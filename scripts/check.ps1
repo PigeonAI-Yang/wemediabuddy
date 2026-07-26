@@ -1,0 +1,120 @@
+$ErrorActionPreference = 'Stop'
+
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$requiredFiles = @(
+    'AGENTS.md',
+    'PRD.md',
+    'SPEC.md',
+    'PLAN.md',
+    'TASKS.md',
+    'TECHNICAL_DESIGN.md',
+    'docs/ai-harness.md',
+    'docs/architecture.md',
+    'docs/development-workflow.md',
+    'docs/verification.md',
+    '.ai/evals/README.md'
+)
+
+Write-Host '> checking required harness files'
+foreach ($relativePath in $requiredFiles) {
+    $fullPath = Join-Path $projectRoot $relativePath
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        throw "Missing required file: $relativePath"
+    }
+}
+
+Write-Host '> checking unresolved placeholders'
+$placeholderPattern = '\b(T' + 'BD|T' + 'ODO)\b'
+$placeholderMatches = Get-ChildItem -LiteralPath $projectRoot -File -Recurse |
+    Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+    Select-String -Pattern $placeholderPattern -CaseSensitive
+if ($placeholderMatches) {
+    $placeholderMatches | ForEach-Object { Write-Host $_.Path ':' $_.LineNumber $_.Line }
+    throw 'Unresolved placeholders found.'
+}
+
+Write-Host '> checking task traceability'
+$prdText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'PRD.md')
+$specText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'SPEC.md')
+$planText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'PLAN.md')
+$tasksText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'TASKS.md')
+$capabilityIds = [regex]::Matches($specText, '\bCAP-\d{3}\b') |
+    ForEach-Object { $_.Value } |
+    Sort-Object -Unique
+foreach ($capabilityId in $capabilityIds) {
+    if ($planText -notmatch [regex]::Escape($capabilityId)) {
+        throw "Capability has no plan mapping: $capabilityId"
+    }
+    if ($tasksText -notmatch [regex]::Escape($capabilityId)) {
+        throw "Capability has no task mapping: $capabilityId"
+    }
+}
+
+$requirementIds = [regex]::Matches($specText, '\b(?:REQ|AC)-\d{3}\b') |
+    ForEach-Object { $_.Value } |
+    Sort-Object -Unique
+foreach ($requirementId in $requirementIds) {
+    if ($prdText -notmatch [regex]::Escape($requirementId)) {
+        throw "SPEC references unknown PRD requirement: $requirementId"
+    }
+}
+
+$taskRows = Get-Content -LiteralPath (Join-Path $projectRoot 'TASKS.md') |
+    Where-Object { $_ -match '^\|\s*WMB-\d{4}\s*\|' }
+$taskIds = $taskRows |
+    ForEach-Object { ([regex]::Match($_, 'WMB-\d{4}')).Value }
+$doingCount = 0
+foreach ($taskRow in $taskRows) {
+    $cells = $taskRow.Trim('|').Split('|') | ForEach-Object { $_.Trim() }
+    if ($cells.Count -ne 8) {
+        throw "Invalid task row: $taskRow"
+    }
+    $status = $cells[3]
+    if ($status -notin @('todo', 'doing', 'blocked', 'done')) {
+        throw "Invalid task status '$status' in $($cells[0])"
+    }
+    if ($status -eq 'doing') {
+        $doingCount++
+    }
+    if ($status -eq 'done' -and (
+        [string]::IsNullOrWhiteSpace($cells[5]) -or
+        [string]::IsNullOrWhiteSpace($cells[6])
+    )) {
+        throw "Done task lacks deliverable or evidence: $($cells[0])"
+    }
+    $dependencies = [regex]::Matches($cells[4], 'WMB-\d{4}') |
+        ForEach-Object { $_.Value }
+    foreach ($dependency in $dependencies) {
+        if ($dependency -notin $taskIds) {
+            throw "Unknown dependency $dependency in $($cells[0])"
+        }
+    }
+}
+if ($doingCount -gt 1) {
+    throw 'More than one task is doing.'
+}
+
+$packageJson = Join-Path $projectRoot 'package.json'
+if (Test-Path -LiteralPath $packageJson -PathType Leaf) {
+    Write-Host '> running package verification'
+    $package = Get-Content -Raw -LiteralPath $packageJson | ConvertFrom-Json
+    foreach ($scriptName in @('typecheck', 'test', 'build')) {
+        if (-not $package.scripts.$scriptName) {
+            throw "package.json is missing required script: $scriptName"
+        }
+    }
+    Push-Location $projectRoot
+    try {
+        npm run typecheck
+        npm test
+        npm run build
+    }
+    finally {
+        Pop-Location
+    }
+}
+else {
+    Write-Host '> application scaffold not present; document checks only'
+}
+
+Write-Host 'WMB harness checks passed.'

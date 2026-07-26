@@ -3,7 +3,7 @@
 - 产品：WeMediaBuddy（WMB）
 - 状态：已确认
 - 日期：2026-07-27
-- 对应需求：`PRD.md` 第 1–9 节和第 11 节
+- 对应需求：`PRD.md` 第 1–9 节、第 10 节“当前产品范围”和第 11–12 节
 
 ## 1. 技术目标
 
@@ -17,7 +17,7 @@
 - 不依赖内容平台官方 API；
 - 不内置 LLM 或 Agent 运行时。
 
-PRD 第 10 节列出的后续能力不在当前实现范围内。
+PRD 第 10 节“后续阶段”列出的能力不在当前实现范围内。
 
 ## 2. 技术栈
 
@@ -140,6 +140,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `platform_accounts`
 - `publications`
 - `metric_snapshots`
+- `account_metric_snapshots`
 - `reviews`
 - `method_findings`
 - `jobs`
@@ -254,6 +255,8 @@ Agent 可以准备发布，但不能完成人类确认。用户必须在 WMB 界
 - 不支持或不可见的字段状态。
 
 不可见指标记为 `unsupported` 或 `unavailable`，不能写成 `0`。
+
+账号级粉丝等指标保存到独立的 `account_metric_snapshots`，不混入帖子快照。
 
 平台适配器从帖子页或创作者后台读取当前账号可见指标。首次实现时以真实登录账号页面为准，将每个平台的稳定字段写成独立适配器验收清单。
 
