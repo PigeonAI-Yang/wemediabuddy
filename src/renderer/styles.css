@@ -843,6 +843,10 @@ dl { margin: 0; }
 .pi-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
 .pi-fields .wide, .pi-config-note, .pi-config-actions { grid-column: 1 / -1; }
 .pi-fields input { min-width: 0; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); color: var(--ink); padding: 10px; }
+.model-picker { display: flex; gap: 7px; }
+.model-picker input, .model-picker select { flex: 1; min-width: 0; }
+.model-picker select { border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); color: var(--ink); padding: 10px; }
+.model-picker button { flex: none; white-space: nowrap; }
 .pi-config-note { margin: 0; }
 .pi-config-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .danger-button { border: 1px solid var(--danger); border-radius: 7px; background: transparent; color: var(--danger); padding: 10px 14px; cursor: pointer; }

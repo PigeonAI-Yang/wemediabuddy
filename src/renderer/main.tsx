@@ -696,6 +696,8 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
   const [piApiKey, setPiApiKey] = useState('');
   const [piConfigNote, setPiConfigNote] = useState('');
+  const [piModels, setPiModels] = useState<string[]>([]);
+  const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [runtimeNote, setRuntimeNote] = useState('');
   const selectPiProfile = (id: string) => {
     const profile = settings?.pi.profiles.find((item) => item.id === id);
@@ -704,6 +706,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
     setPiBaseUrl(profile?.baseUrl ?? '');
     setPiModel(profile?.model ?? '');
     setPiApiKey('');
+    setPiModels([]);
     setPiConfigNote('');
   };
   useEffect(() => {
@@ -723,6 +726,25 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
       refresh();
     } catch (error) {
       setPiConfigNote(error instanceof Error ? error.message : '保存失败');
+    }
+  };
+  const fetchModels = async () => {
+    setLoadingPiModels(true);
+    setPiConfigNote('');
+    try {
+      const models = await window.wmb.listPiModels({
+        id: piProfileId || undefined,
+        baseUrl: piBaseUrl,
+        apiKey: piApiKey || undefined
+      });
+      setPiModels(models);
+      if (!models.includes(piModel)) setPiModel(models[0]);
+      setPiConfigNote(`已获取 ${models.length} 个模型`);
+    } catch (error) {
+      setPiModels([]);
+      setPiConfigNote(`${error instanceof Error ? error.message : '获取模型失败'} 仍可手动填写模型。`);
+    } finally {
+      setLoadingPiModels(false);
     }
   };
   return <section className="page settings-page">
@@ -767,7 +789,15 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
           </div>
           <div className="pi-fields">
             <label><span>配置名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
-            <label><span>模型</span><input value={piModel} onChange={(event) => setPiModel(event.target.value)} placeholder="gpt-5.6-sol" /></label>
+            <label>
+              <span>模型</span>
+              <div className="model-picker">
+                {piModels.length
+                  ? <select value={piModel} onChange={(event) => setPiModel(event.target.value)}>{piModels.map((model) => <option key={model} value={model}>{model}</option>)}</select>
+                  : <input value={piModel} onChange={(event) => setPiModel(event.target.value)} placeholder="获取后选择，或手动填写" />}
+                <button type="button" className="secondary-button" disabled={loadingPiModels || !piBaseUrl.trim()} onClick={() => void fetchModels()}>{loadingPiModels ? '获取中…' : '获取模型'}</button>
+              </div>
+            </label>
             <label className="wide"><span>Base URL</span><input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="http://localhost:61946/v1" /></label>
             <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>
             {piConfigNote && <p className="pi-config-note">{piConfigNote}</p>}

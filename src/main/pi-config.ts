@@ -104,6 +104,32 @@ export function deletePiConfig(database: DatabaseSync, id: string): PiConfig {
   return readPiConfig(database);
 }
 
+export async function listPiModels(database: DatabaseSync, input: {
+  id?: string;
+  baseUrl: string;
+  apiKey?: string;
+}): Promise<string[]> {
+  const baseUrl = new URL(input.baseUrl.trim());
+  if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
+  const stored = input.id ? readStored(database).profiles.find((profile) => profile.id === input.id) : null;
+  const apiKey = input.apiKey?.trim()
+    || (stored ? safeStorage.decryptString(Buffer.from(stored.encryptedApiKey, 'base64')) : '');
+  if (!apiKey) throw new Error('请先填写 API Key。');
+
+  const response = await fetch(`${baseUrl.toString().replace(/\/$/, '')}/models`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(15_000)
+  });
+  if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
+  const body = await response.json() as { data?: Array<{ id?: unknown }> };
+  const models = [...new Set((body.data ?? [])
+    .map((item) => typeof item.id === 'string' ? item.id.trim() : '')
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  if (!models.length) throw new Error('接口没有返回可用模型。');
+  return models;
+}
+
 export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; apiKey: string } {
   const state = readStored(database);
   const active = state.profiles.find((profile) => profile.id === state.activeId);

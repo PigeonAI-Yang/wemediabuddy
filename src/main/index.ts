@@ -27,7 +27,7 @@ import {
   schedulePublicationMetricJobs
 } from './metrics';
 import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
-import { activatePiConfig, deletePiConfig, readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime, stagePiRuntimeFromSource } from './pi-runtime-manager';
@@ -288,6 +288,13 @@ app.whenReady().then(() => {
       pi = null;
       return saved;
     } finally { database.close(); }
+  });
+  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; apiKey?: string }) => {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return await listPiModels(database, input); } finally { database.close(); }
   });
   ipcMain.handle('pi-runtime:get', async () => {
     const dataRoot = await loadSelectedDataRoot();

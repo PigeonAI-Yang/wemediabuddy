@@ -3,9 +3,10 @@ import test from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createServer } from 'node:http';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { activatePiConfig, deletePiConfig, readPiConfig } from '../src/main/pi-config.ts';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig } from '../src/main/pi-config.ts';
 
 test('Pi API presets read, switch and delete without exposing keys', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-config-'));
@@ -39,6 +40,31 @@ test('Pi API presets read, switch and delete without exposing keys', async () =>
     assert.equal(remaining.activeId, 'one');
     assert.deepEqual(remaining.profiles.map((profile) => profile.name), ['主接口']);
   } finally {
+    database.close();
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Pi API model list uses the compatible models endpoint', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-models-'));
+  const root = await openDataRoot(rootPath);
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  const server = createServer((request, response) => {
+    assert.equal(request.url, '/v1/models');
+    assert.equal(request.headers.authorization, 'Bearer test-key');
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ data: [{ id: 'model-b' }, { id: 'model-a' }, { id: 'model-a' }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const models = await listPiModels(database, {
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      apiKey: 'test-key'
+    });
+    assert.deepEqual(models, ['model-a', 'model-b']);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     database.close();
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

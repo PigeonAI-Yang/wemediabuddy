@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('wmb', {
   savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
+  listPiModels: (input: { id?: string; baseUrl: string; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<string[]>,
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),

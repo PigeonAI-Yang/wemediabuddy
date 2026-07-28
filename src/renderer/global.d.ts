@@ -33,6 +33,7 @@ declare global {
       savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
+      listPiModels(input: { id?: string; baseUrl: string; apiKey?: string }): Promise<string[]>;
       chatPi(message: string): Promise<{ text: string; stopped: boolean }>;
       stopPi(): Promise<{ stopped: boolean }>;
       getPiConversation(): Promise<{

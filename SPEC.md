@@ -416,6 +416,7 @@ WMB ships a pinned Pi runtime as an independent application resource. The Pi run
 Pi uses only the OpenAI-compatible Base URL, API key, and model configured in WMB. WMB must not read, copy, refresh, or invalidate another Agent's OAuth session.
 
 Settings may save multiple named API presets. Exactly one configured preset is active for new Pi processes; switching presets stops the current Pi process before the next turn. API keys remain encrypted locally and are never returned to the renderer.
+Settings must fetch model IDs from the configured OpenAI-compatible `/models` endpoint and let the user select one; manual model entry remains available when the endpoint cannot enumerate models.
 
 Only explicit user intents that require research, judgment, writing, rewriting, or review create Pi tasks. Deterministic UI actions continue to call existing business commands directly.
 
