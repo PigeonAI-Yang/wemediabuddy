@@ -10,6 +10,7 @@ type StoredProfile = {
   name: string;
   baseUrl: string;
   model: string;
+  api?: PiApiType;
   encryptedApiKey: string;
 };
 type StoredState = { activeId: string | null; profiles: StoredProfile[] };
@@ -20,9 +21,11 @@ export type PiConfigProfile = {
   name: string;
   baseUrl: string;
   model: string;
+  api: PiApiType;
   configured: boolean;
   active: boolean;
 };
+export type PiApiType = 'openai-responses' | 'anthropic-messages';
 export type PiConfig = {
   activeId: string | null;
   profiles: PiConfigProfile[];
@@ -41,6 +44,7 @@ export function readPiConfig(database: DatabaseSync): PiConfig {
       name: profile.name,
       baseUrl: profile.baseUrl,
       model: profile.model,
+      api: profile.api ?? inferApi(profile.baseUrl),
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
     })),
@@ -55,6 +59,7 @@ export function savePiConfig(database: DatabaseSync, input: {
   name: string;
   baseUrl: string;
   model: string;
+  api: PiApiType;
   apiKey?: string;
 }): PiConfig {
   const baseUrl = new URL(input.baseUrl.trim());
@@ -77,6 +82,7 @@ export function savePiConfig(database: DatabaseSync, input: {
     name,
     baseUrl: baseUrl.toString().replace(/\/$/, ''),
     model,
+    api: input.api,
     encryptedApiKey
   };
   writeStored(database, {
@@ -107,6 +113,7 @@ export function deletePiConfig(database: DatabaseSync, id: string): PiConfig {
 export async function listPiModels(database: DatabaseSync, input: {
   id?: string;
   baseUrl: string;
+  api: PiApiType;
   apiKey?: string;
 }): Promise<string[]> {
   const baseUrl = new URL(input.baseUrl.trim());
@@ -117,7 +124,9 @@ export async function listPiModels(database: DatabaseSync, input: {
   if (!apiKey) throw new Error('请先填写 API Key。');
 
   const response = await fetch(`${baseUrl.toString().replace(/\/$/, '')}/models`, {
-    headers: { authorization: `Bearer ${apiKey}` },
+    headers: input.api === 'anthropic-messages'
+      ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+      : { authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(15_000)
   });
   if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
@@ -130,13 +139,14 @@ export async function listPiModels(database: DatabaseSync, input: {
   return models;
 }
 
-export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; apiKey: string } {
+export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; api: PiApiType; apiKey: string } {
   const state = readStored(database);
   const active = state.profiles.find((profile) => profile.id === state.activeId);
   if (!active) throw new Error('请先在设置中配置 Pi API。');
   return {
     baseUrl: active.baseUrl,
     model: active.model,
+    api: active.api ?? inferApi(active.baseUrl),
     apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
   };
 }
@@ -151,6 +161,14 @@ function readStored(database: DatabaseSync): StoredState {
     activeId: id,
     profiles: [{ id, name: '默认配置', ...value }]
   };
+}
+
+function inferApi(baseUrl: string): PiApiType {
+  try {
+    return new URL(baseUrl).hostname.endsWith('anthropic.com') ? 'anthropic-messages' : 'openai-responses';
+  } catch {
+    return 'openai-responses';
+  }
 }
 
 function writeStored(database: DatabaseSync, state: StoredState): void {

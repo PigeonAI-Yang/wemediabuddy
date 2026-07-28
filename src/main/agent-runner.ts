@@ -92,7 +92,7 @@ export async function startDailyIntelligence(input: {
       providers: {
         'wmb-api': {
           baseUrl: config.baseUrl,
-          api: 'openai-responses',
+          api: config.api,
           apiKey: '$WMB_PI_API_KEY',
           models: [{
             id: config.model,
@@ -206,7 +206,7 @@ export async function startStudioDraft(input: {
       providers: {
         'wmb-api': {
           baseUrl: config.baseUrl,
-          api: 'openai-responses',
+          api: config.api,
           apiKey: '$WMB_PI_API_KEY',
           models: [{
             id: config.model,
@@ -314,7 +314,7 @@ export async function startResultsReview(input: {
       providers: {
         'wmb-api': {
           baseUrl: config.baseUrl,
-          api: 'openai-responses',
+          api: config.api,
           apiKey: '$WMB_PI_API_KEY',
           models: [{
             id: config.model,

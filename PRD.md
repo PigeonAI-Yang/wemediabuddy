@@ -212,7 +212,7 @@ AI 结合当日情报、用户定位、历史内容和账号表现生成可执�
 
 ### 6.1 当前策略
 
-WeMediaBuddy 不自行承载大模型。内置 Pi 使用用户单独配置的 OpenAI-compatible API 执行显式智能任务；现有外部 Agent 继续通过 MCP 接入终端。
+WeMediaBuddy 不自行承载大模型。内置 Pi 使用用户单独配置的 OpenAI Responses 或 Anthropic Messages 接口执行显式智能任务；现有外部 Agent 继续通过 MCP 接入终端。
 
 终端的核心业务操作先形成统一的内部 API，再暴露为 MCP 工具。界面与 Agent 调用同一业务能力，避免形成两套逻辑。
 

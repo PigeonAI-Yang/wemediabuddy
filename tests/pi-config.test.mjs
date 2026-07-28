@@ -60,9 +60,37 @@ test('Pi API model list uses the compatible models endpoint', async () => {
     const address = server.address();
     const models = await listPiModels(database, {
       baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      api: 'openai-responses',
       apiKey: 'test-key'
     });
     assert.deepEqual(models, ['model-a', 'model-b']);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    database.close();
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Anthropic model list uses Anthropic authentication headers', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-anthropic-models-'));
+  const root = await openDataRoot(rootPath);
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  const server = createServer((request, response) => {
+    assert.equal(request.headers['x-api-key'], 'anthropic-key');
+    assert.equal(request.headers['anthropic-version'], '2023-06-01');
+    assert.equal(request.headers.authorization, undefined);
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ data: [{ id: 'claude-test' }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const models = await listPiModels(database, {
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      api: 'anthropic-messages',
+      apiKey: 'anthropic-key'
+    });
+    assert.deepEqual(models, ['claude-test']);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     database.close();

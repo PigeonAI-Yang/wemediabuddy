@@ -692,6 +692,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
 }): React.JSX.Element {
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
+  const [piApi, setPiApi] = useState<'openai-responses' | 'anthropic-messages'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
   const [piApiKey, setPiApiKey] = useState('');
@@ -703,6 +704,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
     const profile = settings?.pi.profiles.find((item) => item.id === id);
     setPiProfileId(id);
     setPiName(profile?.name ?? '');
+    setPiApi(profile?.api ?? 'openai-responses');
     setPiBaseUrl(profile?.baseUrl ?? '');
     setPiModel(profile?.model ?? '');
     setPiApiKey('');
@@ -719,6 +721,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
         name: piName,
         baseUrl: piBaseUrl,
         model: piModel,
+        api: piApi,
         apiKey: piApiKey || undefined
       });
       setPiApiKey('');
@@ -735,6 +738,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
       const models = await window.wmb.listPiModels({
         id: piProfileId || undefined,
         baseUrl: piBaseUrl,
+        api: piApi,
         apiKey: piApiKey || undefined
       });
       setPiModels(models);
@@ -789,7 +793,11 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
           </div>
           <div className="pi-fields">
             <label><span>配置名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
-            <label>
+            <label><span>接口类型</span><select value={piApi} onChange={(event) => { setPiApi(event.target.value as 'openai-responses' | 'anthropic-messages'); setPiModels([]); }}>
+              <option value="openai-responses">OpenAI Responses</option>
+              <option value="anthropic-messages">Anthropic Messages</option>
+            </select></label>
+            <label className="wide">
               <span>模型</span>
               <div className="model-picker">
                 {piModels.length
