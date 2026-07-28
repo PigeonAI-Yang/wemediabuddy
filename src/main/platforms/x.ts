@@ -2,7 +2,7 @@ import type { BrowserContext, Locator, Page } from 'playwright-core';
 import { app } from 'electron';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { parseMetricValue } from './metric-value';
+import { parseMetricValue } from './metric-value.ts';
 
 export type XIdentity = { platform: 'x'; accountKey: string; displayName: string; loginState: 'authenticated'; evidenceUrl: string };
 export type MetricField = { status: 'value' | 'unavailable' | 'parse_failed'; value?: number; rawLabel?: string };
@@ -89,6 +89,38 @@ export async function collectXMetrics(cdpUrl: string, statusUrl: string): Promis
       raw: { bookmarks: await field('[data-testid="bookmark"]') }
     };
   } finally { await browser.close(); }
+}
+
+export async function collectXAccountMetrics(cdpUrl: string, accountKey: string): Promise<{
+  sourceUrl: string;
+  capturedAt: string;
+  normalized: Record<'followers', MetricField>;
+  raw: Record<string, MetricField>;
+}> {
+  const handle = accountKey.startsWith('@') ? accountKey.slice(1) : accountKey;
+  const browser = await connect(cdpUrl);
+  try {
+    const page = await xPage(browser.contexts()[0]);
+    await page.goto(`https://x.com/${handle}`, { waitUntil: 'domcontentloaded' });
+    const profile = page.locator('[data-testid="UserName"]').first();
+    await profile.waitFor({ state: 'visible', timeout: 15_000 });
+    const followersLink = page.locator(`a[href$="/${handle}/verified_followers"], a[href$="/${handle}/followers"]`).first();
+    const rawLabel = await followersLink.getAttribute('aria-label')
+      ?? await followersLink.innerText().catch(() => '');
+    let followers: MetricField = { status: 'unavailable' };
+    if (rawLabel) {
+      const value = parseMetricValue(rawLabel);
+      followers = value === null ? { status: 'parse_failed', rawLabel } : { status: 'value', value, rawLabel };
+    }
+    return {
+      sourceUrl: page.url(),
+      capturedAt: new Date().toISOString(),
+      normalized: { followers },
+      raw: { followers }
+    };
+  } finally {
+    await browser.close();
+  }
 }
 
 async function xPage(context: BrowserContext) {

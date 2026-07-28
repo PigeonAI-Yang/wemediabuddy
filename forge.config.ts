@@ -5,7 +5,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: 'images/icon',
-    extraResource: ['node_modules/playwright-core', '.pi-runtime', '.pi/extensions']
+    extraResource: ['node_modules/playwright-core', '.pi-runtime', '.pi/extensions', 'skills']
   },
   plugins: [
     new VitePlugin({

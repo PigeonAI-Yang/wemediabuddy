@@ -5,16 +5,32 @@ import { openDataRoot, validateDataRoot, type DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
 import { getToday } from './workbench';
-import { createProjectFromPlanItem, getStudio } from './content';
+import { createProjectFromPlanItem, getStudio, saveCoreVersion, updateProjectTitle } from './content';
 import { startMcp, type McpRuntime } from './mcp';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
 import { createPublication, getPublicationDetail, listPublicationDetails, preparePublication, reconcileAsNotPublished, recoverInterruptedPublications, transitionPublication } from './publishing';
 import { saveAccount, verifyAccount } from './accounts';
-import { collectXMetrics, identifyXAccount, prepareXImage, prepareXText, prepareXVideo } from './platforms/x';
+import { collectXAccountMetrics, collectXMetrics, identifyXAccount, prepareXImage, prepareXText, prepareXVideo } from './platforms/x';
 import { identifyWechatAccount, prepareWechatArticle, readBackWechatArticle } from './platforms/wechat';
+import {
+  claimDueMetricJobs,
+  completeMetricJob,
+  failMetricJob,
+  listAccountMetricSnapshots,
+  listMetricJobs,
+  listPublicationMetricSnapshots,
+  processDueMetricJobs,
+  recoverRunningMetricJobs,
+  saveAccountMetricSnapshot,
+  savePublicationMetricSnapshot,
+  scheduleJobsForPublishedPublications,
+  schedulePublicationMetricJobs
+} from './metrics';
+import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
 import { readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
-import { ensurePiConversationLayout, readPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
+import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime, stagePiRuntimeFromSource } from './pi-runtime-manager';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -28,6 +44,7 @@ import {
   updateAgentTaskPhase,
   type AgentIntent
 } from './agent-tasks';
+import { startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -62,6 +79,7 @@ let browser: BrowserRuntime | null = null;
 let pi: PiRpcSupervisor | null = null;
 let piSessionFile: string | null = null;
 let shuttingDown = false;
+let recoveredAgentTasks = false;
 
 function broadcastPiEvent(event: Record<string, unknown>): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -72,7 +90,12 @@ function broadcastPiEvent(event: Record<string, unknown>): void {
 async function persistPiTurn(dataRootPath: string, userText: string, assistant: PiChatMessage): Promise<void> {
   const current = await readPiConversation(dataRootPath);
   const sessionFile = piSessionFile ?? current.sessionFile;
-  const messages = [...current.messages, { role: 'user', text: userText } satisfies PiChatMessage, assistant];
+  const stamped = new Date().toISOString();
+  const messages = [
+    ...current.messages,
+    { role: 'user', text: userText, createdAt: stamped } satisfies PiChatMessage,
+    { ...assistant, createdAt: assistant.createdAt ?? stamped }
+  ];
   let sessionId = current.sessionId;
   if (pi) {
     try {
@@ -83,7 +106,14 @@ async function persistPiTurn(dataRootPath: string, userText: string, assistant: 
       }
     } catch { /* keep previous session id */ }
   }
-  await writePiConversation(dataRootPath, { sessionFile, sessionId, messages });
+  await writePiConversation(dataRootPath, {
+    id: current.id,
+    title: current.title,
+    sessionFile,
+    sessionId,
+    messages,
+    createdAt: current.createdAt
+  });
 }
 
 async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
@@ -93,7 +123,8 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
   const config = resolvePiConfig(database);
   database.close();
   const layout = await ensurePiConversationLayout(dataRoot.path);
-  piSessionFile = layout.sessionFile;
+  const conversationForSession = await readPiConversation(dataRoot.path);
+  piSessionFile = conversationForSession.sessionFile || layout.sessionFile;
   await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
     providers: {
       'wmb-api': {
@@ -104,9 +135,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
       }
     }
   }), 'utf8');
-  const cli = app.isPackaged
-    ? path.join(process.resourcesPath, '.pi-runtime', 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js')
-    : path.join(app.getAppPath(), 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+  const cli = piCliFromRuntimeRoot(await resolvePiRuntimeRoot(dataRoot.path));
   const conversation = await readPiConversation(dataRoot.path);
   if (!mcp) await refreshMcp(dataRoot);
   if (!mcp) throw new Error('WMB MCP 尚未就绪。');
@@ -119,7 +148,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
   pi = new PiRpcSupervisor(process.execPath, [
     cli,
     '--mode', 'rpc',
-    '--session', layout.sessionFile,
+    '--session', piSessionFile || layout.sessionFile,
     '--no-builtin-tools',
     '-e', extensionPath,
     '--provider', 'wmb-api',
@@ -149,10 +178,14 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     ? String((stateData as { sessionId?: string }).sessionId ?? '')
     : '';
   await writePiConversation(dataRoot.path, {
-    sessionFile: layout.sessionFile,
+    id: conversation.id,
+    title: conversation.title,
+    sessionFile: conversation.sessionFile || layout.sessionFile,
     sessionId: sessionId || conversation.sessionId,
-    messages: conversation.messages
+    messages: conversation.messages,
+    createdAt: conversation.createdAt
   });
+  piSessionFile = conversation.sessionFile || layout.sessionFile;
   return pi;
 }
 
@@ -164,7 +197,9 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
 async function loadSelectedDataRoot(): Promise<DataRoot | null> {
   try {
     const { path: rootPath } = JSON.parse(await readFile(dataRootConfigPath(), 'utf8')) as { path: string };
-    return migrate(await validateDataRoot(rootPath));
+    const shouldRecover = !recoveredAgentTasks;
+    recoveredAgentTasks = true;
+    return migrate(await validateDataRoot(rootPath), { recoverAgentTasks: shouldRecover });
   } catch { return null; }
 }
 
@@ -177,11 +212,14 @@ async function chooseDataRoot(): Promise<DataRoot | null> {
   await refreshMcp(migrated);
   return migrated;
 }
-
-function migrate(dataRoot: DataRoot): DataRoot {
+function migrate(dataRoot: DataRoot, options: { recoverAgentTasks?: boolean } = {}): DataRoot {
   const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
   recoverInterruptedPublications(database);
-  recoverInterruptedAgentTasks(database);
+  if (options.recoverAgentTasks) {
+    recoverInterruptedAgentTasks(database);
+    recoverRunningMetricJobs(database);
+    scheduleJobsForPublishedPublications(database);
+  }
   database.close();
   return dataRoot;
 }
@@ -229,10 +267,64 @@ app.whenReady().then(() => {
       return saved;
     } finally { database.close(); }
   });
+  ipcMain.handle('pi-runtime:get', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    return getPiRuntimeInfo(dataRoot?.path ?? null);
+  });
+  ipcMain.handle('pi-runtime:update', async (_event, sourceRuntimeRoot: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    return updatePiRuntime(dataRoot.path, sourceRuntimeRoot);
+  });
+  ipcMain.handle('pi-runtime:rollback', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    return rollbackPiRuntime(dataRoot.path);
+  });
   ipcMain.handle('pi:conversation-get', async () => {
     const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return { sessionFile: '', sessionId: null, messages: [], updatedAt: new Date(0).toISOString() };
+    if (!dataRoot) {
+      return {
+        id: '',
+        title: '新会话',
+        sessionFile: '',
+        sessionId: null,
+        messages: [],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString()
+      };
+    }
     return readPiConversation(dataRoot.path);
+  });
+  ipcMain.handle('pi:conversation-list', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    return listPiConversations(dataRoot.path);
+  });
+  ipcMain.handle('pi:conversation-new', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (pi) {
+      try { if (pi.isActive) await pi.abort(); } catch {}
+      await pi.stop().catch(() => {});
+      pi = null;
+    }
+    const created = await startNewPiConversation(dataRoot.path);
+    piSessionFile = created.sessionFile;
+    return created;
+  });
+  ipcMain.handle('pi:conversation-switch', async (_event, conversationId: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!conversationId) throw new Error('请选择会话。');
+    if (pi) {
+      try { if (pi.isActive) await pi.abort(); } catch {}
+      await pi.stop().catch(() => {});
+      pi = null;
+    }
+    const switched = await switchPiConversation(dataRoot.path, conversationId);
+    piSessionFile = switched.sessionFile;
+    return switched;
   });
   ipcMain.handle('pi:chat', async (_event, message: string) => {
     const raw = message.trim();
@@ -342,6 +434,86 @@ app.whenReady().then(() => {
       return cancelled;
     } finally { database.close(); }
   });
+  ipcMain.handle('agent:start-daily-intelligence', async (_event, businessDate: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!mcp) await refreshMcp(dataRoot);
+    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
+    broadcastPiEvent({ type: 'starting' });
+    try {
+      const result = await startDailyIntelligence({
+        dataRootPath: dataRoot.path,
+        businessDate,
+        mcpUrl: mcp.url,
+        onEvent: (event) => {
+          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
+          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+          if (event.type === 'agent_task') broadcastPiEvent(event);
+        }
+      });
+      broadcastPiEvent({ type: 'agent_task', task: result.task });
+      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
+      return { ok: true, data: result, error: null };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      broadcastPiEvent({ type: 'failed', error: messageText });
+      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message: messageText } };
+    }
+  });
+  ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!mcp) await refreshMcp(dataRoot);
+    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
+    if (!input.projectId) throw new Error('请先选择内容项目。');
+    broadcastPiEvent({ type: 'starting' });
+    try {
+      const result = await startStudioDraft({
+        dataRootPath: dataRoot.path,
+        businessDate: input.businessDate,
+        projectId: input.projectId,
+        mcpUrl: mcp.url,
+        onEvent: (event) => {
+          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
+          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+        }
+      });
+      broadcastPiEvent({ type: 'agent_task', task: result.task });
+      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
+      return { ok: true, data: result, error: null };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      broadcastPiEvent({ type: 'failed', error: messageText });
+      return { ok: false, data: null, error: { code: 'STUDIO_DRAFT_FAILED', message: messageText } };
+    }
+  });
+  ipcMain.handle('agent:start-results-review', async (_event, input: { businessDate: string; publicationId: string }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!mcp) await refreshMcp(dataRoot);
+    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
+    if (!input.publicationId) throw new Error('请先选择已发布内容。');
+    broadcastPiEvent({ type: 'starting' });
+    try {
+      const result = await startResultsReview({
+        dataRootPath: dataRoot.path,
+        businessDate: input.businessDate,
+        publicationId: input.publicationId,
+        mcpUrl: mcp.url,
+        onEvent: (event) => {
+          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
+          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+        }
+      });
+      broadcastPiEvent({ type: 'agent_task', task: result.task });
+      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
+      return { ok: true, data: result, error: null };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      broadcastPiEvent({ type: 'failed', error: messageText });
+      return { ok: false, data: null, error: { code: 'RESULTS_REVIEW_FAILED', message: messageText } };
+    }
+  });
   ipcMain.handle('browser:start', async () => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
@@ -389,6 +561,20 @@ app.whenReady().then(() => {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return getStudio(database); } finally { database.close(); }
   });
+  ipcMain.handle('studio:save-core', async (_event, input: { projectId: string; title: string; body: string }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!input?.projectId) throw new Error('请先选择内容项目。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const titled = updateProjectTitle(database, input.projectId, input.title ?? '');
+      if (!titled.ok) return titled;
+      const body = String(input.body ?? '');
+      if (!body.trim()) return { ok: false, data: null, error: { code: 'VALIDATION_ERROR', message: '正文不能为空。' } };
+      const version = saveCoreVersion(database, input.projectId, body, 'user');
+      return { ok: true, data: { project: titled.data, version }, error: null };
+    } finally { database.close(); }
+  });
   ipcMain.handle('publish:list', async () => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) return [];
@@ -401,13 +587,160 @@ app.whenReady().then(() => {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
       const publication = getPublicationDetail(database, publicationId)?.publication;
-      if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl) throw new Error('只有已发布的 X 内容可以采集指标。');
+      if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl || !publication.publishedAt) {
+        throw new Error('只有已发布的 X 内容可以采集指标。');
+      }
+      schedulePublicationMetricJobs(database, {
+        publicationId: publication.id,
+        publishedAt: publication.publishedAt,
+        sourceUrl: publication.externalUrl,
+        platform: publication.platform
+      });
       if (!browser) {
         const config = readBrowserConfig(database);
         if (!config) throw new Error('请先在设置中选择浏览器 profile。');
         browser = await startBrowser(config);
       }
-      return collectXMetrics(browser.cdpUrl, publication.externalUrl);
+      const capture = await collectXMetrics(browser.cdpUrl, publication.externalUrl);
+      const now = capture.capturedAt || new Date().toISOString();
+      const due = claimDueMetricJobs(database, now);
+      const snapshots = [];
+      for (const job of due) {
+        const payload = job.payload as { publicationId?: string; scheduledFor?: string; sourceUrl?: string };
+        if (payload.publicationId !== publication.id) continue;
+        const saved = completeMetricJob(database, {
+          jobId: job.id,
+          publicationId: publication.id,
+          scheduledFor: String(payload.scheduledFor || job.dueAt),
+          sourceUrl: capture.sourceUrl,
+          capturedAt: capture.capturedAt,
+          normalized: capture.normalized,
+          raw: capture.raw
+        });
+        if (saved.ok) snapshots.push(saved.data);
+        else failMetricJob(database, job.id, saved.error.message);
+      }
+      const manual = savePublicationMetricSnapshot(database, {
+        publicationId: publication.id,
+        scheduledFor: now,
+        sourceUrl: capture.sourceUrl,
+        capturedAt: capture.capturedAt,
+        normalized: capture.normalized,
+        raw: capture.raw
+      });
+      if (!manual.ok) throw new Error(manual.error.message);
+      return { ...capture, snapshot: manual.data, dueSnapshots: snapshots };
+    } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:schedule', async (_event, publicationId: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const publication = getPublicationDetail(database, publicationId)?.publication;
+      if (!publication?.externalUrl || !publication.publishedAt || publication.status !== 'published') {
+        throw new Error('只有已发布且有 URL 的内容可以创建指标任务。');
+      }
+      return schedulePublicationMetricJobs(database, {
+        publicationId: publication.id,
+        publishedAt: publication.publishedAt,
+        sourceUrl: publication.externalUrl,
+        platform: publication.platform
+      });
+    } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:list-jobs', async (_event, publicationId?: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listMetricJobs(database, publicationId); } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:list-snapshots', async (_event, publicationId: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listPublicationMetricSnapshots(database, publicationId); } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:process-due', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      return await processDueMetricJobs(database, async (platform, sourceUrl) => {
+        if (platform !== 'x') throw new Error(`暂不支持平台指标采集：${platform}`);
+        if (!browser) {
+          const config = readBrowserConfig(database);
+          if (!config) throw new Error('请先在设置中选择浏览器 profile。');
+          browser = await startBrowser(config);
+        }
+        return collectXMetrics(browser.cdpUrl, sourceUrl);
+      });
+    } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:collect-account-x', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const account = database.prepare(`SELECT id, account_key AS accountKey FROM platform_accounts WHERE platform = 'x'`).get() as { id: string; accountKey: string } | undefined;
+      if (!account) throw new Error('请先识别并保存 X 账号。');
+      if (!browser) {
+        const config = readBrowserConfig(database);
+        if (!config) throw new Error('请先在设置中选择浏览器 profile。');
+        browser = await startBrowser(config);
+      }
+      const capture = await collectXAccountMetrics(browser.cdpUrl, account.accountKey);
+      return saveAccountMetricSnapshot(database, {
+        accountId: account.id,
+        platform: 'x',
+        sourceUrl: capture.sourceUrl,
+        capturedAt: capture.capturedAt,
+        normalized: capture.normalized,
+        raw: capture.raw
+      });
+    } finally { database.close(); }
+  });
+  ipcMain.handle('metrics:list-account-snapshots', async (_event, accountId?: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listAccountMetricSnapshots(database, accountId); } finally { database.close(); }
+  });
+  ipcMain.handle('reviews:list', async (_event, publicationId?: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listReviews(database, publicationId); } finally { database.close(); }
+  });
+  ipcMain.handle('reviews:get', async (_event, id: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return null;
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return getReview(database, id); } finally { database.close(); }
+  });
+  ipcMain.handle('reviews:save', async (_event, input: {
+    id?: string;
+    publicationId: string;
+    metricSnapshotIds: string[];
+    keep?: string[];
+    stop?: string[];
+    change?: string[];
+    summary?: string;
+    status?: 'draft' | 'final';
+    expectedRevision?: number;
+    findings?: Array<{ id?: string; title: string; body: string }>;
+  }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return saveReview(database, input); } finally { database.close(); }
+  });
+  ipcMain.handle('reviews:backlinks', async (_event, input?: { reviewIds?: string[]; findingIds?: string[] }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      return listReviewBacklinks(database, input?.reviewIds ?? [], input?.findingIds ?? []);
     } finally { database.close(); }
   });
   ipcMain.handle('publish:prepare-x', async (_event, platformVersionId: string) => {

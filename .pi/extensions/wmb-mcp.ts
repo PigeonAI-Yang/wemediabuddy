@@ -134,6 +134,79 @@ const saveSource: ToolDefinition = {
   }
 };
 
+
+const savePlan: ToolDefinition = {
+  name: 'wmb_save_plan',
+  label: '保存 WMB 今日方案',
+  description: '通过 WMB MCP 保存当日运营方案与 1-3 个内容机会。每个机会必须引用已存在的 sourceIds。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      planDate: { type: 'string' },
+      summary: { type: 'string' },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            priority: { type: 'number' },
+            whyNow: { type: 'string' },
+            timeliness: { type: 'string' },
+            targetAudience: { type: 'string' },
+            angle: { type: 'string' },
+            pointOfView: { type: 'string' },
+            platforms: { type: 'array', items: { type: 'string' } },
+            formats: { type: 'array', items: { type: 'string' } },
+            titleGuidance: { type: 'string' },
+            openingGuidance: { type: 'string' },
+            structureGuidance: { type: 'string' },
+            effortEstimate: { type: 'string' },
+            sourceIds: { type: 'array', items: { type: 'string' } },
+            availableMaterials: { type: 'array', items: { type: 'string' } },
+            missingMaterials: { type: 'array', items: { type: 'string' } }
+          },
+          required: ['title', 'priority', 'whyNow', 'timeliness', 'targetAudience', 'angle', 'pointOfView', 'platforms', 'formats', 'titleGuidance', 'openingGuidance', 'structureGuidance', 'effortEstimate', 'sourceIds'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['requestId', 'planDate', 'summary', 'items'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('plans.save', {
+      request_id: String(params.requestId ?? ''),
+      plan_date: String(params.planDate ?? ''),
+      summary: String(params.summary ?? ''),
+      items: params.items
+    }));
+  }
+};
+
+const saveCoreVersion: ToolDefinition = {
+  name: 'wmb_save_core_version',
+  label: '保存 WMB 核心初稿',
+  description: '通过 WMB MCP 为内容项目保存一个核心正文版本。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      projectId: { type: 'string' },
+      body: { type: 'string' }
+    },
+    required: ['requestId', 'projectId', 'body'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('content.save_version', {
+      request_id: String(params.requestId ?? ''),
+      project_id: String(params.projectId ?? ''),
+      body: String(params.body ?? '')
+    }));
+  }
+};
 const getContent: ToolDefinition = {
   name: 'wmb_get_content',
   label: '读取 WMB 创作项目',
@@ -148,10 +221,96 @@ const getContent: ToolDefinition = {
   }
 };
 
+const getMetrics: ToolDefinition = {
+  name: 'wmb_get_metrics',
+  label: '读取发布指标快照',
+  description: '通过 WMB MCP 读取指定发布记录的指标快照。只读。',
+  parameters: {
+    type: 'object',
+    properties: { publicationId: { type: 'string' } },
+    required: ['publicationId'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('metrics.get', { publication_id: String(params.publicationId ?? '') }));
+  }
+};
+
+const getReviews: ToolDefinition = {
+  name: 'wmb_get_reviews',
+  label: '读取复盘',
+  description: '通过 WMB MCP 读取发布复盘与方法结论。只读。',
+  parameters: {
+    type: 'object',
+    properties: {
+      publicationId: { type: 'string' },
+      finalOnly: { type: 'boolean' }
+    },
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('reviews.get', {
+      publication_id: params.publicationId ? String(params.publicationId) : undefined,
+      final_only: params.finalOnly === true
+    }));
+  }
+};
+
+const saveReview: ToolDefinition = {
+  name: 'wmb_save_review',
+  label: '保存复盘',
+  description: '通过 WMB MCP 保存或定稿复盘。最终复盘必须引用真实 metricSnapshotIds，并包含 Keep/Stop/Change。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      publicationId: { type: 'string' },
+      metricSnapshotIds: { type: 'array', items: { type: 'string' } },
+      keep: { type: 'array', items: { type: 'string' } },
+      stop: { type: 'array', items: { type: 'string' } },
+      change: { type: 'array', items: { type: 'string' } },
+      summary: { type: 'string' },
+      status: { type: 'string' },
+      findings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            body: { type: 'string' }
+          },
+          required: ['title', 'body'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['requestId', 'publicationId', 'metricSnapshotIds', 'keep', 'stop', 'change', 'status'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('reviews.save', {
+      request_id: String(params.requestId ?? ''),
+      publication_id: String(params.publicationId ?? ''),
+      metric_snapshot_ids: params.metricSnapshotIds,
+      keep: params.keep,
+      stop: params.stop,
+      change: params.change,
+      summary: params.summary ? String(params.summary) : undefined,
+      status: params.status === 'final' ? 'final' : 'draft',
+      findings: params.findings
+    }));
+  }
+};
+
 export default function (pi: { registerTool(tool: ToolDefinition): void }) {
   pi.registerTool(getWorkbench);
   pi.registerTool(searchSources);
   pi.registerTool(getSource);
   pi.registerTool(saveSource);
+  pi.registerTool(savePlan);
+  pi.registerTool(saveCoreVersion);
   pi.registerTool(getContent);
+  pi.registerTool(getMetrics);
+  pi.registerTool(getReviews);
+  pi.registerTool(saveReview);
 }

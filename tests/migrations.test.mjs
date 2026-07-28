@@ -11,16 +11,16 @@ test('migrations apply once and survive reopening', async () => {
   try {
     {
       const first = migrateDatabase(databasePath);
-      assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 10);
+      assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 14);
       first.close();
     }
     {
       const second = migrateDatabase(databasePath);
-      assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 10);
+      assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 14);
       assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_meta'").get());
       second.close();
     }
   } finally {
-    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });

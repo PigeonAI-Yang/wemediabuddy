@@ -12,7 +12,7 @@ test('Pi conversation snapshot round-trips session identity and messages', async
     assert.equal(layout.sessionFile.endsWith(`${path.sep}sessions${path.sep}dock.jsonl`), true);
     const empty = await readPiConversation(root);
     assert.deepEqual(empty.messages, []);
-    assert.equal(empty.sessionFile, layout.sessionFile);
+    assert.equal(empty.sessionFile.endsWith(`${path.sep}sessions${path.sep}${empty.id}.jsonl`), true);
 
     const saved = await writePiConversation(root, {
       sessionFile: layout.sessionFile,
@@ -26,7 +26,7 @@ test('Pi conversation snapshot round-trips session identity and messages', async
     const loaded = await readPiConversation(root);
     assert.equal(loaded.sessionId, 'session-1');
     assert.equal(loaded.sessionFile, layout.sessionFile);
-    assert.deepEqual(loaded.messages, [
+    assert.deepEqual(loaded.messages.map(({ createdAt: _createdAt, ...message }) => message), [
       { role: 'user', text: '你好' },
       { role: 'assistant', text: '在', status: 'stopped' }
     ]);

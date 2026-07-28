@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
+import { schedulePublicationMetricJobs } from './metrics.ts';
 
 export type PublicationStatus = 'draft' | 'prepared' | 'awaiting_confirmation' | 'publishing' | 'published' | 'failed' | 'needs_user' | 'unknown';
 
@@ -68,7 +69,16 @@ export function transitionPublication(database: DatabaseSync, id: string, to: Pu
     database.prepare('INSERT INTO publication_events (id, publication_id, from_status, to_status, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), id, current.status, to, input.reason ?? null, now);
     database.exec('COMMIT');
-    return success(getPublication(database, id)!);
+    const publication = getPublication(database, id)!;
+    if (to === 'published' && publication.externalUrl && publication.publishedAt) {
+      schedulePublicationMetricJobs(database, {
+        publicationId: publication.id,
+        publishedAt: publication.publishedAt,
+        sourceUrl: publication.externalUrl,
+        platform: publication.platform
+      });
+    }
+    return success(publication);
   } catch (error) {
     database.exec('ROLLBACK');
     throw error;

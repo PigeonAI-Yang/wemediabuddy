@@ -4,6 +4,7 @@ import { failure, success, type CommandResult } from './result.ts';
 import { recordOperation } from './operations.ts';
 import { getToday } from './workbench.ts';
 import { getStudio } from './content.ts';
+import { listReviews } from './reviews.ts';
 
 export type AgentIntent = 'daily_intelligence' | 'studio_draft' | 'results_review';
 export type AgentTaskStatus = 'running' | 'succeeded' | 'failed' | 'interrupted';
@@ -74,6 +75,12 @@ export function getAgentTask(database: DatabaseSync, id: string): AgentTask | nu
   return row ? parseTask(row) : null;
 }
 
+
+function requireTask(database: DatabaseSync, id: string): AgentTask {
+  const task = getAgentTask(database, id);
+  if (!task) throw new Error(`Agent 任务不存在：${id}`);
+  return task;
+}
 export function getActiveAgentTask(database: DatabaseSync, intent: AgentIntent, businessDate: string): AgentTask | null {
   const row = database.prepare(`SELECT id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
     error_code, error_message, created_at, updated_at, finished_at FROM agent_tasks
@@ -98,9 +105,9 @@ export function getLatestAgentTask(database: DatabaseSync, intent?: AgentIntent,
 export function startAgentTask(
   database: DatabaseSync,
   input: { intent: AgentIntent; businessDate: string; contextRefs?: Record<string, unknown>; piSessionId?: string | null }
-): CommandResult<AgentTask> {
-  if (!intents.includes(input.intent)) return failure('VALIDATION_ERROR', '不支持的 Pi 意图。');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate)) return failure('VALIDATION_ERROR', '业务日期必须是 YYYY-MM-DD。');
+): CommandResult<AgentTask> & { reused?: boolean } {
+  if (!intents.includes(input.intent)) return failure<AgentTask>('VALIDATION_ERROR', '不支持的 Pi 意图。');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate)) return failure<AgentTask>('VALIDATION_ERROR', '业务日期必须是 YYYY-MM-DD。');
 
   const active = getActiveAgentTask(database, input.intent, input.businessDate);
   if (active) {
@@ -111,7 +118,8 @@ export function startAgentTask(
       entityId: active.id,
       result: 'ok'
     });
-    return success(active);
+    const reusedTask: AgentTask = active;
+    return { ok: true, data: reusedTask, error: null, reused: true };
   }
 
   const now = new Date().toISOString();
@@ -135,9 +143,10 @@ export function startAgentTask(
     entityId: id,
     result: 'ok'
   });
-  return success(getAgentTask(database, id)!);
+  const created = getAgentTask(database, id);
+  if (!created) return failure<AgentTask>('NOT_FOUND', '创建 Agent 任务后读取失败。');
+  return { ok: true, data: created, error: null, reused: false };
 }
-
 export function updateAgentTaskPhase(
   database: DatabaseSync,
   id: string,
@@ -156,7 +165,7 @@ export function updateAgentTaskPhase(
     now,
     id
   );
-  return success(getAgentTask(database, id)!);
+  return success(requireTask(database, id));
 }
 
 export function cancelAgentTask(database: DatabaseSync, id: string): CommandResult<AgentTask> {
@@ -173,7 +182,7 @@ export function cancelAgentTask(database: DatabaseSync, id: string): CommandResu
     entityId: id,
     result: 'ok'
   });
-  return success(getAgentTask(database, id)!);
+  return success(requireTask(database, id));
 }
 
 export function failAgentTask(database: DatabaseSync, id: string, errorCode: string, errorMessage: string): CommandResult<AgentTask> {
@@ -191,7 +200,7 @@ export function failAgentTask(database: DatabaseSync, id: string, errorCode: str
     result: 'error',
     errorCode
   });
-  return success(getAgentTask(database, id)!);
+  return success(requireTask(database, id));
 }
 
 export function recoverInterruptedAgentTasks(database: DatabaseSync): number {
@@ -238,6 +247,23 @@ function validateStudioDraft(database: DatabaseSync, contextRefs: Record<string,
   return success({ projectId, contentVersionId: latest.id, versionNumber: latest.number });
 }
 
+function validateResultsReview(database: DatabaseSync, contextRefs: Record<string, unknown>): CommandResult<Record<string, unknown>> {
+  const publicationId = typeof contextRefs.publicationId === 'string' ? contextRefs.publicationId : null;
+  if (!publicationId) return failure('VALIDATION_ERROR', '结果复盘任务需要 publicationId。');
+  const reviews = listReviews(database, publicationId).filter((item) => item.status === 'final');
+  if (!reviews.length) return failure('VALIDATION_ERROR', '成功要求该发布存在最终复盘。');
+  const review = reviews[0];
+  if (!review.keep.length || !review.stop.length || !review.change.length) return failure('VALIDATION_ERROR', '最终复盘必须包含 Keep/Stop/Change。');
+  if (!review.metricSnapshotIds.length) return failure('VALIDATION_ERROR', '最终复盘必须引用指标快照。');
+  if (!review.findings.length) return failure('VALIDATION_ERROR', '成功要求至少一条方法结论。');
+  return success({
+    publicationId,
+    reviewId: review.id,
+    metricSnapshotIds: review.metricSnapshotIds,
+    findingIds: review.findings.map((item) => item.id)
+  });
+}
+
 export function completeAgentTask(database: DatabaseSync, id: string): CommandResult<AgentTask> {
   const current = getRow(database, id);
   if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
@@ -247,7 +273,8 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
   let validation: CommandResult<Record<string, unknown>>;
   if (current.intent === 'daily_intelligence') validation = validateDailyIntelligence(database, current.business_date);
   else if (current.intent === 'studio_draft') validation = validateStudioDraft(database, contextRefs);
-  else validation = failure('VALIDATION_ERROR', '结果复盘完成校验尚未接入。');
+  else if (current.intent === 'results_review') validation = validateResultsReview(database, contextRefs);
+  else validation = failure('VALIDATION_ERROR', '未知 Agent 意图。');
 
   if (!validation.ok) {
     recordOperation(database, {
@@ -276,5 +303,5 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
     entityId: id,
     result: 'ok'
   });
-  return success(getAgentTask(database, id)!);
+  return success(requireTask(database, id));
 }

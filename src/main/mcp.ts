@@ -9,6 +9,8 @@ import { getToday } from './workbench.ts';
 import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
 import { getSource, searchSources, upsertSource, type SourceInput } from './sources.ts';
 import { listAssets } from './assets.ts';
+import { listFinalReviewsAndFindings, listReviews, saveReview } from './reviews.ts';
+import { listPublicationMetricSnapshots } from './metrics.ts';
 import * as z from 'zod';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
@@ -97,6 +99,65 @@ function createServerFor(rootPath: string): McpServer {
         const payload = 'ok' in data ? data : { ok: true, data, error: null };
         db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.save_version', input.request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload);
       } catch (error) { db.exec('ROLLBACK'); throw error; }
+    } finally { db.close(); }
+  });
+  server.registerTool('metrics.get', {
+    description: '读取发布指标快照。',
+    inputSchema: { publication_id: z.string() }
+  }, async ({ publication_id }) => {
+    const db = database();
+    try { return text(listPublicationMetricSnapshots(db, publication_id)); }
+    finally { db.close(); }
+  });
+  server.registerTool('reviews.get', {
+    description: '读取复盘与方法结论。',
+    inputSchema: { publication_id: z.string().optional(), final_only: z.boolean().optional() }
+  }, async ({ publication_id, final_only }) => {
+    const db = database();
+    try {
+      if (final_only) return text(listFinalReviewsAndFindings(db));
+      return text(listReviews(db, publication_id));
+    } finally { db.close(); }
+  });
+  server.registerTool('reviews.save', {
+    description: '保存或定稿复盘；最终复盘必须引用真实指标快照并包含 Keep/Stop/Change。',
+    inputSchema: {
+      request_id: z.string(),
+      publication_id: z.string(),
+      metric_snapshot_ids: z.array(z.string()).min(1),
+      keep: z.array(z.string()).optional(),
+      stop: z.array(z.string()).optional(),
+      change: z.array(z.string()).optional(),
+      summary: z.string().optional(),
+      status: z.enum(['draft', 'final']).optional(),
+      expected_revision: z.number().int().optional(),
+      id: z.string().optional(),
+      findings: z.array(z.object({ id: z.string().optional(), title: z.string(), body: z.string() })).optional()
+    }
+  }, async (input) => {
+    const db = database();
+    try {
+      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?')
+        .get('reviews.save', input.request_id) as { resultJson: string } | undefined;
+      if (prior) return text(JSON.parse(prior.resultJson));
+      const saved = saveReview(db, {
+        id: input.id,
+        publicationId: input.publication_id,
+        metricSnapshotIds: input.metric_snapshot_ids,
+        keep: input.keep,
+        stop: input.stop,
+        change: input.change,
+        summary: input.summary,
+        status: input.status,
+        expectedRevision: input.expected_revision,
+        findings: input.findings
+      });
+      const payload = saved.ok ? { ok: true, data: saved.data, error: null } : { ok: false, data: null, error: saved.error };
+      if (saved.ok) {
+        db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)')
+          .run('reviews.save', input.request_id, JSON.stringify(payload), new Date().toISOString());
+      }
+      return text(payload);
     } finally { db.close(); }
   });
   return server;

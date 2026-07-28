@@ -1,16 +1,18 @@
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { getPiRuntimeInfo, type PiRuntimeInfo } from './pi-runtime-manager.ts';
 
 export type SettingsSnapshot = {
   paths: Record<'dataRoot' | 'database' | 'assets' | 'browserProfile' | 'logs' | 'exports', string>;
   usage: Record<'database' | 'assets' | 'browserProfile' | 'logs' | 'exports', number>;
   counts: { migrations: number; appMeta: number };
   mcp: { status: 'not_started' | 'ready'; url: string | null };
-  health: { database: 'ready'; mcp: 'not_started'; browser: 'not_started'; jobs: 'not_started'; platforms: Record<'x' | 'xiaohongshu' | 'wechat', 'unknown'> };
+  health: { database: 'ready'; mcp: 'not_started' | 'ready'; browser: 'not_started' | 'ready'; jobs: 'not_started'; platforms: Record<'x' | 'xiaohongshu' | 'wechat', 'unknown'> };
+  piRuntime: PiRuntimeInfo;
 };
 
-export async function readSettings(rootPath: string): Promise<SettingsSnapshot> {
+export async function readSettings(rootPath: string, options?: { mcpStatus?: 'not_started' | 'ready'; mcpUrl?: string | null; browserStatus?: 'not_started' | 'ready' }): Promise<SettingsSnapshot> {
   const paths = {
     dataRoot: rootPath,
     database: path.join(rootPath, 'wmb.db'),
@@ -19,6 +21,7 @@ export async function readSettings(rootPath: string): Promise<SettingsSnapshot> 
     logs: path.join(rootPath, 'logs'),
     exports: path.join(rootPath, 'exports')
   };
+  const piRuntime = await getPiRuntimeInfo(rootPath);
   const database = new DatabaseSync(paths.database, { readOnly: true });
   const counts = {
     migrations: Number((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count),
@@ -35,8 +38,9 @@ export async function readSettings(rootPath: string): Promise<SettingsSnapshot> 
       exports: await directorySize(paths.exports)
     },
     counts,
-    mcp: { status: 'not_started', url: null },
-    health: { database: 'ready', mcp: 'not_started', browser: 'not_started', jobs: 'not_started', platforms: { x: 'unknown', xiaohongshu: 'unknown', wechat: 'unknown' } }
+    mcp: { status: options?.mcpStatus ?? 'not_started', url: options?.mcpUrl ?? null },
+    health: { database: 'ready', mcp: options?.mcpStatus ?? 'not_started', browser: options?.browserStatus ?? 'not_started', jobs: 'not_started', platforms: { x: 'unknown', xiaohongshu: 'unknown', wechat: 'unknown' } },
+    piRuntime
   };
 }
 

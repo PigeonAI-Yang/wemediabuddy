@@ -197,7 +197,87 @@ export const migrations = [
       );
       CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
     `
+  },
+  {
+    version: 12,
+    sql: `
+      CREATE TABLE jobs (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'needs_user')),
+        due_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        dedupe_key TEXT NOT NULL UNIQUE,
+        payload_json TEXT NOT NULL,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+      );
+      CREATE INDEX jobs_status_due ON jobs(status, due_at);
+      CREATE TABLE publication_metric_snapshots (
+        id TEXT PRIMARY KEY,
+        publication_id TEXT NOT NULL REFERENCES publications(id),
+        scheduled_for TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        normalized_json TEXT NOT NULL,
+        raw_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (publication_id, scheduled_for)
+      );
+      CREATE TABLE account_metric_snapshots (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        source_url TEXT NOT NULL,
+        normalized_json TEXT NOT NULL,
+        raw_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `
+  },
+  {
+    version: 13,
+    sql: `
+      CREATE TABLE reviews (
+        id TEXT PRIMARY KEY,
+        publication_id TEXT NOT NULL REFERENCES publications(id),
+        content_version_id TEXT NOT NULL,
+        metric_snapshot_ids_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'final')),
+        keep_json TEXT NOT NULL,
+        stop_json TEXT NOT NULL,
+        change_json TEXT NOT NULL,
+        summary TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finalized_at TEXT,
+        revision INTEGER NOT NULL
+      );
+      CREATE INDEX reviews_publication_status ON reviews(publication_id, status);
+      CREATE TABLE method_findings (
+        id TEXT PRIMARY KEY,
+        review_id TEXT NOT NULL REFERENCES reviews(id),
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL
+      );
+      CREATE INDEX method_findings_review ON method_findings(review_id);
+    `
   }
+  ,
+  {
+    version: 14,
+    sql: `
+      ALTER TABLE content_versions ADD COLUMN author TEXT NOT NULL DEFAULT 'ai';
+    `
+  }
+
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

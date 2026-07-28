@@ -47,10 +47,31 @@ export function addProjectNote(database: DatabaseSync, projectId: string, body: 
   return { id, revision: 1 };
 }
 
-export function saveCoreVersion(database: DatabaseSync, projectId: string, body: string): { id: string; versionNumber: number } {
+export function saveCoreVersion(
+  database: DatabaseSync,
+  projectId: string,
+  body: string,
+  author: 'user' | 'ai' = 'ai'
+): { id: string; versionNumber: number; createdAt: string; author: 'user' | 'ai' } {
   const versionNumber = Number((database.prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS number FROM content_versions WHERE project_id = ?').get(projectId) as { number: number }).number);
-  const id = randomUUID(); database.prepare('INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES (?, ?, ?, ?, ?)').run(id, projectId, body, versionNumber, new Date().toISOString());
-  return { id, versionNumber };
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  database.prepare('INSERT INTO content_versions (id, project_id, body, version_number, created_at, author) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, projectId, body, versionNumber, createdAt, author);
+  database.prepare('UPDATE content_projects SET updated_at = ? WHERE id = ?').run(createdAt, projectId);
+  return { id, versionNumber, createdAt, author };
+}
+
+export function updateProjectTitle(database: DatabaseSync, projectId: string, title: string): CommandResult<{ id: string; title: string; revision: number }> {
+  const current = database.prepare('SELECT id, revision FROM content_projects WHERE id = ?').get(projectId) as { id: string; revision: number } | undefined;
+  if (!current) return failure('NOT_FOUND', '内容项目不存在。');
+  const nextTitle = title.trim();
+  if (!nextTitle) return failure('VALIDATION_ERROR', '标题不能为空。');
+  const now = new Date().toISOString();
+  const revision = current.revision + 1;
+  database.prepare('UPDATE content_projects SET title = ?, updated_at = ?, revision = ? WHERE id = ?')
+    .run(nextTitle, now, revision, projectId);
+  return success({ id: projectId, title: nextTitle, revision });
 }
 
 export function savePlatformVersion(database: DatabaseSync, input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string }): CommandResult<{ id: string; revision: number }> {
@@ -66,10 +87,16 @@ export function savePlatformVersion(database: DatabaseSync, input: { projectId: 
   return success({ id: input.id, revision: current.revision + 1 });
 }
 
-export function getStudio(database: DatabaseSync): Array<{ id: string; title: string; revisions: Array<{ id: string; number: number; body: string }>; platforms: Record<string, Array<{ id: string; title: string | null; body: string; revision: number; assets: string[] }>> }> {
+export function getStudio(database: DatabaseSync): Array<{
+  id: string;
+  title: string;
+  revisions: Array<{ id: string; number: number; body: string; createdAt: string; author: 'user' | 'ai' }>;
+  platforms: Record<string, Array<{ id: string; title: string | null; body: string; revision: number; assets: string[] }>>;
+}> {
   const projects = database.prepare('SELECT id, title FROM content_projects ORDER BY updated_at DESC').all() as Array<{ id: string; title: string }>;
   return projects.map((project) => {
-    const revisions = database.prepare('SELECT id, version_number AS number, body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC').all(project.id) as Array<{ id: string; number: number; body: string }>;
+    const revisions = database.prepare(`SELECT id, version_number AS number, body, created_at AS createdAt, COALESCE(author, 'ai') AS author
+      FROM content_versions WHERE project_id = ? ORDER BY version_number DESC`).all(project.id) as Array<{ id: string; number: number; body: string; createdAt: string; author: 'user' | 'ai' }>;
     const versions = database.prepare('SELECT id, platform, title, body, revision, asset_ids_json AS assets FROM platform_versions WHERE project_id = ? ORDER BY updated_at DESC').all(project.id) as Array<{ id: string; platform: string; title: string | null; body: string; revision: number; assets: string }>;
     const platforms: Record<string, Array<{ id: string; title: string | null; body: string; revision: number; assets: string[] }>> = { x: [], xiaohongshu: [], wechat: [] };
     for (const version of versions) platforms[version.platform]?.push({ ...version, assets: JSON.parse(version.assets) });
