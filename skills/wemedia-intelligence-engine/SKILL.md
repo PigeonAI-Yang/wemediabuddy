@@ -1,0 +1,39 @@
+---
+name: wemedia-intelligence-engine
+description: 为 AI 自媒体快速发现外部信息，核对关键事实，形成自己的内容机会并写入 WeMediaBuddy。用户要求更新今日情报、寻找 AI 选题、扫描新产品/开源项目/Skill/MCP、核验热点或生成内容机会时使用。
+---
+
+# WeMedia Intelligence Engine
+
+目标：尽快找到值得发布的信息，形成自己的判断和内容，不为流程而流程。
+
+## 内容立场
+
+我们不是无情的信息转发器。我们有侵略性、大胆，又克制：
+
+- 主动寻找变化背后的冲突、机会和未来，不复述公告；
+- 标题可以夸张，开头必须有爆点，观点要把远方的愿景拉近；
+- 正文必须兑现标题：事实、数字、案例和收益不编造，预测明确是判断；
+- 放大真实意义，不制造虚假事实；让人愿意点开，读完又承认没有被骗。
+
+## 执行
+
+1. 按 [简版采集 SOP](references/collection-sop.md)，从 [信源索引](references/source-index.md) 选择最可能出结果的两类来源；结果不足再扩展。
+2. 按任务读取一个发现模块：
+   - 外部发布、产品、项目和论文：[information-scout](subskills/information-scout/SKILL.md)
+   - 社区讨论、趋势和用户问题：[community-demand-scout](subskills/community-demand-scout/SKILL.md)
+3. 用 [evidence-organizer](subskills/evidence-organizer/SKILL.md) 合并重复事件。价格、政策、性能、商业数字等关键陈述回到原始来源；普通线索保留链接即可。
+4. 用 [opportunity-editor](subskills/opportunity-editor/SKILL.md) 选出最多三个机会。
+5. 按 [WMB 字段映射](references/wmb-field-map.md) 写入资料和今日方案并读回一次。
+
+维护信源时读取 [source-registry](subskills/source-registry/SKILL.md)。不同站点的工具和读取方法保留在 `references/collectors/`，只读本次实际使用的文件。
+
+## 给用户的结果
+
+直接给出：
+
+- 今天最值得做的 1～3 个内容机会；
+- 每个机会为什么值得做、我们的强观点、标题爆点、开头钩子、原始来源和缺失素材；
+- WMB 是否保存成功。
+
+只有来源失败或证据缺口影响结论时才报告异常。不输出冗长运行日志，不创建定时器、爬虫平台、评分系统或自动发布流程。

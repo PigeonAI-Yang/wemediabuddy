@@ -1,3 +1,5 @@
+param([switch]$Full)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -26,7 +28,8 @@ foreach ($relativePath in $requiredFiles) {
 Write-Host '> checking unresolved placeholders'
 $placeholderPattern = '\b(T' + 'BD|T' + 'ODO)\b'
 $placeholderMatches = Get-ChildItem -LiteralPath $projectRoot -File -Recurse |
-    Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+    Where-Object { $_.FullName -notmatch '[\\/](?:\.git|node_modules|out|\.vite)[\\/]' } |
+    Where-Object { $_.Extension -in @('.md', '.json', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.css', '.html', '.ps1', '.yml', '.yaml') } |
     Select-String -Pattern $placeholderPattern -CaseSensitive
 if ($placeholderMatches) {
     $placeholderMatches | ForEach-Object { Write-Host $_.Path ':' $_.LineNumber $_.Line }
@@ -95,8 +98,8 @@ if ($doingCount -gt 1) {
 }
 
 $packageJson = Join-Path $projectRoot 'package.json'
-if (Test-Path -LiteralPath $packageJson -PathType Leaf) {
-    Write-Host '> running package verification'
+if ($Full -and (Test-Path -LiteralPath $packageJson -PathType Leaf)) {
+    Write-Host '> running full package verification'
     $package = Get-Content -Raw -LiteralPath $packageJson | ConvertFrom-Json
     foreach ($scriptName in @('typecheck', 'test', 'build')) {
         if (-not $package.scripts.$scriptName) {
@@ -106,15 +109,21 @@ if (Test-Path -LiteralPath $packageJson -PathType Leaf) {
     Push-Location $projectRoot
     try {
         npm run typecheck
+        if ($LASTEXITCODE -ne 0) { throw 'Package typecheck failed.' }
         npm test
+        if ($LASTEXITCODE -ne 0) { throw 'Package tests failed.' }
         npm run build
+        if ($LASTEXITCODE -ne 0) { throw 'Package build failed.' }
     }
     finally {
         Pop-Location
     }
 }
+elseif (-not $Full) {
+    Write-Host '> lightweight check complete; package checks skipped by design'
+}
 else {
-    Write-Host '> application scaffold not present; document checks only'
+    Write-Host '> application scaffold not present'
 }
 
 Write-Host 'WMB harness checks passed.'

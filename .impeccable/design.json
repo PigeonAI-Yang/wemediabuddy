@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-27T15:30:00+08:00",
+  "title": "Design System: WeMediaBuddy",
+  "extensions": {
+    "colorMeta": {
+      "violet": {
+        "role": "primary",
+        "displayName": "主编紫罗兰",
+        "canonical": "#7657EF",
+        "tonalRamp": ["#A98FFF", "#886CF4", "#7657EF", "#5733C7"]
+      },
+      "dark-app-bg": {
+        "role": "neutral",
+        "displayName": "黑夜底色",
+        "canonical": "#090C11",
+        "tonalRamp": ["#1D2230", "#10151D", "#0F141C", "#090C11"]
+      },
+      "day-app-bg": {
+        "role": "neutral",
+        "displayName": "白昼底色",
+        "canonical": "#F5F3FB",
+        "tonalRamp": ["#FFFFFF", "#FBFAFF", "#F5F3FB", "#EBE6F8"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "页面标题",
+        "purpose": "每个页面唯一的主标题。"
+      },
+      "body": {
+        "displayName": "产品正文",
+        "purpose": "判断、说明、内容预览和编辑文本。"
+      },
+      "label": {
+        "displayName": "状态标签",
+        "purpose": "字段名、状态、平台与时间。"
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "150ms ease-out",
+        "purpose": "按钮、标签和选中状态。"
+      },
+      {
+        "name": "drawer-standard",
+        "value": "200ms cubic-bezier(.22, 1, .36, 1)",
+        "purpose": "紧凑窗口的辅助抽屉。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "1100px"
+      },
+      {
+        "name": "medium",
+        "value": "1280px"
+      },
+      {
+        "name": "wide",
+        "value": "1600px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "每个视图唯一的最强操作。",
+      "html": "<button class=\"ds-btn-primary\">就做这个，进入创作</button>",
+      "css": ".ds-btn-primary{border:0;border-radius:7px;background:#7657EF;color:#fff;padding:11px 18px;font:650 13px/1.4 'Segoe UI','Microsoft YaHei UI',sans-serif;transition:background 150ms ease-out;cursor:pointer}.ds-btn-primary:hover{background:#886CF4}.ds-btn-primary:focus-visible{outline:2px solid #7657EF;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "刷新、返回和打开外部执行器。",
+      "html": "<button class=\"ds-btn-secondary\">查看关联资料</button>",
+      "css": ".ds-btn-secondary{border:1px solid #424B59;border-radius:7px;background:#10151D;color:#F3F5F8;padding:10px 16px;font:400 15px/1.4 'Segoe UI','Microsoft YaHei UI',sans-serif;cursor:pointer}.ds-btn-secondary:hover{background:#181E28}.ds-btn-secondary:focus-visible{outline:2px solid #7657EF;outline-offset:2px}"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "description": "平台、版本、优先级与真实状态。",
+      "html": "<span class=\"ds-chip\">等待确认</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;border-radius:5px;background:#1B2029;color:#D1D5DC;padding:5px 10px;font:650 13px/1.4 'Segoe UI','Microsoft YaHei UI',sans-serif}.ds-chip:focus-visible{outline:2px solid #7657EF;outline-offset:2px}"
+    },
+    {
+      "name": "Primary Content Panel",
+      "kind": "card",
+      "refersTo": "card-primary",
+      "description": "首选机会、发布确认或结果详情的主要表面。",
+      "html": "<section class=\"ds-panel\"><h3>首选内容机会</h3><p>判断、观点和证据集中在一个主表面中。</p></section>",
+      "css": ".ds-panel{border:1px solid #7657EF;border-radius:12px;background:#0F141C;color:#F3F5F8;padding:20px 24px;font-family:'Segoe UI','Microsoft YaHei UI',sans-serif}.ds-panel h3{margin:0 0 8px;font-size:18px}.ds-panel p{margin:0;color:#D1D5DC;line-height:1.55}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "52px 高的主导航选中态。",
+      "html": "<button class=\"ds-nav-active\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 5h18v16H3zM7 3v4M17 3v4M3 10h18\"/></svg><span>今日</span></button>",
+      "css": ".ds-nav-active{display:flex;align-items:center;gap:16px;width:190px;height:52px;border:0;border-radius:9px;background:#1D2230;color:#F3F5F8;padding:0 17px;font:400 17px/1 'Segoe UI','Microsoft YaHei UI',sans-serif}.ds-nav-active svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7}.ds-nav-active:focus-visible{outline:2px solid #7657EF;outline-offset:2px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "description": "创作字段与搜索控件。",
+      "html": "<input class=\"ds-input\" value=\"AI 不再满足于回答问题\" aria-label=\"标题\">",
+      "css": ".ds-input{width:360px;height:40px;border:1px solid #424B59;border-radius:7px;background:#10151D;color:#F3F5F8;padding:0 12px;font:400 15px/1 'Segoe UI','Microsoft YaHei UI',sans-serif}.ds-input:focus{border-color:#7657EF;outline:2px solid #7657EF;outline-offset:1px}.ds-input:disabled{opacity:.55}"
+    }
+  ],
+  "narrative": {
+    "northStar": "私人主编台",
+    "overview": "界面优先帮助自媒体创作者判断今天值得讲什么，并把资料、观点、创作、发布和结果连接成可追溯闭环。黑夜紫罗兰默认克制专注，白昼紫罗兰保持同一信息层级。",
+    "keyCharacteristics": [
+      "内容机会优先",
+      "真实证据可追溯",
+      "一个首选和一个主操作",
+      "稳定多栏工作区",
+      "系统状态默认退场"
+    ],
+    "rules": [
+      {
+        "name": "One Violet Voice",
+        "body": "紫罗兰只用于当前选择、主操作和关键判断，单屏实色面积不超过约10%。",
+        "section": "colors"
+      },
+      {
+        "name": "User Language",
+        "body": "业务界面禁止出现内部工程术语。",
+        "section": "typography"
+      },
+      {
+        "name": "Flat by Default",
+        "body": "默认无阴影，以色阶和1px边框建立层次。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do prioritize the user's content decision.",
+      "Do preserve source, version, account and snapshot evidence.",
+      "Do use the official logo from images/logo.png.",
+      "Do test 1672px, 1366px and 1100px layouts."
+    ],
+    "donts": [
+      "Don't build a SaaS dashboard or Kanban board.",
+      "Don't expose MCP, IPC, CDP, revision or external Agent terms.",
+      "Don't invent scores, trends or success states.",
+      "Don't use glassmorphism, neon cyberpunk, large gradients or decorative empty-state glyph tiles."
+    ]
+  }
+}

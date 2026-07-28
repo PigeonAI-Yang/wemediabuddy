@@ -4,7 +4,7 @@ This plan orders the complete current PRD. Phases are dependency gates, not redu
 
 ## M-000 Harness and contracts
 
-Scope: CAP-001–CAP-013 documentation and traceability.
+Scope: CAP-001–CAP-014 documentation and traceability.
 
 Gate:
 
@@ -35,10 +35,11 @@ Scope: CAP-002, CAP-003.
 Deliver:
 
 - source feed/item persistence and dedupe;
+- versioned intelligence-engine Skill with a graded source registry, collection SOPs, evidence verification, event clustering, and opportunity judgment;
 - topics, plans, references, and current-plan rule;
 - Today view and business commands.
 
-Gate: duplicate source input does not create duplicate identity, and a current plan cites stored sources.
+Gate: duplicate or incremental source input does not lose prior analysis, complete source search/readback works, and a current plan cites stored sources with material gaps.
 
 ## M-300 Studio, assets, and MCP
 
@@ -72,25 +73,25 @@ Gate: a local controlled page proves state transitions and restart safety; no re
 
 Scope: CAP-008, CAP-011.
 
-Deliver all three X formats with real account identity, publish readback, metrics, and recovery.
+Deliver all three X platform-version formats and exact manual handoff.
 
-Gate: EVAL-003, EVAL-004, and EVAL-005 pass with real status identities.
+Gate: EVAL-003, EVAL-004, and EVAL-005 pass with exact payloads and bound assets.
 
 ## M-600 Xiaohongshu vertical slice
 
 Scope: CAP-009, CAP-011.
 
-Deliver both Xiaohongshu formats with real account identity, publish readback, metrics, and recovery.
+Deliver both Xiaohongshu formats through the required MCP/manual workflow.
 
-Gate: EVAL-006 and EVAL-007 pass with real note identities.
+Gate: EVAL-006 and EVAL-007 pass with exact payloads and bound assets.
 
 ## M-700 WeChat vertical slice
 
 Scope: CAP-010, CAP-011.
 
-Deliver actual article publication, human takeover when required, accessible article readback, and metrics.
+Deliver the final article payload for manual publication and optional URL validation.
 
-Gate: EVAL-008 passes; a saved draft alone fails.
+Gate: EVAL-008 passes with the exact article payload.
 
 ## M-800 Results and learning loop
 
@@ -114,9 +115,22 @@ Deliver:
 
 - all command checks;
 - packaged app;
-- six live publication receipts;
+- six platform payload receipts;
 - cross-Agent receipt;
 - restart, unknown, stale confirmation, data-root, and feedback-loop receipts.
 
-Gate: all TASKS are `done`, all EVAL-001–EVAL-013 pass, and the harness check passes.
+Gate: all current-scope TASKS are `done`, all EVAL-001–EVAL-013 pass under the manual-publication contract, and the harness check passes.
 
+## M-1000 Built-in Pi executor
+
+Scope: CAP-014 plus existing CAP-002–CAP-005 and CAP-013 business surfaces.
+
+Deliver:
+
+- pinned, independently replaceable Pi runtime using WMB's OpenAI-compatible connection;
+- one supervised RPC process and thin WMB MCP extension;
+- durable, idempotent Pi task state with business-object readback;
+- one persistent collapsible Pi dock on every main page;
+- Today intelligence and Studio draft intents without an external chat.
+
+Gate: the packaged runtime starts, streams, aborts and exits; a real Pi task writes only through live WMB MCP; Today and Studio read back their required business objects; final publication remains manual.

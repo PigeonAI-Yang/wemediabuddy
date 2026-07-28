@@ -14,29 +14,31 @@ Required after scaffold:
 - selected package manager;
 - installed Chrome/Chromium for live platform checks.
 
-## One-command check
+## Lightweight default
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-This currently validates the harness and traceability documents. After scaffold, it must also call the real package scripts.
+This validates required contracts, task-ledger structure and traceability. It intentionally does not run all package checks.
 
-## Typecheck
+## Change-proportional checks
 
-No command exists yet. The scaffold task must add a package script and wire it into `scripts/check.ps1`.
+- Focused regression: required for the changed non-trivial behavior.
+- Typecheck: run when TypeScript or a shared type boundary changed.
+- Full tests: run only for shared business behavior, migrations, or harness changes.
+- Windows package: run only for packaging resources/configuration, startup, preload/main boundaries, release, or final acceptance.
+- Live readback: required whenever the acceptance claim concerns a real browser, MCP, database mutation, packaged runtime, or platform state.
 
-## Lint
+Do not repeat a successful check when neither its inputs nor acceptance target changed. Reuse the recorded receipt.
 
-No command exists yet. Add only if the scaffold includes a linter; do not introduce one solely to satisfy this heading.
+## Full release check
 
-## Tests
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -Full
+```
 
-No command exists yet. Each non-trivial business task must add the smallest runnable regression check required by `SPEC.md`.
-
-## Build
-
-No command exists yet. Electron packaging and application build commands are established by the scaffold task.
+This runs typecheck, all tests and Windows packaging. It is a release/final gate, not a development-loop command.
 
 ## Manual and live checks
 
@@ -48,10 +50,9 @@ Required by capability:
 - Metrics: real creator-page values, capture timestamp, source page, and unsupported/unavailable semantics.
 - Recovery: restart application and verify persisted state and safe job transition.
 
-## Known gaps
+## Prohibited verification waste
 
-- No application code or manifest.
-- No pinned dependency versions.
-- No automated typecheck, test, or build command.
-- Live platform selectors and metric fields require inspection of the user's authenticated pages.
-
+- Packaging after an unrelated renderer or copy change.
+- Running all tests when one focused regression covers the changed call path.
+- Rebuilding the same unchanged Pi/runtime resource more than once in a task.
+- Treating command count as evidence quality.

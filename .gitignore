@@ -1,0 +1,4 @@
+node_modules/
+.pi-runtime/
+out/
+.vite/

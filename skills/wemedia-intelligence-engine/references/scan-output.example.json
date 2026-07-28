@@ -1,0 +1,17 @@
+{
+  "sources": [
+    {"id":"source-1","title":"Example release","original_url":"https://example.com/release"}
+  ],
+  "opportunities": [
+    {
+      "title":"What this release changes",
+      "why_now":"It is new and useful.",
+      "audience":"AI tool users",
+      "angle":"Test it instead of repeating the announcement.",
+      "source_ids":["source-1"],
+      "available_materials":["official release"],
+      "missing_materials":["first-party test"],
+      "effort_estimate":"45 minutes"
+    }
+  ]
+}

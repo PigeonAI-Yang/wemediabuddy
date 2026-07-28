@@ -10,7 +10,7 @@ Keywords `must`, `must not`, and `only` are normative.
 
 ## 1. Completion boundary
 
-WMB is complete only when all capabilities in this document pass and the six real publishing paths have evidence:
+WMB is complete when its research, planning, creation, platform-version handoff, metrics-on-supplied-URLs, and review loop pass. It must support these six manual-publication payloads, but real publication receipts are not a completion gate:
 
 1. X pure text;
 2. X text with one image;
@@ -115,7 +115,7 @@ Links: REQ-002, REQ-013, AC-001.
 A source item must store:
 
 - original and canonical URL when available;
-- source identity when no URL exists;
+- registered source identity when the item came from the maintained source index, or a source identity when no URL exists;
 - title, author, published time, and collected time;
 - summary, categories, keywords, value judgment, IP relevance;
 - creation angles, recommended platforms and formats;
@@ -124,6 +124,8 @@ A source item must store:
 - originating Agent/client label when supplied.
 
 Canonical URL is the primary dedupe key. Items without a URL use a deterministic content fingerprint. Re-ingesting an existing source updates analysis fields without creating a duplicate source identity.
+
+Every enabled entry in the maintained source index must reference a packaged local identity asset. Today and Library render that asset inside one shared 48×48 source mark without recoloring or changing its aspect ratio. Company/platform sources use their registered brand mark; professional-account sources use their registered profile image. Unregistered sources use one neutral source icon. Generated initial-letter tiles are not allowed.
 
 Today must show the selected date, source cards, source links, priority, plan items, pending human actions, and a create-content action.
 
@@ -143,6 +145,7 @@ Each plan item must contain:
 - title/opening/structure guidance;
 - effort estimate;
 - cited `source_ids`;
+- available and missing materials;
 - optional cited `review_ids` and `method_finding_ids`.
 
 A later current plan must contain at least one explicit historical review or method-finding reference once final reviews exist.
@@ -181,6 +184,8 @@ Required MCP tools:
 | --- | --- |
 | `context.get_workbench` | Return current date work, pending actions, recent sources, current plan, recent reviews and method findings. |
 | `sources.upsert_batch` | Add or update source items with dedupe results. |
+| `sources.get` | Read one complete source item by ID. |
+| `sources.search` | Search source items and return complete analysis fields. |
 | `plans.get` | Read a dated/current plan with references. |
 | `plans.save` | Save a complete plan revision with cited IDs. |
 | `content.create` | Create a content project from a topic or plan item. |
@@ -219,41 +224,32 @@ Each adapter implements:
 ```text
 identifyAccount
 prepare
-publish
 readBackPublication
 collectMetrics
 ```
 
 `identifyAccount` returns platform, stable account key, display name, login state, and evidence URL. Login state is one of `authenticated`, `unauthenticated`, `challenge`, or `unknown`.
 
-Current scope permits at most one active account per platform. If the live browser identity differs from the stored active account, prepare and publish must stop with `ACCOUNT_MISMATCH`.
+Current scope permits at most one active account per platform. If the live browser identity differs from the stored active account, prepare and readback must stop with `ACCOUNT_MISMATCH`.
 
 Login expiry, QR scan, CAPTCHA, challenge, or manual review moves the work to `needs_user` and opens the same visible browser for takeover.
 
-### CAP-007 Human confirmation and publication safety
+### CAP-007 Manual publication safety
 
 Links: REQ-007, AC-006.
 
-MCP may prepare a publication. Only the Publish UI may confirm and trigger execution.
+MCP and the UI may present or copy the final platform payload. Neither triggers the platform's final publish action.
 
-Prepare must:
+The Publish view shows the platform, immutable content version, exact title/body, and ordered assets for manual publication. Account detection, editor filling, upload readiness, and publication readback are optional conveniences, not completion requirements.
 
-- identify the exact account;
-- open and fill the platform editor;
-- wait for media upload/processing to become visibly ready;
-- read back editor title/body/media;
-- persist the prepared payload independent of the open page.
-
-The confirmation view must show platform, account identity, immutable content version, exact title/body, and ordered asset previews.
-
-Confirmation binds:
+The prepared record binds:
 
 - platform version ID and revision;
 - account ID and stable key;
 - ordered asset IDs and SHA-256 values;
-- a single publication attempt.
+- the later readback attempt.
 
-Any bound change invalidates confirmation. Confirmation is one-time and immediately starts one atomic transition to `publishing`.
+Any bound change invalidates a saved handoff record. WMB never transitions to `publishing` by clicking a platform control.
 
 Publication states and allowed transitions:
 
@@ -261,15 +257,15 @@ Publication states and allowed transitions:
 | --- | --- |
 | `draft` | `prepared` |
 | `prepared` | `awaiting_confirmation`, `draft` |
-| `awaiting_confirmation` | `publishing`, `draft`, `needs_user` |
-| `publishing` | `published`, `failed`, `needs_user`, `unknown` |
+| `awaiting_confirmation` | `needs_user`, `published`, `unknown`, `draft` |
+| `publishing` | `needs_user`, `unknown` |
 | `failed` | `prepared` |
 | `needs_user` | `prepared`, `published`, `unknown` |
 | `unknown` | `published`, `failed` |
 
-`published` is terminal. Publishing again creates a new publication and attempt.
+`published` is terminal. A new manual publication creates a new publication record.
 
-Success requires stable readback identity:
+When the user chooses to record a manual publication, stable readback identity is:
 
 - X: status URL and status ID;
 - Xiaohongshu: note URL and note ID;
@@ -277,7 +273,7 @@ Success requires stable readback identity:
 
 A toast, click, navigation, or empty editor is not success.
 
-If WMB cannot determine whether a click published, it must enter `unknown`, save attempt and reconciliation evidence, and never auto-retry. Reconciliation may mark published only after a unique account/content/time match; otherwise it remains unknown or a user explicitly confirms it did not publish.
+Missing publication readback does not block content completion. If readback is attempted and ambiguous it enters `unknown`; WMB never clicks or retries the platform publish control.
 
 ### CAP-008 X adapter
 
@@ -289,7 +285,7 @@ Required formats:
 - non-empty text plus exactly one image;
 - non-empty text plus exactly one video.
 
-The adapter must show the X handle in confirmation, wait for media readiness, perform a real publish after UI confirmation, and read back status URL and ID.
+WMB must preserve the exact X payload and assets for manual publication. URL/ID readback is optional after the user publishes.
 
 Required metrics when the authenticated author page exposes them:
 
@@ -309,7 +305,7 @@ Required formats:
 - non-empty title and body with at least one image;
 - non-empty title and body with exactly one video.
 
-The adapter must show the account display name, wait for upload/processing readiness, perform a real publish after UI confirmation, and read back note URL and ID.
+WMB must preserve the exact Xiaohongshu payload and assets for manual publication. Every Xiaohongshu AI operation uses the configured `xpzouying/xiaohongshu-mcp`; WMB has no direct Xiaohongshu browser adapter. URL/ID readback is optional.
 
 Required metrics when the creator page exposes them:
 
@@ -326,7 +322,7 @@ Links: REQ-010, AC-005, AC-006, AC-007.
 
 Required format is a non-empty article title and body with supported inline/cover assets.
 
-Saving a draft is not completion. The adapter must complete actual publication and read back an accessible article URL. QR or administrator confirmation is a normal `needs_user` takeover path; after takeover, WMB must still perform readback.
+The user manually publishes the article. An accessible article URL may be supplied afterward for validation, metrics, and review, but is not required to complete the content workflow.
 
 Required metrics when the authenticated backend exposes them:
 
@@ -340,7 +336,7 @@ Shares, comments, and other labels are optional raw metrics.
 
 Links: REQ-011, REQ-013, AC-007.
 
-Successful publication creates metric jobs for 1h, 6h, 24h, and 72h after `published_at`.
+A recorded publication URL may create metric jobs for 1h, 6h, 24h, and 72h after `published_at`.
 
 Each snapshot stores:
 
@@ -411,6 +407,20 @@ Publish must show a state timeline, attempts, errors, `needs_user` takeover acti
 
 Settings must provide log-directory opening and current health for MCP, browser, database, jobs, and platform identities.
 
+### CAP-014 Built-in Pi executor
+
+Links: REQ-001, REQ-005, REQ-013.
+
+WMB ships a pinned Pi runtime as an independent application resource. The Pi runtime can be replaced or upgraded separately from WMB business code, while WMB records the active version and verifies RPC startup before use.
+
+Pi uses only the OpenAI-compatible Base URL, API key, and model configured in WMB. WMB must not read, copy, refresh, or invalidate another Agent's OAuth session.
+
+Only explicit user intents that require research, judgment, writing, rewriting, or review create Pi tasks. Deterministic UI actions continue to call existing business commands directly.
+
+Pi runs as one supervised RPC subprocess with LF-delimited JSON messages, streamed events, abort, shutdown, and restart-safe task state. Pi may write WMB business state only through the existing MCP tools; it must not write SQLite or business files directly and must not execute final publication.
+
+Every main view shares one collapsible Pi conversation dock. Page changes preserve the conversation and active task. A text response or `agent_end` alone is not success; WMB marks a task successful only after required business objects read back through the existing business API.
+
 ## 4. UI and IPC contract
 
 The five required views are Today, Studio, Publish, Results, and Settings.
@@ -423,6 +433,7 @@ Preload exposes narrow IPC for:
 - safe job retry;
 - settings read/update;
 - open data/log directories.
+- fixed Pi task start/read/cancel and Pi connection settings.
 
 Renderer must not pass SQL, arbitrary command names, arbitrary filesystem paths, or arbitrary browser URLs.
 
@@ -434,17 +445,16 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | --- | --- | --- |
 | EVAL-001 | Sources and planning | Duplicate source readback, current plan, cited source IDs. |
 | EVAL-002 | Cross-Agent continuation | Agent A/B transcript, revision conflict, UI readback. |
-| EVAL-003 | X pure text | Account identity, confirmation, status URL/ID, metric snapshot. |
-| EVAL-004 | X image | Asset hash, editor readback, status URL/ID, metric snapshot. |
-| EVAL-005 | X video | Processing-ready evidence, status URL/ID, metric snapshot. |
-| EVAL-006 | Xiaohongshu image | Account identity, note URL/ID, metric snapshot. |
-| EVAL-007 | Xiaohongshu video | Processing-ready evidence, note URL/ID, metric snapshot. |
-| EVAL-008 | WeChat article | Account identity, actual accessible article URL, metric snapshot. |
+| EVAL-003 | X pure text | Exact manual-publication payload. |
+| EVAL-004 | X image | Exact payload and bound image hash. |
+| EVAL-005 | X video | Exact payload and bound video hash. |
+| EVAL-006 | Xiaohongshu image | Exact title/body/image handoff through the required MCP workflow. |
+| EVAL-007 | Xiaohongshu video | Exact title/body/video handoff through the required MCP workflow. |
+| EVAL-008 | WeChat article | Exact article title/body handoff; URL validation is optional. |
 | EVAL-009 | Stale confirmation | Changed content/account/asset rejects previous confirmation. |
 | EVAL-010 | Unknown publication | Interrupted readback does not republish; reconciliation evidence persists. |
 | EVAL-011 | Restart recovery | Data, jobs, login profile, and safe states survive restart. |
 | EVAL-012 | Feedback loop | Final keep/stop/change review and later plan backlink. |
 | EVAL-013 | Data-root visibility | Real paths, usage, counts, reopen after whole-root move. |
 
-All six real publication evals must pass. Platform-auth or human-confirmation absence is `blocked`, not skipped or passed.
-
+All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

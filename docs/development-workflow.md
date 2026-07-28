@@ -26,7 +26,11 @@
 
 ## Verification
 
-Run the one-command check, then any task-specific live checks in `SPEC.md`.
+Run one focused check that directly covers the changed behavior. Add typecheck only for TypeScript/type-boundary changes. Do not run the full suite or Windows package merely because a file changed.
+
+Use `scripts/check.ps1` for the lightweight contract/ledger check. Use `scripts/check.ps1 -Full` only for release, final acceptance, or a change to packaging/startup/shared infrastructure.
+
+Never repeat an unchanged successful check in the same task. Record and reuse its receipt.
 
 Do not replace real platform acceptance with mocks, screenshots, a green unit test, or a successful click.
 

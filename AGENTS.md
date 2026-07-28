@@ -25,7 +25,7 @@ For browser/platform work, also read the matching platform contract in `SPEC.md`
 2. Read every referenced requirement and the real call path before editing.
 3. For a bug, first create and run a minimal falsifiable reproduction; do not patch before the root cause is confirmed.
 4. Make the smallest implementation that satisfies the referenced SPEC IDs.
-5. Run `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`.
+5. Run the smallest check that can disprove the current change.
 6. Record verification evidence in `TASKS.md`; mark `done` only when every acceptance item passes.
 7. Report files read, files changed, rationale, verification, and remaining risks.
 
@@ -41,13 +41,26 @@ For browser/platform work, also read the matching platform contract in `SPEC.md`
 
 ## Verification
 
-Run the checks listed in `docs/verification.md`. The current one-command entrypoint is:
+Verification is proportional to the change:
+
+- During implementation, run only the focused regression or live readback that directly covers the changed path.
+- Run typecheck only when TypeScript code or a shared type boundary changed.
+- Run the full test suite only when shared business behavior, migrations, or the test harness changed.
+- Run Windows packaging only when packaging configuration, packaged resources, startup, preload/main boundaries, or release delivery changed.
+- Do not repeat an unchanged check or rebuild an unchanged artifact in the same task. Reuse its recorded receipt.
+- A task-specific real readback is stronger than repeating unrelated tests.
+
+The lightweight harness entrypoint is:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-No business-code checks exist until the application scaffold task creates `package.json`; do not report typecheck, lint, test, or build as passed before those commands exist.
+The release/final-acceptance entrypoint is explicit and must not be used as the default development loop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -Full
+```
 
 ## Final report
 
