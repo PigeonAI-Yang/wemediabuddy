@@ -413,7 +413,7 @@ Links: REQ-001, REQ-005, REQ-013.
 
 WMB ships a pinned Pi runtime as an independent application resource. The Pi runtime can be replaced or upgraded separately from WMB business code, while WMB records the active version and verifies RPC startup before use.
 
-Pi uses only the API protocol, Base URL, API key, and model configured in WMB. Current protocols are OpenAI Responses and Anthropic Messages. WMB must not read, copy, refresh, or invalidate another Agent's OAuth session.
+Pi uses only the API protocol, Base URL, API key, and model configured in WMB. Current protocols are OpenAI Responses, OpenAI Chat Completions, and Anthropic Messages. WMB must not read, copy, refresh, or invalidate another Agent's OAuth session.
 
 Settings may save multiple named API presets. Exactly one configured preset is active for new Pi processes; switching presets stops the current Pi process before the next turn. API keys remain encrypted locally and are never returned to the renderer.
 Settings must fetch model IDs from the configured protocol's `/models` endpoint using that protocol's authentication headers and let the user select one; manual model entry remains available when the endpoint cannot enumerate models.

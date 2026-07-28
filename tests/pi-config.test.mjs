@@ -60,7 +60,7 @@ test('Pi API model list uses the compatible models endpoint', async () => {
     const address = server.address();
     const models = await listPiModels(database, {
       baseUrl: `http://127.0.0.1:${address.port}/v1`,
-      api: 'openai-responses',
+      api: 'openai-completions',
       apiKey: 'test-key'
     });
     assert.deepEqual(models, ['model-a', 'model-b']);

@@ -25,7 +25,7 @@ export type PiConfigProfile = {
   configured: boolean;
   active: boolean;
 };
-export type PiApiType = 'openai-responses' | 'anthropic-messages';
+export type PiApiType = 'openai-responses' | 'openai-completions' | 'anthropic-messages';
 export type PiConfig = {
   activeId: string | null;
   profiles: PiConfigProfile[];
@@ -165,7 +165,9 @@ function readStored(database: DatabaseSync): StoredState {
 
 function inferApi(baseUrl: string): PiApiType {
   try {
-    return new URL(baseUrl).hostname.endsWith('anthropic.com') ? 'anthropic-messages' : 'openai-responses';
+    const url = new URL(baseUrl);
+    if (url.hostname === 'opencode.ai' && url.pathname.startsWith('/zen/go/')) return 'openai-completions';
+    return url.hostname.endsWith('anthropic.com') ? 'anthropic-messages' : 'openai-responses';
   } catch {
     return 'openai-responses';
   }

@@ -255,7 +255,7 @@ app.whenReady().then(() => {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return saveBrowserConfig(database, config); } finally { database.close(); }
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'anthropic-messages'; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }) => {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
@@ -289,7 +289,7 @@ app.whenReady().then(() => {
       return saved;
     } finally { database.close(); }
   });
-  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: 'openai-responses' | 'anthropic-messages'; apiKey?: string }) => {
+  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }) => {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据目录。');

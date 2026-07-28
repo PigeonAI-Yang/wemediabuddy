@@ -692,7 +692,7 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
 }): React.JSX.Element {
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
-  const [piApi, setPiApi] = useState<'openai-responses' | 'anthropic-messages'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
+  const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions' | 'anthropic-messages'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
   const [piApiKey, setPiApiKey] = useState('');
@@ -789,12 +789,23 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
                 {profile.active && <em>使用中</em>}
               </button>)}
               <button type="button" className="pi-profile-add" onClick={() => selectPiProfile('')}>＋ 新建配置</button>
+              <button type="button" className="pi-profile-add" onClick={() => {
+                setPiProfileId('');
+                setPiName('OpenCode Go');
+                setPiBaseUrl('https://opencode.ai/zen/go/v1');
+                setPiApi('openai-completions');
+                setPiModel('');
+                setPiApiKey('');
+                setPiModels([]);
+                setPiConfigNote('填写 OpenCode Go API Key 后获取模型');
+              }}>＋ OpenCode Go</button>
             </div>
           </div>
           <div className="pi-fields">
             <label><span>配置名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
-            <label><span>接口类型</span><select value={piApi} onChange={(event) => { setPiApi(event.target.value as 'openai-responses' | 'anthropic-messages'); setPiModels([]); }}>
+            <label><span>接口类型</span><select value={piApi} onChange={(event) => { setPiApi(event.target.value as 'openai-responses' | 'openai-completions' | 'anthropic-messages'); setPiModels([]); }}>
               <option value="openai-responses">OpenAI Responses</option>
+              <option value="openai-completions">OpenAI Chat Completions</option>
               <option value="anthropic-messages">Anthropic Messages</option>
             </select></label>
             <label className="wide">
