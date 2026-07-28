@@ -27,7 +27,7 @@ import {
   schedulePublicationMetricJobs
 } from './metrics';
 import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
-import { readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
+import { activatePiConfig, deletePiConfig, readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime, stagePiRuntimeFromSource } from './pi-runtime-manager';
@@ -255,13 +255,35 @@ app.whenReady().then(() => {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return saveBrowserConfig(database, config); } finally { database.close(); }
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { baseUrl: string; model: string; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; apiKey?: string }) => {
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
       const saved = savePiConfig(database, input);
+      await pi?.stop();
+      pi = null;
+      return saved;
+    } finally { database.close(); }
+  });
+  ipcMain.handle('pi-config:activate', async (_event, id: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const saved = activatePiConfig(database, id);
+      await pi?.stop();
+      pi = null;
+      return saved;
+    } finally { database.close(); }
+  });
+  ipcMain.handle('pi-config:delete', async (_event, id: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const saved = deletePiConfig(database, id);
       await pi?.stop();
       pi = null;
       return saved;

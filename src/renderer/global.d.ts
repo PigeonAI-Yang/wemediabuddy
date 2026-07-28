@@ -14,7 +14,13 @@ declare global {
         browser: { status: string; pid?: number; cdpUrl?: string; profilePath?: string };
         browserOptions: Array<{ id: string; label: string; executablePath: string; userDataDir: string; profileDirectory: string }>;
         selectedBrowser: { id: string; label: string; executablePath: string; userDataDir: string; profileDirectory: string } | null;
-        pi: { baseUrl: string; model: string; configured: boolean };
+        pi: {
+          activeId: string | null;
+          profiles: Array<{ id: string; name: string; baseUrl: string; model: string; configured: boolean; active: boolean }>;
+          baseUrl: string;
+          model: string;
+          configured: boolean;
+        };
         piRuntime: { version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null };
       } | null>;
       openLogs(): Promise<void>;
@@ -24,7 +30,9 @@ declare global {
       updatePiRuntime(sourceRuntimeRoot: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       rollbackPiRuntime(): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       configureBrowser(id: string): Promise<{ id: string }>;
-      savePiConfig(input: { baseUrl: string; model: string; apiKey?: string }): Promise<{ baseUrl: string; model: string; configured: boolean }>;
+      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; apiKey?: string }): Promise<unknown>;
+      activatePiConfig(id: string): Promise<unknown>;
+      deletePiConfig(id: string): Promise<unknown>;
       chatPi(message: string): Promise<{ text: string; stopped: boolean }>;
       stopPi(): Promise<{ stopped: boolean }>;
       getPiConversation(): Promise<{

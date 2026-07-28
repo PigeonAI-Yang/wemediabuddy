@@ -690,11 +690,41 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
   dataRoot: string | null; settings: Awaited<ReturnType<typeof window.wmb.getSettings>>; browserChoice: string;
   setBrowserChoice: (value: string) => void; refresh: () => void;
 }): React.JSX.Element {
+  const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
+  const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
   const [piApiKey, setPiApiKey] = useState('');
+  const [piConfigNote, setPiConfigNote] = useState('');
   const [runtimeNote, setRuntimeNote] = useState('');
-  useEffect(() => { setPiBaseUrl(settings?.pi.baseUrl ?? ''); setPiModel(settings?.pi.model ?? ''); }, [settings?.pi.baseUrl, settings?.pi.model]);
+  const selectPiProfile = (id: string) => {
+    const profile = settings?.pi.profiles.find((item) => item.id === id);
+    setPiProfileId(id);
+    setPiName(profile?.name ?? '');
+    setPiBaseUrl(profile?.baseUrl ?? '');
+    setPiModel(profile?.model ?? '');
+    setPiApiKey('');
+    setPiConfigNote('');
+  };
+  useEffect(() => {
+    selectPiProfile(settings?.pi.activeId ?? '');
+  }, [settings?.pi.activeId, settings?.pi.profiles]);
+  const saveProfile = async () => {
+    try {
+      await window.wmb.savePiConfig({
+        id: piProfileId || undefined,
+        name: piName,
+        baseUrl: piBaseUrl,
+        model: piModel,
+        apiKey: piApiKey || undefined
+      });
+      setPiApiKey('');
+      setPiConfigNote('已保存并切换到此配置');
+      refresh();
+    } catch (error) {
+      setPiConfigNote(error instanceof Error ? error.message : '保存失败');
+    }
+  };
   return <section className="page settings-page">
     <header className="page-heading"><div><span>本地终端</span><h1>设置</h1><p>管理数据位置、专用浏览器和创作助手连接。</p></div></header>
     <div className="settings-grid">
@@ -717,17 +747,38 @@ function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoice, ref
             <button className="primary-button" onClick={() => void window.wmb.startBrowser().then(refresh)}>启动浏览器</button>
           </div>
         </section>
-        <section className="settings-block">
-          <div>
+        <section className="settings-block pi-api-settings">
+          <div className="pi-api-copy">
             <span className="section-label">创作助手</span>
-            <h2>Pi API</h2>
-            <p>{settings.pi.configured ? '已配置 OpenAI-compatible 接口' : '尚未配置'}</p>
+            <h2>API 接入</h2>
+            <p>{settings.pi.configured ? `正在使用：${settings.pi.profiles.find((profile) => profile.active)?.name ?? '已配置接口'}` : '添加一个 OpenAI-compatible 接口后即可使用 Pi'}</p>
+            <div className="pi-profile-list">
+              {settings.pi.profiles.map((profile) => <button
+                type="button"
+                key={profile.id}
+                className={`pi-profile-item${profile.id === piProfileId ? ' selected' : ''}`}
+                onClick={() => selectPiProfile(profile.id)}
+              >
+                <span><strong>{profile.name}</strong><small>{profile.model}</small></span>
+                {profile.active && <em>使用中</em>}
+              </button>)}
+              <button type="button" className="pi-profile-add" onClick={() => selectPiProfile('')}>＋ 新建配置</button>
+            </div>
           </div>
-          <div className="setting-actions">
-            <input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="Base URL" />
-            <input value={piModel} onChange={(event) => setPiModel(event.target.value)} placeholder="Model" />
-            <input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder="API Key（留空保持原值）" type="password" />
-            <button className="primary-button" onClick={() => void window.wmb.savePiConfig({ baseUrl: piBaseUrl, model: piModel, apiKey: piApiKey || undefined }).then(refresh)}>保存 Pi 配置</button>
+          <div className="pi-fields">
+            <label><span>配置名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
+            <label><span>模型</span><input value={piModel} onChange={(event) => setPiModel(event.target.value)} placeholder="gpt-5.6-sol" /></label>
+            <label className="wide"><span>Base URL</span><input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="http://localhost:61946/v1" /></label>
+            <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>
+            {piConfigNote && <p className="pi-config-note">{piConfigNote}</p>}
+            <div className="pi-config-actions">
+              {piProfileId && !settings.pi.profiles.find((profile) => profile.id === piProfileId)?.active && <button className="secondary-button" onClick={() => void window.wmb.activatePiConfig(piProfileId).then(refresh)}>设为当前</button>}
+              {piProfileId && <button className="danger-button" onClick={() => {
+                if (!window.confirm('删除这个 API 配置？')) return;
+                void window.wmb.deletePiConfig(piProfileId).then(() => { setPiProfileId(''); refresh(); });
+              }}>删除</button>}
+              <button className="primary-button" onClick={() => void saveProfile()}>{piProfileId ? '保存修改' : '保存并使用'}</button>
+            </div>
           </div>
         </section>
         <section className="settings-block">

@@ -828,9 +828,24 @@ dl { margin: 0; }
 .settings-block p { max-width: 72ch; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
 .setting-actions { justify-content: flex-end; }
 .settings-block select { min-width: 280px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); color: var(--ink); padding: 10px; }
-.pi-fields { display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(140px, 1fr); gap: 8px; width: min(620px, 58vw); }
+.pi-api-settings { align-items: flex-start; }
+.pi-api-copy { width: min(360px, 34%); }
+.pi-profile-list { display: grid; gap: 7px; margin-top: 16px; }
+.pi-profile-item, .pi-profile-add { width: 100%; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--ink); padding: 10px 12px; text-align: left; cursor: pointer; }
+.pi-profile-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pi-profile-item span { display: grid; gap: 3px; min-width: 0; }
+.pi-profile-item strong, .pi-profile-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-profile-item small { color: var(--muted); }
+.pi-profile-item em { color: var(--accent); font-size: 12px; font-style: normal; }
+.pi-profile-item:hover, .pi-profile-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+.pi-profile-add { color: var(--muted); border-style: dashed; text-align: center; }
+.pi-fields { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr); gap: 12px; width: min(680px, 58vw); }
+.pi-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.pi-fields .wide, .pi-config-note, .pi-config-actions { grid-column: 1 / -1; }
 .pi-fields input { min-width: 0; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); color: var(--ink); padding: 10px; }
-.pi-fields button { grid-column: 2; }
+.pi-config-note { margin: 0; }
+.pi-config-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.danger-button { border: 1px solid var(--danger); border-radius: 7px; background: transparent; color: var(--danger); padding: 10px 14px; cursor: pointer; }
 .status-text { color: var(--muted); font-weight: 650; }
 .status-text.success { color: var(--success); }
 .diagnostic-list { border-top: 1px solid var(--border); }
@@ -877,6 +892,7 @@ dl { margin: 0; }
   .confirmation-panel, .findings-panel { display: none; }
   .settings-block { align-items: flex-start; flex-direction: column; }
   .setting-actions { justify-content: flex-start; }
+  .pi-api-copy, .pi-fields { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
