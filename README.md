@@ -10,6 +10,18 @@ WeMediaBuddy（WMB）是一款面向个人创作者的 Windows 自媒体运营�
 
 WMB 把散落在新闻、产品发布、开源项目、Skill、社区讨论和个人实践中的信息，转化为可以长期积累的资料、判断、内容与方法。
 
+## 仓库地址
+
+```text
+https://github.com/PigeonAI-Yang/wemediabuddy
+```
+
+Git 克隆地址：
+
+```text
+https://github.com/PigeonAI-Yang/wemediabuddy.git
+```
+
 ## 产品愿景
 
 多数 AI 内容工具只负责生成一段文字，生成之后，资料、判断和结果仍然散落在聊天记录里。
@@ -86,6 +98,51 @@ WeMediaBuddy 希望建立一条持续运转的内容经营闭环：
 项目仍在开发中，任务进度以 [`TASKS.md`](./TASKS.md) 为唯一台账。
 
 当前重点是让内置 Pi 真正融入桌面工作现场：先完成可直接使用的连续对话，再逐步接通页面上下文、资料操作、今日情报、内容创作和复盘。
+
+## 安装与运行
+
+当前仓库尚未发布 Windows 安装器。现阶段请从源码运行或生成本地 Windows 打包目录。
+
+### 环境要求
+
+- Windows 10 或 Windows 11；
+- Git；
+- Node.js 24；
+- npm 10 或更高版本；
+- Microsoft Edge、Google Chrome 或其他可用的 Chromium 浏览器。
+
+### 从源码运行
+
+```powershell
+git clone https://github.com/PigeonAI-Yang/wemediabuddy.git
+cd wemediabuddy
+npm ci
+npm start
+```
+
+首次启动后：
+
+1. 选择 WMB 数据目录；
+2. 在“设置”中选择专用浏览器 Profile；
+3. 填写提供 OpenAI-compatible 接口的 Base URL、API Key 和模型名称；
+4. 回到右侧 Pi 对话区开始使用。
+
+API Key、浏览器登录态和业务数据只应保存在本机，不要提交到仓库。
+
+### 生成 Windows 打包目录
+
+```powershell
+npm ci
+npm run build
+```
+
+完成后从以下位置启动：
+
+```text
+out\WeMediaBuddy-win32-x64\WeMediaBuddy.exe
+```
+
+`npm run build` 当前生成可运行的 Windows 应用目录，不生成安装向导。正式安装包将在 Release 流程完成后提供。
 
 ## 文档
 
