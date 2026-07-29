@@ -33,10 +33,11 @@ function seedPublished(database) {
     loginState: 'authenticated'
   });
   const project = createContentProject(database, { title: 'review project', sourceIds: [] });
-  const core = saveCoreVersion(database, project.id, 'core body');
+  const core = saveCoreVersion(database, { projectId: project.id, body: 'core body', expectedRevision: 1 });
+  assert.equal(core.ok, true);
   const platform = savePlatformVersion(database, {
     projectId: project.id,
-    contentVersionId: core.id,
+    contentVersionId: core.data.id,
     platform: 'x',
     format: 'text',
     body: 'platform body'

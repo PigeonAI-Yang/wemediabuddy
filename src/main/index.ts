@@ -4,33 +4,14 @@ import path from 'node:path';
 import { openDataRoot, validateDataRoot, type DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
-import { getToday } from './workbench';
-import { createProjectFromPlanItem, getStudio, saveCoreVersion, updateProjectTitle } from './content';
 import { startMcp, type McpRuntime } from './mcp';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
-import { createPublication, getPublicationDetail, listPublicationDetails, preparePublication, reconcileAsNotPublished, recoverInterruptedPublications, transitionPublication } from './publishing';
-import { saveAccount, verifyAccount } from './accounts';
-import { collectXAccountMetrics, collectXMetrics, identifyXAccount, prepareXImage, prepareXText, prepareXVideo } from './platforms/x';
-import { identifyWechatAccount, prepareWechatArticle, readBackWechatArticle } from './platforms/wechat';
-import {
-  claimDueMetricJobs,
-  completeMetricJob,
-  failMetricJob,
-  listAccountMetricSnapshots,
-  listMetricJobs,
-  listPublicationMetricSnapshots,
-  processDueMetricJobs,
-  recoverRunningMetricJobs,
-  saveAccountMetricSnapshot,
-  savePublicationMetricSnapshot,
-  scheduleJobsForPublishedPublications,
-  schedulePublicationMetricJobs
-} from './metrics';
-import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig } from './pi-config';
+import { recoverInterruptedPublications } from './publishing';
+import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from './metrics';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
-import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime, stagePiRuntimeFromSource } from './pi-runtime-manager';
+import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -40,38 +21,23 @@ import {
   getAgentTask,
   getLatestAgentTask,
   recoverInterruptedAgentTasks,
+  requestAgentTaskControl,
   startAgentTask,
   updateAgentTaskPhase,
   type AgentIntent
 } from './agent-tasks';
-import { startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { abortDailyIntelligence, startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
+import { registerPublishingResultsIpc } from './ipc-publishing-results';
+import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
+import { persistPiTurn } from './pi-persistence';
+import { registerSettingsConfigIpc } from './ipc-settings-config';
+import { preparePiExtension } from './pi-extension';
 
-declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
+if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
+if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 
-function createWindow(): void {
-  const window = new BrowserWindow({
-    width: 1600,
-    height: 960,
-    minWidth: 1100,
-    minHeight: 720,
-    frame: false,
-    icon: path.join(app.getAppPath(), 'images', 'logo.png'),
-    backgroundColor: '#090c11',
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
-  });
-
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    void window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
-  }
-}
+const dailyRuns = new Map<string, Promise<unknown>>();
 
 const dataRootConfigPath = (): string => path.join(app.getPath('userData'), 'data-root.json');
 let mcp: McpRuntime | null = null;
@@ -80,39 +46,17 @@ let pi: PiRpcSupervisor | null = null;
 let piSessionFile: string | null = null;
 let shuttingDown = false;
 let recoveredAgentTasks = false;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-function broadcastPiEvent(event: Record<string, unknown>): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send('pi:event', event);
-  }
-}
-
-async function persistPiTurn(dataRootPath: string, userText: string, assistant: PiChatMessage): Promise<void> {
-  const current = await readPiConversation(dataRootPath);
-  const sessionFile = piSessionFile ?? current.sessionFile;
-  const stamped = new Date().toISOString();
-  const messages = [
-    ...current.messages,
-    { role: 'user', text: userText, createdAt: stamped } satisfies PiChatMessage,
-    { ...assistant, createdAt: assistant.createdAt ?? stamped }
-  ];
-  let sessionId = current.sessionId;
-  if (pi) {
-    try {
-      const state = await pi.getState();
-      const data = state.data;
-      if (data && typeof data === 'object' && 'sessionId' in data && typeof (data as { sessionId?: unknown }).sessionId === 'string') {
-        sessionId = (data as { sessionId: string }).sessionId;
-      }
-    } catch { /* keep previous session id */ }
-  }
-  await writePiConversation(dataRootPath, {
-    id: current.id,
-    title: current.title,
-    sessionFile,
-    sessionId,
-    messages,
-    createdAt: current.createdAt
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0];
+    if (!window || window.isDestroyed()) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
   });
 }
 
@@ -139,21 +83,16 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
   const conversation = await readPiConversation(dataRoot.path);
   if (!mcp) await refreshMcp(dataRoot);
   if (!mcp) throw new Error('WMB MCP 尚未就绪。');
-  const extensionSource = app.isPackaged
-    ? path.join(process.resourcesPath, 'extensions', 'wmb-mcp.ts')
-    : path.join(app.getAppPath(), '.pi', 'extensions', 'wmb-mcp.ts');
-  const extensionPath = path.join(layout.agentDir, 'extensions', 'wmb-mcp.ts');
-  await mkdir(path.dirname(extensionPath), { recursive: true });
-  await writeFile(extensionPath, await readFile(extensionSource));
+  const extensionPath = await preparePiExtension(layout.agentDir);
   pi = new PiRpcSupervisor(process.execPath, [
     cli,
     '--mode', 'rpc',
     '--session', piSessionFile || layout.sessionFile,
-    '--no-builtin-tools',
     '-e', extensionPath,
     '--provider', 'wmb-api',
     '--model', config.model,
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。回答简洁中文。'
+    ...(config.thinking ? ['--thinking', config.thinking] : []),
+    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -161,11 +100,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     WMB_PI_API_KEY: config.apiKey,
     WMB_MCP_URL: mcp.url
   }, (event) => {
-    if (event.type === 'wmb_text_delta') {
-      broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
-      return;
-    }
-    if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+    broadcastPiRuntimeProgress(event);
     if (event.type === 'wmb_process_crashed') {
       const error = String(event.error ?? 'Pi 进程已退出，可重新发送。');
       broadcastPiEvent({ type: 'failed', error });
@@ -225,77 +160,26 @@ function migrate(dataRoot: DataRoot, options: { recoverAgentTasks?: boolean } = 
 }
 
 app.whenReady().then(() => {
-  void loadSelectedDataRoot().then(refreshMcp);
-  ipcMain.handle('data-root:get', loadSelectedDataRoot);
-  ipcMain.handle('data-root:choose', chooseDataRoot);
-  ipcMain.handle('settings:get', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    const settings = dataRoot ? await readSettings(dataRoot.path) : null;
-    if (!settings || !dataRoot) return null;
+  if (!hasSingleInstanceLock) return;
+  void loadSelectedDataRoot().then(async (dataRoot) => {
+    await refreshMcp(dataRoot);
+    if (!dataRoot || !mcp) return;
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const selectedBrowser = readBrowserConfig(database);
-    const pi = readPiConfig(database);
+    const pending = getLatestAgentTask(database);
     database.close();
-    return {
-      ...settings,
-      mcp: mcp ? { status: 'ready', url: mcp.url } : { status: 'not_started', url: null },
-      browser: browser
-        ? { status: 'ready', pid: browser.pid, cdpUrl: browser.cdpUrl, profilePath: browser.profilePath }
-        : { status: 'not_started' },
-      browserOptions: await discoverBrowserProfiles(),
-      selectedBrowser,
-      pi
-    };
+    if (pending?.intent !== 'daily_intelligence' || pending.status !== 'running' || pending.phase !== 'resume_pending') return;
+    const run = startDailyIntelligence({
+      dataRootPath: dataRoot.path,
+      businessDate: pending.businessDate,
+      mcpUrl: mcp.url,
+      onEvent: (event) => {
+        broadcastPiRuntimeProgress(event);
+        if (event.type === 'agent_task') broadcastPiEvent(event);
+      }
+    }).finally(() => dailyRuns.delete(pending.id));
+    dailyRuns.set(pending.id, run);
   });
-  ipcMain.handle('browser:configure', async (_event, id: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const config = (await discoverBrowserProfiles()).find((candidate) => candidate.id === id);
-    if (!config) throw new Error('浏览器 profile 不存在。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return saveBrowserConfig(database, config); } finally { database.close(); }
-  });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }) => {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const saved = savePiConfig(database, input);
-      await pi?.stop();
-      pi = null;
-      return saved;
-    } finally { database.close(); }
-  });
-  ipcMain.handle('pi-config:activate', async (_event, id: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const saved = activatePiConfig(database, id);
-      await pi?.stop();
-      pi = null;
-      return saved;
-    } finally { database.close(); }
-  });
-  ipcMain.handle('pi-config:delete', async (_event, id: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const saved = deletePiConfig(database, id);
-      await pi?.stop();
-      pi = null;
-      return saved;
-    } finally { database.close(); }
-  });
-  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }) => {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return await listPiModels(database, input); } finally { database.close(); }
-  });
+  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp: () => mcp, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
   ipcMain.handle('pi-runtime:get', async () => {
     const dataRoot = await loadSelectedDataRoot();
     return getPiRuntimeInfo(dataRoot?.path ?? null);
@@ -375,12 +259,12 @@ app.whenReady().then(() => {
         text: result.text || (result.stopped ? '已停止生成。' : ''),
         ...(result.stopped ? { status: 'stopped' as const } : {})
       };
-      await persistPiTurn(dataRoot.path, visibleText || raw, assistant);
+      await persistPiTurn(dataRoot.path, visibleText || raw, assistant, piSessionFile, pi);
       broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: assistant.text });
       return result;
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
-      await persistPiTurn(dataRoot.path, visibleText || raw, { role: 'assistant', text: messageText, status: 'failed' }).catch(() => {});
+      await persistPiTurn(dataRoot.path, visibleText || raw, { role: 'assistant', text: messageText, status: 'failed' }, piSessionFile, pi).catch(() => {});
       if (!pi?.isRunning) pi = null;
       broadcastPiEvent({ type: 'failed', error: messageText });
       throw error;
@@ -463,31 +347,47 @@ app.whenReady().then(() => {
       return cancelled;
     } finally { database.close(); }
   });
+  ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const requested = requestAgentTaskControl(database, input.id, input.action);
+      if (requested.ok) {
+        broadcastPiEvent({ type: 'agent_task', task: requested.data });
+        await abortDailyIntelligence(input.id);
+      }
+      return requested;
+    } finally { database.close(); }
+  });
   ipcMain.handle('agent:start-daily-intelligence', async (_event, businessDate: string) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     if (!mcp) await refreshMcp(dataRoot);
     if (!mcp) throw new Error('WMB MCP 尚未就绪。');
-    broadcastPiEvent({ type: 'starting' });
-    try {
-      const result = await startDailyIntelligence({
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate, contextRefs: { planDate: businessDate } });
+    database.close();
+    if (!started.ok) return started;
+    if (!dailyRuns.has(started.data.id)) {
+      const run = startDailyIntelligence({
         dataRootPath: dataRoot.path,
         businessDate,
         mcpUrl: mcp.url,
         onEvent: (event) => {
-          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
-          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+          broadcastPiRuntimeProgress(event);
           if (event.type === 'agent_task') broadcastPiEvent(event);
         }
-      });
-      broadcastPiEvent({ type: 'agent_task', task: result.task });
-      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
-      return { ok: true, data: result, error: null };
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error);
-      broadcastPiEvent({ type: 'failed', error: messageText });
-      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message: messageText } };
+      }).then((result) => {
+        broadcastPiEvent({ type: 'agent_task', task: result.task });
+        return result;
+      }).catch((error) => {
+        broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) });
+      }).finally(() => dailyRuns.delete(started.data.id));
+      dailyRuns.set(started.data.id, run);
     }
+    broadcastPiEvent({ type: 'agent_task', task: started.data });
+    return { ok: true, data: { task: started.data, reused: started.reused === true }, error: null };
   });
   ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string }) => {
     const dataRoot = await loadSelectedDataRoot();
@@ -502,10 +402,7 @@ app.whenReady().then(() => {
         businessDate: input.businessDate,
         projectId: input.projectId,
         mcpUrl: mcp.url,
-        onEvent: (event) => {
-          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
-          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
-        }
+        onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
       broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
@@ -529,10 +426,7 @@ app.whenReady().then(() => {
         businessDate: input.businessDate,
         publicationId: input.publicationId,
         mcpUrl: mcp.url,
-        onEvent: (event) => {
-          if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
-          if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
-        }
+        onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
       broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
@@ -564,306 +458,8 @@ app.whenReady().then(() => {
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error('只允许打开网页链接。');
     await shell.openExternal(url.toString());
   });
-  ipcMain.handle('window:control', (event, action: 'minimize' | 'maximize' | 'close') => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    if (!window) return false;
-    if (action === 'minimize') window.minimize();
-    if (action === 'maximize') window.isMaximized() ? window.unmaximize() : window.maximize();
-    if (action === 'close') window.close();
-    return window.isMaximized();
-  });
-  ipcMain.handle('today:get', async (_event, planDate: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return null;
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return getToday(database, planDate); } finally { database.close(); }
-  });
-  ipcMain.handle('today:create-project', async (_event, planItemId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return createProjectFromPlanItem(database, planItemId); } finally { database.close(); }
-  });
-  ipcMain.handle('studio:get', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return null;
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return getStudio(database); } finally { database.close(); }
-  });
-  ipcMain.handle('studio:save-core', async (_event, input: { projectId: string; title: string; body: string }) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    if (!input?.projectId) throw new Error('请先选择内容项目。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const titled = updateProjectTitle(database, input.projectId, input.title ?? '');
-      if (!titled.ok) return titled;
-      const body = String(input.body ?? '');
-      if (!body.trim()) return { ok: false, data: null, error: { code: 'VALIDATION_ERROR', message: '正文不能为空。' } };
-      const version = saveCoreVersion(database, input.projectId, body, 'user');
-      return { ok: true, data: { project: titled.data, version }, error: null };
-    } finally { database.close(); }
-  });
-  ipcMain.handle('publish:list', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listPublicationDetails(database); } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:collect-x', async (_event, publicationId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const publication = getPublicationDetail(database, publicationId)?.publication;
-      if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl || !publication.publishedAt) {
-        throw new Error('只有已发布的 X 内容可以采集指标。');
-      }
-      schedulePublicationMetricJobs(database, {
-        publicationId: publication.id,
-        publishedAt: publication.publishedAt,
-        sourceUrl: publication.externalUrl,
-        platform: publication.platform
-      });
-      if (!browser) {
-        const config = readBrowserConfig(database);
-        if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-        browser = await startBrowser(config);
-      }
-      const capture = await collectXMetrics(browser.cdpUrl, publication.externalUrl);
-      const now = capture.capturedAt || new Date().toISOString();
-      const due = claimDueMetricJobs(database, now);
-      const snapshots = [];
-      for (const job of due) {
-        const payload = job.payload as { publicationId?: string; scheduledFor?: string; sourceUrl?: string };
-        if (payload.publicationId !== publication.id) continue;
-        const saved = completeMetricJob(database, {
-          jobId: job.id,
-          publicationId: publication.id,
-          scheduledFor: String(payload.scheduledFor || job.dueAt),
-          sourceUrl: capture.sourceUrl,
-          capturedAt: capture.capturedAt,
-          normalized: capture.normalized,
-          raw: capture.raw
-        });
-        if (saved.ok) snapshots.push(saved.data);
-        else failMetricJob(database, job.id, saved.error.message);
-      }
-      const manual = savePublicationMetricSnapshot(database, {
-        publicationId: publication.id,
-        scheduledFor: now,
-        sourceUrl: capture.sourceUrl,
-        capturedAt: capture.capturedAt,
-        normalized: capture.normalized,
-        raw: capture.raw
-      });
-      if (!manual.ok) throw new Error(manual.error.message);
-      return { ...capture, snapshot: manual.data, dueSnapshots: snapshots };
-    } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:schedule', async (_event, publicationId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const publication = getPublicationDetail(database, publicationId)?.publication;
-      if (!publication?.externalUrl || !publication.publishedAt || publication.status !== 'published') {
-        throw new Error('只有已发布且有 URL 的内容可以创建指标任务。');
-      }
-      return schedulePublicationMetricJobs(database, {
-        publicationId: publication.id,
-        publishedAt: publication.publishedAt,
-        sourceUrl: publication.externalUrl,
-        platform: publication.platform
-      });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:list-jobs', async (_event, publicationId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listMetricJobs(database, publicationId); } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:list-snapshots', async (_event, publicationId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listPublicationMetricSnapshots(database, publicationId); } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:process-due', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      return await processDueMetricJobs(database, async (platform, sourceUrl) => {
-        if (platform !== 'x') throw new Error(`暂不支持平台指标采集：${platform}`);
-        if (!browser) {
-          const config = readBrowserConfig(database);
-          if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-          browser = await startBrowser(config);
-        }
-        return collectXMetrics(browser.cdpUrl, sourceUrl);
-      });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:collect-account-x', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const account = database.prepare(`SELECT id, account_key AS accountKey FROM platform_accounts WHERE platform = 'x'`).get() as { id: string; accountKey: string } | undefined;
-      if (!account) throw new Error('请先识别并保存 X 账号。');
-      if (!browser) {
-        const config = readBrowserConfig(database);
-        if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-        browser = await startBrowser(config);
-      }
-      const capture = await collectXAccountMetrics(browser.cdpUrl, account.accountKey);
-      return saveAccountMetricSnapshot(database, {
-        accountId: account.id,
-        platform: 'x',
-        sourceUrl: capture.sourceUrl,
-        capturedAt: capture.capturedAt,
-        normalized: capture.normalized,
-        raw: capture.raw
-      });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:list-account-snapshots', async (_event, accountId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listAccountMetricSnapshots(database, accountId); } finally { database.close(); }
-  });
-  ipcMain.handle('reviews:list', async (_event, publicationId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listReviews(database, publicationId); } finally { database.close(); }
-  });
-  ipcMain.handle('reviews:get', async (_event, id: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return null;
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return getReview(database, id); } finally { database.close(); }
-  });
-  ipcMain.handle('reviews:save', async (_event, input: {
-    id?: string;
-    publicationId: string;
-    metricSnapshotIds: string[];
-    keep?: string[];
-    stop?: string[];
-    change?: string[];
-    summary?: string;
-    status?: 'draft' | 'final';
-    expectedRevision?: number;
-    findings?: Array<{ id?: string; title: string; body: string }>;
-  }) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return saveReview(database, input); } finally { database.close(); }
-  });
-  ipcMain.handle('reviews:backlinks', async (_event, input?: { reviewIds?: string[]; findingIds?: string[] }) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      return listReviewBacklinks(database, input?.reviewIds ?? [], input?.findingIds ?? []);
-    } finally { database.close(); }
-  });
-  ipcMain.handle('publish:prepare-x', async (_event, platformVersionId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    if (!browser) {
-      const configDatabase = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-      const config = readBrowserConfig(configDatabase);
-      configDatabase.close();
-      if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-      browser = await startBrowser(config);
-    }
-    const identity = await identifyXAccount(browser.cdpUrl);
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const existing = database.prepare("SELECT id FROM platform_accounts WHERE platform = 'x'").get() as { id: string } | undefined;
-      if (existing) {
-        const verified = verifyAccount(database, identity);
-        if (!verified.ok) return verified;
-      }
-      const account = existing ?? saveAccount(database, identity);
-      const version = database.prepare("SELECT body, format, asset_ids_json AS assets FROM platform_versions WHERE id = ? AND platform = 'x'").get(platformVersionId) as { body: string; format: string; assets: string } | undefined;
-      const assetIds = version ? JSON.parse(version.assets) as string[] : [];
-      if (!version || !((version.format === 'text' && !assetIds.length) || (['image', 'video'].includes(version.format) && assetIds.length === 1))) throw new Error('X 版本必须是纯文字、正文加一张图片或正文加一个视频。');
-      const reusable = database.prepare(`SELECT id FROM publications
-        WHERE platform_version_id = ? AND account_id = ? AND status IN ('draft', 'failed', 'needs_user')
-        ORDER BY updated_at DESC LIMIT 1`).get(platformVersionId, account.id) as { id: string } | undefined;
-      const created = reusable ? { ok: true as const, data: getPublicationDetail(database, reusable.id)!.publication, error: null } : createPublication(database, { platformVersionId, accountId: account.id });
-      if (!created.ok) return created;
-      const asset = assetIds.length ? database.prepare('SELECT id, relative_path AS relativePath, mime_type AS mimeType FROM assets WHERE id = ?').get(assetIds[0]) as { id: string; relativePath: string; mimeType: string } | undefined : undefined;
-      if (assetIds.length && !asset) throw new Error('绑定图片不存在。');
-      const readback = asset
-        ? version.format === 'video'
-          ? await prepareXVideo(browser.cdpUrl, version.body, path.join(dataRoot.path, asset.relativePath), asset.id)
-          : await prepareXImage(browser.cdpUrl, version.body, path.join(dataRoot.path, asset.relativePath), asset.id)
-        : await prepareXText(browser.cdpUrl, version.body);
-      return preparePublication(database, { publicationId: created.data.id, expectedRevision: created.data.revision, editorTitle: null, editorBody: readback.body, editorAssetIds: readback.assetIds, editorEvidenceUrl: readback.evidenceUrl });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('publish:prepare-wechat-article', async (_event, platformVersionId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      if (!browser) {
-        const config = readBrowserConfig(database);
-        if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-        browser = await startBrowser(config);
-      }
-      const identity = await identifyWechatAccount(browser.cdpUrl);
-      const existing = database.prepare("SELECT id FROM platform_accounts WHERE platform = 'wechat'").get() as { id: string } | undefined;
-      if (existing) {
-        const verified = verifyAccount(database, identity);
-        if (!verified.ok) return verified;
-      }
-      const account = existing ?? saveAccount(database, identity);
-      const version = database.prepare("SELECT title, body, format, asset_ids_json AS assets FROM platform_versions WHERE id = ? AND platform = 'wechat'").get(platformVersionId) as { title: string | null; body: string; format: string; assets: string } | undefined;
-      if (!version?.title || !version.body.trim() || version.format !== 'article') throw new Error('微信公众号版本必须包含非空标题和正文。');
-      const reusable = database.prepare(`SELECT id FROM publications
-        WHERE platform_version_id = ? AND account_id = ? AND status IN ('draft', 'failed', 'needs_user')
-        ORDER BY updated_at DESC LIMIT 1`).get(platformVersionId, account.id) as { id: string } | undefined;
-      const created = reusable ? { ok: true as const, data: getPublicationDetail(database, reusable.id)!.publication, error: null } : createPublication(database, { platformVersionId, accountId: account.id });
-      if (!created.ok) return created;
-      const readback = await prepareWechatArticle(browser.cdpUrl, version.title, version.body);
-      return preparePublication(database, { publicationId: created.data.id, expectedRevision: created.data.revision, editorTitle: readback.title, editorBody: readback.body, editorAssetIds: readback.assetIds, editorEvidenceUrl: readback.evidenceUrl });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('publish:readback-wechat', async (_event, publicationId: string, expectedRevision: number, articleUrl: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const detail = getPublicationDetail(database, publicationId);
-      if (!detail || detail.publication.platform !== 'wechat' || !detail.payload?.title) throw new Error('微信公众号发布记录或标题不存在。');
-      if (!browser) {
-        const config = readBrowserConfig(database);
-        if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-        browser = await startBrowser(config);
-      }
-      const readback = await readBackWechatArticle(browser.cdpUrl, articleUrl, detail.payload.title);
-      return transitionPublication(database, publicationId, 'published', {
-        expectedRevision,
-        externalUrl: readback.externalUrl,
-        externalId: readback.externalId,
-        reason: 'manual publication URL readback matched'
-      });
-    } finally { database.close(); }
-  });
-  ipcMain.handle('publish:reconcile-not-published', async (_event, publicationId: string, expectedRevision: number) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return reconcileAsNotPublished(database, { publicationId, expectedRevision, evidence: { actor: 'ui', decision: 'not_published' } }); } finally { database.close(); }
-  });
+  registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
+  registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

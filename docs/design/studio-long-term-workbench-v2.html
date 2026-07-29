@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WeMediaBuddy 长期创作工作台 V2</title>
+<style>
+:root{color-scheme:dark;--bg:#090c11;--side:#0b0f15;--panel:#0c1118;--surface:#0f141c;--raised:#131922;--hover:#181e28;--selected:#1d2230;--line:#252b35;--line2:#303743;--ink:#f3f5f8;--soft:#d1d5dc;--muted:#aeb5c0;--low:#929aa6;--violet:#7657ef;--violet2:#886cf4;--blue:#71a1ff;--green:#31c777;--amber:#d5a43e;--nav:208px}
+*{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden}body{font:14px/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;background:var(--bg);color:var(--ink)}button,input,select{font:inherit;color:inherit}button{cursor:pointer}.app{height:100%;display:grid;grid-template-columns:var(--nav) minmax(0,1fr);grid-template-rows:64px minmax(0,1fr)}.top{grid-column:1/-1;border-bottom:1px solid var(--line);background:#0a0e14;display:flex;align-items:center;padding:0 16px;gap:18px}.brand{width:calc(var(--nav) - 16px);display:flex;align-items:center;gap:10px;font-weight:700}.brand img{width:30px;height:30px;object-fit:contain}.crumb{color:var(--muted)}.crumb b{color:var(--ink)}.grow{flex:1}.btn{height:38px;border:1px solid var(--line2);border-radius:7px;background:var(--raised);padding:0 14px}.btn:hover,.tool:hover{background:var(--hover)}.btn.primary{border-color:var(--violet);background:var(--violet);font-weight:650}.btn.primary:hover{background:var(--violet2)}button:focus-visible,input:focus-visible,[contenteditable]:focus-visible{outline:2px solid var(--violet2);outline-offset:2px}.side{border-right:1px solid var(--line);background:var(--side);padding:14px 10px;display:flex;flex-direction:column;gap:5px}.nav{height:46px;border:0;border-radius:9px;background:transparent;color:var(--muted);display:flex;align-items:center;gap:12px;padding:0 13px}.nav:hover{background:var(--hover);color:var(--ink)}.nav.active{background:var(--selected);color:var(--ink)}.nav.active:before{content:"";width:3px;height:22px;background:var(--violet);border-radius:3px;margin-left:-13px}.nav-bottom{margin-top:auto}.view{display:none;min-width:0;min-height:0}.view.active{display:flex}
+/* Library */
+.library{flex-direction:column;overflow:auto}.lib-head{padding:30px 34px 22px;border-bottom:1px solid var(--line);background:var(--surface)}.lib-title{display:flex;align-items:flex-start;gap:20px}.lib-title h1{font-size:26px;line-height:1.3;margin:0 0 5px}.lib-title p{margin:0;color:var(--muted)}.lib-title .primary{margin-left:auto}.summary{display:flex;gap:26px;margin-top:24px}.summary button{border:0;background:transparent;padding:0;text-align:left;color:var(--muted)}.summary b{display:block;color:var(--ink);font-size:20px;margin-bottom:2px}.summary button.active b,.summary button.active span{color:#a98fff}.lib-main{padding:20px 34px 30px}.lib-tools{display:flex;align-items:center;gap:8px;margin-bottom:14px}.search{height:40px;min-width:330px;border:1px solid var(--line2);border-radius:7px;background:var(--raised);display:flex;align-items:center;gap:8px;padding:0 11px}.search input{width:100%;border:0;outline:0;background:transparent}.select{height:40px;border:1px solid var(--line2);border-radius:7px;background:var(--raised);padding:0 10px}.result-count{margin-left:auto;color:var(--muted)}.table{border-top:1px solid var(--line2)}.row{display:grid;grid-template-columns:minmax(320px,1.7fr) 120px 150px 160px 110px;align-items:center;gap:18px;min-height:70px;border-bottom:1px solid var(--line);padding:10px 12px}.row.head{min-height:42px;color:var(--low);font-size:12px}.row.project:hover{background:var(--hover)}.project-title{border:0;background:transparent;text-align:left;padding:0;font-weight:650}.project-title small{display:block;color:var(--low);font-weight:400;margin-top:4px}.state{display:inline-flex;align-items:center;gap:7px}.dot{width:7px;height:7px;border-radius:50%;background:var(--amber)}.dot.review{background:var(--blue)}.dot.done{background:var(--green)}.platform{color:var(--muted)}.progress{height:4px;width:72px;background:var(--line2);border-radius:4px;margin-top:6px}.progress i{display:block;height:100%;background:var(--violet);border-radius:4px}.muted{color:var(--muted)}.pagination{display:flex;align-items:center;justify-content:space-between;margin-top:16px;color:var(--muted)}
+/* Editor */
+.editor-view{flex-direction:column}.editor-top{height:56px;display:flex;align-items:center;padding:0 18px;border-bottom:1px solid var(--line);background:var(--surface);gap:12px}.back{border:0;background:transparent;color:var(--muted)}.doc-state{font-size:12px;color:var(--muted)}.doc-state b{color:var(--green)}.editor-grid{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(500px,1fr) 310px}.outline{border-right:1px solid var(--line);background:var(--panel);padding:15px 12px;overflow:auto}.panel-title{font-size:12px;color:var(--muted);margin:0 6px 10px}.outline button{width:100%;border:0;background:transparent;border-radius:6px;text-align:left;padding:7px 9px;color:var(--muted)}.outline button:hover,.outline button.active{background:var(--selected);color:var(--ink)}.outline .sub{padding-left:24px;font-size:13px}.document{min-width:0;display:flex;flex-direction:column}.formatbar{height:48px;max-width:100%;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--line);background:var(--surface);display:flex;align-items:center;padding:0 12px;gap:4px}.tool{height:32px;min-width:32px;white-space:nowrap;border:0;border-radius:6px;background:transparent;padding:0 8px;color:var(--soft)}.tool.active{background:var(--selected);color:#a98fff}.divider{width:1px;min-width:1px;height:20px;background:var(--line2);margin:0 4px}.format-select{height:32px;border:0;border-radius:6px;background:var(--raised);padding:0 8px}.findbar{display:none;height:46px;border-bottom:1px solid var(--line);background:var(--panel);align-items:center;padding:0 14px;gap:7px}.findbar.show{display:flex}.findbar input{height:32px;border:1px solid var(--line2);border-radius:6px;background:var(--raised);padding:0 9px}.canvas{flex:1;overflow:auto;padding:42px 7% 100px}.paper{max-width:780px;margin:auto}.title-input{display:block;width:100%;border:0;background:transparent;color:var(--ink);font-size:29px;line-height:1.35;font-weight:700;letter-spacing:-.025em;padding:0 0 18px;outline:0}.doc-meta{display:flex;gap:14px;color:var(--low);font-size:12px;padding-bottom:22px;border-bottom:1px solid var(--line)}.content{min-height:650px;padding:24px 0;color:var(--soft);font-size:16px;line-height:1.9;outline:0}.content h2{font-size:21px;color:var(--ink);margin:30px 0 12px}.content blockquote{margin:18px 0;border-left:1px solid var(--violet);padding:8px 16px;color:var(--muted);background:var(--surface)}.statusbar{height:34px;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:center;padding:0 14px;color:var(--low);font-size:12px;gap:16px}.statusbar .right{margin-left:auto}.context{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}.context-tabs{height:49px;border-bottom:1px solid var(--line);display:flex;padding:0 9px}.context-tab{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);padding:0 9px}.context-tab.active{color:var(--ink);border-color:var(--violet)}.context-body{padding:16px;overflow:auto}.context-panel{display:none}.context-panel.active{display:block}.version{padding:11px 0;border-bottom:1px solid var(--line)}.version b{display:block}.version small{color:var(--low)}.source{padding:11px 0;border-bottom:1px solid var(--line)}.source a{color:var(--blue);text-decoration:none}.source small{display:block;color:var(--low);margin-top:3px}.hint{border:1px solid var(--line2);border-radius:8px;padding:12px;color:var(--muted);font-size:13px;margin-top:14px}.pi{position:fixed;z-index:10;right:0;top:64px;bottom:0;width:360px;background:var(--panel);border-left:1px solid var(--line2);transform:translateX(100%);transition:transform 200ms ease-out}.pi.open{transform:none}.pi h3{height:56px;margin:0;padding:17px;border-bottom:1px solid var(--line)}.pi p{margin:16px;background:var(--raised);padding:12px;border-radius:8px;color:var(--soft)}
+@media(max-width:1450px){:root{--nav:76px}.brand{width:46px}.brand span,.nav span{display:none}.nav{justify-content:center}.row{grid-template-columns:minmax(280px,1.6fr) 110px 130px 140px 90px}.editor-grid{grid-template-columns:190px minmax(460px,1fr) 280px}}
+@media(max-width:1180px){:root{--nav:68px}.lib-head,.lib-main{padding-left:22px;padding-right:22px}.row{grid-template-columns:minmax(300px,1fr) 105px 120px}.row>*:nth-child(4),.row>*:nth-child(5){display:none}.editor-grid{grid-template-columns:170px minmax(0,1fr)}.context{position:absolute;right:0;top:120px;bottom:0;width:310px;transform:translateX(100%);transition:transform 180ms ease-out}.editor-view.context-open .context{transform:none}.canvas{padding-left:30px;padding-right:30px}.optional{display:none}}
+@media(prefers-reduced-motion:reduce){.pi,.context{transition:none}}
+.pi{display:none;transform:none}.pi.open{display:block}
+@media(max-width:1180px){.context{display:none;transform:none}.editor-view.context-open .context{display:flex}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top"><div class="brand"><img src="../../images/logo.png" alt=""><span>WeMediaBuddy</span></div><div class="crumb">创作 / <b id="crumb">项目库</b></div><div class="grow"></div><button class="btn optional">导入已有稿件</button><button class="btn" id="piBtn">和 Pi 讨论</button></header>
+<aside class="side"><button class="nav">⌂ <span>今日机会</span></button><button class="nav">▦ <span>资料库</span></button><button class="nav active">✎ <span>创作</span></button><button class="nav">↗ <span>发布</span></button><button class="nav">◎ <span>结果</span></button><div class="nav-bottom"><button class="nav">⚙ <span>设置</span></button></div></aside>
+
+<main class="view library active" id="library">
+  <section class="lib-head">
+    <div class="lib-title"><div><h1>创作项目</h1><p>管理长期选题、稿件版本和平台内容。</p></div><button class="btn primary">新建创作项目</button></div>
+    <div class="summary"><button class="active" data-state="all"><b>1,003</b><span>全部项目</span></button><button data-state="working"><b>18</b><span>创作中</span></button><button data-state="review"><b>7</b><span>待审</span></button><button data-state="publish"><b>11</b><span>待发布</span></button><button data-state="done"><b>946</b><span>已完成</span></button><button data-state="archive"><b>21</b><span>已归档</span></button></div>
+  </section>
+  <section class="lib-main">
+    <div class="lib-tools"><label class="search">⌕ <input id="projectSearch" placeholder="搜索项目标题或正文"></label><select class="select"><option>最近更新</option><option>最早更新</option><option>版本最多</option></select><select class="select"><option>全部平台</option><option>小红书</option><option>微信公众号</option><option>X</option></select><span class="result-count">找到 1,003 个项目</span></div>
+    <div class="table">
+      <div class="row head"><span>项目</span><span>工作状态</span><span>平台内容</span><span>最近更新</span><span>版本</span></div>
+      <div class="row project" data-state="working"><button class="project-title">Skill 生态正在分化：头部玩家已经在做发行商了<small>从今日机会创建 · 3 条资料 · 2 个素材</small></button><span class="state"><i class="dot"></i>创作中</span><span class="platform">2 / 3<div class="progress"><i style="width:66%"></i></div></span><span class="muted">12 分钟前 · Pi</span><span>3 个版本</span></div>
+      <div class="row project" data-state="review"><button class="project-title">Agent 工具越多越乱：MCP 真正解决的是接入成本<small>5 条资料 · 1 个素材</small></button><span class="state"><i class="dot review"></i>待审</span><span class="platform">3 / 3<div class="progress"><i style="width:100%"></i></div></span><span class="muted">昨天 · 你</span><span>5 个版本</span></div>
+      <div class="row project" data-state="working"><button class="project-title">OpenAI 新桌面能力，真正值得关注的不是自动化<small>从资料库创建 · 4 条资料</small></button><span class="state"><i class="dot"></i>创作中</span><span class="platform">1 / 3<div class="progress"><i style="width:33%"></i></div></span><span class="muted">7 月 27 日 · Pi</span><span>2 个版本</span></div>
+      <div class="row project" data-state="done"><button class="project-title">为什么 AI 产品都开始争夺你的上下文<small>已发布到 3 个平台 · 结果已回读</small></button><span class="state"><i class="dot done"></i>已完成</span><span class="platform">3 / 3<div class="progress"><i style="width:100%"></i></div></span><span class="muted">7 月 25 日 · 你</span><span>8 个版本</span></div>
+      <div class="row project" data-state="archive"><button class="project-title">2025 年 AI 搜索产品横评<small>已归档 · 可随时恢复</small></button><span class="state"><i class="dot done"></i>已归档</span><span class="platform">3 / 3<div class="progress"><i style="width:100%"></i></div></span><span class="muted">6 月 18 日</span><span>4 个版本</span></div>
+    </div>
+    <div class="pagination"><span>第 1–50 项，共 1,003 项</span><div><button class="btn" disabled>上一页</button> <button class="btn">下一页</button></div></div>
+  </section>
+</main>
+
+<main class="view editor-view" id="editor">
+  <div class="editor-top"><button class="back" id="back">← 返回项目库</button><span class="doc-state"><b>✓ 已保存</b> · 第 3 版 · 今天 15:42</span><div class="grow"></div><button class="btn" id="contextBtn">项目资料</button><button class="btn">预览</button><button class="btn primary">保存为新版本</button></div>
+  <div class="editor-grid">
+    <aside class="outline"><p class="panel-title">文章纲要</p><button class="active">开头</button><button>为什么值得关注</button><button class="sub">可靠产品</button><button class="sub">可执行能力</button><button class="sub">分发与信任</button><button>给创作者的机会</button><p class="panel-title" style="margin-top:22px">平台内容</p><button>核心正文</button><button>小红书 <span class="muted">已完成</span></button><button>微信公众号 <span class="muted">草稿</span></button><button>X <span class="muted">未创建</span></button></aside>
+    <section class="document">
+      <div class="formatbar">
+        <select class="format-select" id="block"><option value="p">正文</option><option value="h2">二级标题</option><option value="h3">三级标题</option><option value="blockquote">引用</option></select><span class="divider"></span>
+        <button class="tool" data-cmd="bold"><b>B</b></button><button class="tool" data-cmd="italic"><i>I</i></button><button class="tool" data-cmd="underline"><u>U</u></button><span class="divider"></span>
+        <button class="tool" data-cmd="insertUnorderedList">• 列表</button><button class="tool" data-cmd="insertOrderedList">1. 列表</button><button class="tool" id="link">链接</button><button class="tool" data-cmd="removeFormat">清除格式</button><span class="divider"></span>
+        <button class="tool" data-cmd="undo">↶</button><button class="tool" data-cmd="redo">↷</button><button class="tool" id="find">查找替换</button>
+      </div>
+      <div class="findbar" id="findbar"><input id="findText" placeholder="查找"><input id="replaceText" placeholder="替换为"><button class="btn" id="replace">替换当前</button><button class="tool" id="closeFind">×</button></div>
+      <div class="canvas"><article class="paper">
+        <input class="title-input" value="Skill 生态正在分化：头部玩家已经在做发行商了" aria-label="文章标题">
+        <div class="doc-meta"><span>核心正文</span><span>创作中</span><span>3 条来源</span><span>2 个素材</span></div>
+        <div class="content" id="content" contenteditable="true">
+          <p>如果你还把 Skill 理解成一段提示词，可能已经错过了这轮变化里最重要的部分。</p>
+          <p>过去几个月，Skill 生态正在出现明显分层：有人还在分享单个技巧，有人已经开始维护标准、组织作者、做版本更新和分发。头部玩家扮演的角色，越来越像软件时代的发行商。</p>
+          <h2>这件事为什么值得关注？</h2>
+          <p><strong>第一，真正稀缺的不是“会写提示词”</strong>，而是把一套工作方法持续维护成可靠产品。</p>
+          <p>第二，当 Skill 可以被外部 Agent 直接调用，创作者交付的不再只是教程，而是一段可重复执行的能力。</p>
+          <blockquote>分发和信任开始比生产更重要。用户需要知道它来自谁、解决什么问题、更新是否可靠。</blockquote>
+          <h2>给普通创作者的机会</h2>
+          <p>机会不是再造一个平台，而是先把自己最稳定的一套工作方法变成可验证、可复用、能持续更新的 Skill。</p>
+        </div>
+      </article></div>
+      <div class="statusbar"><span id="counts">字数 269 · 预计阅读 1 分钟</span><span>自动保存已开启</span><span class="right">Markdown 兼容格式</span></div>
+    </section>
+    <aside class="context">
+      <div class="context-tabs"><button class="context-tab active" data-panel="versions">版本</button><button class="context-tab" data-panel="sources">来源</button><button class="context-tab" data-panel="assets">素材</button></div>
+      <div class="context-body">
+        <section class="context-panel active" id="versions"><p class="panel-title">版本历史</p><div class="version"><b>第 3 版 · 最新</b><small>今天 15:42 · Pi 补充论点</small></div><div class="version"><b>第 2 版</b><small>今天 14:18 · 你修改</small></div><div class="version"><b>第 1 版</b><small>今天 11:06 · Pi 创建</small></div><div class="hint">选择历史版本后进入只读查看，可另存为新版本或复制成新项目。</div></section>
+        <section class="context-panel" id="sources"><p class="panel-title">关联来源 · 3</p><div class="source"><a href="#">OpenAI：Skills 设计说明 ↗</a><small>官方资料 · 今天核对</small></div><div class="source"><a href="#">Anthropic Agent Skills 公开仓库 ↗</a><small>原始项目 · 7 月 28 日</small></div><div class="source"><a href="#">创作者分发模式观察</a><small>个人判断</small></div></section>
+        <section class="context-panel" id="assets"><p class="panel-title">媒体素材 · 2</p><div class="source"><b>skill-ecosystem-cover.png</b><small>封面 · 本地文件</small></div><div class="source"><b>repository-growth-chart.png</b><small>正文配图 · 本地文件</small></div></section>
+      </div>
+    </aside>
+  </div>
+</main>
+</div>
+<aside class="pi" id="pi"><h3>Pi · 当前创作项目</h3><p>我会跟随当前正文、版本和关联来源。选中一段文字后，可以让我压缩、改写或核对论据。</p></aside>
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const openEditor=()=>{$('#library').classList.remove('active');$('#editor').classList.add('active');$('#crumb').textContent='编辑项目'};
+$$('.project-title').forEach(x=>x.onclick=openEditor);$('#back').onclick=()=>{$('#editor').classList.remove('active');$('#library').classList.add('active');$('#crumb').textContent='项目库'};
+$$('.summary button').forEach(b=>b.onclick=()=>{$$('.summary button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.row.project').forEach(r=>r.hidden=b.dataset.state!=='all'&&r.dataset.state!==b.dataset.state)});
+$('#projectSearch').oninput=e=>$$('.row.project').forEach(r=>r.hidden=!r.textContent.toLowerCase().includes(e.target.value.toLowerCase()));
+$$('.tool[data-cmd]').forEach(b=>b.onclick=()=>{document.execCommand(b.dataset.cmd);$('#content').focus()});
+$('#block').onchange=e=>{document.execCommand('formatBlock',false,e.target.value);$('#content').focus()};
+$('#link').onclick=()=>{const u=prompt('粘贴链接地址');if(u)document.execCommand('createLink',false,u)};
+$('#find').onclick=()=>$('#findbar').classList.add('show');$('#closeFind').onclick=()=>$('#findbar').classList.remove('show');
+$('#findText').oninput=e=>{if(e.target.value)window.find(e.target.value)};
+$('#replace').onclick=()=>{const s=getSelection();if(s&&s.toString()===$('#findText').value){document.execCommand('insertText',false,$('#replaceText').value);window.find($('#findText').value)}};
+const count=()=>{const n=$('#content').innerText.replace(/\s/g,'').length;$('#counts').textContent=`字数 ${n} · 预计阅读 ${Math.max(1,Math.ceil(n/500))} 分钟`};$('#content').oninput=count;count();
+$$('.context-tab').forEach(t=>t.onclick=()=>{$$('.context-tab,.context-panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');$('#'+t.dataset.panel).classList.add('active')});
+$('#contextBtn').onclick=()=>$('#editor').classList.toggle('context-open');$('#piBtn').onclick=()=>$('#pi').classList.toggle('open');
+</script>
+</body></html>

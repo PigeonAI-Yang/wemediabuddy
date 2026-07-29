@@ -1,0 +1,9 @@
+{
+  "name": "wmb-design-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "description": "WeMediaBuddy 墨夜编辑台 — 交互式设计原型（纯静态，仅供设计审核）",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

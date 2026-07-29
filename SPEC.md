@@ -148,6 +148,8 @@ Each plan item must contain:
 - available and missing materials;
 - optional cited `review_ids` and `method_finding_ids`.
 
+The current plan must retain every deduplicated result that meets the opportunity standard; it must not impose a fixed item-count cap. `priority` is an integer from `0` through `7`, mapped to `SSS`, `S`, `A`, `B`, `C`, `D`, `E`, and `F`. Items are read back in ascending numeric priority, preserving source order within the same grade. Information below the opportunity threshold remains a source item and must not be promoted merely to increase the plan size.
+
 A later current plan must contain at least one explicit historical review or method-finding reference once final reviews exist.
 
 ### CAP-004 Content, platform versions, and assets
@@ -424,6 +426,36 @@ Pi runs as one supervised RPC subprocess with LF-delimited JSON messages, stream
 
 Every main view shares one collapsible Pi conversation dock. Page changes preserve the conversation and active task. A text response or `agent_end` alone is not success; WMB marks a task successful only after required business objects read back through the existing business API.
 
+### CAP-015 Long-term knowledge compounding
+
+Links: REQ-002, REQ-003, REQ-004, REQ-011, REQ-012, REQ-014, AC-001, AC-002, AC-009, AC-010.
+
+Every source has two independent states: verification (`pending`, `verified`, `disputed`, `rejected`) and management (`active`, `watching`, `expired`, `archived`). Opportunity, content and publication use are derived from existing relations rather than copied into another status.
+
+Library reads sources through an independent bounded, paged query with search and both state filters. It must not reuse the Today source limit.
+
+Topics have a stable canonical key, kind (`theme` or `event`), management status and explicit source relations (`primary`, `supporting`, `background`, `contradicting`). Repeated recording of the same topic/source/relation is idempotent.
+
+A bounded historical-context read follows the existing chain from topic/source to plan opportunity, content project, publication and final review. It reports observed relations and must not claim causal impact.
+
+Rediscovery is deterministic and shows at least: high-priority unused sources, watching sources and sources pending verification for more than seven days. UI, IPC, MCP and built-in Pi use the same business functions for these reads and writes.
+
+### CAP-016 Knowledge canvas and direct page context
+
+Links: REQ-002, REQ-003, REQ-004, REQ-014, REQ-015, AC-001, AC-002, AC-009, AC-010, AC-011.
+
+A knowledge canvas is a persistent working view over existing WMB business objects. Canvas nodes reference allowed real object IDs or contain a canvas note; removing a node must not delete the referenced object. One object may appear in multiple canvases, and each canvas stores its own layout and viewport.
+
+Semantic relations have explicit direction, type and optional label. Relation truth is stored separately from per-canvas visibility. Creating, relabelling, hiding and archiving a relation are distinct operations. Pi-proposed relations remain suggestions until the user confirms them.
+
+The canvas supports adding real objects, dragging, pan/zoom, click and Shift multi-selection, rectangular selection and explicit typed connection. Layout and relationship writes use optimistic revisions and batch business commands.
+
+Pi context follows the same direct-selection interaction on every page. With no selected object, the bounded current-page read model is the context. With one or more checked/selected objects, only those objects and relations whose two endpoints are selected are context. Multi-selection is explicit; clicking page whitespace clears it and restores current-page context.
+
+WMB resolves the context immediately before a Pi turn and sends the exact IDs, types, current revisions/content and internal relations. WMB must not silently expand a non-empty selection. The submitted Pi session turn is the exact-use record; WMB must not create an additional package, snapshot object, version family or duplicate use receipt.
+
+A creative brief or content project created from that context stores its actual evidence/source references as part of that existing business object. UI, IPC, MCP and built-in Pi call the same business functions; MCP mutations are atomically idempotent by `request_id`.
+
 ## 4. UI and IPC contract
 
 The five required views are Today, Studio, Publish, Results, and Settings.
@@ -459,5 +491,7 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-011 | Restart recovery | Data, jobs, login profile, and safe states survive restart. |
 | EVAL-012 | Feedback loop | Final keep/stop/change review and later plan backlink. |
 | EVAL-013 | Data-root visibility | Real paths, usage, counts, reopen after whole-root move. |
+| EVAL-014 | Knowledge compounding | 250-source pagination, dual-state stale-write rejection, cross-day topic idempotency and topic/source-to-review readback. |
+| EVAL-015 | Knowledge canvas | Persistent real-object layout and typed relations, current-page default, exact multi-selection excluding a sentinel, Pi-session context identity without package/use writes, project evidence backlink, stale-write rejection and 250-node/1100px operation. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

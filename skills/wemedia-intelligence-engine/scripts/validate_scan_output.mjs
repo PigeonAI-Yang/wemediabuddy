@@ -7,9 +7,11 @@ const sourceIds = new Set((scan.sources ?? []).map((source) => source.id));
 const opportunities = scan.opportunities ?? [];
 
 if (!sourceIds.size) throw new Error('scan needs at least one source');
-if (opportunities.length > 3) throw new Error('scan allows at most 3 opportunities');
-for (const item of opportunities) {
+if (!opportunities.length) throw new Error('scan needs at least one qualifying opportunity');
+for (const [index, item] of opportunities.entries()) {
   if (!item.title || !item.why_now || !item.angle || !item.source_ids?.length) throw new Error('opportunity missing useful content');
+  if (!Number.isInteger(item.priority) || item.priority < 0 || item.priority > 7) throw new Error('opportunity priority must be an integer from 0 to 7');
+  if (index > 0 && opportunities[index - 1].priority > item.priority) throw new Error('opportunities must be ordered SSS to F');
   for (const id of item.source_ids) if (!sourceIds.has(id)) throw new Error(`missing source ${id}`);
 }
 

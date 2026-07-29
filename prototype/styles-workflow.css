@@ -1,0 +1,177 @@
+/* ============ 创作 Studio ============ */
+
+.studio-grid { display: grid; grid-template-columns: 230px 1fr; gap: 0; border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; background: var(--bg-1); }
+.studio-side { border-right: 1px solid var(--line); padding: 14px 10px; background: var(--bg-1); }
+.studio-side .side-label { font-size: 10.5px; letter-spacing: 1.2px; color: var(--t3); padding: 8px 10px 6px; font-weight: 600; }
+.outline-item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; color: var(--t2);
+  font-size: 13px; padding: 7px 10px; border-radius: 7px;
+}
+.outline-item:hover { background: var(--bg-2); color: var(--t1); }
+.outline-item.on { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600; }
+
+.pf-ver { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 7px; font-size: 13px; color: var(--t2); }
+.pf-ver:hover { background: var(--bg-2); }
+.pf-ver .st-dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
+.st-dot.none { background: var(--t3); }
+.st-dot.ready { background: var(--green); }
+.st-dot.draft { background: var(--amber); }
+
+.editor-area { display: flex; flex-direction: column; min-height: 560px; }
+.editor-toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.et-btn { border: 0; background: none; color: var(--t2); font-size: 13px; padding: 5px 9px; border-radius: 6px; font-weight: 500; }
+.et-btn:hover { background: var(--bg-2); color: var(--t1); }
+.et-sep { width: 1px; height: 18px; background: var(--line-strong); margin: 0 6px; }
+
+.editor-body { flex: 1; padding: 28px 44px; max-width: 860px; }
+.editor-title { font-size: 27px; font-weight: 700; line-height: 1.35; outline: none; }
+.editor-meta { display: flex; gap: 12px; align-items: center; margin: 12px 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.editor-h { font-size: 18px; font-weight: 700; margin: 26px 0 10px; }
+.editor-p { color: #c6cbdb; font-size: 14.5px; line-height: 1.85; margin-bottom: 12px; }
+.editor-foot {
+  display: flex; gap: 16px; align-items: center;
+  padding: 9px 20px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--t3);
+  background: var(--bg-1);
+}
+
+/* ============ 发布 Publish ============ */
+
+.pub-grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+
+.pub-card { margin-bottom: 16px; overflow: hidden; }
+.pub-head { display: flex; align-items: center; gap: 12px; padding: 15px 20px; border-bottom: 1px solid var(--line); }
+.pub-head .pf-tag { font-size: 13px; }
+.pub-head .pf-tag i { width: 20px; height: 20px; font-size: 11px; border-radius: 6px; }
+.pub-title-line { font-size: 14px; font-weight: 600; }
+.pub-body { padding: 16px 20px; }
+.pub-payload {
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #c6cbdb;
+  white-space: pre-wrap;
+}
+.pub-assets { display: flex; gap: 10px; margin-top: 12px; }
+.asset-thumb {
+  width: 88px; height: 66px;
+  border-radius: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  display: grid; place-items: center;
+  font-size: 11px; color: var(--t3);
+  flex-direction: column;
+}
+.pub-foot { display: flex; gap: 10px; align-items: center; padding: 13px 20px; border-top: 1px solid var(--line); background: rgba(255, 255, 255, 0.015); }
+
+.timeline { padding: 6px 20px 18px; }
+.tl-item { display: flex; gap: 12px; position: relative; padding: 8px 0 8px 4px; }
+.tl-item::before {
+  content: "";
+  position: absolute; left: 9px; top: 26px; bottom: -6px;
+  width: 1px; background: var(--line-strong);
+}
+.tl-item:last-child::before { display: none; }
+.tl-dot { width: 11px; height: 11px; border-radius: 50%; margin-top: 5px; flex: none; box-shadow: 0 0 0 3px var(--bg-1); }
+.tl-dot.ok { background: var(--green); }
+.tl-dot.wait { background: var(--amber); }
+.tl-dot.err { background: var(--red); }
+.tl-dot.idle { background: var(--t3); }
+.tl-text { font-size: 12.5px; }
+.tl-text b { font-weight: 600; }
+.tl-text .faint { display: block; font-size: 11.5px; }
+
+.account-card { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-m); margin-bottom: 10px; background: var(--bg-1); }
+.account-avatar { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #fff; flex: none; }
+
+/* ============ 结果 Results ============ */
+
+.metric-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.metric-card { padding: 16px 18px; }
+.metric-value { font-size: 27px; font-weight: 700; font-family: var(--mono); margin-top: 4px; }
+.metric-delta { font-size: 11.5px; margin-top: 3px; }
+.metric-delta.up { color: var(--green); }
+.metric-delta.down { color: var(--red); }
+.spark { display: flex; gap: 3px; align-items: flex-end; height: 30px; margin-top: 10px; }
+.spark i { flex: 1; border-radius: 2px; background: var(--bg-3); min-height: 3px; }
+.spark i.hot { background: var(--accent); }
+
+.snap-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.snap-table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.8px;
+  color: var(--t3); font-weight: 600;
+  padding: 10px 14px; border-bottom: 1px solid var(--line-strong);
+}
+.snap-table td { padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.snap-table tr:last-child td { border-bottom: 0; }
+.snap-table tr:hover td { background: var(--bg-2); }
+
+.review-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.review-col { border-radius: var(--r-m); border: 1px solid var(--line); padding: 15px 17px; background: var(--bg-1); }
+.review-col h4 { font-size: 13px; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.review-col.keep h4 { color: var(--green); }
+.review-col.stop h4 { color: var(--red); }
+.review-col.change h4 { color: var(--amber); }
+.review-col li { font-size: 12.5px; color: var(--t2); margin: 7px 0 7px 16px; line-height: 1.6; }
+
+/* ============ 设置 Settings ============ */
+
+.settings-grid { display: grid; grid-template-columns: 200px 1fr; gap: 24px; align-items: start; }
+.set-nav { position: sticky; top: 0; }
+.set-nav button {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; color: var(--t2);
+  font-size: 13.5px; padding: 8px 12px; border-radius: 8px;
+}
+.set-nav button:hover { background: var(--bg-2); color: var(--t1); }
+.set-nav button.on { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600; }
+
+.set-section { margin-bottom: 26px; }
+.set-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.set-row:last-child { border-bottom: 0; }
+.set-row-label { font-size: 13.5px; font-weight: 600; }
+.set-row-sub { font-size: 12px; color: var(--t3); margin-top: 1px; }
+.set-row .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.path { font-family: var(--mono); font-size: 11.5px; color: var(--t2); background: var(--bg-0); padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); }
+
+.health-dot { width: 8px; height: 8px; border-radius: 50%; }
+.health-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(76, 195, 138, 0.6); }
+.health-dot.warn { background: var(--amber); box-shadow: 0 0 8px rgba(240, 180, 90, 0.6); }
+.health-dot.off { background: var(--t3); }
+
+.toggle { width: 38px; height: 22px; border-radius: 99px; background: var(--bg-3); border: 1px solid var(--line-strong); position: relative; transition: background 0.15s; }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--t2); transition: all 0.15s; }
+.toggle.on { background: var(--accent); border-color: transparent; }
+.toggle.on::after { left: 18px; background: #fff; }
+
+/* 原型说明浮条 */
+.proto-note {
+  position: fixed;
+  left: 50%; bottom: 44px;
+  transform: translateX(-50%);
+  background: rgba(16, 19, 27, 0.95);
+  border: 1px solid var(--line-strong);
+  border-radius: 99px;
+  padding: 8px 18px;
+  font-size: 12px;
+  color: var(--t2);
+  box-shadow: var(--shadow-pop);
+  z-index: 99;
+  display: flex; gap: 8px; align-items: center;
+}
+.proto-note b { color: var(--amber); }
+

@@ -6,6 +6,8 @@ export type SourceInput = {
   originalUrl?: string; title: string; author?: string; publishedAt?: string; summary?: string; categories?: string[]; keywords?: string[];
   valueJudgment?: string; ipRelevance?: string; creationAngles?: string; recommendedPlatforms?: string[]; recommendedFormats?: string[];
   timeliness?: string; priority?: number; evidence?: string; clientLabel?: string; expectedRevision?: number;
+  verificationStatus?: 'pending' | 'verified' | 'disputed' | 'rejected';
+  managementStatus?: 'active' | 'watching' | 'expired' | 'archived';
 };
 
 export type SourceRecord = {
@@ -13,6 +15,8 @@ export type SourceRecord = {
   publishedAt: string | null; collectedAt: string; summary: string | null; categories: string[]; keywords: string[]; valueJudgment: string | null;
   ipRelevance: string | null; creationAngles: string | null; recommendedPlatforms: string[]; recommendedFormats: string[];
   timeliness: string | null; priority: number | null; evidence: string | null; clientLabel: string | null; revision: number;
+  verificationStatus: 'pending' | 'verified' | 'disputed' | 'rejected';
+  managementStatus: 'active' | 'watching' | 'expired' | 'archived';
 };
 
 export function createSourceFeed(database: DatabaseSync, input: { name: string; url?: string }): { id: string; revision: number } {
@@ -87,7 +91,8 @@ const sourceSelect = `SELECT id, feed_id AS feedId, original_url AS originalUrl,
   published_at AS publishedAt, collected_at AS collectedAt, summary, categories_json AS categories, keywords_json AS keywords,
   value_judgment AS valueJudgment, ip_relevance AS ipRelevance, creation_angles AS creationAngles,
   recommended_platforms_json AS recommendedPlatforms, recommended_formats_json AS recommendedFormats, timeliness, priority,
-  evidence, client_label AS clientLabel, revision FROM source_items`;
+  evidence, client_label AS clientLabel, verification_status AS verificationStatus,
+  management_status AS managementStatus, revision FROM source_items`;
 
 function parseSource(row: SourceRow): SourceRecord {
   return {

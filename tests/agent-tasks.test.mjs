@@ -15,6 +15,7 @@ import {
   failAgentTask,
   getActiveAgentTask,
   recoverInterruptedAgentTasks,
+  reportAgentTaskProgress,
   startAgentTask,
   updateAgentTaskPhase
 } from '../src/main/agent-tasks.ts';
@@ -66,9 +67,9 @@ test('agent task completion requires business object readback', async () => {
       planDate: '2026-07-28',
       timezone: 'Asia/Shanghai',
       summary: 'one opportunity',
-      items: [{
-        title: 'Opportunity',
-        priority: 1,
+      items: Array.from({ length: 8 }, (_, priority) => ({
+        title: `Opportunity ${priority}`,
+        priority,
         whyNow: 'now',
         timeliness: 'today',
         targetAudience: 'builders',
@@ -81,14 +82,19 @@ test('agent task completion requires business object readback', async () => {
         structureGuidance: 'structure',
         effortEstimate: '30m',
         sourceIds: [source.id]
-      }]
+      }))
     });
+    database.prepare(`INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)`)
+      .run('sources.upsert_batch', `${started.data.id}:source:0:0`, JSON.stringify({ data: { id: source.id } }), new Date().toISOString());
+    database.prepare(`INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)`)
+      .run('plans.save', `${started.data.id}:plan`, '{}', new Date().toISOString());
 
     updateAgentTaskPhase(database, started.data.id, 'writing_plan');
     const completed = completeAgentTask(database, started.data.id);
     assert.equal(completed.ok, true);
     assert.equal(completed.data.status, 'succeeded');
     assert.equal(Boolean(completed.data.resultRefs.planId), true);
+    assert.equal(completed.data.resultRefs.opportunityCount, 8);
     assert.equal(getActiveAgentTask(database, 'daily_intelligence', '2026-07-28'), null);
   });
 });
@@ -111,7 +117,7 @@ test('running agent tasks become interrupted on recovery and can be cancelled', 
     assert.notEqual(next.data.id, started.data.id);
 
     const project = createContentProject(database, { title: 'Draft project', sourceIds: [] });
-    saveCoreVersion(database, project.id, 'first draft body');
+    saveCoreVersion(database, { projectId: project.id, body: 'first draft body', expectedRevision: 1 });
 
     const cancelledStart = startAgentTask(database, {
       intent: 'studio_draft',
@@ -120,7 +126,7 @@ test('running agent tasks become interrupted on recovery and can be cancelled', 
     });
     const cancelled = cancelAgentTask(database, cancelledStart.data.id);
     assert.equal(cancelled.ok, true);
-    assert.equal(cancelled.data.status, 'interrupted');
+    assert.equal(cancelled.data.status, 'cancelled');
 
     const failedStart = startAgentTask(database, {
       intent: 'studio_draft',
@@ -140,5 +146,25 @@ test('running agent tasks become interrupted on recovery and can be cancelled', 
     assert.equal(done.ok, true);
     assert.equal(done.data.status, 'succeeded');
     assert.equal(done.data.resultRefs.projectId, project.id);
+  });
+});
+
+test('daily task persists bounded progress and resumes the same checkpoint', async () => {
+  await withDb((database) => {
+    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-07-29' });
+    const progress = reportAgentTaskProgress(database, started.data.id, {
+      phase: 'scanning_sources',
+      progress: { planned: 6, processed: 1, failed: 1, currentSource: 'slow source' },
+      checkpoint: { completedRoutes: ['slow source'] },
+      message: '来源超时，已继续',
+      level: 'warning'
+    });
+    assert.equal(progress.ok, true);
+    assert.equal(progress.data.events.length, 1);
+    recoverInterruptedAgentTasks(database);
+    const resumed = getActiveAgentTask(database, 'daily_intelligence', '2026-07-29');
+    assert.equal(resumed.id, started.data.id);
+    assert.equal(resumed.phase, 'resume_pending');
+    assert.deepEqual(resumed.checkpoint.completedRoutes, ['slow source']);
   });
 });

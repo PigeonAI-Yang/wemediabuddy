@@ -8,8 +8,9 @@ const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-publishing-'));
 try {
   const db = migrateDatabase(path.join(directory, 'wmb.db'));
   const project = createContentProject(db, { title: 'publish state' });
-  const core = saveCoreVersion(db, project.id, 'core');
-  const version = savePlatformVersion(db, { projectId: project.id, contentVersionId: core.id, platform: 'x', format: 'text', body: 'hello' });
+  const core = saveCoreVersion(db, { projectId: project.id, body: 'core', expectedRevision: 1 });
+  if (!core.ok) throw new Error('core setup failed');
+  const version = savePlatformVersion(db, { projectId: project.id, contentVersionId: core.data.id, platform: 'x', format: 'text', body: 'hello' });
   const account = saveAccount(db, { platform: 'x', accountKey: '@owner', displayName: 'Owner', loginState: 'authenticated', evidenceUrl: 'https://x.com/owner' });
   if (!version.ok) throw new Error('version setup failed');
   const created = createPublication(db, { platformVersionId: version.data.id, accountId: account.id });

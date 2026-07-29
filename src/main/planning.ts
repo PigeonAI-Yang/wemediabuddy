@@ -11,18 +11,32 @@ export function createTopic(database: DatabaseSync, title: string): { id: string
 
 export function saveCurrentPlan(database: DatabaseSync, input: { planDate: string; timezone: string; summary: string; items: PlanItemInput[] }, transaction = true): { id: string; revision: number } {
   if (!input.items.length) throw new Error('计划至少需要一项。');
-  for (const item of input.items) if (!item.sourceIds.length) throw new Error('计划条目必须引用资料。');
+  for (const item of input.items) {
+    if (!Number.isInteger(item.priority) || item.priority < 0 || item.priority > 7) throw new Error('机会等级必须是 0–7 的整数。');
+    if (!item.sourceIds.length) throw new Error('计划条目必须引用资料。');
+  }
+  const items = input.items.map((item, index) => ({ item, index }))
+    .sort((a, b) => a.item.priority - b.item.priority || a.index - b.index)
+    .map(({ item }) => item);
   const sourceCount = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${input.items.flatMap((item) => item.sourceIds).map(() => '?').join(',')})`).get(...input.items.flatMap((item) => item.sourceIds)) as { count: number }).count);
   if (sourceCount !== new Set(input.items.flatMap((item) => item.sourceIds)).size) throw new Error('计划引用了不存在的资料。');
-  const reviewsTable = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reviews'").get();
-  if (reviewsTable && Number((database.prepare("SELECT COUNT(*) AS count FROM reviews WHERE status = 'final'").get() as { count: number }).count) > 0 && !input.items.some((item) => item.reviewIds?.length || item.methodFindingIds?.length)) throw new Error('存在最终复盘时，当前计划必须引用历史复盘或方法结论。');
+  validateReferences(database, 'topics', input.items.flatMap((item) => item.topicId ? [item.topicId] : []), '计划引用了不存在的主题。');
+  validateReferences(database, 'reviews', input.items.flatMap((item) => item.reviewIds ?? []), '计划引用了不存在的复盘。', "status='final'");
+  validateReferences(database, 'method_findings', input.items.flatMap((item) => item.methodFindingIds ?? []), '计划引用了不存在的方法结论。');
   const now = new Date().toISOString(); const id = randomUUID();
   if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     database.prepare('UPDATE plans SET is_current = 0, updated_at = ?, revision = revision + 1 WHERE plan_date = ? AND is_current = 1').run(now, input.planDate);
     database.prepare('INSERT INTO plans (id, plan_date, timezone, summary, is_current, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 1, ?, ?, 1)').run(id, input.planDate, input.timezone, input.summary, now, now);
-    input.items.forEach((item, sortOrder) => database.prepare(`INSERT INTO plan_items (id, plan_id, topic_id, title, priority, why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate, source_ids_json, available_materials_json, missing_materials_json, review_ids_json, method_finding_ids_json, sort_order, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(randomUUID(), id, item.topicId ?? null, item.title, item.priority, item.whyNow, item.timeliness, item.targetAudience, item.angle, item.pointOfView, JSON.stringify(item.platforms), JSON.stringify(item.formats), item.titleGuidance, item.openingGuidance, item.structureGuidance, item.effortEstimate, JSON.stringify(item.sourceIds), JSON.stringify(item.availableMaterials ?? []), JSON.stringify(item.missingMaterials ?? []), JSON.stringify(item.reviewIds ?? []), JSON.stringify(item.methodFindingIds ?? []), sortOrder, now, now));
+    items.forEach((item, sortOrder) => database.prepare(`INSERT INTO plan_items (id, plan_id, topic_id, title, priority, why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate, source_ids_json, available_materials_json, missing_materials_json, review_ids_json, method_finding_ids_json, sort_order, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(randomUUID(), id, item.topicId ?? null, item.title, item.priority, item.whyNow, item.timeliness, item.targetAudience, item.angle, item.pointOfView, JSON.stringify(item.platforms), JSON.stringify(item.formats), item.titleGuidance, item.openingGuidance, item.structureGuidance, item.effortEstimate, JSON.stringify(item.sourceIds), JSON.stringify(item.availableMaterials ?? []), JSON.stringify(item.missingMaterials ?? []), JSON.stringify(item.reviewIds ?? []), JSON.stringify(item.methodFindingIds ?? []), sortOrder, now, now));
     if (transaction) database.exec('COMMIT');
   } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
   return { id, revision: 1 };
+}
+
+function validateReferences(database: DatabaseSync, table: 'topics' | 'reviews' | 'method_findings', ids: string[], message: string, extra = '1=1') {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return;
+  const count = Number((database.prepare(`SELECT count(*) AS count FROM ${table} WHERE ${extra} AND id IN (${unique.map(() => '?').join(',')})`).get(...unique) as { count: number }).count);
+  if (count !== unique.length) throw new Error(message);
 }

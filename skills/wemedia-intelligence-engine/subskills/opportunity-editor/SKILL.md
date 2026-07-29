@@ -5,7 +5,7 @@ description: 快速判断哪些 AI 信息值得今天转化为自己的内容，
 
 # Opportunity Editor
 
-读取 [机会标准](../../references/opportunity-standard.md)，回答四个问题后直接选择最多三个机会。没有用户价值或我们自己的角度就放弃，不做评分表。
+读取 [机会标准](../../references/opportunity-standard.md)，回答四个问题后保留全部合格的去重机会，并按 `SSS → S → A → B → C → D → E → F` 排列。没有用户价值或我们自己的角度就放弃，不为凑数量保留。
 
 不要写成新闻摘要。每个机会给出：
 

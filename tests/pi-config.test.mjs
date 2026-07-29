@@ -20,7 +20,7 @@ test('Pi API presets read, switch and delete without exposing keys', async () =>
         activeId: 'one',
         profiles: [
           { id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', encryptedApiKey: 'secret-one' },
-          { id: 'two', name: '备用接口', baseUrl: 'https://two.test/v1', model: 'model-two', encryptedApiKey: 'secret-two' }
+          { id: 'two', name: '备用接口', baseUrl: 'https://two.test/v1', model: 'model-two', thinking: 'high', encryptedApiKey: 'secret-two' }
         ]
       }),
       now,
@@ -35,6 +35,7 @@ test('Pi API presets read, switch and delete without exposing keys', async () =>
     const switched = activatePiConfig(database, 'two');
     assert.equal(switched.activeId, 'two');
     assert.equal(switched.model, 'model-two');
+    assert.equal(switched.profiles.find((profile) => profile.id === 'two').thinking, 'high');
 
     const remaining = deletePiConfig(database, 'two');
     assert.equal(remaining.activeId, 'one');

@@ -2,3 +2,4 @@ node_modules/
 .pi-runtime/
 out/
 .vite/
+.wmb-*.log

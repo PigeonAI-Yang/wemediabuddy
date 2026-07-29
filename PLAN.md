@@ -4,7 +4,7 @@ This plan orders the complete current PRD. Phases are dependency gates, not redu
 
 ## M-000 Harness and contracts
 
-Scope: CAP-001–CAP-014 documentation and traceability.
+Scope: CAP-001–CAP-015 documentation and traceability.
 
 Gate:
 
@@ -39,7 +39,7 @@ Deliver:
 - topics, plans, references, and current-plan rule;
 - Today view and business commands.
 
-Gate: duplicate or incremental source input does not lose prior analysis, complete source search/readback works, and a current plan cites stored sources with material gaps.
+Gate: duplicate or incremental source input does not lose prior analysis, complete source search/readback works, and a current plan cites stored sources with material gaps, retains every qualifying opportunity, and reads them back in `SSS → F` order without a fixed count cap.
 
 ## M-300 Studio, assets, and MCP
 
@@ -134,3 +134,81 @@ Deliver:
 - Today intelligence and Studio draft intents without an external chat.
 
 Gate: the packaged runtime starts, streams, aborts and exits; a real Pi task writes only through live WMB MCP; Today and Studio read back their required business objects; final publication remains manual.
+
+## M-1100 Long-term Studio workbench
+
+Scope: CAP-004, CAP-005 and CAP-014 at 1000+ content-project scale.
+
+Detailed plan: `STUDIO_LONG_TERM_PLAN.md`.
+
+Order:
+
+1. correct Pi project/version semantics;
+2. split project-list and single-project detail reads;
+3. add project status, archive, search and bounded paging;
+4. rebuild Studio around on-demand project detail and usable version history;
+5. migrate existing data and pass the 1001-project desktop acceptance.
+
+Gate: Pi creates a new project for a new article and leaves unrelated project versions unchanged; list payloads contain at most 50 summaries and no historical bodies; one project detail retains complete immutable versions; 1001-project search/filter/paging, revision conflict, migration integrity and real desktop operation pass.
+
+## M-1200 Knowledge compounding
+
+Scope: CAP-002, CAP-003, CAP-004, CAP-011, CAP-012 and CAP-015.
+
+Deliver:
+
+- dual-axis source lifecycle and independent paged Library;
+- explicit cross-day topic/source aggregation;
+- bounded historical contribution-chain context;
+- deterministic rediscovery;
+- shared UI, IPC and MCP/Pi business commands.
+
+Detailed plan: `KNOWLEDGE_COMPOUNDING_PLAN.md`.
+
+Gate: migration preserves existing objects; lifecycle revisions, topic idempotency, 250-item paging, and a real source-to-review feedback chain read back through the same business API.
+
+## M-1300 Knowledge canvas
+
+Scope: CAP-002, CAP-003, CAP-004, CAP-015 and CAP-016.
+
+Deliver:
+
+- persistent canvases containing references to real WMB objects and local notes;
+- directed typed semantic relations with separate canvas visibility;
+- drag, pan/zoom, multi-select and rectangular selection;
+- direct current-page or explicit multi-selection Pi context with whitespace clear;
+- direct current-page/selected context carried by the existing Pi turn, with evidence links stored on briefs/projects and no package or snapshot object;
+- shared business, IPC and MCP commands with optimistic revisions and atomic idempotency.
+
+Detailed plan: `KNOWLEDGE_CANVAS_PLAN.md`.
+
+Gate: EVAL-015 passes on migrated real data, including restart restoration, current-page default, multi-select sentinel exclusion, whitespace clear, exact Pi-turn context identity, project evidence backlink and 250-node/1100px operation.
+
+## M-1500 Frontend visual and experience redesign
+
+Scope: renderer UI/UX only; no business-contract change. Baseline is the owner-approved interactive prototype in `prototype/` (「墨夜编辑台」, approved 2026-07-30).
+
+Deliver:
+
+- design tokens (elevation, accent discipline, priority/platform color scales, type scale) in `styles.css`;
+- grouped rail navigation, refined topbar and status bar, collapsible Pi dock;
+- per-view redesigns: Today, Studio, Publish, Results, Library/Domain Map, Canvas/Composer, Settings;
+- amber "needs human" semantics, SSS→F grade badges, platform identity colors applied consistently.
+
+Gate: every redesigned view keeps its existing business behavior and readbacks, shows zero document/body overflow at 1100×700 and 1920×900 in a real Electron window, and typecheck plus the lightweight harness pass.
+
+## M-1400 Built-in Xiaohongshu collection for Pi
+
+Scope: CAP-002, CAP-009, CAP-013 and CAP-014.
+
+Deliver:
+
+- pinned `xpzouying/xiaohongshu-mcp` binaries packaged as WMB resources without account cookies;
+- one supervised loopback-only child process using the selected WMB data root for runtime state;
+- explicit login, readiness, failure, restart, data-root switch and application-exit lifecycle;
+- exactly four read-only Xiaohongshu tools exposed to every built-in Pi entry;
+- Xiaohongshu search/detail/profile evidence saved and read back through the existing WMB source business API.
+
+Detailed plan: `XIAOHONGSHU_MCP_PI_PLAN.md`.
+
+Gate: a packaged Windows app starts its own pinned Xiaohongshu MCP without external installation, Pi performs one real read-only collection flow and saves a source through WMB MCP, cookies remain only under the selected data root, write tools are absent, and application exit leaves no child process.

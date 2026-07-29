@@ -269,6 +269,26 @@ export function saveReview(
       ) VALUES (?, ?, ?, ?, ?, ?, 1)`).run(finding.id ?? randomUUID(), id, title, body, now, now);
     }
 
+    if(status==='final'){
+      const origin=database.prepare(`SELECT b.canvas_id AS canvasId,b.context_node_ids_json AS contextNodeIdsJson
+        FROM creative_brief_projects link JOIN creative_briefs b ON b.id=link.brief_id
+        JOIN platform_versions pv ON pv.project_id=link.project_id JOIN publications p ON p.platform_version_id=pv.id
+        WHERE p.id=? LIMIT 1`).get(input.publicationId) as {canvasId:string;contextNodeIdsJson:string}|undefined;
+      if(origin?.canvasId){
+        const contextNodeIds=JSON.parse(origin.contextNodeIdsJson) as string[];
+        const topicNodes=contextNodeIds.length?database.prepare(`SELECT id FROM knowledge_canvas_nodes
+          WHERE canvas_id=? AND object_type='topic' AND id IN (${contextNodeIds.map(()=>'?').join(',')})`).all(origin.canvasId,...contextNodeIds).map((item:any)=>item.id):[];
+        const suggestions=[{key:'review',objectType:'review',objectId:id,returnRelationType:'derived_from'},
+          ...database.prepare('SELECT id FROM method_findings WHERE review_id=? ORDER BY created_at,id').all(id).map((item:any)=>({key:`finding:${item.id}`,objectType:'method_finding',objectId:item.id,returnRelationType:'uses_method'}))];
+        const insert=database.prepare(`INSERT OR IGNORE INTO knowledge_suggestions(id,request_id,canvas_id,kind,payload_json,created_at,updated_at)
+          VALUES(?,?,?,'node',?,?,?)`);
+        suggestions.forEach((item,index)=>insert.run(randomUUID(),`review-return:${id}:${item.key}`,origin.canvasId,JSON.stringify({
+          objectType:item.objectType,objectId:item.objectId,x:120+index*280,y:680,
+          returnFromNodeIds:topicNodes,returnRelationType:item.returnRelationType
+        }),now,now));
+      }
+    }
+
     database.exec('COMMIT');
   } catch (error) {
     database.exec('ROLLBACK');

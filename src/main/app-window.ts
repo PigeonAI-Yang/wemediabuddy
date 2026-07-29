@@ -1,0 +1,39 @@
+import { app, BrowserWindow } from 'electron';
+import path from 'node:path';
+
+declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
+declare const MAIN_WINDOW_VITE_NAME: string;
+
+export function createWindow(): void {
+  const window = new BrowserWindow({
+    show: process.env.WMB_ACCEPTANCE_HEADLESS !== '1',
+    width: 1600,
+    height: 960,
+    minWidth: 1100,
+    minHeight: 720,
+    frame: false,
+    icon: path.join(app.getAppPath(), 'images', 'logo.png'),
+    backgroundColor: '#090c11',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) void window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  else void window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+}
+
+export function broadcastPiEvent(event: Record<string, unknown>): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('pi:event', event);
+  }
+}
+
+export function broadcastPiRuntimeProgress(event: Record<string, unknown>): void {
+  if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
+  if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
+  if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? '') });
+  if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'running' });
+}

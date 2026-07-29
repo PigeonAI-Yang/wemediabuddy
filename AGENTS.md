@@ -36,6 +36,7 @@ For browser/platform work, also read the matching platform contract in `SPEC.md`
 - User requirement: do not add an embedded LLM, Agent runtime, platform API integration, cloud service, auth system, or multi-user features.
 - User requirement: publishing always requires a fresh human confirmation bound to the exact account, content version, and assets.
 - Project fact: runtime data belongs under the configured data root, never in the Git repository.
+- Project rule: no source file may exceed 500 lines; split by existing business boundaries before crossing the limit.
 - Recommendation: do not add dependencies unless an active task cannot be completed with the approved stack or existing dependencies; record the reason in `TASKS.md`.
 - Never run destructive Git or filesystem commands against broad paths.
 

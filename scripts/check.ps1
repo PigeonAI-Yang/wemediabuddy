@@ -36,6 +36,25 @@ if ($placeholderMatches) {
     throw 'Unresolved placeholders found.'
 }
 
+Write-Host '> checking 500-line source limit'
+$sourceExtensions = @('.ts', '.tsx', '.js', '.mjs', '.cjs', '.css', '.scss', '.html', '.ps1')
+$sourceFiles = git -C $projectRoot ls-files --cached --others --exclude-standard
+if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate project source files.' }
+$oversizedSources = foreach ($relativePath in $sourceFiles) {
+    if ($relativePath -match '^(?:node_modules|out|\.git|\.ai|resources)/') { continue }
+    if ([IO.Path]::GetExtension($relativePath) -notin $sourceExtensions) { continue }
+    $fullPath = Join-Path $projectRoot $relativePath
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
+    $lineCount = (Get-Content -LiteralPath $fullPath).Count
+    if ($lineCount -gt 500) { "$relativePath ($lineCount lines)" }
+}
+if ($oversizedSources) {
+    $oversizedSources | ForEach-Object { Write-Host $_ }
+    throw 'Source files exceed the 500-line project limit.'
+}
+node (Join-Path $projectRoot 'scripts/verify-prototype-split.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Prototype split verification failed.' }
+
 Write-Host '> checking task traceability'
 $prdText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'PRD.md')
 $specText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'SPEC.md')

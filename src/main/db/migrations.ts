@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { knowledgeMigrations } from './knowledge-migrations.ts';
 
 export const migrations = [
   {
@@ -276,8 +277,53 @@ export const migrations = [
     sql: `
       ALTER TABLE content_versions ADD COLUMN author TEXT NOT NULL DEFAULT 'ai';
     `
-  }
-
+  },
+  {
+    version: 15,
+    sql: `
+      ALTER TABLE content_projects ADD COLUMN status TEXT NOT NULL DEFAULT 'drafting'
+        CHECK (status IN ('idea', 'drafting', 'review', 'ready', 'completed'));
+      ALTER TABLE content_projects ADD COLUMN archived_at TEXT;
+      CREATE INDEX content_projects_archive_updated ON content_projects(archived_at, updated_at DESC, id DESC);
+      CREATE INDEX content_projects_status_archive_updated ON content_projects(status, archived_at, updated_at DESC, id DESC);
+    `
+  },
+  {
+    version: 16,
+    sql: `
+      ALTER TABLE agent_tasks RENAME TO agent_tasks_v11;
+      CREATE TABLE agent_tasks (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN ('daily_intelligence', 'studio_draft', 'results_review')),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks (
+        id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
+        error_code, error_message, created_at, updated_at, finished_at, heartbeat_at
+      )
+      SELECT id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
+        error_code, error_message, created_at, updated_at, finished_at, updated_at
+      FROM agent_tasks_v11;
+      DROP TABLE agent_tasks_v11;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+    `
+  },
+  ...knowledgeMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

@@ -5,6 +5,7 @@
   "opportunities": [
     {
       "title":"What this release changes",
+      "priority":1,
       "why_now":"It is new and useful.",
       "audience":"AI tool users",
       "angle":"Test it instead of repeating the announcement.",

@@ -1,0 +1,19 @@
+{
+  "name": "xpzouying/xiaohongshu-mcp",
+  "version": "v2.1.1",
+  "releaseUrl": "https://github.com/xpzouying/xiaohongshu-mcp/releases/tag/v2.1.1",
+  "license": "Apache-2.0",
+  "licenseUrl": "https://github.com/xpzouying/xiaohongshu-mcp/blob/main/LICENSE",
+  "assets": [
+    {
+      "name": "xiaohongshu-mcp-windows-amd64.exe",
+      "size": 15080448,
+      "sha256": "884396ec85fb304e97db7da689099c075c7b5366254d1e97a578242b70399623"
+    },
+    {
+      "name": "xiaohongshu-login-windows-amd64.exe",
+      "size": 10760192,
+      "sha256": "59ee1c3fe8d355a50c516a83d3cbfdfad91cd70290d3858bbf3c11720dc33e5a"
+    }
+  ]
+}

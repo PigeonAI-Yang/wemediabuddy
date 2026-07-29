@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WeMediaBuddy 设置页设计方案</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --app: #090c11;
+      --bar: #0a0e14;
+      --rail: #0b0f15;
+      --surface: #0f141c;
+      --raised: #141a23;
+      --hover: #181e28;
+      --selected: #1d2230;
+      --ink: #f3f5f8;
+      --ink-soft: #d1d5dc;
+      --muted: #aeb5c0;
+      --muted-low: #929aa6;
+      --border: #252b35;
+      --border-strong: #3a424f;
+      --violet: #7657ef;
+      --violet-hover: #886cf4;
+      --violet-soft: #b9a7ff;
+      --link: #71a1ff;
+      --success: #31c777;
+      --danger: #ed6370;
+      --focus: color-mix(in srgb, var(--violet) 30%, transparent);
+    }
+    [data-theme="light"] {
+      color-scheme: light;
+      --app: #f5f3fb;
+      --bar: #fff;
+      --rail: #f8f7fc;
+      --surface: #fff;
+      --raised: #fbfaff;
+      --hover: #f0ecfa;
+      --selected: #ebe6f8;
+      --ink: #211d2b;
+      --ink-soft: #3e384a;
+      --muted: #625b70;
+      --muted-low: #746d81;
+      --border: #d9d4e4;
+      --border-strong: #bcb4ca;
+      --violet: #6844db;
+      --violet-hover: #5733c7;
+      --violet-soft: #6844db;
+      --link: #315fba;
+      --success: #147a43;
+      --danger: #c42b3a;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--app);
+      color: var(--ink);
+      font: 15px/1.55 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--violet);
+      outline-offset: 2px;
+    }
+    .titlebar {
+      height: 64px;
+      display: grid;
+      grid-template-columns: 260px 1fr 260px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: var(--bar);
+      -webkit-app-region: drag;
+    }
+    .brand, .window-actions { display: flex; align-items: center; }
+    .brand { gap: 10px; padding-left: 22px; font-weight: 700; }
+    .brand img { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+    .titlebar-title { justify-self: center; font-size: 14px; color: var(--ink-soft); }
+    .window-actions { justify-content: flex-end; gap: 4px; padding-right: 12px; -webkit-app-region: no-drag; }
+    .icon-button {
+      width: 38px; height: 34px; border: 0; border-radius: 7px;
+      background: transparent; cursor: pointer;
+    }
+    .icon-button:hover { background: var(--hover); }
+    .close:hover { background: #c42b3a; color: #fff; }
+    .settings-shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      height: calc(100vh - 64px);
+    }
+    .settings-nav {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: var(--rail);
+      padding: 22px 14px 16px;
+    }
+    .back {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; height: 40px; border: 0; border-radius: 8px;
+      background: transparent; padding: 0 12px; color: var(--muted);
+      cursor: pointer; text-align: left;
+    }
+    .back:hover { background: var(--hover); color: var(--ink); }
+    .settings-nav h1 { margin: 24px 12px 14px; font-size: 23px; letter-spacing: -.02em; }
+    .nav-list { display: grid; gap: 3px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; height: 44px; border: 0; border-radius: 8px;
+      background: transparent; padding: 0 12px; color: var(--muted);
+      cursor: pointer; text-align: left;
+    }
+    .nav-item:hover { background: var(--hover); color: var(--ink); }
+    .nav-item.active { background: var(--selected); color: var(--ink); }
+    .nav-item.active .nav-icon { color: var(--violet-soft); }
+    .nav-icon { width: 20px; color: var(--muted-low); text-align: center; font-size: 16px; }
+    .nav-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; }
+    .settings-content {
+      min-width: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .settings-content:hover { scrollbar-color: var(--border-strong) transparent; }
+    .content-inner {
+      width: min(860px, calc(100% - 80px));
+      margin: 0 auto;
+      padding: 52px 0 80px;
+    }
+    .page-header { margin-bottom: 34px; }
+    .page-header h2 { margin: 0 0 8px; font-size: 30px; line-height: 1.25; letter-spacing: -.03em; }
+    .page-header p { max-width: 65ch; margin: 0; color: var(--muted); }
+    .settings-section { border-top: 1px solid var(--border); padding: 26px 0; }
+    .settings-section:first-of-type { border-top: 0; padding-top: 0; }
+    .section-heading { margin-bottom: 20px; }
+    .section-heading h3 { margin: 0 0 5px; font-size: 17px; }
+    .section-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+    .profile-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .profile-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      align-items: center; gap: 13px; width: 100%;
+      border: 0; border-bottom: 1px solid var(--border);
+      background: var(--surface); padding: 14px 16px; cursor: pointer; text-align: left;
+    }
+    .profile-row:last-child { border-bottom: 0; }
+    .profile-row:hover { background: var(--hover); }
+    .profile-row.active { background: color-mix(in srgb, var(--violet) 9%, var(--surface)); }
+    .provider-mark {
+      display: grid; place-items: center; width: 36px; height: 36px;
+      border-radius: 8px; background: var(--raised); color: var(--violet-soft);
+      font-weight: 700;
+    }
+    .profile-copy { min-width: 0; }
+    .profile-copy strong, .profile-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .profile-copy small { margin-top: 2px; color: var(--muted); }
+    .status { display: flex; align-items: center; gap: 7px; color: var(--success); font-size: 13px; }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .add-profile {
+      margin-top: 10px; border: 0; background: transparent; color: var(--link);
+      padding: 7px 0; cursor: pointer;
+    }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .field { display: grid; gap: 7px; min-width: 0; }
+    .field.wide { grid-column: 1 / -1; }
+    .field > span { color: var(--ink-soft); font-size: 13px; font-weight: 650; }
+    .field small { color: var(--muted); }
+    input, select {
+      width: 100%; min-width: 0; height: 42px;
+      border: 1px solid var(--border-strong); border-radius: 7px;
+      background: var(--raised); color: var(--ink); padding: 0 12px;
+    }
+    input:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--focus); outline: 0; }
+    .model-control { display: flex; gap: 8px; }
+    .model-control select { flex: 1; }
+    .secondary, .primary, .danger {
+      min-height: 40px; border-radius: 7px; padding: 9px 15px;
+      font-weight: 650; cursor: pointer; white-space: nowrap;
+    }
+    .secondary { border: 1px solid var(--border-strong); background: var(--raised); color: var(--ink); }
+    .secondary:hover { background: var(--hover); }
+    .primary { border: 0; background: var(--violet); color: #fff; }
+    .primary:hover { background: var(--violet-hover); }
+    .danger { border: 1px solid var(--danger); background: transparent; color: var(--danger); }
+    .action-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; }
+    .action-row > div { display: flex; gap: 8px; }
+    .connection-result { color: var(--success); font-size: 13px; }
+    .setting-row {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center; gap: 28px; padding: 17px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: 0; }
+    .setting-row strong, .setting-row small { display: block; }
+    .setting-row small { margin-top: 3px; color: var(--muted); }
+    .setting-row select { width: 210px; }
+    .hidden { display: none; }
+    @media (max-width: 1100px) {
+      .titlebar { grid-template-columns: 200px 1fr 200px; }
+      .settings-shell { grid-template-columns: 210px minmax(0, 1fr); }
+      .content-inner { width: min(760px, calc(100% - 48px)); }
+    }
+    @media (max-width: 760px) {
+      .titlebar { grid-template-columns: 1fr auto; }
+      .titlebar-title { display: none; }
+      .settings-shell { grid-template-columns: 72px minmax(0, 1fr); }
+      .settings-nav { padding-inline: 8px; }
+      .settings-nav h1, .back span, .nav-item span { display: none; }
+      .back, .nav-item { justify-content: center; padding: 0; }
+      .content-inner { width: calc(100% - 32px); padding-top: 32px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .field.wide { grid-column: auto; }
+      .profile-row { grid-template-columns: 42px minmax(0, 1fr); }
+      .profile-row .status { display: none; }
+      .setting-row { grid-template-columns: 1fr; gap: 10px; }
+      .setting-row select { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand"><img src="../../images/logo.png" alt=""><strong>WeMediaBuddy</strong></div>
+    <div class="titlebar-title">设置</div>
+    <div class="window-actions">
+      <button class="icon-button" id="themeButton" aria-label="切换主题" title="切换主题">☀</button>
+      <button class="icon-button" aria-label="最小化">─</button>
+      <button class="icon-button" aria-label="最大化">□</button>
+      <button class="icon-button close" aria-label="关闭">×</button>
+    </div>
+  </header>
+
+  <div class="settings-shell">
+    <aside class="settings-nav">
+      <button class="back" type="button"><b>‹</b><span>返回工作台</span></button>
+      <h1>设置</h1>
+      <nav class="nav-list" aria-label="设置分类">
+        <button class="nav-item" data-page="general"><b class="nav-icon">⌂</b><span>常规</span></button>
+        <button class="nav-item active" data-page="ai"><b class="nav-icon">✦</b><span>AI 与模型</span></button>
+        <button class="nav-item" data-page="appearance"><b class="nav-icon">◐</b><span>外观</span></button>
+        <button class="nav-item" data-page="data"><b class="nav-icon">▱</b><span>数据与存储</span></button>
+        <button class="nav-item" data-page="browser"><b class="nav-icon">◎</b><span>浏览器与账号</span></button>
+        <button class="nav-item" data-page="agent"><b class="nav-icon">↔</b><span>Agent 接入</span></button>
+      </nav>
+      <nav class="nav-foot">
+        <button class="nav-item" data-page="about"><b class="nav-icon">ⓘ</b><span>关于 WMB</span></button>
+      </nav>
+    </aside>
+
+    <main class="settings-content">
+      <section class="content-inner page" id="ai">
+        <header class="page-header">
+          <h2>AI 与模型</h2>
+          <p>管理 Pi 使用的接口配置。你可以保存多个预设，并随时切换当前使用的模型。</p>
+        </header>
+
+        <section class="settings-section">
+          <div class="section-heading">
+            <h3>配置预设</h3>
+            <p>当前预设会用于新的 Pi 对话和内容任务。</p>
+          </div>
+          <div class="profile-list">
+            <button class="profile-row active" type="button">
+              <span class="provider-mark">O</span>
+              <span class="profile-copy"><strong>OpenCode Go</strong><small>mimo-v2.5 · OpenAI Chat Completions</small></span>
+              <span class="status">正在使用</span>
+            </button>
+            <button class="profile-row" type="button">
+              <span class="provider-mark">C</span>
+              <span class="profile-copy"><strong>本地 CPA</strong><small>gpt-5.6-sol · OpenAI Responses</small></span>
+              <span></span>
+            </button>
+          </div>
+          <button class="add-profile" type="button">＋ 添加配置预设</button>
+        </section>
+
+        <section class="settings-section">
+          <div class="section-heading">
+            <h3>OpenCode Go</h3>
+            <p>修改后只影响这个预设，API 密钥会保存在本机。</p>
+          </div>
+          <form class="form-grid">
+            <label class="field wide"><span>接口地址</span><input value="https://opencode.ai/zen/go/v1"></label>
+            <label class="field"><span>接口类型</span>
+              <select><option>OpenAI Chat Completions</option><option>OpenAI Responses</option><option>Anthropic Messages</option></select>
+            </label>
+            <label class="field"><span>API 密钥</span><input type="password" value="wmb-local-secret"></label>
+            <label class="field wide"><span>模型</span>
+              <span class="model-control">
+                <select><option>mimo-v2.5</option><option>minimax-m2.5</option><option>glm-5</option></select>
+                <button class="secondary" type="button" id="modelsButton">获取模型</button>
+              </span>
+              <small id="modelHint">上次获取到 23 个可用模型。</small>
+            </label>
+          </form>
+          <div class="action-row">
+            <span class="connection-result" id="connectionResult">● 配置可用</span>
+            <div>
+              <button class="secondary" id="testButton" type="button">测试连接</button>
+              <button class="primary" type="button">保存配置</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <div class="section-heading"><h3>预设管理</h3></div>
+          <div class="setting-row">
+            <span><strong>复制当前预设</strong><small>以当前参数创建一份新配置。</small></span>
+            <button class="secondary" type="button">复制预设</button>
+          </div>
+          <div class="setting-row">
+            <span><strong>删除 OpenCode Go</strong><small>当前正在使用的预设不能直接删除。</small></span>
+            <button class="danger" type="button" disabled>删除预设</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="general">
+        <header class="page-header"><h2>常规</h2><p>设置 WMB 启动方式和默认行为。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>启动后打开</strong><small>选择每次进入 WMB 时看到的页面。</small></span><select><option>今日内容</option><option>资料库</option><option>创作</option></select></div>
+          <div class="setting-row"><span><strong>界面语言</strong><small>更改应用中的菜单和提示语言。</small></span><select><option>简体中文</option></select></div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="appearance">
+        <header class="page-header"><h2>外观</h2><p>选择适合当前工作环境的界面主题。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>主题</strong><small>黑夜紫罗兰适合长时间专注，白昼紫罗兰适合明亮环境。</small></span><select id="themeSelect"><option value="dark">黑夜紫罗兰</option><option value="light">白昼紫罗兰</option></select></div>
+          <div class="setting-row"><span><strong>界面密度</strong><small>调整列表和表单的垂直间距。</small></span><select><option>舒适</option><option>紧凑</option></select></div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="data">
+        <header class="page-header"><h2>数据与存储</h2><p>查看 WMB 数据保存位置并管理本地空间。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>数据目录</strong><small>J:\PigeonYang\WeMediaBuddyData</small></span><button class="secondary">打开目录</button></div>
+          <div class="setting-row"><span><strong>本地数据</strong><small>数据库、资料、媒体素材和导出文件。</small></span><button class="secondary">查看占用</button></div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="browser">
+        <header class="page-header"><h2>浏览器与账号</h2><p>管理 WMB 专用浏览器和平台登录状态。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>浏览器配置</strong><small>pyaireader 专用 Edge，登录状态保存在独立目录。</small></span><select><option>pyaireader profile</option></select></div>
+          <div class="setting-row"><span><strong>平台账号</strong><small>X、小红书和微信公众号登录状态。</small></span><button class="secondary">查看账号</button></div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="agent">
+        <header class="page-header"><h2>Agent 接入</h2><p>让其他 Agent 读取和操作 WMB 中的同一份业务资料。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>本地接入地址</strong><small>http://127.0.0.1:9223/mcp</small></span><button class="secondary">复制地址</button></div>
+          <div class="setting-row"><span><strong>连接状态</strong><small>本地服务正在运行。</small></span><span class="status">可连接</span></div>
+        </section>
+      </section>
+
+      <section class="content-inner page hidden" id="about">
+        <header class="page-header"><h2>关于 WMB</h2><p>WeMediaBuddy 是你的本地 AI 自媒体运营终端。</p></header>
+        <section class="settings-section">
+          <div class="setting-row"><span><strong>应用版本</strong><small>WeMediaBuddy 1.0.0</small></span><button class="secondary">检查更新</button></div>
+          <div class="setting-row"><span><strong>Pi 运行组件</strong><small>0.82.1，随应用安装并可独立更新。</small></span><button class="secondary">管理更新</button></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const themeButton = document.querySelector("#themeButton");
+    const themeSelect = document.querySelector("#themeSelect");
+    function setTheme(theme) {
+      root.dataset.theme = theme;
+      themeButton.textContent = theme === "dark" ? "☀" : "☾";
+      if (themeSelect) themeSelect.value = theme;
+    }
+    themeButton.addEventListener("click", () => setTheme(root.dataset.theme === "dark" ? "light" : "dark"));
+    themeSelect?.addEventListener("change", event => setTheme(event.target.value));
+    document.querySelectorAll(".nav-item[data-page]").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
+        document.querySelectorAll(".page").forEach(page => page.classList.add("hidden"));
+        button.classList.add("active");
+        document.querySelector(`#${button.dataset.page}`).classList.remove("hidden");
+      });
+    });
+    document.querySelector("#modelsButton").addEventListener("click", () => {
+      document.querySelector("#modelHint").textContent = "已获取 23 个可用模型，刚刚更新。";
+    });
+    document.querySelector("#testButton").addEventListener("click", () => {
+      document.querySelector("#connectionResult").textContent = "● 连接成功，mimo-v2.5 可用";
+    });
+  </script>
+</body>
+</html>

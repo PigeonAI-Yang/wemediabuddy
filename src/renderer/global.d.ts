@@ -1,3 +1,4 @@
+import type { ContentProjectDetail } from '../main/content';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 
 declare global {
@@ -16,7 +17,7 @@ declare global {
         selectedBrowser: { id: string; label: string; executablePath: string; userDataDir: string; profileDirectory: string } | null;
         pi: {
           activeId: string | null;
-          profiles: Array<{ id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; configured: boolean; active: boolean }>;
+          profiles: Array<{ id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; configured: boolean; active: boolean }>;
           baseUrl: string;
           model: string;
           configured: boolean;
@@ -25,12 +26,49 @@ declare global {
       } | null>;
       openLogs(): Promise<void>;
       openExternal(url: string): Promise<void>;
+      getGitHubRankings(refresh?: boolean): Promise<{
+        fetchedAt: string;
+        boards: Array<{
+          id: string; label: string; sourceUrl: string; status: 'ready' | 'unavailable'; error?: string;
+          items: Array<{ rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string }>;
+        }>;
+      }>;
+      listKnowledgeSources(input?: { query?: string; verificationStatus?: string; managementStatus?: string; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>;
+      updateKnowledgeSource(input: { id: string; expectedRevision: number; verificationStatus?: string; managementStatus?: string }): Promise<{ id: string; revision: number }>;
+      listKnowledgeTopics(input?: { query?: string; status?: string; limit?: number; offset?: number }): Promise<any[]>;
+      listKnowledgeDomains(input?: {query?:string;status?:string;order?:'manual'|'recent'|'size';limit?:number;offset?:number}):Promise<{items:any[];total:number;limit:number;offset:number;hasMore:boolean}>;
+      getKnowledgeDomain(id:string,input?:{limit?:number;offset?:number}):Promise<any>;
+      createKnowledgeDomain(input:{title:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[]}):Promise<any>;
+      updateKnowledgeDomain(input:{id:string;expectedRevision:number;title?:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[];archived?:boolean}):Promise<any>;
+      getKnowledgeContext(input: { topicId?: string; sourceId?: string; query?: string; limit?: number }): Promise<any>;
+      getKnowledgeTopicDossier(input: { topicId: string; category?: string; limit?: number; offset?: number }): Promise<any>;
+      getRediscovery(): Promise<{ unused: any[]; watching: any[]; pending: any[] }>;
+      listKnowledgeCanvases(): Promise<any[]>;
+      createKnowledgeCanvas(input: { title: string; topicId?: string }): Promise<any>;
+      getKnowledgeCanvas(id: string): Promise<any>;
+      updateKnowledgeCanvas(input: { id:string;expectedRevision:number;title?:string;viewportX?:number;viewportY?:number;zoom?:number }): Promise<any>;
+      addKnowledgeCanvasNode(input: { canvasId: string; objectType: string; objectId?: string; noteTitle?: string; noteText?: string; x: number; y: number }): Promise<any>;
+      moveKnowledgeCanvasNodes(input: { canvasId: string; nodes: Array<{ id: string; x: number; y: number; expectedRevision: number }> }): Promise<any>;
+      removeKnowledgeCanvasNode(input: { canvasId: string; nodeId: string; expectedRevision: number }): Promise<any>;
+      createKnowledgeRelation(input: { canvasId: string; fromNodeId: string; toNodeId: string; relationType: string; label?: string }): Promise<any>;
+      updateKnowledgeRelation(input: { id: string; expectedRevision: number; fromNodeId?:string; toNodeId?:string; relationType?: string; label?: string|null; hidden?: boolean; archived?: boolean }): Promise<any>;
+      decideKnowledgeSuggestion(input:{requestId:string;id:string;expectedRevision:number;decision:'confirm'|'reject'}):Promise<any>;
+      previewKnowledgeContextPackage(input:{canvasId:string;nodeIds:string[];excludedNodeIds?:string[];excludedRelationIds?:string[]}):Promise<any>;
+      listKnowledgeContextPackages(input?:{query?:string;archived?:boolean;limit?:number;offset?:number}):Promise<any>;
+      getKnowledgeContextPackage(id: string): Promise<any>;
+      getContentProjectContextPackages(projectId: string): Promise<any[]>;
+      getCreativeBrief(packageId:string):Promise<any|null>;
+      getCreativeBriefForContext(input:{canvasId:string;nodeIds:string[]}):Promise<any|null>;
+      createCreativeBrief(input:{requestId:string;canvasId:string;nodeIds:string[];selectionMode:'current_page'|'selected';title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[]}):Promise<any>;
+      updateCreativeBrief(input:{requestId:string;id:string;expectedRevision:number;title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[];status?:'draft'|'confirmed'}):Promise<any>;
+      createProjectFromBrief(input:{requestId:string;briefId:string;expectedRevision:number}):Promise<any>;
+      getCreativeBriefLineage(briefId:string):Promise<any>;
       windowControl(action: 'minimize' | 'maximize' | 'close'): Promise<boolean>;
       getPiRuntime(): Promise<{ version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null }>;
       updatePiRuntime(sourceRuntimeRoot: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       rollbackPiRuntime(): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       configureBrowser(id: string): Promise<{ id: string }>;
-      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }): Promise<unknown>;
+      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
       listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }): Promise<string[]>;
@@ -64,7 +102,7 @@ declare global {
         messages: Array<{ role: 'user' | 'assistant'; text: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
         updatedAt: string;
       }>;
-      onPiEvent(listener: (event: { type: string; text?: string; error?: string }) => void): () => void;
+      onPiEvent(listener: (event: { type: string; text?: string; error?: string; toolName?: string }) => void): () => void;
       startAgentTask(input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
@@ -72,6 +110,7 @@ declare global {
       completeAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       failAgentTask(input: { id: string; errorCode: string; errorMessage: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       cancelAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      controlDailyIntelligence(input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startDailyIntelligence(businessDate: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
@@ -81,10 +120,40 @@ declare global {
       getStudio(): Promise<Array<{
         id: string;
         title: string;
+        revision: number;
         revisions: Array<{ id: string; number: number; body: string; createdAt: string; author: 'user' | 'ai' }>;
         platforms: Record<string, Array<{ id: string; title: string | null; body: string; revision: number; assets: string[] }>>;
       }> | null>;
-      saveStudioCore(input: { projectId: string; title: string; body: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      listStudioProjects(input: {
+        query?: string;
+        status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
+        archived?: boolean;
+        topicId?: string | null;
+        order?: 'recent' | 'oldest' | 'versions';
+        platform?: 'x' | 'xiaohongshu' | 'wechat';
+        limit?: number;
+        offset?: number;
+      }): Promise<{
+        items: Array<{
+          id: string; title: string; status: 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
+          archivedAt: string | null; revision: number; createdAt: string; updatedAt: string; versionCount: number;
+          latestVersion: { id: string; number: number; createdAt: string; author: 'user' | 'ai' } | null;
+          platforms: { x: number; xiaohongshu: number; wechat: number };
+        }>;
+        limit: number; offset: number; hasMore: boolean;
+      } | null>;
+      getStudioProject(projectId: string): Promise<ContentProjectDetail | null>;
+      createStudioProject(input: { title: string; body: string }): Promise<ContentProjectDetail>;
+      updateStudioProject(input: {
+        projectId: string;
+        expectedRevision: number;
+        status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
+        archived?: boolean;
+      }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string; details?: { current?: ContentProjectDetail } } | null }>;
+      copyStudioVersionToProject(input: {
+        sourceProjectId: string; contentVersionId: string; title: string;
+      }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
+      saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getPublications(): Promise<Array<{
         publication: {
           id: string;

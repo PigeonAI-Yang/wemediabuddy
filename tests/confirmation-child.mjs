@@ -8,8 +8,9 @@ const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-confirmation-'));
 try {
   const root = await openDataRoot(path.join(parent, 'data')); const db = migrateDatabase(path.join(root.path, 'wmb.db'));
   const media = path.join(parent, 'image.png'); await writeFile(media, 'image'); const asset = await importAsset(db, root.path, { sourcePath: media, mimeType: 'image/png', origin: 'user' });
-  const project = createContentProject(db, { title: 'confirmation' }); const core = saveCoreVersion(db, project.id, 'core');
-  const version = savePlatformVersion(db, { projectId: project.id, contentVersionId: core.id, platform: 'x', format: 'image', body: 'hello', assetIds: [asset.id] });
+  const project = createContentProject(db, { title: 'confirmation' }); const core = saveCoreVersion(db, { projectId: project.id, body: 'core', expectedRevision: 1 });
+  if (!core.ok) throw new Error('core setup failed');
+  const version = savePlatformVersion(db, { projectId: project.id, contentVersionId: core.data.id, platform: 'x', format: 'image', body: 'hello', assetIds: [asset.id] });
   const account = saveAccount(db, { platform: 'x', accountKey: '@owner', displayName: 'Owner', loginState: 'authenticated', evidenceUrl: 'https://x.com/owner' });
   if (!version.ok) throw new Error('setup failed');
   const created = createPublication(db, { platformVersionId: version.data.id, accountId: account.id });

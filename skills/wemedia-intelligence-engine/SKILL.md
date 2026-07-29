@@ -23,8 +23,9 @@ description: 为 AI 自媒体快速发现外部信息，核对关键事实，形
    - 外部发布、产品、项目和论文：[information-scout](subskills/information-scout/SKILL.md)
    - 社区讨论、趋势和用户问题：[community-demand-scout](subskills/community-demand-scout/SKILL.md)
 3. 用 [evidence-organizer](subskills/evidence-organizer/SKILL.md) 合并重复事件。价格、政策、性能、商业数字等关键陈述回到原始来源；普通线索保留链接即可。
-4. 用 [opportunity-editor](subskills/opportunity-editor/SKILL.md) 选出最多三个机会。
-5. 按 [WMB 字段映射](references/wmb-field-map.md) 写入资料和今日方案并读回一次。
+4. 用 [opportunity-editor](subskills/opportunity-editor/SKILL.md) 保留全部达到机会标准的去重结果，并按 `SSS → S → A → B → C → D → E → F` 排序。
+5. 每条资料写入后先用 `wmb_get_knowledge_context` 查询同主题历史，再用 `wmb_record_knowledge` 归入稳定主题并记录核验/管理状态。
+6. 按 [WMB 字段映射](references/wmb-field-map.md) 写入今日方案并读回一次；每个机会必须回填真实 `topicId`，没有相关历史复盘时不得引用无关复盘。
 
 维护信源时读取 [source-registry](subskills/source-registry/SKILL.md)。不同站点的工具和读取方法保留在 `references/collectors/`，只读本次实际使用的文件。
 
@@ -32,7 +33,7 @@ description: 为 AI 自媒体快速发现外部信息，核对关键事实，形
 
 直接给出：
 
-- 今天最值得做的 1～3 个内容机会；
+- 今天全部达到标准的内容机会，按 `SSS → F` 递减排列；
 - 每个机会为什么值得做、我们的强观点、标题爆点、开头钩子、原始来源和缺失素材；
 - WMB 是否保存成功。
 

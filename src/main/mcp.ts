@@ -3,7 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import { createContentProject, getStudio, saveCoreVersion, savePlatformVersion } from './content.ts';
+import { createContentProjectWithVersion, getContentProject, listContentProjects, saveCoreVersion, savePlatformVersion } from './content.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { getToday } from './workbench.ts';
 import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
@@ -12,6 +12,9 @@ import { listAssets } from './assets.ts';
 import { listFinalReviewsAndFindings, listReviews, saveReview } from './reviews.ts';
 import { listPublicationMetricSnapshots } from './metrics.ts';
 import * as z from 'zod';
+import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
+import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
+import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -27,8 +30,60 @@ function createServerFor(rootPath: string): McpServer {
   server.registerTool('plans.get', { description: '读取指定日期或今日的当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())).plan); } finally { db.close(); }
   });
-  server.registerTool('content.get', { description: '读取内容项目、版本与平台版本。' }, async () => {
-    const db = database(); try { return text(getStudio(db)); } finally { db.close(); }
+  server.registerTool('agent_tasks.get', {
+    description: '读取长任务的持久进度、检查点和待处理控制。',
+    inputSchema: { task_id: z.string() }
+  }, async ({ task_id }) => {
+    const db = database(); try { return text(getAgentTask(db, task_id)); } finally { db.close(); }
+  });
+  server.registerTool('agent_tasks.report_progress', {
+    description: '在每个来源开始、成功、失败或跳过后持久化进度和检查点。',
+    inputSchema: {
+      task_id: z.string(),
+      phase: z.string().optional(),
+      current_source: z.string().optional(),
+      planned: z.number().int().nonnegative().optional(),
+      processed: z.number().int().nonnegative().optional(),
+      failed: z.number().int().nonnegative().optional(),
+      verified: z.number().int().nonnegative().optional(),
+      saved: z.number().int().nonnegative().optional(),
+      opportunity_count: z.number().int().nonnegative().optional(),
+      checkpoint: z.record(z.string(), z.unknown()).optional(),
+      message: z.string().optional(),
+      level: z.enum(['info', 'warning']).optional(),
+      clear_control: z.boolean().optional()
+    }
+  }, async (input) => {
+    const db = database();
+    try {
+      const result = reportAgentTaskProgress(db, input.task_id, {
+        phase: input.phase,
+        progress: {
+          currentSource: input.current_source, planned: input.planned, processed: input.processed,
+          failed: input.failed, verified: input.verified, saved: input.saved, opportunityCount: input.opportunity_count
+        },
+        checkpoint: input.checkpoint,
+        message: input.message,
+        level: input.level
+      });
+      if (input.clear_control && result.ok) clearAgentTaskControl(db, input.task_id);
+      return text(result);
+    } finally { db.close(); }
+  });
+  server.registerTool('content.list', {
+    description: '服务端搜索内容项目，只返回最多 50 条摘要，不返回历史正文。',
+    inputSchema: {
+      query: z.string().optional(),
+      status: z.enum(['idea', 'drafting', 'review', 'ready', 'completed']).optional(),
+      archived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(50).optional(),
+      offset: z.number().int().min(0).optional()
+    }
+  }, async (input) => {
+    const db = database(); try { return text(listContentProjects(db, input)); } finally { db.close(); }
+  });
+  server.registerTool('content.get', { description: '按项目 ID 读取一个内容项目的完整详情。', inputSchema: { project_id: z.string() } }, async ({ project_id }) => {
+    const db = database(); try { return text(getContentProject(db, project_id)); } finally { db.close(); }
   });
   server.registerTool('assets.list', { description: '读取已导入素材元数据。' }, async () => {
     const db = database();
@@ -67,16 +122,129 @@ function createServerFor(rootPath: string): McpServer {
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } finally { db.close(); }
   });
-  server.registerTool('content.create', { description: '创建内容项目。', inputSchema: { request_id: z.string(), title: z.string(), source_ids: z.array(z.string()).optional() } }, async ({ request_id, title, source_ids }) => {
+  server.registerTool('knowledge.get_context', {
+    description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',
+    inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }
+  }, async (input) => {
+    const db = database(); try { return text(getKnowledgeContext(db, { topicId: input.topic_id, sourceId: input.source_id, query: input.query, limit: input.limit })); } finally { db.close(); }
+  });
+  server.registerTool('knowledge.domains_list',{
+    description:'分页读取长期领域及真实主题、资料和近期变化计数。',
+    inputSchema:{query:z.string().optional(),status:z.enum(['active','watching','dormant']).optional(),order:z.enum(['manual','recent','size']).optional(),limit:z.number().int().min(1).max(100).optional(),offset:z.number().int().nonnegative().optional()}
+  },async input=>{const db=database();try{return text(listKnowledgeDomains(db,input));}finally{db.close();}});
+  server.registerTool('knowledge.domain_get',{
+    description:'读取一个领域及完整有界主题页。',
+    inputSchema:{domain_id:z.string(),limit:z.number().int().min(1).max(100).optional(),offset:z.number().int().nonnegative().optional()}
+  },async({domain_id,...input})=>{const db=database();try{return text(getKnowledgeDomain(db,domain_id,input));}finally{db.close();}});
+  server.registerTool('knowledge.topic_dossier_get',{
+    description:'分页读取一个长期主题的资料、判断、受众需求、反证、内容、指标、复盘与方法结论。',
+    inputSchema:{topic_id:z.string(),category:z.enum(topicDossierCategories).optional(),limit:z.number().int().min(1).max(100).optional(),offset:z.number().int().nonnegative().optional()}
+  },async({topic_id,...input})=>{const db=database();try{return text(getKnowledgeTopicDossier(db,{topicId:topic_id,...input}));}finally{db.close();}});
+  server.registerTool('knowledge.domain_create',{
+    description:'原子创建长期领域和明确主题成员；同一 request_id 重放原结果。',
+    inputSchema:{request_id:z.string(),title:z.string(),description:z.string().optional(),status:z.enum(['active','watching','dormant']).optional(),topic_ids:z.array(z.string()).optional()}
+  },async({request_id,topic_ids,...input})=>{const db=database();try{
+    const tool='knowledge.domain_create',prior=db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,request_id) as {resultJson:string}|undefined;
+    if(prior)return text(JSON.parse(prior.resultJson));db.exec('BEGIN IMMEDIATE');try{const payload={ok:true,data:createKnowledgeDomain(db,{...input,topicIds:topic_ids},false),error:null};db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,request_id,JSON.stringify(payload),new Date().toISOString());db.exec('COMMIT');return text(payload);}catch(error){db.exec('ROLLBACK');throw error;}
+  }finally{db.close();}});
+  server.registerTool('knowledge.domain_update',{
+    description:'按 revision 原子更新或归档长期领域；同一 request_id 重放原结果。',
+    inputSchema:{request_id:z.string(),id:z.string(),expected_revision:z.number().int(),title:z.string().optional(),description:z.string().optional(),status:z.enum(['active','watching','dormant']).optional(),topic_ids:z.array(z.string()).optional(),archived:z.boolean().optional()}
+  },async({request_id,expected_revision,topic_ids,...input})=>{const db=database();try{
+    const tool='knowledge.domain_update',prior=db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,request_id) as {resultJson:string}|undefined;
+    if(prior)return text(JSON.parse(prior.resultJson));db.exec('BEGIN IMMEDIATE');try{const payload={ok:true,data:updateKnowledgeDomain(db,{...input,expectedRevision:expected_revision,topicIds:topic_ids},false),error:null};db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,request_id,JSON.stringify(payload),new Date().toISOString());db.exec('COMMIT');return text(payload);}catch(error){db.exec('ROLLBACK');throw error;}
+  }finally{db.close();}});
+  server.registerTool('knowledge.canvas_get', {
+    description: '读取一张持久知识画布的真实对象引用、布局和语义关系。',
+    inputSchema: { canvas_id: z.string() }
+  }, async ({ canvas_id }) => {
+    const db = database(); try { return text(getKnowledgeCanvas(db,canvas_id)); } finally { db.close(); }
+  });
+  server.registerTool('knowledge.context_package_get', {
+    description: '读取用户明确保存的静态上下文包及 Pi 实际允许接收的 selected_only manifest；不得扩展到包外对象。',
+    inputSchema: { package_id: z.string() }
+  }, async ({ package_id }) => {
+    const db = database(); try { return text(getKnowledgeContextPackage(db,package_id)); } finally { db.close(); }
+  });
+  server.registerTool('knowledge.context_packages_list',{
+    description:'分页读取可复用静态上下文包及版本、对象、关系和使用计数。',
+    inputSchema:{query:z.string().optional(),archived:z.boolean().optional(),limit:z.number().int().min(1).max(100).optional(),offset:z.number().int().nonnegative().optional()}
+  },async input=>{const db=database();try{return text(listKnowledgeContextPackages(db,input));}finally{db.close();}});
+  server.registerTool('knowledge.context_package_preview',{
+    description:'在保存前生成 selected_only 精确清单、排除项与体积门槛。',
+    inputSchema:{canvas_id:z.string(),node_ids:z.array(z.string()).min(1),excluded_node_ids:z.array(z.string()).optional(),excluded_relation_ids:z.array(z.string()).optional()}
+  },async({canvas_id,node_ids,excluded_node_ids,excluded_relation_ids})=>{const db=database();try{return text(previewKnowledgeContextPackage(db,{canvasId:canvas_id,nodeIds:node_ids,excludedNodeIds:excluded_node_ids,excludedRelationIds:excluded_relation_ids}));}finally{db.close();}});
+  server.registerTool('knowledge.suggestion_create',{
+    description:'Pi 只创建待用户确认的画布节点或关系建议；同一 request_id 只产生一条建议，不直接写入正式知识。',
+    inputSchema:{
+      request_id:z.string(),canvas_id:z.string(),kind:z.enum(['node','relation']),
+      payload:z.record(z.string(),z.unknown())
+    }
+  },async({request_id,canvas_id,kind,payload})=>{const db=database();try{
+    return text(createKnowledgeSuggestionIdempotent(db,{requestId:request_id,canvasId:canvas_id,kind,payload}));
+  }finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_get',{
+    description:'读取一个静态上下文包版本对应的可编辑创作简报。',
+    inputSchema:{package_id:z.string()}
+  },async({package_id})=>{const db=database();try{return text(getCreativeBriefForPackage(db,package_id));}finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_get_for_context',{
+    description:'按画布和直接选择读取最近一份创作简报。',
+    inputSchema:{canvas_id:z.string(),node_ids:z.array(z.string()).min(1)}
+  },async({canvas_id,node_ids})=>{const db=database();try{return text(getCreativeBriefForContext(db,{canvasId:canvas_id,nodeIds:node_ids}));}finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_create',{
+    description:'只用当前页或直接选择的画布节点创建一份可编辑简报；同一 request_id 重放同一结果。',
+    inputSchema:{request_id:z.string(),canvas_id:z.string(),node_ids:z.array(z.string()).min(1),selection_mode:z.enum(['current_page','selected']),title:z.string(),core_judgment:z.string(),why_now:z.string(),structure:z.array(z.string()).min(1),evidence_node_ids:z.array(z.string())}
+  },async({request_id,canvas_id,node_ids,selection_mode,core_judgment,why_now,evidence_node_ids,...input})=>{const db=database();try{
+    return text(createCreativeBriefIdempotent(db,{...input,requestId:request_id,canvasId:canvas_id,nodeIds:node_ids,selectionMode:selection_mode,coreJudgment:core_judgment,whyNow:why_now,evidenceNodeIds:evidence_node_ids}));
+  }finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_update',{
+    description:'按 revision 更新已有创作简报；证据仍必须属于原静态包，同一 request_id 重放同一结果。',
+    inputSchema:{request_id:z.string(),id:z.string(),expected_revision:z.number().int(),title:z.string(),core_judgment:z.string(),why_now:z.string(),structure:z.array(z.string()).min(1),evidence_node_ids:z.array(z.string()),status:z.enum(['draft','confirmed']).optional()}
+  },async({request_id,expected_revision,core_judgment,why_now,evidence_node_ids,...input})=>{const db=database();try{
+    return text(updateCreativeBriefIdempotent(db,{...input,requestId:request_id,expectedRevision:expected_revision,coreJudgment:core_judgment,whyNow:why_now,evidenceNodeIds:evidence_node_ids}));
+  }finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_create_project',{
+    description:'从已确认创作简报原子创建内容项目和首版正文，并直接关联所选真实资料；同一 request_id 重放原结果。',
+    inputSchema:{request_id:z.string(),brief_id:z.string(),expected_revision:z.number().int()}
+  },async({request_id,brief_id,expected_revision})=>{const db=database();try{
+    return text(createContentProjectFromBriefIdempotent(db,{requestId:request_id,briefId:brief_id,expectedRevision:expected_revision}));
+  }finally{db.close();}});
+  server.registerTool('knowledge.creative_brief_lineage_get',{
+    description:'从简报双向读取内容项目、发布、指标、复盘和方法结论。',
+    inputSchema:{brief_id:z.string()}
+  },async({brief_id})=>{const db=database();try{return text(getCreativeBriefLineage(db,brief_id));}finally{db.close();}});
+  server.registerTool('knowledge.project_context_packages_get', {
+    description:'从内容项目反向读取精确上下文包版本。',
+    inputSchema:{project_id:z.string()}
+  },async({project_id})=>{const db=database();try{return text(getContentProjectContextPackages(db,project_id));}finally{db.close();}});
+  server.registerTool('knowledge.record_batch', {
+    description: '把已入库资料归入稳定主题并更新核验/管理状态；同一 request_id 重放原结果。',
+    inputSchema: { request_id: z.string(), items: z.array(z.object({
+      sourceId: z.string(), topic: z.object({ canonicalKey: z.string().optional(), title: z.string(), kind: z.enum(['theme','event']).optional(), summary: z.string().optional() }),
+      relation: z.enum(['primary','supporting','background','contradicting']).optional(),
+      verificationStatus: z.enum(['pending','verified','disputed','rejected']).optional(),
+      managementStatus: z.enum(['active','watching','expired','archived']).optional()
+    })).min(1) }
+  }, async ({ request_id, items }) => {
+    const db = database();
+    try {
+      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('knowledge.record_batch', request_id) as { resultJson: string } | undefined;
+      if (prior) return text(JSON.parse(prior.resultJson));
+      const payload = { ok: true, data: recordKnowledgeBatch(db, { items }), error: null };
+      db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('knowledge.record_batch', request_id, JSON.stringify(payload), new Date().toISOString());
+      return text(payload);
+    } finally { db.close(); }
+  });
+  server.registerTool('content.create', { description: '原子创建内容项目和首个核心版本。新主题必须使用此工具。', inputSchema: { request_id: z.string(), title: z.string(), body: z.string(), source_ids: z.array(z.string()).optional() } }, async ({ request_id, title, body, source_ids }) => {
     const db = database(); try {
       const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.create', request_id) as { resultJson: string } | undefined;
       if (prior) return text(JSON.parse(prior.resultJson));
-      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: createContentProject(db, { title, sourceIds: source_ids }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.create', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
+      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: createContentProjectWithVersion(db, { title, body, sourceIds: source_ids }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.create', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
     } finally { db.close(); }
   });
   server.registerTool('plans.save', { description: '保存完整当日运营方案。', inputSchema: {
     request_id: z.string(), plan_date: z.string(), summary: z.string(), items: z.array(z.object({
-      title: z.string(), priority: z.number(), whyNow: z.string(), timeliness: z.string(), targetAudience: z.string(),
+      title: z.string(), priority: z.number().int().min(0).max(7), whyNow: z.string(), timeliness: z.string(), targetAudience: z.string(),
       angle: z.string(), pointOfView: z.string(), platforms: z.array(z.string()), formats: z.array(z.string()),
       titleGuidance: z.string(), openingGuidance: z.string(), structureGuidance: z.string(), effortEstimate: z.string(),
       sourceIds: z.array(z.string()).min(1), availableMaterials: z.array(z.string()).optional(),
@@ -95,7 +263,11 @@ function createServerFor(rootPath: string): McpServer {
       const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.save_version', input.request_id) as { resultJson: string } | undefined;
       if (prior) return text(JSON.parse(prior.resultJson));
       db.exec('BEGIN IMMEDIATE'); try {
-        const data = input.platform ? savePlatformVersion(db, { projectId: input.project_id, contentVersionId: input.content_version_id!, platform: input.platform, format: input.format!, title: input.title, body: input.body, expectedRevision: input.expected_revision, id: input.version_id }) : saveCoreVersion(db, input.project_id, input.body);
+        const data = input.platform
+          ? savePlatformVersion(db, { projectId: input.project_id, contentVersionId: input.content_version_id!, platform: input.platform, format: input.format!, title: input.title, body: input.body, expectedRevision: input.expected_revision, id: input.version_id })
+          : typeof input.expected_revision === 'number'
+            ? saveCoreVersion(db, { projectId: input.project_id, body: input.body, expectedRevision: input.expected_revision }, false)
+            : { ok: false as const, data: null, error: { code: 'VALIDATION_ERROR', message: '核心版本写入必须提供 expected_revision。' } };
         const payload = 'ok' in data ? data : { ok: true, data, error: null };
         db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.save_version', input.request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload);
       } catch (error) { db.exec('ROLLBACK'); throw error; }

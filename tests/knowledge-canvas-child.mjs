@@ -1,0 +1,71 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { upsertSource } from '../src/main/sources.ts';
+import { upsertKnowledgeTopic } from '../src/main/knowledge.ts';
+import { createContentProject } from '../src/main/content.ts';
+import { addKnowledgeCanvasNode, createKnowledgeCanvas, createKnowledgeContextPackageIdempotent, createKnowledgeRelation, getContentProjectContextPackages, getKnowledgeCanvas, getKnowledgeContextPackage, moveKnowledgeCanvasNodes, recordKnowledgeContextUse, removeKnowledgeCanvasNode, updateKnowledgeCanvas, updateKnowledgeRelation } from '../src/main/knowledge-canvas.ts';
+
+const directory=await mkdtemp(path.join(os.tmpdir(),'wmb-canvas-'));
+try {
+  const db=migrateDatabase(path.join(directory,'wmb.db'));
+  const source=upsertSource(db,{originalUrl:'https://example.com/source',title:'真实资料',summary:'旧摘要',priority:1});
+  const topic=upsertKnowledgeTopic(db,{title:'长期主题'});
+  const canvas=createKnowledgeCanvas(db,{title:'测试画布'});
+  const sourceNode=addKnowledgeCanvasNode(db,{canvasId:canvas.id,objectType:'source',objectId:source.id,x:10,y:20});
+  const topicNode=addKnowledgeCanvasNode(db,{canvasId:canvas.id,objectType:'topic',objectId:topic.id,x:300,y:20});
+  const noteNode=addKnowledgeCanvasNode(db,{canvasId:canvas.id,objectType:'note',noteTitle:'判断',noteText:'手工判断',x:600,y:20});
+  const sentinel=addKnowledgeCanvasNode(db,{canvasId:canvas.id,objectType:'note',noteTitle:'哨兵',x:900,y:20});
+  const secondCanvas=createKnowledgeCanvas(db,{title:'第二画布'});
+  addKnowledgeCanvasNode(db,{canvasId:secondCanvas.id,objectType:'source',objectId:source.id,x:40,y:40});
+  const renamed=updateKnowledgeCanvas(db,{id:secondCanvas.id,expectedRevision:secondCanvas.revision,title:'第二长期画布',viewportX:120,viewportY:80,zoom:1.25});
+  if(renamed.title!=='第二长期画布'||renamed.viewportX!==120||renamed.zoom!==1.25)throw new Error('canvas metadata did not persist');
+  let staleCanvas=false;try{updateKnowledgeCanvas(db,{id:secondCanvas.id,expectedRevision:secondCanvas.revision,title:'覆盖'});}catch(error){staleCanvas=String(error).includes('REVISION_CONFLICT');}
+  if(!staleCanvas)throw new Error('stale canvas write did not fail');
+  const relation=createKnowledgeRelation(db,{canvasId:canvas.id,fromNodeId:sourceNode.id,toNodeId:topicNode.id,relationType:'supports'});
+  createKnowledgeRelation(db,{canvasId:canvas.id,fromNodeId:sentinel.id,toNodeId:noteNode.id,relationType:'contradicts'});
+  const packageInput={requestId:'eval-015-package',canvasId:canvas.id,name:'三对象包',objective:'验证精确选包',nodeIds:[sourceNode.id,topicNode.id,noteNode.id]};
+  const pack=createKnowledgeContextPackageIdempotent(db,packageInput).data;
+  const packageReplay=createKnowledgeContextPackageIdempotent(db,packageInput);
+  if(packageReplay.data.id!==pack.id||!packageReplay.replayed)throw new Error('context package was not idempotent');
+  if(pack.items.length!==3||pack.relations.length!==1||pack.items.some(item=>item.nodeId===sentinel.id))throw new Error('sentinel leaked into package');
+  db.prepare("UPDATE source_items SET summary='新摘要',revision=revision+1 WHERE id=?").run(source.id);
+  const reread=getKnowledgeCanvas(db,canvas.id);
+  if(!reread.nodes.find(node=>node.id===sourceNode.id).object.body.includes('新摘要'))throw new Error('canvas copied stale business object');
+  if(!pack.items.find(item=>item.nodeId===sourceNode.id).snapshot.body.includes('旧摘要'))throw new Error('static package drifted');
+  const moved=moveKnowledgeCanvasNodes(db,{canvasId:canvas.id,nodes:[{id:topicNode.id,x:360,y:80,expectedRevision:topicNode.revision}]});
+  if(moved.nodes.find(item=>item.id===topicNode.id).x!==360)throw new Error('node movement did not persist');
+  updateKnowledgeRelation(db,{id:relation.id,expectedRevision:relation.revision,label:'保留标签',hidden:true});
+  const hiddenRelation=getKnowledgeCanvas(db,canvas.id).relations.find(item=>item.id===relation.id);
+  if(hiddenRelation.hidden!==1||hiddenRelation.label!=='保留标签')throw new Error('relation hide did not preserve label');
+  const reconnected=updateKnowledgeRelation(db,{id:relation.id,expectedRevision:relation.revision+1,toNodeId:noteNode.id,hidden:false});
+  if(reconnected.toNodeId!==noteNode.id||reconnected.hidden!==0)throw new Error('relation reconnect/show did not persist');
+  const project=createContentProject(db,{title:'选包项目'});
+  const use=recordKnowledgeContextUse(db,{requestId:'eval-015-use',packageId:pack.id,expectedRevision:pack.revision,purpose:'creation',contentProjectId:project.id});
+  const replay=recordKnowledgeContextUse(db,{requestId:'eval-015-use',packageId:pack.id,expectedRevision:pack.revision,purpose:'creation',contentProjectId:project.id});
+  if(use.id!==replay.id||!replay.replayed)throw new Error('context use was not idempotent');
+  if(use.manifest.items.some(item=>item.nodeId===sentinel.id))throw new Error('actual-use manifest leaked sentinel');
+  if(getKnowledgeContextPackage(db,pack.id).projects[0]?.projectId!==project.id)throw new Error('package project backlink missing');
+  if(getContentProjectContextPackages(db,project.id)[0]?.packageId!==pack.id)throw new Error('project package backlink missing');
+  if(!db.prepare('SELECT 1 FROM content_project_sources WHERE project_id=? AND source_id=?').get(project.id,source.id))throw new Error('selected source not linked to project');
+  let stale=false;try{recordKnowledgeContextUse(db,{requestId:'stale-use',packageId:pack.id,expectedRevision:0,purpose:'discussion'});}catch(error){stale=String(error).includes('REVISION_CONFLICT');}
+  if(!stale||db.prepare('SELECT 1 FROM knowledge_context_uses WHERE request_id=?').get('stale-use'))throw new Error('stale use wrote partial state');
+  updateKnowledgeRelation(db,{id:relation.id,expectedRevision:relation.revision+2,archived:true});
+  if(getKnowledgeContextPackage(db,pack.id).relations.length!==1)throw new Error('archiving relation erased package snapshot');
+  const restoredRelation=createKnowledgeRelation(db,{canvasId:canvas.id,fromNodeId:sourceNode.id,toNodeId:noteNode.id,relationType:'supports'});
+  if(restoredRelation.id!==relation.id||restoredRelation.hidden!==0||!getKnowledgeCanvas(db,canvas.id).relations.some(item=>item.id===relation.id))throw new Error('archived relation could not be recreated');
+  removeKnowledgeCanvasNode(db,{canvasId:canvas.id,nodeId:sourceNode.id,expectedRevision:sourceNode.revision});
+  if(!db.prepare('SELECT id FROM source_items WHERE id=?').get(source.id))throw new Error('removing placement deleted source');
+  if(!getKnowledgeCanvas(db,secondCanvas.id).nodes.some(item=>item.objectId===source.id))throw new Error('removing one placement changed another canvas');
+  const scaleStarted=performance.now();
+  const scale=createKnowledgeCanvas(db,{title:'250 节点规模画布'});
+  const scaleNodes=[];
+  for(let index=0;index<250;index++)scaleNodes.push(addKnowledgeCanvasNode(db,{canvasId:scale.id,objectType:'note',noteTitle:`节点 ${index}`,x:(index%25)*260,y:Math.floor(index/25)*160}));
+  moveKnowledgeCanvasNodes(db,{canvasId:scale.id,nodes:scaleNodes.map((node,index)=>({id:node.id,x:node.x+1,y:node.y+1,expectedRevision:node.revision}))});
+  if(getKnowledgeCanvas(db,scale.id).nodes.length!==250)throw new Error('250-node canvas did not restore');
+  console.log(JSON.stringify({canvasNodes:250,createMoveRestoreMs:Math.round((performance.now()-scaleStarted)*10)/10}));
+  db.close();
+} finally {
+  await rm(directory,{recursive:true,force:true,maxRetries:3,retryDelay:100});
+}

@@ -49,7 +49,7 @@ export function getToday(database: DatabaseSync, planDate: string): {
     formats_json AS formats, title_guidance AS titleGuidance, opening_guidance AS openingGuidance,
     structure_guidance AS structureGuidance, effort_estimate AS effortEstimate, source_ids_json AS sourceIds,
     available_materials_json AS availableMaterials, missing_materials_json AS missingMaterials
-    FROM plan_items WHERE plan_id = ? ORDER BY sort_order`).all(plan.id) as Array<Omit<TodayPlanItem, 'platforms' | 'formats' | 'sourceIds' | 'availableMaterials' | 'missingMaterials'> & { platforms: string; formats: string; sourceIds: string; availableMaterials: string; missingMaterials: string }>;
+    FROM plan_items WHERE plan_id = ? ORDER BY priority ASC, sort_order ASC`).all(plan.id) as Array<Omit<TodayPlanItem, 'platforms' | 'formats' | 'sourceIds' | 'availableMaterials' | 'missingMaterials'> & { platforms: string; formats: string; sourceIds: string; availableMaterials: string; missingMaterials: string }>;
   const items = rows.map((item) => ({
     ...item,
     platforms: JSON.parse(item.platforms) as string[],

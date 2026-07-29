@@ -11,6 +11,7 @@ type StoredProfile = {
   baseUrl: string;
   model: string;
   api?: PiApiType;
+  thinking?: PiThinkingLevel;
   encryptedApiKey: string;
 };
 type StoredState = { activeId: string | null; profiles: StoredProfile[] };
@@ -22,10 +23,12 @@ export type PiConfigProfile = {
   baseUrl: string;
   model: string;
   api: PiApiType;
+  thinking?: PiThinkingLevel;
   configured: boolean;
   active: boolean;
 };
 export type PiApiType = 'openai-responses' | 'openai-completions' | 'anthropic-messages';
+export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type PiConfig = {
   activeId: string | null;
   profiles: PiConfigProfile[];
@@ -45,6 +48,7 @@ export function readPiConfig(database: DatabaseSync): PiConfig {
       baseUrl: profile.baseUrl,
       model: profile.model,
       api: profile.api ?? inferApi(profile.baseUrl),
+      thinking: profile.thinking,
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
     })),
@@ -60,6 +64,7 @@ export function savePiConfig(database: DatabaseSync, input: {
   baseUrl: string;
   model: string;
   api: PiApiType;
+  thinking?: PiThinkingLevel;
   apiKey?: string;
 }): PiConfig {
   const baseUrl = new URL(input.baseUrl.trim());
@@ -83,6 +88,7 @@ export function savePiConfig(database: DatabaseSync, input: {
     baseUrl: baseUrl.toString().replace(/\/$/, ''),
     model,
     api: input.api,
+    thinking: input.thinking,
     encryptedApiKey
   };
   writeStored(database, {
@@ -139,7 +145,7 @@ export async function listPiModels(database: DatabaseSync, input: {
   return models;
 }
 
-export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; api: PiApiType; apiKey: string } {
+export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; apiKey: string } {
   const state = readStored(database);
   const active = state.profiles.find((profile) => profile.id === state.activeId);
   if (!active) throw new Error('请先在设置中配置 Pi API。');
@@ -147,6 +153,7 @@ export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; mode
     baseUrl: active.baseUrl,
     model: active.model,
     api: active.api ?? inferApi(active.baseUrl),
+    thinking: active.thinking,
     apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
   };
 }
