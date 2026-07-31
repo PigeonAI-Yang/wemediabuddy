@@ -7,6 +7,27 @@ contextBridge.exposeInMainWorld('wmb', {
   openLogs: () => ipcRenderer.invoke('settings:open-logs'),
   openExternal: (url: string) => ipcRenderer.invoke('link:open', url),
   getGitHubRankings: (refresh = false) => ipcRenderer.invoke('rankings:github-ai', refresh),
+  getCachedRankings: () => ipcRenderer.invoke('rankings:get-cached'),
+  readXListIndex: () => ipcRenderer.invoke('x-lists:read-index'),
+  getCachedXListIndex: () => ipcRenderer.invoke('x-lists:get-cached-index'),
+  readXListDetail: (listId: string) => ipcRenderer.invoke('x-lists:read-detail', listId),
+  readXListMembers: (listId: string) => ipcRenderer.invoke('x-lists:read-members', listId),
+  readXListTimeline: (input: { listId: string; limit?: number; knownUrls?: string[] }) => ipcRenderer.invoke('x-lists:read-timeline', input),
+  readXListPost: (input: { statusUrl: string; replyLimit?: number; bypassCache?: boolean }) => ipcRenderer.invoke('x-lists:read-post', input),
+  getCachedXListTimeline: (input: { accountKey: string; listId: string }) => ipcRenderer.invoke('x-lists:get-cached-timeline', input),
+  listCachedXListTimeline: (input: { accountKey: string; listId: string; limit?: number; offset?: number }) => ipcRenderer.invoke('x-lists:list-cached-timeline', input),
+  clearXListTimelineCache: (input: { accountKey?: string } = {}) => ipcRenderer.invoke('x-lists:clear-timeline-cache', input),
+  getXListTimelineCacheStats: () => ipcRenderer.invoke('x-lists:timeline-cache-stats'),
+  listXListBindings: (accountKey?: string) => ipcRenderer.invoke('x-lists:list-bindings', accountKey),
+  listXListOperations: (input: { accountKey?: string; limit?: number } = {}) => ipcRenderer.invoke('x-lists:list-operations', input),
+  getXListOperation: (operationId: string) => ipcRenderer.invoke('x-lists:get-operation', operationId),
+  prepareXListOperation: (input: unknown) => ipcRenderer.invoke('x-lists:prepare', input),
+  armXListOperation: (input: { operationId: string; expectedRevision: number }) => ipcRenderer.invoke('x-lists:arm', input),
+  confirmXListOperation: (input: { operationId: string; expectedRevision: number; typedListName?: string }) => ipcRenderer.invoke('x-lists:confirm', input),
+  stopXListOperation: (input: { operationId: string; expectedRevision: number }) => ipcRenderer.invoke('x-lists:stop', input),
+  bindXList: (input: { listId: string; expectedRevision?: number }) => ipcRenderer.invoke('x-lists:bind', input),
+  setXListBindingEnabled: (input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }) => ipcRenderer.invoke('x-lists:set-binding-enabled', input),
+  collectXListTimeline: (input: { accountKey: string; listId: string; limit?: number }) => ipcRenderer.invoke('x-lists:collect-timeline', input),
   listKnowledgeSources: (input = {}) => ipcRenderer.invoke('knowledge:list-sources', input),
   updateKnowledgeSource: (input: unknown) => ipcRenderer.invoke('knowledge:update-source', input),
   listKnowledgeTopics: (input = {}) => ipcRenderer.invoke('knowledge:list-topics', input),
@@ -46,15 +67,41 @@ contextBridge.exposeInMainWorld('wmb', {
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),
-  chatPi: (message: string) => ipcRenderer.invoke('pi:chat', message) as Promise<{ text: string; stopped: boolean }>,
+  chatPi: (message: string, delivery?: 'steer' | 'followUp') => ipcRenderer.invoke('pi:chat', { message, delivery }) as Promise<{
+    text: string;
+    stopped: boolean;
+    queued: boolean;
+    conversation: {
+      id: string;
+      title: string;
+      sessionFile: string;
+      sessionId: string | null;
+      createdAt: string;
+      messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+      updatedAt: string;
+    } | null;
+  }>,
   stopPi: () => ipcRenderer.invoke('pi:stop') as Promise<{ stopped: boolean }>,
+  forkPiConversation: (entryId: string) => ipcRenderer.invoke('pi:fork', entryId) as Promise<{
+    cancelled: boolean;
+    text: string;
+    conversation: {
+      id: string;
+      title: string;
+      sessionFile: string;
+      sessionId: string | null;
+      createdAt: string;
+      messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+      updatedAt: string;
+    };
+  }>,
   getPiConversation: () => ipcRenderer.invoke('pi:conversation-get') as Promise<{
     id: string;
     title: string;
     sessionFile: string;
     sessionId: string | null;
     createdAt: string;
-    messages: Array<{ role: 'user' | 'assistant'; text: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+    messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
   listPiConversations: () => ipcRenderer.invoke('pi:conversation-list') as Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean }>>,
@@ -64,7 +111,7 @@ contextBridge.exposeInMainWorld('wmb', {
     sessionFile: string;
     sessionId: string | null;
     createdAt: string;
-    messages: Array<{ role: 'user' | 'assistant'; text: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+    messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
   newPiConversation: () => ipcRenderer.invoke('pi:conversation-new') as Promise<{
@@ -73,11 +120,11 @@ contextBridge.exposeInMainWorld('wmb', {
     sessionFile: string;
     sessionId: string | null;
     createdAt: string;
-    messages: Array<{ role: 'user' | 'assistant'; text: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+    messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  onPiEvent: (listener: (event: { type: string; text?: string; error?: string; toolName?: string }) => void) => {
-    const handler = (_event: unknown, payload: { type: string; text?: string; error?: string; toolName?: string }) => listener(payload);
+  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
+    const handler = (_event: unknown, payload: { type: string; text?: string; error?: string; toolName?: string; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
   },
@@ -94,7 +141,7 @@ contextBridge.exposeInMainWorld('wmb', {
   startResultsReview: (input: { businessDate: string; publicationId: string }) => ipcRenderer.invoke('agent:start-results-review', input),
   startDailyIntelligence: (businessDate: string) => ipcRenderer.invoke('agent:start-daily-intelligence', businessDate),
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
-  startBrowser: () => ipcRenderer.invoke('browser:start'),
+  startBrowser: (input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => ipcRenderer.invoke('browser:start', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
@@ -102,13 +149,15 @@ contextBridge.exposeInMainWorld('wmb', {
   getStudioProject: (projectId: string) => ipcRenderer.invoke('studio:get-detail', projectId),
   createStudioProject: (input: { title: string; body: string }) => ipcRenderer.invoke('studio:create-project', input),
   updateStudioProject: (input: { projectId: string; expectedRevision: number; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; topicId?:string|null }) => ipcRenderer.invoke('studio:update-project', input),
+  deleteStudioProject: (input: { projectId: string; expectedRevision: number }) => ipcRenderer.invoke('studio:delete-project', input),
+  saveDiscoveredSource: (input: { title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
   copyStudioVersionToProject: (input: { sourceProjectId: string; contentVersionId: string; title: string }) => ipcRenderer.invoke('studio:copy-version', input),
   saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number }) => ipcRenderer.invoke('studio:save-core', input),
   getPublications: () => ipcRenderer.invoke('publish:list'),
   collectXMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:collect-x', publicationId),
   schedulePublicationMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:schedule', publicationId),
   listMetricJobs: (publicationId?: string) => ipcRenderer.invoke('metrics:list-jobs', publicationId),
-  listPublicationMetricSnapshots: (publicationId: string) => ipcRenderer.invoke('metrics:list-snapshots', publicationId),
+  listPublicationMetricSnapshots: (publicationId?: string) => ipcRenderer.invoke('metrics:list-snapshots', publicationId),
   processDueMetrics: () => ipcRenderer.invoke('metrics:process-due'),
   listReviews: (publicationId?: string) => ipcRenderer.invoke('reviews:list', publicationId),
   getReview: (id: string) => ipcRenderer.invoke('reviews:get', id),

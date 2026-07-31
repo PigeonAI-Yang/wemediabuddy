@@ -19,7 +19,8 @@ const transitions: Record<PublicationStatus, PublicationStatus[]> = {
 export type PublicationRecord = {
   id: string; platformVersionId: string; platformVersionRevision: number; platform: 'x' | 'xiaohongshu' | 'wechat';
   accountId: string; accountKey: string; status: PublicationStatus; revision: number;
-  externalUrl: string | null; externalId: string | null; publishedAt: string | null;
+  externalUrl: string | null; externalId: string | null; publishedAt: string | null; projectId: string;
+  format: string | null;
 };
 
 type BoundAsset = { id: string; sha256: string; relativePath: string; mimeType: string };
@@ -244,7 +245,9 @@ export function reconcileAsNotPublished(database: DatabaseSync, input: { publica
 export function getPublication(database: DatabaseSync, id: string): PublicationRecord | undefined {
   return database.prepare(`SELECT id, platform_version_id AS platformVersionId, platform_version_revision AS platformVersionRevision,
     platform, account_id AS accountId, account_key AS accountKey, status, revision, external_url AS externalUrl,
-    external_id AS externalId, published_at AS publishedAt FROM publications WHERE id = ?`).get(id) as PublicationRecord | undefined;
+    external_id AS externalId, published_at AS publishedAt,
+    (SELECT project_id FROM platform_versions WHERE id = platform_version_id) AS projectId,
+    (SELECT format FROM platform_versions WHERE id = platform_version_id) AS format FROM publications WHERE id = ?`).get(id) as PublicationRecord | undefined;
 }
 
 function readCurrentBinding(database: DatabaseSync, publication: PublicationRecord): {

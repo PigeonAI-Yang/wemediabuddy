@@ -397,6 +397,35 @@ export function updateContentProject(
   }
 }
 
+// 受限硬删除:只允许删除从未进入发布/知识链路的工作项目(无平台版本、无发布、无上下文使用、无画布引用)。
+// 一旦进入链路,项目被发布记录/指标/复盘回链,只能归档不能删除。
+export function deleteContentProject(database: DatabaseSync, input: { projectId: string; expectedRevision: number }): CommandResult<{ id: string }> {
+  const current = getContentProject(database, input.projectId);
+  if (!current) return failure('NOT_FOUND', '内容项目不存在。');
+  if (current.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', '内容项目已更新,请重新加载。', { current });
+  const platformVersions = Number((database.prepare('SELECT COUNT(*) AS count FROM platform_versions WHERE project_id = ?').get(input.projectId) as { count: number }).count);
+  if (platformVersions > 0) return failure('HAS_PLATFORM_VERSIONS', '项目已有平台版本,不能删除;可以归档。');
+  const contextUses = Number((database.prepare('SELECT COUNT(*) AS count FROM knowledge_context_uses WHERE content_project_id = ?').get(input.projectId) as { count: number }).count);
+  if (contextUses > 0) return failure('HAS_CONTEXT_USES', '项目已被 Pi 上下文引用,不能删除;可以归档。');
+  const canvasRefs = Number((database.prepare("SELECT COUNT(*) AS count FROM knowledge_canvas_nodes WHERE object_type = 'content_project' AND object_id = ?").get(input.projectId) as { count: number }).count);
+  if (canvasRefs > 0) return failure('HAS_CANVAS_REFS', '项目已被关系画布引用,不能删除;可以归档。');
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    database.prepare('DELETE FROM content_project_sources WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM content_notes WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM content_decisions WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM content_versions WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM content_project_context_packages WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM creative_brief_projects WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM content_projects WHERE id = ?').run(input.projectId);
+    database.exec('COMMIT');
+    return success({ id: input.projectId });
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function savePlatformVersion(database: DatabaseSync, input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string }): CommandResult<{ id: string; revision: number }> {
   const now = new Date().toISOString();
   if (!input.id) {

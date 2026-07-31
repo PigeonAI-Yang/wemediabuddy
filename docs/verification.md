@@ -32,6 +32,36 @@ This validates required contracts, task-ledger structure and traceability. It in
 
 Do not repeat a successful check when neither its inputs nor acceptance target changed. Reuse the recorded receipt.
 
+## Desktop renderer identity smoke
+
+Black screen after local desktop edits is commonly Electron loading a foreign Vite page on a shared port. Packaged builds are not affected.
+
+Before claiming desktop/UI success in dev:
+
+```powershell
+node scripts/smoke-renderer.mjs
+```
+
+Pass criteria:
+
+- URL is `http://127.0.0.1:27391/`
+- title is `WeMediaBuddy`
+- document root id is `root`
+
+Fail criteria:
+
+- any other product title
+- missing `#root`
+- port owned by another local Vite app
+
+Startup preflight:
+
+```powershell
+node scripts/check-dev-port.mjs
+```
+
+Renderer port source of truth: `vite.renderer.config.ts` (`27391`, `strictPort: true`).
+
 ## Full release check
 
 ```powershell

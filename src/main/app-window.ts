@@ -31,9 +31,18 @@ export function broadcastPiEvent(event: Record<string, unknown>): void {
   }
 }
 
-export function broadcastPiRuntimeProgress(event: Record<string, unknown>): void {
-  if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? '') });
-  if (event.type === 'agent_start') broadcastPiEvent({ type: 'running' });
-  if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? '') });
-  if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'running' });
+export function broadcastPiRuntimeProgress(event: Record<string, unknown>, scope: 'dock' | 'task' = 'task'): void {
+  if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? ''), scope });
+  if (event.type === 'wmb_thinking_delta') broadcastPiEvent({ type: 'thinking', text: String(event.text ?? ''), scope });
+  if (event.type === 'agent_start') broadcastPiEvent({ type: 'running', scope });
+  if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? ''), scope });
+  if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'running', scope });
+  if (event.type === 'queue_update') {
+    broadcastPiEvent({
+      type: 'queue',
+      steering: Array.isArray(event.steering) ? event.steering.map(String) : [],
+      followUp: Array.isArray(event.followUp) ? event.followUp.map(String) : [],
+      scope
+    });
+  }
 }

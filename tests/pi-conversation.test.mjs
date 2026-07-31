@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { ensurePiConversationLayout, readPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
+import { createForkedPiConversation, ensurePiConversationLayout, readPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
 
 test('Pi conversation snapshot round-trips session identity and messages', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-'));
@@ -18,7 +18,7 @@ test('Pi conversation snapshot round-trips session identity and messages', async
       sessionFile: layout.sessionFile,
       sessionId: 'session-1',
       messages: [
-        { role: 'user', text: '你好' },
+        { role: 'user', text: '你好', entryId: 'u1' },
         { role: 'assistant', text: '在', status: 'stopped' }
       ]
     });
@@ -27,9 +27,16 @@ test('Pi conversation snapshot round-trips session identity and messages', async
     assert.equal(loaded.sessionId, 'session-1');
     assert.equal(loaded.sessionFile, layout.sessionFile);
     assert.deepEqual(loaded.messages.map(({ createdAt: _createdAt, ...message }) => message), [
-      { role: 'user', text: '你好' },
+      { role: 'user', text: '你好', entryId: 'u1' },
       { role: 'assistant', text: '在', status: 'stopped' }
     ]);
+    const forked = await createForkedPiConversation(root, {
+      sessionFile: path.join(root, 'pi-agent', 'sessions', 'fork.jsonl'),
+      sessionId: 'fork-1',
+      messages: [{ role: 'user', text: '分叉后的消息', entryId: 'u2' }]
+    });
+    assert.notEqual(forked.id, loaded.id);
+    assert.equal((await readPiConversation(root)).id, forked.id);
   } finally {
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

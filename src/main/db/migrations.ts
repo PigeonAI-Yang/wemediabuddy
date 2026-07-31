@@ -323,7 +323,106 @@ export const migrations = [
       CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
     `
   },
-  ...knowledgeMigrations
+  ...knowledgeMigrations,
+  {
+    version: 27,
+    sql: `
+      CREATE TABLE ranking_cache (id INTEGER PRIMARY KEY CHECK (id = 1), payload_json TEXT NOT NULL, fetched_at TEXT NOT NULL);
+    `
+  },
+  {
+    version: 28,
+    sql: `
+      CREATE TABLE x_list_bindings (
+        id TEXT PRIMARY KEY,
+        account_key TEXT NOT NULL,
+        list_id TEXT NOT NULL,
+        canonical_url TEXT NOT NULL,
+        owner_handle TEXT NOT NULL,
+        name TEXT NOT NULL,
+        list_kind TEXT NOT NULL CHECK (list_kind IN ('owned', 'following', 'member')),
+        source_feed_id TEXT NOT NULL REFERENCES source_feeds(id),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        last_observed_at TEXT,
+        last_observation_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        UNIQUE (account_key, list_id)
+      );
+      CREATE INDEX x_list_bindings_account_updated ON x_list_bindings(account_key, updated_at DESC);
+      CREATE TABLE x_list_operations (
+        id TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        input_hash TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('create', 'update', 'delete', 'members_add', 'members_remove')),
+        account_key TEXT NOT NULL,
+        list_id TEXT,
+        canonical_url TEXT,
+        owner_handle TEXT,
+        snapshot_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('prepared', 'awaiting_confirmation', 'running', 'succeeded', 'partial', 'needs_user', 'unknown', 'failed')),
+        phase TEXT NOT NULL,
+        stop_requested INTEGER NOT NULL DEFAULT 0 CHECK (stop_requested IN (0, 1)),
+        confirmation_fingerprint TEXT,
+        confirmed_at TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL
+      );
+      CREATE INDEX x_list_operations_account_updated ON x_list_operations(account_key, updated_at DESC);
+      CREATE TABLE x_list_operation_items (
+        id TEXT PRIMARY KEY,
+        operation_id TEXT NOT NULL REFERENCES x_list_operations(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        handle TEXT NOT NULL,
+        desired_state TEXT NOT NULL CHECK (desired_state IN ('present', 'absent')),
+        state TEXT NOT NULL CHECK (state IN ('pending', 'already_present', 'already_absent', 'succeeded', 'needs_user', 'unknown', 'failed', 'skipped')),
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT NOT NULL,
+        UNIQUE (operation_id, sort_order),
+        UNIQUE (operation_id, handle)
+      );
+      CREATE INDEX x_list_operation_items_operation ON x_list_operation_items(operation_id, sort_order);
+    `
+  },
+  {
+    version: 29,
+    sql: `
+      CREATE TABLE x_list_index_cache (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        account_key TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        fetched_at TEXT NOT NULL
+      );
+    `
+  },
+  {
+    version: 30,
+    sql: `
+      CREATE TABLE x_list_timeline_cache (
+        account_key TEXT NOT NULL,
+        list_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        posts_count INTEGER NOT NULL,
+        payload_bytes INTEGER NOT NULL,
+        fetched_at TEXT NOT NULL,
+        last_accessed_at TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('live', 'collect')),
+        schema_version INTEGER NOT NULL,
+        fingerprint TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (account_key, list_id)
+      );
+      CREATE INDEX x_list_timeline_cache_accessed ON x_list_timeline_cache(last_accessed_at);
+      CREATE INDEX x_list_timeline_cache_account_accessed ON x_list_timeline_cache(account_key, last_accessed_at);
+    `
+  }
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

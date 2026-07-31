@@ -75,6 +75,25 @@ export function searchSources(database: DatabaseSync, query = '', limit = 50): S
   return rows.map(parseSource);
 }
 
+export function listSourcesByFeed(
+  database: DatabaseSync,
+  feedId: string,
+  input: { limit?: number; offset?: number } = {}
+): { items: SourceRecord[]; limit: number; offset: number; hasMore: boolean } {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const offset = Math.max(input.offset ?? 0, 0);
+  const rows = database.prepare(`${sourceSelect}
+    WHERE feed_id = ?
+    ORDER BY collected_at DESC, id DESC
+    LIMIT ? OFFSET ?`).all(feedId, limit + 1, offset) as unknown as SourceRow[];
+  return {
+    items: rows.slice(0, limit).map(parseSource),
+    limit,
+    offset,
+    hasMore: rows.length > limit
+  };
+}
+
 export function canonicalizeUrl(value: string): string {
   const url = new URL(value); url.hash = ''; return url.toString();
 }

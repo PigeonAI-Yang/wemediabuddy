@@ -2,7 +2,7 @@ import { CanvasRelations } from './knowledge-canvas-relations';
 import { relationNames } from './knowledge-canvas-types';
 
 export function KnowledgeCanvasLayout({ c }: { c: any }) {
-  const { canvases, canvas, sources, topics, selected, box, connecting, pendingRelation, selectedRelation, drawer, assetQuery, mode, undoStack, redoStack, boardRef, setCanvas, setSelected, setBox, setConnecting, setKeyboardConnectionSource, setPendingRelation, setSelectedRelation, setDrawer, setAssetQuery, setMode, loadCanvas, createCanvas, renameCanvas, updateViewport, undo, redo, addObject, addNote, createRelation, connectByKeyboard, saveRelation, hideRelation, archiveRelation, decideSuggestion, beginConnection, beginDrag, beginBox, openComposer, onDiscuss } = c;
+  const { canvases, canvas, sources, topics, selected, box, connecting, pendingRelation, selectedRelation, drawer, assetQuery, mode, undoStack, redoStack, boardRef, setCanvas, setSelected, setBox, setConnecting, setKeyboardConnectionSource, setPendingRelation, setSelectedRelation, setDrawer, setAssetQuery, setMode, loadCanvas, createCanvas, renameCanvas, updateViewport, undo, redo, addObject, addNote, createRelation, connectByKeyboard, saveRelation, hideRelation, archiveRelation, decideSuggestion, beginConnection, beginDrag, beginBox, onDiscuss } = c;
   return (
     <section className={`kc-page${drawer ? " drawer-open" : ""}`}>
       <header className="kc-header">
@@ -23,13 +23,7 @@ export function KnowledgeCanvasLayout({ c }: { c: any }) {
             ))}
           </select>
           <button onClick={() => void renameCanvas()}>重命名</button>
-          <button onClick={onDiscuss}>和 Pi 讨论</button>
-          <button
-            className="primary-button"
-            onClick={() => void openComposer()}
-          >
-            形成创作简报
-          </button>
+          <button className="primary-button" onClick={onDiscuss}>和 Pi 讨论</button>
         </div>
       </header>
       <div className="kc-shell">
@@ -442,13 +436,7 @@ export function KnowledgeCanvasLayout({ c }: { c: any }) {
             <div className="kc-selection-bar">
               <strong>{selected.length} 个节点作为 Pi 上下文</strong>
               <button onClick={() => setSelected([])}>取消选择</button>
-              <button onClick={onDiscuss}>和 Pi 讨论</button>
-              <button
-                className="primary-button"
-                onClick={() => void openComposer()}
-              >
-                形成创作简报
-              </button>
+              <button className="primary-button" onClick={onDiscuss}>和 Pi 讨论</button>
             </div>
           )}
           {canvas?.suggestions?.length > 0 && (

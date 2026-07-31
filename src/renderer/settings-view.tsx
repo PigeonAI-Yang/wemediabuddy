@@ -25,6 +25,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piModels, setPiModels] = useState<string[]>([]);
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [runtimeNote, setRuntimeNote] = useState('');
+  const [timelineCacheNote, setTimelineCacheNote] = useState('');
+  const [timelineCacheStats, setTimelineCacheStats] = useState<{ rows: number; bytes: number; accounts: number } | null>(null);
   const selectPiProfile = (id: string) => {
     const profile = settings?.pi.profiles.find((item) => item.id === id);
     setPiProfileId(id);
@@ -39,6 +41,10 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   useEffect(() => {
     selectPiProfile(settings?.pi.activeId ?? '');
   }, [settings?.pi.activeId, settings?.pi.profiles]);
+  useEffect(() => {
+    if (section !== 'browser') return;
+    void window.wmb.getXListTimelineCacheStats().then(setTimelineCacheStats).catch(() => setTimelineCacheStats(null));
+  }, [section, settings?.browser.status]);
   const saveProfile = async () => {
     try {
       await window.wmb.savePiConfig({
@@ -169,11 +175,41 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           <div className="settings-row"><div><h3>日志</h3><p>logs/ · {settings ? formatBytes(settings.usage.logs) : '查看应用运行记录和错误信息。'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}
         {section === 'browser' && settings && <section className="settings-section">
-          <div className="settings-section-heading"><h3>专用浏览器</h3><p>{settings.browser.status === 'ready' ? `已启动，配置目录：${settings.browser.profilePath}` : '浏览器尚未由本应用启动'}</p></div>
+          <div className="settings-section-heading">
+            <h3>专用浏览器</h3>
+            <p>
+              {settings.browser.status === 'ready'
+                ? `已连接（${settings.browser.mode === 'visible' ? '前台接管' : settings.browser.mode === 'headless' ? '实验无头' : '后台静默'}）${settings.browser.profilePath ? ` · ${settings.browser.profilePath}` : ''}`
+                : '浏览器尚未由本应用启动。X List 默认后台静默运行，不抢前台。'}
+            </p>
+          </div>
+          <p className="settings-help">X 默认在后台 worker 运行（隐藏窗口 + 拟人间隔），日常操作不应再弹出浏览器。验证码/登录才用前台接管。</p>
           <div className="settings-browser-controls">
             <select value={browserChoice} onChange={(event) => setBrowserChoice(event.target.value)}>{settings.browserOptions.map((option) => <option key={option.id} value={option.id}>{option.label} · {option.profileDirectory}</option>)}</select>
             <button className="secondary-button" disabled={!browserChoice} onClick={() => void window.wmb.configureBrowser(browserChoice).then(refresh)}>保存选择</button>
-            <button className="primary-button" onClick={() => void window.wmb.startBrowser().then(refresh)}>启动浏览器</button>
+            <button className="secondary-button" onClick={() => void window.wmb.startBrowser({ mode: 'quiet' }).then(refresh)}>后台静默启动</button>
+            <button className="primary-button" onClick={() => void window.wmb.startBrowser({ mode: 'visible' }).then(refresh)}>前台接管</button>
+          </div>
+          <div className="settings-row">
+            <div>
+              <h3>X List 浏览缓存</h3>
+              <p>
+                {timelineCacheStats
+                  ? `${timelineCacheStats.rows} 条预览 · ${formatBytes(timelineCacheStats.bytes)} · ${timelineCacheStats.accounts} 个账号`
+                  : '用于秒开已看过的 List 动态，可随时清空，不影响已采集资料。'}
+              </p>
+              {timelineCacheNote && <p className="task-status">{timelineCacheNote}</p>}
+            </div>
+            <button className="secondary-button" onClick={() => void (async () => {
+              try {
+                const result = await window.wmb.clearXListTimelineCache();
+                const stats = await window.wmb.getXListTimelineCacheStats();
+                setTimelineCacheStats(stats);
+                setTimelineCacheNote(`已清理 ${result.deleted} 条浏览缓存。`);
+              } catch (error) {
+                setTimelineCacheNote(error instanceof Error ? error.message : '清理失败');
+              }
+            })()}>清理浏览缓存</button>
           </div>
         </section>}
         {section === 'agent' && settings && <section className="settings-section">

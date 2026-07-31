@@ -11,6 +11,9 @@ export type RankingItem = {
 export type RankingBoard = {
   id: string;
   label: string;
+  kind: 'rankings';
+  sourceId: string;
+  sourceLabel: string;
   sourceUrl: string;
   status: 'ready' | 'unavailable';
   error?: string;
@@ -173,7 +176,7 @@ function artificialAnalysisItems(html: string): RankingItem[] {
   }));
 }
 
-async function loadBoard(id: string, label: string, sourceUrl: string, parse: (html: string) => RankingItem[], requestUrl = sourceUrl): Promise<RankingBoard> {
+async function loadBoard(id: string, label: string, source: { id: string; label: string }, sourceUrl: string, parse: (html: string) => RankingItem[], requestUrl = sourceUrl): Promise<RankingBoard> {
   try {
     const response = await net.fetch(requestUrl, {
       headers: { 'user-agent': 'WeMediaBuddy/0.1' },
@@ -182,11 +185,23 @@ async function loadBoard(id: string, label: string, sourceUrl: string, parse: (h
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const items = parse(await response.text()).slice(0, 30);
     if (!items.length) throw new Error('榜单当前没有可读项目');
-    return { id, label, sourceUrl, status: 'ready', items };
+    return { id, label, kind: 'rankings', sourceId: source.id, sourceLabel: source.label, sourceUrl, status: 'ready', items };
   } catch (error) {
-    return { id, label, sourceUrl, status: 'unavailable', error: error instanceof Error ? error.message : String(error), items: [] };
+    return { id, label, kind: 'rankings', sourceId: source.id, sourceLabel: source.label, sourceUrl, status: 'unavailable', error: error instanceof Error ? error.message : String(error), items: [] };
   }
 }
+
+const SOURCES = {
+  github: { id: 'github', label: 'GitHub' },
+  whatstrending: { id: 'whatstrending', label: 'WhatsTrending' },
+  ossinsight: { id: 'ossinsight', label: 'OSSInsight' },
+  trendingrepo: { id: 'trendingrepo', label: 'TrendingRepo' },
+  skills: { id: 'skills', label: 'skills.sh' },
+  smithery: { id: 'smithery', label: 'Smithery' },
+  huggingface: { id: 'huggingface', label: 'Hugging Face' },
+  producthunt: { id: 'producthunt', label: 'Product Hunt' },
+  artificialanalysis: { id: 'artificialanalysis', label: 'Artificial Analysis' }
+} as const;
 
 let cached: { expiresAt: number; value: GitHubRankings } | null = null;
 
@@ -194,24 +209,28 @@ export async function getGitHubRankings(refresh = false): Promise<GitHubRankings
   if (!refresh && cached && cached.expiresAt > Date.now()) return cached.value;
   const boards = await Promise.all([
     // GitHub has no official Trending API; these three preserve the public page's ranking semantics.
-    loadBoard('github-daily', 'GitHub 今日', 'https://github.com/trending?since=daily', githubItems),
-    loadBoard('github-weekly', 'GitHub 本周', 'https://github.com/trending?since=weekly', githubItems),
-    loadBoard('github-monthly', 'GitHub 本月', 'https://github.com/trending?since=monthly', githubItems),
-    loadBoard('ai-growth', 'AI 增长榜', 'https://whatstrending.ai/repos', whatsTrendingApiItems, 'https://whatstrending.ai/api/repos'),
-    loadBoard('ossinsight-ai', 'OSSInsight AI', 'https://ossinsight.io/trending/ai', ossInsightItems, 'https://api.ossinsight.io/v1/trends/repos/?period=past_24_hours&language=All'),
+    loadBoard('github-daily', '今日', SOURCES.github, 'https://github.com/trending?since=daily', githubItems),
+    loadBoard('github-weekly', '本周', SOURCES.github, 'https://github.com/trending?since=weekly', githubItems),
+    loadBoard('github-monthly', '本月', SOURCES.github, 'https://github.com/trending?since=monthly', githubItems),
+    loadBoard('ai-growth', 'AI 增长榜', SOURCES.whatstrending, 'https://whatstrending.ai/repos', whatsTrendingApiItems, 'https://whatstrending.ai/api/repos'),
+    loadBoard('ossinsight-ai', 'AI 趋势', SOURCES.ossinsight, 'https://ossinsight.io/trending/ai', ossInsightItems, 'https://api.ossinsight.io/v1/trends/repos/?period=past_24_hours&language=All'),
     // TrendingRepo advertises API access as Pro; its public JSON-LD is the available read-only source.
-    loadBoard('trendingrepo-ai', 'TrendingRepo AI/ML', 'https://trendingrepo.com/categories/ai-ml', itemListItems),
-    // skills.sh's documented API requires Vercel OIDC; the public leaderboard carries the same ranking.
-    loadBoard('skills-trending', 'Skill 趋势', 'https://skills.sh/trending', skillsItems),
-    loadBoard('smithery-mcp', 'MCP 使用榜', 'https://smithery.ai/', smitheryItems, 'https://registry.smithery.ai/servers?pageSize=30'),
-    loadBoard('huggingface-models', 'Hugging Face 模型', 'https://huggingface.co/models?other=trending', huggingFaceItems, 'https://huggingface.co/api/trending?type=model'),
+    loadBoard('trendingrepo-ai', 'AI/ML 榜', SOURCES.trendingrepo, 'https://trendingrepo.com/categories/ai-ml', itemListItems),
+    // skills.sh's documented API requires Vercel OIDC; its public leaderboards remain readable.
+    loadBoard('skills-all-time', '总榜', SOURCES.skills, 'https://www.skills.sh/', skillsItems),
+    loadBoard('skills-trending', '24h 趋势', SOURCES.skills, 'https://www.skills.sh/trending', skillsItems),
+    loadBoard('skills-hot', 'Hot 榜', SOURCES.skills, 'https://www.skills.sh/hot', skillsItems),
+    loadBoard('smithery-mcp', 'MCP 使用榜', SOURCES.smithery, 'https://smithery.ai/', smitheryItems, 'https://registry.smithery.ai/servers?pageSize=30'),
+    loadBoard('huggingface-models', '模型趋势', SOURCES.huggingface, 'https://huggingface.co/models?other=trending', huggingFaceItems, 'https://huggingface.co/api/trending?type=model'),
     // Product Hunt's GraphQL API requires OAuth; its official AI Atom feed is public and ordered by the source.
-    loadBoard('producthunt-ai', 'AI 新产品', 'https://www.producthunt.com/topics/artificial-intelligence', productHuntItems, 'https://www.producthunt.com/feed?category=artificial-intelligence'),
+    loadBoard('producthunt-ai', 'AI 新产品', SOURCES.producthunt, 'https://www.producthunt.com/topics/artificial-intelligence', productHuntItems, 'https://www.producthunt.com/feed?category=artificial-intelligence'),
     // Artificial Analysis's API requires a key; its public leaderboard embeds the same current model data.
-    loadBoard('model-benchmark', '模型能力榜', 'https://artificialanalysis.ai/leaderboards/models', artificialAnalysisItems)
+    loadBoard('model-benchmark', '模型能力榜', SOURCES.artificialanalysis, 'https://artificialanalysis.ai/leaderboards/models', artificialAnalysisItems)
   ]);
   const value = { fetchedAt: new Date().toISOString(), boards };
-  cached = { expiresAt: Date.now() + 60 * 60_000, value };
+  // 全部可读才缓存 1 小时;有榜单暂不可读时只缓存 5 分钟,避免一次网络抖动被缓存放大成一小时不可用。
+  const allReady = boards.every((board) => board.status === 'ready');
+  cached = { expiresAt: Date.now() + (allReady ? 60 : 5) * 60_000, value };
   return value;
 }
 

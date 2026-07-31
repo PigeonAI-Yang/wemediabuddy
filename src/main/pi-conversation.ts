@@ -5,6 +5,8 @@ import path from 'node:path';
 export type PiChatMessage = {
   role: 'user' | 'assistant';
   text: string;
+  thinking?: string;
+  entryId?: string;
   status?: 'streaming' | 'stopped' | 'failed';
   createdAt?: string;
 };
@@ -76,6 +78,8 @@ function normalizeMessage(message: PiChatMessage, fallbackCreatedAt?: string): P
   return {
     role: message.role,
     text: message.text,
+    ...(message.thinking && message.thinking.trim() ? { thinking: message.thinking } : {}),
+    ...(message.entryId ? { entryId: message.entryId } : {}),
     ...(message.status ? { status: message.status } : {}),
     ...(message.createdAt || fallbackCreatedAt ? { createdAt: message.createdAt ?? fallbackCreatedAt } : {})
   };
@@ -308,6 +312,7 @@ export async function writePiConversation(
     sessionId?: string | null;
     messages: PiChatMessage[];
     createdAt?: string;
+    makeActive?: boolean;
   }
 ): Promise<PiConversationSnapshot> {
   const current = input.id
@@ -327,6 +332,29 @@ export async function writePiConversation(
     updatedAt
   };
   if (!snapshot.title || snapshot.title === '新会话') snapshot.title = titleFromMessages(messages);
+  const saved = await writeConversationFile(dataRootPath, snapshot);
+  await upsertIndexEntry(dataRootPath, saved, input.makeActive ?? true);
+  return saved;
+}
+
+export async function createForkedPiConversation(
+  dataRootPath: string,
+  input: {
+    sessionFile: string;
+    sessionId?: string | null;
+    messages: PiChatMessage[];
+  }
+): Promise<PiConversationSnapshot> {
+  const createdAt = nowIso();
+  const snapshot: PiConversationSnapshot = {
+    id: randomUUID(),
+    title: titleFromMessages(input.messages),
+    sessionFile: input.sessionFile,
+    sessionId: input.sessionId ?? null,
+    messages: input.messages,
+    createdAt,
+    updatedAt: createdAt
+  };
   const saved = await writeConversationFile(dataRootPath, snapshot);
   await upsertIndexEntry(dataRootPath, saved, true);
   return saved;

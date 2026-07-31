@@ -40,6 +40,22 @@ For browser/platform work, also read the matching platform contract in `SPEC.md`
 - Recommendation: do not add dependencies unless an active task cannot be completed with the approved stack or existing dependencies; record the reason in `TASKS.md`.
 - Never run destructive Git or filesystem commands against broad paths.
 
+## Local desktop dev isolation
+
+Project fact: WeMediaBuddy desktop **dev** uses Electron + Vite. Packaged builds do not. Black screens after edits are often **renderer port collisions**, not product UI bugs.
+
+Hard rules for Agents:
+
+1. Renderer dev server is locked to **`127.0.0.1:27391`** in `vite.renderer.config.ts` with `strictPort: true`.
+2. Do **not** use/share default Vite ports (`5173`, `5174`, …). Other local apps (for example py-polymarket) already occupy them.
+3. Before claiming a UI/desktop change works, smoke-check the page identity:
+   - `node scripts/smoke-renderer.mjs`
+   - must be title `WeMediaBuddy` and `#root`
+   - if title is another project, treat as failed verification, not “user should refresh”
+4. `npm start` runs `scripts/check-dev-port.mjs` first. If port `27391` is owned by a foreign page, refuse to start.
+5. After CSS/HMR thrash or unexplained black window: stop `wmb-dev`, confirm nothing foreign is on `27391`, cold-start, then re-run smoke. Do not declare success from process “ready” alone.
+6. When restarting desktop for main-process changes, use this project’s isolated runtime only; never assume a generic Vite URL is WeMediaBuddy.
+
 ## Verification
 
 Verification is proportional to the change:

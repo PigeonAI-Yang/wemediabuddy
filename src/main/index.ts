@@ -9,7 +9,7 @@ import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBro
 import { recoverInterruptedPublications } from './publishing';
 import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from './metrics';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
-import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation, type PiChatMessage } from './pi-conversation';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
@@ -30,8 +30,10 @@ import { abortDailyIntelligence, startDailyIntelligence, startResultsReview, sta
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
-import { persistPiTurn } from './pi-persistence';
+import { visiblePiPrompt } from './pi-persistence';
 import { registerSettingsConfigIpc } from './ipc-settings-config';
+import { registerPiDockIpc } from './ipc-pi-dock';
+import { registerXListIpc } from './ipc-x-lists';
 import { preparePiExtension } from './pi-extension';
 
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
@@ -92,7 +94,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     '--provider', 'wmb-api',
     '--model', config.model,
     ...(config.thinking ? ['--thinking', config.thinking] : []),
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
+    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时只可读取或调用 wmb_prepare_x_list_operation 创建待 UI 最终确认的提议，绝不能确认或执行外部 List 写入。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -100,10 +102,17 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     WMB_PI_API_KEY: config.apiKey,
     WMB_MCP_URL: mcp.url
   }, (event) => {
-    broadcastPiRuntimeProgress(event);
+    const dockEvent = event.type === 'queue_update'
+      ? {
+        ...event,
+        steering: Array.isArray(event.steering) ? event.steering.map((text) => visiblePiPrompt(String(text))) : [],
+        followUp: Array.isArray(event.followUp) ? event.followUp.map((text) => visiblePiPrompt(String(text))) : []
+      }
+      : event;
+    broadcastPiRuntimeProgress(dockEvent, 'dock');
     if (event.type === 'wmb_process_crashed') {
       const error = String(event.error ?? 'Pi 进程已退出，可重新发送。');
-      broadcastPiEvent({ type: 'failed', error });
+      broadcastPiEvent({ type: 'failed', error, scope: 'dock' });
       pi = null;
     }
   }, layout.workspace);
@@ -239,41 +248,12 @@ app.whenReady().then(() => {
     piSessionFile = switched.sessionFile;
     return switched;
   });
-  ipcMain.handle('pi:chat', async (_event, message: string) => {
-    const raw = message.trim();
-    if (!raw) throw new Error('请输入内容。');
-    if (pi?.isActive) throw new Error('Pi 正在回复，请稍候。');
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const visibleText = raw.includes('[USER_MESSAGE]\n')
-      ? raw.slice(raw.indexOf('[USER_MESSAGE]\n') + '[USER_MESSAGE]\n'.length).trim()
-      : raw;
-    broadcastPiEvent({ type: 'starting' });
-    try {
-      const runtime = await ensurePi(dataRoot);
-      const result = await runtime.promptUntilSettled(raw, {
-        onDelta: (partial) => broadcastPiEvent({ type: 'delta', text: partial })
-      });
-      const assistant: PiChatMessage = {
-        role: 'assistant',
-        text: result.text || (result.stopped ? '已停止生成。' : ''),
-        ...(result.stopped ? { status: 'stopped' as const } : {})
-      };
-      await persistPiTurn(dataRoot.path, visibleText || raw, assistant, piSessionFile, pi);
-      broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: assistant.text });
-      return result;
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error);
-      await persistPiTurn(dataRoot.path, visibleText || raw, { role: 'assistant', text: messageText, status: 'failed' }, piSessionFile, pi).catch(() => {});
-      if (!pi?.isRunning) pi = null;
-      broadcastPiEvent({ type: 'failed', error: messageText });
-      throw error;
-    }
-  });
-  ipcMain.handle('pi:stop', async () => {
-    if (!pi?.isActive) return { stopped: false };
-    await pi.abortTurn();
-    return { stopped: true };
+  registerPiDockIpc({
+    loadSelectedDataRoot,
+    ensurePi,
+    getPi: () => pi,
+    getPiSessionFile: () => piSessionFile,
+    setPiSessionFile: (sessionFile) => { piSessionFile = sessionFile; }
   });
   ipcMain.handle('agent:start', async (_event, input: { intent: AgentIntent; businessDate: string; contextRefs?: Record<string, unknown> }) => {
     const dataRoot = await loadSelectedDataRoot();
@@ -437,15 +417,16 @@ app.whenReady().then(() => {
       return { ok: false, data: null, error: { code: 'RESULTS_REVIEW_FAILED', message: messageText } };
     }
   });
-  ipcMain.handle('browser:start', async () => {
+  ipcMain.handle('browser:start', async (_event, input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     const config = readBrowserConfig(database);
     database.close();
     if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-    browser ??= await startBrowser(config);
-    return { pid: browser.pid, cdpUrl: browser.cdpUrl, profilePath: browser.profilePath };
+    // Takeover/login should force a fresh visible launch preference even if a quiet runtime is cached.
+    browser = await startBrowser(config, { mode: input.mode });
+    return { pid: browser.pid, cdpUrl: browser.cdpUrl, profilePath: browser.profilePath, mode: browser.mode };
   });
   ipcMain.handle('settings:open-logs', async () => {
     const dataRoot = await loadSelectedDataRoot();
@@ -460,6 +441,7 @@ app.whenReady().then(() => {
   });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
   registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
+  registerXListIpc({ loadSelectedDataRoot });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

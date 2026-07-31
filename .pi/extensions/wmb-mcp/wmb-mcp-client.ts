@@ -1,5 +1,8 @@
-const url = process.env.WMB_MCP_URL;
-if (!url) throw new Error('WMB_MCP_URL is required.');
+function mcpUrl(): string {
+  const url = process.env.WMB_MCP_URL;
+  if (!url) throw new Error('WMB_MCP_URL is required.');
+  return url;
+}
 
 export type JsonSchema = {
   type: 'object';
@@ -17,7 +20,7 @@ export type ToolDefinition = {
 };
 
 async function request(method: string, params?: unknown, sessionId?: string): Promise<{ data: unknown; sessionId?: string }> {
-  const response = await fetch(url, {
+  const response = await fetch(mcpUrl(), {
     method: 'POST',
     headers: {
       accept: 'application/json, text/event-stream',

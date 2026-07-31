@@ -1,5 +1,4 @@
 import type { BrowserContext, Locator, Page } from 'playwright-core';
-import { app } from 'electron';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { parseMetricValue } from './metric-value.ts';
@@ -8,7 +7,7 @@ export type XIdentity = { platform: 'x'; accountKey: string; displayName: string
 export type MetricField = { status: 'value' | 'unavailable' | 'parse_failed'; value?: number; rawLabel?: string };
 
 export async function identifyXAccount(cdpUrl: string): Promise<XIdentity> {
-  const browser = await connect(cdpUrl);
+  const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
@@ -23,7 +22,7 @@ export async function identifyXAccount(cdpUrl: string): Promise<XIdentity> {
 }
 
 export async function prepareXText(cdpUrl: string, body: string): Promise<{ title: null; body: string; assetIds: []; evidenceUrl: string }> {
-  const browser = await connect(cdpUrl);
+  const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
@@ -45,7 +44,7 @@ export async function prepareXVideo(cdpUrl: string, body: string, assetPath: str
 }
 
 async function prepareXMedia(cdpUrl: string, body: string, assetPath: string, assetId: string, waitsForProcessing: boolean): Promise<{ title: null; body: string; assetIds: [string]; evidenceUrl: string }> {
-  const browser = await connect(cdpUrl);
+  const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
@@ -64,7 +63,7 @@ async function prepareXMedia(cdpUrl: string, body: string, assetPath: string, as
 export async function collectXMetrics(cdpUrl: string, statusUrl: string): Promise<{
   sourceUrl: string; capturedAt: string; normalized: Record<'views' | 'likes' | 'replies' | 'reposts', MetricField>; raw: Record<string, MetricField>;
 }> {
-  const browser = await connect(cdpUrl);
+  const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
     await page.goto(statusUrl, { waitUntil: 'domcontentloaded' });
@@ -98,7 +97,7 @@ export async function collectXAccountMetrics(cdpUrl: string, accountKey: string)
   raw: Record<string, MetricField>;
 }> {
   const handle = accountKey.startsWith('@') ? accountKey.slice(1) : accountKey;
-  const browser = await connect(cdpUrl);
+  const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
     await page.goto(`https://x.com/${handle}`, { waitUntil: 'domcontentloaded' });
@@ -139,9 +138,12 @@ async function activeEditor(page: Page): Promise<Locator> {
   throw new Error('X 当前页面没有可操作的发帖编辑器。');
 }
 
-async function connect(cdpUrl: string) {
-  const load = createRequire(__filename);
-  const { chromium } = load(app.isPackaged
+export async function connectXBrowser(cdpUrl: string) {
+  const load = createRequire(import.meta.url);
+  const isPackaged = process.versions.electron
+    ? (load('electron') as typeof import('electron')).app.isPackaged
+    : false;
+  const { chromium } = load(isPackaged
     ? path.join(process.resourcesPath, 'playwright-core')
     : 'playwright-core') as typeof import('playwright-core');
   return chromium.connectOverCDP(cdpUrl);

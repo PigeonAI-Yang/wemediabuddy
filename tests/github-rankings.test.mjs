@@ -13,6 +13,7 @@ test('ranking parsers retain repo identity, description and star movement', () =
   assert.match(source, /api\.ossinsight\.io\/v1\/trends\/repos/);
   assert.match(source, /ossInsightItems/);
   assert.match(source, /trendingrepo\.com\/categories\/ai-ml/);
+  assert.match(source, /loadBoard\('skills-all-time', '总榜', SOURCES\.skills, 'https:\/\/www\.skills\.sh\/', skillsItems\)/);
   assert.match(source, /skills\.sh\/trending/);
   assert.match(source, /registry\.smithery\.ai\/servers\?pageSize=30/);
   assert.match(source, /huggingface\.co\/api\/trending\?type=model/);
@@ -25,5 +26,5 @@ test('ranking parsers retain repo identity, description and star movement', () =
   assert.match(source, /artificialAnalysisItems/);
   assert.match(source, /stars\?\\s\+\(today\|this week\|this month\)/);
   assert.match(source, /status: 'unavailable'/);
-  assert.match(source, /Date\.now\(\) \+ 60 \* 60_000/);
+  assert.match(source, /allReady \? 60 : 5/);
 });

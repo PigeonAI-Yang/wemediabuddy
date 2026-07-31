@@ -16,6 +16,19 @@
 - Preserve dirty work and unrelated user changes.
 - Update the task's evidence fields as checks complete.
 
+## Desktop dev server isolation
+
+WeMediaBuddy desktop **dev** loads the renderer from a local Vite server. Packaged apps do not. A recurring black-screen failure mode is Electron attaching to the wrong Vite app on a shared port.
+
+Rules:
+
+- Renderer port is fixed at **`127.0.0.1:27391`** (`vite.renderer.config.ts`, `strictPort: true`).
+- Never rely on Vite defaults `5173/5174`.
+- `npm start` preflight: `scripts/check-dev-port.mjs`.
+- UI verification smoke: `node scripts/smoke-renderer.mjs` (must report WeMediaBuddy + `#root`).
+- If the smoke title is another product, stop and fix port ownership before more UI work.
+- Process “ready” is not proof the correct renderer is loaded.
+
 ## Error handling
 
 - Preserve the distinction between `failed`, `needs_user`, and publication `unknown`.

@@ -224,10 +224,13 @@ export function failMetricJob(database: DatabaseSync, jobId: string, errorMessag
     .run(errorMessage, now, now, jobId);
 }
 
-export function listPublicationMetricSnapshots(database: DatabaseSync, publicationId: string): MetricSnapshot[] {
-  const rows = database.prepare(`SELECT id, publication_id AS publicationId, scheduled_for AS scheduledFor, captured_at AS capturedAt,
+export function listPublicationMetricSnapshots(database: DatabaseSync, publicationId?: string): MetricSnapshot[] {
+  const base = `SELECT id, publication_id AS publicationId, scheduled_for AS scheduledFor, captured_at AS capturedAt,
     source_url AS sourceUrl, normalized_json AS normalized, raw_json AS raw, created_at AS createdAt
-    FROM publication_metric_snapshots WHERE publication_id = ? ORDER BY captured_at DESC, scheduled_for DESC`).all(publicationId) as Array<{
+    FROM publication_metric_snapshots`;
+  const rows = (publicationId
+    ? database.prepare(`${base} WHERE publication_id = ? ORDER BY captured_at DESC, scheduled_for DESC`).all(publicationId)
+    : database.prepare(`${base} ORDER BY captured_at DESC, scheduled_for DESC`).all()) as Array<{
     id: string; publicationId: string; scheduledFor: string; capturedAt: string; sourceUrl: string; normalized: string; raw: string; createdAt: string;
   }>;
   return rows.map((row) => ({

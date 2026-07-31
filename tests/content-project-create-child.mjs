@@ -16,7 +16,7 @@ try {
   mcp = await startMcp(directory);
   process.env.WMB_MCP_URL = mcp.url;
   const tools = new Map();
-  const extension = (await import(`../.pi/extensions/wmb-mcp.ts?test=${Date.now()}`)).default;
+  const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({
     registerTool(tool) {
       tools.set(tool.name, tool);

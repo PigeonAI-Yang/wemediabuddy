@@ -1,26 +1,28 @@
 import { createRoot } from 'react-dom/client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TodayPlanItem } from '../main/workbench';
 import { LongTermStudioView } from './studio-view';
 import { KnowledgeCanvasView } from './knowledge-canvas-view';
 import { DomainMapView, TopicDossierView } from './knowledge-system-view';
-import { CreativeComposerView } from './creative-composer-view';
 import { Icon, TodayView, LibraryView } from './today-library-view';
+import { DiscoverView } from './discover-view';
 import { LegacyStudioView } from './legacy-studio-view';
-import { PublishView, ResultsView } from './publishing-results-view';
+import { PublishView } from './publishing-results-view';
+import { ResultsView } from './results-view';
 import { SettingsView } from './settings-view';
 import { PiDock } from './pi-dock';
-import type { PiContextRef, RankingContext, Theme, View } from './app-types';
+import type { PiContextRef, RankingContext, Theme, View, XListPiContext } from './app-types';
 import { logoUrl, views } from './app-types';
 import './styles.css';
 
 function App(): React.JSX.Element {
-  let restoredCreativeContext:null|{canvasId:string;nodeIds:string[];mode:'current_page'|'selected';title:string}=null;
-  try{restoredCreativeContext=JSON.parse(localStorage.getItem('wmb.creativeContext')??'null');}catch{}
   const restoredTopicId=localStorage.getItem('wmb.knowledgeTopicId');
   const storedView=localStorage.getItem('wmb.view');
-  const restoredView:View=views.includes(storedView as View)?storedView as View:'today';
-  const [view, setView] = useState<View>(restoredView==='compose'&&!restoredCreativeContext?'knowledge':restoredView==='topic'&&!restoredTopicId?'knowledge':restoredView);
+  const restoredView:View=views.includes(storedView as View)?storedView as View:(storedView==='compose'?'canvas':'today');
+  const [view, setView] = useState<View>(restoredView==='topic'&&!restoredTopicId?'knowledge':restoredView);
+  useEffect(() => {
+    if (!views.includes(view) || (view as string) === 'compose') setView('canvas');
+  }, [view]);
   const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('wmb.theme') === 'light' ? 'light' : 'dark');
   const [dataRoot, setDataRoot] = useState<string | null>(null);
   const [settings, setSettings] = useState<Awaited<ReturnType<typeof window.wmb.getSettings>>>(null);
@@ -31,7 +33,8 @@ function App(): React.JSX.Element {
   const [piDockWidth, setPiDockWidth] = useState(() => Number(localStorage.getItem('wmb.piDockWidth')) || 380);
   const [todaySelectedItems, setTodaySelectedItems] = useState<TodayPlanItem[]>([]);
   const [rankingContext, setRankingContext] = useState<RankingContext>({ boards: [], items: [] });
-  const [creativeContext,setCreativeContext] = useState<{canvasId:string;nodeIds:string[];mode:'current_page'|'selected';title:string}|null>(restoredCreativeContext);
+  const [xListContext, setXListContext] = useState<XListPiContext | null>(null);
+  const [canvasOpenId,setCanvasOpenId]=useState<string|null>(null);
   const [canvasContext,setCanvasContext]=useState<{canvasId:string;nodeIds:string[];mode:'current_page'|'selected';title:string}|null>(null);
   const [knowledgeTopicId,setKnowledgeTopicId]=useState<string|null>(restoredTopicId);
   const [knowledgeDomainId,setKnowledgeDomainId]=useState<string|null>(()=>localStorage.getItem('wmb.knowledgeDomainId'));
@@ -44,6 +47,7 @@ function App(): React.JSX.Element {
   const [now, setNow] = useState(() => new Date());
   const [piPhase, setPiPhase] = useState<'idle' | 'starting' | 'running' | 'failed' | 'stopped'>('idle');
   const [piStatusText, setPiStatusText] = useState('Pi 空闲');
+  const [pageStatus, setPageStatus] = useState<{ text: string; running?: boolean } | null>(null);
   const dateLabel = useMemo(() => new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'medium',
@@ -56,9 +60,12 @@ function App(): React.JSX.Element {
   useEffect(() => { void window.wmb.getDataRoot().then((root) => setDataRoot(root?.path ?? null)); refreshSettings(); refreshToday(); refreshPublications(); const poll = window.setInterval(() => { refreshToday(); refreshPublications(); }, 5000); return () => window.clearInterval(poll); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('wmb.theme', theme); }, [theme]);
   useEffect(()=>localStorage.setItem('wmb.view',view),[view]);
+  useEffect(() => {
+    if (view !== 'discover' && view !== 'today') setPageStatus(null);
+  }, [view]);
   useEffect(()=>{if(knowledgeTopicId)localStorage.setItem('wmb.knowledgeTopicId',knowledgeTopicId);else localStorage.removeItem('wmb.knowledgeTopicId');},[knowledgeTopicId]);
   useEffect(()=>{if(knowledgeDomainId)localStorage.setItem('wmb.knowledgeDomainId',knowledgeDomainId);else localStorage.removeItem('wmb.knowledgeDomainId');},[knowledgeDomainId]);
-  useEffect(()=>{if(creativeContext)localStorage.setItem('wmb.creativeContext',JSON.stringify(creativeContext));else localStorage.removeItem('wmb.creativeContext');},[creativeContext]);
+  useEffect(()=>{localStorage.removeItem('wmb.creativeContext');},[]);
   useEffect(()=>{
     const query=globalQuery.trim();if(query.length<2){setGlobalResults([]);return;}
     let active=true;
@@ -113,9 +120,38 @@ function App(): React.JSX.Element {
     });
   }, [settings?.pi?.configured]);
   const navigate = (next: View) => { setView(next); if (next === 'publish' || next === 'results') refreshPublications(); };
+  // B:每个视图记住自己的滚动位置,切回时恢复
+  const scrollMemory = useRef<Record<string, number>>({});
+  const findScroller = (workspace: Element): HTMLElement | null => {
+    const candidates = [workspace as HTMLElement, ...workspace.querySelectorAll<HTMLElement>('*')];
+    return candidates.find((el) => el.scrollHeight > el.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(el).overflowY)) ?? null;
+  };
+  useEffect(() => {
+    const workspace = document.querySelector('.workspace');
+    if (!workspace) return;
+    const save = () => {
+      const scroller = findScroller(workspace);
+      if (scroller) scrollMemory.current[view] = scroller.scrollTop;
+    };
+    workspace.addEventListener('scroll', save, { capture: true, passive: true });
+    return () => workspace.removeEventListener('scroll', save, { capture: true });
+  }, [view]);
+  useEffect(() => {
+    const workspace = document.querySelector('.workspace');
+    if (!workspace) return;
+    const frame = requestAnimationFrame(() => {
+      const saved = scrollMemory.current[view] ?? 0;
+      const scroller = findScroller(workspace);
+      if (scroller && saved > 0) scroller.scrollTop = saved;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [view]);
+  useEffect(() => {
+    if (view !== 'discover') setXListContext(null);
+  }, [view]);
   const openGlobalResult=(item:(typeof globalResults)[number])=>{if(item.kind==='topic'){setKnowledgeTopicId(item.id);navigate('topic');}else if(item.kind==='project'){setStudioSelectedId(item.id);navigate('studio');}else{setKnowledgeDomainId(item.id);navigate('knowledge');}setGlobalQuery('');setGlobalResults([]);};
-  const nav = [{ id: 'today', label: '今日' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
-  const pageLabels: Record<View, string> = { today: '今日内容',knowledge:'领域地图',topic:'长期主题档案', library: '资料库', canvas: '关系画布',compose:'创作组合台', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
+  const nav = [{ id: 'today', label: '今日' }, { id: 'discover', label: '发现' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
+  const pageLabels: Record<View, string> = { today: '今日内容', discover: '发现', knowledge:'领域地图',topic:'长期主题档案', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
   const publishSelected = publications.find((item) => item.publication.id === publishSelectedId) ?? publications[0] ?? null;
   const piContext: PiContextRef = (() => {
     if (view === 'today') {
@@ -129,7 +165,21 @@ function App(): React.JSX.Element {
         selectedItems: todaySelectedItems
       };
     }
-    if (view === 'library') {
+    if (view === 'discover') {
+      if (xListContext) {
+        const post = xListContext.selectedPost;
+        const postTitle = post
+          ? ((post.text || '').trim().slice(0, 48) || post.authorHandle || post.url)
+          : null;
+        return {
+          page: view,
+          pageLabel: '发现 · X Lists',
+          objectType: xListContext.mode === 'post' ? 'x_list_post' : (xListContext.listId ? 'x_list' : null),
+          objectId: xListContext.mode === 'post' ? (post?.url ?? null) : xListContext.listId,
+          objectTitle: xListContext.mode === 'post' ? postTitle : (xListContext.listName ?? null),
+          xListContext
+        };
+      }
       const firstRankingItem = rankingContext.items[0] ?? null;
       const firstRankingBoard = rankingContext.boards[0] ?? null;
       return {
@@ -143,7 +193,6 @@ function App(): React.JSX.Element {
     }
     if(view==='knowledge'||view==='topic')return{page:view,pageLabel:pageLabels[view],objectType:view==='topic'?'topic':null,objectId:knowledgeTopicId,objectTitle:null};
     if (view === 'canvas') return { page:view,pageLabel:pageLabels[view],objectType:'canvas',objectId:canvasContext?.canvasId??null,objectTitle:canvasContext?.title??null,packagePurpose:'discussion',canvasId:canvasContext?.canvasId,contextSelection:canvasContext??undefined };
-    if(view==='compose')return{page:view,pageLabel:pageLabels[view],objectType:'canvas',objectId:creativeContext?.canvasId??null,objectTitle:creativeContext?.title??null,packagePurpose:'creation',canvasId:creativeContext?.canvasId,contextSelection:creativeContext??undefined};
     if (view === 'studio') {
       return {
         page: view,
@@ -179,23 +228,24 @@ function App(): React.JSX.Element {
       <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong></div>
       <div className="global-search"><input aria-label="全局搜索" placeholder="搜索领域、主题或项目" value={globalQuery} onChange={event=>setGlobalQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'){setGlobalQuery('');setGlobalResults([]);}else if(event.key==='Enter'&&globalResults[0]){event.preventDefault();openGlobalResult(globalResults[0]);}}}/>{globalResults.length>0&&<div role="listbox" aria-label="全局搜索结果">{globalResults.map(item=><button key={`${item.kind}:${item.id}`} onClick={()=>openGlobalResult(item)}><small>{item.kind==='domain'?'领域':item.kind==='topic'?'主题':'项目'}</small><span>{item.title}</span></button>)}</div>}</div>
       {view === 'settings' && <span className="topbar-page-title">设置</span>}
-      {view === 'studio' && <><span className="studio-topbar-crumb">创作 / <b>{studioSelectedId ? '编辑项目' : '项目库'}</b></span><div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div></>}
+      {view === 'studio' && <div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div>}
       <div className="titlebar-actions">
         <button aria-label="最小化窗口" onClick={() => void window.wmb.windowControl('minimize')}>−</button>
         <button aria-label="最大化或还原窗口" onClick={() => void window.wmb.windowControl('maximize')}>□</button>
         <button className="window-close" aria-label="关闭窗口" onClick={() => void window.wmb.windowControl('close')}>×</button>
       </div>
     </header>
-    <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view==='knowledge'||view==='topic'||view==='compose'?'active':''} onClick={()=>navigate('knowledge')} title="知识系统"><Icon name="library"/><span>知识系统</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="library"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
+    <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view==='knowledge'||view==='topic'?'active':''} onClick={()=>navigate('knowledge')} title="知识系统"><Icon name="knowledge"/><span>知识系统</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="canvas"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
     <section className="workspace">
-      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={() => navigate('studio')} openLibrary={() => navigate('library')} openPublish={() => navigate('publish')} publications={publications} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} planDate={planDate}/>}
+      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={() => navigate('studio')} openLibrary={() => navigate('library')} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} planDate={planDate} onStatusChange={setPageStatus}/>}
       {view==='knowledge'&&<DomainMapView selectedDomainId={knowledgeDomainId} onSelectDomain={setKnowledgeDomainId} onOpenTopic={id=>{setKnowledgeTopicId(id);navigate('topic');}}/>}
-      {view==='topic'&&knowledgeTopicId&&<TopicDossierView topicId={knowledgeTopicId} onBack={()=>navigate('knowledge')} onOpenCanvas={canvasId=>{setCreativeContext(current=>current?.canvasId===canvasId?current:null);navigate('canvas');}}/>}
-      {view === 'library' && <LibraryView rankingContext={rankingContext} onRankingContextChange={setRankingContext}/>}
-      {view === 'canvas' && <KnowledgeCanvasView initialSelection={creativeContext} initialCanvasId={creativeContext?.canvasId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)} onCompose={(item)=>{setCreativeContext(item);setPiDockCollapsed(false);navigate('compose');}}/>}
-      {view==='compose'&&creativeContext&&<CreativeComposerView context={creativeContext} onBack={()=>navigate('canvas')} onDiscuss={()=>setPiDockCollapsed(false)} onGenerate={()=>{setPiDockCollapsed(false);window.setTimeout(()=>window.dispatchEvent(new CustomEvent('wmb-pi-generate',{detail:'请基于当前创作组合生成一份可编辑创作简报，保存后回读简报 ID、revision、标题、核心判断、为什么现在和结构；不要生成正文。'})),0);}} onProject={projectId=>{setStudioSelectedId(projectId);navigate('studio');}}/>}
+      {view==='topic'&&knowledgeTopicId&&<TopicDossierView topicId={knowledgeTopicId} onBack={()=>navigate('knowledge')} onOpenCanvas={canvasId=>{setCanvasOpenId(canvasId);navigate('canvas');}}/>}
+      {view === 'discover' && <DiscoverView rankingContext={rankingContext} onRankingContextChange={setRankingContext} onStatusChange={setPageStatus} onXListContextChange={setXListContext}/>}
+      {view === 'library' && <LibraryView/>}
+      {view === 'canvas' && <KnowledgeCanvasView initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
+
       {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} planDate={planDate}/>}
-      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} takeover={() => void window.wmb.startBrowser().then(refreshSettings)} selectedId={publishSelectedId} onSelect={setPublishSelectedId}/>}
+      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => void window.wmb.startBrowser({ mode: 'visible' }).then(refreshSettings)} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings}/>}
       {view === 'results' && <ResultsView publications={publications} refresh={refreshPublications} planDate={planDate}/>}
       {view === 'settings' && <SettingsView dataRoot={dataRoot} settings={settings} browserChoice={browserChoice} setBrowserChoice={setBrowserChoice} refresh={refreshSettings} theme={theme} setTheme={setTheme} back={() => navigate('today')}/>}
     </section>
@@ -205,6 +255,7 @@ function App(): React.JSX.Element {
         <span className="status-item" data-phase={piPhase}><span className="status-dot"/>{piStatusText}</span>
         <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'MCP 已连接' : 'MCP 未连接'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
+        {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}
       </div>
       <div className="status-bar-right">
         <button type="button" className="status-theme" title={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} aria-label={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '☾'} <span>{theme === 'dark' ? '黑夜紫罗兰' : '白昼紫罗兰'}</span></button>

@@ -8,7 +8,7 @@ type RpcMessage = {
   error?: unknown;
   data?: unknown;
   message?: unknown;
-  assistantMessageEvent?: { type?: string; delta?: string };
+  assistantMessageEvent?: { type?: string; delta?: string; contentIndex?: number };
   [key: string]: unknown;
 };
 
@@ -24,7 +24,9 @@ type SettleWaiter = {
 
 export type PiChatResult = {
   text: string;
+  thinking: string;
   stopped: boolean;
+  error?: string;
 };
 
 function defer<T>(): { promise: Promise<T>; resolve(value: T | PromiseLike<T>): void; reject(error: Error): void } {
@@ -53,6 +55,58 @@ function assistantTextFromMessage(message: unknown): string {
     .join('');
 }
 
+function assistantThinkingFromMessage(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const record = message as { role?: unknown; content?: unknown };
+  if (record.role !== 'assistant') return '';
+  const content = record.content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const item = part as { type?: string; thinking?: string };
+      return item.type === 'thinking' && typeof item.thinking === 'string' ? item.thinking : '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function assistantErrorFromMessage(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const record = message as {
+    role?: unknown;
+    stopReason?: unknown;
+    errorMessage?: unknown;
+    error?: unknown;
+  };
+  if (record.role !== 'assistant') return '';
+  const direct = typeof record.errorMessage === 'string' ? record.errorMessage.trim()
+    : typeof record.error === 'string' ? record.error.trim()
+    : record.error && typeof record.error === 'object' && typeof (record.error as { message?: unknown }).message === 'string'
+      ? String((record.error as { message: string }).message).trim()
+      : '';
+  if (direct) return humanizePiProviderError(direct);
+  if (record.stopReason === 'error') return 'Pi 模型调用失败。';
+  return '';
+}
+
+function humanizePiProviderError(raw: string): string {
+  const text = raw.replace(/^\d{3}:\s*/, '').trim();
+  // OpenCode Go China-hosted model opt-in.
+  if (/RegionError/i.test(text) || /only available hosted in China and requires explicit opt in/i.test(text)) {
+    const link = text.match(/https?:\/\/\S+/)?.[0]?.replace(/[)\].,]+$/, '') ?? 'https://opencode.ai';
+    return `当前模型未开通中国区访问（OpenCode RegionError）。请到 ${link} 完成 opt-in，或在 Pi 模型设置里换一个可用模型。`;
+  }
+  if (/invalid.?api.?key|incorrect api key|unauthorized/i.test(text)) {
+    return 'Pi API Key 无效或未授权，请到设置里检查配置。';
+  }
+  if (/rate limit|too many requests/i.test(text)) {
+    return 'Pi 接口触发限流，请稍后再试。';
+  }
+  // Keep provider detail, but avoid dumping giant JSON blobs in the dock.
+  return text.length > 420 ? `${text.slice(0, 420)}…` : text;
+}
+
 export class PiRpcSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
   private buffer = '';
@@ -63,7 +117,10 @@ export class PiRpcSupervisor {
   private aborted = false;
   private intentionalStop = false;
   private streamedText = '';
+  private streamedThinking = '';
+  private streamedError = '';
   private onDelta: ((text: string) => void) | null = null;
+  private onStreaming: (() => void) | null = null;
   private readonly executable: string;
   private readonly args: string[];
   private readonly env: NodeJS.ProcessEnv;
@@ -133,28 +190,48 @@ export class PiRpcSupervisor {
     return this.send({ type: 'prompt', message });
   }
 
+  steer(message: string): Promise<RpcMessage> {
+    return this.send({ type: 'steer', message });
+  }
+
+  followUp(message: string): Promise<RpcMessage> {
+    return this.send({ type: 'follow_up', message });
+  }
+
+  getEntries(): Promise<RpcMessage> {
+    return this.send({ type: 'get_entries' });
+  }
+
+  fork(entryId: string): Promise<RpcMessage> {
+    return this.send({ type: 'fork', entryId });
+  }
+
   async promptUntilSettled(
     message: string,
-    options: { timeoutMs?: number; onDelta?: (text: string) => void } = {}
+    options: { timeoutMs?: number; onDelta?: (text: string) => void; onStreaming?: () => void } = {}
   ): Promise<PiChatResult> {
     if (this.active) throw new Error('Pi 正在回复，请稍候。');
-    const timeoutMs = options.timeoutMs ?? 120000;
     this.active = true;
     this.aborted = false;
     this.streamedText = '';
+    this.streamedThinking = '';
+    this.streamedError = '';
     this.onDelta = options.onDelta ?? null;
+    this.onStreaming = options.onStreaming ?? null;
     const { promise: settled, resolve, reject } = defer<void>();
-    const timer = setTimeout(() => {
-      this.settleWaiters = this.settleWaiters.filter((waiter) => waiter.resolve !== resolve);
-      reject(new Error('Pi 回复超时。'));
-    }, timeoutMs);
+    const timer = typeof options.timeoutMs === 'number'
+      ? setTimeout(() => {
+        this.settleWaiters = this.settleWaiters.filter((waiter) => waiter.resolve !== resolve);
+        reject(new Error('Pi 回复超时。'));
+      }, options.timeoutMs)
+      : null;
     this.settleWaiters.push({
       resolve: () => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         resolve();
       },
       reject: (error) => {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
         reject(error);
       }
     });
@@ -162,6 +239,8 @@ export class PiRpcSupervisor {
       await this.prompt(message);
       await settled;
       let text = this.streamedText.trim();
+      let thinking = this.streamedThinking.trim();
+      const error = this.streamedError.trim();
       if (!text) {
         const result = await this.getLastAssistantText();
         const data = result.data;
@@ -169,11 +248,14 @@ export class PiRpcSupervisor {
           ? String((data as { text?: string | null }).text ?? '').trim()
           : '';
       }
-      if (!text && !this.aborted) throw new Error('Pi 没有返回文字。');
-      return { text, stopped: this.aborted };
+      if (!text && !this.aborted) {
+        throw new Error(error || 'Pi 没有返回文字。');
+      }
+      return { text, thinking, stopped: this.aborted, ...(error ? { error } : {}) };
     } finally {
       this.active = false;
       this.onDelta = null;
+      this.onStreaming = null;
     }
   }
 
@@ -238,24 +320,50 @@ export class PiRpcSupervisor {
         else request.resolve(message);
         continue;
       }
+      if (message.type === 'agent_start') {
+        this.onStreaming?.();
+        this.onStreaming = null;
+      }
+      if (message.type === 'message_start') {
+        const started = message.message as { role?: unknown } | undefined;
+        if (started?.role === 'assistant') {
+          this.streamedText = '';
+          this.streamedThinking = '';
+          this.streamedError = '';
+        }
+      }
       if (message.type === 'message_update') {
         const deltaEvent = message.assistantMessageEvent;
-        if (deltaEvent?.type === 'text_delta' && typeof deltaEvent.delta === 'string' && deltaEvent.delta) {
+        if (deltaEvent?.type === 'thinking_delta' && typeof deltaEvent.delta === 'string' && deltaEvent.delta) {
+          this.streamedThinking += deltaEvent.delta;
+          this.onEvent({ type: 'wmb_thinking_delta', text: this.streamedThinking });
+        } else if (deltaEvent?.type === 'text_delta' && typeof deltaEvent.delta === 'string' && deltaEvent.delta) {
           this.streamedText += deltaEvent.delta;
           this.onDelta?.(this.streamedText);
           this.onEvent({ type: 'wmb_text_delta', text: this.streamedText });
         } else {
+          const partialThinking = assistantThinkingFromMessage(message.message);
+          if (partialThinking && partialThinking !== this.streamedThinking) {
+            this.streamedThinking = partialThinking;
+            this.onEvent({ type: 'wmb_thinking_delta', text: this.streamedThinking });
+          }
           const partial = assistantTextFromMessage(message.message);
           if (partial && partial !== this.streamedText) {
             this.streamedText = partial;
             this.onDelta?.(this.streamedText);
             this.onEvent({ type: 'wmb_text_delta', text: this.streamedText });
           }
+          const partialError = assistantErrorFromMessage(message.message);
+          if (partialError) this.streamedError = partialError;
         }
       }
       if (message.type === 'message_end') {
         const finalText = assistantTextFromMessage(message.message);
         if (finalText) this.streamedText = finalText;
+        const finalThinking = assistantThinkingFromMessage(message.message);
+        if (finalThinking) this.streamedThinking = finalThinking;
+        const finalError = assistantErrorFromMessage(message.message);
+        if (finalError) this.streamedError = finalError;
       }
       if (message.type === 'agent_settled') {
         const waiters = this.settleWaiters.splice(0, this.settleWaiters.length);
@@ -272,6 +380,7 @@ export class PiRpcSupervisor {
     for (const waiter of waiters) waiter.reject(error);
     this.active = false;
     this.onDelta = null;
+    this.onStreaming = null;
   }
 
   private exitError(code: number | null): string {

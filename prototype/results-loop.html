@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>复盘 · 运营学习闭环 — WMB 可交互设计稿</title>
+<link rel="stylesheet" href="./results-loop.css"/>
+</head>
+<body>
+<div class="page">
+
+  <header class="topbar">
+    <div>
+      <h1>复盘</h1>
+      <p class="sub">运营学习闭环 · 数据 → 模式 → 方法库 → 下一轮行动</p>
+    </div>
+    <button class="period-btn" id="periodBtn">本周 · 7/24 – 7/30 ▾</button>
+  </header>
+
+  <div class="stat-strip" id="statStrip"></div>
+
+  <div class="filters">
+    <div class="chip-group" id="pfChips"><span>平台</span></div>
+    <div class="chip-group" id="fmtChips"><span>形式</span></div>
+  </div>
+
+  <!-- Pi 周期复盘草案：人机协同的核心 —— Pi 扫全量数据给草案，人定稿 -->
+  <section class="hero" id="hero"></section>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-head">
+        <p class="eyebrow">组合形态 · 每条内容一个点 / 聚合分位带</p>
+        <div class="tabs" id="chartTabs">
+          <button data-tab="scatter" class="on">表现散点</button>
+          <button data-tab="curve">增长形态</button>
+          <button data-tab="heat">形式 × 平台热图</button>
+        </div>
+      </div>
+      <div id="chartWrap"></div>
+      <div class="legend" id="chartLegend"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head"><p class="eyebrow">模式发现 · Pi 从本期数据中提出</p></div>
+        <div id="patterns"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><p class="eyebrow">方法库回摆 · 结论被验证还是否定</p></div>
+        <div id="findings"></div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="panel" style="margin-bottom:18px">
+    <div class="panel-head">
+      <p class="eyebrow">行动聚合 · 本周期全部复盘的 Keep / Stop / Change</p>
+      <span class="eyebrow" style="text-transform:none;letter-spacing:0">→ 右侧为闭环证据：被后续方案引用次数</span>
+    </div>
+    <div class="actions-grid" id="actionsGrid"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <p class="eyebrow">待复盘 · 发布超过 72h 还没有复盘</p>
+      <button class="mini-btn" id="piReviewAll">让 Pi 全部复盘</button>
+    </div>
+    <div class="pending-list" id="pendingList"></div>
+  </section>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script src="./results-loop.js"></script>
+</body>
+</html>

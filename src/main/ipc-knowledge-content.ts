@@ -4,9 +4,12 @@ import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { getToday } from './workbench';
 import { getGitHubRankings } from './github-rankings';
+import { readRankingCache, writeRankingCache } from './ranking-cache';
 import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, listKnowledgeSources, listKnowledgeTopics, listRediscovery, updateKnowledgeDomain, updateKnowledgeSource, type ManagementStatus, type VerificationStatus } from './knowledge';
 import { addKnowledgeCanvasNode, createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeCanvas, createKnowledgeRelation, decideKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeCanvases, listKnowledgeContextPackages, moveKnowledgeCanvasNodes, previewKnowledgeContextPackage, removeKnowledgeCanvasNode, updateCreativeBriefIdempotent, updateKnowledgeCanvas, updateKnowledgeRelation } from './knowledge-canvas';
-import { copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, getContentProject, getStudio, listContentProjects, saveCoreVersion, updateContentProject, type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus } from './content';
+import { copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject, getContentProject, getStudio, listContentProjects, saveCoreVersion, updateContentProject, type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus } from './content';
+import { upsertSource } from './sources';
+import { success } from './result';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -14,7 +17,25 @@ type Dependencies = {
 };
 
 export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: Dependencies): void {
-  ipcMain.handle('rankings:github-ai', (_event, refresh = false) => getGitHubRankings(refresh));
+  ipcMain.handle('rankings:get-cached', async () => {
+    const root = await loadSelectedDataRoot();
+    if (!root) return null;
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return readRankingCache(db); } finally { db.close(); }
+  });
+  ipcMain.handle('rankings:github-ai', async (_event, refresh = false) => {
+    const value = await getGitHubRankings(refresh);
+    const root = await loadSelectedDataRoot();
+    if (!root) return value;
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try {
+      const cached = readRankingCache(db);
+      const freshReady = value.boards.some((board) => board.status === 'ready');
+      if (!freshReady && cached?.boards.some((board) => board.status === 'ready')) return cached;
+      if (freshReady) writeRankingCache(db, value);
+      return value;
+    } finally { db.close(); }
+  });
   ipcMain.handle('knowledge:list-sources', async (_event, input = {}) => {
     const root = await loadSelectedDataRoot(); if (!root) return null;
     const db = migrateDatabase(path.join(root.path, 'wmb.db')); try { return listKnowledgeSources(db, input); } finally { db.close(); }
@@ -189,6 +210,21 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return updateContentProject(database, input); } finally { database.close(); }
+  });
+  ipcMain.handle('sources:save-discovered', async (_event, input: { title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const saved = upsertSource(database, { title: input.title, originalUrl: input.originalUrl, summary: input.summary, author: input.author, categories: input.categories });
+      return success({ id: saved.id, created: saved.created });
+    } finally { database.close(); }
+  });
+  ipcMain.handle('studio:delete-project', async (_event, input: { projectId: string; expectedRevision: number }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return deleteContentProject(database, input); } finally { database.close(); }
   });
   ipcMain.handle('studio:copy-version', async (_event, input: { sourceProjectId: string; contentVersionId: string; title: string }) => {
     const dataRoot = await loadSelectedDataRoot();

@@ -76,6 +76,7 @@ Required error codes:
 - `CONFIRMATION_STALE`
 - `BROWSER_NEEDS_USER`
 - `PUBLICATION_UNKNOWN`
+- `X_LIST_UNKNOWN`
 - `METRIC_UNAVAILABLE`
 - `NOT_FOUND`
 - `VALIDATION_ERROR`
@@ -426,6 +427,8 @@ Pi runs as one supervised RPC subprocess with LF-delimited JSON messages, stream
 
 Every main view shares one collapsible Pi conversation dock. Page changes preserve the conversation and active task. A text response or `agent_end` alone is not success; WMB marks a task successful only after required business objects read back through the existing business API.
 
+普通 Pi 对话不设 WMB 级总时限：仅在 Pi 发出 `agent_settled`、用户显式 `abort`，或 Pi 返回真实错误/退出时结束。生成期间编辑框保持可用；空编辑框的主按钮为停止方块，非空编辑框发送 Pi 原生 `steer`，`Alt+Enter` 发送原生 `followUp`。WMB 只展示 Pi 的 `queue_update` 队列，不自建逐条取消、重排或伪撤回。历史撤回和重发必须由 Pi 原生 `fork` 创建新分支，不能只裁剪本地聊天记录；固定业务 Agent 的显式任务时限不受此条影响。
+
 ### CAP-015 Long-term knowledge compounding
 
 Links: REQ-002, REQ-003, REQ-004, REQ-011, REQ-012, REQ-014, AC-001, AC-002, AC-009, AC-010.
@@ -456,6 +459,20 @@ WMB resolves the context immediately before a Pi turn and sends the exact IDs, t
 
 A creative brief or content project created from that context stores its actual evidence/source references as part of that existing business object. UI, IPC, MCP and built-in Pi call the same business functions; MCP mutations are atomically idempotent by `request_id`.
 
+### CAP-017 X List workspace
+
+Links: REQ-001, REQ-002, REQ-005, REQ-006, REQ-013, REQ-016, AC-001, AC-012.
+
+「发现」中的 X Lists 是固定用途的列表管理与情报接入工作台，不是通用 X 客户端。它从同一个已选择的专用 X 登录态实时读取三类可访问 List：用户创建、用户关注、用户在其中。稳定身份是 X List ID 与规范 URL；名称不是身份。WMB 只持久化用户绑定为发现信源的 List 及每次操作的证据，不镜像全部成员或完整动态历史。
+
+用户创建的 List 支持创建、读取详情、编辑名称/描述/公开性、删除、分页查看成员以及按精确 handle 串行批量添加或移除成员。非当前账号拥有的 List 仅支持读取详情、成员和时间线，以及接入/移出 WMB 发现；WMB 不自动执行退出别人 List、拉黑创建者、私信、推荐搜索、置顶或任何未列出的 X 社交动作。
+
+每个外部写入先读取当前账号、List 身份/所有者、权限和必要的页面快照，生成冻结的变更集。创建、编辑、删除和成员批处理都必须由 UI 最终确认；MCP 和 Pi 只能读取或准备，不能确认。确认绑定账号、List、变更前快照和精确 diff；其中任一项变化使确认失效。删除还要求用户输入当前 List 名称再次确认。批量成员操作只需一次确认，但每个成员都要有平台读回结果。
+
+执行始终使用可见的专用 X 页面、单个可操作标签和串行节奏；用户可以随时接管或请求停止，停止只在当前原子页面动作完成后生效。平台出现登录、验证码、挑战、权限不足或选择器无法安全确认时，操作进入 `needs_user`。点击后无法读回实际状态时，操作进入 `unknown`，停止后续项目且不自动重试。操作状态为 `prepared`、`awaiting_confirmation`、`running`、`succeeded`、`partial`、`needs_user`、`unknown` 或 `failed`，与发布和指标 jobs 分开保存。
+
+绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源，不创建定时全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
+
 ## 4. UI and IPC contract
 
 The five required views are Today, Studio, Publish, Results, and Settings.
@@ -469,6 +486,7 @@ Preload exposes narrow IPC for:
 - settings read/update;
 - open data/log directories.
 - fixed Pi task start/read/cancel and Pi connection settings.
+- fixed X List reads, preparation and UI-only confirmation.
 
 Renderer must not pass SQL, arbitrary command names, arbitrary filesystem paths, or arbitrary browser URLs.
 
@@ -493,5 +511,6 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-013 | Data-root visibility | Real paths, usage, counts, reopen after whole-root move. |
 | EVAL-014 | Knowledge compounding | 250-source pagination, dual-state stale-write rejection, cross-day topic idempotency and topic/source-to-review readback. |
 | EVAL-015 | Knowledge canvas | Persistent real-object layout and typed relations, current-page default, exact multi-selection excluding a sentinel, Pi-session context identity without package/use writes, project evidence backlink, stale-write rejection and 250-node/1100px operation. |
+| EVAL-016 | X List workspace | Real selected X profile reads owned/followed/member List identities; an owned List member batch is frozen, UI-confirmed, serially read back and stoppable; stale snapshot becomes confirmation-stale; a bound List timeline writes traceable existing source items; unsafe external-list actions remain absent. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

@@ -23,7 +23,7 @@ export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser,
     if (current) return current;
     const config = readBrowserConfig(database);
     if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-    const runtime = await startBrowser(config);
+    const runtime = await startBrowser(config, { mode: 'quiet' });
     setBrowser(runtime);
     return runtime;
   };
@@ -104,7 +104,7 @@ export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser,
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return listMetricJobs(database, publicationId); } finally { database.close(); }
   });
-  ipcMain.handle('metrics:list-snapshots', async (_event, publicationId: string) => {
+  ipcMain.handle('metrics:list-snapshots', async (_event, publicationId?: string) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) return [];
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));

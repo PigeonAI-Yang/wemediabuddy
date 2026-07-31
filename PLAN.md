@@ -131,6 +131,7 @@ Deliver:
 - one supervised RPC process and thin WMB MCP extension;
 - durable, idempotent Pi task state with business-object readback;
 - one persistent collapsible Pi dock on every main page;
+- native Pi dock turn controls: no ordinary-chat deadline, stop/steer/follow-up, native queue display and forked conversation branches;
 - Today intelligence and Studio draft intents without an external chat.
 
 Gate: the packaged runtime starts, streams, aborts and exits; a real Pi task writes only through live WMB MCP; Today and Studio read back their required business objects; final publication remains manual.
@@ -212,3 +213,17 @@ Deliver:
 Detailed plan: `XIAOHONGSHU_MCP_PI_PLAN.md`.
 
 Gate: a packaged Windows app starts its own pinned Xiaohongshu MCP without external installation, Pi performs one real read-only collection flow and saves a source through WMB MCP, cookies remain only under the selected data root, write tools are absent, and application exit leaves no child process.
+
+## M-1600 X List workspace
+
+Scope: CAP-017.
+
+Deliver:
+
+- fixed, visible, serial X List executor using the selected dedicated X profile;
+- persisted List bindings, confirmation-bound operation records and per-member readback;
+- owned/followed/member List read model and permission-bounded management commands;
+- UI-only confirmation, MCP/Pi read-and-prepare commands, and Discover List workspace;
+- explicit bounded List-timeline collection into existing sources.
+
+Gate: EVAL-016 passes with a real selected X profile, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback.

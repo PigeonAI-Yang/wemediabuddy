@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import { SourceMark } from './source-mark';
-import type { RankingContext, RankingContextItem } from './app-types';
+import { PlatformMark } from './platform-mark';
 import { formatNames, platformNames } from './app-types';
 export function formatSourcePublishedAt(value?: string | null): string | null {
   if (!value) return null;
@@ -20,23 +20,34 @@ export function formatSourcePublishedAt(value?: string | null): string | null {
   return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`;
 }
 
-function latestSourcePublishedAt(sourceIds: string[], sources: TodaySource[]): string | null {
-  let latestMs = Number.NEGATIVE_INFINITY;
-  let latest: string | null = null;
+function latestSourceTime(sourceIds: string[], sources: TodaySource[]): { at: string | null; kind: 'published' | 'collected' | null } {
+  let bestPublishedMs = Number.NEGATIVE_INFINITY;
+  let bestPublished: string | null = null;
+  let bestCollectedMs = Number.NEGATIVE_INFINITY;
+  let bestCollected: string | null = null;
   for (const id of sourceIds) {
     const source = sources.find((item) => item.id === id);
-    if (!source?.publishedAt) continue;
-    const ms = Date.parse(source.publishedAt);
-    if (Number.isNaN(ms)) {
-      if (!latest) latest = source.publishedAt;
-      continue;
+    if (!source) continue;
+    if (source.publishedAt) {
+      const ms = Date.parse(source.publishedAt);
+      if (!Number.isNaN(ms) && ms >= bestPublishedMs) {
+        bestPublishedMs = ms;
+        bestPublished = source.publishedAt;
+      } else if (Number.isNaN(ms) && !bestPublished) {
+        bestPublished = source.publishedAt;
+      }
     }
-    if (ms >= latestMs) {
-      latestMs = ms;
-      latest = source.publishedAt;
+    if (source.collectedAt) {
+      const ms = Date.parse(source.collectedAt);
+      if (!Number.isNaN(ms) && ms >= bestCollectedMs) {
+        bestCollectedMs = ms;
+        bestCollected = source.collectedAt;
+      }
     }
   }
-  return latest;
+  if (bestPublished) return { at: bestPublished, kind: 'published' };
+  if (bestCollected) return { at: bestCollected, kind: 'collected' };
+  return { at: null, kind: null };
 }
 
 type PriorityGrade = 'SSS' | 'S' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
@@ -55,12 +66,15 @@ function priorityGrade(value: number | null | undefined): PriorityGrade {
 }
 
 function priorityLabel(value: number | null | undefined): string {
-  return `${priorityGrade(value)}级`;
+  return priorityGrade(value);
 }
 export function Icon({ name }: { name: string }): React.JSX.Element {
   const paths: Record<string, React.JSX.Element> = {
     today: <><path d="M3 5h18v16H3z"/><path d="M7 3v4M17 3v4M3 10h18"/></>,
     library: <><path d="M3 4h7l2 3h9v13H3z"/></>,
+    discover: <><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.3 4.7-4.7 2.3 2.3-4.7z"/></>,
+    knowledge: <><circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5" r="2"/><circle cx="19.5" cy="5" r="2"/><circle cx="4.5" cy="19" r="2"/><circle cx="19.5" cy="19" r="2"/><path d="m6 6.5 4.2 3.7M18 6.5l-4.2 3.7M6 17.5l4.2-3.7M18 17.5l-4.2-3.7"/></>,
+    canvas: <><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.4 10.8 7.2-4.6M8.4 13.2l7.2 4.6"/></>,
     studio: <><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10z"/><path d="m13.5 7 3.5 3.5"/></>,
     publish: <><path d="m3 11 18-8-7 18-3-7z"/><path d="m11 14 10-11"/></>,
     results: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></>,
@@ -84,7 +98,7 @@ function SourceList({ sources, ids, open, close, openLibrary }: { sources: Today
         <div>
           <span className="source-type">{source.categories[0] || '入库资料'}</span>
           <h3>{source.title}</h3>
-          <p>{formatSourcePublishedAt(source.publishedAt) ?? '发布时间未知'}{source.author ? ` · ${source.author}` : (domainOf(source.canonicalUrl) ? ` · ${domainOf(source.canonicalUrl)}` : '')}</p>
+          <p>{formatSourcePublishedAt(source.publishedAt) ?? (formatSourcePublishedAt(source.collectedAt) ? `入库 ${formatSourcePublishedAt(source.collectedAt)}` : '时间未知')}{source.author ? ` · ${source.author}` : (domainOf(source.canonicalUrl) ? ` · ${domainOf(source.canonicalUrl)}` : '')}</p>
         </div>
         {source.canonicalUrl && <button className="text-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}
       </article>)}
@@ -94,26 +108,71 @@ function SourceList({ sources, ids, open, close, openLibrary }: { sources: Today
   </aside>;
 }
 
+
+function CreateIconButton({ onClick, primary }: { onClick: () => void; primary?: boolean }): React.JSX.Element {
+  return <button
+    type="button"
+    className={`icon-action-button create-action${primary ? ' primary' : ''}`}
+    aria-label="开始创作"
+    title="开始创作"
+    onClick={(event) => { event.stopPropagation(); onClick(); }}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+      <path
+        d="m4 20 4.5-1 10-10-3.5-3.5-10 10z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m13.5 7 3.5 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </button>;
+}
+
 function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
   onCreate: (item: TodayPlanItem) => void; sources: TodaySource[];
 }): React.JSX.Element {
-  const publishedAt = latestSourcePublishedAt(item.sourceIds, sources);
-  const publishedLabel = formatSourcePublishedAt(publishedAt) ?? '发布时间未知';
-  if (!primary) return <article data-opportunity-card className={`opportunity-small${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
-    <div className="opportunity-tags"><strong data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong><time dateTime={publishedAt ?? undefined}>{publishedLabel}</time></div>
+  const sourceTime = latestSourceTime(item.sourceIds, sources);
+  const timeText = formatSourcePublishedAt(sourceTime.at);
+  const timeLabel = timeText
+    ? (sourceTime.kind === 'collected' ? `入库 ${timeText}` : timeText)
+    : '时间未知';
+  if (!primary) return <article data-opportunity-card className={`opp-row${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
+    <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{priorityGrade(item.priority)}</strong>
+    <div className="opp-main">
+      <div className="opp-title">{item.title}</div>
+      <div className="opp-why">{item.whyNow}</div>
+      <div className="opp-meta">
+        {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
+        <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
+        <span className="opp-faint">工作量 {item.effortEstimate}</span>
+      </div>
+    </div>
     <span className="opportunity-check" aria-hidden="true">✓</span>
-    <h3>{item.title}</h3>
-    <dl><dt>为什么现在值得做</dt><dd>{item.whyNow}</dd><dt>建议表达角度</dt><dd>{item.angle}</dd></dl>
-    <footer><span>关联资料 {item.sourceIds.length} 条</span><span>{item.platforms.map((value) => platformNames[value] || value).join('、')}</span><button onClick={(event) => { event.stopPropagation(); onCreate(item); }}>进入创作</button></footer>
+    <CreateIconButton onClick={() => onCreate(item)}/>
   </article>;
-  return <article data-opportunity-card className={`opportunity-primary${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
-    <div className="opportunity-tags"><strong data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong><time dateTime={publishedAt ?? undefined}>{publishedLabel}</time><span>关联资料 {item.sourceIds.length} 条</span></div>
+  return <article data-opportunity-card className={`opportunity-primary hero-card${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
     <span className="opportunity-check" aria-hidden="true">✓</span>
+    <div className="opportunity-tags hero-tags">
+      <strong data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong>
+      {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
+      <span className="pill violet">时效 {item.timeliness}</span>
+      <time dateTime={sourceTime.at ?? undefined}>{timeLabel}</time>
+    </div>
     <h2>{item.title}</h2>
+    <p className="hero-why">入选理由：{item.whyNow}</p>
     <div className="editorial-brief">
       <dl className="brief-core">
-        <div><dt>为什么现在</dt><dd>{item.whyNow}</dd></div>
         <div><dt>表达角度</dt><dd>{item.angle}</dd></div>
         <div><dt>核心观点</dt><dd>{item.pointOfView}</dd></div>
       </dl>
@@ -126,27 +185,25 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
         </dl>
       </section>
     </div>
-    <footer>
-      <div className="meta-line">
-        <span>平台：{item.platforms.map((value) => platformNames[value] || value).join('、')}</span>
-        <span>形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
-        <span>制作：{item.effortEstimate}</span>
-      </div>
-      <button className="primary-button" onClick={(event) => { event.stopPropagation(); onCreate(item); }}>进入创作</button>
+    <footer className="hero-meta">
+      <span className="pill gray">目标：{item.targetAudience}</span>
+      <span className="pill gray">形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
+      <span className="pill gray">工作量 {item.effortEstimate}</span>
+      <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
+      <CreateIconButton primary onClick={() => onCreate(item)}/>
     </footer>
   </article>;
 }
 
-export function TodayView({ today, refresh, openStudio, openLibrary, openPublish, publications, selectedItems, onSelectionChange, planDate }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, planDate, onStatusChange }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void;
   openStudio: () => void;
   openLibrary: () => void;
-  openPublish: () => void;
-  publications: Awaited<ReturnType<typeof window.wmb.getPublications>>;
   selectedItems: TodayPlanItem[];
   onSelectionChange: (items: TodayPlanItem[]) => void;
   planDate: string;
+  onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
 }): React.JSX.Element {
   const phaseLabels: Record<string, string> = {
     starting: '正在启动',
@@ -171,8 +228,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openPublish
   const items = today?.plan?.items ?? [];
   const primary = items[0] ?? null;
   const pendingActions = today?.pendingActions ?? [];
-  const awaiting = (publications ?? []).filter((item) => item.publication.status === 'awaiting_confirmation');
-  const pendingCount = pendingActions.length + awaiting.length;
+  // Publish confirmation belongs on the Publish page, not the Today home rail.
+  const pendingCount = pendingActions.length;
   const sssCount = items.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
   useEffect(() => {
@@ -206,6 +263,15 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openPublish
     const clock = window.setInterval(() => tick((value) => value + 1), 1000);
     return () => { window.clearInterval(poll); window.clearInterval(clock); };
   }, [planDate]);
+  useEffect(() => {
+    if (!onStatusChange) return;
+    if (!taskStatus) {
+      onStatusChange(null);
+      return;
+    }
+    onStatusChange({ text: taskStatus, running });
+    return () => onStatusChange(null);
+  }, [taskStatus, running, onStatusChange]);
   const create = async (item: TodayPlanItem) => { await window.wmb.createProjectFromPlanItem(item.id); openStudio(); };
   const toggleSelection = (item: TodayPlanItem) => {
     onSelectionChange(selectedItems.some((selected) => selected.id === item.id)
@@ -239,79 +305,147 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openPublish
       window.setTimeout(() => refresh(), 300);
     }
   };
+  const dateTitle = (() => {
+    const date = new Date(`${planDate}T12:00:00+08:00`);
+    const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+    return `${date.getMonth() + 1} 月 ${date.getDate()} 日 · ${week}`;
+  })();
+  const taskPhaseLabel = task?.phase ? (phaseLabels[task.phase] ?? '正在处理') : '正在处理';
+  const planned = Math.max(0, Number(task?.progress?.planned ?? 0));
+  const processed = Math.max(0, Number(task?.progress?.processed ?? 0));
+  const failed = Math.max(0, Number(task?.progress?.failed ?? 0));
+  const verified = Math.max(0, Number(task?.progress?.verified ?? 0));
+  const saved = Math.max(0, Number(task?.progress?.saved ?? 0));
+  const opportunityCount = Math.max(0, Number(task?.progress?.opportunityCount ?? 0));
+  const progressRatio = planned > 0 ? Math.min(1, processed / planned) : (running ? Math.min(0.9, 0.12 + processed * 0.08) : 0);
+  const progressPct = Math.round(progressRatio * 100);
+  const currentSource = String(task?.progress?.currentSource || '').trim();
+  const lastEvent = Array.isArray(task?.events) && task.events.length
+    ? task.events[task.events.length - 1]
+    : null;
+  const lastEventText = lastEvent?.message ? String(lastEvent.message).trim() : '';
+  const sourceElapsedSec = task?.progress?.lastActivityAt
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(task.progress.lastActivityAt)) / 1000))
+    : 0;
+  // Heartbeat keeps updating while Pi is alive; source activity only moves on real route progress.
+  // A long silent source is normal (single route can take minutes). Only dead heartbeat means stuck.
+  const heartbeatAgeSec = task?.heartbeatAt
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(task.heartbeatAt)) / 1000))
+    : (task?.updatedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(task.updatedAt)) / 1000)) : 0);
+  const reallyStuck = running && heartbeatAgeSec > 60;
+  const elapsedMin = task?.createdAt
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(task.createdAt)) / 60000))
+    : 0;
+  const formatDuration = (totalSec: number) => {
+    if (totalSec < 60) return `${totalSec}s`;
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return sec ? `${min}m${sec}s` : `${min}m`;
+  };
   return <div className="today-layout" onClick={(event) => {
       const target = event.target as HTMLElement;
       if (!target.closest('[data-opportunity-card], button, a, input, select, textarea')) onSelectionChange([]);
     }}>
     <section className="today-main">
-      <header className="page-heading">
-        <div><h1>今日内容简报</h1></div>
+      <header className="page-heading today-heading">
+        <div><h1>{dateTitle}</h1></div>
         <div className="heading-actions">
-          <button className="primary-button" disabled={running} onClick={() => void startIntelligence()}>{running ? '生成中…' : '开始今日情报'}</button>
-          <button className="sources-toggle" onClick={() => setSourcesOpen(true)}>查看资料</button>
+          <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
           <button className="refresh-button" onClick={refresh}>↻ 刷新</button>
+          <button className="primary-button" disabled={running} onClick={() => void startIntelligence()}>{running ? '生成中…' : primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
         </div>
       </header>
-      {taskStatus && <p className="task-status" data-running={running ? 'true' : 'false'}>{taskStatus}</p>}
       <div className="stat-strip">
         <div className="stat-cell"><div className="stat-label">今日新资料</div><div className="stat-value">{sources.length}</div><div className="stat-delta">已入库可追溯</div></div>
         <div className="stat-cell"><div className="stat-label">内容机会</div><div className="stat-value">{items.length}</div><div className={`stat-delta${sssCount ? ' up' : ''}`}>{sssCount ? `${sssCount} 个 SSS 级` : items.length ? '按等级排列' : '等待生成'}</div></div>
-        <div className="stat-cell"><div className="stat-label">待你处理</div><div className="stat-value" data-tone={pendingCount ? 'amber' : undefined}>{pendingCount}</div><div className="stat-delta">{awaiting.length ? `${awaiting.length} 项发布确认` : pendingCount ? '需要人工介入' : '暂无待办'}</div></div>
+        <div className="stat-cell"><div className="stat-label">待你处理</div><div className="stat-value" data-tone={pendingCount ? 'amber' : undefined}>{pendingCount}</div><div className="stat-delta">{pendingCount ? '需要人工介入' : '暂无待办'}</div></div>
         <div className="stat-cell"><div className="stat-label">进行中项目</div><div className="stat-value">{studioActive ?? '–'}</div><div className="stat-delta">创作中的内容项目</div></div>
       </div>
-      {(pendingActions.length > 0 || awaiting.length > 0) && <div className="action-strip">
-        {pendingActions.map((action) => <div className="action-card" key={action}>
-          <div className="action-icon" aria-hidden="true">✋</div>
-          <div>
-            <div className="action-title">{action}</div>
-            <div className="action-sub">需要人工处理后流程才能继续</div>
-            {action.includes('运营方案') && <button className="action-go" disabled={running} onClick={() => void startIntelligence()}>开始今日情报</button>}
+
+      {task?.status === 'running' && <section className="intelligence-progress" aria-live="polite">
+        <div className="intelligence-progress-head">
+          <div className="intelligence-progress-title">
+            <strong>{taskPhaseLabel}</strong>
+            {currentSource ? <span className="intelligence-source">当前：{currentSource}</span> : null}
           </div>
-        </div>)}
-        {awaiting.map((item) => <div className="action-card" key={item.publication.id}>
-          <div className="action-icon" aria-hidden="true">📣</div>
-          <div>
-            <div className="action-title">确认 {platformNames[item.publication.platform] ?? item.publication.platform} 发布内容</div>
-            <div className="action-sub">{item.payload?.title || item.payload?.body.slice(0, 42) || '内容版本与素材已就绪'}</div>
-            <button className="action-go" onClick={openPublish}>前往发布 →</button>
+          <div className="intelligence-progress-meta">
+            {reallyStuck
+              ? <em className="intelligence-stalled-pill">疑似卡死 {formatDuration(heartbeatAgeSec)}</em>
+              : (currentSource && sourceElapsedSec > 0
+                ? <em className="intelligence-source-timer">本源 {formatDuration(sourceElapsedSec)}</em>
+                : null)}
+            <span>{planned > 0 ? `${processed}/${planned}` : `${progressPct}%`}</span>
+            <span>已运行 {elapsedMin} 分钟</span>
           </div>
-        </div>)}
-      </div>}
-      {task?.status === 'running' && <section className="intelligence-progress">
-        <div className="intelligence-progress-head"><strong>{phaseLabels[task.phase] ?? '正在处理'}</strong><span>已运行 {Math.max(0, Math.floor((Date.now() - Date.parse(task.createdAt)) / 60000))} 分钟</span></div>
-        <p>当前来源：{task.progress?.currentSource || '准备中'} · 最后活动 {task.progress?.lastActivityAt ? Math.max(0, Math.floor((Date.now() - Date.parse(task.progress.lastActivityAt)) / 1000)) : 0} 秒前</p>
-        {task.progress?.lastActivityAt && Date.now() - Date.parse(task.progress.lastActivityAt) > 45_000 &&
-          <p className="intelligence-stalled">当前来源超过 45 秒没有业务进展；后台心跳仍会继续更新，可跳过此来源。</p>}
-        <div className="intelligence-counts">
-          <span>计划 {task.progress?.planned ?? 0}</span><span>处理 {task.progress?.processed ?? 0}</span>
-          <span>失败 {task.progress?.failed ?? 0}</span><span>核验 {task.progress?.verified ?? 0}</span>
-          <span>保存 {task.progress?.saved ?? 0}</span><span>机会 {task.progress?.opportunityCount ?? 0}</span>
         </div>
-        <div className="intelligence-events">{(task.events ?? []).slice(-3).reverse().map((event: any) => <p key={`${event.at}-${event.message}`}>{event.message}</p>)}</div>
+        <div className="intelligence-bar" aria-label={`进度 ${progressPct}%`}>
+          <i style={{ width: `${Math.max(progressPct, running ? 6 : 0)}%` }} />
+        </div>
+        <div className="intelligence-counts" aria-label="进度计数">
+          <span><b>{planned}</b>计划</span>
+          <span><b>{processed}</b>处理</span>
+          <span><b>{failed}</b>失败</span>
+          <span><b>{verified}</b>核验</span>
+          <span><b>{saved}</b>保存</span>
+          <span><b>{opportunityCount}</b>机会</span>
+        </div>
+        {reallyStuck ? (
+          <p className="intelligence-last-event">任务心跳超过 60 秒未更新，进程可能已挂起；可跳过当前来源或取消后重试。</p>
+        ) : lastEventText && lastEventText !== currentSource && !(currentSource && lastEventText.includes(currentSource)) ? (
+          <p className="intelligence-last-event">{lastEventText}</p>
+        ) : null}
         <div className="intelligence-controls">
           <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'skip_source' })}>跳过当前来源</button>
           <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' })}>保存已有结果并停止</button>
           <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' })}>取消任务</button>
         </div>
       </section>}
-      {primary ? <div className="today-feed">
-        {task?.status === 'running' && task.resultRefs?.planId !== today?.plan?.id && <p className="previous-plan-notice">以下是上一轮已完成结果；本轮新机会将在来源核验结束后更新。</p>}
-        <p className="eyebrow">最高机会 · {priorityGrade(primary.priority)}</p>
-        <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>
-        {items.length > 1 && <p className="eyebrow">全部机会 · 按等级</p>}
-        {items.length > 1 && <section className="other-opportunities"><div>{items.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>)}</div></section>}
-      </div> : <section className="empty-state"><h2>今日内容机会还在准备中</h2><p>点击“开始今日情报”，让 Pi 扫描并写入今天的内容机会。</p><button className="primary-button" disabled={running} onClick={() => void startIntelligence()}>{running ? '生成中…' : '开始今日情报'}</button></section>}
+      <div className="today-grid">
+        <div className="today-opps">
+          {primary ? <>
+            {task?.status === 'running' && task.resultRefs?.planId !== today?.plan?.id && <p className="previous-plan-notice">以下是上一轮已完成结果；本轮新机会将在来源核验结束后更新。</p>}
+            <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>
+            {items.length > 1 && <div className="opp-list">{items.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>)}</div>}
+          </> : <section className="empty-state">
+            <h2>{running ? '正在侦察今日内容机会' : '今日内容机会还在准备中'}</h2>
+            <p>{running
+              ? (currentSource ? `正在处理：${currentSource}` : '来源扫描和整理完成后，机会会自动出现在这里。')
+              : '点击右上角“开始今日情报”，让 Pi 扫描并写入今天的内容机会。'}</p>
+            {!running && <button className="primary-button" onClick={() => void startIntelligence()}>开始今日情报</button>}
+          </section>}
+        </div>
+        <aside className="today-rail">
+          {pendingActions.length > 0 && <>
+            <p className="eyebrow">待你处理 · {pendingCount}</p>
+            {pendingActions.map((action) => <div className="action-card" key={action}>
+              <div className="action-icon" aria-hidden="true">✋</div>
+              <div>
+                <div className="action-title">{action}</div>
+                <div className="action-sub">需要人工处理后流程才能继续</div>
+                {action.includes('运营方案') && <button className="action-go" disabled={running} onClick={() => void startIntelligence()}>开始今日情报</button>}
+              </div>
+            </div>)}
+          </>}
+          <div className="feed-list">
+            {sources.slice(0, 6).map((source) => <div className="feed-item" key={source.id}>
+              <SourceMark canonicalUrl={source.canonicalUrl}/>
+              <div>
+                <div className="feed-title">{source.title}</div>
+                <div className="feed-sub"><span>{source.categories[0] || '入库资料'}</span><span>·</span><span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span></div>
+              </div>
+            </div>)}
+            {!sources.length && <p className="empty-copy rail-feed-empty">今日还没有入库资料。</p>}
+          </div>
+        </aside>
+      </div>
     </section>
     <button className={`drawer-backdrop${sourcesOpen ? ' open' : ''}`} aria-label="关闭关联资料" onClick={() => setSourcesOpen(false)}/>
     <SourceList sources={today?.sources ?? []} ids={[...new Set((selectedItems.length ? selectedItems : primary ? [primary] : []).flatMap((item) => item.sourceIds))]} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={openLibrary}/>
   </div>;
 }
 
-export function LibraryView({ rankingContext, onRankingContextChange }: {
-  rankingContext: RankingContext;
-  onRankingContextChange: (context: RankingContext) => void;
-}): React.JSX.Element {
-  const [section, setSection] = useState<'rankings' | 'saved' | 'topics' | 'rediscovery'>('rankings');
+export function LibraryView(): React.JSX.Element {
+  const [section, setSection] = useState<'saved' | 'topics' | 'rediscovery'>('saved');
   const [knowledge, setKnowledge] = useState<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>(null);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [verificationFilter, setVerificationFilter] = useState('');
@@ -321,18 +455,6 @@ export function LibraryView({ rankingContext, onRankingContextChange }: {
   const [context, setContext] = useState<any>(null);
   const [selectedKnowledge, setSelectedKnowledge] = useState<any>(null);
   const [rediscovery, setRediscovery] = useState<{ unused: any[]; watching: any[]; pending: any[] }>({ unused: [], watching: [], pending: [] });
-  const [rankings, setRankings] = useState<Awaited<ReturnType<typeof window.wmb.getGitHubRankings>> | null>(null);
-  const [boardId, setBoardId] = useState('github-daily');
-  const [rankingError, setRankingError] = useState('');
-  const [loadingRankings, setLoadingRankings] = useState(false);
-  const loadRankings = async (refresh = false) => {
-    setLoadingRankings(true);
-    setRankingError('');
-    try { setRankings(await window.wmb.getGitHubRankings(refresh)); }
-    catch (error) { setRankingError(error instanceof Error ? error.message : String(error)); }
-    finally { setLoadingRankings(false); }
-  };
-  useEffect(() => { void loadRankings(); }, []);
   const loadKnowledge = async () => setKnowledge(await window.wmb.listKnowledgeSources({
     query: knowledgeQuery, verificationStatus: verificationFilter || undefined, managementStatus: managementFilter || undefined,
     limit: 50, offset: knowledgeOffset
@@ -342,54 +464,13 @@ export function LibraryView({ rankingContext, onRankingContextChange }: {
     if (section === 'topics') void window.wmb.listKnowledgeTopics({ limit: 100 }).then(setTopics);
     if (section === 'rediscovery') void window.wmb.getRediscovery().then(setRediscovery);
   }, [section]);
-  const board = rankings?.boards.find((item) => item.id === boardId) ?? rankings?.boards[0];
-  const selectBoard = (selectedBoard: NonNullable<typeof board>) => {
-    const selectedItems = selectedBoard.items.map((item) => ({ ...item, boardId: selectedBoard.id, boardLabel: selectedBoard.label }));
-    setBoardId(selectedBoard.id);
-    onRankingContextChange({
-      boards: [{ id: selectedBoard.id, label: selectedBoard.label, sourceUrl: selectedBoard.sourceUrl, items: selectedItems }],
-      items: []
-    });
-  };
-  const toggleRankingItem = (item: RankingContextItem) => {
-    const selected = rankingContext.items.some((value) => value.boardId === item.boardId && value.name === item.name);
-    onRankingContextChange({
-      boards: [],
-      items: selected
-        ? rankingContext.items.filter((value) => value.boardId !== item.boardId || value.name !== item.name)
-        : [...rankingContext.items, item]
-    });
-  };
-  return <section className="page library-page" onClick={(event) => {
-    const target = event.target as HTMLElement;
-    if (!target.closest('[data-ranking-item], button, a, input, select, textarea')) onRankingContextChange({ boards: [], items: [] });
-  }}>
-    <header className="page-heading"><div><span>发现与积累</span><h1>{section === 'rankings' ? 'AI 榜单' : section === 'topics' ? '长期主题' : section === 'rediscovery' ? '重新发现' : '值得长期使用的资料'}</h1><p>{section === 'rankings' ? '直接看正在增长的项目、Skill、MCP、模型和 AI 产品。' : '资料会持续归入主题，并与后续内容、发布和复盘相连。'}</p></div>{section === 'saved' && <div className="stat-summary"><strong>{knowledge?.total ?? 0}</strong><span>条入库资料</span></div>}</header>
+  return <section className="page library-page">
     <nav className="library-sections" aria-label="资料库分页面">
-      <button className={section === 'rankings' ? 'active' : ''} onClick={() => setSection('rankings')}>AI 榜单</button>
       <button className={section === 'saved' ? 'active' : ''} onClick={() => setSection('saved')}>入库资料</button>
       <button className={section === 'topics' ? 'active' : ''} onClick={() => setSection('topics')}>主题</button>
       <button className={section === 'rediscovery' ? 'active' : ''} onClick={() => setSection('rediscovery')}>重新发现</button>
     </nav>
-    {section === 'rankings' ? <>
-      <div className="page-toolbar ranking-toolbar">
-        <div className="filter-row">{rankings?.boards.map((item) => <button className={`filter${item.id === board?.id ? ' active' : ''}${rankingContext.boards.some((selected) => selected.id === item.id) ? ' context-selected' : ''}`} key={item.id} onClick={() => selectBoard(item)}>{rankingContext.boards.some((selected) => selected.id === item.id) ? '✓ ' : ''}{item.label}</button>)}</div>
-        <div className="ranking-actions"><button className="refresh-button" disabled={loadingRankings} title={loadingRankings ? '正在刷新榜单' : '刷新榜单'} aria-label={loadingRankings ? '正在刷新榜单' : '刷新榜单'} onClick={() => void loadRankings(true)}><span className={loadingRankings ? 'ranking-refresh-spinning' : ''} aria-hidden="true">↻</span></button></div>
-      </div>
-      {rankingError ? <section className="empty-state library-empty"><h2>榜单读取失败</h2><p>{rankingError}</p></section>
-        : !rankings || loadingRankings && !board ? <section className="ranking-loading">正在读取最新榜单…</section>
-        : board?.status === 'unavailable' ? <section className="empty-state library-empty"><h2>{board.label} 暂时不可读</h2><p>{board.error}</p><button onClick={() => void window.wmb.openExternal(board.sourceUrl)}>打开来源</button></section>
-        : <div className="ranking-list">{board?.items.map((item) => {
-          const contextItem = { ...item, boardId: board.id, boardLabel: board.label };
-          const selected = rankingContext.items.some((value) => value.boardId === board.id && value.name === item.name);
-          return <article key={`${board.id}-${item.name}`} data-ranking-item className={selected ? 'selected' : ''} onClick={() => toggleRankingItem(contextItem)}>
-          <strong className="ranking-number">{item.rank}</strong>
-          <div><h2>{item.name}</h2><p>{item.description || '该项目尚未提供简介。'}</p><small>{[item.language, item.stars && `★ ${item.stars}`, item.gained].filter(Boolean).join(' · ')}</small></div>
-          {selected && <span className="ranking-check" aria-label="已选中">✓</span>}
-          <button className="ranking-open" title="查看项目" aria-label={`查看 ${item.name}`} onClick={(event) => { event.stopPropagation(); void window.wmb.openExternal(item.url); }}><span aria-hidden="true">↗</span></button>
-        </article>; })}</div>}
-      {rankings && <p className="ranking-footnote">更新于 {new Date(rankings.fetchedAt).toLocaleString('zh-CN')} · 数据来自 <button onClick={() => board && void window.wmb.openExternal(board.sourceUrl)}>{board?.label}</button></p>}
-    </> : section === 'saved' ? <>
+    {section === 'saved' ? <>
       <div className="page-toolbar knowledge-toolbar">
         <input aria-label="搜索资料" placeholder="搜索标题、摘要或关键词" value={knowledgeQuery} onChange={(e) => { setKnowledgeQuery(e.target.value); setKnowledgeOffset(0); }}/>
         <span className="chip-label">核验</span>
@@ -397,16 +478,29 @@ export function LibraryView({ rankingContext, onRankingContextChange }: {
         <span className="chip-label">管理</span>
         {([['', '全部'], ['active', '活跃'], ['watching', '持续观察'], ['expired', '已过期'], ['archived', '已归档']] as const).map(([value, label]) => <button key={value} className={`chip${managementFilter === value ? ' on' : ''}`} aria-label={`管理状态 ${label}`} onClick={() => { setManagementFilter(value); setKnowledgeOffset(0); }}>{label}</button>)}
       </div>
-      {knowledge?.items.length ? <div className="library-list">{knowledge.items.map((source) => <article key={source.id} onClick={() => { setSelectedKnowledge(source); void window.wmb.getKnowledgeContext({ sourceId: source.id }).then(setContext); }}>
-        <SourceMark canonicalUrl={source.originalUrl}/>
-        <div><div className="library-meta"><span>{source.verificationStatus === 'verified' ? '已核验' : '待核验'} · {source.managementStatus === 'watching' ? '持续观察' : source.managementStatus === 'archived' ? '已归档' : '活跃'}</span><time>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt)}</time></div><h2>{source.title}</h2><p>{source.summary || '这条资料尚未补充摘要。'}</p><small>{source.topics || '尚未归入主题'} · 机会 {source.opportunityCount} · 内容 {source.projectCount} · 发布 {source.publicationCount}</small></div>
-        <div className="lib-side">
-          <span className={`pill-status ${source.verificationStatus === 'verified' ? 'green' : 'gray'}`}><span className="dot"/>{source.verificationStatus === 'verified' ? '已核验' : source.verificationStatus === 'disputed' ? '有争议' : source.verificationStatus === 'rejected' ? '已排除' : '待核验'}</span>
-          {source.managementStatus === 'watching' && <span className="pill-status blue">持续观察</span>}
-          {(source.managementStatus === 'archived' || source.managementStatus === 'expired') && <span className="pill-status gray">{source.managementStatus === 'archived' ? '已归档' : '已过期'}</span>}
-          {source.originalUrl && <button onClick={(event) => { event.stopPropagation(); void window.wmb.openExternal(source.originalUrl); }}>原文 ↗</button>}
-        </div>
-      </article>)}</div> : <section className="empty-state library-empty"><h2>没有匹配资料</h2><p>调整搜索或筛选条件后再看。</p></section>}
+      {knowledge?.items.length ? <div className="library-list">{knowledge.items.map((source) => {
+        const statePill = source.managementStatus === 'watching' ? { cls: 'blue', text: '观察中' }
+          : source.managementStatus === 'archived' ? { cls: 'gray', text: '已归档' }
+          : source.managementStatus === 'expired' ? { cls: 'gray', text: '已过期' }
+          : source.verificationStatus === 'verified' ? { cls: 'green', text: '已验证' }
+          : source.verificationStatus === 'disputed' ? { cls: 'amber', text: '有争议' }
+          : source.verificationStatus === 'rejected' ? { cls: 'gray', text: '已排除' }
+          : { cls: 'gray', text: '待验证' };
+        const tags = String(source.topics || '').split(/[,，、]/).map((tag: string) => tag.trim()).filter((tag: string) => tag && tag !== '尚未归入主题').slice(0, 4);
+        return <article className="lib-row" key={source.id} onClick={() => { setSelectedKnowledge(source); void window.wmb.getKnowledgeContext({ sourceId: source.id }).then(setContext); }}>
+          <SourceMark canonicalUrl={source.originalUrl}/>
+          <div className="lib-main">
+            <div className="lib-title">{source.title}</div>
+            <div className="lib-sum">{source.summary || '这条资料尚未补充摘要。'}</div>
+            <div className="lib-tags">{tags.map((tag: string) => <span className="tag" key={tag}>{tag}</span>)}<span className="tag lib-count">机会 {source.opportunityCount} · 内容 {source.projectCount} · 发布 {source.publicationCount}</span></div>
+          </div>
+          <div className="lib-side">
+            <span className={`pill-status ${statePill.cls}`}><span className="dot"/>{statePill.text}</span>
+            <span className="lib-time">{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt)}</span>
+            {source.originalUrl && <button onClick={(event) => { event.stopPropagation(); void window.wmb.openExternal(source.originalUrl); }}>原文 ↗</button>}
+          </div>
+        </article>;
+      })}</div> : <section className="empty-state library-empty"><h2>没有匹配资料</h2><p>调整搜索或筛选条件后再看。</p></section>}
       <div className="knowledge-pager"><button disabled={knowledgeOffset === 0} onClick={() => setKnowledgeOffset(Math.max(0, knowledgeOffset - 50))}>上一页</button><span>{knowledgeOffset + 1}–{Math.min(knowledgeOffset + 50, knowledge?.total ?? 0)} / {knowledge?.total ?? 0}</span><button disabled={!knowledge?.hasMore} onClick={() => setKnowledgeOffset(knowledgeOffset + 50)}>下一页</button></div>
       {context && <section className="knowledge-context"><button aria-label="关闭历史上下文" onClick={() => { setContext(null); setSelectedKnowledge(null); }}>×</button><h2>历史上下文</h2>
         {selectedKnowledge && <div className="knowledge-status-controls">

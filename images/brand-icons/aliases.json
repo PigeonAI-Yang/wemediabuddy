@@ -1,0 +1,8 @@
+{
+  "platform-x": "x",
+  "platform-wechat": "wechat",
+  "platform-xiaohongshu": "xiaohongshu",
+  "source-google-deepmind": "deepmind",
+  "source-openai": "openai",
+  "source-microsoft": "microsoft"
+}

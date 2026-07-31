@@ -1,4 +1,13 @@
-.pi-collapsed .pi-dock-toggle { right: 0; }
+.pi-collapsed .pi-dock-toggle,
+.pi-dock.collapsed .pi-dock-toggle,
+.app-shell.pi-collapsed .pi-dock-toggle {
+  /* pi column width is 0; left:0 is the screen right edge, translate keeps the tab outside. */
+  left: 0;
+  right: auto;
+  transform: translate(-100%, -50%);
+  border-right: 0;
+  opacity: 1;
+}
 .pi-dock-header {
   position: relative;
   display: grid; gap: 8px; border-bottom: 1px solid var(--border-soft); padding: 16px 16px 12px;
@@ -146,6 +155,57 @@
 .pi-bubble-wrap { display: grid; gap: 6px; margin: 0 0 16px; }
 .pi-bubble-wrap.user { justify-items: end; }
 .pi-bubble-wrap.assistant { justify-items: stretch; }
+
+.pi-thinking {
+  margin: 0 0 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, #7c6cff 6%);
+  overflow: hidden;
+}
+.pi-thinking > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+}
+.pi-thinking > summary::-webkit-details-marker { display: none; }
+.pi-thinking > summary span {
+  color: color-mix(in srgb, var(--accent) 78%, var(--ink));
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pi-thinking > summary small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .78;
+}
+.pi-thinking > summary::after {
+  content: '▾';
+  margin-left: auto;
+  opacity: .55;
+  transition: transform .15s ease;
+}
+.pi-thinking[open] > summary::after { transform: rotate(180deg); }
+.pi-thinking > pre {
+  margin: 0;
+  padding: 0 12px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: color-mix(in srgb, var(--ink-soft) 92%, var(--muted));
+  font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  max-height: 280px;
+  overflow: auto;
+}
+.pi-thinking.streaming > summary span { color: var(--accent); }
+
 .pi-bubble { margin: 0; border-radius: 10px; background: var(--surface-raised); padding: 13px 14px; color: var(--ink-soft); line-height: 1.55; }
 .pi-bubble.user, .pi-conversation p.user { max-width: 88%; background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised)); white-space: pre-wrap; }
 .pi-bubble-meta {
@@ -217,10 +277,12 @@
 .pi-model-trigger:hover, .pi-model-trigger.open { background: var(--surface-hover); color: var(--accent-soft); }
 .pi-model-trigger:hover small, .pi-model-trigger:hover b, .pi-model-trigger.open small, .pi-model-trigger.open b { color: var(--accent-soft); }
 .pi-send-button {
-  height: 30px; border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-ink);
-  padding: 0 11px; cursor: pointer; font-size: 12px; font-weight: 650;
+  display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-ink);
+  padding: 0; cursor: pointer;
 }
+.pi-send-button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pi-send-button:disabled { opacity: .45; cursor: default; }
+.pi-send-button.pi-stop-button { background: color-mix(in srgb, #ff5d5d 82%, black); color: white; }
 .pi-model-menu {
   position: absolute; z-index: 50; right: 14px; bottom: 74px; display: grid; gap: 13px;
   width: min(320px, calc(100% - 28px)); border: 1px solid var(--border-strong); border-radius: 10px;
@@ -248,6 +310,25 @@
 .pi-bubble-actions button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pi-bubble-actions button:hover { color: var(--ink); background: var(--surface-hover); }
 .pi-bubble-actions button:disabled { opacity: .45; cursor: default; }
+.pi-native-queue {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--accent) 7%);
+  padding: 10px;
+}
+.pi-native-queue header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pi-native-queue header strong { font-size: 12px; }
+.pi-native-queue header small { color: var(--muted-low); font-size: 11px; }
+.pi-native-queue ol { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.pi-native-queue li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 7px; align-items: start; color: var(--muted); }
+.pi-native-queue li > span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-soft); font-size: 13px; line-height: 1; }
+.pi-native-queue li[data-kind="follow"] > span { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
+.pi-native-queue li div { min-width: 0; }
+.pi-native-queue li b { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 650; }
+.pi-native-queue li p { display: -webkit-box; overflow: hidden; margin: 2px 0 0; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; line-height: 1.4; }
 .pi-dock.collapsed > :not(.pi-dock-toggle) { display: none; }
 .pi-open .today-layout { display: block; }
 .pi-open .today-main { height: 100%; }
@@ -258,11 +339,10 @@
 .pi-open .drawer-backdrop { position: fixed; z-index: 30; inset: var(--topbar-height) var(--pi-width) var(--status-height) var(--nav-width); border: 0; background: var(--overlay); }
 .pi-open .drawer-backdrop.open { display: block; }
 .pi-open .studio-layout { grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); }
-.pi-open .publish-layout { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-.pi-open .workflow-list { grid-row: 1 / 3; }
-.pi-open .publish-preview { grid-column: 2; grid-row: 1; }
-.pi-open .confirmation-panel { grid-column: 2; grid-row: 2; max-height: 300px; }
+.pi-open .publish-layout { grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 340px); }
 .pi-open .results-layout { grid-template-columns: minmax(220px, 270px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .pi-open .results-main { grid-column: 2; grid-row: 1; }
 .pi-open .findings-panel { grid-column: 2; grid-row: 2; max-height: 220px; }
-
+@media (max-width: 1279px) {
+  .pi-open .publish-preview { overflow: visible; }
+}

@@ -6,6 +6,7 @@ export type TodaySource = {
   canonicalUrl: string | null;
   author: string | null;
   publishedAt: string | null;
+  collectedAt: string;
   summary: string | null;
   priority: number | null;
   categories: string[];
@@ -33,15 +34,34 @@ export type TodayPlanItem = {
   missingMaterials: string[];
 };
 
+type SourceRow = Omit<TodaySource, 'categories'> & { categories: string };
+
+function mapSourceRows(rows: SourceRow[]): TodaySource[] {
+  return rows.map((source) => ({ ...source, categories: JSON.parse(source.categories) as string[] }));
+}
+
 export function getToday(database: DatabaseSync, planDate: string): {
   sources: TodaySource[];
   plan: { id: string; summary: string; items: TodayPlanItem[] } | null;
   pendingActions: string[];
 } {
-  const sourceRows = database.prepare(`SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
-    summary, priority, categories_json AS categories, value_judgment AS valueJudgment
-    FROM source_items ORDER BY priority DESC, collected_at DESC LIMIT 50`).all() as Array<Omit<TodaySource, 'categories'> & { categories: string }>;
-  const sources = sourceRows.map((source) => ({ ...source, categories: JSON.parse(source.categories) as string[] }));
+  // "最新情报" is a freshness rail: prefer sources collected on the plan date, newest first.
+  // Do not rank by historical priority — old high-priority items were burying today's intake.
+  const dayStart = `${planDate}T00:00:00.000+08:00`;
+  const dayEnd = `${planDate}T23:59:59.999+08:00`;
+  const sourceSelect = `SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
+    collected_at AS collectedAt, summary, priority, categories_json AS categories, value_judgment AS valueJudgment
+    FROM source_items`;
+  const todayRows = database.prepare(`${sourceSelect}
+    WHERE collected_at >= ? AND collected_at <= ?
+    ORDER BY collected_at DESC
+    LIMIT 50`).all(dayStart, dayEnd) as SourceRow[];
+  const sourceRows = todayRows.length
+    ? todayRows
+    : database.prepare(`${sourceSelect}
+      ORDER BY collected_at DESC
+      LIMIT 50`).all() as SourceRow[];
+  const sources = mapSourceRows(sourceRows);
   const plan = database.prepare('SELECT id, summary FROM plans WHERE plan_date = ? AND is_current = 1').get(planDate) as { id: string; summary: string } | undefined;
   if (!plan) return { sources, plan: null, pendingActions: ['创建今日运营方案'] };
   const rows = database.prepare(`SELECT id, topic_id AS topicId, title, priority, why_now AS whyNow, timeliness,

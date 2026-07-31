@@ -30,7 +30,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       ...settings,
       mcp: getMcp() ? { status: 'ready', url: getMcp()!.url } : { status: 'not_started', url: null },
       browser: getBrowser()
-        ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath }
+        ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath, mode: getBrowser()!.mode }
         : { status: 'not_started' },
       browserOptions: await discoverBrowserProfiles(),
       selectedBrowser,

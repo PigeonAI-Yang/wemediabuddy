@@ -4,13 +4,10 @@ import { useCanvasHistory } from "./use-canvas-history";
 import { relationNames } from "./knowledge-canvas-types";
 
 export function KnowledgeCanvasView({
-  initialSelection,
   initialCanvasId,
   onContextChange,
   onDiscuss,
-  onCompose,
 }: {
-  initialSelection?: { canvasId: string; nodeIds: string[] } | null;
   initialCanvasId?: string | null;
   onContextChange: (
     item: {
@@ -21,20 +18,12 @@ export function KnowledgeCanvasView({
     } | null,
   ) => void;
   onDiscuss: () => void;
-  onCompose: (item: {
-    canvasId: string;
-    nodeIds: string[];
-    mode: "current_page" | "selected";
-    title: string;
-  }) => void;
 }) {
   const [canvases, setCanvases] = useState<any[]>([]);
   const [canvas, setCanvas] = useState<any>(null);
   const [sources, setSources] = useState<any[]>([]);
   const [topics, setTopics] = useState<any[]>([]);
-  const [selected, setSelected] = useState<string[]>(
-    () => initialSelection?.nodeIds ?? [],
-  );
+  const [selected, setSelected] = useState<string[]>([]);
   const [box, setBox] = useState<{
     x: number;
     y: number;
@@ -480,21 +469,5 @@ export function KnowledgeCanvasView({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
   };
-  const openComposer = () => {
-    if (!canvas) return;
-    const nodeIds = selected.length
-      ? selected
-      : canvas.nodes.map((node: any) => node.id);
-    if (!nodeIds.length) {
-      setMessage("当前页面没有可用于创作的对象");
-      return;
-    }
-    onCompose({
-      canvasId: canvas.id,
-      nodeIds,
-      mode: selected.length ? "selected" : "current_page",
-      title: canvas.title,
-    });
-  };
-  return <KnowledgeCanvasLayout c={{ canvases, canvas, sources, topics, selected, box, connecting, pendingRelation, selectedRelation, drawer, assetQuery, mode, undoStack, redoStack, boardRef, setCanvas, setSelected, setBox, setConnecting, setKeyboardConnectionSource, setPendingRelation, setSelectedRelation, setDrawer, setAssetQuery, setMode, loadCanvas, createCanvas, renameCanvas, updateViewport, undo, redo, addObject, addNote, createRelation, connectByKeyboard, saveRelation, hideRelation, archiveRelation, decideSuggestion, beginConnection, beginDrag, beginBox, openComposer, onDiscuss }} />;
+  return <KnowledgeCanvasLayout c={{ canvases, canvas, sources, topics, selected, box, connecting, pendingRelation, selectedRelation, drawer, assetQuery, mode, undoStack, redoStack, boardRef, setCanvas, setSelected, setBox, setConnecting, setKeyboardConnectionSource, setPendingRelation, setSelectedRelation, setDrawer, setAssetQuery, setMode, loadCanvas, createCanvas, renameCanvas, updateViewport, undo, redo, addObject, addNote, createRelation, connectByKeyboard, saveRelation, hideRelation, archiveRelation, decideSuggestion, beginConnection, beginDrag, beginBox, onDiscuss }} />;
 }

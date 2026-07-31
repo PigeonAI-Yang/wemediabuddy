@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform, ContentProjectStatus, ContentProjectSummary } from '../main/content';
+import { PlatformMark } from './platform-mark';
 
 const statuses: Array<{ value: ContentProjectStatus; label: string }> = [
   { value: 'idea', label: '想法' }, { value: 'drafting', label: '创作中' },
   { value: 'review', label: '待审' }, { value: 'ready', label: '待发布' },
   { value: 'completed', label: '已完成' }
 ];
-const platformNames: Record<string, string> = { x: 'X', xiaohongshu: '小红书', wechat: '微信' };
+const platformNames: Record<string, string> = { x: 'X', xiaohongshu: '小红书', wechat: '公众号' };
 const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN');
 const renderMarkdown = (value: string) => DOMPurify.sanitize(marked.parse(value, { async: false }) as string);
 const bodyWithoutLeadingTitle = (value: string) => value.replace(/^#\s+.+\r?\n+/, '');
@@ -198,6 +199,27 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   };
 
   const reload = async () => { if (selectedId) await loadDetail(selectedId); await loadFirst(true); };
+  const deleteRow = async (project: ContentProjectSummary) => {
+    if (busy) return;
+    if (!window.confirm(`彻底删除项目「${project.title}」?此操作不可恢复。`)) return;
+    setBusy(true);
+    try {
+      const result = await window.wmb.deleteStudioProject({ projectId: project.id, expectedRevision: project.revision });
+      setMessage(result.ok ? '项目已彻底删除' : result.error?.message || '删除失败');
+      if (result.ok) await loadFirst(true);
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
+  const archiveRow = async (project: ContentProjectSummary) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await window.wmb.updateStudioProject({ projectId: project.id, expectedRevision: project.revision, archived: !project.archivedAt });
+      setMessage(result.ok ? (project.archivedAt ? '已恢复项目' : '已归档项目，可在「已归档」中恢复') : result.error?.message || '操作失败');
+      if (result.ok) await loadFirst(true);
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
   const save = async () => {
     if (!selected || busy) return;
     if (!title.trim() || !body.trim()) { setMessage(!title.trim() ? '标题不能为空' : '正文不能为空'); return; }
@@ -285,14 +307,18 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         <span>找到 {projects.length}{hasMore || offset ? '+' : ''} 个项目</span>
       </div>
       <div className="studio-project-table" role="table">
-        <div className="studio-project-row head" role="row"><span>项目</span><span>工作状态</span><span>平台内容</span><span>最近更新</span><span>版本</span></div>
-        {projects.map((project) => <button className="studio-project-row" role="row" key={project.id} onClick={() => onSelect(project.id)}>
+        <div className="studio-project-row head" role="row"><span>项目</span><span>工作状态</span><span>平台内容</span><span>最近更新</span><span>版本</span><span/></div>
+        {projects.map((project) => <div className="studio-project-row" role="row" tabIndex={0} key={project.id} onClick={() => onSelect(project.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(project.id); } }}>
           <span><strong>{project.title}</strong><small>项目 {project.id.slice(0, 8)} · 最新正文按需读取</small></span>
           <span className="studio-project-state"><i data-status={project.status}/>{project.archivedAt ? '已归档' : statuses.find((item) => item.value === project.status)?.label}</span>
           <span className="studio-project-platform">{Object.values(project.platforms).filter(Boolean).length} / 3<i><b style={{ width: `${Object.values(project.platforms).filter(Boolean).length / 3 * 100}%` }}/></i></span>
           <time>{formatTime(project.updatedAt)}</time>
           <span>{project.versionCount} 个版本</span>
-        </button>)}
+          <span className="studio-row-actions">
+            <button className="studio-row-action" aria-label={`${project.archivedAt ? '恢复' : '归档'}项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void archiveRow(project); }}>{project.archivedAt ? '恢复' : '归档'}</button>
+            {Object.values(project.platforms).every((count) => !count) && <button className="studio-row-action danger" aria-label={`删除项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void deleteRow(project); }}>删除</button>}
+          </span>
+        </div>)}
       </div>
       {loading && !projects.length && <p className="studio-loading">正在读取项目…</p>}
       {!loading && !projects.length && <div className="compact-empty"><h2>没有符合条件的项目</h2><p>调整搜索或状态条件后重试。</p></div>}
@@ -302,8 +328,10 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
 
   return <section className={`studio-editor-view${contextOpen ? ' context-open' : ''}`}>
     <div className="studio-editor-top">
-      <button className="studio-top-back" onClick={() => onSelect(null)}>← 返回项目库</button>
-      <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <><b>{dirty ? '有未保存修改' : '✓ 已保存'}</b> · 第 {selected.versionCount} 版 · {formatTime(latest?.createdAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
+      <div className="studio-head-copy">
+        <div className="studio-crumbs"><button className="studio-top-back" onClick={() => onSelect(null)}>创作 / 项目库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
+        <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>第 {selected.versionCount} 版 · <b>{dirty ? '有未保存修改' : '已自动保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latest?.createdAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
+      </div>
       <div className="studio-grow"/>
       <button className="secondary-button" onClick={() => setContextOpen((value) => !value)}>项目资料</button>
       <button className="secondary-button" onClick={() => setPreview((value) => !value)}>{preview ? '继续编辑' : '预览'}</button>
@@ -317,7 +345,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       {!outline.length && <p>二级、三级标题会显示在这里。</p>}
       <p className="studio-panel-title platform-title">平台内容</p>
       <button className={tab === 'core' ? 'active' : ''} onClick={() => setTab('core')}>核心正文</button>
-      {Object.entries(selected?.platformVersions ?? {}).map(([platform, versions]) => <button key={platform} onClick={() => setTab('platforms')}>{platformNames[platform]} <small>{versions.length ? `${versions.length} 个版本` : '未创建'}</small><i className="st-dot" data-state={versions.length ? 'ready' : 'none'} aria-hidden="true"/></button>)}
+      {Object.entries(selected?.platformVersions ?? {}).map(([platform, versions]) => <button key={platform} onClick={() => setTab('platforms')}><span className={`pf-tag ${platform}`}><PlatformMark platform={platform}/>{platformNames[platform]}</span> <small>{versions.length ? `${versions.length} 个版本` : '未创建'}</small><i className="st-dot" data-state={versions.length ? 'ready' : 'none'} aria-hidden="true"/></button>)}
     </aside>
     <main className="studio-document">
       {selected ? <>
@@ -332,7 +360,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
               <span className="studio-divider"/>
               <button onClick={() => execRich('insertUnorderedList')}>• 列表</button>
               <button onClick={() => execRich('insertOrderedList')}>1. 列表</button>
-              <button onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button>
+              <button onClick={() => formatSelection('[', '](https://)', '链接文字')}>🔗 链接</button>
               <button onClick={() => execRich('removeFormat')}>清除格式</button>
               <span className="studio-divider"/>
               <button onClick={() => execRich('undo')}>↶</button>

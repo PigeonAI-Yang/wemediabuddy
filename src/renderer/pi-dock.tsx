@@ -1,28 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import type { PiContextRef } from './app-types';
-function renderMarkdown(text: string): string {
-  return DOMPurify.sanitize(marked.parse(text, {
-    async: false,
-    gfm: true,
-    breaks: true
-  }) as string);
-}
-
-function formatPiMessageTime(value?: string | null): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  }).format(date);
-}
+import { PiDockTranscript, formatPiMessageTime, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 
 function piToolActivity(toolName?: string): string {
   if (!toolName) return '正在处理';
@@ -35,6 +13,14 @@ function piToolActivity(toolName?: string): string {
   return '正在使用工具';
 }
 
+function piErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw
+    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim() || 'Pi 回复失败。';
+}
+
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
   toggle: () => void;
@@ -43,16 +29,17 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   resize: (event: React.PointerEvent<HTMLDivElement>) => void;
   resetWidth: () => void;
 }): React.JSX.Element {
-  type PiMessage = { role: 'user' | 'assistant'; text: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string };
   type PiSessionItem = { id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean };
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<PiMessage[]>([]);
+  const [messages, setMessages] = useState<PiDockMessage[]>([]);
+  const [nativeQueue, setNativeQueue] = useState<PiNativeQueue>({ steering: [], followUp: [] });
   const [sessions, setSessions] = useState<PiSessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'starting' | 'running' | 'failed' | 'stopped'>('idle');
   const [statusText, setStatusText] = useState(configured ? '已配置' : '等待配置');
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const conversationTouched = useRef(false);
   const headerRef = useRef<HTMLElement | null>(null);
   const busy = phase === 'starting' || phase === 'running';
   const [modelLabel, setModelLabel] = useState('默认模型');
@@ -81,6 +68,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
 
   useEffect(() => {
     void window.wmb.getPiConversation().then((conversation) => {
+      if (conversationTouched.current) return;
       setMessages(conversation.messages ?? []);
       setActiveSessionId(conversation.id || null);
     }).catch(() => {});
@@ -93,7 +81,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   useEffect(() => {
     const node = conversationRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, phase]);
+  }, [messages, nativeQueue, phase]);
 
   useEffect(() => {
     if (!sessionMenuOpen) return;
@@ -113,9 +101,30 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   }, [sessionMenuOpen]);
 
   useEffect(() => window.wmb.onPiEvent((event) => {
+    if (event.scope !== 'dock') return;
     if (event.type === 'starting') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
     if (event.type === 'running') { setPhase('running'); setStatusText('正在思考'); return; }
     if (event.type === 'tool') { setPhase('running'); setStatusText(piToolActivity(event.toolName)); return; }
+    if (event.type === 'queue') {
+      setNativeQueue({ steering: event.steering ?? [], followUp: event.followUp ?? [] });
+      return;
+    }
+    if (event.type === 'queued') {
+      setPhase('running');
+      setStatusText(event.delivery === 'followUp' ? '已加入下一轮' : '已加入插队队列');
+      return;
+    }
+    if (event.type === 'thinking') {
+      setPhase('running'); setStatusText('正在思考');
+      setMessages((items) => {
+        const next = items.slice();
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && last.status === 'streaming') next[next.length - 1] = { ...last, thinking: event.text ?? '' };
+        else next.push({ role: 'assistant', text: '', thinking: event.text ?? '', status: 'streaming', createdAt: new Date().toISOString() });
+        return next;
+      });
+      return;
+    }
     if (event.type === 'delta') {
       setPhase('running'); setStatusText('正在回复');
       setMessages((items) => {
@@ -133,13 +142,15 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         const next = items.slice();
         const last = next[next.length - 1];
         const text = (event.text && event.text.trim()) || last?.text || '已停止生成。';
-        if (last?.role === 'assistant') next[next.length - 1] = { ...last, role: 'assistant', text, status: 'stopped' };
-        else next.push({ role: 'assistant', text, status: 'stopped', createdAt: new Date().toISOString() });
+        const thinking = (event.thinking && event.thinking.trim()) || last?.thinking;
+        if (last?.role === 'assistant') next[next.length - 1] = { ...last, role: 'assistant', text, ...(thinking ? { thinking } : {}), status: 'stopped' };
+        else next.push({ role: 'assistant', text, ...(thinking ? { thinking } : {}), status: 'stopped', createdAt: new Date().toISOString() });
         return next;
       });
       return;
     }
     if (event.type === 'failed') {
+      setNativeQueue({ steering: [], followUp: [] });
       setPhase('failed'); setStatusText('失败');
       setMessages((items) => {
         const next = items.slice();
@@ -152,11 +163,20 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'idle') {
+      setNativeQueue({ steering: [], followUp: [] });
       setPhase('idle'); setStatusText(configured ? '已配置' : '等待配置');
       setMessages((items) => {
         const next = items.slice();
         const last = next[next.length - 1];
-        if (last?.role === 'assistant' && last.status === 'streaming') next[next.length - 1] = { ...last, role: 'assistant', text: event.text || last.text, status: undefined };
+        if (last?.role === 'assistant' && last.status === 'streaming') {
+          next[next.length - 1] = {
+            ...last,
+            role: 'assistant',
+            text: event.text || last.text,
+            ...(event.thinking || last.thinking ? { thinking: event.thinking || last.thinking } : {}),
+            status: undefined
+          };
+        }
         return next;
       });
       void refreshSessions();
@@ -222,8 +242,15 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     window.setTimeout(() => setToast(''), 1400);
   };
   const rankingCount = (context.rankingContext?.boards.length ?? 0) + (context.rankingContext?.items.length ?? 0);
+  const xList = context.xListContext;
   const contextChip = context.contextSelection
     ? `${context.pageLabel} · ${context.contextSelection.mode==='selected'?`已选 ${context.contextSelection.nodeIds.length} 项`:`当前页 ${context.contextSelection.nodeIds.length} 项`}`
+    : xList
+    ? (xList.mode === 'post' && xList.selectedPost
+      ? `${context.pageLabel} · 帖子 ${xList.selectedPost.authorHandle || ''}`.trim()
+      : xList.listName
+        ? `${context.pageLabel} · ${xList.listName}${xList.loadedCount ? ` · 已加载 ${xList.loadedCount} 条` : (xList.visiblePosts.length ? ` · ${xList.visiblePosts.length} 条动态` : '')}`
+        : `${context.pageLabel} · 当前页`)
     : rankingCount
     ? `${context.pageLabel} · 已选 ${context.rankingContext?.boards.length ?? 0} 个榜单、${context.rankingContext?.items.length ?? 0} 个项目`
     : context.objectTitle
@@ -249,42 +276,50 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         + `\ncanvasId=${context.canvasId??''}`
         + `\nselectionMode=${context.contextSelection?.mode??'current_page'}`
         + `\nsuggestionRule=若要提出新节点或关系，只能调用 wmb_suggest_knowledge 创建待确认建议；用户确认前不得视为正式知识。`
-        + (context.packagePurpose==='creation'?`\nbriefRule=这次要形成可编辑简报；必须调用 wmb_create_creative_brief，传入 canvasId、contextNodeIds 和 selectionMode，证据不得超出 contextNodeIds；保存后回读结果，不要直接生成正文。`:'')
         + `\ncontextNodeIds=${JSON.stringify(directContext.items.map(item=>item.nodeId))}`
         + `\ncontextManifest=${JSON.stringify(directContext)}`
+      : xList
+      ? `\ncontextRule=优先使用下面直接提供的 X List 页面上下文；用户没点帖子时讨论当前列表已加载的全部动态（loadedCount/visiblePosts），点了帖子时只讨论该帖及其评论。不要假设未加载的更早帖子。`
       : '';
-    return `[WMB_CONTEXT]\npage=${context.page}\npageLabel=${context.pageLabel}\nobjectType=${context.objectType ?? ''}\nobjectId=${context.objectId ?? ''}\nobjectTitle=${context.objectTitle ?? ''}${contextInstruction}\nselectedItems=${JSON.stringify(selectedContext)}\nrankingContext=${JSON.stringify(context.rankingContext ?? { boards: [], items: [] })}\n[USER_MESSAGE]\n${text}`;
+    const xListPayload = xList ? JSON.stringify({
+      accountKey: xList.accountKey,
+      listId: xList.listId,
+      listName: xList.listName,
+      listKind: xList.listKind,
+      mode: xList.mode,
+      loadedCount: xList.loadedCount ?? xList.visiblePosts.length,
+      selectedPost: xList.selectedPost,
+      visiblePosts: xList.visiblePosts
+    }) : 'null';
+    return `[WMB_CONTEXT]\npage=${context.page}\npageLabel=${context.pageLabel}\nobjectType=${context.objectType ?? ''}\nobjectId=${context.objectId ?? ''}\nobjectTitle=${context.objectTitle ?? ''}${contextInstruction}\nselectedItems=${JSON.stringify(selectedContext)}\nrankingContext=${JSON.stringify(context.rankingContext ?? { boards: [], items: [] })}\nxListContext=${xListPayload}\n[USER_MESSAGE]\n${text}`;
   };
 
-  const sendText = async (text: string, opts?: { replaceFrom?: number }) => {
+  const sendText = async (text: string, delivery?: 'steer' | 'followUp') => {
     const value = text.trim();
-    if (!value || busy) return;
-    const stamped = new Date().toISOString();
-    if (opts?.replaceFrom !== undefined) {
-      setMessages((items) => items.slice(0, opts.replaceFrom).concat([
-        { role: 'user', text: value, createdAt: stamped },
-        { role: 'assistant', text: '', status: 'streaming', createdAt: stamped }
-      ]));
-    } else {
+    if (!value) return;
+    const queued = busy;
+    if (!queued) {
+      conversationTouched.current = true;
+      const stamped = new Date().toISOString();
       setMessages((items) => [...items, { role: 'user', text: value, createdAt: stamped }, { role: 'assistant', text: '', status: 'streaming', createdAt: stamped }]);
+      setPhase('starting'); setStatusText('正在连接 Pi');
     }
-    setPhase('starting'); setStatusText('正在连接 Pi');
     try {
-      const directContext=context.contextSelection?.nodeIds.length
-        ? await window.wmb.previewKnowledgeContextPackage({canvasId:context.contextSelection.canvasId,nodeIds:context.contextSelection.nodeIds})
+      const directContext = context.contextSelection?.nodeIds.length
+        ? await window.wmb.previewKnowledgeContextPackage({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
         : undefined;
-      const result = await window.wmb.chatPi(buildPayload(value,directContext));
-      setMessages((items) => {
-        const next = items.slice();
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant') next[next.length - 1] = { ...last, role: 'assistant', text: result.text || last.text, status: result.stopped ? 'stopped' : undefined };
-        return next;
-      });
+      const result = await window.wmb.chatPi(buildPayload(value, directContext), queued ? (delivery ?? 'steer') : undefined);
+      if (result.queued) return;
+      if (result.conversation) {
+        setMessages(result.conversation.messages);
+        setActiveSessionId(result.conversation.id || null);
+      }
       setPhase(result.stopped ? 'stopped' : 'idle');
       setStatusText(result.stopped ? '已停止' : (configured ? '已配置' : '等待配置'));
       void refreshSessions();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = piErrorMessage(error);
+      if (queued) { showToast(message); return; }
       setPhase('failed'); setStatusText('失败');
       setMessages((items) => {
         const next = items.slice();
@@ -296,22 +331,31 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
   };
 
-  const send = async () => {
+  const send = async (delivery?: 'steer' | 'followUp') => {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text) return;
     setInput('');
-    await sendText(text);
+    await sendText(text, delivery);
   };
   useEffect(()=>{
     const generate=(event:Event)=>void sendText((event as CustomEvent<string>).detail);
     window.addEventListener('wmb-pi-generate',generate);
     return()=>window.removeEventListener('wmb-pi-generate',generate);
   });
-  const stop = async () => { try { await window.wmb.stopPi(); } catch {} };
+  const stop = async () => {
+    try {
+      const result = await window.wmb.stopPi();
+      if (result.stopped) setStatusText('正在停止');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '停止失败');
+    }
+  };
   const newConversation = async () => {
     if (busy) await stop();
+    conversationTouched.current = true;
     const conversation = await window.wmb.newPiConversation();
     setMessages(conversation.messages ?? []);
+    setNativeQueue({ steering: [], followUp: [] });
     setActiveSessionId(conversation.id || null);
     setPhase('idle');
     setStatusText(configured ? '新会话' : '等待配置');
@@ -324,8 +368,10 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (busy) await stop();
+    conversationTouched.current = true;
     const conversation = await window.wmb.switchPiConversation(conversationId);
     setMessages(conversation.messages ?? []);
+    setNativeQueue({ steering: [], followUp: [] });
     setActiveSessionId(conversation.id || conversationId);
     setPhase('idle');
     setStatusText(configured ? '已切换会话' : '等待配置');
@@ -340,30 +386,31 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       showToast('复制失败');
     }
   };
-  const recallMessage = (index: number) => {
+  const forkMessage = async (entryId: string, retry: boolean) => {
     if (busy) return;
-    setMessages((items) => items.slice(0, index));
-    showToast('已撤回');
-  };
-  const resendMessage = async (index: number) => {
-    const target = messages[index];
-    if (!target) return;
-    if (target.role === 'user') {
-      await sendText(target.text, { replaceFrom: index });
-      return;
+    conversationTouched.current = true;
+    try {
+      const forked = await window.wmb.forkPiConversation(entryId);
+      if (forked.cancelled) { showToast('Pi 未创建分支'); return; }
+      setMessages(forked.conversation.messages);
+      setNativeQueue({ steering: [], followUp: [] });
+      setActiveSessionId(forked.conversation.id || null);
+      setPhase('idle');
+      setStatusText(configured ? '已创建 Pi 分支' : '等待配置');
+      await refreshSessions();
+      if (retry) await sendText(forked.text);
+      else setInput(forked.text);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Pi 分叉失败');
     }
-    let userIndex = -1;
-    for (let i = index - 1; i >= 0; i -= 1) {
-      if (messages[i]?.role === 'user') { userIndex = i; break; }
-    }
-    if (userIndex < 0) return;
-    await sendText(messages[userIndex].text, { replaceFrom: userIndex });
   };
   const activeTitle = sessions.find((item) => item.id === activeSessionId)?.title || 'Pi';
 
   return <aside className={`pi-dock${collapsed ? ' collapsed' : ''}`}>
     {!collapsed && <div className="pi-resize-handle" role="separator" aria-label="调整 Pi 对话栏宽度" aria-orientation="vertical" title="拖拽调整宽度，双击恢复默认" onPointerDown={resize} onDoubleClick={resetWidth}/>}
-    <button className="pi-dock-toggle" onClick={toggle} aria-label={collapsed ? '展开 Pi' : '收起 Pi'}>{collapsed ? '‹' : '›'}</button>
+    <button type="button" className="pi-dock-toggle" onClick={toggle} aria-label={collapsed ? '展开 Pi' : '收起 Pi'} title={collapsed ? '展开 Pi' : '收起 Pi'}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? 'M14.5 6.5 9 12l5.5 5.5' : 'M9.5 6.5 15 12l-5.5 5.5'} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </button>
     {!collapsed && <>
       <header className="pi-dock-header" ref={headerRef}>
         <div className="pi-dock-title-row">
@@ -415,41 +462,17 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         </div>
         {toast && <small className="pi-toast">{toast}</small>}
       </header>
-      <div className="pi-conversation" ref={conversationRef}>
-        {messages.length ? <>
-          {messages.map((message, index) => {
-            const timeLabel = formatPiMessageTime(message.createdAt);
-            const showActions = Boolean(message.text) && message.status !== 'streaming';
-            return (
-              <div className={`pi-bubble-wrap ${message.role}`} key={`${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`}>
-                {message.role === 'assistant'
-                  ? message.status === 'streaming' && !message.text
-                    ? <div className="assistant pi-bubble streaming pi-activity" role="status" aria-live="polite">
-                        <span className="pi-activity-mark" aria-hidden="true"><i /></span>
-                        <span className="pi-activity-copy"><strong>{statusText}</strong><small>Pi 正在继续处理</small></span>
-                      </div>
-                    : <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }} />
-                  : <p className="user pi-bubble">{message.text}</p>}
-                <div className="pi-bubble-meta">
-                  <time className="pi-bubble-time">{timeLabel || (message.status === 'streaming' ? '发送中' : '')}</time>
-                  <div className="pi-bubble-actions" aria-hidden={showActions ? undefined : true} style={showActions ? undefined : { visibility: 'hidden' }}>
-                    <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => void copyMessage(message.text)}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
-                    </button>
-                    <button type="button" title="撤回" aria-label="撤回" disabled={!showActions || busy} onClick={() => recallMessage(index)}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-3"/></svg>
-                    </button>
-                    <button type="button" title="重发" aria-label="重发" disabled={!showActions || busy || !configured} onClick={() => void resendMessage(index)}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div className="pi-conversation-end-spacer" aria-hidden="true" />
-        </> : <p className="pi-empty">{configured ? '现在可以直接和我对话。' : '请先在设置中填写 Pi API。'}</p>}
-      </div>
+      <PiDockTranscript
+        messages={messages}
+        queue={nativeQueue}
+        busy={busy}
+        configured={configured}
+        statusText={statusText}
+        conversationRef={conversationRef}
+        onCopy={(text) => void copyMessage(text)}
+        onFork={(entryId) => void forkMessage(entryId, false)}
+        onRetry={(entryId) => void forkMessage(entryId, true)}
+      />
       <footer className="pi-dock-footer">
         {modelMenuOpen && <div className="pi-model-menu" role="dialog" aria-label="选择模型和推理强度">
           <div className="pi-model-menu-head"><strong>模型与推理</strong><button type="button" onClick={() => setModelMenuOpen(false)}>×</button></div>
@@ -463,11 +486,11 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         </div>}
         <div className="pi-composer">
           <textarea
-            disabled={!configured || busy}
+            disabled={!configured}
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }}
-            placeholder={configured ? (busy ? 'Pi 正在回复…' : phase === 'failed' ? '失败后可以直接重试' : phase === 'stopped' ? '已停止，可以继续发送' : '给 Pi 发消息') : '配置 Pi API 后可以对话'}
+            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(event.altKey ? 'followUp' : 'steer'); } }}
+            placeholder={configured ? (busy ? '继续输入；发送会插入当前回复，Alt+Enter 放到下一轮' : phase === 'failed' ? '失败后可以直接重试' : phase === 'stopped' ? '已停止，可以继续发送' : '给 Pi 发消息') : '配置 Pi API 后可以对话'}
           />
           <div className="pi-composer-bar">
             <div className="pi-composer-tools">
@@ -477,15 +500,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
               <button type="button" className="pi-icon-button" title="附件（即将支持）" aria-label="附件" disabled>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg>
               </button>
-              <button type="button" className="pi-icon-button" title={busy ? '停止生成' : '新会话'} aria-label={busy ? '停止生成' : '新会话'} onClick={() => void (busy ? stop() : newConversation())}>
-                {busy
-                  ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
-                  : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>}
-              </button>
             </div>
             <div className="pi-composer-meta">
               <button type="button" className={`pi-model-trigger${modelMenuOpen ? ' open' : ''}`} title="选择模型和推理强度" onClick={() => void openModelMenu()}><span>{modelLabel}</span><small>{thinkingChoice === 'auto' ? '自动' : thinkingChoice}</small><b>▾</b></button>
-              <button type="button" className="pi-send-button" disabled={!configured || busy || !input.trim()} onClick={() => void send()}>{busy ? '…' : '发送'}</button>
+              {busy && !input.trim()
+                ? <button type="button" className="pi-send-button pi-stop-button" title="停止 Pi 当前回复" aria-label="停止 Pi 当前回复" disabled={!configured} onClick={() => void stop()}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
+                : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || !input.trim()} onClick={() => void send('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
             </div>
           </div>
         </div>

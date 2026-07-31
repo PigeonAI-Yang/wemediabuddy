@@ -15,6 +15,10 @@ import * as z from 'zod';
 import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
 import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
 import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
+import { getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
+import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
+import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
+import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -121,6 +125,56 @@ function createServerFor(rootPath: string): McpServer {
         db.exec('COMMIT'); return text(payload);
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } finally { db.close(); }
+  });
+  const selectedXListBrowser = async () => {
+    const db = database();
+    try {
+      const config = readBrowserConfig(db);
+      if (!config || !isPyaireaderXProfile({ id: config.id, cdpUrl: config.cdpUrl }) || !config.cdpUrl) {
+        throw new Error('请先选择 Pyaireader 专用 X 登录态。');
+      }
+      const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
+      return { id: config.id, cdpUrl: runtime.cdpUrl };
+    } finally { db.close(); }
+  };
+  server.registerTool('x_lists.read_index', {
+    description: '读取当前专用 X 登录账号可见的 List 索引（真实网页，不是仅本地绑定）。只读。后台静默浏览器，含拟人间隔。',
+    inputSchema: {}
+  }, async () => text(await readXListIndex(await selectedXListBrowser())));
+  server.registerTool('x_lists.read_detail', {
+    description: '读取指定 X List 的详情。只读真实网页。后台静默浏览器，含拟人间隔。',
+    inputSchema: { list_id: z.string() }
+  }, async ({ list_id }) => text(await readXListDetail(await selectedXListBrowser(), list_id)));
+  server.registerTool('x_lists.read_members', {
+    description: '读取指定 X List 当前可见成员。只读真实网页。后台静默浏览器，含拟人间隔。',
+    inputSchema: { list_id: z.string() }
+  }, async ({ list_id }) => text(await readXListMembers(await selectedXListBrowser(), list_id)));
+  server.registerTool('x_lists.read_timeline', {
+    description: '读取指定 X List 当前可见动态，最多 50 条。只读真实网页。后台静默浏览器，含拟人间隔。',
+    inputSchema: { list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
+  }, async ({ list_id, limit }) => text(await readXListTimeline(await selectedXListBrowser(), list_id, limit ?? 50)));
+  server.registerTool('x_lists.list_bindings', {
+    description: '读取已绑定到 WMB 发现的 X List，不读取或操作 X 网页。',
+    inputSchema: { account_key: z.string().optional() }
+  }, async ({ account_key }) => {
+    const db = database(); try { return text(listXListBindings(db, account_key)); } finally { db.close(); }
+  });
+  server.registerTool('x_lists.get_operation', {
+    description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
+    inputSchema: { id: z.string() }
+  }, async ({ id }) => {
+    const db = database(); try { return text(getXListOperation(db, id)); } finally { db.close(); }
+  });
+  server.registerTool('x_lists.prepare', {
+    description: '仅创建待 WMB UI 读取快照并最终确认的 X List 操作提议。不能确认、不能执行外部 List 写入。',
+    inputSchema: {
+      request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
+      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional()
+    }
+  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles }) => {
+    const db = database();
+    try { return text(prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles })); }
+    finally { db.close(); }
   });
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',

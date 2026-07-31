@@ -102,6 +102,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `operations`：最小业务操作记录；
 - `mcp`：MCP 工具到业务命令的映射；
 - `browser`：Chrome 生命周期、CDP 连接和平台适配器。
+- `x-lists`：固定 X List 读写、确认、读回和发现信源绑定。
 
 不建设通用工作流引擎、事件溯源系统、平台 DSL 或选择器配置平台。
 
@@ -145,6 +146,9 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `method_findings`
 - `jobs`
 - `operation_log`
+- `x_list_bindings`
+- `x_list_operations`
+- `x_list_operation_items`
 
 平台特有字段和原始指标使用 JSON 保存；跨平台稳定字段使用普通列。不同平台不建立重复业务表。
 

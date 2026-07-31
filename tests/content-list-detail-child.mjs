@@ -67,7 +67,7 @@ try {
   mcp = await startMcp(directory);
   process.env.WMB_MCP_URL = mcp.url;
   const tools = new Map();
-  const extension = (await import(`../.pi/extensions/wmb-mcp.ts?test=${Date.now()}`)).default;
+  const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
   const mcpListResult = await tools.get('wmb_list_content_projects').execute('list', { query: 'needle-55', limit: 50 });
   const mcpList = JSON.parse(mcpListResult.details.content[0].text);

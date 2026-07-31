@@ -6,10 +6,12 @@
   "description": "A local desktop terminal for human and external-Agent self-media operations.",
   "main": ".vite/build/index.js",
   "scripts": {
+    "prestart": "node scripts/check-dev-port.mjs",
     "start": "electron-forge start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "build": "node scripts/prepare-pi-runtime.mjs && electron-forge package"
+    "build": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
+    "icons:brand": "node scripts/build-brand-icons.mjs"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",

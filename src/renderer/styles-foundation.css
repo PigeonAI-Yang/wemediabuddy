@@ -126,18 +126,40 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 button:disabled { cursor: not-allowed; opacity: .5; }
 h1, h2, h3, p { text-wrap: pretty; }
 
-.workspace, .today-main, .source-list, .studio-projects, .studio-editor, .studio-context, .workflow-list, .publish-preview, .confirmation-panel, .results-main, .findings-panel {
+/* Global scrollbars: thin, overlay-like, invisible until the scroller is hovered. */
+* {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
-.workspace:hover, .workspace:focus-within, .today-main:hover, .today-main:focus-within, .source-list:hover, .source-list:focus-within,
-.studio-projects:hover, .studio-editor:hover, .studio-context:hover, .workflow-list:hover, .publish-preview:hover, .confirmation-panel:hover,
-.results-main:hover, .findings-panel:hover { scrollbar-color: var(--scroll-thumb) transparent; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: transparent; background-clip: padding-box; }
-*:hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover) !important; background-clip: padding-box !important; }
+*:hover,
+*:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--scroll-thumb) 72%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: padding-box;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--scroll-thumb) 72%, transparent);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-hover) !important;
+  background-clip: padding-box !important;
+}
 
 .app-shell {
   --nav-width: 216px;
@@ -149,12 +171,7 @@ h1, h2, h3, p { text-wrap: pretty; }
   transition: grid-template-columns 200ms cubic-bezier(.22, 1, .36, 1);
 }
 .app-shell.pi-collapsed { --pi-width: 0px; }
-.app-shell.studio-mode {
-  --nav-width: 208px;
-  --status-height: 0px;
-}
-.studio-mode .status-bar { display: none; }
-.studio-mode.pi-collapsed .pi-dock-toggle { display: none; }
+/* studio collapsed must still show the Pi reopen control */
 .studio-mode .sidebar { padding: 12px 10px; }
 .topbar {
   -webkit-app-region: drag;
@@ -199,9 +216,58 @@ h1, h2, h3, p { text-wrap: pretty; }
   font-size: 14px;
   transform: translateX(-50%);
 }
-.global-search{position:relative;width:min(360px,32vw);margin-left:24px}.global-search>input{width:100%;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised);color:var(--ink);padding:0 12px}.global-search>input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.global-search>div{position:absolute;z-index:60;top:40px;left:0;right:0;display:grid;max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:0 12px 30px var(--overlay)}.global-search button{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;border:0;border-bottom:1px solid var(--border);background:transparent;color:var(--ink);padding:10px 12px;text-align:left;cursor:pointer}.global-search button:hover,.global-search button:focus-visible{background:var(--accent-faint);outline:0}.global-search small{color:var(--muted)}.global-search span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.global-search{-webkit-app-region:no-drag}
-@media(max-width:1180px){.global-search{width:220px;margin-left:12px}}
+.global-search {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  /* Match workspace content left padding (studio/editor uses clamp(18px,1.8vw,28px)). */
+  left: calc(var(--nav-width) + clamp(18px, 1.8vw, 28px));
+  width: min(360px, 32vw);
+  margin: 0;
+}
+.global-search > input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  padding: 0 12px;
+}
+.global-search > input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.global-search > div {
+  position: absolute;
+  z-index: 60;
+  top: 40px;
+  left: 0;
+  right: 0;
+  display: grid;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 30px var(--overlay);
+}
+.global-search button {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+@media (max-width: 1180px) {
+  .global-search {
+    width: 220px;
+  }
+}
 .titlebar-actions button {
   width: 46px;
   border: 0;
@@ -233,7 +299,7 @@ h1, h2, h3, p { text-wrap: pretty; }
 .sidebar button.active::before { content: ""; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
 .sidebar svg { flex: none; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
 .sidebar-bottom { display: grid; gap: 2px; border-top: 1px solid var(--line); padding-top: 10px; }
-.workspace { grid-row: 2; min-width: 0; min-height: 0; overflow: auto; background: var(--workspace-bg); }
+.workspace { grid-row: 2; min-width: 0; min-height: 0; overflow: hidden; background: var(--workspace-bg); }
 .task-status { margin: 0 0 14px; color: var(--accent-soft); font-size: 13px; }
 .task-status[data-running="true"] { color: var(--accent); }
 .editor-actions { display: flex; gap: 8px; align-items: center; }
@@ -245,6 +311,11 @@ h1, h2, h3, p { text-wrap: pretty; }
 .pi-resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; transition: background 140ms ease; }
 .pi-resize-handle:hover::after, body.resizing-pi .pi-resize-handle::after { background: var(--accent); }
 body.resizing-pi { cursor: col-resize; user-select: none; }
+
+/* 视图切换过渡:还原设计稿 .view.active 的 fade(仅内容区,侧栏/顶栏/Pi 栏不重渲染) */
+@keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
+.workspace > * { animation: view-in 0.12s ease; }
+
 .status-bar {
   grid-column: 1 / -1;
   grid-row: 3;
@@ -265,6 +336,8 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 .status-theme { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); padding: 3px 6px; cursor: pointer; font: inherit; }
 .status-theme:hover { background: var(--surface-hover); color: var(--accent-soft); }
 .status-item { display: inline-flex; align-items: center; gap: 6px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-page { max-width: min(46vw, 560px); color: var(--muted); }
+.status-page[data-running="true"] { color: var(--accent-soft); }
 .status-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
 .status-dot.ok { background: var(--success); }
 .status-dot.warn { background: var(--amber); }
@@ -277,32 +350,71 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 .status-item[data-phase="failed"] .status-dot { background: var(--danger); }
 .status-sep { display: none; }
 .pi-dock.collapsed { border-left: 0; }
+/* Hover bridge sits on the dock itself so it is not separated by the center scrollbar gutter. */
+.pi-dock:not(.collapsed)::before {
+  content: "";
+  position: absolute;
+  z-index: 49;
+  top: 0;
+  bottom: 0;
+  left: -28px;
+  width: 28px;
+}
 .pi-dock-toggle {
-  position: fixed;
-  top: calc(var(--topbar-height) + (100vh - var(--topbar-height) - var(--status-height)) / 2);
-  right: calc(var(--pi-width) - 25px);
-  z-index: 50;
+  /* Bound to Pi panel, not the viewport — avoids the middle-column scrollbar gap. */
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 120;
   display: grid;
   place-items: center;
-  width: 25px;
-  height: 40px;
-  border: 1px solid var(--border);
+  width: 16px;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  /* Full continuous stroke; left corners rounded, right edge flush to Pi frame. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 88%, transparent);
   border-right: 0;
-  border-radius: 7px 0 0 7px;
-  background: var(--panel-bg);
+  border-radius: 10px 0 0 10px;
+  background: color-mix(in srgb, var(--panel-bg) 94%, #000 6%);
   color: var(--muted);
+  box-shadow: none;
   cursor: pointer;
-  font-size: 18px;
-  transform: translateY(-50%);
+  transform: translate(-100%, -50%);
   opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
+  pointer-events: auto;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+/* Hit area extends left without creating a visual gap from the panel. */
+.pi-dock-toggle::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  bottom: -14px;
+  left: -10px;
+  right: -1px;
+}
+.pi-dock-toggle > svg {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 .pi-dock:hover .pi-dock-toggle,
 .pi-dock:focus-within .pi-dock-toggle,
 .pi-dock.collapsed .pi-dock-toggle,
+.app-shell.pi-collapsed .pi-dock-toggle,
+.pi-dock-toggle:hover,
 .pi-dock-toggle:focus-visible {
   opacity: 1;
-  pointer-events: auto;
 }
-.pi-dock-toggle:hover { color: var(--ink); background: var(--surface-hover); }
+.pi-dock-toggle:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface-raised) 88%, var(--accent) 6%);
+  border-color: color-mix(in srgb, var(--border-strong) 70%, var(--accent) 18%);
+}
+.pi-dock-toggle:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
