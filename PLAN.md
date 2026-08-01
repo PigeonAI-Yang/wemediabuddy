@@ -262,3 +262,11 @@ Order:
 8. `WMB-1907` — run focused packaged acceptance for enrollment, relaunch switching, failure recovery, UK, the third lane and truthful `needs_user`, reusing unchanged legacy receipts.
 
 Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
+
+## M-2000 Pi model contract correction
+
+Scope: CAP-014.
+
+Deliver: state the built-in Pi boundary accurately, retain only OpenAI Responses and OpenAI Chat Completions configuration, reject unsupported protocols at the shared config boundary, and keep model selection bound to the provider catalog or explicit user input without fallback.
+
+Gate: focused Pi configuration tests, Windows packaging and live configuration readback prove the removed protocol is unavailable while the existing OpenAI-compatible profile remains unchanged. Run typecheck and record unrelated baseline failures without expanding this task.

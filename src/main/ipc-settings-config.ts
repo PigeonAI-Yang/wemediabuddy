@@ -6,7 +6,7 @@ import { readSettings } from './settings';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, type BrowserRuntime } from './browser';
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -48,13 +48,14 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return saveBrowserConfig(database, config); } finally { database.close(); }
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; thinking?: PiThinkingLevel; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; apiKey?: string }) => {
+    const api = requirePiApiType(input.api);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
-      const saved = savePiConfig(database, input);
+      const saved = savePiConfig(database, { ...input, api });
       await stopPi();
       return saved;
     } finally { database.close(); }
@@ -79,11 +80,12 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       return saved;
     } finally { database.close(); }
   });
-  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; apiKey?: string }) => {
+  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: unknown; apiKey?: string }) => {
+    const api = requirePiApiType(input.api);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return await listPiModels(database, input); } finally { database.close(); }
+    try { return await listPiModels(database, { ...input, api }); } finally { database.close(); }
   });
 }
