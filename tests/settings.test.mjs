@@ -17,7 +17,7 @@ test('settings reports actual configured paths, bytes, counts, and current healt
     const settings = await readSettings(root.path);
     assert.equal(settings.paths.logs, path.join(root.path, 'logs'));
     assert.equal(settings.usage.logs, 3);
-    assert.equal(settings.counts.migrations, 30);
+    assert.equal(settings.counts.migrations, 34);
     assert.equal(settings.health.database, 'ready');
     assert.equal(settings.health.browser, 'not_started');
   } finally {

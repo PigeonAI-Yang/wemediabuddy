@@ -1,0 +1,15 @@
+
+DevTools listening on ws://127.0.0.1:9333/devtools/browser/9cc03738-aa2c-4fc7-a3b2-c957590fc6ea
+Error occurred in handler for 'knowledge-canvas:add-node': Error: UNIQUE constraint failed: knowledge_canvas_nodes.canvas_id, knowledge_canvas_nodes.object_type, knowledge_canvas_nodes.object_id
+    at addKnowledgeCanvasNode (J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:1144:35)
+    at J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:25514:14
+    at async Session.<anonymous> (node:electron/js2c/browser_init:2:120530) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 2067,
+  errstr: 'constraint failed'
+}
+Error occurred in handler for 'knowledge-canvas:update-relation': Error: REVISION_CONFLICT
+    at assertRevision (J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:1088:34)
+    at updateKnowledgeRelation (J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:1187:3)
+    at J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:25554:14
+    at async Session.<anonymous> (node:electron/js2c/browser_init:2:120530)

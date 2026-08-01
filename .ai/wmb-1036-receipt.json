@@ -1,0 +1,46 @@
+{
+  "during": {
+    "inputEnabled": true,
+    "squareStop": true,
+    "messageCount": 2,
+    "queueText": "Pi 队列原生↥即将处理插队",
+    "dockStatus": "已加入插队队列",
+    "phase": "running",
+    "events": [
+      {
+        "type": "starting",
+        "scope": "dock"
+      },
+      {
+        "type": "running",
+        "scope": "dock"
+      },
+      {
+        "type": "queue",
+        "steering": [
+          "插队"
+        ],
+        "followUp": [],
+        "scope": "dock"
+      },
+      {
+        "type": "queued",
+        "delivery": "steer",
+        "scope": "dock"
+      }
+    ]
+  },
+  "first": {
+    "phase": "stopped",
+    "messages": [
+      "先用 bash 执行 PowerShell Start-Sleep 12 秒，结束后只回复 done。不要提前回复。7/30 21:02:50",
+      "插队7/30 21:02:54",
+      "done.\n7/30 21:03:21"
+    ]
+  },
+  "after": {
+    "userMessages": [],
+    "input": "先用 bash 执行 PowerShell Start-Sleep 12 秒，结束后只回复 done。不要提前回复。",
+    "forkReady": true
+  }
+}

@@ -16,9 +16,19 @@ description: 为 AI 自媒体快速发现外部信息，核对关键事实，形
 - 正文必须兑现标题：事实、数字、案例和收益不编造，预测明确是判断；
 - 放大真实意义，不制造虚假事实；让人愿意点开，读完又承认没有被骗。
 
+## 导线优先（硬）
+
+今日情报 **先官方导线，后主题增亮**：
+
+1. **W0** enabled X List bindings（至少 **AI前沿** `list_id=2082851520417255750` @KimbomArtist）拉 timeline；
+2. **W1** `source-index` 中全部 `primary + release` 官方源逐条打卡（DeepSeek / ByteDance Seed / 即梦等含在内）；
+3. **W2** 再跑 Pi 主题/社区航线做解释与选题。
+
+**Pi 不单独发现 A 类。** 有没有发版以 W0/W1 入库为准；主题 scout 不得跳过导线，也不得用“先扫两类”代替 A 类全量。
+
 ## 执行
 
-1. 按 [简版采集 SOP](references/collection-sop.md)，从 [信源索引](references/source-index.md) 选择最可能出结果的两类来源；结果不足再扩展。
+1. 按 [采集 SOP](references/collection-sop.md)：A 类 must_check 全量；C 类可抽样。信源见 [信源索引](references/source-index.md)。
 2. 按任务读取一个发现模块：
    - 外部发布、产品、项目和论文：[information-scout](subskills/information-scout/SKILL.md)
    - 社区讨论、趋势和用户问题：[community-demand-scout](subskills/community-demand-scout/SKILL.md)
@@ -27,7 +37,7 @@ description: 为 AI 自媒体快速发现外部信息，核对关键事实，形
 5. 每条资料写入后先用 `wmb_get_knowledge_context` 查询同主题历史，再用 `wmb_record_knowledge` 归入稳定主题并记录核验/管理状态。
 6. 按 [WMB 字段映射](references/wmb-field-map.md) 写入今日方案并读回一次；每个机会必须回填真实 `topicId`，没有相关历史复盘时不得引用无关复盘。
 
-维护信源时读取 [source-registry](subskills/source-registry/SKILL.md)。不同站点的工具和读取方法保留在 `references/collectors/`，只读本次实际使用的文件。
+维护信源时读取 [source-registry](subskills/source-registry/SKILL.md)。不同站点的工具和读取方法保留在 `references/collectors/`，只读本次实际使用的文件；X List 路径见 [collectors/x.md](references/collectors/x.md)。
 
 ## 给用户的结果
 

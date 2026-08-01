@@ -1,0 +1,140 @@
+{
+  "ok": true,
+  "operation": {
+    "id": "af4302f7-faf4-42ad-b0f2-351a44123135",
+    "state": "failed",
+    "phase": "failed",
+    "revision": 4,
+    "errorCode": "VALIDATION_ERROR",
+    "errorMessage": "X 操作超时（90s）。请重试。",
+    "items": [
+      {
+        "id": "8b9d83b8-0cb6-48b6-a0ce-13e4cb6ecb49",
+        "sortOrder": 0,
+        "handle": "@deepseek_ai",
+        "desiredState": "present",
+        "state": "already_present",
+        "evidence": {
+          "outcome": "already_present",
+          "evidenceUrl": "https://x.com/i/lists/2082851520417255750/members"
+        },
+        "updatedAt": "2026-07-31T23:40:23.102Z"
+      },
+      {
+        "id": "b7ced3f8-cd88-434d-99ee-6d2e8b2c0c81",
+        "sortOrder": 1,
+        "handle": "@OpenAI",
+        "desiredState": "present",
+        "state": "already_present",
+        "evidence": {
+          "outcome": "already_present",
+          "evidenceUrl": "https://x.com/i/lists/2082851520417255750/members"
+        },
+        "updatedAt": "2026-07-31T23:41:23.261Z"
+      },
+      {
+        "id": "df97f120-4759-4d3b-9883-20b732430a7d",
+        "sortOrder": 2,
+        "handle": "@AnthropicAI",
+        "desiredState": "present",
+        "state": "failed",
+        "evidence": {
+          "message": "X 操作超时（90s）。请重试。"
+        },
+        "updatedAt": "2026-07-31T23:42:53.618Z"
+      },
+      {
+        "id": "5f9db25c-a551-4f49-b1da-1167bd5fbaad",
+        "sortOrder": 3,
+        "handle": "@GoogleDeepMind",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-07-31T15:36:37.371Z"
+      },
+      {
+        "id": "8df3e42b-72d8-4049-91e8-d0983f44160f",
+        "sortOrder": 4,
+        "handle": "@xai",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-07-31T15:36:37.371Z"
+      },
+      {
+        "id": "3ed3a280-2490-4e45-900b-bc9786914c5b",
+        "sortOrder": 5,
+        "handle": "@BytePlusGlobal",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-07-31T15:36:37.371Z"
+      },
+      {
+        "id": "25ff2137-581f-4ee8-9b10-d6690a086a9c",
+        "sortOrder": 6,
+        "handle": "@ByteDanceOSS",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-07-31T15:36:37.371Z"
+      },
+      {
+        "id": "6d5b7fef-dbfe-442b-9be8-36b9ceb1d05f",
+        "sortOrder": 7,
+        "handle": "@CapCutApp",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-07-31T15:36:37.371Z"
+      }
+    ]
+  },
+  "requested": [
+    "@deepseek_ai",
+    "@OpenAI",
+    "@AnthropicAI",
+    "@GoogleDeepMind",
+    "@xai",
+    "@BytePlusGlobal",
+    "@ByteDanceOSS",
+    "@CapCutApp"
+  ],
+  "presentAfter": [
+    {
+      "handle": "@deepseek_ai",
+      "present": true
+    },
+    {
+      "handle": "@OpenAI",
+      "present": true
+    },
+    {
+      "handle": "@AnthropicAI",
+      "present": false
+    },
+    {
+      "handle": "@GoogleDeepMind",
+      "present": false
+    },
+    {
+      "handle": "@xai",
+      "present": false
+    },
+    {
+      "handle": "@BytePlusGlobal",
+      "present": false
+    },
+    {
+      "handle": "@ByteDanceOSS",
+      "present": false
+    },
+    {
+      "handle": "@CapCutApp",
+      "present": false
+    }
+  ],
+  "membersCount": 12,
+  "membersError": null,
+  "finishedAt": "2026-07-31T23:43:42.005Z"
+}

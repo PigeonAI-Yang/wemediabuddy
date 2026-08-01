@@ -1,5 +1,9 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
+import { setDataChangedPublisher, type DataChangedEvent } from './data-changed.ts';
+
+export type { DataChangedEvent, DataChangedScope } from './data-changed.ts';
+export { broadcastDataChanged } from './data-changed.ts';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -30,6 +34,12 @@ export function broadcastPiEvent(event: Record<string, unknown>): void {
     if (!window.isDestroyed()) window.webContents.send('pi:event', event);
   }
 }
+
+setDataChangedPublisher((event: DataChangedEvent) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('data:changed', event);
+  }
+});
 
 export function broadcastPiRuntimeProgress(event: Record<string, unknown>, scope: 'dock' | 'task' = 'task'): void {
   if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? ''), scope });

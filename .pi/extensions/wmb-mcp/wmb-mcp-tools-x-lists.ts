@@ -53,7 +53,7 @@ const getOperation: ToolDefinition = {
 
 const prepareOperation: ToolDefinition = {
   name: 'wmb_prepare_x_list_operation', label: '准备 X List 操作',
-  description: '只创建待 WMB UI 读取快照并最终确认的提议；绝不能确认或执行 X List 外部写入。',
+  description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。真正写入 X 前必须再调用 wmb_confirm_x_list_operation。members_* 建议每次只传 1 个 handle，串行执行。',
   parameters: {
     type: 'object',
     properties: {
@@ -70,4 +70,26 @@ const prepareOperation: ToolDefinition = {
   }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation];
+const confirmOperation: ToolDefinition = {
+  name: 'wmb_confirm_x_list_operation', label: '确认并执行 X List 操作',
+  description: '确认并执行已 prepare 的 X List 操作。会读取真实网页快照、arm，再后台 quiet 串行执行。delete 必须提供 typedListName 且与当前 List 名称完全一致。用于 members_add/members_remove/create/update/delete。',
+  parameters: {
+    type: 'object',
+    properties: {
+      operationId: { type: 'string' },
+      expectedRevision: { type: 'number' },
+      typedListName: { type: 'string' }
+    },
+    required: ['operationId'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('x_lists.confirm', {
+      operation_id: String(params.operationId ?? ''),
+      expected_revision: typeof params.expectedRevision === 'number' ? params.expectedRevision : undefined,
+      typed_list_name: params.typedListName === undefined ? undefined : String(params.typedListName)
+    }));
+  }
+};
+
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, confirmOperation];

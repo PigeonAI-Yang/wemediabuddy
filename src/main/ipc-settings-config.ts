@@ -5,17 +5,19 @@ import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, type BrowserRuntime } from './browser';
 import type { McpRuntime } from './mcp';
+import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
   chooseDataRoot: () => Promise<DataRoot | null>;
   getMcp: () => McpRuntime | null;
+  getXhs?: () => XhsMcpRuntime | null;
   getBrowser: () => BrowserRuntime | null;
   stopPi: () => Promise<void>;
 };
 
-export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp, getBrowser, stopPi }: Dependencies): void {
+export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp, getXhs, getBrowser, stopPi }: Dependencies): void {
   ipcMain.handle('data-root:get', loadSelectedDataRoot);
   ipcMain.handle('data-root:choose', chooseDataRoot);
   ipcMain.handle('settings:get', async () => {
@@ -29,6 +31,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     return {
       ...settings,
       mcp: getMcp() ? { status: 'ready', url: getMcp()!.url } : { status: 'not_started', url: null },
+      xhs: getXhs?.()?.status() ?? { status: 'not_started', url: null, port: null, pid: null, runtimeDir: null, tools: [], requiredToolsPresent: false, lastError: null },
       browser: getBrowser()
         ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath, mode: getBrowser()!.mode }
         : { status: 'not_started' },

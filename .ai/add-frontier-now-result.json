@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "error": "manage sheet not open",
+  "stack": "Error: manage sheet not open\n    at openManageSheet (file:///J:/PigeonYang/WeMediaBuddy/.ai/add-frontier-now.mjs:44:9)\n    at async session.run.timeoutMs (file:///J:/PigeonYang/WeMediaBuddy/.ai/add-frontier-now.mjs:141:7)\n    at async execute (file:///J:/PigeonYang/WeMediaBuddy/src/main/platforms/x-list-session.ts:111:18)",
+  "results": []
+}

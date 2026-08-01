@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "businessDate": "2026-08-01",
+  "error": "plan item 引用了不存在的 source：a7494702-9b45-4246-9400-f229c19b85d3",
+  "stack": "Error: plan item 引用了不存在的 source：a7494702-9b45-4246-9400-f229c19b85d3\n    at startDailyIntelligence (file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts:384:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///J:/PigeonYang/WeMediaBuddy/.ai/run-daily-intelligence-once.mjs:36:15"
+}

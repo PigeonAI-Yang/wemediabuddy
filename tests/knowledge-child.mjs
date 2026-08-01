@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { upsertSource } from '../src/main/sources.ts';
-import { getKnowledgeContext, listKnowledgeSources, recordKnowledgeBatch, updateKnowledgeSource } from '../src/main/knowledge.ts';
+import { deleteKnowledgeSource, getKnowledgeContext, listKnowledgeSources, recordKnowledgeBatch, updateKnowledgeSource } from '../src/main/knowledge.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-knowledge-'));
@@ -21,6 +21,23 @@ try {
   let staleRejected = false;
   try { updateKnowledgeSource(database, { id: ids[0], expectedRevision: 1, managementStatus: 'archived' }); } catch (error) { staleRejected = String(error).includes('REVISION_CONFLICT'); }
   if (state.revision !== 2 || !staleRejected) throw new Error('dual state concurrency failed');
+
+  const edited = updateKnowledgeSource(database, { id: ids[1], expectedRevision: 1, title: '资料 1 改名', summary: '新摘要', author: 'tester' });
+  const editedRow = listKnowledgeSources(database, { query: '资料 1 改名', limit: 5 }).items.find((item) => item.id === ids[1]);
+  if (edited.revision !== 2 || editedRow?.title !== '资料 1 改名' || editedRow?.summary !== '新摘要' || editedRow?.author !== 'tester') {
+    throw new Error('source edit failed');
+  }
+
+  updateKnowledgeSource(database, { id: ids[2], expectedRevision: 1, managementStatus: 'archived' });
+  const defaultList = listKnowledgeSources(database, { limit: 100 });
+  if (defaultList.items.some((item) => item.id === ids[2])) throw new Error('archived source still listed by default');
+  const archivedOnly = listKnowledgeSources(database, { managementStatus: 'archived', limit: 20 });
+  if (!archivedOnly.items.some((item) => item.id === ids[2])) throw new Error('archived filter failed');
+
+  const removed = deleteKnowledgeSource(database, { id: ids[3], expectedRevision: 1 });
+  if (!removed.deleted || listKnowledgeSources(database, { query: '资料 3', includeArchived: true, limit: 20 }).items.some((item) => item.id === ids[3])) {
+    throw new Error('source delete failed');
+  }
 
   const recorded = recordKnowledgeBatch(database, { items: [{ sourceId: ids[0], topic: { canonicalKey: 'openai-agents', title: 'OpenAI Agents' }, relation: 'primary' }] });
   const replay = recordKnowledgeBatch(database, { items: [{ sourceId: ids[0], topic: { canonicalKey: 'OPENAI-AGENTS', title: 'OpenAI Agents' }, relation: 'primary' }] });

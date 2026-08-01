@@ -1,0 +1,8 @@
+
+DevTools listening on ws://127.0.0.1:9334/devtools/browser/45f2f062-4ca1-4ff1-8656-3fce3e58055f
+Error occurred in handler for 'knowledge-context:preview-package': Error: No handler registered for 'knowledge-context:preview-package'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:120643)
+    at Session.emit (node:events:509:28)
+Error occurred in handler for 'knowledge-context:preview-package': Error: No handler registered for 'knowledge-context:preview-package'
+    at Session.<anonymous> (node:electron/js2c/browser_init:2:120643)
+    at Session.emit (node:events:509:28)

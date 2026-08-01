@@ -1,0 +1,78 @@
+{
+  "ok": false,
+  "results": [
+    {
+      "handle": "@AnthropicAI",
+      "ok": false,
+      "error": "当前页面不是有效的 X List。",
+      "ms": 22890
+    },
+    {
+      "handle": "@GoogleDeepMind",
+      "ok": false,
+      "error": "当前页面不是有效的 X List。",
+      "ms": 33595
+    },
+    {
+      "handle": "@xai",
+      "ok": false,
+      "error": "X 成员管理页未出现可操作控件；请接管浏览器后重试。",
+      "ms": 36188
+    },
+    {
+      "handle": "@BytePlusGlobal",
+      "ok": false,
+      "error": "当前页面不是有效的 X List。",
+      "ms": 48171
+    },
+    {
+      "handle": "@ByteDanceOSS",
+      "ok": false,
+      "error": "X 成员管理页未出现可操作控件；请接管浏览器后重试。",
+      "ms": 40568
+    },
+    {
+      "handle": "@CapCutApp",
+      "ok": false,
+      "error": "当前页面不是有效的 X List。",
+      "ms": 38924
+    }
+  ],
+  "presentAfter": [
+    {
+      "handle": "@deepseek_ai",
+      "present": false
+    },
+    {
+      "handle": "@OpenAI",
+      "present": false
+    },
+    {
+      "handle": "@AnthropicAI",
+      "present": false
+    },
+    {
+      "handle": "@GoogleDeepMind",
+      "present": false
+    },
+    {
+      "handle": "@xai",
+      "present": false
+    },
+    {
+      "handle": "@BytePlusGlobal",
+      "present": false
+    },
+    {
+      "handle": "@ByteDanceOSS",
+      "present": false
+    },
+    {
+      "handle": "@CapCutApp",
+      "present": false
+    }
+  ],
+  "membersCount": 0,
+  "membersError": null,
+  "finishedAt": "2026-08-01T09:20:49.600Z"
+}

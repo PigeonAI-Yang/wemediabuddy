@@ -64,9 +64,81 @@ declare global {
       bindXList(input: { listId: string; expectedRevision?: number }): Promise<XListCommand<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
       setXListBindingEnabled(input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }): Promise<XListCommand<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
       collectXListTimeline(input: { accountKey: string; listId: string; limit?: number }): Promise<XListCommand<{ binding: { id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }; sourceIds: string[] }>>;
-      listKnowledgeSources(input?: { query?: string; verificationStatus?: string; managementStatus?: string; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>;
-      updateKnowledgeSource(input: { id: string; expectedRevision: number; verificationStatus?: string; managementStatus?: string }): Promise<{ id: string; revision: number }>;
-      listKnowledgeTopics(input?: { query?: string; status?: string; limit?: number; offset?: number }): Promise<any[]>;
+      listKnowledgeSources(input?: { query?: string; verificationStatus?: string; managementStatus?: string; includeArchived?: boolean; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>;
+      updateKnowledgeSource(input: { id: string; expectedRevision: number; verificationStatus?: string; managementStatus?: string; title?: string; summary?: string | null; author?: string | null }): Promise<{ id: string; revision: number }>;
+      deleteKnowledgeSource(input: { id: string; expectedRevision: number }): Promise<{ id: string; deleted: true }>;
+      listWatchingSources(input?: { limit?: number }): Promise<Array<{
+        id: string;
+        title: string;
+        originalUrl?: string | null;
+        summary?: string | null;
+        publishedAt?: string | null;
+        collectedAt?: string | null;
+        verificationStatus?: string;
+        managementStatus?: string;
+        revision?: number;
+        topics?: string;
+        opportunityCount?: number;
+        projectCount?: number;
+        publicationCount?: number;
+        priority?: number | null;
+      }>>;
+      markSourcesWatching(input: { sourceIds: string[] }): Promise<{ updated: number; ids: string[] }>;
+      getSourceBodyCache(sourceId: string): Promise<{
+        sourceId: string;
+        url: string;
+        status: 'ready' | 'failed' | 'empty';
+        contentType: string | null;
+        extractedText: string;
+        extractedChars: number;
+        errorMessage: string | null;
+        fetchedAt: string;
+        updatedAt: string;
+      } | null>;
+      listSourceBodyCaches(sourceIds?: string[]): Promise<Array<{
+        sourceId: string;
+        url: string;
+        status: 'ready' | 'failed' | 'empty';
+        contentType: string | null;
+        extractedText: string;
+        extractedChars: number;
+        errorMessage: string | null;
+        fetchedAt: string;
+        updatedAt: string;
+      }>>;
+      fetchSourceBody(input: { sourceId: string; force?: boolean; maxChars?: number }): Promise<{
+        sourceId: string;
+        url: string;
+        status: 'ready' | 'failed' | 'empty';
+        contentType: string | null;
+        extractedText: string;
+        extractedChars: number;
+        errorMessage: string | null;
+        fetchedAt: string;
+        updatedAt: string;
+      }>;
+      getXhsStatus(): Promise<{
+        status: 'not_started' | 'starting' | 'ready' | 'needs_user' | 'process_failed' | 'tool_mismatch';
+        url: string | null;
+        port: number | null;
+        pid: number | null;
+        runtimeDir: string | null;
+        tools: string[];
+        requiredToolsPresent: boolean;
+        lastError: string | null;
+      }>;
+      ensureXhs(): Promise<any>;
+      startXhsLogin(): Promise<{ ok: boolean; pid?: number; error?: string }>;
+      getWireHealthLedger(input?: { businessDate?: string }): Promise<{
+        taskId: string | null;
+        businessDate: string | null;
+        status: string | null;
+        phase: string | null;
+        updatedAt: string | null;
+        entries: Array<{ key: string; kind: 'registry' | 'x_list' | 'other'; ok: boolean; at: string; error?: string; saved: number }>;
+        summary: { total: number; ok: number; failed: number; saved: number };
+      }>;
+      listKnowledgeTopics(input?: { query?: string; status?: string; limit?: number; offset?: number }): Promise<{ items: Array<{ id: string; title: string; canonicalKey: string; kind: string; summary: string | null; status: string; firstSeenAt: string | null; lastSeenAt: string | null; revision: number; sourceCount: number; opportunityCount: number; contentCount: number; publicationCount: number }>; total: number; limit: number; offset: number; hasMore: boolean }>;
       listKnowledgeDomains(input?: {query?:string;status?:string;order?:'manual'|'recent'|'size';limit?:number;offset?:number}):Promise<{items:any[];total:number;limit:number;offset:number;hasMore:boolean}>;
       getKnowledgeDomain(id:string,input?:{limit?:number;offset?:number}):Promise<any>;
       createKnowledgeDomain(input:{title:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[]}):Promise<any>;
@@ -160,6 +232,7 @@ declare global {
         updatedAt: string;
       }>;
       onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void): () => void;
+      onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => void): () => void;
       startAgentTask(input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
@@ -172,7 +245,63 @@ declare global {
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startBrowser(input?: { mode?: 'quiet' | 'visible' | 'headless' }): Promise<{ pid: number; cdpUrl: string; profilePath: string; mode: 'quiet' | 'visible' | 'headless' }>;
-      getToday(planDate: string): Promise<{ sources: TodaySource[]; plan: { id: string; summary: string; items: TodayPlanItem[] } | null; pendingActions: string[] } | null>;
+      getToday(planDate: string): Promise<{
+        sources: TodaySource[];
+        sourcesTotal: number;
+        plan: { id: string; summary: string; items: TodayPlanItem[] } | null;
+        pendingActions: string[];
+        fermenting: {
+          items: Array<{
+            id: string;
+            objectType: 'plan_item' | 'source' | 'topic';
+            objectId: string;
+            fingerprint: string;
+            title: string;
+            state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired';
+            priority: number | null;
+            topicId: string | null;
+            sourceIds: string[];
+            originPlanDate: string | null;
+            firstSeenAt: string;
+            lastSeenAt: string;
+            expiresAt: string;
+            decayScore: number;
+            reason: string | null;
+            aftershocks: Array<{ sourceId: string; title: string; collectedAt: string }>;
+            fermentedDays: number;
+            createdAt: string;
+            updatedAt: string;
+            revision: number;
+          }>;
+          watchingItems: Array<{
+            id: string;
+            objectType: 'plan_item' | 'source' | 'topic';
+            objectId: string;
+            fingerprint: string;
+            title: string;
+            state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired';
+            priority: number | null;
+            topicId: string | null;
+            sourceIds: string[];
+            originPlanDate: string | null;
+            firstSeenAt: string;
+            lastSeenAt: string;
+            expiresAt: string;
+            decayScore: number;
+            reason: string | null;
+            aftershocks: Array<{ sourceId: string; title: string; collectedAt: string }>;
+            fermentedDays: number;
+            createdAt: string;
+            updatedAt: string;
+            revision: number;
+          }>;
+          topics: Array<{ topicId: string; title: string; activeCount: number; watchingCount: number; latestTitle: string | null; fermentedDays: number }>;
+          pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
+        };
+      } | null>;
+      refreshFermenting(planDate: string): Promise<any>;
+      listFermenting(planDate: string): Promise<any>;
+      setCarryState(input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }): Promise<any>;
       createProjectFromPlanItem(planItemId: string): Promise<{ id: string; revision: number; created: boolean }>;
       getStudio(): Promise<Array<{
         id: string;
@@ -213,6 +342,29 @@ declare global {
         sourceProjectId: string; contentVersionId: string; title: string;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
       saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      listStudioAssets(projectId: string): Promise<Array<{
+        id: string;
+        relativePath: string;
+        mimeType: string;
+        byteCount: number;
+        sha256: string;
+        origin: string;
+        width: number | null;
+        height: number | null;
+        durationMs: number | null;
+        createdAt: string;
+      }>>;
+      importStudioImage(input: {
+        projectId: string;
+        sourcePath?: string;
+        fileName?: string;
+        mimeType?: string;
+        bytesBase64?: string;
+        alt?: string;
+      }): Promise<
+        | { ok: true; asset: { id: string; relativePath: string; mimeType: string; byteCount: number; sha256: string; origin: string; width: number | null; height: number | null; durationMs: number | null; createdAt: string }; markdown: string; reused: boolean }
+        | { ok: false; cancelled: true }
+      >;
       getPublications(): Promise<Array<{
         publication: {
           id: string;

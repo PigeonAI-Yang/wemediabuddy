@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "handle": "@ArtificialAnlys",
+      "ok": true,
+      "result": {
+        "accountKey": "@KimbomArtist",
+        "outcome": "already_present",
+        "evidenceUrl": "https://x.com/i/lists/2083262800521224237/members"
+      }
+    },
+    {
+      "handle": "@lmsysorg",
+      "ok": false,
+      "error": "X 列表页未出现“管理成员”入口；请接管浏览器后重试。"
+    }
+  ],
+  "handles": [
+    "@ArtificialAnlys",
+    "@arena"
+  ]
+}

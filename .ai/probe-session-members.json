@@ -1,0 +1,97 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "target": "https://x.com/i/lists/2082851520417255750",
+      "url": "https://x.com/i/lists/2082851520417255750",
+      "title": "",
+      "hasAccount": true,
+      "userCells": 0,
+      "dialogs": 0,
+      "masks": 0,
+      "searchInputs": [
+        {
+          "testid": "SearchBox_Search_Input",
+          "placeholder": "搜索",
+          "aria": "查询词条",
+          "visible": true
+        }
+      ],
+      "buttons": [],
+      "textSample": "要查看键盘快捷键，按下问号\n查看键盘快捷键\n主页\n探索\n通知\n聊天\nGrok\nPremium\n书签\n创作者工作室\n文章\n个人资料\n更多\n发帖\n亵渎\n@KimbomArtist\n查看新帖子\n升级为 Premium+\n享受更多好处，比如免广告和最高回复优先级。\n升级为 Premium+\n条款\n ·\n隐私\n ·\nCookie\n ·\n辅助功能\n ·\n美国 TIDA\n ·\n广告信息\n ·\n更多\n© 2026 X Corp."
+    },
+    {
+      "target": "https://x.com/i/lists/2082851520417255750/members",
+      "url": "https://x.com/home",
+      "title": "X",
+      "hasAccount": true,
+      "userCells": 0,
+      "dialogs": 0,
+      "masks": 0,
+      "searchInputs": [
+        {
+          "testid": "SearchBox_Search_Input",
+          "placeholder": "搜索",
+          "aria": "查询词条",
+          "visible": true
+        }
+      ],
+      "buttons": [
+        "管理时间线",
+        "添加照片或视频",
+        "添加一个 GIF",
+        "添加投票",
+        "添加表情符号"
+      ],
+      "textSample": "要查看键盘快捷键，按下问号\n查看键盘快捷键\n主页\n探索\n通知\n聊天\nGrok\nPremium\n书签\n创作者工作室\n文章\n个人资料\n更多\n发帖\n亵渎\n@KimbomArtist\n为你推荐 \n正在关注\n查看新帖子\n有什么新鲜事？\n\n\n发帖\n升级为 Premium+\n享受更多好处，比如免广告和最高回复优先级。\n升级为 Premium+\n条款\n ·\n隐私\n ·\nCookie\n ·\n辅助功能\n ·\n美国 TIDA\n ·\n广告信息\n ·\n更多\n© 2026 X Corp."
+    },
+    {
+      "target": "https://x.com/i/lists/2082851520417255750/members/suggested",
+      "url": "https://x.com/home",
+      "title": "主页 / X",
+      "hasAccount": true,
+      "userCells": 3,
+      "dialogs": 0,
+      "masks": 0,
+      "searchInputs": [
+        {
+          "testid": "SearchBox_Search_Input",
+          "placeholder": "搜索",
+          "aria": "查询词条",
+          "visible": true
+        }
+      ],
+      "buttons": [
+        "管理时间线",
+        "添加照片或视频",
+        "添加一个 GIF",
+        "添加投票",
+        "添加表情符号"
+      ],
+      "textSample": "要查看键盘快捷键，按下问号\n查看键盘快捷键\n主页\n探索\n通知\n聊天\nGrok\nPremium\n书签\n创作者工作室\n文章\n个人资料\n更多\n发帖\n亵渎\n@KimbomArtist\n为你推荐 \n正在关注\nTop sexy girls\nadv\n在人前羞耻的露出果体\n母狗反差羞辱自拍\n섹트_Korea\n软件\n查看新帖子\n有什么新鲜事？\n\n\n发帖\n升级为 Premium+\n享受更多好处，比如免广告和最高回复优先级。\n升级为 Premium+\n当前趋势\n有什么新鲜事\n美国 的趋势\nIntroducing\n美国 的趋势\nBetty\n趋势 Mrs. Tucker\n娱乐 趋势\nSpider-Man\n趋势 Peter，Tom Holland\n美国 的趋势\nCeuta\n显示更多\nZartbot\n@zartbotF\n关注\nAYi\n@AYi_AInotes\n关注\nAI Will\n@FinanceYF5\n关注\n显示更多"
+    },
+    {
+      "target": "https://x.com/i/lists/2082851520417255750/info",
+      "url": "https://x.com/i/lists/2082851520417255750",
+      "title": "",
+      "hasAccount": true,
+      "userCells": 0,
+      "dialogs": 0,
+      "masks": 0,
+      "searchInputs": [
+        {
+          "testid": "SearchBox_Search_Input",
+          "placeholder": "搜索",
+          "aria": "查询词条",
+          "visible": true
+        }
+      ],
+      "buttons": [],
+      "textSample": "要查看键盘快捷键，按下问号\n查看键盘快捷键\n主页\n探索\n通知\n聊天\nGrok\nPremium\n书签\n创作者工作室\n文章\n个人资料\n更多\n发帖\n亵渎\n@KimbomArtist\nAI前沿\n@KimbomArtist\n查看新帖子\n升级为 Premium+\n享受更多好处，比如免广告和最高回复优先级。\n升级为 Premium+\n条款\n ·\n隐私\n ·\nCookie\n ·\n辅助功能\n ·\n美国 TIDA\n ·\n广告信息\n ·\n更多\n© 2026 X Corp."
+    },
+    {
+      "target": "add_anthropic",
+      "searchVisible": false
+    }
+  ]
+}

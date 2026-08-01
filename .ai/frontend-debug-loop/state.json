@@ -1,0 +1,37 @@
+{
+  "active_loop": "2026-07-29-semantic-edge",
+  "status": "needs_user",
+  "symptom": "关系画布没有可发现、可拖拽的语义连线操作",
+  "observation_packet": {
+    "url": "Electron relationship canvas",
+    "viewport": "1100x700",
+    "user_action": "寻找节点连接端口并尝试拖线",
+    "expected": "节点边缘出现端口，拖向目标节点后选择关系并显示有向标签线",
+    "actual": "节点没有端口；只有必须先选中两个节点才可点击的顶部按钮",
+    "screenshot": ".ai/wmb-1300-canvas-1100b.png",
+    "console": "未发现崩溃，问题是交互缺失",
+    "network_ws": "本地 IPC，未触发 create-relation",
+    "dom_selector": ".kc-node 缺少连接端口；.kc-edges pointer-events:none",
+    "computed_style_layout": "只有整卡 cursor:grab，无连接命中区",
+    "state_store_snapshot": "selected.length 必须等于 2 才能调用 connect()"
+  },
+  "hypotheses": [
+    {
+      "hypothesis": "实现把设计稿的端口拖线降级成了两节点选择加 prompt",
+      "would_disprove": "DOM 中存在可聚焦端口，pointerdown 到 pointerup 会创建预览线并调用 IPC",
+      "result": "confirmed"
+    }
+  ],
+  "breakpoint": "event-missing",
+  "owner_check": {
+    "user_blocked_on": "节点没有端口拖线",
+    "now_usable": "代码已加入端口、拖线预览、落点关系菜单和有向标签线",
+    "real_data_or_state": "真实画布已载入三个资料节点",
+    "loading_empty_error_states": "空画布引导已加入",
+    "v1_v2_baseline_preserved": "全局导航和 Pi dock 未改",
+    "regression_risk_checked": "等待后台自动门禁",
+    "would_user_return_this": "unsure"
+  },
+  "attempts": 1,
+  "last_gate": "用户要求停止鼠标控制；不再进行窗口级自动交互，真实端口拖线验收等待用户自行操作"
+}

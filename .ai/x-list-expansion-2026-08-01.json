@@ -1,0 +1,102 @@
+{
+  "date": "2026-08-01",
+  "account": "@KimbomArtist",
+  "principle": [
+    "AI前沿 = 官方/实验室/核心产品发版雷达，宁缺毋滥",
+    "AI博主 = 高质量解释者、工程实践、趋势翻译",
+    "赚钱信息差博主 = 可执行商业/流量/变现信息差，拒绝纯喊单和纯情绪"
+  ],
+  "lists": [
+    {
+      "listId": "2082851520417255750",
+      "name": "AI前沿",
+      "currentSignal": "已有 OpenAI/DeepSeek/部分产品号；缺官方厂牌完整覆盖，且时间线被 elon 噪声稀释",
+      "add": [
+        {"handle": "@AnthropicAI", "why": "Claude 发版与安全/企业动态主通道"},
+        {"handle": "@GoogleDeepMind", "why": "DeepMind 研究与模型发布"},
+        {"handle": "@GoogleAI", "why": "Google AI 产品层发布（Gemini/app 侧）"},
+        {"handle": "@xai", "why": "xAI/Grok 官方发布"},
+        {"handle": "@AIatMeta", "why": "Llama/Meta AI 官方发布"},
+        {"handle": "@MistralAI", "why": "Mistral 模型与产品发布"},
+        {"handle": "@MiniMax_AI", "why": "国产官方发版补充"},
+        {"handle": "@Alibaba_Qwen", "why": "Qwen 官方发版（若 handle 变更需人工核验）"},
+        {"handle": "@Kimi_Moonshot", "why": "Moonshot/Kimi 官方发版"},
+        {"handle": "@ByteDanceOSS", "why": "字节开源/Seed 周边信号"},
+        {"handle": "@huggingface", "why": "模型上架与开源发布聚合"},
+        {"handle": "@lmsysorg", "why": "评测/排行与模型对照信号"}
+      ],
+      "optionalLater": [
+        {"handle": "@nvidia", "why": "基础设施与模型栈，信号偏宽，可后加"},
+        {"handle": "@Microsoft", "why": "噪音大，建议只在需要企业 AI 动态时加"}
+      ],
+      "removeOrMuteLater": [
+        {"handle": "@elonmusk", "why": "严重稀释 AI前沿 信噪比；可移到单独关注，不必占 W0 雷达"}
+      ]
+    },
+    {
+      "listId": "2082177169078251627",
+      "name": "AI博主",
+      "currentSignal": "中文实操博主已有，但缺全球高质量解释层与工程层",
+      "add": [
+        {"handle": "@karpathy", "why": "训练/工程第一性原理，长文密度高"},
+        {"handle": "@sama", "why": "OpenAI 路线与产业叙事（注意不是 changelog）"},
+        {"handle": "@simonw", "why": "工具/开发者生态最佳雷达之一"},
+        {"handle": "@swyx", "why": "AI 工程与产品交叉，选题友好"},
+        {"handle": "@chipro", "why": "生产级 ML/系统视角"},
+        {"handle": "@emollick", "why": "工作流与组织采用，适合商业内容"},
+        {"handle": "@ylecun", "why": "研究路线争议与开放权重立场"},
+        {"handle": "@AndrewYNg", "why": "教育/落地叙事，稳定可引用"},
+        {"handle": "@jeremyphoward", "why": "fast.ai/实践派，开源与学习路径"},
+        {"handle": "@rasbt", "why": "LLM 工程与论文拆解"},
+        {"handle": "@cwolferesearch", "why": "研究解读质量高"},
+        {"handle": "@omarsar0", "why": "论文/技术卡片化，适合日更选题"},
+        {"handle": "@dotey", "why": "中文 AI 产品与工具翻译层（宝玉）"},
+        {"handle": "@op7418", "why": "中文 AI 产品快讯与体验"},
+        {"handle": "@huangyun_122", "why": "中文 AI 产品观察"},
+        {"handle": "@vista8", "why": "中文科技/AI 观察，选题活跃"}
+      ]
+    },
+    {
+      "listId": "2082167416352579643",
+      "name": "赚钱信息差博主",
+      "currentSignal": "已有中文商业实操号，但覆盖面窄、同质化；需补“可执行信息差”而非喊单",
+      "add": [
+        {"handle": "@levelsio", "why": "独立开发/出海变现样本，可执行"},
+        {"handle": "@marc_louvion", "why": "indie hacker 产品与增长实操"},
+        {"handle": "@tdinh_me", "why": "solo founder 增长与变现"},
+        {"handle": "@dannypostmaa", "why": "AI 产品快速上线与获客"},
+        {"handle": "@gregisenberg", "why": "社群/产品商业化"},
+        {"handle": "@dvassallo", "why": "小生意/定价/独立商业"},
+        {"handle": "@shanif", "why": "micro-SaaS 与信息差型产品"},
+        {"handle": "@jspekker", "why": "AI wrapper/产品实验密度高"},
+        {"handle": "@godofprompt", "why": "Prompt/AI 产品分发，偏流量玩法"},
+        {"handle": "@thepatwalls", "why": "产品发布与 audience 经营"},
+        {"handle": "@transterrified", "why": "中文区商业观察（需核验活跃度）"},
+        {"handle": "@vista8", "why": "中文信息差/工具机会（与AI博主可双挂）"}
+      ],
+      "avoid": [
+        "纯币圈喊单号",
+        "只转发不解释的“日入xx”账号",
+        "没有可复现路径的焦虑营销号"
+      ]
+    }
+  ],
+  "alsoUsefulButSeparate": [
+    {
+      "list": "AI测评榜",
+      "add": ["@arena", "@ArtificialAnlys", "@lmsysorg", "@huggingface", "@OpenRouterAI"]
+    },
+    {
+      "list": "AI薅羊毛博主",
+      "note": "当前几乎单账号垄断，建议另补 3-5 个稳定羊毛/额度/折扣信息源，避免单点失效"
+    }
+  ],
+  "execution": {
+    "recommendedBatch": {
+      "AI前沿": ["@AnthropicAI", "@GoogleDeepMind", "@xai", "@AIatMeta", "@MistralAI", "@Kimi_Moonshot", "@huggingface"],
+      "AI博主": ["@karpathy", "@simonw", "@swyx", "@chipro", "@emollick", "@dotey", "@op7418"],
+      "赚钱信息差博主": ["@levelsio", "@marc_louvion", "@tdinh_me", "@dannypostmaa", "@dvassallo", "@jspekker"]
+    },
+    "note": "自动 members_add 之前曾因 X 成员管理 UI 不稳定失败。建议先人工确认 handle 仍有效，再分批加；每批 6-8 个。"
+  }
+}

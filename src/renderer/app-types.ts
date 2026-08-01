@@ -1,4 +1,4 @@
-import type { TodayPlanItem } from '../main/workbench';
+import type { TodayPlanItem, TodaySource } from '../main/workbench';
 
 export type View = 'today' | 'discover' | 'knowledge' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
 export const views: View[] = ['today', 'discover', 'knowledge', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
@@ -30,6 +30,17 @@ export type XListPiContext = {
   /** Total posts loaded in UI (same as visiblePosts.length after fix; kept explicit for chip honesty). */
   loadedCount: number;
 };
+export type PiFocusObject = {
+  type: string;
+  id: string;
+  title: string;
+  summary?: string | null;
+  url?: string | null;
+  bodyStatus?: 'none' | 'ready' | 'failed' | 'empty';
+  bodyExcerpt?: string | null;
+  bodyChars?: number;
+  meta?: Record<string, unknown>;
+};
 export type PiContextRef = {
   page: View;
   pageLabel: string;
@@ -40,8 +51,47 @@ export type PiContextRef = {
   canvasId?: string;
   contextSelection?: { canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string };
   selectedItems?: TodayPlanItem[];
+  selectedSources?: Array<TodaySource & { bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number }>;
+  fermenting?: {
+    items: Array<{
+      id: string;
+      objectType: 'plan_item' | 'source' | 'topic';
+      objectId: string;
+      title: string;
+      state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired';
+      priority: number | null;
+      topicId: string | null;
+      sourceIds: string[];
+      originPlanDate: string | null;
+      fermentedDays: number;
+      decayScore: number;
+      reason: string | null;
+      aftershocks: Array<{ sourceId: string; title: string; collectedAt: string }>;
+      revision: number;
+    }>;
+    watchingItems: Array<{
+      id: string;
+      objectType: 'plan_item' | 'source' | 'topic';
+      objectId: string;
+      title: string;
+      state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired';
+      priority: number | null;
+      topicId: string | null;
+      sourceIds: string[];
+      originPlanDate: string | null;
+      fermentedDays: number;
+      decayScore: number;
+      reason: string | null;
+      aftershocks: Array<{ sourceId: string; title: string; collectedAt: string }>;
+      revision: number;
+    }>;
+    topics: Array<{ topicId: string; title: string; activeCount: number; watchingCount: number; latestTitle: string | null; fermentedDays: number }>;
+    pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
+  };
   rankingContext?: RankingContext;
   xListContext?: XListPiContext | null;
+  /** Generic page focus. Pages report what user is looking at; Pi packs this without per-page wiring. */
+  focus?: PiFocusObject | null;
 };
 
 export const platformNames: Record<string, string> = {

@@ -227,3 +227,38 @@ Deliver:
 - explicit bounded List-timeline collection into existing sources.
 
 Gate: EVAL-016 passes with a real selected X profile, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback.
+
+## M-1700 Official-release intelligence wire
+
+Scope: CAP-002, CAP-003, CAP-014 and CAP-017.
+
+Deliver: expand and validate the official AI source index, run the enabled AI-frontier X List and primary-source checklist before judgment routes, persist per-source health, and prove named release evidence enters existing sources.
+
+Gate: source-index validation, focused wire tests, durable source-item readback and List-operation evidence pass without creating a second intelligence store.
+
+## M-1800 Durable source foundation
+
+Scope: CAP-002 and CAP-014.
+
+Deliver: canonical source identity and upsert semantics, registry-to-feed binding, bounded source-body cache rules, and a shared wire-health read API.
+
+Gate: source/migration/settings focused tests and typecheck prove every ingress resolves to one durable source and the latest wire health is readable through the shared business surface.
+
+## M-1900 Modular data-root workspaces
+
+Scope: CAP-018 and CAP-019.
+
+Detailed design: `docs/spark/2026-08-02-modular-workspace-content-terminal-design.md`.
+
+Order:
+
+1. `WMB-1900` — approve the product/implementation/architecture contracts and this sequential task chain;
+2. `WMB-1901` — seal the dirty baseline, its acceptance code and a repeatable pre-enrollment AI-root manifest with an explicit allowed-difference set;
+3. `WMB-1902` — add the minimal registry, root identity, moved-root relink and zero-business-migration AI enrollment;
+4. `WMB-1903` — deliver the complete relaunch-based workspace switch slice: mutation drain, switch journal, list/switch UI, old MCP/process shutdown, rollback and inactive-root proof;
+5. `WMB-1904` — add finite compile-time AI/UK profiles, route discovered AI-only choices through the active profile, create a fresh UK root and prove a linked X pure-text chain with exhaustive AI-only sentinel coverage;
+6. `WMB-1905` — extract only the intelligence/creation catalog boundaries proven by AI/UK, then add session-bound proposals and read-or-prepare-only application MCP tools with the full stale negative matrix;
+7. `WMB-1906` — add UI result/diff confirmation and prove an Owner-supplied third self-media goal through manual confirmation, cold reopen and a linked X pure-text chain;
+8. `WMB-1907` — run focused packaged acceptance for enrollment, relaunch switching, failure recovery, UK, the third lane and truthful `needs_user`, reusing unchanged legacy receipts.
+
+Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.

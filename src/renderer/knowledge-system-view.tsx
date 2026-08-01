@@ -20,7 +20,7 @@ export function DomainMapView({selectedDomainId,onSelectDomain,onOpenTopic}:{sel
     const loaded=await Promise.all(next.items.map((item:any)=>window.wmb.getKnowledgeDomain(item.id,{limit:100})));
     setDetails(Object.fromEntries(loaded.map(item=>[item.id,item])));
   };
-  useEffect(()=>{void Promise.all([refresh(),window.wmb.listKnowledgeTopics({limit:100})]).then(([,items])=>setTopics(items));},[query,status,order]);
+  useEffect(()=>{void Promise.all([refresh(),window.wmb.listKnowledgeTopics({limit:100})]).then(([,page])=>setTopics(page?.items ?? []));},[query,status,order]);
   useEffect(()=>{if(selectedDomainId&&details[selectedDomainId])setOpened(details[selectedDomainId]);},[selectedDomainId,details]);
   const save=async(event:React.FormEvent)=>{
     event.preventDefault();if(!editor)return;

@@ -1,0 +1,117 @@
+{
+  "requestId": "pi-confirm-tool-smoke2-1785620136944",
+  "prepared": {
+    "id": "ca0d6080-28a6-4619-9f74-5e78255f9548",
+    "requestId": "pi-confirm-tool-smoke2-1785620136944",
+    "inputHash": "6a18ce3e06be8638bd744e33e16295b414b1c445cf740a62ba937f027e1cfff9",
+    "kind": "members_add",
+    "accountKey": "@KimbomArtist",
+    "listId": "2083262800521224237",
+    "canonicalUrl": "https://x.com/i/lists/2083262800521224237",
+    "ownerHandle": null,
+    "snapshot": {
+      "accountKey": "@KimbomArtist"
+    },
+    "payload": {
+      "handles": [
+        "@OpenRouter"
+      ],
+      "desiredState": "present"
+    },
+    "state": "prepared",
+    "phase": "prepared",
+    "stopRequested": false,
+    "confirmationFingerprint": null,
+    "confirmedAt": null,
+    "startedAt": null,
+    "finishedAt": null,
+    "evidence": {
+      "requestedAt": "2026-08-01T21:35:37.023Z"
+    },
+    "errorCode": null,
+    "errorMessage": null,
+    "createdAt": "2026-08-01T21:35:37.023Z",
+    "updatedAt": "2026-08-01T21:35:37.023Z",
+    "revision": 1,
+    "items": [
+      {
+        "id": "22b1dd4e-20f1-42ed-a108-2ab2b39f9ef5",
+        "sortOrder": 0,
+        "handle": "@OpenRouter",
+        "desiredState": "present",
+        "state": "pending",
+        "evidence": {},
+        "updatedAt": "2026-08-01T21:35:37.023Z"
+      }
+    ]
+  },
+  "confirmed": {
+    "ok": true,
+    "data": {
+      "id": "ca0d6080-28a6-4619-9f74-5e78255f9548",
+      "requestId": "pi-confirm-tool-smoke2-1785620136944",
+      "inputHash": "6a18ce3e06be8638bd744e33e16295b414b1c445cf740a62ba937f027e1cfff9",
+      "kind": "members_add",
+      "accountKey": "@KimbomArtist",
+      "listId": "2083262800521224237",
+      "canonicalUrl": "https://x.com/i/lists/2083262800521224237",
+      "ownerHandle": "@KimbomArtist",
+      "snapshot": {
+        "accountKey": "@KimbomArtist",
+        "list": {
+          "listId": "2083262800521224237",
+          "canonicalUrl": "https://x.com/i/lists/2083262800521224237",
+          "ownerHandle": "@KimbomArtist",
+          "name": "List 2083262800521224237",
+          "description": "",
+          "isPrivate": false,
+          "memberCount": null,
+          "kind": "owned",
+          "evidenceFingerprint": "36ce0dfb32af7d73287a1d20d93e12f8d4d195ad47c0cc496ccce2d261948cea"
+        },
+        "members": [
+          {
+            "handle": "@OpenRouter",
+            "present": true
+          }
+        ]
+      },
+      "payload": {
+        "handles": [
+          "@OpenRouter"
+        ],
+        "desiredState": "present"
+      },
+      "state": "succeeded",
+      "phase": "all_member_readbacks_succeeded",
+      "stopRequested": false,
+      "confirmationFingerprint": "983f889b6ad6405c50689b4efa19058497a3ed003354af188e5d511457b30cd0",
+      "confirmedAt": "2026-08-01T21:36:12.463Z",
+      "startedAt": "2026-08-01T21:36:12.463Z",
+      "finishedAt": "2026-08-01T21:36:26.639Z",
+      "evidence": {
+        "requestedAt": "2026-08-01T21:35:37.023Z"
+      },
+      "errorCode": null,
+      "errorMessage": null,
+      "createdAt": "2026-08-01T21:35:37.023Z",
+      "updatedAt": "2026-08-01T21:36:26.639Z",
+      "revision": 4,
+      "items": [
+        {
+          "id": "22b1dd4e-20f1-42ed-a108-2ab2b39f9ef5",
+          "sortOrder": 0,
+          "handle": "@OpenRouter",
+          "desiredState": "present",
+          "state": "already_present",
+          "evidence": {
+            "outcome": "already_present",
+            "evidenceUrl": "https://x.com/i/lists/2083262800521224237/members"
+          },
+          "updatedAt": "2026-08-01T21:36:26.631Z"
+        }
+      ]
+    },
+    "error": null
+  }
+}

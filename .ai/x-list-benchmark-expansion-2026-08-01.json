@@ -1,0 +1,62 @@
+{
+  "date": "2026-08-01",
+  "account": "@KimbomArtist",
+  "listId": "2083262800521224237",
+  "listName": "AI测评榜",
+  "canonicalUrl": "https://x.com/i/lists/2083262800521224237",
+  "currentProblem": "时间线几乎被 @arena 单点占据；缺第三方榜、学术基准、推理平台对照、agent/code 基准",
+  "alreadyPresentSignal": ["@arena", "@MiniMax_AI", "@petergostev"],
+  "principle": [
+    "只收有固定榜单/可复核评测方法的账号",
+    "官方模型发版号不进此列表（AI前沿）",
+    "handle 全部经 x.com 页面核验，排除同名个人号"
+  ],
+  "verifiedBatch": [
+    {"handle": "@ArtificialAnlys", "org": "Artificial Analysis", "why": "综合智能/价格/速度榜，日更选题友好"},
+    {"handle": "@lmsysorg", "org": "LMSYS", "why": "Chatbot Arena / 学术评测体系"},
+    {"handle": "@lmarena_ai", "org": "LMArena", "why": "Arena 产品侧账号，和 @arena 互补"},
+    {"handle": "@huggingface", "org": "Hugging Face", "why": "Open LLM Leaderboard / 开源上榜生态"},
+    {"handle": "@OpenRouter", "org": "OpenRouter", "why": "真实调用侧路由与模型可用性/排名信号"},
+    {"handle": "@togethercompute", "org": "Together AI", "why": "开源模型托管与性能成本对照"},
+    {"handle": "@fireworks_ai", "org": "Fireworks AI", "why": "推理性能与开源模型上线信号"},
+    {"handle": "@GroqInc", "org": "Groq", "why": "速度基准常客；注意不是个人号 @groq"},
+    {"handle": "@wandb", "org": "Weights & Biases", "why": "评测实验与报告"},
+    {"handle": "@scale_AI", "org": "Scale AI", "why": "SEAL 等第三方评测信号"},
+    {"handle": "@EpochAIResearch", "org": "Epoch AI", "why": "长期能力趋势与数据驱动研究"},
+    {"handle": "@StanfordCRFM", "org": "Stanford CRFM", "why": "HELM 等基础模型评测"},
+    {"handle": "@allen_ai", "org": "Ai2", "why": "OLMo/开放研究与评测"},
+    {"handle": "@arcprize", "org": "ARC Prize", "why": "抽象推理硬基准"},
+    {"handle": "@SWEbench", "org": "SWE-bench", "why": "代码 agent 主流基准"},
+    {"handle": "@BigCodeProject", "org": "BigCode", "why": "代码模型与评测生态"},
+    {"handle": "@haizelabs", "org": "Haize Labs", "why": "安全/红队评测"},
+    {"handle": "@confident_ai", "org": "Confident AI", "why": "DeepEval 生态，LLM 评测工程化"},
+    {"handle": "@rungalileo", "org": "Galileo", "why": "生产评测/可观测"},
+    {"handle": "@vectara", "org": "Vectara", "why": "幻觉评测（HHEM）"}
+  ],
+  "rejectedAfterVerify": [
+    {"handle": "@OpenRouterAI", "reason": "404"},
+    {"handle": "@groq", "reason": "个人号 Gilles Roquefeuil，不是 Groq 公司"},
+    {"handle": "@weights_biases", "reason": "非官方 W&B"},
+    {"handle": "@epochai", "reason": "个人号，不是 Epoch AI"},
+    {"handle": "@ChatbotArena", "reason": "404"},
+    {"handle": "@EleutherAI", "reason": "404"}
+  ],
+  "recommendedFirstWave": [
+    "@ArtificialAnlys",
+    "@lmsysorg",
+    "@lmarena_ai",
+    "@huggingface",
+    "@OpenRouter",
+    "@togethercompute",
+    "@fireworks_ai",
+    "@GroqInc",
+    "@wandb",
+    "@scale_AI",
+    "@EpochAIResearch",
+    "@StanfordCRFM",
+    "@arcprize",
+    "@SWEbench",
+    "@haizelabs",
+    "@vectara"
+  ]
+}

@@ -1,3 +1,4 @@
+import { broadcastDataChanged } from './data-changed.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
@@ -40,6 +41,7 @@ export function createPublication(database: DatabaseSync, input: { platformVersi
     database.prepare('INSERT INTO publication_events (id, publication_id, from_status, to_status, reason, created_at) VALUES (?, ?, NULL, ?, ?, ?)')
       .run(randomUUID(), id, 'draft', 'created', now);
     database.exec('COMMIT');
+    broadcastDataChanged({ scopes: ['publications'], reason: 'publication.create' });
     return success(getPublication(database, id)!);
   } catch (error) {
     database.exec('ROLLBACK');
@@ -79,6 +81,7 @@ export function transitionPublication(database: DatabaseSync, id: string, to: Pu
         platform: publication.platform
       });
     }
+    broadcastDataChanged({ scopes: ['publications'], reason: `publication.${to}` });
     return success(publication);
   } catch (error) {
     database.exec('ROLLBACK');

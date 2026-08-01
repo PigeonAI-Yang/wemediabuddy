@@ -1,14 +1,20 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { getToday } from './workbench';
+import { listFermentingBundle, refreshWorkCarry, setCarryState, type CarryState } from './ferment';
 import { getGitHubRankings } from './github-rankings';
 import { readRankingCache, writeRankingCache } from './ranking-cache';
-import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, listKnowledgeSources, listKnowledgeTopics, listRediscovery, updateKnowledgeDomain, updateKnowledgeSource, type ManagementStatus, type VerificationStatus } from './knowledge';
+import { createKnowledgeDomain, deleteKnowledgeSource, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, listKnowledgeSources, listKnowledgeTopics, listRediscovery, listWatchingSources, markSourcesWatching, updateKnowledgeDomain, updateKnowledgeSource, type ManagementStatus, type VerificationStatus } from './knowledge';
 import { addKnowledgeCanvasNode, createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeCanvas, createKnowledgeRelation, decideKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeCanvases, listKnowledgeContextPackages, moveKnowledgeCanvasNodes, previewKnowledgeContextPackage, removeKnowledgeCanvasNode, updateCreativeBriefIdempotent, updateKnowledgeCanvas, updateKnowledgeRelation } from './knowledge-canvas';
 import { copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject, getContentProject, getStudio, listContentProjects, saveCoreVersion, updateContentProject, type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus } from './content';
 import { upsertSource } from './sources';
+import { getAsset, guessImageMime, importAsset, importAssetBytes, linkProjectAsset, listProjectAssets, markdownImageForAsset } from './assets';
+import { broadcastDataChanged } from './data-changed';
+import { mkdir } from 'node:fs/promises';
+import { fetchAndCacheSourceBody, getSourceBodyCache, listSourceBodyCaches } from './source-body-cache';
+import { getWireHealthLedger } from './source-wire-health';
 import { success } from './result';
 
 type Dependencies = {
@@ -40,12 +46,57 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
     const root = await loadSelectedDataRoot(); if (!root) return null;
     const db = migrateDatabase(path.join(root.path, 'wmb.db')); try { return listKnowledgeSources(db, input); } finally { db.close(); }
   });
-  ipcMain.handle('knowledge:update-source', async (_event, input: { id: string; expectedRevision: number; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus }) => {
+  ipcMain.handle('knowledge:update-source', async (_event, input: {
+    id: string;
+    expectedRevision: number;
+    verificationStatus?: VerificationStatus;
+    managementStatus?: ManagementStatus;
+    title?: string;
+    summary?: string | null;
+    author?: string | null;
+  }) => {
     const root = await loadSelectedDataRoot(); if (!root) throw new Error('请先选择数据根目录。');
     const db = migrateDatabase(path.join(root.path, 'wmb.db')); try { return updateKnowledgeSource(db, input); } finally { db.close(); }
   });
-  ipcMain.handle('knowledge:list-topics', async (_event, input = {}) => {
+  ipcMain.handle('knowledge:delete-source', async (_event, input: { id: string; expectedRevision: number }) => {
+    const root = await loadSelectedDataRoot(); if (!root) throw new Error('请先选择数据根目录。');
+    const db = migrateDatabase(path.join(root.path, 'wmb.db')); try { return deleteKnowledgeSource(db, input); } finally { db.close(); }
+  });
+  ipcMain.handle('knowledge:list-watching', async (_event, input: { limit?: number } = {}) => {
     const root = await loadSelectedDataRoot(); if (!root) return [];
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return listWatchingSources(db, input?.limit ?? 30); } finally { db.close(); }
+  });
+  ipcMain.handle('knowledge:mark-watching', async (_event, input: { sourceIds?: string[] } = {}) => {
+    const root = await loadSelectedDataRoot(); if (!root) throw new Error('请先选择数据根目录。');
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return markSourcesWatching(db, Array.isArray(input?.sourceIds) ? input.sourceIds : []); } finally { db.close(); }
+  });
+  ipcMain.handle('sources:get-body-cache', async (_event, sourceId: string) => {
+    const root = await loadSelectedDataRoot(); if (!root) return null;
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return getSourceBodyCache(db, sourceId); } finally { db.close(); }
+  });
+  ipcMain.handle('sources:list-body-cache', async (_event, sourceIds: string[] = []) => {
+    const root = await loadSelectedDataRoot(); if (!root) return [];
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return listSourceBodyCaches(db, Array.isArray(sourceIds) ? sourceIds : []); } finally { db.close(); }
+  });
+  ipcMain.handle('sources:fetch-body', async (_event, input: { sourceId: string; force?: boolean; maxChars?: number }) => {
+    const root = await loadSelectedDataRoot(); if (!root) throw new Error('请先选择数据根目录。');
+    if (!input?.sourceId) throw new Error('缺少 sourceId。');
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return await fetchAndCacheSourceBody(db, input); } finally { db.close(); }
+  });
+  ipcMain.handle('sources:wire-health', async (_event, input: { businessDate?: string } = {}) => {
+    const root = await loadSelectedDataRoot(); if (!root) {
+      return { taskId: null, businessDate: input?.businessDate ?? null, status: null, phase: null, updatedAt: null, entries: [], summary: { total: 0, ok: 0, failed: 0, saved: 0 } };
+    }
+    const db = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { return getWireHealthLedger(db, input ?? {}); } finally { db.close(); }
+  });
+  ipcMain.handle('knowledge:list-topics', async (_event, input = {}) => {
+    const root = await loadSelectedDataRoot(); if (!root) return { items: [], total: 0, limit: 50, offset: 0, hasMore: false };
     const db = migrateDatabase(path.join(root.path, 'wmb.db')); try { return listKnowledgeTopics(db, input); } finally { db.close(); }
   });
   ipcMain.handle('knowledge-domains:list',async(_event,input={})=>{
@@ -170,6 +221,24 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try { return getToday(database, planDate); } finally { database.close(); }
   });
+  ipcMain.handle('today:refresh-fermenting', async (_event, planDate: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return null;
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return refreshWorkCarry(database, planDate); } finally { database.close(); }
+  });
+  ipcMain.handle('today:list-fermenting', async (_event, planDate: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return null;
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listFermentingBundle(database, planDate); } finally { database.close(); }
+  });
+  ipcMain.handle('today:set-carry-state', async (_event, input: { id: string; expectedRevision: number; state: CarryState; reason?: string }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return setCarryState(database, input); } finally { database.close(); }
+  });
   ipcMain.handle('today:create-project', async (_event, planItemId: string) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
@@ -246,5 +315,71 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
         author: 'user'
       });
     } finally { database.close(); }
+  });
+  ipcMain.handle('studio:list-assets', async (_event, projectId: string) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try { return listProjectAssets(database, projectId); } finally { database.close(); }
+  });
+  ipcMain.handle('studio:import-image', async (_event, input: {
+    projectId: string;
+    sourcePath?: string;
+    fileName?: string;
+    mimeType?: string;
+    bytesBase64?: string;
+    alt?: string;
+  }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    if (!input?.projectId) throw new Error('请先选择内容项目。');
+    await mkdir(path.join(dataRoot.path, 'assets'), { recursive: true });
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    try {
+      const project = getContentProject(database, input.projectId);
+      if (!project) throw new Error('内容项目不存在。');
+      let imported: { id: string; relativePath: string; reused: boolean; mimeType: string; sha256: string };
+      if (input.bytesBase64) {
+        imported = await importAssetBytes(database, dataRoot.path, {
+          bytes: Buffer.from(input.bytesBase64, 'base64'),
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          origin: 'studio-editor'
+        });
+      } else {
+        let sourcePath = input.sourcePath;
+        if (!sourcePath) {
+          const picked = await dialog.showOpenDialog({
+            title: '插入图片',
+            properties: ['openFile'],
+            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] }]
+          });
+          if (picked.canceled || !picked.filePaths[0]) return { ok: false as const, cancelled: true as const };
+          sourcePath = picked.filePaths[0];
+        }
+        imported = await importAsset(database, dataRoot.path, {
+          sourcePath,
+          mimeType: input.mimeType || guessImageMime(sourcePath),
+          origin: 'studio-editor'
+        });
+      }
+      if (!String(imported.mimeType || '').startsWith('image/')) {
+        throw new Error('只能插入图片文件。');
+      }
+      linkProjectAsset(database, input.projectId, imported.id);
+      const asset = getAsset(database, imported.id);
+      if (!asset) throw new Error('素材写入后读取失败。');
+      const alt = (input.alt || input.fileName || path.basename(asset.relativePath)).replace(/\.[^.]+$/, '');
+      const markdown = markdownImageForAsset(asset, alt || '图片');
+      broadcastDataChanged({ scopes: ['today'], reason: 'studio.asset' });
+      return {
+        ok: true as const,
+        asset,
+        markdown,
+        reused: imported.reused
+      };
+    } finally {
+      database.close();
+    }
   });
 }

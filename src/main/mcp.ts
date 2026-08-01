@@ -8,6 +8,7 @@ import { migrateDatabase } from './db/migrations.ts';
 import { getToday } from './workbench.ts';
 import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
 import { getSource, searchSources, upsertSource, type SourceInput } from './sources.ts';
+import { getWireHealthLedger } from './source-wire-health.ts';
 import { listAssets } from './assets.ts';
 import { listFinalReviewsAndFindings, listReviews, saveReview } from './reviews.ts';
 import { listPublicationMetricSnapshots } from './metrics.ts';
@@ -15,7 +16,8 @@ import * as z from 'zod';
 import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
 import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
 import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
-import { getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
+import { armXListOperation, getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
+import { captureXListOperationSnapshot, confirmAndRunXListOperation } from './x-list-execution.ts';
 import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
@@ -102,6 +104,14 @@ function createServerFor(rootPath: string): McpServer {
   }, async ({ query, limit }) => {
     const db = database(); try { return text(searchSources(db, query, limit)); } finally { db.close(); }
   });
+  server.registerTool('sources.wire_health_get', {
+    description: '读取最近一次今日情报导线巡检健康台账（按 registry/X List 源）。',
+    inputSchema: { business_date: z.string().optional() }
+  }, async ({ business_date }) => {
+    const db = database();
+    try { return text(getWireHealthLedger(db, { businessDate: business_date })); }
+    finally { db.close(); }
+  });
   server.registerTool('sources.upsert_batch', {
     description: '新增或更新资料；同一 request_id 重放原始结果。',
     inputSchema: { request_id: z.string(), items: z.array(z.object({
@@ -166,7 +176,7 @@ function createServerFor(rootPath: string): McpServer {
     const db = database(); try { return text(getXListOperation(db, id)); } finally { db.close(); }
   });
   server.registerTool('x_lists.prepare', {
-    description: '仅创建待 WMB UI 读取快照并最终确认的 X List 操作提议。不能确认、不能执行外部 List 写入。',
+    description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。默认先 prepared；真正写入 X 需再调用 x_lists.confirm。members_* 建议每次 1 个 handle 串行。',
     inputSchema: {
       request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
       name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional()
@@ -175,6 +185,47 @@ function createServerFor(rootPath: string): McpServer {
     const db = database();
     try { return text(prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles })); }
     finally { db.close(); }
+  });
+  server.registerTool('x_lists.confirm', {
+    description: '确认并执行已 prepare 的 X List 操作。会先读取真实网页快照并 arm，再后台 quiet 执行。delete 必须提供与当前 List 名称完全一致的 typed_list_name。members_add/remove 按 handle 串行执行。',
+    inputSchema: {
+      operation_id: z.string(),
+      expected_revision: z.number().int().optional(),
+      typed_list_name: z.string().optional()
+    }
+  }, async ({ operation_id, expected_revision, typed_list_name }) => {
+    const db = database();
+    try {
+      let operation = getXListOperation(db, operation_id);
+      if (!operation) return text({ ok: false, data: null, error: { code: 'NOT_FOUND', message: 'List 操作不存在。' } });
+      if (operation.state === 'succeeded' || operation.state === 'partial' || operation.state === 'failed' || operation.state === 'needs_user' || operation.state === 'unknown') {
+        return text({ ok: true, data: operation, error: null });
+      }
+      const config = await selectedXListBrowser();
+      if (operation.state === 'prepared') {
+        const snapshot = await captureXListOperationSnapshot(config, operation);
+        const armed = armXListOperation(db, {
+          operationId: operation.id,
+          expectedRevision: expected_revision ?? operation.revision,
+          snapshot
+        });
+        if (!armed.ok) return text(armed);
+        operation = armed.data;
+      }
+      if (operation.state !== 'awaiting_confirmation') {
+        return text({ ok: false, data: operation, error: { code: 'INVALID_STATE', message: `操作状态不可确认: ${operation.state}` } });
+      }
+      if (operation.kind === 'delete' && !(typed_list_name && typed_list_name.trim())) {
+        return text({ ok: false, data: operation, error: { code: 'VALIDATION_ERROR', message: '删除 List 必须提供 typed_list_name，且与当前名称完全一致。' } });
+      }
+      return text(await confirmAndRunXListOperation(db, config, {
+        operationId: operation.id,
+        expectedRevision: operation.revision,
+        typedListName: typed_list_name
+      }));
+    } finally {
+      db.close();
+    }
   });
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',

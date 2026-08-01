@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "requestId": "pi-serial-members-add-1785618630903",
+  "pi": "prepare only",
+  "wmb": "arm+confirm+ensureXListMember serial",
+  "operationState": "succeeded",
+  "items": [
+    {
+      "handle": "@huggingface",
+      "state": "succeeded",
+      "evidence": {
+        "outcome": "added",
+        "evidenceUrl": "https://x.com/i/lists/2083262800521224237/members"
+      }
+    }
+  ],
+  "handles": [
+    "@lmsysorg",
+    "@ArtificialAnlys",
+    "@arena",
+    "@huggingface"
+  ],
+  "confirmedError": null
+}

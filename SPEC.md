@@ -2,6 +2,7 @@
 
 - Status: approved design, implementation contract
 - Date: 2026-07-27
+- Scope revision: 2026-08-02 modular data-root workspaces
 - Product source: `PRD.md`
 - Architecture source: `TECHNICAL_DESIGN.md`
 - Scope: PRD current product range only
@@ -22,6 +23,8 @@ WMB is complete when its research, planning, creation, platform-version handoff,
 Threads, polls, mixed image/video posts, product links, locations, collections, scheduled platform publishing, live streams, audio, and paid articles are outside current scope.
 
 WMB does not judge whether an Agent's writing is good. WMB must provide complete context, structured persistence, traceable references, and observable execution so an external Agent can perform the AI work.
+
+WMB is niche-agnostic inside the self-media boundary. The existing AI lane, the UK lane, and later user-created lanes use the same fixed business loop through isolated workspaces defined by CAP-018 and CAP-019.
 
 ## 2. Shared conventions
 
@@ -80,6 +83,12 @@ Required error codes:
 - `METRIC_UNAVAILABLE`
 - `NOT_FOUND`
 - `VALIDATION_ERROR`
+- `WORKSPACE_BUSY`
+- `WORKSPACE_NOT_FOUND`
+- `WORKSPACE_ID_MISMATCH`
+- `WORKSPACE_SWITCH_FAILED`
+- `PROFILE_STALE`
+- `OFFICIAL_PACK_UNAVAILABLE`
 
 ## 3. Capability contracts
 
@@ -94,6 +103,8 @@ On first run, WMB must require a data root. It creates or opens:
 ├─ wmb.db
 ├─ assets/
 ├─ browser-profile/
+├─ pi-agent/
+├─ xiaohongshu-mcp/
 ├─ logs/
 └─ exports/
 ```
@@ -473,6 +484,34 @@ Links: REQ-001, REQ-002, REQ-005, REQ-006, REQ-013, REQ-016, AC-001, AC-012.
 
 绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源，不创建定时全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
 
+### CAP-018 Isolated data-root workspaces and one active runtime
+
+Links: REQ-001, REQ-013, REQ-017, REQ-019, AC-013, AC-014.
+
+A workspace is one complete WMB data root, not a tenant row inside a shared database. The application-level registry stores only stable workspace identity, display name, resolved root path, the active selection, and a crash-recovery switch journal. The root's existing `app_meta` stores the matching `workspace_id`; a missing root or identity mismatch must be rejected rather than inferred from its path or name.
+
+The existing user data root is registered in place as the AI workspace. Registration may add workspace identity and profile records, but must not move or copy files, rewrite business object IDs, or change existing uniqueness semantics. A new UK or custom workspace uses a separate root and may contain the same URLs, dates, object IDs, account names and asset hashes without collision.
+
+Exactly one workspace runtime may be active. SQLite, MCP, Pi, Chrome, Xiaohongshu MCP, scheduler, jobs and renderer reads are all bound to that root. A switch is rejected with `WORKSPACE_BUSY` while a Pi/content/intelligence/review task is running, an external browser write cannot be safely interrupted, or the current mutation queue cannot be drained. An allowed switch closes the mutation gate, rejects new mutations, waits for committed database/file writes, validates the target root and identity read-only, records `previous_workspace_id + pending_workspace_id`, stops every root-bound runtime, closes the database and MCP server, then relaunches the Electron application. It does not rebind a live renderer to another root.
+
+Startup marks a pending switch as attempting, opens and migrates the target root through the normal transactional path, and commits the active selection only after core database and business readback succeeds. A target failure restores and opens the previous root; a process exit while attempting is treated as a failed switch on the next start. Schema/migration metadata and diagnostic logs may change during a failed attempt, but content business objects must not. If the previous root also cannot reopen, WMB reports recovery failure and must not claim success.
+
+Each successful switch starts a new process and a new random MCP URL. Every old HTTP connection, stream and URL must close and must never forward to the new root. Inactive roots run no background process or scheduled write. Safe overdue jobs use the existing real-time recovery rule when that root is activated again; unsafe jobs remain `needs_user`/`unknown` and are never replayed. Listing and explicit relink after a move are in scope; rename, archive, permanent deletion and parallel runtimes are not.
+
+### CAP-019 Official workspace profiles and AI proposals
+
+Links: REQ-018, REQ-019, AC-015.
+
+AI and UK are versioned official templates shipped with WMB. `WorkspaceProfileV1` has only these fields: stable profile ID, integer revision, optional official template ID/version, display name, audience, content goal, plain-text editorial brief, exactly one official intelligence-pack ID/version, one creation-pack ID/version, and one or more currently supported platforms. Text fields are context, never executable configuration. Review remains fixed WMB behavior until real lane differences justify another field. A profile cannot contain arbitrary code, file paths, tool names, new business stages, cross-stage graphs, or a generic `module.run` instruction. Third-party plugins and a free workflow builder are outside scope.
+
+Each root stores one effective profile revision. An Agent task or job records the profile revision it starts with, and profile activation is rejected while a profile-bound task is running; WMB does not keep multiple pack runtimes or implement old-pack compatibility. An Agent may read the compile-time official catalog and create a complete proposal from the user's natural-language self-media goal, but WMB only validates its finite fields, references and state; it does not claim the proposed content strategy is correct. AI and UK official templates can also be created directly from UI without a configured model.
+
+Unconfirmed proposals are session-bound Main-process state and disappear on restart. Confirmation binds the proposal ID, normalized proposal hash, base effective-profile revision, official catalog version, selected pack versions, platform selection and the exact displayed diff. Any change or missing session proposal makes the confirmation stale and returns `PROFILE_STALE`; a missing packaged capability returns `OFFICIAL_PACK_UNAVAILABLE`. MCP and Pi may list workspaces, read the current workspace and catalog, and submit a proposal. They must not confirm, activate, delete, or supply an arbitrary root path.
+
+For an existing root, UI confirmation updates its effective profile in one root-local transaction. For a new workspace, the UI alone selects an empty root; WMB idempotently writes a root identity, schema and effective profile before atomically adding it to the registry. A crash before registry insertion leaves no visible/active workspace and the candidate root can be safely revalidated and relinked; the current active root is unchanged. The normal relaunch switch is a separate step.
+
+The UK template must route intelligence and creation through UK-approved capabilities. Its acceptance includes an inventory at the shared dispatch boundary proving zero calls and zero writes through every AI-only Skill, creation route, X List, source route or other discovered AI-only entry. Missing model credentials or platform login makes the attempted Pi task or job persist the existing `needs_user` state with a stable reason plus workspace/profile revision; WMB must not silently substitute another model, tool, account or pack.
+
 ## 4. UI and IPC contract
 
 The five required views are Today, Studio, Publish, Results, and Settings.
@@ -487,8 +526,11 @@ Preload exposes narrow IPC for:
 - open data/log directories.
 - fixed Pi task start/read/cancel and Pi connection settings.
 - fixed X List reads, preparation and UI-only confirmation.
+- workspace list, current identity, relaunch-based safe switch, moved-root relink, proposal preparation and UI-only profile activation.
 
 Renderer must not pass SQL, arbitrary command names, arbitrary filesystem paths, or arbitrary browser URLs.
+
+The UI must keep the active workspace identity visible wherever account, MCP or data-root identity matters. A switch relaunches the application and opens the target root with fresh renderer state.
 
 Every mutation returns the complete latest object. Focused views poll for external MCP writes at most every five seconds.
 
@@ -512,5 +554,8 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-014 | Knowledge compounding | 250-source pagination, dual-state stale-write rejection, cross-day topic idempotency and topic/source-to-review readback. |
 | EVAL-015 | Knowledge canvas | Persistent real-object layout and typed relations, current-page default, exact multi-selection excluding a sentinel, Pi-session context identity without package/use writes, project evidence backlink, stale-write rejection and 250-node/1100px operation. |
 | EVAL-016 | X List workspace | Real selected X profile reads owned/followed/member List identities; an owned List member batch is frozen, UI-confirmed, serially read back and stoppable; stale snapshot becomes confirmation-stale; a bound List timeline writes traceable existing source items; unsafe external-list actions remain absent. |
+| EVAL-017 | AI root enrollment | A sealed pre-enrollment manifest binds Git/diff ownership, acceptance-script and package hashes, resolved root/schema, stable business projections, asset/export hashes, login readback and Pi sessions. Post-enrollment differs only by declared workspace/profile/migration metadata and runtime logs; current capability receipts remain valid. |
+| EVAL-018 | Workspace switch and isolation | AI/UK duplicate-value fixtures remain isolated; an in-flight mutation or unsafe task rejects switching; a safe switch relaunches, terminates old HTTP streams/sessions and the complete old process tree, uses a new MCP URL, and leaves the inactive root's DB/WAL/files/jobs unchanged across a due-time observation window. Injected failure and process-kill at each switch-journal phase restore the original root; moved-root relink and identity mismatch are proven. |
+| EVAL-019 | Official profiles and new lanes | Without a configured model, UI creates the fixed UK template; UK completes a linked source → plan → content → X pure-text platform version through UI/Pi/external MCP while every inventoried AI-only route stays at zero. A non-self-media proposal and each stale confirmation binding are rejected with zero registry/root/profile change, and MCP/Pi expose no activate tool. An Owner-provided third self-media goal is confirmed manually in the real UI, cold-reopened, and completes the same linked text chain; interrupted candidate-root initialization leaves registry/active unchanged and is safely revalidated. Missing model/login produces persistent, accurately attributed `needs_user` with no fallback or cross-root write. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

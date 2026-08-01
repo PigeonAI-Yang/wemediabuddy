@@ -256,6 +256,7 @@ export class XListSession {
         await this.humanBrowseAfterNavigation();
       }
       this.assertCurrent(opId);
+      await this.dismissBlockingOverlays();
       await this.assertUsablePage();
       await this.guard.recordSuccess();
     } catch (error) {
@@ -286,18 +287,31 @@ export class XListSession {
     throw new XListNeedsUserError('X 当前页面未出现可安全操作的 List 控件；请接管浏览器后重试。');
   }
 
-  async click(locator: Locator): Promise<void> {
+  async click(locator: Locator, options: { force?: boolean; preserveOverlay?: boolean } = {}): Promise<void> {
     try {
-      await this.guard.wait('full');
-      await locator.scrollIntoViewIfNeeded();
+      // Modal/member workflows need many clicks; full/night penalties make a single add exceed timeouts.
+      await this.guard.wait(options.preserveOverlay ? 'browse' : 'browse');
+      // Never Escape away a useful List sheet just before clicking inside it.
+      if (!options.preserveOverlay) await this.dismissBlockingOverlays();
+      await locator.scrollIntoViewIfNeeded().catch(() => {});
       const box = await locator.boundingBox();
       if (!box) throw new XListNeedsUserError('X List 控件不可见，无法安全点击。');
-      const targetX = box.x + box.width * randomFloat(0.35, 0.65);
-      const targetY = box.y + box.height * randomFloat(0.35, 0.65);
-      const startX = Math.max(8, targetX - randomInt(100, 220));
-      const startY = Math.max(8, targetY + randomInt(-120, 120));
-      await humanPointerClick(this.page, { x: startX, y: startY }, { x: targetX, y: targetY });
-      await this.settle('full');
+      if (options.force) {
+        await locator.click({ force: true, timeout: 8_000 });
+      } else {
+        const targetX = box.x + box.width * randomFloat(0.35, 0.65);
+        const targetY = box.y + box.height * randomFloat(0.35, 0.65);
+        const startX = Math.max(8, targetX - randomInt(100, 220));
+        const startY = Math.max(8, targetY + randomInt(-120, 120));
+        try {
+          await humanPointerClick(this.page, { x: startX, y: startY }, { x: targetX, y: targetY });
+        } catch {
+          // Modal masks and layered sheets frequently intercept pointer paths on X.
+          if (!options.preserveOverlay) await this.dismissBlockingOverlays();
+          await locator.click({ force: true, timeout: 8_000 });
+        }
+      }
+      await this.settle('browse');
       await this.guard.recordSuccess();
     } catch (error) {
       if (!(error instanceof XListNeedsUserError) && !(error instanceof XListDataError)) await this.guard.recordFailure();
@@ -309,13 +323,54 @@ export class XListSession {
 
   async typeInto(locator: Locator, value: string): Promise<void> {
     try {
-      await this.click(locator);
+      // Typing into members/search sheets must not Escape the sheet first.
+      await this.click(locator, { force: true, preserveOverlay: true });
       await this.page.keyboard.press('Control+A');
       await typeHumanly(this.page, value);
       await this.settle('full');
     } finally {
       await this.restoreUserForeground();
     }
+  }
+
+  async dismissBlockingOverlays(): Promise<void> {
+    // If a useful List dialog/sheet is open, Escape would destroy the workflow.
+    const usefulOpen = await this.page.locator('[role="dialog"], [aria-modal="true"]').evaluateAll((nodes) => {
+      return nodes.some((node) => {
+        const el = node as HTMLElement;
+        if (!(el.offsetWidth || el.offsetHeight)) return false;
+        const text = (el.innerText || '').slice(0, 500);
+        return /管理成员|编辑列表|已推荐|列表成员|Manage members|Edit List|Suggested|Members|搜索用户|Search people/.test(text);
+      });
+    }).catch(() => false);
+
+    if (!usefulOpen) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const blocked = await this.page.locator('[data-testid="mask"]').first().isVisible().catch(() => false);
+        if (!blocked) break;
+        await this.page.keyboard.press('Escape').catch(() => {});
+        await sleep(250);
+      }
+    }
+
+    // Drop inert masks that still swallow pointer events. Keep masks tied to open sheets.
+    await this.page.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('[data-testid="mask"]'))) {
+        const parent = el.parentElement;
+        const useful = parent?.querySelector?.(
+          '[data-testid="UserCell"], input[data-testid="SearchBox_Search_Input"], input[placeholder*="搜索用户"], input[placeholder*="Search"], [role="dialog"], [aria-modal="true"]'
+        );
+        if (useful) continue;
+        // If any visible dialog exists, keep masks; they often belong to the sheet stack.
+        const dialogOpen = Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]'))
+          .some((node) => {
+            const item = node as HTMLElement;
+            return !!(item.offsetWidth || item.offsetHeight);
+          });
+        if (dialogOpen) continue;
+        el.remove();
+      }
+    }).catch(() => {});
   }
 
   async visibleText(): Promise<string> {

@@ -1,10 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openDataRoot, validateDataRoot, type DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
+import type { XhsMcpRuntime } from './xiaohongshu-mcp';
+import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
 import { recoverInterruptedPublications } from './publishing';
 import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from './metrics';
@@ -34,15 +36,31 @@ import { visiblePiPrompt } from './pi-persistence';
 import { registerSettingsConfigIpc } from './ipc-settings-config';
 import { registerPiDockIpc } from './ipc-pi-dock';
 import { registerXListIpc } from './ipc-x-lists';
+import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
 if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'wmb-asset',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+]);
+
 const dailyRuns = new Map<string, Promise<unknown>>();
 
 const dataRootConfigPath = (): string => path.join(app.getPath('userData'), 'data-root.json');
 let mcp: McpRuntime | null = null;
+let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
 let pi: PiRpcSupervisor | null = null;
 let piSessionFile: string | null = null;
@@ -77,7 +95,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
         baseUrl: config.baseUrl,
         api: config.api,
         apiKey: '$WMB_PI_API_KEY',
-        models: [{ id: config.model, name: config.model, reasoning: true, input: ['text', 'image'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 272000, maxTokens: 16000 }]
+        models: [{ id: config.model, name: config.model, reasoning: true, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 272000, maxTokens: 16000 }]
       }
     }
   }), 'utf8');
@@ -94,13 +112,14 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     '--provider', 'wmb-api',
     '--model', config.model,
     ...(config.thinking ? ['--thinking', config.thinking] : []),
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时只可读取或调用 wmb_prepare_x_list_operation 创建待 UI 最终确认的提议，绝不能确认或执行外部 List 写入。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
+    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时：先 wmb_prepare_x_list_operation 创建提议，再在用户明确要求执行时调用 wmb_confirm_x_list_operation 确认执行；members_add/remove 每次只处理少量 handle 并串行确认。删除 List 必须提供与名称完全一致的 typedListName。禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     PI_CODING_AGENT_DIR: layout.agentDir,
     WMB_PI_API_KEY: config.apiKey,
-    WMB_MCP_URL: mcp.url
+    WMB_MCP_URL: mcp.url,
+    WMB_XHS_MCP_URL: xhs?.getUrl() || ''
   }, (event) => {
     const dockEvent = event.type === 'queue_update'
       ? {
@@ -138,6 +157,10 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   mcp = dataRoot ? await startMcp(dataRoot.path) : null;
 }
 
+async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
+  xhs = await refreshXhsRuntime(dataRoot, xhs);
+}
+
 async function loadSelectedDataRoot(): Promise<DataRoot | null> {
   try {
     const { path: rootPath } = JSON.parse(await readFile(dataRootConfigPath(), 'utf8')) as { path: string };
@@ -154,6 +177,7 @@ async function chooseDataRoot(): Promise<DataRoot | null> {
   await writeFile(dataRootConfigPath(), JSON.stringify({ path: dataRoot.path }), 'utf8');
   const migrated = migrate(dataRoot);
   await refreshMcp(migrated);
+  await refreshXhs(migrated);
   return migrated;
 }
 function migrate(dataRoot: DataRoot, options: { recoverAgentTasks?: boolean } = {}): DataRoot {
@@ -172,6 +196,7 @@ app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   void loadSelectedDataRoot().then(async (dataRoot) => {
     await refreshMcp(dataRoot);
+    await refreshXhs(dataRoot);
     if (!dataRoot || !mcp) return;
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     const pending = getLatestAgentTask(database);
@@ -181,6 +206,7 @@ app.whenReady().then(() => {
       dataRootPath: dataRoot.path,
       businessDate: pending.businessDate,
       mcpUrl: mcp.url,
+      xhsMcpUrl: xhs?.getUrl() || '',
       onEvent: (event) => {
         broadcastPiRuntimeProgress(event);
         if (event.type === 'agent_task') broadcastPiEvent(event);
@@ -188,7 +214,33 @@ app.whenReady().then(() => {
     }).finally(() => dailyRuns.delete(pending.id));
     dailyRuns.set(pending.id, run);
   });
-  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp: () => mcp, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
+  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
+  protocol.handle('wmb-asset', async (request) => {
+    try {
+      const dataRoot = await loadSelectedDataRoot();
+      if (!dataRoot) return new Response('No data root', { status: 404 });
+      const raw = request.url.replace(/^wmb-asset:\/\//i, '').replace(/\/$/, '');
+      const assetId = decodeURIComponent(raw.split(/[?#]/)[0] || '');
+      if (!assetId) return new Response('Missing asset id', { status: 400 });
+      const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+      try {
+        const asset = getAsset(database, assetId);
+        if (!asset) return new Response('Asset not found', { status: 404 });
+        const absolute = path.join(dataRoot.path, ...asset.relativePath.split('/'));
+        const bytes = await readFile(absolute);
+        return new Response(bytes, {
+          headers: {
+            'Content-Type': asset.mimeType || guessImageMime(absolute),
+            'Cache-Control': 'no-cache'
+          }
+        });
+      } finally {
+        database.close();
+      }
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : String(error), { status: 500 });
+    }
+  });
   ipcMain.handle('pi-runtime:get', async () => {
     const dataRoot = await loadSelectedDataRoot();
     return getPiRuntimeInfo(dataRoot?.path ?? null);
@@ -354,6 +406,7 @@ app.whenReady().then(() => {
         dataRootPath: dataRoot.path,
         businessDate,
         mcpUrl: mcp.url,
+      xhsMcpUrl: xhs?.getUrl() || '',
         onEvent: (event) => {
           broadcastPiRuntimeProgress(event);
           if (event.type === 'agent_task') broadcastPiEvent(event);
@@ -382,6 +435,7 @@ app.whenReady().then(() => {
         businessDate: input.businessDate,
         projectId: input.projectId,
         mcpUrl: mcp.url,
+      xhsMcpUrl: xhs?.getUrl() || '',
         onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
@@ -406,6 +460,7 @@ app.whenReady().then(() => {
         businessDate: input.businessDate,
         publicationId: input.publicationId,
         mcpUrl: mcp.url,
+      xhsMcpUrl: xhs?.getUrl() || '',
         onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
@@ -458,6 +513,8 @@ app.on('before-quit', (event) => {
       await pi?.stop();
       browser?.stop();
       await mcp?.close();
+      await xhs?.stop().catch(() => {});
+      xhs = null;
     } finally {
       pi = null;
       app.exit(0);

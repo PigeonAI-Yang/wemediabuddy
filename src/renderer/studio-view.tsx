@@ -11,26 +11,98 @@ const statuses: Array<{ value: ContentProjectStatus; label: string }> = [
 ];
 const platformNames: Record<string, string> = { x: 'X', xiaohongshu: '小红书', wechat: '公众号' };
 const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN');
-const renderMarkdown = (value: string) => DOMPurify.sanitize(marked.parse(value, { async: false }) as string);
+marked.setOptions({
+  gfm: true,
+  breaks: true
+});
+
+const looksLikeMarkdown = (value: string): boolean => {
+  const text = value.trim();
+  if (!text) return false;
+  return /(^|\n)\s{0,3}(#{1,6}\s+\S|```|~~~|\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|(?:^|\n)(?:- |\* |\d+\. )|>\s+\S|\[[^\]]+\]\([^)]+\)|!\[[^\]]*\]\([^)]+\)|\|.+\|)/m.test(text);
+};
+
+const renderMarkdown = (value: string): string => {
+  const html = marked.parse(value ?? '', { async: false }) as string;
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|wmb-asset):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+  });
+};
+
 const bodyWithoutLeadingTitle = (value: string) => value.replace(/^#\s+.+\r?\n+/, '');
+
 function htmlToMarkdown(root: HTMLElement): string {
   const read = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
     if (!(node instanceof HTMLElement)) return '';
     const content = [...node.childNodes].map(read).join('');
-    if (/^H[1-3]$/.test(node.tagName)) return `${'#'.repeat(Number(node.tagName[1]))} ${content.trim()}\n\n`;
+    if (/^H[1-6]$/.test(node.tagName)) return `${'#'.repeat(Number(node.tagName[1]))} ${content.trim()}\n\n`;
     if (node.tagName === 'P' || node.tagName === 'DIV') return `${content.trim()}\n\n`;
     if (node.tagName === 'STRONG' || node.tagName === 'B') return `**${content}**`;
     if (node.tagName === 'EM' || node.tagName === 'I') return `*${content}*`;
+    if (node.tagName === 'S' || node.tagName === 'DEL' || node.tagName === 'STRIKE') return `~~${content}~~`;
+    if (node.tagName === 'CODE') {
+      if (node.parentElement?.tagName === 'PRE') return content;
+      return `\`${content}\``;
+    }
+    if (node.tagName === 'PRE') {
+      const code = node.querySelector('code')?.textContent ?? content;
+      return `\`\`\`\n${code.replace(/\n$/, '')}\n\`\`\`\n\n`;
+    }
+    if (node.tagName === 'HR') return `\n---\n\n`;
     if (node.tagName === 'U') return `<u>${content}</u>`;
-    if (node.tagName === 'BLOCKQUOTE') return `${content.trim().split('\n').map((line) => `> ${line}`).join('\n')}\n\n`;
+    if (node.tagName === 'IMG') {
+      const alt = node.getAttribute('alt') || '图片';
+      const src = node.getAttribute('src') || '';
+      return src ? `![${alt}](${src})\n\n` : '';
+    }
+    if (node.tagName === 'BLOCKQUOTE') {
+      return `${content.trim().split('\n').filter(Boolean).map((line) => `> ${line}`).join('\n')}\n\n`;
+    }
     if (node.tagName === 'A') return `[${content}](${node.getAttribute('href') ?? ''})`;
     if (node.tagName === 'BR') return '\n';
-    if (node.tagName === 'UL' || node.tagName === 'OL') return `${[...node.children].map((item, index) => `${node.tagName === 'OL' ? `${index + 1}.` : '-'} ${item.textContent?.trim() ?? ''}`).join('\n')}\n\n`;
+    if (node.tagName === 'UL' || node.tagName === 'OL') {
+      return `${[...node.children].map((item, index) => {
+        const bullet = node.tagName === 'OL' ? `${index + 1}.` : '-';
+        return `${bullet} ${read(item).trim()}`;
+      }).join('\n')}\n\n`;
+    }
     if (node.tagName === 'LI') return content;
+    if (node.tagName === 'TABLE') {
+      const rows = [...node.querySelectorAll('tr')].map((row) => [...row.children].map((cell) => cell.textContent?.trim() ?? ''));
+      if (!rows.length) return '';
+      const head = rows[0];
+      const sep = head.map(() => '---');
+      const bodyRows = rows.slice(1);
+      return `| ${head.join(' | ')} |\n| ${sep.join(' | ')} |\n${bodyRows.map((row) => `| ${row.join(' | ')} |`).join('\n')}\n\n`;
+    }
     return content;
   };
   return [...root.childNodes].map(read).join('').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function insertTextAtCursor(textarea: HTMLTextAreaElement, text: string): string {
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? start;
+  const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
+  const caret = start + text.length;
+  textarea.value = next;
+  textarea.selectionStart = caret;
+  textarea.selectionEnd = caret;
+  return next;
+}
+
+function wrapTextareaSelection(textarea: HTMLTextAreaElement, before: string, after = before, placeholder = '文字'): string {
+  const start = textarea.selectionStart ?? 0;
+  const end = textarea.selectionEnd ?? 0;
+  const selected = textarea.value.slice(start, end) || placeholder;
+  const next = `${textarea.value.slice(0, start)}${before}${selected}${after}${textarea.value.slice(end)}`;
+  textarea.value = next;
+  textarea.selectionStart = start + before.length;
+  textarea.selectionEnd = start + before.length + selected.length;
+  return next;
 }
 
 export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, planDate }: {
@@ -64,9 +136,12 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const [findText, setFindText] = useState('');
   const [contextOpen, setContextOpen] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [editorMode, setEditorMode] = useState<'rich' | 'source'>('source');
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const bodyInput = useRef<HTMLDivElement>(null);
+  const sourceInput = useRef<HTMLTextAreaElement>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const bodyHistory = useRef<string[]>(['']);
   const bodyHistoryIndex = useRef(0);
@@ -111,16 +186,26 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   }, []);
   useEffect(() => {
     void loadFirst();
-    const poll = window.setInterval(() => void loadFirst(true), 5000);
-    return () => window.clearInterval(poll);
   }, [query, status, archived, order, platform, offset]);
-  useEffect(()=>{void window.wmb.listKnowledgeTopics({limit:100}).then(setTopics);},[]);
+  useEffect(() => {
+    return window.wmb.onDataChanged((event) => {
+      const scopes = event.scopes ?? [];
+      const touchesStudio = scopes.includes('studio') || scopes.includes('agent') || scopes.length === 0;
+      if (!touchesStudio) return;
+      void loadFirst(true);
+      // Pi may save a new core version while this project is open; reload unless user has local dirty edits.
+      if (selectedId && !dirty) void loadDetail(selectedId);
+    });
+  }, [query, status, archived, order, platform, offset, dirty, selectedId]);
+  useEffect(()=>{void window.wmb.listKnowledgeTopics({limit:100}).then((page)=>setTopics(page?.items ?? []));},[]);
   useEffect(() => { setOffset(0); }, [query, status, archived, order, platform]);
   useEffect(() => { if (!selectedId) { setSelected(null); onContext(null); } }, [selectedId]);
   const summary = projects.find((item) => item.id === selectedId);
   useEffect(() => {
-    if (selectedId && (!selected || selected.id !== selectedId || selected.updatedAt !== summary?.updatedAt)) void loadDetail(selectedId);
-  }, [selectedId, summary?.updatedAt]);
+    if (!selectedId) return;
+    if (dirty && selected?.id === selectedId) return;
+    if (!selected || selected.id !== selectedId || selected.updatedAt !== summary?.updatedAt) void loadDetail(selectedId);
+  }, [selectedId, summary?.updatedAt, dirty, selected?.id, selected?.updatedAt]);
   useEffect(() => { onContext(selected ? { id: selected.id, title: selected.title } : null); }, [selected?.id, selected?.title]);
   useEffect(() => {
     setTitle(selected?.title ?? '');
@@ -132,14 +217,36 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     setCopyTitle(selected ? `${selected.title}（独立项目）` : '');
   }, [selected?.id, selected?.title, selected?.revisions[0]?.id]);
   const outline = useMemo(() => bodyWithoutLeadingTitle(body).split('\n').flatMap((line, index) => {
-    const match = /^(#{2,3})\s+(.+)$/.exec(line);
+    const match = /^(#{1,6})\s+(.+)$/.exec(line);
     return match ? [{ level: match[1].length, title: match[2], index }] : [];
   }), [body]);
   const characterCount = body.replace(/\s/g, '').length;
+  const displayBody = viewedVersion?.body ?? body;
   useEffect(() => {
+    if (editorMode !== 'rich' && !preview && !viewedVersion) return;
     const editor = bodyInput.current;
-    if (editor && document.activeElement !== editor) editor.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(viewedVersion?.body ?? body));
-  }, [body, viewedVersion?.body]);
+    if (!editor) return;
+    // Keep caret stable while actively typing in rich mode; still refresh on mode switches.
+    if (document.activeElement === editor && editorMode === 'rich' && !preview && !viewedVersion) return;
+    editor.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(displayBody));
+  }, [displayBody, viewedVersion?.id, editorMode, preview]);
+  useEffect(() => {
+    if (!(preview || viewedVersion || editorMode === 'rich')) return;
+    const editor = bodyInput.current;
+    if (!editor) return;
+    editor.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(displayBody));
+  }, [editorMode, preview, viewedVersion?.id]);
+  const fitSourceEditor = () => {
+    const textarea = sourceInput.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const minHeight = Math.max(window.innerHeight - 360, 420);
+    textarea.style.height = `${Math.max(textarea.scrollHeight, minHeight)}px`;
+  };
+  useEffect(() => {
+    if (editorMode !== 'source' || preview || viewedVersion) return;
+    fitSourceEditor();
+  }, [body, editorMode, preview, viewedVersion]);
   const changeBody = (next: string) => {
     const history = bodyHistory.current.slice(0, bodyHistoryIndex.current + 1);
     if (history[history.length - 1] !== next) history.push(next);
@@ -153,26 +260,132 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     bodyHistoryIndex.current = next;
     setBody(bodyHistory.current[next]);
   };
-  const formatSelection = (before: string, after = before, placeholder = '文字') => {
+  const insertMarkdown = (snippet: string) => {
+    if (viewedVersion || preview) return;
+    if (editorMode === 'source') {
+      const textarea = sourceInput.current;
+      if (!textarea) {
+        changeBody(`${body}${body.endsWith('\n') || !body ? '' : '\n\n'}${snippet}`);
+        return;
+      }
+      textarea.focus();
+      changeBody(insertTextAtCursor(textarea, snippet));
+      return;
+    }
     const editor = bodyInput.current;
-    if (!editor || viewedVersion) return;
+    if (!editor) {
+      changeBody(`${body}${body.endsWith('\n') || !body ? '' : '\n\n'}${snippet}`);
+      return;
+    }
     editor.focus();
-    const command = before === '**' ? 'bold' : before === '*' ? 'italic' : before === '- ' ? 'insertUnorderedList' : before === '> ' ? 'formatBlock' : '';
+    document.execCommand('insertHTML', false, renderMarkdown(snippet));
+    changeBody(htmlToMarkdown(editor));
+  };
+  const formatSelection = (before: string, after = before, placeholder = '文字') => {
+    if (viewedVersion || preview) return;
+    if (editorMode === 'source') {
+      const textarea = sourceInput.current;
+      if (!textarea) return;
+      textarea.focus();
+      changeBody(wrapTextareaSelection(textarea, before, after, placeholder));
+      return;
+    }
+    const editor = bodyInput.current;
+    if (!editor) return;
+    editor.focus();
+    const command = before === '**' ? 'bold' : before === '*' ? 'italic' : before === '~~' ? 'strikeThrough' : before === '- ' ? 'insertUnorderedList' : before === '> ' ? 'formatBlock' : '';
     if (command === 'formatBlock') document.execCommand(command, false, 'blockquote');
     else if (command) document.execCommand(command);
     else if (before === '## ') document.execCommand('formatBlock', false, 'h2');
+    else if (before === '### ') document.execCommand('formatBlock', false, 'h3');
     else if (before === '[') {
       const url = window.prompt('粘贴链接地址');
       if (url) document.execCommand('createLink', false, url);
-    } else document.execCommand('insertText', false, placeholder);
+    } else if (before.startsWith('```')) {
+      insertMarkdown(`\n\`\`\`\n${placeholder}\n\`\`\`\n`);
+      return;
+    } else document.execCommand('insertText', false, `${before}${placeholder}${after}`);
     changeBody(htmlToMarkdown(editor));
   };
   const execRich = (command: string, value?: string) => {
+    if (editorMode === 'source') {
+      if (command === 'bold') return formatSelection('**');
+      if (command === 'italic') return formatSelection('*');
+      if (command === 'strikeThrough') return formatSelection('~~');
+      if (command === 'insertUnorderedList') return insertMarkdown('\n- 列表项\n');
+      if (command === 'insertOrderedList') return insertMarkdown('\n1. 列表项\n');
+      if (command === 'formatBlock' && value === 'h2') return insertMarkdown('\n## 二级标题\n\n');
+      if (command === 'formatBlock' && value === 'h3') return insertMarkdown('\n### 三级标题\n\n');
+      if (command === 'formatBlock' && value === 'blockquote') return insertMarkdown('\n> 引用\n\n');
+      if (command === 'formatBlock' && value === 'p') return insertMarkdown('\n');
+      if (command === 'undo') return moveHistory(-1);
+      if (command === 'redo') return moveHistory(1);
+      return;
+    }
     const editor = bodyInput.current;
     if (!editor || viewedVersion) return;
     editor.focus();
     document.execCommand(command, false, value);
     changeBody(htmlToMarkdown(editor));
+  };
+  const handleEditorPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    if (viewedVersion || preview || busy) return;
+    const editor = bodyInput.current;
+    if (!editor) return;
+    const file = [...event.clipboardData.files].find((item) => item.type.startsWith('image/'));
+    if (file) {
+      event.preventDefault();
+      void insertImageFile(file);
+      return;
+    }
+    const html = event.clipboardData.getData('text/html');
+    const text = event.clipboardData.getData('text/plain');
+    if (html && !looksLikeMarkdown(text)) return;
+    if (!text || !looksLikeMarkdown(text)) return;
+    event.preventDefault();
+    document.execCommand('insertHTML', false, renderMarkdown(text));
+    changeBody(htmlToMarkdown(editor));
+  };
+  const handleSourcePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (viewedVersion || preview || busy) return;
+    const file = [...event.clipboardData.files].find((item) => item.type.startsWith('image/'));
+    if (!file) return;
+    event.preventDefault();
+    void insertImageFile(file);
+  };
+  const insertImageFile = async (file?: File) => {
+    if (!selected || busy || viewedVersion || preview) return;
+    setBusy(true);
+    setMessage(file ? '正在插入图片…' : '选择图片…');
+    try {
+      let result: Awaited<ReturnType<typeof window.wmb.importStudioImage>>;
+      if (file) {
+        const buffer = new Uint8Array(await file.arrayBuffer());
+        let binary = '';
+        for (const byte of buffer) binary += String.fromCharCode(byte);
+        result = await window.wmb.importStudioImage({
+          projectId: selected.id,
+          fileName: file.name,
+          mimeType: file.type,
+          bytesBase64: btoa(binary),
+          alt: file.name.replace(/\.[^.]+$/, '')
+        });
+      } else {
+        result = await window.wmb.importStudioImage({ projectId: selected.id });
+      }
+      if (!result.ok) {
+        setMessage(result.cancelled ? '' : '插入图片失败');
+        return;
+      }
+      insertMarkdown(`${result.markdown}\n\n`);
+      setMessage(result.reused ? '已插入已有图片素材' : '图片已插入');
+      await loadDetail(selected.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+      if (imageInput.current) imageInput.current.value = '';
+    }
   };
   const createProject = async () => {
     if (!newTitle.trim() || busy) return;
@@ -221,8 +434,13 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     finally { setBusy(false); }
   };
   const save = async () => {
-    if (!selected || busy) return;
+    if (!selected || busy || viewedVersion || preview) return;
     if (!title.trim() || !body.trim()) { setMessage(!title.trim() ? '标题不能为空' : '正文不能为空'); return; }
+    if (!dirty) {
+      setMessage('内容没有改动');
+      window.setTimeout(() => setMessage((current) => current === '内容没有改动' ? '' : current), 1600);
+      return;
+    }
     setBusy(true); setMessage('正在保存…');
     try {
       const result = await window.wmb.saveStudioCore({ projectId: selected.id, title: title.trim(), body, expectedRevision: selected.revision });
@@ -289,6 +507,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
 
   if (!selectedId) return <section className="studio-library">
     <input ref={importInput} className="studio-import-input" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProject(file); }}/>
+    <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
     <header className="studio-library-heading">
       <div><h1>创作项目</h1><p>管理长期选题、稿件版本和平台内容。</p></div>
       <button className="primary-button" onClick={() => setCreating(true)}>新建创作项目</button>
@@ -327,22 +546,29 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   </section>;
 
   return <section className={`studio-editor-view${contextOpen ? ' context-open' : ''}`}>
+    <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
     <div className="studio-editor-top">
       <div className="studio-head-copy">
         <div className="studio-crumbs"><button className="studio-top-back" onClick={() => onSelect(null)}>创作 / 项目库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
-        <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>第 {selected.versionCount} 版 · <b>{dirty ? '有未保存修改' : '已自动保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latest?.createdAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
+        <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>第 {selected.versionCount} 版 · <b>{dirty ? '有未保存修改' : '已保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latest?.createdAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
       </div>
       <div className="studio-grow"/>
       <button className="secondary-button" onClick={() => setContextOpen((value) => !value)}>项目资料</button>
+      {!preview && !viewedVersion ? (
+        <div className="studio-mode-switch" role="group" aria-label="编辑模式">
+          <button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码</button>
+          <button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>渲染编辑</button>
+        </div>
+      ) : null}
       <button className="secondary-button" onClick={() => setPreview((value) => !value)}>{preview ? '继续编辑' : '预览'}</button>
-      <button className="primary-button" disabled={!dirty || busy || Boolean(viewedVersion)} onClick={() => void save()}>保存为新版本</button>
+      <button className="primary-button" disabled={!selected || busy || Boolean(viewedVersion) || preview} onClick={() => void save()} title={viewedVersion ? '历史版本只读，请返回最新版后再保存' : preview ? '预览模式下不能保存' : dirty ? '保存当前修改' : '内容未改动'}>保存</button>
     </div>
     <div className="studio-editor-grid">
     <aside className="studio-outline">
       <p className="studio-panel-title">文章纲要</p>
       <button className="active">开头</button>
-      {outline.map((item) => <button key={`${item.index}-${item.title}`} className={item.level === 3 ? 'sub' : ''}>{item.title}</button>)}
-      {!outline.length && <p>二级、三级标题会显示在这里。</p>}
+      {outline.map((item) => <button key={`${item.index}-${item.title}`} className={item.level >= 3 ? 'sub' : ''}>{item.title}</button>)}
+      {!outline.length && <p>标题会显示在这里。</p>}
       <p className="studio-panel-title platform-title">平台内容</p>
       <button className={tab === 'core' ? 'active' : ''} onClick={() => setTab('core')}>核心正文</button>
       {Object.entries(selected?.platformVersions ?? {}).map(([platform, versions]) => <button key={platform} onClick={() => setTab('platforms')}><span className={`pf-tag ${platform}`}><PlatformMark platform={platform}/>{platformNames[platform]}</span> <small>{versions.length ? `${versions.length} 个版本` : '未创建'}</small><i className="st-dot" data-state={versions.length ? 'ready' : 'none'} aria-hidden="true"/></button>)}
@@ -352,33 +578,96 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         {(tab === 'core' || tab === 'versions') && <>
           {viewedVersion && <section className="historical-version-notice"><span>正在查看不可修改的版本 v{viewedVersion.number}</span><div><button className="secondary-button" onClick={() => setViewedVersionId(null)}>返回最新版</button><button className="secondary-button" disabled={busy} onClick={() => void saveFromVersion()}>基于此版本另存</button></div><label>新项目标题<input value={copyTitle} onChange={(event) => setCopyTitle(event.target.value)}/></label><button className="primary-button" disabled={busy || !copyTitle.trim()} onClick={() => void copyVersion()}>复制版本为新项目</button></section>}
           {!preview && !viewedVersion && <div className="studio-formatbar" role="toolbar" aria-label="正文格式" onMouseDown={(event) => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); }}>
-              <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}><option value="p">正文</option><option value="h2">二级标题</option><option value="h3">三级标题</option><option value="blockquote">引用</option></select>
+              <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}>
+                <option value="p">正文</option>
+                <option value="h2">二级标题</option>
+                <option value="h3">三级标题</option>
+                <option value="blockquote">引用</option>
+              </select>
               <span className="studio-divider"/>
-              <button onClick={() => execRich('bold')}><strong>B</strong></button>
-              <button onClick={() => execRich('italic')}><em>I</em></button>
-              <button onClick={() => execRich('underline')}><u>U</u></button>
+              <button type="button" title="粗体" onClick={() => execRich('bold')}><strong>B</strong></button>
+              <button type="button" title="斜体" onClick={() => execRich('italic')}><em>I</em></button>
+              <button type="button" title="删除线" onClick={() => formatSelection('~~')}>S</button>
+              <button type="button" title="行内代码" onClick={() => formatSelection('`')}>{'<>'}</button>
               <span className="studio-divider"/>
-              <button onClick={() => execRich('insertUnorderedList')}>• 列表</button>
-              <button onClick={() => execRich('insertOrderedList')}>1. 列表</button>
-              <button onClick={() => formatSelection('[', '](https://)', '链接文字')}>🔗 链接</button>
-              <button onClick={() => execRich('removeFormat')}>清除格式</button>
+              <button type="button" onClick={() => execRich('insertUnorderedList')}>• 列表</button>
+              <button type="button" onClick={() => execRich('insertOrderedList')}>1. 列表</button>
+              <button type="button" onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button>
+              <button type="button" onClick={() => insertMarkdown('\n```\n代码\n```\n')}>代码块</button>
+              <button type="button" onClick={() => insertMarkdown('\n| 列1 | 列2 |\n| --- | --- |\n| A | B |\n')}>表格</button>
+              <button type="button" onClick={() => insertMarkdown('\n---\n')}>分割线</button>
+              <button type="button" disabled={busy} onClick={() => void insertImageFile()}>图片</button>
+              <button type="button" onClick={() => execRich('removeFormat')}>清除</button>
               <span className="studio-divider"/>
-              <button onClick={() => execRich('undo')}>↶</button>
-              <button onClick={() => execRich('redo')}>↷</button>
-              <button onClick={() => setFindOpen((value) => !value)}>查找替换</button>
+              <button type="button" onClick={() => execRich('undo')}>↶</button>
+              <button type="button" onClick={() => execRich('redo')}>↷</button>
+              <button type="button" onClick={() => setFindOpen((value) => !value)}>查找替换</button>
             </div>}
             {findOpen && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? body.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !body.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(body.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas"><article className="studio-paper">
             <input id="studio-title" className="studio-title-input" value={title} disabled={busy || Boolean(viewedVersion)} onChange={(event) => setTitle(event.target.value)}/>
-            <div className="studio-doc-meta"><span>核心正文</span><span>{statuses.find((item) => item.value === selected.status)?.label}</span><span>{selected.sources.length} 条来源</span>{selected.creativeBrief&&<span>来自创作简报</span>}<span>{selected.assets.length} 个素材</span></div>
-            <div ref={bodyInput} id="studio-body" className="studio-rich-editor" contentEditable={!preview && !viewedVersion && !busy} suppressContentEditableWarning onInput={(event) => changeBody(htmlToMarkdown(event.currentTarget))}/>
+            <div className="studio-doc-meta">
+              <span>核心正文</span>
+              <span>{statuses.find((item) => item.value === selected.status)?.label}</span>
+              <span>{selected.sources.length} 条来源</span>
+              {selected.creativeBrief && <span>来自创作简报</span>}
+              <span>{selected.assets.length} 个素材</span>
+              <span>{preview ? '预览' : editorMode === 'source' ? 'Markdown 源码' : '富文本'}</span>
+            </div>
+            {preview || viewedVersion || editorMode === 'rich' ? (
+              <div
+                ref={bodyInput}
+                id="studio-body"
+                className="studio-rich-editor"
+                contentEditable={!preview && !viewedVersion && !busy && editorMode === 'rich'}
+                suppressContentEditableWarning
+                onInput={(event) => changeBody(htmlToMarkdown(event.currentTarget))}
+                onPaste={handleEditorPaste}
+                onBlur={(event) => {
+                  if (viewedVersion || preview || editorMode !== 'rich') return;
+                  event.currentTarget.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(body));
+                }}
+              />
+            ) : (
+              <div className="studio-source-stack">
+                <textarea
+                  ref={sourceInput}
+                  id="studio-body-source"
+                  className="studio-source-editor"
+                  value={body}
+                  disabled={busy}
+                  spellCheck={false}
+                  placeholder={"在这里写完整 Markdown。\n\n## 二级标题\n\n正文段落。"}
+                  onChange={(event) => {
+                    changeBody(event.target.value);
+                    const textarea = event.currentTarget;
+                    textarea.style.height = 'auto';
+                    const minHeight = Math.max(window.innerHeight - 360, 420);
+                    textarea.style.height = `${Math.max(textarea.scrollHeight, minHeight)}px`;
+                  }}
+                  onPaste={handleSourcePaste}
+                />
+                <section className="studio-live-preview" aria-label="Markdown 实时预览">
+                  <div className="studio-live-preview-label">实时预览</div>
+                  <div
+                    className="studio-rich-editor studio-live-preview-body"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(bodyWithoutLeadingTitle(body)) || '<p class="studio-live-preview-empty">输入 Markdown 后这里会实时渲染</p>' }}
+                  />
+                </section>
+              </div>
+            )}
           </article></div>
-          <div className="studio-writing-status"><span>字数 {characterCount} · 预计阅读 {Math.max(1, Math.ceil(characterCount / 500))} 分钟</span><span>{preview ? '预览模式' : '自动保存已开启'}</span><span className="right">Markdown 兼容格式</span></div>
+          <div className="studio-writing-status" data-running={busy ? 'true' : 'false'}>
+            <span>字数 {characterCount} · 预计阅读 {Math.max(1, Math.ceil(characterCount / 500))} 分钟</span>
+            <span className={message ? 'studio-status-message' : undefined}>
+              {message
+                || (preview ? '预览模式' : viewedVersion ? '历史版本只读' : dirty ? '未保存' : '已保存')}
+            </span>
+          </div>
         </>}
         {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
         {tab === 'platforms' && <section className="studio-detail-list">{Object.entries(selected.platformVersions).flatMap(([platform, versions]) => versions.map((version) => <article key={version.id}><span>{platformNames[platform]} · {version.format}</span><h3>{version.title || `平台版本 ${version.id.slice(0, 8)}`}</h3><p>{version.body}</p><small>绑定核心版本 {selected.revisions.find((item) => item.id === version.contentVersionId)?.number ?? version.contentVersionId} · revision {version.revision} · 素材 {version.assets.length}</small></article>))}{!Object.values(selected.platformVersions).flat().length && <div className="compact-empty"><h2>没有平台版本</h2><p>平台适配内容会在这里按真实绑定关系显示。</p></div>}</section>}
         {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>SHA-256 {asset.sha256}</p><small>{asset.byteCount} bytes{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} ms` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
-        {message && <p className="task-status" data-running={busy ? 'true' : 'false'}>{message}</p>}
       </> : <section className="empty-state editor-empty"><h2>{message ? '项目详情读取失败' : '选择一个内容项目'}</h2><p>{message || '左侧会显示符合当前条件的项目。'}</p>{selectedId && message && <button onClick={() => void loadDetail(selectedId)}>重新读取</button>}</section>}
     </main>
     <aside className="studio-context-v2">

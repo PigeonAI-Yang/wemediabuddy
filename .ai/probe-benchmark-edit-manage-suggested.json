@@ -1,0 +1,106 @@
+{
+  "step1": {
+    "label": "after-manage",
+    "url": "https://x.com/i/lists/2083262800521224237/members",
+    "dialogs": [
+      {
+        "idx": 0,
+        "text": "管理成员\n成员 (1)\n已推荐\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "pivots": [
+          {
+            "text": "成员 (1)",
+            "href": "/i/lists/2083262800521224237/members",
+            "role": "tab",
+            "testid": null
+          },
+          {
+            "text": "已推荐",
+            "href": "/i/lists/2083262800521224237/members/suggested",
+            "role": "tab",
+            "testid": null
+          }
+        ]
+      },
+      {
+        "idx": 1,
+        "text": "管理成员\n成员 (1)\n已推荐\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "pivots": [
+          {
+            "text": "成员 (1)",
+            "href": "/i/lists/2083262800521224237/members",
+            "role": "tab",
+            "testid": null
+          },
+          {
+            "text": "已推荐",
+            "href": "/i/lists/2083262800521224237/members/suggested",
+            "role": "tab",
+            "testid": null
+          }
+        ]
+      }
+    ]
+  },
+  "step2": {
+    "label": "after-suggested",
+    "url": "https://x.com/i/lists/2083262800521224237/members/suggested",
+    "dialogs": [
+      {
+        "idx": 0,
+        "text": "管理成员\n成员 (1)\n已推荐\n查找建议的成员\n尝试搜索账号，以便查看推荐内容，然后添加到这个列表中。",
+        "inputs": [
+          {
+            "type": "text",
+            "placeholder": "搜索用户",
+            "testid": null,
+            "aria": "查询词条",
+            "visible": true
+          }
+        ],
+        "pivots": [
+          {
+            "text": "成员 (1)",
+            "href": "/i/lists/2083262800521224237/members",
+            "role": "tab",
+            "testid": null
+          },
+          {
+            "text": "已推荐",
+            "href": "/i/lists/2083262800521224237/members/suggested",
+            "role": "tab",
+            "testid": null
+          }
+        ]
+      },
+      {
+        "idx": 1,
+        "text": "管理成员\n成员 (1)\n已推荐\n查找建议的成员\n尝试搜索账号，以便查看推荐内容，然后添加到这个列表中。",
+        "inputs": [
+          {
+            "type": "text",
+            "placeholder": "搜索用户",
+            "testid": null,
+            "aria": "查询词条",
+            "visible": true
+          }
+        ],
+        "pivots": [
+          {
+            "text": "成员 (1)",
+            "href": "/i/lists/2083262800521224237/members",
+            "role": "tab",
+            "testid": null
+          },
+          {
+            "text": "已推荐",
+            "href": "/i/lists/2083262800521224237/members/suggested",
+            "role": "tab",
+            "testid": null
+          }
+        ]
+      }
+    ]
+  }
+}

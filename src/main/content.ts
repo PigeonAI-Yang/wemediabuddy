@@ -1,6 +1,8 @@
+import { markCarryDoneForPlanItem } from './ferment.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
+import { broadcastDataChanged } from './data-changed.ts';
 
 export type ContentProjectStatus = 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
 export type ContentProjectOrder = 'recent' | 'oldest' | 'versions';
@@ -152,10 +154,22 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
     s.published_at AS publishedAt, s.summary
     FROM content_project_sources cps JOIN source_items s ON s.id = cps.source_id
     WHERE cps.project_id = ? ORDER BY s.collected_at DESC`).all(projectId) as ContentProjectDetail['sources'];
-  const assets = database.prepare(`SELECT DISTINCT a.id, a.relative_path AS relativePath, a.mime_type AS mimeType,
+  const assets = database.prepare(`SELECT a.id, a.relative_path AS relativePath, a.mime_type AS mimeType,
     a.byte_count AS byteCount, a.sha256, a.origin, a.width, a.height, a.duration_ms AS durationMs, a.created_at AS createdAt
-    FROM platform_versions pv JOIN json_each(pv.asset_ids_json) linked JOIN assets a ON a.id = linked.value
-    WHERE pv.project_id = ? ORDER BY a.created_at DESC`).all(projectId) as ContentProjectDetail['assets'];
+    FROM (
+      SELECT asset_id AS id, MAX(created_at) AS linked_at FROM (
+        SELECT linked.value AS asset_id, pv.updated_at AS created_at
+        FROM platform_versions pv JOIN json_each(pv.asset_ids_json) linked
+        WHERE pv.project_id = ?
+        UNION ALL
+        SELECT cpa.asset_id, cpa.created_at
+        FROM content_project_assets cpa
+        WHERE cpa.project_id = ?
+      ) grouped
+      GROUP BY asset_id
+    ) links
+    JOIN assets a ON a.id = links.id
+    ORDER BY links.linked_at DESC`).all(projectId, projectId) as ContentProjectDetail['assets'];
   const notes = database.prepare(`SELECT id, body, created_at AS createdAt, updated_at AS updatedAt, revision
     FROM content_notes WHERE project_id = ? ORDER BY created_at`).all(projectId) as ContentProjectDetail['notes'];
   const decisions = database.prepare(`SELECT id, body, created_at AS createdAt, updated_at AS updatedAt, revision
@@ -237,6 +251,7 @@ export function createContentProjectWithVersion(
     const project = createContentProject(database, input, false);
     const version = insertCoreVersion(database, project.id, input.body);
     if (transaction) database.exec('COMMIT');
+    broadcastDataChanged({ scopes: ['studio'], reason: 'content.create' });
     return {
       ...project,
       title: input.title,
@@ -270,6 +285,7 @@ export function createProjectFromPlanItem(database: DatabaseSync, planItemId: st
     }, false);
     insertCoreVersion(database, project.id, `# ${item.title}\n\n## 核心观点\n${item.pointOfView}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}`);
     database.exec('COMMIT');
+    markCarryDoneForPlanItem(database, planItemId);
     return { ...project, created: true };
   } catch (error) {
     database.exec('ROLLBACK');
@@ -334,6 +350,7 @@ export function saveCoreVersion(
     database.prepare('UPDATE content_projects SET title = ?, updated_at = ?, revision = ? WHERE id = ?')
       .run(title, version.createdAt, revision, input.projectId);
     if (transaction) database.exec('COMMIT');
+    broadcastDataChanged({ scopes: ['studio'], reason: 'content.core_version' });
     return success({
       ...version,
       projectRevision: revision,

@@ -57,14 +57,16 @@ try {
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
-  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline') || tools.has('wmb_confirm_x_list_operation')) throw new Error('Pi List tool boundary mismatch');
+  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
   const piPrepared = await tools.get('wmb_prepare_x_list_operation').execute('pi-list-prepare', {
     requestId: 'pi-list-create-1', accountKey: '@Owner', kind: 'create', name: 'AI前沿', isPrivate: false
   });
   const piPayload = JSON.parse(piPrepared.details.content[0].text);
   if (!piPayload.ok || piPayload.data.operation.state !== 'prepared') throw new Error('Pi did not create a proposal');
   const mcpSource = await readFile(new URL('../src/main/mcp.ts', import.meta.url), 'utf8');
-  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
+  if (!mcpSource.includes("x_lists.confirm") || !mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
+  // Confirm tool must refuse delete without typedListName (no browser execution needed for this validation branch when state is prepared->arm would need browser;
+  // here we only assert the tool exists and prepare path still works).
 } finally {
   await mcp?.close();
   await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

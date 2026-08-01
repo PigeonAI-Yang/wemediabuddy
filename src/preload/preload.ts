@@ -30,6 +30,16 @@ contextBridge.exposeInMainWorld('wmb', {
   collectXListTimeline: (input: { accountKey: string; listId: string; limit?: number }) => ipcRenderer.invoke('x-lists:collect-timeline', input),
   listKnowledgeSources: (input = {}) => ipcRenderer.invoke('knowledge:list-sources', input),
   updateKnowledgeSource: (input: unknown) => ipcRenderer.invoke('knowledge:update-source', input),
+  deleteKnowledgeSource: (input: { id: string; expectedRevision: number }) => ipcRenderer.invoke('knowledge:delete-source', input),
+  listWatchingSources: (input: { limit?: number } = {}) => ipcRenderer.invoke('knowledge:list-watching', input),
+  markSourcesWatching: (input: { sourceIds: string[] }) => ipcRenderer.invoke('knowledge:mark-watching', input),
+  getSourceBodyCache: (sourceId: string) => ipcRenderer.invoke('sources:get-body-cache', sourceId),
+  listSourceBodyCaches: (sourceIds: string[] = []) => ipcRenderer.invoke('sources:list-body-cache', sourceIds),
+  fetchSourceBody: (input: { sourceId: string; force?: boolean; maxChars?: number }) => ipcRenderer.invoke('sources:fetch-body', input),
+  getWireHealthLedger: (input: { businessDate?: string } = {}) => ipcRenderer.invoke('sources:wire-health', input),
+  getXhsStatus: () => ipcRenderer.invoke('xhs:status'),
+  ensureXhs: () => ipcRenderer.invoke('xhs:ensure'),
+  startXhsLogin: () => ipcRenderer.invoke('xhs:start-login'),
   listKnowledgeTopics: (input = {}) => ipcRenderer.invoke('knowledge:list-topics', input),
   listKnowledgeDomains: (input = {}) => ipcRenderer.invoke('knowledge-domains:list', input),
   getKnowledgeDomain: (id:string,input={}) => ipcRenderer.invoke('knowledge-domains:get', id,input),
@@ -128,6 +138,11 @@ contextBridge.exposeInMainWorld('wmb', {
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
   },
+  onDataChanged: (listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => void) => {
+    const handler = (_event: unknown, payload: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => listener(payload);
+    ipcRenderer.on('data:changed', handler);
+    return () => { ipcRenderer.removeListener('data:changed', handler); };
+  },
   collectXAccountMetrics: () => ipcRenderer.invoke('metrics:collect-account-x'),
   listAccountMetricSnapshots: (accountId?: string) => ipcRenderer.invoke('metrics:list-account-snapshots', accountId),
   startAgentTask: (input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }) => ipcRenderer.invoke('agent:start', input),
@@ -143,6 +158,9 @@ contextBridge.exposeInMainWorld('wmb', {
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
   startBrowser: (input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => ipcRenderer.invoke('browser:start', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
+  refreshFermenting: (planDate: string) => ipcRenderer.invoke('today:refresh-fermenting', planDate),
+  listFermenting: (planDate: string) => ipcRenderer.invoke('today:list-fermenting', planDate),
+  setCarryState: (input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }) => ipcRenderer.invoke('today:set-carry-state', input),
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
   listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),
@@ -153,6 +171,15 @@ contextBridge.exposeInMainWorld('wmb', {
   saveDiscoveredSource: (input: { title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
   copyStudioVersionToProject: (input: { sourceProjectId: string; contentVersionId: string; title: string }) => ipcRenderer.invoke('studio:copy-version', input),
   saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number }) => ipcRenderer.invoke('studio:save-core', input),
+  listStudioAssets: (projectId: string) => ipcRenderer.invoke('studio:list-assets', projectId),
+  importStudioImage: (input: {
+    projectId: string;
+    sourcePath?: string;
+    fileName?: string;
+    mimeType?: string;
+    bytesBase64?: string;
+    alt?: string;
+  }) => ipcRenderer.invoke('studio:import-image', input),
   getPublications: () => ipcRenderer.invoke('publish:list'),
   collectXMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:collect-x', publicationId),
   schedulePublicationMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:schedule', publicationId),

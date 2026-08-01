@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "handle": "@AnthropicAI",
+  "error": "X 成员推荐页未出现搜索框。",
+  "stack": "Error: X 成员推荐页未出现搜索框。\n    at addMember (file:///J:/PigeonYang/WeMediaBuddy/src/main/platforms/x-list-browser.ts:1097:22)\n    at async session.run.timeoutMs (file:///J:/PigeonYang/WeMediaBuddy/src/main/platforms/x-list-browser.ts:979:9)\n    at async execute (file:///J:/PigeonYang/WeMediaBuddy/src/main/platforms/x-list-session.ts:111:18)"
+}

@@ -1,3 +1,4 @@
+import { broadcastDataChanged } from './data-changed.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -13,7 +14,7 @@ const topicStatuses = new Set<TopicStatus>(['active', 'watching', 'dormant', 'ar
 const domainStatuses = new Set<DomainStatus>(['active','watching','dormant']);
 
 export function listKnowledgeSources(database: DatabaseSync, input: {
-  query?: string; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus; limit?: number; offset?: number;
+  query?: string; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus; includeArchived?: boolean; limit?: number; offset?: number;
 } = {}) {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
   const offset = Math.max(input.offset ?? 0, 0);
@@ -22,7 +23,12 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
   const pattern = `%${query}%`;
   const args: Array<string | number | null> = [query, pattern, pattern, pattern];
   if (input.verificationStatus) { where.push('s.verification_status = ?'); args.push(input.verificationStatus); }
-  if (input.managementStatus) { where.push('s.management_status = ?'); args.push(input.managementStatus); }
+  if (input.managementStatus) {
+    where.push('s.management_status = ?');
+    args.push(input.managementStatus);
+  } else if (!input.includeArchived) {
+    where.push("s.management_status != 'archived'");
+  }
   const clause = where.join(' AND ');
   const total = Number((database.prepare(`SELECT count(*) AS count FROM source_items s WHERE ${clause}`).get(...args) as { count: number }).count);
   const items = database.prepare(`
@@ -41,18 +47,112 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
 }
 
 export function updateKnowledgeSource(database: DatabaseSync, input: {
-  id: string; expectedRevision: number; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus;
+  id: string;
+  expectedRevision: number;
+  verificationStatus?: VerificationStatus;
+  managementStatus?: ManagementStatus;
+  title?: string;
+  summary?: string | null;
+  author?: string | null;
 }) {
   if (input.verificationStatus && !verification.has(input.verificationStatus)) throw new Error('INVALID_VERIFICATION_STATUS');
   if (input.managementStatus && !management.has(input.managementStatus)) throw new Error('INVALID_MANAGEMENT_STATUS');
+  const title = input.title?.trim();
+  if (input.title !== undefined && !title) throw new Error('TITLE_REQUIRED');
   const current = database.prepare('SELECT revision FROM source_items WHERE id=?').get(input.id) as { revision: number } | undefined;
   if (!current) throw new Error('SOURCE_NOT_FOUND');
   if (current.revision !== input.expectedRevision) throw new Error('REVISION_CONFLICT');
   const next = current.revision + 1;
-  database.prepare(`UPDATE source_items SET verification_status=coalesce(?, verification_status),
-    management_status=coalesce(?, management_status), updated_at=?, revision=? WHERE id=?`)
-    .run(input.verificationStatus ?? null, input.managementStatus ?? null, new Date().toISOString(), next, input.id);
+  database.prepare(`UPDATE source_items SET
+    verification_status=coalesce(?, verification_status),
+    management_status=coalesce(?, management_status),
+    title=coalesce(?, title),
+    summary=CASE WHEN ? = 1 THEN ? ELSE summary END,
+    author=CASE WHEN ? = 1 THEN ? ELSE author END,
+    updated_at=?, revision=? WHERE id=?`)
+    .run(
+      input.verificationStatus ?? null,
+      input.managementStatus ?? null,
+      title ?? null,
+      input.summary !== undefined ? 1 : 0,
+      input.summary !== undefined ? input.summary : null,
+      input.author !== undefined ? 1 : 0,
+      input.author !== undefined ? input.author : null,
+      new Date().toISOString(),
+      next,
+      input.id
+    );
+  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
   return { id: input.id, revision: next };
+}
+
+export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }) {
+  const current = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.id) as { id: string; revision: number } | undefined;
+  if (!current) throw new Error('SOURCE_NOT_FOUND');
+  if (current.revision !== input.expectedRevision) throw new Error('REVISION_CONFLICT');
+  database.exec('BEGIN');
+  try {
+    database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(input.id);
+    database.prepare('DELETE FROM content_project_sources WHERE source_id=?').run(input.id);
+    database.prepare('DELETE FROM source_body_cache WHERE source_id=?').run(input.id);
+    try {
+      database.prepare("DELETE FROM knowledge_canvas_nodes WHERE object_type='source' AND object_id=?").run(input.id);
+    } catch {
+      // canvas table may not exist in stripped fixtures
+    }
+    const result = database.prepare('DELETE FROM source_items WHERE id=?').run(input.id);
+    if (!result.changes) throw new Error('SOURCE_NOT_FOUND');
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+  return { id: input.id, deleted: true as const };
+}
+
+export function listWatchingSources(database: DatabaseSync, limit = 30) {
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  return database.prepare(`
+    SELECT s.id, s.title, s.original_url AS originalUrl, s.author, s.published_at AS publishedAt,
+      s.collected_at AS collectedAt, s.summary, s.priority, s.verification_status AS verificationStatus,
+      s.management_status AS managementStatus, s.revision,
+      coalesce((SELECT group_concat(t.title, '、') FROM topic_source_links l JOIN topics t ON t.id=l.topic_id WHERE l.source_id=s.id), '') AS topics,
+      (SELECT count(*) FROM plan_items pi, json_each(pi.source_ids_json) j WHERE j.value=s.id) AS opportunityCount,
+      (SELECT count(*) FROM content_project_sources cps WHERE cps.source_id=s.id) AS projectCount,
+      (SELECT count(*) FROM content_project_sources cps JOIN content_projects cp ON cp.id=cps.project_id
+        JOIN content_versions cv ON cv.project_id=cp.id JOIN platform_versions pv ON pv.content_version_id=cv.id
+        JOIN publications p ON p.platform_version_id=pv.id WHERE cps.source_id=s.id AND p.status='published') AS publicationCount
+    FROM source_items s
+    WHERE s.management_status = 'watching'
+    ORDER BY s.updated_at DESC, s.collected_at DESC
+    LIMIT ?
+  `).all(safeLimit);
+}
+
+export function markSourcesWatching(database: DatabaseSync, sourceIds: string[]): { updated: number; ids: string[] } {
+  const unique = [...new Set(sourceIds.filter(Boolean))];
+  if (!unique.length) return { updated: 0, ids: [] };
+  const now = new Date().toISOString();
+  let updated = 0;
+  const ids: string[] = [];
+  const select = database.prepare('SELECT id, revision, management_status AS managementStatus FROM source_items WHERE id = ?');
+  const update = database.prepare(`UPDATE source_items
+    SET management_status = 'watching', updated_at = ?, revision = revision + 1
+    WHERE id = ?`);
+  for (const id of unique) {
+    const row = select.get(id) as { id: string; revision: number; managementStatus: string } | undefined;
+    if (!row) continue;
+    if (row.managementStatus === 'watching') {
+      ids.push(row.id);
+      continue;
+    }
+    update.run(now, id);
+    updated += 1;
+    ids.push(id);
+  }
+  if (updated > 0) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
+  return { updated, ids };
 }
 
 export function upsertKnowledgeTopic(database: DatabaseSync, input: {
@@ -106,14 +206,44 @@ export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Arr
 export function listKnowledgeTopics(database: DatabaseSync, input: { query?: string; status?: TopicStatus; limit?: number; offset?: number } = {}) {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100), offset = Math.max(input.offset ?? 0, 0);
   const query = input.query?.trim() ?? '', pattern = `%${query}%`;
-  const rows = database.prepare(`SELECT t.id,t.title,t.canonical_key AS canonicalKey,t.kind,t.summary,t.status,
-    t.first_seen_at AS firstSeenAt,t.last_seen_at AS lastSeenAt,t.revision,count(DISTINCT l.source_id) AS sourceCount,
-    count(DISTINCT pi.id) AS opportunityCount
-    FROM topics t LEFT JOIN topic_source_links l ON l.topic_id=t.id LEFT JOIN plan_items pi ON pi.topic_id=t.id
-    WHERE (?='' OR t.title LIKE ? OR coalesce(t.summary,'') LIKE ?) AND (?='' OR t.status=?)
+  const statusFilter = input.status ?? '';
+  if (statusFilter && !topicStatuses.has(statusFilter)) throw new Error('INVALID_TOPIC_STATUS');
+  const includeArchived = statusFilter ? 1 : 0;
+  const where = `(?='' OR t.title LIKE ? OR coalesce(t.summary,'') LIKE ?) AND (?='' OR t.status=?) AND (?=1 OR t.status!='archived')`;
+  const filterArgs = [query, pattern, pattern, statusFilter, statusFilter, includeArchived] as const;
+  const total = Number((database.prepare(`SELECT count(*) AS count FROM topics t WHERE ${where}`).get(...filterArgs) as { count: number }).count);
+  const items = database.prepare(`SELECT t.id,t.title,t.canonical_key AS canonicalKey,t.kind,t.summary,t.status,
+    t.first_seen_at AS firstSeenAt,t.last_seen_at AS lastSeenAt,t.revision,
+    count(DISTINCT l.source_id) AS sourceCount,
+    count(DISTINCT pi.id) AS opportunityCount,
+    (
+      SELECT count(DISTINCT cp.id) FROM content_projects cp
+      WHERE cp.topic_id=t.id OR EXISTS(
+        SELECT 1 FROM content_project_sources cps
+        JOIN topic_source_links linked ON linked.source_id=cps.source_id
+        WHERE cps.project_id=cp.id AND linked.topic_id=t.id
+      )
+    ) AS contentCount,
+    (
+      SELECT count(DISTINCT p.id) FROM content_projects cp
+      JOIN content_versions cv ON cv.project_id=cp.id
+      JOIN platform_versions pv ON pv.content_version_id=cv.id
+      JOIN publications p ON p.platform_version_id=pv.id
+      WHERE p.status='published' AND (
+        cp.topic_id=t.id OR EXISTS(
+          SELECT 1 FROM content_project_sources cps
+          JOIN topic_source_links linked ON linked.source_id=cps.source_id
+          WHERE cps.project_id=cp.id AND linked.topic_id=t.id
+        )
+      )
+    ) AS publicationCount
+    FROM topics t
+    LEFT JOIN topic_source_links l ON l.topic_id=t.id
+    LEFT JOIN plan_items pi ON pi.topic_id=t.id
+    WHERE ${where}
     GROUP BY t.id ORDER BY t.last_seen_at DESC,t.id DESC LIMIT ? OFFSET ?`)
-    .all(query, pattern, pattern, input.status ?? '', input.status ?? '', limit, offset);
-  return rows;
+    .all(...filterArgs, limit, offset);
+  return { items, total, limit, offset, hasMore: offset + items.length < total };
 }
 
 export function createKnowledgeDomain(database:DatabaseSync,input:{
@@ -242,7 +372,7 @@ export function getKnowledgeTopicDossier(database: DatabaseSync,input:{
   const branches=[
     `SELECT CASE WHEN max(tsl.relation='contradicting')=1 THEN 'counter_evidence' ELSE 'sources' END category,
       s.id objectId,'source' objectType,s.title,coalesce(s.summary,'') body,s.collected_at occurredAt,
-      json_object('relation',CASE WHEN max(tsl.relation='contradicting')=1 THEN 'contradicting' ELSE min(tsl.relation) END,'verificationStatus',s.verification_status,'managementStatus',s.management_status) metadataJson
+      json_object('relation',CASE WHEN max(tsl.relation='contradicting')=1 THEN 'contradicting' ELSE min(tsl.relation) END,'verificationStatus',s.verification_status,'managementStatus',s.management_status,'revision',s.revision,'originalUrl',s.original_url) metadataJson
       FROM topic_source_links tsl JOIN source_items s ON s.id=tsl.source_id WHERE tsl.topic_id=? GROUP BY s.id`,
     `SELECT 'judgments',pi.id,'plan_item',pi.title,pi.point_of_view,p.plan_date,
       json_object('whyNow',pi.why_now,'timeliness',pi.timeliness) FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE pi.topic_id=?`,

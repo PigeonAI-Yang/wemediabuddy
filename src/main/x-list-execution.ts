@@ -127,13 +127,45 @@ async function runMemberBatch(database: DatabaseSync, config: XListBrowserConfig
       }
       if (error instanceof XListNeedsUserError && !intent.value) {
         updateXListOperationItem(database, { operationId: operation.id, handle: item.handle, state: 'needs_user', evidence: { message: error.message } });
-        return success(finishXListOperation(database, operation.id, { state: 'needs_user', phase: 'needs_user', errorCode: 'BROWSER_NEEDS_USER', errorMessage: error.message }));
+        // Keep going for remaining handles; final state becomes partial/needs_user summary.
+        continue;
       }
       const state = intent.value || error instanceof XListUnknownError ? 'unknown' : 'failed';
       updateXListOperationItem(database, { operationId: operation.id, handle: item.handle, state, evidence: { message: error instanceof Error ? error.message : String(error) } });
-      if (state === 'unknown') skipPendingXListOperationItems(database, operation.id);
-      return success(finishXListOperation(database, operation.id, { state, phase: state === 'unknown' ? 'unknown_after_action' : 'failed', errorCode: state === 'unknown' ? 'X_LIST_UNKNOWN' : 'VALIDATION_ERROR', errorMessage: error instanceof Error ? error.message : String(error) }));
+      if (state === 'unknown') {
+        skipPendingXListOperationItems(database, operation.id);
+        return success(finishXListOperation(database, operation.id, { state, phase: 'unknown_after_action', errorCode: 'X_LIST_UNKNOWN', errorMessage: error instanceof Error ? error.message : String(error) }));
+      }
+      continue;
     }
+  }
+  const items = getXListOperation(database, operation.id)?.items ?? operation.items;
+  const needsUser = items.filter((item) => item.state === 'needs_user').length;
+  const failed = items.filter((item) => item.state === 'failed').length;
+  const done = items.filter((item) => item.state === 'added' || item.state === 'removed' || item.state === 'already_present' || item.state === 'already_absent').length;
+  if (needsUser && !failed && !done) {
+    return success(finishXListOperation(database, operation.id, {
+      state: 'needs_user',
+      phase: 'needs_user',
+      errorCode: 'BROWSER_NEEDS_USER',
+      errorMessage: '部分成员变更需要用户接管浏览器。'
+    }));
+  }
+  if ((failed || needsUser) && done) {
+    return success(finishXListOperation(database, operation.id, {
+      state: 'partial',
+      phase: 'partial_member_readbacks',
+      errorCode: needsUser ? 'BROWSER_NEEDS_USER' : 'VALIDATION_ERROR',
+      errorMessage: needsUser ? '部分成员需要用户接管后重试。' : '部分成员变更失败。'
+    }));
+  }
+  if (failed || needsUser) {
+    return success(finishXListOperation(database, operation.id, {
+      state: needsUser ? 'needs_user' : 'failed',
+      phase: needsUser ? 'needs_user' : 'failed',
+      errorCode: needsUser ? 'BROWSER_NEEDS_USER' : 'VALIDATION_ERROR',
+      errorMessage: needsUser ? '成员变更需要用户接管浏览器。' : '全部成员变更失败。'
+    }));
   }
   return success(finishXListOperation(database, operation.id, { state: 'succeeded', phase: 'all_member_readbacks_succeeded' }));
 }

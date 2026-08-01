@@ -1,0 +1,77 @@
+
+DevTools listening on ws://127.0.0.1:9337/devtools/browser/b2d5b8a7-9c53-4ce8-a1eb-0cd05aa5e6b8
+CDP ready, connecting…
+page url: file:///J:/PigeonYang/WeMediaBuddy/.vite/renderer/main_window/index.html
+[console] warning %cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
+
+For more information and help, consult
+https://
+shell rendered
+{
+ "today@1100": {
+  "doc": false,
+  "body": false
+ },
+ "studio@1100": {
+  "doc": false,
+  "body": false
+ },
+ "publish@1100": {
+  "doc": false,
+  "body": false
+ },
+ "results@1100": {
+  "doc": false,
+  "body": false
+ },
+ "knowledge@1100": {
+  "doc": false,
+  "body": false
+ },
+ "library@1100": {
+  "doc": false,
+  "body": false
+ },
+ "canvas@1100": {
+  "doc": false,
+  "body": false
+ },
+ "settings@1100": {
+  "doc": false,
+  "body": false
+ },
+ "today@1920": {
+  "doc": false,
+  "body": false
+ },
+ "studio@1920": {
+  "doc": false,
+  "body": false
+ },
+ "publish@1920": {
+  "doc": false,
+  "body": false
+ },
+ "results@1920": {
+  "doc": false,
+  "body": false
+ },
+ "knowledge@1920": {
+  "doc": false,
+  "body": false
+ },
+ "library@1920": {
+  "doc": false,
+  "body": false
+ },
+ "canvas@1920": {
+  "doc": false,
+  "body": false
+ },
+ "settings@1920": {
+  "doc": false,
+  "body": false
+ }
+}

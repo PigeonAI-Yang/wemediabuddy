@@ -1,0 +1,170 @@
+{
+  "ok": false,
+  "succeeded": [],
+  "already": [],
+  "failed": [
+    {
+      "handle": "@ArtificialAnlys",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@lmsysorg",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@lmarena_ai",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@huggingface",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@OpenRouter",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@EpochAIResearch",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@arcprize",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@SWEbench",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@togethercompute",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@fireworks_ai",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@GroqInc",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@wandb",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@scale_AI",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@StanfordCRFM",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@haizelabs",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@vectara",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    }
+  ],
+  "results": [
+    {
+      "handle": "@ArtificialAnlys",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@lmsysorg",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@lmarena_ai",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@huggingface",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@OpenRouter",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@EpochAIResearch",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@arcprize",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@SWEbench",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@togethercompute",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@fireworks_ai",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@GroqInc",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@wandb",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@scale_AI",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@StanfordCRFM",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@haizelabs",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    },
+    {
+      "handle": "@vectara",
+      "state": "failed",
+      "reason": "locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[role=\"dialog\"]').first() to be visible\u001b[22m\n\u001b[2m    23 × locator resolved to hidden <div role=\"dialog\" class=\"css-175oi2r r-1p0dtai r-1adg3ll r-1d2f490 r-bnwqim r-zchlnj r-ipm5af\">…</div>\u001b[22m\n"
+    }
+  ],
+  "headerSample": "要查看键盘快捷键，按下问号\n查看键盘快捷键\n主页\n探索\n通知\n聊天\nGrok\nPremium\n书签\n创作者工作室\n文章\n个人资料\n更多\n发帖\n亵渎\n@KimbomArtist\nAI测评榜\n@KimbomArtist\n查看新帖子\n列表\nAI测评榜\n亵渎\n@KimbomArtist\n1 成员\n0 关注者\n编辑列表\nArena.ai\n@arena\n·\n3小时\n翻译自 英语\n显示原文\n更新：Image-to-WebDev 在 Code Arena 中的得分已出炉，针对 Opus 5 (Max)、GPT-5.6 Sol、Luna 和 Terra、Grok-4.5、Kimi K3 (Max) 以及 Muse Spark 1.1。看看它们如何排名。\n\n- #1 Opus 5 (Max) 以 1,669 分\n- #4 GPT-5.6 Sol (xHigh) 以 1,581 分\n- #5 Grok-4.5 以 1,578 分\n- #6 Kimi K3 (Max) 以\n显示更多\n30\n20\n269\n1.9万\nArena.ai\n@arena\n·\n3小时\n回复 \n@arena\n翻译自 英语\n显示原文\n从我们的一位创始工程师 Aryan 那里了解更多关于 Image-to-WebDev 的信息。\nTurn any image into a working website with Code Arena | Arena.ai\n来自 youtube.com\n2\n1\n2\n4,254\nArena.ai 已转帖\nPeter Gostev\n@petergostev\n·\n7月29日\n翻译自 英语\n显示原文\nClaude Opus 5 - 放大到手机屏幕 10 层以下，一直到原子级别。\n\n推理设置：最大\n成本：$33.78（通过 Agent Arena）\n0:28\n引用\nPeter Gostev\n@petergos"
+}

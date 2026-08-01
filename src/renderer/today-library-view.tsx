@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import type { PiFocusObject } from './app-types';
+import { useEffect, useRef, useState } from 'react';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import { SourceMark } from './source-mark';
 import { PlatformMark } from './platform-mark';
@@ -18,6 +19,56 @@ export function formatSourcePublishedAt(value?: string | null): string | null {
   }).formatToParts(date);
   const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
   return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`;
+}
+
+export type SelectedTodaySource = TodaySource & {
+  bodyStatus?: 'none' | 'ready' | 'failed' | 'empty';
+  bodyExcerpt?: string | null;
+  bodyChars?: number;
+};
+
+const MAX_SELECTED_SOURCES = 5;
+const BODY_EXCERPT_CHARS = 4000;
+
+function isHeartbeatSource(source: TodaySource): boolean {
+  const title = source.title || '';
+  if (title.startsWith('[官宣巡检]')) return true;
+  const categories = source.categories || [];
+  if (categories.includes('wire_heartbeat') || categories.includes('official_heartbeat')) return true;
+  const summary = (source.summary || '').trim();
+  if (!summary) return true;
+  // Very thin homepage shells: short summary that mostly restates the title.
+  if (summary.length < 80 && title && summary.includes(title.replace(/^\[官宣巡检\]\s*/, '').slice(0, 12))) return true;
+  return false;
+}
+
+function sortFeedSources(sources: TodaySource[]): TodaySource[] {
+  return [...sources].sort((a, b) => {
+    const ah = isHeartbeatSource(a) ? 1 : 0;
+    const bh = isHeartbeatSource(b) ? 1 : 0;
+    if (ah !== bh) return ah - bh;
+    return String(b.collectedAt || '').localeCompare(String(a.collectedAt || ''));
+  });
+}
+
+function bodyToSelectedFields(body: {
+  status: 'ready' | 'failed' | 'empty';
+  extractedText: string;
+  extractedChars: number;
+} | null | undefined): Pick<SelectedTodaySource, 'bodyStatus' | 'bodyExcerpt' | 'bodyChars'> {
+  if (!body) return { bodyStatus: 'none', bodyExcerpt: null, bodyChars: 0 };
+  if (body.status === 'ready' && body.extractedText.trim()) {
+    return {
+      bodyStatus: 'ready',
+      bodyExcerpt: body.extractedText.slice(0, BODY_EXCERPT_CHARS),
+      bodyChars: body.extractedChars || body.extractedText.length
+    };
+  }
+  return {
+    bodyStatus: body.status,
+    bodyExcerpt: null,
+    bodyChars: body.extractedChars || 0
+  };
 }
 
 function latestSourceTime(sourceIds: string[], sources: TodaySource[]): { at: string | null; kind: 'published' | 'collected' | null } {
@@ -84,27 +135,32 @@ export function Icon({ name }: { name: string }): React.JSX.Element {
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
 
-function SourceList({ sources, ids, open, close, openLibrary }: { sources: TodaySource[]; ids: string[]; open: boolean; close: () => void; openLibrary: () => void }): React.JSX.Element {
-  const selected = ids.map((id) => sources.find((source) => source.id === id)).filter(Boolean) as TodaySource[];
-  return <aside className={`sources-panel${open ? ' open' : ''}`} aria-label="关联资料">
+function SourceList({ sources, open, close, openLibrary }: {
+  sources: TodaySource[];
+  open: boolean;
+  close: () => void;
+  openLibrary: (sourceId?: string) => void;
+}): React.JSX.Element {
+  const ordered = sortFeedSources(sources);
+  return <aside className={`sources-panel${open ? ' open' : ''}`} aria-label="今日资料">
     <div className="panel-heading">
-      <p className="eyebrow">最新情报</p>
-      <div><h2>首选机会的关联资料</h2><button className="close-sources" aria-label="关闭关联资料" onClick={close}>×</button></div>
-      <p>已保存到终端，可追溯原始来源</p>
+      <p className="eyebrow">今日资料 · {ordered.length}</p>
+      <div><h2>完整入库列表</h2><button className="close-sources" aria-label="关闭今日资料" onClick={close}>×</button></div>
+      <p>首页只展示最新最重要；这里看今日全部资料</p>
     </div>
     <div className="source-list">
-      {selected.map((source) => <article className="source-row" key={source.id}>
+      {ordered.map((source) => <article className="source-row" key={source.id}>
         <SourceMark canonicalUrl={source.canonicalUrl}/>
         <div>
-          <span className="source-type">{source.categories[0] || '入库资料'}</span>
+          <span className="source-type">{isHeartbeatSource(source) ? '巡检打卡' : (source.categories[0] || '入库资料')}</span>
           <h3>{source.title}</h3>
           <p>{formatSourcePublishedAt(source.publishedAt) ?? (formatSourcePublishedAt(source.collectedAt) ? `入库 ${formatSourcePublishedAt(source.collectedAt)}` : '时间未知')}{source.author ? ` · ${source.author}` : (domainOf(source.canonicalUrl) ? ` · ${domainOf(source.canonicalUrl)}` : '')}</p>
         </div>
         {source.canonicalUrl && <button className="text-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}
       </article>)}
-      {!selected.length && <p className="empty-copy">当前机会没有可展示的关联资料。</p>}
+      {!ordered.length && <p className="empty-copy">今日还没有入库资料。</p>}
     </div>
-    <button className="wide-secondary" onClick={openLibrary}>查看全部入库资料 <span>›</span></button>
+    <button className="wide-secondary" onClick={() => openLibrary()}>打开资料库 <span>›</span></button>
   </aside>;
 }
 
@@ -155,7 +211,6 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
       <div className="opp-meta">
         {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
         <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
-        <span className="opp-faint">工作量 {item.effortEstimate}</span>
       </div>
     </div>
     <span className="opportunity-check" aria-hidden="true">✓</span>
@@ -188,20 +243,21 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
     <footer className="hero-meta">
       <span className="pill gray">目标：{item.targetAudience}</span>
       <span className="pill gray">形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
-      <span className="pill gray">工作量 {item.effortEstimate}</span>
       <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
       <CreateIconButton primary onClick={() => onCreate(item)}/>
     </footer>
   </article>;
 }
 
-export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, planDate, onStatusChange }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void;
   openStudio: () => void;
-  openLibrary: () => void;
+  openLibrary: (sourceId?: string) => void;
   selectedItems: TodayPlanItem[];
   onSelectionChange: (items: TodayPlanItem[]) => void;
+  selectedSources: SelectedTodaySource[];
+  onSelectedSourcesChange: (sources: SelectedTodaySource[]) => void;
   planDate: string;
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
 }): React.JSX.Element {
@@ -225,6 +281,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const [task, setTask] = useState<any>(null);
   const [, tick] = useState(0);
   const sources = today?.sources ?? [];
+  const fermenting = today?.fermenting ?? { items: [], watchingItems: [], topics: [], pinnedSources: [] };
+  const feedSources = sortFeedSources(sources);
+  const pinnedSourceIds = new Set((fermenting.pinnedSources || []).map((item) => item.id));
   const items = today?.plan?.items ?? [];
   const primary = items[0] ?? null;
   const pendingActions = today?.pendingActions ?? [];
@@ -232,6 +291,86 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const pendingCount = pendingActions.length;
   const sssCount = items.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
+  const [detailSource, setDetailSource] = useState<TodaySource | null>(null);
+  const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
+  const [detailBodyLoading, setDetailBodyLoading] = useState(false);
+  const [detailBodyError, setDetailBodyError] = useState('');
+  const [carryBusyId, setCarryBusyId] = useState<string | null>(null);
+  const oppsRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLElement | null>(null);
+  const feedListRef = useRef<HTMLDivElement | null>(null);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(feedSources.length);
+
+  useEffect(() => {
+    const opps = oppsRef.current;
+    const rail = railRef.current;
+    const feed = feedListRef.current;
+    if (!opps || !rail || !feed || typeof ResizeObserver === 'undefined') return;
+
+    let measuring = false;
+
+    const sync = () => {
+      if (measuring) return;
+      // Outer rail matches left bottom. Feed card hugs whole rows only — no half-cut, no inner empty pad.
+      const targetHeight = Math.ceil(opps.getBoundingClientRect().height);
+      if (targetHeight <= 0) return;
+      rail.style.height = `${targetHeight}px`;
+      rail.style.minHeight = `${targetHeight}px`;
+      rail.style.maxHeight = `${targetHeight}px`;
+
+      if (!feedSources.length) {
+        setVisibleFeedCount(0);
+        return;
+      }
+
+      measuring = true;
+      const previousCount = visibleFeedCount;
+      // Temporarily render all rows to measure natural heights.
+      setVisibleFeedCount(feedSources.length);
+
+      window.requestAnimationFrame(() => {
+        const railStyles = getComputedStyle(rail);
+        const gap = Number.parseFloat(railStyles.rowGap || railStyles.gap || '0') || 0;
+        let reserved = 0;
+        for (const child of [...rail.children] as HTMLElement[]) {
+          if (child === feed) continue;
+          reserved += Math.ceil(child.getBoundingClientRect().height);
+          reserved += gap;
+        }
+        const feedStyles = getComputedStyle(feed);
+        const padY = (Number.parseFloat(feedStyles.paddingTop || '0') || 0)
+          + (Number.parseFloat(feedStyles.paddingBottom || '0') || 0);
+        const available = Math.max(0, targetHeight - reserved - padY);
+
+        const rows = [...feed.querySelectorAll<HTMLElement>('.feed-item')];
+        let used = 0;
+        let fit = 0;
+        for (const row of rows) {
+          const rowHeight = Math.ceil(row.getBoundingClientRect().height);
+          if (rowHeight <= 0) continue;
+          if (used + rowHeight > available + 0.5) break;
+          used += rowHeight;
+          fit += 1;
+        }
+        const next = Math.max(1, Math.min(sources.length, fit || 1));
+        setVisibleFeedCount((prev) => (prev === next ? prev : next));
+        // If count didn't change, ensure we didn't leave the temporary full list on screen.
+        if (next === previousCount && previousCount !== sources.length) {
+          setVisibleFeedCount(next);
+        }
+        measuring = false;
+      });
+    };
+
+    sync();
+    const ro = new ResizeObserver(() => sync());
+    ro.observe(opps);
+    window.addEventListener('resize', sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [primary?.id, items.length, sources.length, pendingActions.length, task?.status, sources.map((item) => item.id).join('|')]);
   useEffect(() => {
     let active = true;
     void window.wmb.listStudioProjects({ limit: 50 }).then((result) => {
@@ -246,23 +385,70 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
     if (next.length !== selectedItems.length) onSelectionChange(next);
   }, [today?.plan?.id]);
   useEffect(() => {
+    const available = new Set(sources.map((source) => source.id));
+    const next = selectedSources.filter((source) => available.has(source.id));
+    if (next.length !== selectedSources.length) onSelectedSourcesChange(next);
+  }, [sources.map((source) => source.id).join('|')]);
+  useEffect(() => {
+    if (!detailSource) {
+      setDetailBody(null);
+      setDetailBodyError('');
+      setDetailBodyLoading(false);
+      return;
+    }
+    let active = true;
+    setDetailBodyLoading(true);
+    setDetailBodyError('');
+    void window.wmb.getSourceBodyCache(detailSource.id).then((value) => {
+      if (!active) return;
+      setDetailBody(value);
+    }).catch((error) => {
+      if (!active) return;
+      setDetailBodyError(error instanceof Error ? error.message : String(error));
+    }).finally(() => {
+      if (active) setDetailBodyLoading(false);
+    });
+    return () => { active = false; };
+  }, [detailSource?.id]);
+  useEffect(() => {
     const load = () => void window.wmb.getAgentTask({ intent: 'daily_intelligence', businessDate: planDate }).then((value) => {
-      setTask(value);
-      if (!value) return;
+      setTask((prev: any) => {
+        const prevSig = JSON.stringify(prev ?? null);
+        const nextSig = JSON.stringify(value ?? null);
+        return prevSig === nextSig ? prev : value;
+      });
+      if (!value) {
+        setRunning((prev) => (prev ? false : prev));
+        return;
+      }
       const typed = value as { status?: string; phase?: string; errorMessage?: string | null };
-      setRunning(typed.status === 'running');
-      if (typed.status === 'running') setTaskStatus(typed.phase === 'starting' ? '今日情报正在启动…' : '今日情报正在运行');
-      if (typed.status === 'failed') setTaskStatus(typed.errorMessage || '今日情报失败');
-      if (typed.status === 'interrupted') setTaskStatus('上次情报任务已中断');
-      if (typed.status === 'cancelled') setTaskStatus('今日情报已取消');
-      if (typed.status === 'partial') setTaskStatus('已保存可用资料，任务部分完成');
-      if (typed.status === 'succeeded') setTaskStatus('今日情报已完成');
+      const nextRunning = typed.status === 'running';
+      setRunning((prev) => (prev === nextRunning ? prev : nextRunning));
+      let nextStatus = '';
+      if (typed.status === 'running') nextStatus = typed.phase === 'starting' ? '今日情报正在启动…' : '今日情报正在运行';
+      else if (typed.status === 'failed') nextStatus = typed.errorMessage || '今日情报失败';
+      else if (typed.status === 'interrupted') nextStatus = '上次情报任务已中断';
+      else if (typed.status === 'cancelled') nextStatus = '今日情报已取消';
+      else if (typed.status === 'partial') nextStatus = '已保存可用资料，任务部分完成';
+      else if (typed.status === 'succeeded') nextStatus = '今日情报已完成';
+      if (nextStatus) setTaskStatus((prev) => (prev === nextStatus ? prev : nextStatus));
     }).catch(() => {});
     load();
-    const poll = window.setInterval(load, 3000);
+    const unsubscribe = window.wmb.onDataChanged((event) => {
+      if (event.scopes.includes('agent') || event.scopes.includes('today')) load();
+    });
+    // While running, keep a light fallback in case progress emits are coalesced away.
+    const poll = running ? window.setInterval(load, 5_000) : 0;
+    return () => {
+      unsubscribe();
+      if (poll) window.clearInterval(poll);
+    };
+  }, [planDate, running]);
+  useEffect(() => {
+    if (!running) return;
     const clock = window.setInterval(() => tick((value) => value + 1), 1000);
-    return () => { window.clearInterval(poll); window.clearInterval(clock); };
-  }, [planDate]);
+    return () => window.clearInterval(clock);
+  }, [running]);
   useEffect(() => {
     if (!onStatusChange) return;
     if (!taskStatus) {
@@ -273,10 +459,73 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
     return () => onStatusChange(null);
   }, [taskStatus, running, onStatusChange]);
   const create = async (item: TodayPlanItem) => { await window.wmb.createProjectFromPlanItem(item.id); openStudio(); };
+  const createFromCarry = async (item: { objectType: string; objectId: string }) => {
+    if (item.objectType !== 'plan_item') return;
+    await window.wmb.createProjectFromPlanItem(item.objectId);
+    refresh();
+    openStudio();
+  };
+  const updateCarry = async (item: { id: string; revision: number }, state: 'active' | 'done' | 'dismissed') => {
+    setCarryBusyId(item.id);
+    try {
+      await window.wmb.setCarryState({ id: item.id, expectedRevision: item.revision, state });
+      refresh();
+    } finally {
+      setCarryBusyId(null);
+    }
+  };
+  const observeCarry = async (item: { id: string; revision: number; sourceIds?: string[] }) => {
+    setCarryBusyId(item.id);
+    try {
+      const sourceIds = item.sourceIds ?? [];
+      if (sourceIds.length) await window.wmb.markSourcesWatching({ sourceIds });
+      await window.wmb.setCarryState({ id: item.id, expectedRevision: item.revision, state: 'dismissed' });
+      refresh();
+    } finally {
+      setCarryBusyId(null);
+    }
+  };
   const toggleSelection = (item: TodayPlanItem) => {
     onSelectionChange(selectedItems.some((selected) => selected.id === item.id)
       ? selectedItems.filter((selected) => selected.id !== item.id)
       : [...selectedItems, item]);
+  };
+  const toggleSourceSelection = (source: TodaySource) => {
+    const exists = selectedSources.some((item) => item.id === source.id);
+    if (exists) {
+      onSelectedSourcesChange(selectedSources.filter((item) => item.id !== source.id));
+      return;
+    }
+    if (selectedSources.length >= MAX_SELECTED_SOURCES) return;
+    const cached = selectedSources.find((item) => item.id === source.id);
+    onSelectedSourcesChange([...selectedSources, {
+      ...source,
+      bodyStatus: cached?.bodyStatus ?? 'none',
+      bodyExcerpt: cached?.bodyExcerpt ?? null,
+      bodyChars: cached?.bodyChars ?? 0
+    }]);
+  };
+  const openSourceDetail = (source: TodaySource) => {
+    setDetailSource(source);
+  };
+  const attachBodyToSelection = async (source: TodaySource, force = false) => {
+    setDetailBodyLoading(true);
+    setDetailBodyError('');
+    try {
+      const body = await window.wmb.fetchSourceBody({ sourceId: source.id, force, maxChars: 20000 });
+      setDetailBody(body);
+      const fields = bodyToSelectedFields(body);
+      const exists = selectedSources.some((item) => item.id === source.id);
+      if (exists) {
+        onSelectedSourcesChange(selectedSources.map((item) => item.id === source.id ? { ...item, ...source, ...fields } : item));
+      } else if (selectedSources.length < MAX_SELECTED_SOURCES) {
+        onSelectedSourcesChange([...selectedSources, { ...source, ...fields }]);
+      }
+    } catch (error) {
+      setDetailBodyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDetailBodyLoading(false);
+    }
   };
   const startIntelligence = async () => {
     if (running) return;
@@ -305,11 +554,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
       window.setTimeout(() => refresh(), 300);
     }
   };
-  const dateTitle = (() => {
-    const date = new Date(`${planDate}T12:00:00+08:00`);
-    const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
-    return `${date.getMonth() + 1} 月 ${date.getDate()} 日 · ${week}`;
-  })();
   const taskPhaseLabel = task?.phase ? (phaseLabels[task.phase] ?? '正在处理') : '正在处理';
   const planned = Math.max(0, Number(task?.progress?.planned ?? 0));
   const processed = Math.max(0, Number(task?.progress?.processed ?? 0));
@@ -344,77 +588,127 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   };
   return <div className="today-layout" onClick={(event) => {
       const target = event.target as HTMLElement;
-      if (!target.closest('[data-opportunity-card], button, a, input, select, textarea')) onSelectionChange([]);
+      if (!target.closest('[data-opportunity-card], [data-feed-item], [data-source-detail], button, a, input, select, textarea, label')) {
+        onSelectionChange([]);
+        onSelectedSourcesChange([]);
+      }
     }}>
     <section className="today-main">
-      <header className="page-heading today-heading">
-        <div><h1>{dateTitle}</h1></div>
-        <div className="heading-actions">
-          <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
-          <button className="refresh-button" onClick={refresh}>↻ 刷新</button>
-          <button className="primary-button" disabled={running} onClick={() => void startIntelligence()}>{running ? '生成中…' : primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
-        </div>
-      </header>
-      <div className="stat-strip">
-        <div className="stat-cell"><div className="stat-label">今日新资料</div><div className="stat-value">{sources.length}</div><div className="stat-delta">已入库可追溯</div></div>
-        <div className="stat-cell"><div className="stat-label">内容机会</div><div className="stat-value">{items.length}</div><div className={`stat-delta${sssCount ? ' up' : ''}`}>{sssCount ? `${sssCount} 个 SSS 级` : items.length ? '按等级排列' : '等待生成'}</div></div>
-        <div className="stat-cell"><div className="stat-label">待你处理</div><div className="stat-value" data-tone={pendingCount ? 'amber' : undefined}>{pendingCount}</div><div className="stat-delta">{pendingCount ? '需要人工介入' : '暂无待办'}</div></div>
-        <div className="stat-cell"><div className="stat-label">进行中项目</div><div className="stat-value">{studioActive ?? '–'}</div><div className="stat-delta">创作中的内容项目</div></div>
-      </div>
-
-      {task?.status === 'running' && <section className="intelligence-progress" aria-live="polite">
-        <div className="intelligence-progress-head">
-          <div className="intelligence-progress-title">
-            <strong>{taskPhaseLabel}</strong>
-            {currentSource ? <span className="intelligence-source">当前：{currentSource}</span> : null}
-          </div>
-          <div className="intelligence-progress-meta">
-            {reallyStuck
-              ? <em className="intelligence-stalled-pill">疑似卡死 {formatDuration(heartbeatAgeSec)}</em>
-              : (currentSource && sourceElapsedSec > 0
-                ? <em className="intelligence-source-timer">本源 {formatDuration(sourceElapsedSec)}</em>
-                : null)}
-            <span>{planned > 0 ? `${processed}/${planned}` : `${progressPct}%`}</span>
-            <span>已运行 {elapsedMin} 分钟</span>
-          </div>
-        </div>
-        <div className="intelligence-bar" aria-label={`进度 ${progressPct}%`}>
-          <i style={{ width: `${Math.max(progressPct, running ? 6 : 0)}%` }} />
-        </div>
-        <div className="intelligence-counts" aria-label="进度计数">
-          <span><b>{planned}</b>计划</span>
-          <span><b>{processed}</b>处理</span>
-          <span><b>{failed}</b>失败</span>
-          <span><b>{verified}</b>核验</span>
-          <span><b>{saved}</b>保存</span>
-          <span><b>{opportunityCount}</b>机会</span>
-        </div>
-        {reallyStuck ? (
-          <p className="intelligence-last-event">任务心跳超过 60 秒未更新，进程可能已挂起；可跳过当前来源或取消后重试。</p>
-        ) : lastEventText && lastEventText !== currentSource && !(currentSource && lastEventText.includes(currentSource)) ? (
-          <p className="intelligence-last-event">{lastEventText}</p>
-        ) : null}
-        <div className="intelligence-controls">
-          <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'skip_source' })}>跳过当前来源</button>
-          <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' })}>保存已有结果并停止</button>
-          <button onClick={() => void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' })}>取消任务</button>
-        </div>
-      </section>}
+      <section
+        className="today-command"
+        data-mode={running ? 'running' : 'idle'}
+        aria-live={running ? 'polite' : undefined}
+        aria-label={running ? '今日情报运行中' : '今日概览'}
+      >
+        {running ? (
+          <>
+            <div className="today-command-run">
+              <div className="today-command-run-head">
+                <div className="today-command-run-title">
+                  <strong>{taskPhaseLabel}</strong>
+                  {currentSource ? <span className="intelligence-source">当前：{currentSource}</span> : null}
+                </div>
+                <div className="today-command-run-meta">
+                  {reallyStuck
+                    ? <em className="intelligence-stalled-pill">疑似卡死 {formatDuration(heartbeatAgeSec)}</em>
+                    : (currentSource && sourceElapsedSec > 0
+                      ? <em className="intelligence-source-timer">本源 {formatDuration(sourceElapsedSec)}</em>
+                      : null)}
+                  <span>{planned > 0 ? `${processed}/${planned}` : `${progressPct}%`}</span>
+                  <span>已运行 {elapsedMin} 分钟</span>
+                </div>
+              </div>
+              <div className="intelligence-bar" aria-label={`进度 ${progressPct}%`}>
+                <i style={{ width: `${Math.max(progressPct, running ? 6 : 0)}%` }} />
+              </div>
+              <div className="intelligence-counts" aria-label="进度计数">
+                <span><b>{planned}</b>计划</span>
+                <span><b>{processed}</b>处理</span>
+                <span><b>{failed}</b>失败</span>
+                <span><b>{verified}</b>核验</span>
+                <span><b>{saved}</b>保存</span>
+                <span><b>{opportunityCount}</b>机会</span>
+              </div>
+              {reallyStuck ? (
+                <p className="intelligence-last-event">任务心跳超过 60 秒未更新，进程可能已挂起；可跳过当前来源或取消后重试。</p>
+              ) : lastEventText && lastEventText !== currentSource && !(currentSource && lastEventText.includes(currentSource)) ? (
+                <p className="intelligence-last-event">{lastEventText}</p>
+              ) : null}
+            </div>
+            <div className="today-command-actions">
+              <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
+              <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'skip_source' }); }}>跳过当前来源</button>
+              <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' }); }}>保存并停止</button>
+              <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' }); }}>取消任务</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="today-command-stats" aria-label="今日指标">
+              <div className="today-command-stat">
+                <span className="stat-label">今日新资料</span>
+                <strong className="stat-value">{today?.sourcesTotal ?? sources.length}</strong>
+              </div>
+              <div className="today-command-stat">
+                <span className="stat-label">内容机会</span>
+                <strong className="stat-value">{items.length}</strong>
+                {sssCount ? <em className="stat-delta up">{sssCount} SSS</em> : null}
+              </div>
+              <div className="today-command-stat">
+                <span className="stat-label">仍在发酵</span>
+                <strong className="stat-value" data-tone={(fermenting.items?.length ?? 0) ? 'amber' : undefined}>{fermenting.items?.length ?? 0}</strong>
+              </div>
+              <div className="today-command-stat">
+                <span className="stat-label">进行中项目</span>
+                <strong className="stat-value">{studioActive ?? '–'}</strong>
+              </div>
+            </div>
+            <div className="today-command-actions">
+              <button className="refresh-button" onClick={refresh} title="刷新" aria-label="刷新">↻</button>
+              <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
+              <button className="primary-button" onClick={() => void startIntelligence()}>{primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
+            </div>
+          </>
+        )}
+      </section>
       <div className="today-grid">
-        <div className="today-opps">
+        <div className="today-opps" ref={oppsRef}>
           {primary ? <>
-            {task?.status === 'running' && task.resultRefs?.planId !== today?.plan?.id && <p className="previous-plan-notice">以下是上一轮已完成结果；本轮新机会将在来源核验结束后更新。</p>}
             <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>
             {items.length > 1 && <div className="opp-list">{items.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>)}</div>}
           </> : <section className="empty-state">
             <h2>{running ? '正在侦察今日内容机会' : '今日内容机会还在准备中'}</h2>
             <p>{running
               ? (currentSource ? `正在处理：${currentSource}` : '来源扫描和整理完成后，机会会自动出现在这里。')
-              : '点击右上角“开始今日情报”，让 Pi 扫描并写入今天的内容机会。'}</p>
+              : '点击上方“开始今日情报”，让 Pi 扫描并写入今天的内容机会。'}</p>
             {!running && <button className="primary-button" onClick={() => void startIntelligence()}>开始今日情报</button>}
           </section>}
+          {(fermenting.items?.length ?? 0) > 0 && <section className="fermenting-rail light" aria-label="仍在发酵">
+            <div className="fermenting-head">
+              <h2>仍在发酵 · {fermenting.items.length}</h2>
+            </div>
+            <div className="fermenting-list">
+              {fermenting.items.map((item) => <article className="fermenting-row" key={item.id}>
+                <div className="fermenting-row-main">
+                  <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong>
+                  <div className="fermenting-row-text">
+                    <h3>{item.title}</h3>
+                    <div className="fermenting-row-meta">
+                      <span>{item.fermentedDays} 天</span>
+                      {item.originPlanDate ? <span>{item.originPlanDate}</span> : null}
+                    </div>
+                  </div>
+                </div>
+                <div className="fermenting-actions">
+                  {item.objectType === 'plan_item' ? <button className="secondary-button" onClick={() => void createFromCarry(item)}>继续做</button> : null}
+                  <button className="secondary-button" disabled={carryBusyId === item.id || !(item.sourceIds?.length)} onClick={() => void observeCarry(item)}>观察</button>
+                  <button className="text-button" disabled={carryBusyId === item.id} onClick={() => void updateCarry(item, 'dismissed')}>不再显示</button>
+                </div>
+              </article>)}
+            </div>
+          </section>}
         </div>
-        <aside className="today-rail">
+        <aside className="today-rail" ref={railRef}>
           {pendingActions.length > 0 && <>
             <p className="eyebrow">待你处理 · {pendingCount}</p>
             {pendingActions.map((action) => <div className="action-card" key={action}>
@@ -426,57 +720,593 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
               </div>
             </div>)}
           </>}
-          <div className="feed-list">
-            {sources.slice(0, 6).map((source) => <div className="feed-item" key={source.id}>
-              <SourceMark canonicalUrl={source.canonicalUrl}/>
-              <div>
-                <div className="feed-title">{source.title}</div>
-                <div className="feed-sub"><span>{source.categories[0] || '入库资料'}</span><span>·</span><span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span></div>
-              </div>
-            </div>)}
-            {!sources.length && <p className="empty-copy rail-feed-empty">今日还没有入库资料。</p>}
+          <div className="feed-list" ref={feedListRef}>
+            {selectedSources.length > 0 && <div className="feed-selection-bar">已选 {selectedSources.length}/{MAX_SELECTED_SOURCES} 条资料进 Pi</div>}
+            {feedSources.slice(0, visibleFeedCount).map((source) => {
+              const selected = selectedSources.some((item) => item.id === source.id);
+              const heartbeat = isHeartbeatSource(source);
+              const disabled = !selected && selectedSources.length >= MAX_SELECTED_SOURCES;
+              return <div
+                className={`feed-item${selected ? ' selected' : ''}${heartbeat ? ' heartbeat' : ''}${pinnedSourceIds.has(source.id) ? ' pinned' : ''}${disabled ? ' disabled' : ''}`}
+                data-feed-item
+                key={source.id}
+                title={disabled ? `最多选择 ${MAX_SELECTED_SOURCES} 条` : (selected ? '点击空白处移出 Pi 上下文' : '点击空白处加入 Pi 上下文')}
+                onClick={() => {
+                  if (disabled) return;
+                  toggleSourceSelection(source);
+                }}
+              >
+                <SourceMark canonicalUrl={source.canonicalUrl}/>
+                <div className="feed-main">
+                  <div
+                    className="feed-title"
+                    title="打开资料详情"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openSourceDetail(source);
+                    }}
+                  >
+                    {source.title}
+                  </div>
+                  <div
+                    className="feed-sub"
+                    title="打开资料详情"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openSourceDetail(source);
+                    }}
+                  >
+                    <span>{pinnedSourceIds.has(source.id) ? '重点' : heartbeat ? '巡检打卡' : (source.categories[0] || '入库资料')}</span>
+                    <span>·</span>
+                    <span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span>
+                    {selected && selectedSources.find((item) => item.id === source.id)?.bodyStatus === 'ready' ? <span className="feed-body-pill">含正文</span> : null}
+                  </div>
+                </div>
+              </div>;
+            })}
+            {!feedSources.length && <p className="empty-copy rail-feed-empty">今日还没有入库资料。</p>}
           </div>
         </aside>
       </div>
     </section>
-    <button className={`drawer-backdrop${sourcesOpen ? ' open' : ''}`} aria-label="关闭关联资料" onClick={() => setSourcesOpen(false)}/>
-    <SourceList sources={today?.sources ?? []} ids={[...new Set((selectedItems.length ? selectedItems : primary ? [primary] : []).flatMap((item) => item.sourceIds))]} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={openLibrary}/>
+    <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>
+    <SourceList sources={today?.sources ?? []} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()}/>
+    {detailSource && <aside className="sources-panel open source-detail-panel" data-source-detail aria-label="资料详情">
+      <div className="panel-heading">
+        <p className="eyebrow">{isHeartbeatSource(detailSource) ? '巡检打卡 · 摘要可能很薄' : '资料详情'}</p>
+        <div>
+          <h2>{detailSource.title}</h2>
+          <button className="close-sources" aria-label="关闭资料详情" onClick={() => setDetailSource(null)}>×</button>
+        </div>
+        <p>
+          {(detailSource.categories[0] || '入库资料')}
+          {' · '}
+          {formatSourcePublishedAt(detailSource.publishedAt) ?? formatSourcePublishedAt(detailSource.collectedAt) ?? '时间未知'}
+          {detailSource.author ? ` · ${detailSource.author}` : (domainOf(detailSource.canonicalUrl) ? ` · ${domainOf(detailSource.canonicalUrl)}` : '')}
+        </p>
+      </div>
+      <div className="source-detail-body">
+        <section>
+          <h3>工作摘要</h3>
+          <p>{detailSource.summary?.trim() || '这条资料还没有可用摘要。可抓取正文，或打开原文确认。'}</p>
+        </section>
+        <section>
+          <div className="source-detail-body-head">
+            <h3>正文缓存</h3>
+            <span className="source-detail-body-status">
+              {detailBodyLoading ? '处理中…'
+                : detailBody?.status === 'ready' ? `已缓存 ${detailBody.extractedChars} 字`
+                : detailBody?.status === 'failed' ? '抓取失败'
+                : detailBody?.status === 'empty' ? '无正文'
+                : '尚未抓取'}
+            </span>
+          </div>
+          {detailBodyError ? <p className="source-detail-error">{detailBodyError}</p> : null}
+          {detailBody?.errorMessage ? <p className="source-detail-error">{detailBody.errorMessage}</p> : null}
+          {detailBody?.status === 'ready' && detailBody.extractedText
+            ? <div className="source-detail-text">{detailBody.extractedText.slice(0, 6000)}</div>
+            : <p className="empty-copy">暂无正文</p>}
+        </section>
+      </div>
+      <div className="source-detail-actions">
+        <button
+          className={selectedSources.some((item) => item.id === detailSource.id) ? 'secondary-button' : 'primary-button'}
+          onClick={() => toggleSourceSelection(detailSource)}
+          disabled={!selectedSources.some((item) => item.id === detailSource.id) && selectedSources.length >= MAX_SELECTED_SOURCES}
+        >
+          {selectedSources.some((item) => item.id === detailSource.id) ? '移出 Pi 上下文' : '加入 Pi 上下文'}
+        </button>
+        <button className="secondary-button" disabled={detailBodyLoading} onClick={() => void attachBodyToSelection(detailSource, false)}>
+          {detailBody?.status === 'ready' ? '带正文给 Pi' : '抓取正文并给 Pi'}
+        </button>
+        {detailBody?.status === 'ready' ? <button className="secondary-button" disabled={detailBodyLoading} onClick={() => void attachBodyToSelection(detailSource, true)}>重新抓取</button> : null}
+        {detailSource.canonicalUrl ? <button className="secondary-button" onClick={() => void window.wmb.openExternal(detailSource.canonicalUrl!)}>打开原文 ↗</button> : null}
+        <button className="secondary-button" onClick={() => openLibrary(detailSource.id)}>在资料库中查看</button>
+      </div>
+    </aside>}
   </div>;
 }
 
-export function LibraryView(): React.JSX.Element {
-  const [section, setSection] = useState<'saved' | 'topics' | 'rediscovery'>('saved');
-  const [knowledge, setKnowledge] = useState<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>(null);
+type LibrarySection = 'saved' | 'rediscovery';
+
+type LibrarySourceItem = {
+  id: string;
+  title: string;
+  originalUrl?: string | null;
+  author?: string | null;
+  summary?: string | null;
+  publishedAt?: string | null;
+  collectedAt?: string | null;
+  verificationStatus?: string;
+  managementStatus?: string;
+  revision?: number;
+  topics?: string;
+  opportunityCount?: number;
+  projectCount?: number;
+  publicationCount?: number;
+  reason?: string;
+  priority?: number;
+};
+
+type SourceKnowledgeContext = {
+  topics: Array<{ id: string; title: string }>;
+  opportunities: unknown[];
+  projects: unknown[];
+  publications: unknown[];
+  reviews: Array<{ id: string; summary?: string | null }>;
+  findings: Array<{ id: string; title?: string | null; body?: string | null }>;
+};
+
+type KnowledgeSourcePage = {
+  items: LibrarySourceItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+type RediscoveryItem = {
+  id: string;
+  title: string;
+  reason?: string;
+  priority?: number;
+  collectedAt?: string | null;
+};
+
+function isLibrarySection(value: string | null): value is LibrarySection {
+  return value === 'saved' || value === 'rediscovery';
+}
+
+function asSourceKnowledgeContext(value: unknown): SourceKnowledgeContext | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const topics = Array.isArray(record.topics) ? record.topics.filter((item): item is { id: string; title: string } => {
+    if (!item || typeof item !== 'object') return false;
+    const topic = item as Record<string, unknown>;
+    return typeof topic.id === 'string' && typeof topic.title === 'string';
+  }) : [];
+  const reviews = Array.isArray(record.reviews) ? record.reviews.filter((item): item is { id: string; summary?: string | null } => {
+    if (!item || typeof item !== 'object') return false;
+    return typeof (item as Record<string, unknown>).id === 'string';
+  }) : [];
+  const findings = Array.isArray(record.findings) ? record.findings.filter((item): item is { id: string; title?: string | null; body?: string | null } => {
+    if (!item || typeof item !== 'object') return false;
+    return typeof (item as Record<string, unknown>).id === 'string';
+  }) : [];
+  return {
+    topics,
+    opportunities: Array.isArray(record.opportunities) ? record.opportunities : [],
+    projects: Array.isArray(record.projects) ? record.projects : [],
+    publications: Array.isArray(record.publications) ? record.publications : [],
+    reviews,
+    findings
+  };
+}
+
+export function LibraryView(props: {
+  onOpenTopic?: (topicId: string) => void;
+  onOpenStudio?: (projectId: string) => void;
+  onOpenCanvas?: (canvasId?: string) => void;
+  focusSourceId?: string | null;
+  onFocusSourceConsumed?: () => void;
+  onFocusChange?: (focus: PiFocusObject | null) => void;
+} = {}): React.JSX.Element {
+  const { onOpenTopic, focusSourceId, onFocusSourceConsumed, onFocusChange } = props;
+  const storedSection = localStorage.getItem('wmb.librarySection');
+  const initialSection = storedSection === 'topics' ? 'saved' : storedSection;
+  const [section, setSection] = useState<LibrarySection>(isLibrarySection(initialSection) ? initialSection : 'saved');
+  const [knowledge, setKnowledge] = useState<KnowledgeSourcePage | null>(null);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [verificationFilter, setVerificationFilter] = useState('');
   const [managementFilter, setManagementFilter] = useState('');
   const [knowledgeOffset, setKnowledgeOffset] = useState(0);
-  const [topics, setTopics] = useState<any[]>([]);
-  const [context, setContext] = useState<any>(null);
-  const [selectedKnowledge, setSelectedKnowledge] = useState<any>(null);
-  const [rediscovery, setRediscovery] = useState<{ unused: any[]; watching: any[]; pending: any[] }>({ unused: [], watching: [], pending: [] });
-  const loadKnowledge = async () => setKnowledge(await window.wmb.listKnowledgeSources({
-    query: knowledgeQuery, verificationStatus: verificationFilter || undefined, managementStatus: managementFilter || undefined,
-    limit: 50, offset: knowledgeOffset
-  }));
-  useEffect(() => { if (section === 'saved') void loadKnowledge(); }, [section, knowledgeQuery, verificationFilter, managementFilter, knowledgeOffset]);
+  const [sourceContext, setSourceContext] = useState<SourceKnowledgeContext | null>(null);
+  const [selectedKnowledge, setSelectedKnowledge] = useState<LibrarySourceItem | null>(null);
+  const [libraryBody, setLibraryBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
+  const [libraryBodyLoading, setLibraryBodyLoading] = useState(false);
+  const [libraryBodyError, setLibraryBodyError] = useState('');
+  const [rediscovery, setRediscovery] = useState<{ unused: RediscoveryItem[]; watching: RediscoveryItem[]; pending: RediscoveryItem[] }>({ unused: [], watching: [], pending: [] });
+  const [watchingBoard, setWatchingBoard] = useState<LibrarySourceItem[]>([]);
+  const [editingSource, setEditingSource] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSummary, setEditSummary] = useState('');
+  const [editAuthor, setEditAuthor] = useState('');
+  const [sourceActionError, setSourceActionError] = useState('');
+  const [sourceActionBusy, setSourceActionBusy] = useState(false);
+  const [pendingSourceAction, setPendingSourceAction] = useState<null | 'archive' | 'delete'>(null);
+  const focusRequestId = useRef(0);
+  const publishFocus = (source: LibrarySourceItem | null, body: Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>> | null = null) => {
+    if (!onFocusChange) return;
+    if (!source) {
+      onFocusChange(null);
+      return;
+    }
+    const excerpt = body?.status === 'ready' && body.extractedText?.trim()
+      ? body.extractedText.slice(0, 6000)
+      : null;
+    onFocusChange({
+      type: 'source',
+      id: source.id,
+      title: source.title,
+      summary: source.summary ?? null,
+      url: source.originalUrl ?? null,
+      bodyStatus: body?.status ?? 'none',
+      bodyExcerpt: excerpt,
+      bodyChars: body?.extractedChars ?? excerpt?.length ?? 0,
+      meta: {
+        author: source.author ?? null,
+        publishedAt: source.publishedAt ?? null,
+        collectedAt: source.collectedAt ?? null,
+        verificationStatus: source.verificationStatus ?? null,
+        managementStatus: source.managementStatus ?? null,
+        topics: source.topics ?? ''
+      }
+    });
+  };
+
+
+  const openSection = (next: LibrarySection) => {
+    setSection(next);
+    localStorage.setItem('wmb.librarySection', next);
+  };
+
+  const openSourceDrawer = async (source: LibrarySourceItem) => {
+    const requestId = ++focusRequestId.current;
+    setSelectedKnowledge(source);
+    setLibraryBody(null);
+    setLibraryBodyError('');
+    setLibraryBodyLoading(true);
+    publishFocus(source, null);
+    try {
+      const [context, body] = await Promise.all([
+        window.wmb.getKnowledgeContext({ sourceId: source.id }),
+        window.wmb.getSourceBodyCache(source.id)
+      ]);
+      if (requestId !== focusRequestId.current) return;
+      setSourceContext(asSourceKnowledgeContext(context));
+      setLibraryBody(body);
+      publishFocus(source, body);
+    } catch (error) {
+      if (requestId !== focusRequestId.current) return;
+      setLibraryBodyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (requestId === focusRequestId.current) setLibraryBodyLoading(false);
+    }
+  };
+  const fetchLibraryBody = async (force = false) => {
+    if (!selectedKnowledge) return;
+    const source = selectedKnowledge;
+    const requestId = ++focusRequestId.current;
+    setLibraryBodyLoading(true);
+    setLibraryBodyError('');
+    try {
+      const body = await window.wmb.fetchSourceBody({ sourceId: source.id, force, maxChars: 20000 });
+      if (requestId !== focusRequestId.current) return;
+      setLibraryBody(body);
+      publishFocus(source, body);
+    } catch (error) {
+      if (requestId !== focusRequestId.current) return;
+      setLibraryBodyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (requestId === focusRequestId.current) setLibraryBodyLoading(false);
+    }
+  };
+  const loadWatchingBoard = async () => {
+    const rows = await window.wmb.listWatchingSources({ limit: 30 });
+    setWatchingBoard((rows ?? []) as LibrarySourceItem[]);
+  };
+
+  const loadKnowledge = async () => {
+    const page = await window.wmb.listKnowledgeSources({
+      query: knowledgeQuery,
+      verificationStatus: verificationFilter || undefined,
+      managementStatus: managementFilter || undefined,
+      limit: 50,
+      offset: knowledgeOffset
+    });
+    if (!page) {
+      setKnowledge(null);
+      return;
+    }
+    setKnowledge({
+      items: (page.items ?? []) as LibrarySourceItem[],
+      total: page.total,
+      limit: page.limit,
+      offset: page.offset,
+      hasMore: page.hasMore
+    });
+  };
+
   useEffect(() => {
-    if (section === 'topics') void window.wmb.listKnowledgeTopics({ limit: 100 }).then(setTopics);
-    if (section === 'rediscovery') void window.wmb.getRediscovery().then(setRediscovery);
+    if (section === 'saved') {
+      void loadKnowledge();
+      void loadWatchingBoard();
+    }
+  }, [section, knowledgeQuery, verificationFilter, managementFilter, knowledgeOffset]);
+  useEffect(() => {
+    if (section !== 'saved') return;
+    return window.wmb.onDataChanged((event) => {
+      if (!event.scopes.includes('library') && !event.scopes.includes('sources')) return;
+      void loadKnowledge();
+      void loadWatchingBoard();
+    });
+  }, [section, knowledgeQuery, verificationFilter, managementFilter, knowledgeOffset]);
+  useEffect(() => {
+    if (!focusSourceId || section !== 'saved' || !knowledge?.items?.length) return;
+    const hit = knowledge.items.find((item) => item.id === focusSourceId);
+    if (hit) {
+      void openSourceDrawer(hit);
+      onFocusSourceConsumed?.();
+      return;
+    }
+    // Not on current page: still open a minimal shell so deep-link is not a no-op.
+    void openSourceDrawer({ id: focusSourceId, title: '定位中的资料' });
+    onFocusSourceConsumed?.();
+  }, [focusSourceId, section, knowledge?.items?.map((item) => item.id).join('|')]);
+
+  useEffect(() => {
+    if (section === 'rediscovery') {
+      void window.wmb.getRediscovery().then((value) => {
+        setRediscovery({
+          unused: (value?.unused ?? []) as RediscoveryItem[],
+          watching: (value?.watching ?? []) as RediscoveryItem[],
+          pending: (value?.pending ?? []) as RediscoveryItem[]
+        });
+      });
+    }
   }, [section]);
+
+  const closeSourceDetail = () => {
+    focusRequestId.current += 1;
+    setSourceContext(null);
+    setSelectedKnowledge(null);
+    setLibraryBody(null);
+    setLibraryBodyError('');
+    setEditingSource(false);
+    setSourceActionError('');
+    setPendingSourceAction(null);
+    publishFocus(null);
+  };
+  const beginEditSource = () => {
+    if (!selectedKnowledge) return;
+    setEditTitle(selectedKnowledge.title || '');
+    setEditSummary(selectedKnowledge.summary || '');
+    setEditAuthor(selectedKnowledge.author || '');
+    setSourceActionError('');
+    setEditingSource(true);
+  };
+  const saveSourceEdits = async () => {
+    if (!selectedKnowledge || selectedKnowledge.revision == null) return;
+    const title = editTitle.trim();
+    if (!title) {
+      setSourceActionError('标题不能为空');
+      return;
+    }
+    setSourceActionBusy(true);
+    setSourceActionError('');
+    try {
+      const result = await window.wmb.updateKnowledgeSource({
+        id: selectedKnowledge.id,
+        expectedRevision: selectedKnowledge.revision,
+        title,
+        summary: editSummary.trim() || null,
+        author: editAuthor.trim() || null
+      });
+      const next = {
+        ...selectedKnowledge,
+        title,
+        summary: editSummary.trim() || null,
+        author: editAuthor.trim() || null,
+        revision: result.revision
+      };
+      setSelectedKnowledge(next);
+      setEditingSource(false);
+      publishFocus(next, libraryBody);
+      void loadKnowledge();
+      void loadWatchingBoard();
+    } catch (error) {
+      setSourceActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSourceActionBusy(false);
+    }
+  };
+  const archiveSelectedSource = async () => {
+    if (!selectedKnowledge || selectedKnowledge.revision == null) return;
+    setSourceActionBusy(true);
+    setSourceActionError('');
+    try {
+      await window.wmb.updateKnowledgeSource({
+        id: selectedKnowledge.id,
+        expectedRevision: selectedKnowledge.revision,
+        managementStatus: 'archived'
+      });
+      closeSourceDetail();
+      void loadKnowledge();
+      void loadWatchingBoard();
+    } catch (error) {
+      setSourceActionError(error instanceof Error ? error.message : String(error));
+      setPendingSourceAction(null);
+    } finally {
+      setSourceActionBusy(false);
+    }
+  };
+  const deleteSelectedSource = async () => {
+    if (!selectedKnowledge || selectedKnowledge.revision == null) return;
+    setSourceActionBusy(true);
+    setSourceActionError('');
+    try {
+      await window.wmb.deleteKnowledgeSource({
+        id: selectedKnowledge.id,
+        expectedRevision: selectedKnowledge.revision
+      });
+      closeSourceDetail();
+      void loadKnowledge();
+      void loadWatchingBoard();
+    } catch (error) {
+      setSourceActionError(error instanceof Error ? error.message : String(error));
+      setPendingSourceAction(null);
+    } finally {
+      setSourceActionBusy(false);
+    }
+  };
+
+  if (selectedKnowledge) {
+    const metaBits = [
+      selectedKnowledge.managementStatus === 'watching' ? '观察中' : null,
+      formatSourcePublishedAt(selectedKnowledge.publishedAt) ?? formatSourcePublishedAt(selectedKnowledge.collectedAt),
+      selectedKnowledge.author || null,
+      domainOf(selectedKnowledge.originalUrl ?? null)
+    ].filter(Boolean);
+    return <section className="page library-page library-source-detail-page">
+      <header className="library-source-detail-head">
+        <button className="text-button" onClick={closeSourceDetail}>← 返回资料库</button>
+        <div className="library-source-detail-actions">
+          {!editingSource ? <button className="secondary-button" disabled={sourceActionBusy} onClick={beginEditSource}>编辑</button> : null}
+          <button className="secondary-button" disabled={libraryBodyLoading || sourceActionBusy} onClick={() => void fetchLibraryBody(false)}>{libraryBody?.status === 'ready' ? '刷新正文' : '抓取正文'}</button>
+          {libraryBody?.status === 'ready' ? <button className="secondary-button" disabled={libraryBodyLoading || sourceActionBusy} onClick={() => void fetchLibraryBody(true)}>强制重抓</button> : null}
+          {selectedKnowledge.originalUrl ? <button className="secondary-button" onClick={() => void window.wmb.openExternal(selectedKnowledge.originalUrl!)}>打开原文 ↗</button> : null}
+          <button className="secondary-button" disabled={sourceActionBusy || selectedKnowledge.revision == null} onClick={() => { setSourceActionError(''); setPendingSourceAction('archive'); }}>归档</button>
+          <button className="text-button danger-button" disabled={sourceActionBusy || selectedKnowledge.revision == null} onClick={() => { setSourceActionError(''); setPendingSourceAction('delete'); }}>删除</button>
+        </div>
+      </header>
+      <article className="library-source-detail">
+        {sourceActionError ? <p className="source-detail-error">{sourceActionError}</p> : null}
+        {pendingSourceAction ? (
+          <div className="library-source-confirm" role="group" aria-label={pendingSourceAction === 'delete' ? '确认删除' : '确认归档'}>
+            <p>{pendingSourceAction === 'delete'
+              ? `永久删除「${selectedKnowledge.title}」？不可恢复。`
+              : `归档「${selectedKnowledge.title}」后，默认列表不再显示。`}</p>
+            <div className="library-source-detail-actions">
+              <button
+                className={pendingSourceAction === 'delete' ? 'primary-button danger-button' : 'primary-button'}
+                disabled={sourceActionBusy}
+                onClick={() => { void (pendingSourceAction === 'delete' ? deleteSelectedSource() : archiveSelectedSource()); }}
+              >{pendingSourceAction === 'delete' ? '确认删除' : '确认归档'}</button>
+              <button className="secondary-button" disabled={sourceActionBusy} onClick={() => setPendingSourceAction(null)}>取消</button>
+            </div>
+          </div>
+        ) : null}
+        {editingSource ? (
+          <div className="library-source-edit">
+            <label>标题<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
+            <label>作者<input value={editAuthor} onChange={(event) => setEditAuthor(event.target.value)} /></label>
+            <label>摘要<textarea value={editSummary} rows={6} onChange={(event) => setEditSummary(event.target.value)} /></label>
+            <div className="library-source-detail-actions">
+              <button className="primary-button" disabled={sourceActionBusy} onClick={() => void saveSourceEdits()}>保存</button>
+              <button className="secondary-button" disabled={sourceActionBusy} onClick={() => { setEditingSource(false); setSourceActionError(''); }}>取消</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h1>{selectedKnowledge.title}</h1>
+            {metaBits.length ? <p className="library-source-detail-meta">{metaBits.join(' · ')}</p> : null}
+          </>
+        )}
+        <div className="knowledge-status-controls">
+          <label>核验<select value={selectedKnowledge.verificationStatus ?? 'pending'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
+            if (selectedKnowledge.revision == null) return;
+            const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, verificationStatus: event.target.value });
+            setSelectedKnowledge({ ...selectedKnowledge, verificationStatus: event.target.value, revision: result.revision });
+            void loadKnowledge();
+          }}><option value="pending">待核验</option><option value="verified">已核验</option><option value="disputed">有争议</option><option value="rejected">已排除</option></select></label>
+          <label>管理<select value={selectedKnowledge.managementStatus ?? 'active'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
+            if (selectedKnowledge.revision == null) return;
+            const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, managementStatus: event.target.value });
+            setSelectedKnowledge({ ...selectedKnowledge, managementStatus: event.target.value, revision: result.revision });
+            void loadKnowledge();
+            void loadWatchingBoard();
+          }}><option value="active">活跃</option><option value="watching">观察中</option><option value="expired">已过期</option><option value="archived">已归档</option></select></label>
+        </div>
+        {!editingSource ? <section>
+          <h2>摘要</h2>
+          <p>{selectedKnowledge.summary || '暂无摘要'}</p>
+        </section> : null}
+        <section>
+          <div className="source-detail-body-head">
+            <h2>正文</h2>
+            <span className="source-detail-body-status">{libraryBodyLoading ? '处理中…' : libraryBody?.status === 'ready' ? `已缓存 ${libraryBody.extractedChars} 字` : libraryBody?.status === 'failed' ? '抓取失败' : libraryBody?.status === 'empty' ? '无正文' : '尚未抓取'}</span>
+          </div>
+          {libraryBodyError ? <p className="source-detail-error">{libraryBodyError}</p> : null}
+          {libraryBody?.errorMessage ? <p className="source-detail-error">{libraryBody.errorMessage}</p> : null}
+          {libraryBody?.status === 'ready' && libraryBody.extractedText
+            ? <div className="library-source-detail-body">{libraryBody.extractedText}</div>
+            : <p className="empty-copy">暂无正文</p>}
+        </section>
+        <section>
+          <h2>关联</h2>
+          <p className="library-source-detail-meta">主题 {sourceContext?.topics.length ?? 0} · 机会 {sourceContext?.opportunities.length ?? 0} · 项目 {sourceContext?.projects.length ?? 0} · 发布 {sourceContext?.publications.length ?? 0}</p>
+          <div className="library-source-detail-links">
+            {(sourceContext?.topics ?? []).map((item) => <button key={item.id} className="secondary-button" onClick={() => onOpenTopic?.(item.id)}>{item.title}</button>)}
+          </div>
+          {(sourceContext?.reviews ?? []).map((review) => <article className="library-source-detail-note" key={review.id}><strong>复盘</strong><p>{review.summary || '无摘要'}</p></article>)}
+          {(sourceContext?.findings ?? []).map((finding) => <article className="library-source-detail-note" key={finding.id}><strong>{finding.title}</strong><p>{finding.body}</p></article>)}
+        </section>
+      </article>
+    </section>;
+  }
+
   return <section className="page library-page">
     <nav className="library-sections" aria-label="资料库分页面">
-      <button className={section === 'saved' ? 'active' : ''} onClick={() => setSection('saved')}>入库资料</button>
-      <button className={section === 'topics' ? 'active' : ''} onClick={() => setSection('topics')}>主题</button>
-      <button className={section === 'rediscovery' ? 'active' : ''} onClick={() => setSection('rediscovery')}>重新发现</button>
+      <button className={section === 'saved' ? 'active' : ''} onClick={() => openSection('saved')}>资料</button>
+      <button className={section === 'rediscovery' ? 'active' : ''} onClick={() => openSection('rediscovery')}>重新发现</button>
     </nav>
+
     {section === 'saved' ? <>
+      {watchingBoard.length > 0 && managementFilter !== 'watching' && <section className="library-watching-board" aria-label="观察中">
+        <div className="library-watching-head">
+          <h2>观察中 · {watchingBoard.length}</h2>
+        </div>
+        <div className="library-watching-list">
+          {watchingBoard.map((source) => (
+            <article
+              className="library-watching-card"
+              key={`watch-${source.id}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => { void openSourceDrawer(source); }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  void openSourceDrawer(source);
+                }
+              }}
+            >
+              <div className="library-watching-title">{source.title}</div>
+              <div className="library-watching-meta">
+                <span>观察中</span>
+                <span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? ''}</span>
+              </div>
+              {source.summary ? <p>{source.summary}</p> : null}
+            </article>
+          ))}
+        </div>
+      </section>}
       <div className="page-toolbar knowledge-toolbar">
         <input aria-label="搜索资料" placeholder="搜索标题、摘要或关键词" value={knowledgeQuery} onChange={(e) => { setKnowledgeQuery(e.target.value); setKnowledgeOffset(0); }}/>
         <span className="chip-label">核验</span>
         {([['', '全部'], ['verified', '已核验'], ['pending', '待核验'], ['disputed', '有争议'], ['rejected', '已排除']] as const).map(([value, label]) => <button key={value} className={`chip${verificationFilter === value ? ' on' : ''}`} aria-label={`核验状态 ${label}`} onClick={() => { setVerificationFilter(value); setKnowledgeOffset(0); }}>{label}</button>)}
         <span className="chip-label">管理</span>
-        {([['', '全部'], ['active', '活跃'], ['watching', '持续观察'], ['expired', '已过期'], ['archived', '已归档']] as const).map(([value, label]) => <button key={value} className={`chip${managementFilter === value ? ' on' : ''}`} aria-label={`管理状态 ${label}`} onClick={() => { setManagementFilter(value); setKnowledgeOffset(0); }}>{label}</button>)}
+        {([['', '全部'], ['active', '活跃'], ['watching', '观察中'], ['expired', '已过期'], ['archived', '已归档']] as const).map(([value, label]) => <button key={value} className={`chip${managementFilter === value ? ' on' : ''}`} aria-label={`管理状态 ${label}`} onClick={() => { setManagementFilter(value); setKnowledgeOffset(0); }}>{label}</button>)}
       </div>
       {knowledge?.items.length ? <div className="library-list">{knowledge.items.map((source) => {
         const statePill = source.managementStatus === 'watching' ? { cls: 'blue', text: '观察中' }
@@ -486,30 +1316,23 @@ export function LibraryView(): React.JSX.Element {
           : source.verificationStatus === 'disputed' ? { cls: 'amber', text: '有争议' }
           : source.verificationStatus === 'rejected' ? { cls: 'gray', text: '已排除' }
           : { cls: 'gray', text: '待验证' };
-        const tags = String(source.topics || '').split(/[,，、]/).map((tag: string) => tag.trim()).filter((tag: string) => tag && tag !== '尚未归入主题').slice(0, 4);
-        return <article className="lib-row" key={source.id} onClick={() => { setSelectedKnowledge(source); void window.wmb.getKnowledgeContext({ sourceId: source.id }).then(setContext); }}>
-          <SourceMark canonicalUrl={source.originalUrl}/>
+        const tags = String(source.topics || '').split(/[,，、]/).map((tag) => tag.trim()).filter((tag) => tag && tag !== '尚未归入主题').slice(0, 4);
+        return <article className="lib-row" key={source.id} onClick={() => { void openSourceDrawer(source); }}>
+          <SourceMark canonicalUrl={source.originalUrl ?? null}/>
           <div className="lib-main">
             <div className="lib-title">{source.title}</div>
-            <div className="lib-sum">{source.summary || '这条资料尚未补充摘要。'}</div>
-            <div className="lib-tags">{tags.map((tag: string) => <span className="tag" key={tag}>{tag}</span>)}<span className="tag lib-count">机会 {source.opportunityCount} · 内容 {source.projectCount} · 发布 {source.publicationCount}</span></div>
+            <div className="lib-sum">{source.summary || '暂无摘要'}</div>
+            <div className="lib-tags">{tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}<span className="tag lib-count">机会 {source.opportunityCount ?? 0} · 内容 {source.projectCount ?? 0} · 发布 {source.publicationCount ?? 0}</span></div>
           </div>
           <div className="lib-side">
             <span className={`pill-status ${statePill.cls}`}><span className="dot"/>{statePill.text}</span>
             <span className="lib-time">{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt)}</span>
-            {source.originalUrl && <button onClick={(event) => { event.stopPropagation(); void window.wmb.openExternal(source.originalUrl); }}>原文 ↗</button>}
+            {source.originalUrl ? <button onClick={(event) => { event.stopPropagation(); const url = source.originalUrl; if (url) void window.wmb.openExternal(url); }}>原文 ↗</button> : null}
           </div>
         </article>;
       })}</div> : <section className="empty-state library-empty"><h2>没有匹配资料</h2><p>调整搜索或筛选条件后再看。</p></section>}
       <div className="knowledge-pager"><button disabled={knowledgeOffset === 0} onClick={() => setKnowledgeOffset(Math.max(0, knowledgeOffset - 50))}>上一页</button><span>{knowledgeOffset + 1}–{Math.min(knowledgeOffset + 50, knowledge?.total ?? 0)} / {knowledge?.total ?? 0}</span><button disabled={!knowledge?.hasMore} onClick={() => setKnowledgeOffset(knowledgeOffset + 50)}>下一页</button></div>
-      {context && <section className="knowledge-context"><button aria-label="关闭历史上下文" onClick={() => { setContext(null); setSelectedKnowledge(null); }}>×</button><h2>历史上下文</h2>
-        {selectedKnowledge && <div className="knowledge-status-controls">
-          <label>核验<select value={selectedKnowledge.verificationStatus} onChange={async (event) => { const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, verificationStatus: event.target.value }); setSelectedKnowledge({ ...selectedKnowledge, verificationStatus: event.target.value, revision: result.revision }); void loadKnowledge(); }}><option value="pending">待核验</option><option value="verified">已核验</option><option value="disputed">有争议</option><option value="rejected">已排除</option></select></label>
-          <label>管理<select value={selectedKnowledge.managementStatus} onChange={async (event) => { const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, managementStatus: event.target.value }); setSelectedKnowledge({ ...selectedKnowledge, managementStatus: event.target.value, revision: result.revision }); void loadKnowledge(); }}><option value="active">活跃</option><option value="watching">持续观察</option><option value="expired">已过期</option><option value="archived">已归档</option></select></label>
-        </div>}
-        <p>关联资料 {context.sources.length} · 内容机会 {context.opportunities.length} · 内容项目 {context.projects.length} · 已发布 {context.publications.length} · 指标 {context.metrics.length} · 最终复盘 {context.reviews.length}</p>{context.reviews.map((review: any) => <article key={review.id}><strong>复盘</strong><p>{review.summary || '无摘要'}</p></article>)}{context.findings.map((finding: any) => <article key={finding.id}><strong>{finding.title}</strong><p>{finding.body}</p></article>)}</section>}
-    </> : section === 'topics' ? <div className="topic-list">{topics.map((topic) => <button key={topic.id} onClick={() => void window.wmb.getKnowledgeContext({ topicId: topic.id }).then(setContext)}><strong>{topic.title}</strong><span>{topic.sourceCount} 条资料 · {topic.opportunityCount} 个机会 · {topic.status === 'watching' ? '持续观察' : '活跃'}</span></button>)}{!topics.length && <section className="empty-state library-empty"><h2>尚未形成主题</h2><p>下一轮情报会把资料归入稳定主题。</p></section>}{context && <section className="knowledge-context"><button onClick={() => setContext(null)}>×</button><h2>{context.topics[0]?.title || '主题历史'}</h2><p>资料 {context.sources.length} · 机会 {context.opportunities.length} · 内容 {context.projects.length} · 发布 {context.publications.length} · 指标 {context.metrics.length} · 复盘 {context.reviews.length} · 方法结论 {context.findings.length}</p></section>}</div>
-    : <div className="rediscovery-groups">{([['高价值但尚未创作', rediscovery.unused], ['持续观察', rediscovery.watching], ['待核验超过 7 天', rediscovery.pending]] as const).map(([title, items]) => <section key={title}><h2>{title}<span>{items.length}</span></h2>{items.length ? items.map((item) => <button key={item.id} onClick={() => void window.wmb.getKnowledgeContext({ sourceId: item.id }).then(setContext)}><strong>{item.title}</strong><small>{item.reason}</small></button>) : <p>当前没有此类资料。</p>}</section>)}</div>}
+    </> : <div className="rediscovery-groups">{([['高价值但尚未创作', rediscovery.unused], ['持续观察', rediscovery.watching], ['待核验超过 7 天', rediscovery.pending]] as const).map(([title, items]) => <section key={title}><h2>{title}<span>{items.length}</span></h2>{items.length ? items.map((item) => <button key={item.id} onClick={() => { void openSourceDrawer(item); openSection('saved'); }}><strong>{item.title}</strong><small>{item.reason}</small></button>) : <p>当前没有此类资料。</p>}</section>)}</div>}
   </section>;
 }
 

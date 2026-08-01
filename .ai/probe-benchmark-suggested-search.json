@@ -1,0 +1,165 @@
+{
+  "before": {
+    "url": "https://x.com/i/lists/2083262800521224237/members",
+    "dialogs": [
+      {
+        "text": "列表成员\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "tabs": [
+          {
+            "text": "Arena.ai @arena 移除 Where AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → http:// arena.ai/jobs",
+            "href": null,
+            "role": "button",
+            "testid": "UserCell"
+          },
+          {
+            "text": "Arena.ai",
+            "href": "/arena",
+            "role": "link",
+            "testid": null
+          },
+          {
+            "text": "@arena",
+            "href": "/arena",
+            "role": "link",
+            "testid": null
+          },
+          {
+            "text": "移除",
+            "href": null,
+            "role": "button",
+            "testid": null
+          },
+          {
+            "text": "http:// arena.ai/jobs",
+            "href": "https://t.co/XBZCrseaWF",
+            "role": "link",
+            "testid": null
+          }
+        ]
+      },
+      {
+        "text": "列表成员\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "tabs": [
+          {
+            "text": "Arena.ai @arena 移除 Where AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → http:// arena.ai/jobs",
+            "href": null,
+            "role": "button",
+            "testid": "UserCell"
+          },
+          {
+            "text": "Arena.ai",
+            "href": "/arena",
+            "role": "link",
+            "testid": null
+          },
+          {
+            "text": "@arena",
+            "href": "/arena",
+            "role": "link",
+            "testid": null
+          },
+          {
+            "text": "移除",
+            "href": null,
+            "role": "button",
+            "testid": null
+          },
+          {
+            "text": "http:// arena.ai/jobs",
+            "href": "https://t.co/XBZCrseaWF",
+            "role": "link",
+            "testid": null
+          }
+        ]
+      }
+    ]
+  },
+  "after": {
+    "url": "https://x.com/i/lists/2083262800521224237/members",
+    "dialogs": [
+      {
+        "text": "列表成员\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "buttons": [
+          {
+            "text": "",
+            "href": null,
+            "aria": "关闭"
+          },
+          {
+            "text": "Arena.ai @arena 移除 Where AI meets the re",
+            "href": null,
+            "aria": null
+          },
+          {
+            "text": "Arena.ai",
+            "href": "/arena",
+            "aria": null
+          },
+          {
+            "text": "@arena",
+            "href": "/arena",
+            "aria": null
+          },
+          {
+            "text": "移除",
+            "href": null,
+            "aria": "移除"
+          },
+          {
+            "text": "http:// arena.ai/jobs",
+            "href": "https://t.co/XBZCrseaWF",
+            "aria": null
+          }
+        ]
+      },
+      {
+        "text": "列表成员\n列表成员\nArena.ai\n@arena\n移除\nWhere AI meets the real world. Formerly LMArena. We measure and advance the frontier of AI through community-driven evaluation. We’re hiring → \nhttp://\narena.ai/jobs",
+        "inputs": [],
+        "buttons": [
+          {
+            "text": "",
+            "href": null,
+            "aria": "关闭"
+          },
+          {
+            "text": "Arena.ai @arena 移除 Where AI meets the re",
+            "href": null,
+            "aria": null
+          },
+          {
+            "text": "Arena.ai",
+            "href": "/arena",
+            "aria": null
+          },
+          {
+            "text": "@arena",
+            "href": "/arena",
+            "aria": null
+          },
+          {
+            "text": "移除",
+            "href": null,
+            "aria": "移除"
+          },
+          {
+            "text": "http:// arena.ai/jobs",
+            "href": "https://t.co/XBZCrseaWF",
+            "aria": null
+          }
+        ]
+      }
+    ],
+    "allInputs": [
+      {
+        "type": "text",
+        "placeholder": "搜索",
+        "testid": "SearchBox_Search_Input",
+        "aria": "查询词条",
+        "visible": true
+      }
+    ]
+  }
+}

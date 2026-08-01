@@ -1,0 +1,79 @@
+{
+  "list_id": "2082851520417255750",
+  "list_name": "AI前沿",
+  "account": "@KimbomArtist",
+  "purpose": "Daily intelligence W0 hard wire — official/release radar members for the bound AI前沿 list",
+  "note": "Suggested handles for members_add confirmation flow. Verify each handle on X before applying. Diff against current members; do not silent-mutate the list during collection.",
+  "suggested_members": [
+    {
+      "handle": "@deepseek_ai",
+      "org": "DeepSeek",
+      "role": "official_company",
+      "why": "Sole official DeepSeek X account; pairs with deepseek-site / api-docs / github"
+    },
+    {
+      "handle": "@OpenAI",
+      "org": "OpenAI",
+      "role": "official_company",
+      "why": "Primary OpenAI release channel on X"
+    },
+    {
+      "handle": "@AnthropicAI",
+      "org": "Anthropic",
+      "role": "official_company",
+      "why": "Primary Anthropic release channel on X"
+    },
+    {
+      "handle": "@GoogleDeepMind",
+      "org": "Google DeepMind",
+      "role": "official_lab",
+      "why": "DeepMind research and model announcements"
+    },
+    {
+      "handle": "@xai",
+      "org": "xAI",
+      "role": "official_company",
+      "why": "xAI product and model releases"
+    },
+    {
+      "handle": "@dreamina_ai",
+      "org": "ByteDance Dreamina / Jimeng intl",
+      "role": "official_product",
+      "why": "International Jimeng/Dreamina; posts Seedance model launches"
+    },
+    {
+      "handle": "@BytePlusGlobal",
+      "org": "ByteDance BytePlus",
+      "role": "official_platform",
+      "why": "Enterprise API surface for Seedance / Seed models"
+    },
+    {
+      "handle": "@ByteDanceOSS",
+      "org": "ByteDance Open Source",
+      "role": "official_oss",
+      "why": "Open-source and Seed-adjacent release signals"
+    },
+    {
+      "handle": "@CapCutApp",
+      "org": "CapCut",
+      "role": "official_product",
+      "why": "CapCut/Dreamina distribution; video AI product releases"
+    }
+  ],
+  "source_index_crosswalk": [
+    "deepseek-site",
+    "deepseek-api-docs",
+    "deepseek-github",
+    "x-deepseek-ai",
+    "bytedance-seed",
+    "volcengine-seedance",
+    "jimeng",
+    "dreamina",
+    "x-dreamina-ai",
+    "x-byteplus-global",
+    "openai-news",
+    "anthropic-news",
+    "deepmind-blog",
+    "xai-news"
+  ]
+}

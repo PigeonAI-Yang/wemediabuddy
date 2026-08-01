@@ -71,9 +71,9 @@ export function KnowledgeCanvasView({
       window.wmb.listKnowledgeCanvases(),
       window.wmb.listKnowledgeSources({ limit: 50 }),
       window.wmb.listKnowledgeTopics({ limit: 50 }),
-    ]).then(async ([list, sourcePage, topicList]) => {
+    ]).then(async ([list, sourcePage, topicPage]) => {
       setSources(sourcePage?.items ?? []);
-      setTopics(topicList ?? []);
+      setTopics(topicPage?.items ?? []);
       const next = list.length
         ? list
         : [await window.wmb.createKnowledgeCanvas({ title: "长期主题工作台" })];

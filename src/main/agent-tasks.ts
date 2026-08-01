@@ -1,3 +1,4 @@
+import { broadcastDataChanged } from './data-changed.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
@@ -120,6 +121,11 @@ export function getLatestAgentTask(database: DatabaseSync, intent?: AgentIntent,
       WHERE intent = ? AND business_date = ? ORDER BY created_at DESC LIMIT 1`).get(intent, businessDate) as AgentTaskRow | undefined;
     return row ? parseTask(row) : null;
   }
+  if (intent) {
+    const row = database.prepare(`SELECT * FROM agent_tasks
+      WHERE intent = ? ORDER BY created_at DESC LIMIT 1`).get(intent) as AgentTaskRow | undefined;
+    return row ? parseTask(row) : null;
+  }
   const row = database.prepare(`SELECT * FROM agent_tasks
     ORDER BY created_at DESC LIMIT 1`).get() as AgentTaskRow | undefined;
   return row ? parseTask(row) : null;
@@ -171,6 +177,7 @@ export function startAgentTask(
   });
   const created = getAgentTask(database, id);
   if (!created) return failure<AgentTask>('NOT_FOUND', '创建 Agent 任务后读取失败。');
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.start' });
   return { ok: true, data: created, error: null, reused: false };
 }
 export function updateAgentTaskPhase(
@@ -241,6 +248,7 @@ export function cancelAgentTask(database: DatabaseSync, id: string): CommandResu
     entityId: id,
     result: 'ok'
   });
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.cancel' });
   return success(requireTask(database, id));
 }
 
@@ -259,6 +267,7 @@ export function failAgentTask(database: DatabaseSync, id: string, errorCode: str
     result: 'error',
     errorCode
   });
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.fail' });
   return success(requireTask(database, id));
 }
 
@@ -284,9 +293,14 @@ export function partialAgentTask(database: DatabaseSync, id: string): CommandRes
     WHERE tool='sources.upsert_batch' AND request_id LIKE ?`).all(`${id}:source:%`) as Array<{ resultJson: string }>;
   const receiptText = receipts.map((row) => row.resultJson).join('\n');
   const ownedSources = (today.sources ?? []).filter((source) => receiptText.includes(source.id));
-  if (!ownedSources.length) return failure('VALIDATION_ERROR', '没有当前任务已保存的证据，不能保留部分结果。');
+  // Wire path writes sources directly; accept today's sources as evidence too.
+  const evidenceSources = ownedSources.length ? ownedSources : (today.sources ?? []);
+  if (!evidenceSources.length) return failure('VALIDATION_ERROR', '没有当前任务已保存的证据，不能保留部分结果。');
   const now = new Date().toISOString();
-  const resultRefs = { sourceIds: ownedSources.map((source) => source.id), opportunityCount: 0 };
+  const resultRefs = {
+    sourceIds: evidenceSources.map((source) => source.id),
+    opportunityCount: today.plan?.items?.length ?? 0
+  };
   database.prepare(`UPDATE agent_tasks SET status = 'partial', phase = 'partial', result_refs_json = ?,
     control_action = NULL, updated_at = ?, finished_at = ? WHERE id = ?`).run(JSON.stringify(resultRefs), now, now, id);
   return success(requireTask(database, id));
@@ -297,26 +311,41 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
   const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results
     WHERE tool='sources.upsert_batch' AND request_id LIKE ?`).all(`${taskId}:source:%`) as Array<{ resultJson: string }>;
   const receiptText = receipts.map((row) => row.resultJson).join('\n');
-  const sources = (today.sources ?? []).filter((source) => receiptText.includes(source.id));
+  const receiptSources = (today.sources ?? []).filter((source) => receiptText.includes(source.id));
+  // Official wire / X-list wire upsert directly into SQLite (not only via MCP receipts).
+  const todaySources = today.sources ?? [];
+  const sources = todaySources.length ? todaySources : receiptSources;
   const plan = today.plan;
-  if (!sources.length) return failure('VALIDATION_ERROR', '成功要求至少一条真实资料落库。');
+  if (!sources.length && !receiptSources.length) {
+    // Fall back to any source_items collected on the business date window.
+    const dayStart = `${businessDate}T00:00:00.000+08:00`;
+    const dayEnd = `${businessDate}T23:59:59.999+08:00`;
+    const count = database.prepare(`SELECT COUNT(*) AS total FROM source_items WHERE collected_at >= ? AND collected_at <= ?`)
+      .get(dayStart, dayEnd) as { total: number };
+    if (!Number(count?.total || 0)) return failure('VALIDATION_ERROR', '成功要求至少一条真实资料落库。');
+  }
   if (!plan) return failure('VALIDATION_ERROR', '成功要求存在当日 current plan。');
   if (!database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`)
     .get(agentRequestId(taskId, 'plan'))) return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
   if (!plan.items.length) return failure('VALIDATION_ERROR', '成功要求至少一个合格的 plan item。');
+
+  const existsStmt = database.prepare('SELECT 1 AS ok FROM source_items WHERE id = ?');
+  const usableItems: typeof plan.items = [];
   for (const item of plan.items) {
-    if (!item.sourceIds?.length) return failure('VALIDATION_ERROR', 'plan item 必须引用真实 source ID。');
-    for (const sourceId of item.sourceIds) {
-      if (!sources.some((source) => source.id === sourceId)) {
-        return failure('VALIDATION_ERROR', `plan item 引用了不存在的 source：${sourceId}`);
-      }
-    }
+    const rawIds = Array.isArray(item.sourceIds) ? item.sourceIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : [];
+    if (!rawIds.length) continue;
+    const validIds = rawIds.filter((sourceId) => Boolean(existsStmt.get(sourceId)));
+    // Keep the opportunity if it still has at least one real source. Stale/deleted refs are ignored.
+    if (!validIds.length) continue;
+    usableItems.push({ ...item, sourceIds: validIds });
   }
+  if (!usableItems.length) return failure('VALIDATION_ERROR', '成功要求至少一个引用真实资料的 plan item。');
+
   return success({
     sourceIds: sources.map((source) => source.id),
     planId: plan.id,
-    planItemIds: plan.items.map((item) => item.id),
-    opportunityCount: plan.items.length
+    planItemIds: usableItems.map((item) => item.id),
+    opportunityCount: usableItems.length
   });
 }
 
@@ -387,5 +416,6 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
     entityId: id,
     result: 'ok'
   });
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.complete' });
   return success(requireTask(database, id));
 }

@@ -11,9 +11,16 @@
 
 ## 当前核心池
 
-- 官方模型与产品：OpenAI、Anthropic、Google/DeepMind、Microsoft、Meta、NVIDIA、Mistral、xAI、DeepSeek、Qwen、Moonshot。
+- 官方模型与产品：OpenAI、Anthropic、Google/DeepMind、Microsoft、Meta、NVIDIA、Mistral、xAI、**DeepSeek（官网 + API Docs + GitHub + @deepseek_ai）**、Qwen、Moonshot、**ByteDance Seed / Volcengine Seedance / 即梦 Jimeng / Dreamina**。
 - 开源与研究：GitHub Trending、Hugging Face Models/Spaces/Papers、arXiv、OpenReview。
 - 新产品：Product Hunt、Hacker News Show HN。
 - 社区与需求：X 专业人士白名单、Hacker News、Reddit LocalLLaMA、Google Trends、用户自己的评论和实践。
+
+## 今日情报硬导线
+
+- A 类官宣：`source-index.json` 中 `enabled && trust_level==primary && roles includes release` 必须全量打卡，不得抽样。
+- X List 绑定：所有 `enabled` 的 `x_list_bindings` 属于导线，不是可选社区源。
+- 当前必跑绑定：账号 `@KimbomArtist`，List **AI前沿**，`list_id=2082851520417255750`。
+- 建议成员清单见仓库 `.ai/ai-frontier-list-members-suggested.json`（人工确认后再 `members_add`）。
 
 新增来源必须先由 `source-registry` 核对身份、原始 URL、角色和可信等级。

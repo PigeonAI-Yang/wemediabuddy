@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
 import { PiDockTranscript, formatPiMessageTime, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 
@@ -20,6 +20,96 @@ function piErrorMessage(error: unknown): string {
     .replace(/^Error:\s*/i, '')
     .trim() || 'Pi 回复失败。';
 }
+const PiComposer = memo(function PiComposer({
+  configured,
+  busy,
+  phase,
+  draftSeed,
+  onDraftSeedConsumed,
+  onSend,
+  onStop,
+  modelLabel,
+  thinkingChoice,
+  modelMenuOpen,
+  modelMenuBusy,
+  modelChoice,
+  modelOptions,
+  onModelChoice,
+  onThinkingChoice,
+  onOpenModelMenu,
+  onCloseModelMenu,
+  onApplyModel
+}: {
+  configured: boolean;
+  busy: boolean;
+  phase: 'idle' | 'starting' | 'running' | 'failed' | 'stopped';
+  draftSeed: string | null;
+  onDraftSeedConsumed: () => void;
+  onSend: (text: string, delivery?: 'steer' | 'followUp') => void;
+  onStop: () => void;
+  modelLabel: string;
+  thinkingChoice: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  modelMenuOpen: boolean;
+  modelMenuBusy: boolean;
+  modelChoice: string;
+  modelOptions: string[];
+  onModelChoice: (value: string) => void;
+  onThinkingChoice: (value: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') => void;
+  onOpenModelMenu: () => void;
+  onCloseModelMenu: () => void;
+  onApplyModel: () => void;
+}): React.JSX.Element {
+  const [input, setInput] = useState('');
+  useEffect(() => {
+    if (draftSeed == null) return;
+    setInput(draftSeed);
+    onDraftSeedConsumed();
+  }, [draftSeed, onDraftSeedConsumed]);
+  const sendCurrent = (delivery?: 'steer' | 'followUp') => {
+    const text = input.trim();
+    if (!text) return;
+    setInput('');
+    onSend(text, delivery);
+  };
+  return <footer className="pi-dock-footer">
+    {modelMenuOpen && <div className="pi-model-menu" role="dialog" aria-label="选择模型和推理强度">
+      <div className="pi-model-menu-head"><strong>模型与推理</strong><button type="button" onClick={onCloseModelMenu}>×</button></div>
+      <label><span>模型</span><select disabled={modelMenuBusy} value={modelChoice} onChange={(event) => onModelChoice(event.target.value)}>
+        {modelOptions.length ? modelOptions.map((model) => <option key={model} value={model}>{model}</option>) : <option value={modelChoice}>{modelMenuBusy ? '正在读取模型…' : modelChoice || '没有可用模型'}</option>}
+      </select></label>
+      <label><span>推理强度</span><select disabled={modelMenuBusy} value={thinkingChoice} onChange={(event) => onThinkingChoice(event.target.value as typeof thinkingChoice)}>
+        <option value="auto">自动</option><option value="off">关闭</option><option value="minimal">极简</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">很高</option><option value="max">最高</option>
+      </select></label>
+      <button type="button" className="primary-button" disabled={modelMenuBusy || !modelChoice} onClick={onApplyModel}>{modelMenuBusy ? '读取中…' : '应用到新回复'}</button>
+    </div>}
+    <div className="pi-composer">
+      <textarea
+        disabled={!configured}
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendCurrent(event.altKey ? 'followUp' : 'steer'); } }}
+        placeholder={configured ? (busy ? '继续输入；发送会插入当前回复，Alt+Enter 放到下一轮' : phase === 'failed' ? '失败后可以直接重试' : phase === 'stopped' ? '已停止，可以继续发送' : '给 Pi 发消息') : '配置 Pi API 后可以对话'}
+      />
+      <div className="pi-composer-bar">
+        <div className="pi-composer-tools">
+          <button type="button" className="pi-icon-button" title="插入图片（即将支持）" aria-label="插入图片" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L9 18"/></svg>
+          </button>
+          <button type="button" className="pi-icon-button" title="附件（即将支持）" aria-label="附件" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg>
+          </button>
+        </div>
+        <div className="pi-composer-meta">
+          <button type="button" className={`pi-model-trigger${modelMenuOpen ? ' open' : ''}`} title="选择模型和推理强度" onClick={onOpenModelMenu}><span>{modelLabel}</span><small>{thinkingChoice === 'auto' ? '自动' : thinkingChoice}</small><b>▾</b></button>
+          {busy && !input.trim()
+            ? <button type="button" className="pi-send-button pi-stop-button" title="停止 Pi 当前回复" aria-label="停止 Pi 当前回复" disabled={!configured} onClick={onStop}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
+            : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || !input.trim()} onClick={() => sendCurrent('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
+        </div>
+      </div>
+    </div>
+  </footer>;
+});
+
 
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
@@ -30,7 +120,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   resetWidth: () => void;
 }): React.JSX.Element {
   type PiSessionItem = { id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean };
-  const [input, setInput] = useState('');
+  const [draftSeed, setDraftSeed] = useState<string | null>(null);
   const [messages, setMessages] = useState<PiDockMessage[]>([]);
   const [nativeQueue, setNativeQueue] = useState<PiNativeQueue>({ steering: [], followUp: [] });
   const [sessions, setSessions] = useState<PiSessionItem[]>([]);
@@ -241,23 +331,33 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     setToast(text);
     window.setTimeout(() => setToast(''), 1400);
   };
-  const rankingCount = (context.rankingContext?.boards.length ?? 0) + (context.rankingContext?.items.length ?? 0);
+  const contextChip = useMemo(() => {
+    const rankingCount = (context.rankingContext?.boards.length ?? 0) + (context.rankingContext?.items.length ?? 0);
+    const xList = context.xListContext;
+    if (context.contextSelection) {
+      return `${context.pageLabel} · ${context.contextSelection.mode==='selected'?`已选 ${context.contextSelection.nodeIds.length} 项`:`当前页 ${context.contextSelection.nodeIds.length} 项`}`;
+    }
+    if (xList) {
+      if (xList.mode === 'post' && xList.selectedPost) return `${context.pageLabel} · 帖子 ${xList.selectedPost.authorHandle || ''}`.trim();
+      if (xList.listName) return `${context.pageLabel} · ${xList.listName}${xList.loadedCount ? ` · 已加载 ${xList.loadedCount} 条` : (xList.visiblePosts.length ? ` · ${xList.visiblePosts.length} 条动态` : '')}`;
+      return `${context.pageLabel} · 当前页`;
+    }
+    if (rankingCount) return `${context.pageLabel} · 已选 ${context.rankingContext?.boards.length ?? 0} 个榜单、${context.rankingContext?.items.length ?? 0} 个项目`;
+    if (context.focus) return `${context.pageLabel} · ${context.focus.title}${context.focus.bodyStatus === 'ready' ? ' · 含正文' : ''}`;
+    const oppCount = context.selectedItems?.length ?? 0;
+    const sourceCount = context.selectedSources?.length ?? 0;
+    const bodyCount = context.selectedSources?.filter((item) => item.bodyStatus === 'ready' && item.bodyExcerpt).length ?? 0;
+    const fermentCount = (context.fermenting?.items?.length ?? 0) + (context.fermenting?.watchingItems?.length ?? 0);
+    if (oppCount || sourceCount || fermentCount) {
+      const parts = [context.pageLabel];
+      if (oppCount) parts.push(`已选 ${oppCount} 个机会`);
+      if (sourceCount) parts.push(`${sourceCount} 条资料${bodyCount ? `（${bodyCount} 含正文）` : '（摘要）'}`);
+      if (fermentCount) parts.push(`发酵 ${fermentCount}`);
+      return parts.join(' · ');
+    }
+    return context.objectTitle ? `${context.pageLabel} · ${context.objectTitle}` : context.pageLabel;
+  }, [context]);
   const xList = context.xListContext;
-  const contextChip = context.contextSelection
-    ? `${context.pageLabel} · ${context.contextSelection.mode==='selected'?`已选 ${context.contextSelection.nodeIds.length} 项`:`当前页 ${context.contextSelection.nodeIds.length} 项`}`
-    : xList
-    ? (xList.mode === 'post' && xList.selectedPost
-      ? `${context.pageLabel} · 帖子 ${xList.selectedPost.authorHandle || ''}`.trim()
-      : xList.listName
-        ? `${context.pageLabel} · ${xList.listName}${xList.loadedCount ? ` · 已加载 ${xList.loadedCount} 条` : (xList.visiblePosts.length ? ` · ${xList.visiblePosts.length} 条动态` : '')}`
-        : `${context.pageLabel} · 当前页`)
-    : rankingCount
-    ? `${context.pageLabel} · 已选 ${context.rankingContext?.boards.length ?? 0} 个榜单、${context.rankingContext?.items.length ?? 0} 个项目`
-    : context.objectTitle
-    ? context.selectedItems?.length
-      ? `${context.pageLabel} · 已选 ${context.selectedItems.length} 个机会`
-      : `${context.pageLabel} · ${context.objectTitle}`
-    : context.pageLabel;
   const buildPayload = (text: string, directContext?: {scope:string;items:Array<{nodeId:string}>;relations:Array<{id:string}>;estimatedCharacters:number}) => {
     const selectedContext = context.selectedItems?.map((item) => ({
       id: item.id,
@@ -270,6 +370,19 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       structureGuidance: item.structureGuidance,
       sourceIds: item.sourceIds
     })) ?? [];
+    const selectedSources = context.selectedSources?.map((source) => ({
+      id: source.id,
+      title: source.title,
+      url: source.canonicalUrl,
+      author: source.author,
+      publishedAt: source.publishedAt,
+      collectedAt: source.collectedAt,
+      summary: source.summary,
+      categories: source.categories,
+      bodyStatus: source.bodyStatus ?? 'none',
+      bodyChars: source.bodyChars ?? 0,
+      bodyExcerpt: source.bodyExcerpt ?? null
+    })) ?? [];
     const contextInstruction = directContext
       ? `\ncontextRule=只使用下面直接提供的页面上下文，不得调用上下文包工具，也不得扩展到选中范围之外。`
         + `\nmode=${context.packagePurpose??'discussion'}`
@@ -280,6 +393,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         + `\ncontextManifest=${JSON.stringify(directContext)}`
       : xList
       ? `\ncontextRule=优先使用下面直接提供的 X List 页面上下文；用户没点帖子时讨论当前列表已加载的全部动态（loadedCount/visiblePosts），点了帖子时只讨论该帖及其评论。不要假设未加载的更早帖子。`
+      : context.focus
+      ? `\ncontextRule=focus 是用户当前正在看的对象。有 bodyExcerpt 时优先依据正文；否则用 summary。不要把摘要当成全文，也不要假设未提供的页面内容。`
+      : selectedSources.length
+      ? `\ncontextRule=selectedSources 是用户勾选的原始资料。默认只有摘要（summary）；bodyStatus=ready 且 bodyExcerpt 非空时才有正文摘录。selectedItems 是选题机会。fermenting 是跨日仍在发酵的机会/主题，优先考虑未消化的高价值续命项。回答优先引用 selectedSources 证据，不要把摘要当成全文。`
+      : ((context.fermenting?.items?.length ?? 0) + (context.fermenting?.watchingItems?.length ?? 0))
+      ? `\ncontextRule=fermenting.items 是仍值得做的跨日项；fermenting.watchingItems 是观察中项。都不是今日主清单。讨论时优先今日 selectedItems，再看发酵补充。`
       : '';
     const xListPayload = xList ? JSON.stringify({
       accountKey: xList.accountKey,
@@ -291,7 +410,36 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       selectedPost: xList.selectedPost,
       visiblePosts: xList.visiblePosts
     }) : 'null';
-    return `[WMB_CONTEXT]\npage=${context.page}\npageLabel=${context.pageLabel}\nobjectType=${context.objectType ?? ''}\nobjectId=${context.objectId ?? ''}\nobjectTitle=${context.objectTitle ?? ''}${contextInstruction}\nselectedItems=${JSON.stringify(selectedContext)}\nrankingContext=${JSON.stringify(context.rankingContext ?? { boards: [], items: [] })}\nxListContext=${xListPayload}\n[USER_MESSAGE]\n${text}`;
+    const fermentingPayload = JSON.stringify({
+      items: (context.fermenting?.items ?? []).slice(0, 5).map((item) => ({
+        id: item.id,
+        objectType: item.objectType,
+        objectId: item.objectId,
+        title: item.title,
+        state: item.state,
+        priority: item.priority,
+        topicId: item.topicId,
+        sourceIds: item.sourceIds,
+        originPlanDate: item.originPlanDate,
+        fermentedDays: item.fermentedDays,
+        decayScore: item.decayScore,
+        reason: item.reason,
+        aftershocks: (item.aftershocks || []).slice(0, 3)
+      })),
+      watchingItems: (context.fermenting?.watchingItems ?? []).slice(0, 5).map((item) => ({
+        id: item.id,
+        objectType: item.objectType,
+        objectId: item.objectId,
+        title: item.title,
+        state: item.state,
+        priority: item.priority,
+        fermentedDays: item.fermentedDays,
+        originPlanDate: item.originPlanDate
+      })),
+      topics: (context.fermenting?.topics ?? []).slice(0, 6),
+      pinnedSources: (context.fermenting?.pinnedSources ?? []).slice(0, 3)
+    });
+    return `[WMB_CONTEXT]\npage=${context.page}\npageLabel=${context.pageLabel}\nobjectType=${context.objectType ?? ''}\nobjectId=${context.objectId ?? ''}\nobjectTitle=${context.objectTitle ?? ''}${contextInstruction}\nfocus=${JSON.stringify(context.focus ?? null)}\nselectedItems=${JSON.stringify(selectedContext)}\nselectedSources=${JSON.stringify(selectedSources)}\nfermenting=${fermentingPayload}\nrankingContext=${JSON.stringify(context.rankingContext ?? { boards: [], items: [] })}\nxListContext=${xListPayload}\n[USER_MESSAGE]\n${text}`;
   };
 
   const sendText = async (text: string, delivery?: 'steer' | 'followUp') => {
@@ -331,25 +479,24 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
   };
 
-  const send = async (delivery?: 'steer' | 'followUp') => {
-    const text = input.trim();
-    if (!text) return;
-    setInput('');
-    await sendText(text, delivery);
-  };
-  useEffect(()=>{
-    const generate=(event:Event)=>void sendText((event as CustomEvent<string>).detail);
-    window.addEventListener('wmb-pi-generate',generate);
-    return()=>window.removeEventListener('wmb-pi-generate',generate);
+  const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp') => {
+    const value = text.trim();
+    if (!value) return;
+    await sendText(value, delivery);
+  }, [busy, configured, context]);
+  useEffect(() => {
+    const generate = (event: Event) => void sendText((event as CustomEvent<string>).detail);
+    window.addEventListener('wmb-pi-generate', generate);
+    return () => window.removeEventListener('wmb-pi-generate', generate);
   });
-  const stop = async () => {
+  const stop = useCallback(async () => {
     try {
       const result = await window.wmb.stopPi();
       if (result.stopped) setStatusText('正在停止');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '停止失败');
     }
-  };
+  }, []);
   const newConversation = async () => {
     if (busy) await stop();
     conversationTouched.current = true;
@@ -399,7 +546,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       setStatusText(configured ? '已创建 Pi 分支' : '等待配置');
       await refreshSessions();
       if (retry) await sendText(forked.text);
-      else setInput(forked.text);
+      else setDraftSeed(forked.text);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Pi 分叉失败');
     }
@@ -473,43 +620,26 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         onFork={(entryId) => void forkMessage(entryId, false)}
         onRetry={(entryId) => void forkMessage(entryId, true)}
       />
-      <footer className="pi-dock-footer">
-        {modelMenuOpen && <div className="pi-model-menu" role="dialog" aria-label="选择模型和推理强度">
-          <div className="pi-model-menu-head"><strong>模型与推理</strong><button type="button" onClick={() => setModelMenuOpen(false)}>×</button></div>
-          <label><span>模型</span><select disabled={modelMenuBusy} value={modelChoice} onChange={(event) => setModelChoice(event.target.value)}>
-            {modelOptions.length ? modelOptions.map((model) => <option key={model} value={model}>{model}</option>) : <option value={modelChoice}>{modelMenuBusy ? '正在读取模型…' : modelChoice || '没有可用模型'}</option>}
-          </select></label>
-          <label><span>推理强度</span><select disabled={modelMenuBusy} value={thinkingChoice} onChange={(event) => setThinkingChoice(event.target.value as typeof thinkingChoice)}>
-            <option value="auto">自动</option><option value="off">关闭</option><option value="minimal">极简</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">很高</option><option value="max">最高</option>
-          </select></label>
-          <button type="button" className="primary-button" disabled={modelMenuBusy || !modelChoice} onClick={() => void applyModelChoice()}>{modelMenuBusy ? '读取中…' : '应用到新回复'}</button>
-        </div>}
-        <div className="pi-composer">
-          <textarea
-            disabled={!configured}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(event.altKey ? 'followUp' : 'steer'); } }}
-            placeholder={configured ? (busy ? '继续输入；发送会插入当前回复，Alt+Enter 放到下一轮' : phase === 'failed' ? '失败后可以直接重试' : phase === 'stopped' ? '已停止，可以继续发送' : '给 Pi 发消息') : '配置 Pi API 后可以对话'}
-          />
-          <div className="pi-composer-bar">
-            <div className="pi-composer-tools">
-              <button type="button" className="pi-icon-button" title="插入图片（即将支持）" aria-label="插入图片" disabled>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L9 18"/></svg>
-              </button>
-              <button type="button" className="pi-icon-button" title="附件（即将支持）" aria-label="附件" disabled>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg>
-              </button>
-            </div>
-            <div className="pi-composer-meta">
-              <button type="button" className={`pi-model-trigger${modelMenuOpen ? ' open' : ''}`} title="选择模型和推理强度" onClick={() => void openModelMenu()}><span>{modelLabel}</span><small>{thinkingChoice === 'auto' ? '自动' : thinkingChoice}</small><b>▾</b></button>
-              {busy && !input.trim()
-                ? <button type="button" className="pi-send-button pi-stop-button" title="停止 Pi 当前回复" aria-label="停止 Pi 当前回复" disabled={!configured} onClick={() => void stop()}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
-                : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || !input.trim()} onClick={() => void send('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
-            </div>
-          </div>
-        </div>
-      </footer>
+      <PiComposer
+        configured={configured}
+        busy={busy}
+        phase={phase}
+        draftSeed={draftSeed}
+        onDraftSeedConsumed={() => setDraftSeed(null)}
+        onSend={(text, delivery) => { void send(text, delivery); }}
+        onStop={() => { void stop(); }}
+        modelLabel={modelLabel}
+        thinkingChoice={thinkingChoice}
+        modelMenuOpen={modelMenuOpen}
+        modelMenuBusy={modelMenuBusy}
+        modelChoice={modelChoice}
+        modelOptions={modelOptions}
+        onModelChoice={setModelChoice}
+        onThinkingChoice={setThinkingChoice}
+        onOpenModelMenu={() => { void openModelMenu(); }}
+        onCloseModelMenu={() => setModelMenuOpen(false)}
+        onApplyModel={() => { void applyModelChoice(); }}
+      />
     </>}
   </aside>;
 }

@@ -1,8 +1,10 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { app } from 'electron';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { migrateDatabase } from './db/migrations.ts';
+import { listWatchingSources } from './knowledge.ts';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -20,6 +22,13 @@ import { ensurePiConversationLayout, readPiConversation } from './pi-conversatio
 import { resolvePiConfig } from './pi-config.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
+import { readBrowserConfig } from './browser.ts';
+import {
+  mergeWireCheckpoint,
+  runEnabledXListWire,
+  runOfficialWebWire
+} from './intelligence-wire.ts';
+import { refreshWorkCarry } from './ferment.ts';
 
 const activeDailyRuntimes = new Map<string, PiRpcSupervisor>();
 export async function abortDailyIntelligence(taskId: string): Promise<boolean> {
@@ -35,9 +44,19 @@ export type DailyIntelligenceRun = {
 };
 
 function skillSourcePath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'skills', 'wemedia-intelligence-engine')
-    : path.join(app.getAppPath(), 'skills', 'wemedia-intelligence-engine');
+  // Prefer the repo/runtime copy next to this module. Electron getAppPath() can point at
+  // ad-hoc runner directories (e.g. .ai/) and is unreliable for headless launches.
+  const local = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/wemedia-intelligence-engine');
+  try {
+    const require = createRequire(import.meta.url);
+    const electron = require('electron') as { app?: { isPackaged?: boolean } };
+    if (electron.app?.isPackaged) {
+      return path.join(process.resourcesPath, 'skills', 'wemedia-intelligence-engine');
+    }
+  } catch {
+    // ignore
+  }
+  return local;
 }
 
 async function piCliPath(dataRootPath: string): Promise<string> {
@@ -50,8 +69,8 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: string }, route?: string): string {
-  return [
+function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: string }, route?: string, options?: { firstRoute?: boolean; fermentingSummary?: string; watchingSummary?: string }): string {
+  const lines = [
     '执行 WeMediaBuddy 今日情报任务。',
     `task_id=${task.id}`,
     `intent=${task.intent}`,
@@ -70,12 +89,29 @@ function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: strin
     '7. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。按等级从高到低提交；未达到机会标准的线索只保留为资料，不得凑数。',
     '8. 写回后调用 wmb_get_workbench 读回，并汇报最终计数。',
     '如果外部读取失败，仍可用已核验的公开官方 URL 完成最小可用写入，但不得伪造不存在的业务对象。'
-  ].join('\n');
+  ];
+  if (options?.firstRoute) {
+    lines.push(
+      '补充：W0/W1 导线（enabled X List + primary release 官方源）已由运行时执行完毕。A 类官宣发现属于导线职责，本轮不要跳过已入库核验资料；请基于 workbench/source_items 做解释、冲突与机会，而不是重复“有没有发版”的盲扫。',
+      '观察雷达：资料库 management_status=watching 的对象是用户明确要持续跟踪的。本轮优先检查它们的相关主题/官方源/后续评测是否有新进展；有进展就入库并在机会里点明“观察对象余波”。',
+      options?.watchingSummary ? `当前观察中：${options.watchingSummary}` : '当前观察中：无'
+    );
+  }
+  if (!route) {
+    lines.push(
+      '9. 方案综合时同时看：今日新资料、资料库观察中对象的余波、workbench.fermenting 未消化差集。',
+      '10. 观察中对象若仍有跟进价值，应生成/保留机会并写清余波理由；若已无跟进必要，可在总结建议取消观察（不要擅自改 management_status）。',
+      options?.watchingSummary ? `当前观察中：${options.watchingSummary}` : '当前观察中：无',
+      options?.fermentingSummary ? `当前发酵差集：${options.fermentingSummary}` : '当前发酵差集：无'
+    );
+  }
+  return lines.join('\n');
 }
 export async function startDailyIntelligence(input: {
   dataRootPath: string;
   businessDate: string;
   mcpUrl: string;
+  xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
@@ -86,7 +122,8 @@ export async function startDailyIntelligence(input: {
       intent: 'daily_intelligence',
       businessDate: input.businessDate,
       contextRefs: { planDate: input.businessDate },
-      piSessionId: conversation.sessionId
+      // Keep dock chat session separate; daily wire must not inherit image-bearing chat history.
+      piSessionId: `daily-${input.businessDate}`
     });
     if (!started.ok) throw new Error(started.error.message);
     taskId = started.data.id;
@@ -105,7 +142,7 @@ export async function startDailyIntelligence(input: {
             id: config.model,
             name: config.model,
             reasoning: true,
-            input: ['text', 'image'],
+            input: ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 272000,
             maxTokens: 16000
@@ -126,22 +163,25 @@ export async function startDailyIntelligence(input: {
 
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-daily-'));
     const cliPath = await piCliPath(input.dataRootPath);
+    const dailySessionFile = path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`);
+    await mkdir(path.dirname(dailySessionFile), { recursive: true });
     const runtimeArgs = [
       cliPath,
       '--mode', 'rpc',
-      '--session', layout.sessionFile,
+      '--session', dailySessionFile,
       '--skill', path.join(layout.agentDir, 'skills', 'wemedia-intelligence-engine'),
       '-e', extensionPath,
       '--provider', 'wmb-api',
       '--model', config.model,
-      '--append-system-prompt', '你是 WeMediaBuddy 内置 Pi。只通过 wmb_* MCP 工具完成今日情报写入。禁止直接写文件/数据库，禁止最终发布。'
+      '--append-system-prompt', '你是 WeMediaBuddy 内置 Pi。只通过 wmb_* MCP 工具完成今日情报写入。禁止直接写文件/数据库，禁止最终发布。回答与工具调用都只使用纯文本，不要请求或生成图片。'
     ];
     const runtimeEnv = {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl
+      WMB_MCP_URL: input.mcpUrl,
+      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
     };
     const makeRuntime = () => new PiRpcSupervisor(process.execPath, runtimeArgs, runtimeEnv, (event) => {
       input.onEvent?.(event as Record<string, unknown>);
@@ -156,8 +196,56 @@ export async function startDailyIntelligence(input: {
         }
       }, 15_000);
       try {
+        let wireCheckpoint = mergeWireCheckpoint(started.data.checkpoint, {});
+        const browserConfig = readBrowserConfig(database);
+        reportAgentTaskProgress(database, started.data.id, {
+          phase: 'scanning_sources',
+          message: '正在巡检 X List',
+          checkpoint: wireCheckpoint
+        });
+        const xListWire = await runEnabledXListWire({
+          database,
+          browserConfig,
+          checkpoint: wireCheckpoint,
+          onProgress: (message, checkpoint) => {
+            wireCheckpoint = checkpoint;
+            reportAgentTaskProgress(database, started.data.id, {
+              phase: 'scanning_sources',
+              message,
+              checkpoint
+            });
+          }
+        });
+        wireCheckpoint = xListWire.checkpoint;
+        reportAgentTaskProgress(database, started.data.id, {
+          phase: 'scanning_sources',
+          message: '正在巡检官方源',
+          checkpoint: wireCheckpoint
+        });
+        const officialWire = await runOfficialWebWire({
+          database,
+          skillRoot: skillSourcePath(),
+          checkpoint: wireCheckpoint,
+          browserConfig,
+          onProgress: (message, checkpoint) => {
+            wireCheckpoint = checkpoint;
+            reportAgentTaskProgress(database, started.data.id, {
+              phase: 'scanning_sources',
+              message,
+              checkpoint
+            });
+          }
+        });
+        wireCheckpoint = officialWire.checkpoint;
+        reportAgentTaskProgress(database, started.data.id, {
+          phase: 'scanning_sources',
+          message: '导线巡检完成，开始主题航线。',
+          checkpoint: wireCheckpoint
+        });
+
         const routes = ['官方产品与模型发布', '开源项目与开发者工具', 'AI Skill 与 MCP 生态', '研究与模型评测', '社区真实问题与争议', '创作者与商业案例'];
-        const done = new Set(Array.isArray(started.data.checkpoint.completedRoutes) ? started.data.checkpoint.completedRoutes as string[] : []);
+        const done = new Set(Array.isArray(wireCheckpoint.completedRoutes) ? wireCheckpoint.completedRoutes : []);
+        const firstPendingRoute = routes.find((route) => !done.has(route));
         for (let index = 0; index < routes.length; index += 1) {
           const route = routes[index];
           if (done.has(route)) continue;
@@ -176,7 +264,9 @@ export async function startDailyIntelligence(input: {
             clearAgentTaskControl(database, current.id);
             reportAgentTaskProgress(database, current.id, {
               progress: { planned: routes.length, processed: done.size + 1, currentSource: route },
-              checkpoint: { completedRoutes: [...done, route] },
+              checkpoint: mergeWireCheckpoint(getAgentTask(database, current.id)?.checkpoint ?? wireCheckpoint, {
+                completedRoutes: [...done, route]
+              }),
               message: `已按用户要求跳过：${route}`,
               level: 'warning'
             });
@@ -192,14 +282,24 @@ export async function startDailyIntelligence(input: {
           activeDailyRuntimes.set(current.id, runtime);
           try {
             await runtime.start();
+            const watchingSummary = route === firstPendingRoute
+              ? JSON.stringify(listWatchingSources(database, 20).map((item) => ({
+                id: item.id,
+                title: item.title,
+                topics: item.topics,
+                priority: item.priority
+              })))
+              : undefined;
             await runtime.promptUntilSettled(dailyPrompt(getAgentTask(database, current.id) ?? current, {
               sources: agentRequestId(current.id, `source:${index}`),
               plan: requestIds.plan
-            }, route), { timeoutMs: 4 * 60_000 });
+            }, route, { firstRoute: route === firstPendingRoute, watchingSummary }), { timeoutMs: 4 * 60_000 });
             done.add(route);
             reportAgentTaskProgress(database, current.id, {
               progress: { processed: done.size, currentSource: route },
-              checkpoint: { completedRoutes: [...done] },
+              checkpoint: mergeWireCheckpoint(getAgentTask(database, current.id)?.checkpoint ?? wireCheckpoint, {
+                completedRoutes: [...done]
+              }),
               message: `完成扫描：${route}`
             });
           } catch (error) {
@@ -208,7 +308,9 @@ export async function startDailyIntelligence(input: {
             done.add(route);
             reportAgentTaskProgress(database, current.id, {
               progress: { processed: done.size, failed: (latest?.progress.failed ?? 0) + 1, currentSource: route },
-              checkpoint: { completedRoutes: [...done] },
+              checkpoint: mergeWireCheckpoint(latest?.checkpoint ?? wireCheckpoint, {
+                completedRoutes: [...done]
+              }),
               message: `来源路线失败，已隔离并继续：${route}`,
               level: 'warning'
             });
@@ -225,11 +327,42 @@ export async function startDailyIntelligence(input: {
           return { task: partial.data, reused: started.reused === true };
         }
         reportAgentTaskProgress(database, beforePlan.id, { phase: 'synthesizing', message: '来源扫描结束，正在整理全部合格内容机会。' });
+        const fermenting = refreshWorkCarry(database, beforePlan.businessDate);
+        const watchingSummary = JSON.stringify(listWatchingSources(database, 20).map((item) => ({
+          id: item.id,
+          title: item.title,
+          topics: item.topics,
+          priority: item.priority
+        })));
+        const fermentingSummary = JSON.stringify({
+          items: fermenting.items.slice(0, 5).map((item) => ({
+            title: item.title,
+            state: item.state,
+            priority: item.priority,
+            fermentedDays: item.fermentedDays,
+            reason: item.reason,
+            aftershocks: item.aftershocks.slice(0, 2).map((shock) => shock.title)
+          })),
+          topics: fermenting.topics.slice(0, 5)
+        });
         const synthesis = makeRuntime();
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
           await synthesis.start();
-          await synthesis.promptUntilSettled(dailyPrompt(getAgentTask(database, beforePlan.id) ?? beforePlan, requestIds), { timeoutMs: 6 * 60_000 });
+          await synthesis.promptUntilSettled(dailyPrompt(getAgentTask(database, beforePlan.id) ?? beforePlan, requestIds, undefined, { fermentingSummary, watchingSummary }), { timeoutMs: 6 * 60_000 });
+        } catch (error) {
+          // Wire + route scanning already persisted sources/opportunities. Don't discard the day
+          // just because final synthesis provider call failed (e.g. model modality mismatch).
+          const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
+          const message = error instanceof Error ? error.message : String(error);
+          reportAgentTaskProgress(database, latest.id, {
+            phase: 'synthesis_failed',
+            message: `综合整理失败，保留已扫描结果：${message.slice(0, 180)}`,
+            level: 'warning'
+          });
+          const partial = partialAgentTask(database, latest.id);
+          if (partial.ok) return { task: partial.data, reused: started.reused === true };
+          throw error;
         } finally {
           activeDailyRuntimes.delete(beforePlan.id);
           await synthesis.stop().catch(() => {});
@@ -247,6 +380,14 @@ export async function startDailyIntelligence(input: {
       updateAgentTaskPhase(database, started.data.id, 'validating');
       const completed = completeAgentTask(database, started.data.id);
       if (!completed.ok) {
+        // Prefer keeping a useful day over hard-failing on residual validation edge cases.
+        reportAgentTaskProgress(database, started.data.id, {
+          phase: 'validating',
+          message: `完成校验未完全通过，尝试保留结果：${completed.error.message}`,
+          level: 'warning'
+        });
+        const partial = partialAgentTask(database, started.data.id);
+        if (partial.ok) return { task: partial.data, reused: started.reused === true };
         failAgentTask(database, started.data.id, completed.error.code, completed.error.message);
         throw new Error(completed.error.message);
       }
@@ -289,6 +430,7 @@ export async function startStudioDraft(input: {
   businessDate: string;
   projectId: string;
   mcpUrl: string;
+  xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
@@ -315,7 +457,7 @@ export async function startStudioDraft(input: {
             id: config.model,
             name: config.model,
             reasoning: true,
-            input: ['text', 'image'],
+            input: ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 272000,
             maxTokens: 16000
@@ -341,7 +483,8 @@ export async function startStudioDraft(input: {
       ELECTRON_RUN_AS_NODE: '1',
       PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl
+      WMB_MCP_URL: input.mcpUrl,
+      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
     }, (event) => {
       input.onEvent?.(event as Record<string, unknown>);
     }, workDir);
@@ -394,6 +537,7 @@ export async function startResultsReview(input: {
   businessDate: string;
   publicationId: string;
   mcpUrl: string;
+  xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
@@ -420,7 +564,7 @@ export async function startResultsReview(input: {
             id: config.model,
             name: config.model,
             reasoning: true,
-            input: ['text', 'image'],
+            input: ['text'],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 272000,
             maxTokens: 16000
@@ -446,7 +590,8 @@ export async function startResultsReview(input: {
       ELECTRON_RUN_AS_NODE: '1',
       PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl
+      WMB_MCP_URL: input.mcpUrl,
+      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
     }, (event) => {
       input.onEvent?.(event as Record<string, unknown>);
     }, workDir);
@@ -474,4 +619,4 @@ export async function startResultsReview(input: {
     database.close();
   }
 }
-import { preparePiExtension } from './pi-extension';
+import { preparePiExtension } from './pi-extension.ts';

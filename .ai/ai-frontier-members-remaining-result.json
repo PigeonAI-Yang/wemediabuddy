@@ -1,0 +1,125 @@
+{
+  "ok": true,
+  "requestId": "wmb-ai-frontier-members-remaining-1785544597300",
+  "operation": {
+    "id": "9aadf6d7-99c1-41a3-a76e-8d0962610bea",
+    "state": "needs_user",
+    "phase": "needs_user",
+    "revision": 4,
+    "errorCode": "BROWSER_NEEDS_USER",
+    "errorMessage": "成员变更需要用户接管浏览器。",
+    "items": [
+      {
+        "id": "5ad7910f-11cc-4500-abe7-65fe6dc82e9f",
+        "sortOrder": 0,
+        "handle": "@AnthropicAI",
+        "desiredState": "present",
+        "state": "needs_user",
+        "evidence": {
+          "message": "X 当前页面未出现可安全操作的 List 控件；请接管浏览器后重试。"
+        },
+        "updatedAt": "2026-08-01T00:39:59.977Z"
+      },
+      {
+        "id": "46f67308-29b0-4a45-b599-2f9920062713",
+        "sortOrder": 1,
+        "handle": "@GoogleDeepMind",
+        "desiredState": "present",
+        "state": "needs_user",
+        "evidence": {
+          "message": "X 当前页面未出现可安全操作的 List 控件；请接管浏览器后重试。"
+        },
+        "updatedAt": "2026-08-01T00:42:45.893Z"
+      },
+      {
+        "id": "48c0ea3f-7584-43e4-890a-9ce514931203",
+        "sortOrder": 2,
+        "handle": "@xai",
+        "desiredState": "present",
+        "state": "failed",
+        "evidence": {
+          "message": "X 操作超时（180s）。请重试。"
+        },
+        "updatedAt": "2026-08-01T00:45:46.251Z"
+      },
+      {
+        "id": "894d0291-bb20-4cd5-862a-cedef12edb5a",
+        "sortOrder": 3,
+        "handle": "@BytePlusGlobal",
+        "desiredState": "present",
+        "state": "needs_user",
+        "evidence": {
+          "message": "X 当前页面未出现可安全操作的 List 控件；请接管浏览器后重试。"
+        },
+        "updatedAt": "2026-08-01T00:48:21.706Z"
+      },
+      {
+        "id": "16f92849-13a6-4508-a27a-161f576c0c71",
+        "sortOrder": 4,
+        "handle": "@ByteDanceOSS",
+        "desiredState": "present",
+        "state": "failed",
+        "evidence": {
+          "message": "X 操作超时（180s）。请重试。"
+        },
+        "updatedAt": "2026-08-01T00:51:22.052Z"
+      },
+      {
+        "id": "c0687725-5819-41d1-9acd-22b22d4670ed",
+        "sortOrder": 5,
+        "handle": "@CapCutApp",
+        "desiredState": "present",
+        "state": "needs_user",
+        "evidence": {
+          "message": "X 当前页面未出现可安全操作的 List 控件；请接管浏览器后重试。"
+        },
+        "updatedAt": "2026-08-01T00:53:59.294Z"
+      }
+    ]
+  },
+  "remainingRequested": [
+    "@AnthropicAI",
+    "@GoogleDeepMind",
+    "@xai",
+    "@BytePlusGlobal",
+    "@ByteDanceOSS",
+    "@CapCutApp"
+  ],
+  "presentAfterAll": [
+    {
+      "handle": "@deepseek_ai",
+      "present": true
+    },
+    {
+      "handle": "@OpenAI",
+      "present": true
+    },
+    {
+      "handle": "@AnthropicAI",
+      "present": false
+    },
+    {
+      "handle": "@GoogleDeepMind",
+      "present": false
+    },
+    {
+      "handle": "@xai",
+      "present": false
+    },
+    {
+      "handle": "@BytePlusGlobal",
+      "present": false
+    },
+    {
+      "handle": "@ByteDanceOSS",
+      "present": false
+    },
+    {
+      "handle": "@CapCutApp",
+      "present": false
+    }
+  ],
+  "membersCount": 12,
+  "membersError": null,
+  "finishedAt": "2026-08-01T00:54:19.779Z"
+}
