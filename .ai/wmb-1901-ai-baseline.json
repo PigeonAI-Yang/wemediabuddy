@@ -1,0 +1,390 @@
+{
+  "schema": "wmb.workspace-baseline.v1",
+  "capturedAt": "2026-08-01T22:06:05.384Z",
+  "preTask": {
+    "head": "6e1ea6a7d9f6640cff998e7c9aa97652c6e70b14",
+    "clean": true
+  },
+  "git": {
+    "head": "6e1ea6a7d9f6640cff998e7c9aa97652c6e70b14",
+    "branch": "feat/wmb-today-ui-xlists-brand-pack",
+    "status": [
+      " M TASKS.md",
+      "?? scripts/workspace-baseline.mjs",
+      "?? tests/workspace-baseline.test.mjs"
+    ],
+    "stagedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "workingDiffSha256": "408511d68749765655d6b21b6a02c1fd84c23e7eb056329b6d129465fc36098d",
+    "untrackedFiles": [
+      {
+        "path": "scripts/workspace-baseline.mjs",
+        "sha256": "fd80dd2d6166b7d3f2a78dd1d46f674d0f81677b5de6487d3ad440659ed6b5f1"
+      },
+      {
+        "path": "tests/workspace-baseline.test.mjs",
+        "sha256": "30aae69f2f0de9099ab9c085b1d688d6372fc7d4f3f60d32906089878512ee71"
+      }
+    ]
+  },
+  "acceptance": {
+    "files": {
+      "scripts/check.ps1": "ffcddbc3fa8c408ebfa1e4c3cf2562f9ffb7db491e27b452513b20133201ade8",
+      "scripts/workspace-baseline.mjs": "fd80dd2d6166b7d3f2a78dd1d46f674d0f81677b5de6487d3ad440659ed6b5f1",
+      "tests/workspace-baseline.test.mjs": "30aae69f2f0de9099ab9c085b1d688d6372fc7d4f3f60d32906089878512ee71",
+      "package.json": "a923cb56307901b8aedfbbae6a4d882deac63b35106e231db9a79902c4690a82",
+      "package-lock.json": "68e631183ba110d43f9e990fe2856b347755afe64ecf30239cc0207155036568",
+      ".ai/evals/README.md": "302ced87778fddccfecb0e5be11127f46d569ee7d8c0fa4cdca943032d4339ee"
+    },
+    "package": {
+      "path": "J:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\resources\\app.asar",
+      "sha256": "b67e74fb22db1eddc66b2a22f49480194711136df198be11c10f897a50763e03"
+    }
+  },
+  "root": {
+    "resolvedRoot": "J:\\PigeonYang\\WeMediaBuddyData",
+    "rootEntries": [
+      "assets",
+      "browser-profile",
+      "exports",
+      "logs",
+      "pi-agent",
+      "wmb.db",
+      "xiaohongshu-mcp"
+    ],
+    "schemaVersion": 0,
+    "migrationVersion": 34,
+    "database": {
+      "byteCount": 2306048,
+      "sha256": "738f782fdd01280dbde0e4b6a0b532848ec43ce60e4d959f9d877ac10719f1a9"
+    },
+    "tableNames": [
+      "account_metric_snapshots",
+      "agent_tasks",
+      "app_meta",
+      "assets",
+      "content_decisions",
+      "content_notes",
+      "content_project_assets",
+      "content_project_context_packages",
+      "content_project_sources",
+      "content_projects",
+      "content_versions",
+      "creative_brief_projects",
+      "creative_briefs",
+      "jobs",
+      "knowledge_canvas_nodes",
+      "knowledge_canvases",
+      "knowledge_context_package_items",
+      "knowledge_context_package_relations",
+      "knowledge_context_packages",
+      "knowledge_context_uses",
+      "knowledge_domain_topics",
+      "knowledge_domains",
+      "knowledge_relations",
+      "knowledge_suggestions",
+      "mcp_request_results",
+      "method_findings",
+      "operation_log",
+      "plan_items",
+      "plans",
+      "platform_accounts",
+      "platform_versions",
+      "publication_attempts",
+      "publication_confirmations",
+      "publication_events",
+      "publication_metric_snapshots",
+      "publication_reconciliations",
+      "publications",
+      "ranking_cache",
+      "reviews",
+      "schema_migrations",
+      "source_body_cache",
+      "source_feeds",
+      "source_items",
+      "topic_source_links",
+      "topics",
+      "work_carry_items",
+      "x_list_bindings",
+      "x_list_index_cache",
+      "x_list_operation_items",
+      "x_list_operations",
+      "x_list_timeline_cache"
+    ],
+    "businessTables": {
+      "account_metric_snapshots": {
+        "rowCount": 1,
+        "sha256": "1cbb76a2e80610c5e6a696c0a9449d22fc2a2c624619693122e2e7bd77d49000"
+      },
+      "agent_tasks": {
+        "rowCount": 18,
+        "sha256": "62993c5e193a3d38037abc92dd02c24ec52aca982059324485fda821fbb88beb"
+      },
+      "assets": {
+        "rowCount": 2,
+        "sha256": "661a80c93189e5f90d404a9c50c1a956881d4cd2b199f08ba9aaf90cd781181c"
+      },
+      "content_decisions": {
+        "rowCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "content_notes": {
+        "rowCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "content_project_assets": {
+        "rowCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "content_project_context_packages": {
+        "rowCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "content_project_sources": {
+        "rowCount": 28,
+        "sha256": "9761751ec8915790e337b2eae246f2e469d0e0c3af924bf976963585bf46eeb1"
+      },
+      "content_projects": {
+        "rowCount": 16,
+        "sha256": "4ac4d95c7c5fec2ee5621cdb8ea1ff8524247e30060973c50c10f3c727d16cf2"
+      },
+      "content_versions": {
+        "rowCount": 33,
+        "sha256": "7f2b270d32bf18553867455438867e6ae9e33942d3f152fe0c5a938ab16025e1"
+      },
+      "creative_brief_projects": {
+        "rowCount": 2,
+        "sha256": "bf59dd2d4566a24f259ada8ce44d272af43921808757d591f2518f166da5160e"
+      },
+      "creative_briefs": {
+        "rowCount": 3,
+        "sha256": "e6866b08f5d5273bad10eb1e7246859604116e2f151500e1b5263b9964f02068"
+      },
+      "jobs": {
+        "rowCount": 12,
+        "sha256": "706630b5037749f0b9644d221a85a97b9e66a1d180886f5f1bd5653931dfbf82"
+      },
+      "knowledge_canvas_nodes": {
+        "rowCount": 15,
+        "sha256": "5a1a6f5438045298ae3633ce3c9a6ecb9a5bf10a49d59a79b592538a34b9f576"
+      },
+      "knowledge_canvases": {
+        "rowCount": 6,
+        "sha256": "f63caa133b39ede6a977ff35ee5b6c9b76a0935d569528cf7696c9d93d9b5bd4"
+      },
+      "knowledge_context_package_items": {
+        "rowCount": 2,
+        "sha256": "8f51eb5d242536f53d20d1647dd2ca9c1701cebfd58b44fd6105f170039169aa"
+      },
+      "knowledge_context_package_relations": {
+        "rowCount": 1,
+        "sha256": "63a6539107f1145bcc9131238198b098951fca61841edd671501518694ccb23f"
+      },
+      "knowledge_context_packages": {
+        "rowCount": 1,
+        "sha256": "72bc9493cd624a1b3a84d15ec3390b99f84cb773ff326ca3f6e9de4dec2c4c84"
+      },
+      "knowledge_context_uses": {
+        "rowCount": 3,
+        "sha256": "33d99181b1ea7a0417fbf2502fdfd70ee3d5c47d244abb8b6e7a54e60593bddf"
+      },
+      "knowledge_domain_topics": {
+        "rowCount": 2,
+        "sha256": "61b8fa9e00c6030f5319581cd6ca5cc8fd5d6b80ab1e8988f3f9c903e2a474f2"
+      },
+      "knowledge_domains": {
+        "rowCount": 2,
+        "sha256": "70f650309fdb98a4fe5494347678692259059740bcbf2661261b2bff4e4d9226"
+      },
+      "knowledge_relations": {
+        "rowCount": 7,
+        "sha256": "26bb61a2f96cccef339e896465d3835d8e2c636cb17d6828f3c50ffe02b8bd49"
+      },
+      "knowledge_suggestions": {
+        "rowCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "mcp_request_results": {
+        "rowCount": 178,
+        "sha256": "fbbbd86ae0e84c9a042a6707a507a8ad126bd377e36921d8a9f5c079d89b1088"
+      },
+      "method_findings": {
+        "rowCount": 2,
+        "sha256": "49b9194a50d98e0c5cc4e1f317309c4090e522a6b49f848cb3041479d9d7c2fe"
+      },
+      "operation_log": {
+        "rowCount": 716,
+        "sha256": "30b7b3b56a1355674606e932129dbb28f2935dfe60975a25d17f6199c56772b2"
+      },
+      "plan_items": {
+        "rowCount": 72,
+        "sha256": "7dcfd68413c65c2e65326616f17186bf1014335dc375396791cbe665125fbe65"
+      },
+      "plans": {
+        "rowCount": 10,
+        "sha256": "a5b00895258834aa7345775f579115b70fca7f2b79b7bafa97612ff54a0cd84b"
+      },
+      "platform_accounts": {
+        "rowCount": 3,
+        "sha256": "59e181b968a640a51088996b512b37bc6f9edaa862126db77d017d74bb0a521e"
+      },
+      "platform_versions": {
+        "rowCount": 6,
+        "sha256": "13a24d6cfe9503d8fd0b7b5bfe037378ebc1230a5b7e107f5e4d0d276e56fb42"
+      },
+      "publication_attempts": {
+        "rowCount": 8,
+        "sha256": "ac7181c1736ec7f62c4260ab5e4233fc2364f3f8544b5ee25f9770121250c750"
+      },
+      "publication_confirmations": {
+        "rowCount": 8,
+        "sha256": "56aeba082c8cd446268eb842fadb38b4d968c7a3c470221468522fc12a8473d3"
+      },
+      "publication_events": {
+        "rowCount": 48,
+        "sha256": "2a19b2622a1f02cb37f0897699476402ef5218ceffa50e4d8021d4a34ec12b1c"
+      },
+      "publication_metric_snapshots": {
+        "rowCount": 2,
+        "sha256": "3c919616633f7a975b863dd7a5b4a56110963e871ec20b481e7f5fc511e96e32"
+      },
+      "publication_reconciliations": {
+        "rowCount": 4,
+        "sha256": "d95fc45a44c603b2e6f608922e88a657a28cc77fb6b5f1f540313427a7f32e80"
+      },
+      "publications": {
+        "rowCount": 8,
+        "sha256": "8f8c6ea87d82f74d06f79707c7bb6b29a19a901b8321e9667bdec7c00b28b5cb"
+      },
+      "ranking_cache": {
+        "rowCount": 1,
+        "sha256": "e99e751391725c5d93e391969be6baae1aaeca13e36db430d274c154ac7a4816"
+      },
+      "reviews": {
+        "rowCount": 2,
+        "sha256": "3b7452de167fb1cef32f9c1d50d26af0ee1b8688c2024ce4f13ab9e74f29bc8a"
+      },
+      "source_body_cache": {
+        "rowCount": 5,
+        "sha256": "008c673f368c6898520c98bab92993cd8724f43444c7724d9459aa45cf1150ad"
+      },
+      "source_feeds": {
+        "rowCount": 27,
+        "sha256": "4a4292a57d009a2bcaa17e84c8f31f7ce9b5f804c4d98467ab59acfbff26f2c6"
+      },
+      "source_items": {
+        "rowCount": 356,
+        "sha256": "e2f8d6215e7525ee257f396a5785a8cc9b434596f8c7d81f27f99db0660e6d53"
+      },
+      "topic_source_links": {
+        "rowCount": 89,
+        "sha256": "eafd9bf8da651a821408bdac3808149bf249c87c9098b2eda4e4b4eae4e520ee"
+      },
+      "topics": {
+        "rowCount": 22,
+        "sha256": "a5c2854a2e4af907c032d131ca678cbbca8ee422cd20795f4512e9b6232196b2"
+      },
+      "work_carry_items": {
+        "rowCount": 56,
+        "sha256": "9bee23f073da652f5add3efe888e9a14771993b17ee24483c937f468c51dd32c"
+      },
+      "x_list_bindings": {
+        "rowCount": 5,
+        "sha256": "dbeb092f3f3f1a777418829c3395695e46d4344d55b655cda5b38c4ec13ec0c7"
+      },
+      "x_list_index_cache": {
+        "rowCount": 1,
+        "sha256": "d17fd15dd7fda040b9227dcb27344335e903250239ca6ef18306bf2a71dc7edc"
+      },
+      "x_list_operation_items": {
+        "rowCount": 81,
+        "sha256": "d71f36edef21e8ba384fe941f9d7bc3e817e76c8b338da1186c2d44a3289460f"
+      },
+      "x_list_operations": {
+        "rowCount": 12,
+        "sha256": "482ea81eb3196cdf2772afb14bf8bb1a224581b7c53fced4b83a2bd4b1e5cc87"
+      },
+      "x_list_timeline_cache": {
+        "rowCount": 7,
+        "sha256": "9e2fcc82479d442084044fbedc2a872e5d022b7fffe7393788c757b92bbcd3e2"
+      }
+    },
+    "appMeta": {
+      "rowCount": 2,
+      "sha256": "4f24c1039c81f5e8d6a9c35eaa85a3cf165872b11838447339a2080f511de036",
+      "entries": [
+        {
+          "key": "browser.config",
+          "sha256": "e946b2d62d98ce207d3c07c557cef80c7dbd45237b4616a5e1d1868537846dca"
+        },
+        {
+          "key": "pi-api-config",
+          "sha256": "f64860e816dc10889de0f5d6549cc78089945354b086300c312da7be913ae815"
+        }
+      ]
+    },
+    "loginReadback": {
+      "rowCount": 3,
+      "sha256": "59e181b968a640a51088996b512b37bc6f9edaa862126db77d017d74bb0a521e"
+    },
+    "trees": {
+      "assets": {
+        "exists": true,
+        "fileCount": 2,
+        "byteCount": 1415598,
+        "sha256": "38e254ce7cb2d53afe31c776953c740106295f5ea39e5a968dedd6a2addff756"
+      },
+      "exports": {
+        "exists": true,
+        "fileCount": 0,
+        "byteCount": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "browser-profile": {
+        "exists": true,
+        "fileCount": 712,
+        "byteCount": 79993807,
+        "sha256": "6b7a66007922ace76c5821ab13e6017e42c3b1fa750699dedf5a041ef2763d7a"
+      },
+      "pi-agent": {
+        "exists": true,
+        "fileCount": 98,
+        "byteCount": 25597560,
+        "sha256": "91030d1def5ce77bd289a18a95bad47544c1f62dca215b352bd0faf2ff550a43"
+      },
+      "xiaohongshu-mcp": {
+        "exists": true,
+        "fileCount": 2,
+        "byteCount": 5779,
+        "sha256": "d73c280aa0b939e3b30749d460fb6e4acbb318ed746548de48aacc3a969c43b7"
+      }
+    },
+    "stableProjectionSha256": "c8d49884f7852e1bcef55438151a156e0e9c042628bb85312346bc58ac631bbf"
+  },
+  "allowedEnrollmentDifferences": {
+    "database": {
+      "schemaVersionMayAdvance": true,
+      "allowedNewTables": [
+        "workspace_profiles"
+      ],
+      "allowedChangedTables": [
+        "app_meta",
+        "schema_migrations"
+      ],
+      "allowedAddedAppMetaKeys": [
+        "workspace_id"
+      ]
+    },
+    "filesystem": {
+      "allowedChangedPaths": [
+        "logs/**"
+      ],
+      "preservedTreeHashes": [
+        "assets",
+        "exports",
+        "browser-profile",
+        "pi-agent",
+        "xiaohongshu-mcp"
+      ]
+    }
+  }
+}
