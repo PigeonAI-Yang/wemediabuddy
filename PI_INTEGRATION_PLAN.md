@@ -41,7 +41,7 @@ Pi 随 WMB 安装包放在独立 `resources/.pi-runtime` 目录，像内置 Pyth
 
 ### 2.1 模型与认证
 
-WMB 不复用、复制或刷新 Codex、Claude 等其他 Agent 的 OAuth 凭证。Pi 使用用户在 WMB 中单独配置的 OpenAI-compatible API：
+WMB 不复用、复制或刷新其他 Agent 的 OAuth 凭证。Pi 使用用户在 WMB 中单独配置的 OpenAI-compatible API：
 
 - Base URL；
 - API Key；

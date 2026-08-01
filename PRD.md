@@ -101,7 +101,7 @@ WMB 内置 Pi 作为默认执行者，同时保留外部 Agent 通过 MCP 接续
 
 ### 4.3 Agent 中立
 
-Codex、Claude Code、OpenCode、Oh My Pi、WorkBuddy 等外部 Agent 均可通过同一套 MCP 能力读取并操作项目状态。更换 Agent 后，工作可以从原状态继续。
+获得用户授权的外部 Agent 均可通过同一套 MCP 能力读取并操作项目状态。更换 Agent 后，工作可以从原状态继续。
 
 ### 4.4 浏览器是平台执行器
 
@@ -234,7 +234,9 @@ AI 结合当日情报、用户定位、历史内容和账号表现生成可执�
 
 ### 6.1 当前策略
 
-WeMediaBuddy 不自行承载大模型。内置 Pi 使用用户单独配置的 OpenAI Responses、OpenAI Chat Completions 或 Anthropic Messages 接口执行显式智能任务；现有外部 Agent 继续通过 MCP 接入终端。
+WeMediaBuddy 内置并监管固定版本的 Pi RPC 执行器，但不承载模型权重或推理服务。Pi 只使用用户单独配置的 OpenAI Responses 或 OpenAI Chat Completions 兼容接口执行显式智能任务；现有外部 Agent 继续通过 MCP 接入终端。
+
+常用模型可以包括 DeepSeek V4 Flash、GPT-5.6 Luna 和 MiMo-V2.5-Pro，但保存和调用的模型 ID 必须来自当前服务的真实 `/models` 目录或用户明确输入。WMB 不在模型或服务不可用时静默切换到其他模型、协议或供应商。
 
 终端的核心业务操作先形成统一的内部 API，再暴露为 MCP 工具。界面与 Agent 调用同一业务能力，避免形成两套逻辑。
 

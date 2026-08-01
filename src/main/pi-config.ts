@@ -27,7 +27,7 @@ export type PiConfigProfile = {
   configured: boolean;
   active: boolean;
 };
-export type PiApiType = 'openai-responses' | 'openai-completions' | 'anthropic-messages';
+export type PiApiType = 'openai-responses' | 'openai-completions';
 export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type PiConfig = {
   activeId: string | null;
@@ -36,6 +36,11 @@ export type PiConfig = {
   model: string;
   configured: boolean;
 };
+
+export function requirePiApiType(value: unknown): PiApiType {
+  if (value === 'openai-responses' || value === 'openai-completions') return value;
+  throw new Error(`Pi 接口类型不受支持：${String(value)}。仅支持 OpenAI Responses 或 OpenAI Chat Completions。`);
+}
 
 export function readPiConfig(database: DatabaseSync): PiConfig {
   const state = readStored(database);
@@ -47,7 +52,7 @@ export function readPiConfig(database: DatabaseSync): PiConfig {
       name: profile.name,
       baseUrl: profile.baseUrl,
       model: profile.model,
-      api: profile.api ?? inferApi(profile.baseUrl),
+      api: requirePiApiType(profile.api),
       thinking: profile.thinking,
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
@@ -67,6 +72,7 @@ export function savePiConfig(database: DatabaseSync, input: {
   thinking?: PiThinkingLevel;
   apiKey?: string;
 }): PiConfig {
+  const api = requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
   const name = input.name.trim();
@@ -87,7 +93,7 @@ export function savePiConfig(database: DatabaseSync, input: {
     name,
     baseUrl: baseUrl.toString().replace(/\/$/, ''),
     model,
-    api: input.api,
+    api,
     thinking: input.thinking,
     encryptedApiKey
   };
@@ -122,6 +128,7 @@ export async function listPiModels(database: DatabaseSync, input: {
   api: PiApiType;
   apiKey?: string;
 }): Promise<string[]> {
+  requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
   const stored = input.id ? readStored(database).profiles.find((profile) => profile.id === input.id) : null;
@@ -130,9 +137,7 @@ export async function listPiModels(database: DatabaseSync, input: {
   if (!apiKey) throw new Error('请先填写 API Key。');
 
   const response = await fetch(`${baseUrl.toString().replace(/\/$/, '')}/models`, {
-    headers: input.api === 'anthropic-messages'
-      ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-      : { authorization: `Bearer ${apiKey}` },
+    headers: { authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(15_000)
   });
   if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
@@ -152,7 +157,7 @@ export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; mode
   return {
     baseUrl: active.baseUrl,
     model: active.model,
-    api: active.api ?? inferApi(active.baseUrl),
+    api: requirePiApiType(active.api),
     thinking: active.thinking,
     apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
   };
@@ -168,16 +173,6 @@ function readStored(database: DatabaseSync): StoredState {
     activeId: id,
     profiles: [{ id, name: '默认配置', ...value }]
   };
-}
-
-function inferApi(baseUrl: string): PiApiType {
-  try {
-    const url = new URL(baseUrl);
-    if (url.hostname === 'opencode.ai' && url.pathname.startsWith('/zen/go/')) return 'openai-completions';
-    return url.hostname.endsWith('anthropic.com') ? 'anthropic-messages' : 'openai-responses';
-  } catch {
-    return 'openai-responses';
-  }
 }
 
 function writeStored(database: DatabaseSync, state: StoredState): void {

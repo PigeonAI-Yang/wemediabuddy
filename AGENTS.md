@@ -4,7 +4,7 @@
 
 WeMediaBuddy is a Windows desktop terminal where a human and external AI Agents operate the same self-media workflow: research, planning, creation, browser publishing, metrics, and review.
 
-Current scope is defined by `PRD.md` and `SPEC.md`. X, Xiaohongshu, and WeChat Official Accounts are required. WMB does not embed an LLM or Agent runtime and does not use platform APIs.
+Current scope is defined by `PRD.md` and `SPEC.md`. X, Xiaohongshu, and WeChat Official Accounts are required. WMB embeds and supervises a pinned Pi RPC runtime, but does not embed model weights or provide model inference, and does not use platform APIs.
 
 ## Required reading
 
