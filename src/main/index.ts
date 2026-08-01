@@ -1,15 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, safeStorage, shell } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { openDataRoot, validateDataRoot, type DataRoot } from './data-root';
+import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
-import { recoverInterruptedPublications } from './publishing';
-import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from './metrics';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
@@ -22,12 +20,12 @@ import {
   getActiveAgentTask,
   getAgentTask,
   getLatestAgentTask,
-  recoverInterruptedAgentTasks,
   requestAgentTaskControl,
   startAgentTask,
   updateAgentTaskPhase,
   type AgentIntent
 } from './agent-tasks';
+import { createDataRootSelection } from './data-root-selection';
 import { abortDailyIntelligence, startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -58,14 +56,12 @@ protocol.registerSchemesAsPrivileged([
 
 const dailyRuns = new Map<string, Promise<unknown>>();
 
-const dataRootConfigPath = (): string => path.join(app.getPath('userData'), 'data-root.json');
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
 let pi: PiRpcSupervisor | null = null;
 let piSessionFile: string | null = null;
 let shuttingDown = false;
-let recoveredAgentTasks = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
@@ -161,36 +157,10 @@ async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot, xhs);
 }
 
-async function loadSelectedDataRoot(): Promise<DataRoot | null> {
-  try {
-    const { path: rootPath } = JSON.parse(await readFile(dataRootConfigPath(), 'utf8')) as { path: string };
-    const shouldRecover = !recoveredAgentTasks;
-    recoveredAgentTasks = true;
-    return migrate(await validateDataRoot(rootPath), { recoverAgentTasks: shouldRecover });
-  } catch { return null; }
-}
-
-async function chooseDataRoot(): Promise<DataRoot | null> {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
-  if (result.canceled || !result.filePaths[0]) return null;
-  const dataRoot = await openDataRoot(result.filePaths[0]);
-  await writeFile(dataRootConfigPath(), JSON.stringify({ path: dataRoot.path }), 'utf8');
-  const migrated = migrate(dataRoot);
-  await refreshMcp(migrated);
-  await refreshXhs(migrated);
-  return migrated;
-}
-function migrate(dataRoot: DataRoot, options: { recoverAgentTasks?: boolean } = {}): DataRoot {
-  const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-  recoverInterruptedPublications(database);
-  if (options.recoverAgentTasks) {
-    recoverInterruptedAgentTasks(database);
-    recoverRunningMetricJobs(database);
-    scheduleJobsForPublishedPublications(database);
-  }
-  database.close();
-  return dataRoot;
-}
+const { loadSelectedDataRoot, chooseDataRoot, migrate } = createDataRootSelection({
+  userDataPath: () => app.getPath('userData'),
+  refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); }
+});
 
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
