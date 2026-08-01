@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DataRoot } from './data-root';
@@ -7,7 +7,7 @@ import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
-import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
+import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
@@ -26,6 +26,7 @@ import {
   type AgentIntent
 } from './agent-tasks';
 import { createDataRootSelection } from './data-root-selection';
+import { assertWorkspaceSwitchable, installWorkspaceIpcGate, WorkspaceRuntimeGate } from './workspace-runtime';
 import { abortDailyIntelligence, startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -53,9 +54,8 @@ protocol.registerSchemesAsPrivileged([
     }
   }
 ]);
-
 const dailyRuns = new Map<string, Promise<unknown>>();
-
+const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate);
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
@@ -150,18 +150,21 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
 
 async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   await mcp?.close();
-  mcp = dataRoot ? await startMcp(dataRoot.path) : null;
+  mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate) : null;
 }
 
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot, xhs);
 }
-
-const { loadSelectedDataRoot, chooseDataRoot, migrate } = createDataRootSelection({
+const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace } = createDataRootSelection({
   userDataPath: () => app.getPath('userData'),
-  refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); }
+  chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; },
+  refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); },
+  canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(pi?.isActive), dailyRunCount: dailyRuns.size }),
+  closeMutationGate: () => workspaceGate.closeAndDrain(), openMutationGate: () => workspaceGate.reopen(),
+  stopRuntime: async () => { await pi?.stop(); pi = null; await stopManagedBrowsers(); browser = null; await mcp?.close(); mcp = null; await xhs?.stop(); xhs = null; },
+  relaunch: () => { app.relaunch(); app.quit(); }
 });
-
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   void loadSelectedDataRoot().then(async (dataRoot) => {
@@ -184,7 +187,7 @@ app.whenReady().then(() => {
     }).finally(() => dailyRuns.delete(pending.id));
     dailyRuns.set(pending.id, run);
   });
-  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
+  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
   protocol.handle('wmb-asset', async (request) => {
     try {
       const dataRoot = await loadSelectedDataRoot();
@@ -481,7 +484,7 @@ app.on('before-quit', (event) => {
     try {
       if (pi?.isActive) await pi.abortTurn().catch(() => {});
       await pi?.stop();
-      browser?.stop();
+      await stopManagedBrowsers();
       await mcp?.close();
       await xhs?.stop().catch(() => {});
       xhs = null;

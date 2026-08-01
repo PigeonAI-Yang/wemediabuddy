@@ -1,12 +1,13 @@
 import { access, readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
-import { spawn, execFile, type ChildProcess } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { isPyaireaderXProfile, pyaireaderXEndpoint, pyaireaderXProfileId } from './platforms/x-list-primitives.ts';
 import { X_BROWSER_VIEWPORT } from './platforms/x-humanization.ts';
+import { stopProcessIdTree, stopProcessTree } from './workspace-runtime.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,7 +29,7 @@ export type BrowserRuntime = {
   pid: number;
   cdpUrl: string;
   mode: BrowserLaunchMode;
-  stop: () => void;
+  stop: () => Promise<void>;
 };
 
 export type StartBrowserOptions = {
@@ -135,7 +136,7 @@ export async function startBrowser(config: BrowserConfig, options: StartBrowserO
   const port = preferredCdpUrl ? portFromCdpUrl(preferredCdpUrl) : await reservePort();
   const cdpUrl = preferredCdpUrl ?? `http://127.0.0.1:${port}`;
   if (await cdpReady(cdpUrl)) {
-    const runtime = attachExistingRuntime(config, cdpUrl, mode);
+    const runtime = await attachExistingRuntime(config, cdpUrl, mode);
     if (mode === 'quiet') await ensureQuietXBrowserWindow(cdpUrl).catch(() => {});
     if (mode === 'visible') await revealXBrowserWindow(cdpUrl).catch(() => {});
     return runtime;
@@ -152,7 +153,7 @@ export async function startBrowser(config: BrowserConfig, options: StartBrowserO
     if (mode === 'quiet') await ensureQuietXBrowserWindow(cdpUrl).catch(() => {});
     if (mode === 'visible') await revealXBrowserWindow(cdpUrl).catch(() => {});
   } catch (error) {
-    stopChild(child);
+    await stopProcessTree(child);
     throw error;
   }
   const runtime: BrowserRuntime = {
@@ -161,7 +162,7 @@ export async function startBrowser(config: BrowserConfig, options: StartBrowserO
     pid: child.pid,
     cdpUrl,
     mode,
-    stop: () => stopChild(child)
+    stop: () => stopProcessTree(child)
   };
   managedRuntimes.set(cdpUrl, runtime);
   return runtime;
@@ -199,18 +200,36 @@ export async function cdpReady(cdpUrl: string): Promise<boolean> {
   try { return (await fetch(`${cdpUrl}/json/version`)).ok; } catch { return false; }
 }
 
-function attachExistingRuntime(config: BrowserConfig, cdpUrl: string, mode: BrowserLaunchMode): BrowserRuntime {
+async function attachExistingRuntime(config: BrowserConfig, cdpUrl: string, mode: BrowserLaunchMode): Promise<BrowserRuntime> {
   const existing = managedRuntimes.get(cdpUrl);
+  const pid = existing?.pid || await listeningPid(cdpUrl);
   const runtime: BrowserRuntime = {
     executablePath: config.executablePath,
     profilePath: path.join(config.userDataDir, config.profileDirectory),
-    pid: existing?.pid ?? 0,
+    pid,
     cdpUrl,
     mode,
-    stop: existing?.stop ?? (() => {})
+    stop: existing?.stop ?? (() => stopProcessIdTree(pid))
   };
   managedRuntimes.set(cdpUrl, runtime);
   return runtime;
+}
+
+export async function stopManagedBrowsers(): Promise<void> {
+  const runtimes = [...new Set(managedRuntimes.values())];
+  await Promise.all(runtimes.map((runtime) => runtime.stop()));
+  managedRuntimes.clear();
+}
+
+async function listeningPid(cdpUrl: string): Promise<number> {
+  if (process.platform !== 'win32') return 0;
+  const port = portFromCdpUrl(cdpUrl);
+  const { stdout } = await execFileAsync('netstat.exe', ['-ano', '-p', 'tcp'], { windowsHide: true });
+  for (const line of stdout.split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length >= 5 && columns[1]?.endsWith(`:${port}`) && columns[3] === 'LISTENING') return Number(columns[4]) || 0;
+  }
+  return 0;
 }
 
 async function setBrowserWindowState(cdpUrl: string, windowState: 'quiet' | 'visible' | 'minimized' | 'normal'): Promise<void> {
@@ -368,9 +387,4 @@ async function waitForCdp(cdpUrl: string): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error('浏览器未在时限内提供 CDP；请先完全关闭正在运行的同 profile Edge 后重试。');
-}
-
-function stopChild(child: ChildProcess): void {
-  if (child.killed) return;
-  child.kill();
 }

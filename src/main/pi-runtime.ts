@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { stopProcessTree } from './workspace-runtime.ts';
 
 type RpcMessage = {
   id?: string;
@@ -277,14 +278,7 @@ export class PiRpcSupervisor {
     const child = this.child;
     if (!child) return;
     this.intentionalStop = true;
-    const { promise: exited, resolve } = defer<void>();
-    child.once('exit', () => resolve());
-    child.kill();
-    const timeout = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch { /* already gone */ }
-    }, 2000);
-    await exited;
-    clearTimeout(timeout);
+    await stopProcessTree(child, 2_000);
     this.child = null;
   }
 

@@ -3,6 +3,7 @@ import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { stopProcessTree } from './workspace-runtime.ts';
 
 export type XhsReadiness =
   | 'not_started'
@@ -220,20 +221,7 @@ export async function startXhsMcp(
       if (status === 'ready' || status === 'needs_user' || status === 'starting') status = 'not_started';
       return;
     }
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(() => {
-        try { current.kill('SIGKILL'); } catch { /* ignore */ }
-        resolve();
-      }, 3000);
-      current.once('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-      try { current.kill(); } catch {
-        clearTimeout(timer);
-        resolve();
-      }
-    });
+    await stopProcessTree(current, 3_000);
     url = null;
     port = null;
     if (status === 'ready' || status === 'needs_user' || status === 'starting') status = 'not_started';

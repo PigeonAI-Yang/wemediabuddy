@@ -26,7 +26,9 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [runtimeNote, setRuntimeNote] = useState('');
   const [timelineCacheNote, setTimelineCacheNote] = useState('');
+  const [workspaceNote, setWorkspaceNote] = useState('');
   const [timelineCacheStats, setTimelineCacheStats] = useState<{ rows: number; bytes: number; accounts: number } | null>(null);
+  const [workspaces, setWorkspaces] = useState<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>({ activeWorkspaceId: null, workspaces: [] });
   const selectPiProfile = (id: string) => {
     const profile = settings?.pi.profiles.find((item) => item.id === id);
     setPiProfileId(id);
@@ -45,6 +47,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     if (section !== 'browser') return;
     void window.wmb.getXListTimelineCacheStats().then(setTimelineCacheStats).catch(() => setTimelineCacheStats(null));
   }, [section, settings?.browser.status]);
+  useEffect(() => { if (section === 'data') void window.wmb.listWorkspaces().then(setWorkspaces); }, [section, dataRoot]);
   const saveProfile = async () => {
     try {
       await window.wmb.savePiConfig({
@@ -167,6 +170,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         </>}
         {section === 'data' && <section className="settings-section">
           <div className="settings-row"><div><h3>数据目录</h3><p>所有业务数据集中保存在此，可整体移动。</p></div><div className="settings-row-actions"><span className="path-chip">{dataRoot || '尚未选择数据根目录'}</span><button className="secondary-button" onClick={() => void window.wmb.chooseDataRoot().then(refresh)}>选择目录</button></div></div>
+          {workspaces.workspaces.map((workspace) => <div className="settings-row" key={workspace.id}><div><h3>{workspace.displayName}</h3><p>{workspace.id} · {workspace.rootPath}</p></div>{workspace.id === workspaces.activeWorkspaceId ? <span className="pill-status green"><span className="dot"/>当前</span> : <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.switchWorkspace(workspace.id).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>切换后重启</button>}</div>)}
+          {workspaceNote && <p className="settings-note error">{workspaceNote}</p>}
           {settings && <>
             <div className="settings-row"><div><h3>数据库</h3><p>wmb.db · {formatBytes(settings.usage.database)} · 迁移 v{settings.counts.migrations}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
             <div className="settings-row"><div><h3>素材目录</h3><p>assets/ · {formatBytes(settings.usage.assets)} · SHA-256 去重</p></div></div>

@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('wmb', {
   getDataRoot: () => ipcRenderer.invoke('data-root:get'),
   chooseDataRoot: () => ipcRenderer.invoke('data-root:choose'),
+  listWorkspaces: () => ipcRenderer.invoke('workspaces:list'),
+  switchWorkspace: (workspaceId: string) => ipcRenderer.invoke('workspaces:switch', workspaceId),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   openLogs: () => ipcRenderer.invoke('settings:open-logs'),
   openExternal: (url: string) => ipcRenderer.invoke('link:open', url),

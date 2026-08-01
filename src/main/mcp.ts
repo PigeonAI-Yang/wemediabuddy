@@ -21,6 +21,7 @@ import { captureXListOperationSnapshot, confirmAndRunXListOperation } from './x-
 import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
+import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -440,11 +441,14 @@ function createServerFor(rootPath: string): McpServer {
   return server;
 }
 
-export async function startMcp(rootPath: string): Promise<McpRuntime> {
+export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate): Promise<McpRuntime> {
   const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath)));
   const http = createServer((request, response) => {
     if (request.url?.split('?')[0] !== '/mcp') { response.writeHead(404).end(); return; }
-    void handler(request, response);
+    void (gate ? gate.run(() => handler(request, response)) : handler(request, response)).catch((error: unknown) => {
+      if (!response.headersSent) response.writeHead((error as { code?: string }).code === 'WORKSPACE_BUSY' ? 503 : 500);
+      if (!response.writableEnded) response.end(error instanceof Error ? error.message : String(error));
+    });
   });
   await new Promise<void>((resolve, reject) => { http.once('error', reject); http.listen(0, '127.0.0.1', resolve); });
   const address = http.address();
@@ -452,4 +456,7 @@ export async function startMcp(rootPath: string): Promise<McpRuntime> {
   return { url: `http://127.0.0.1:${address.port}/mcp`, close: () => close(http) };
 }
 
-function close(http: Server): Promise<void> { return new Promise((resolve, reject) => http.close((error) => error ? reject(error) : resolve())); }
+function close(http: Server): Promise<void> {
+  http.closeAllConnections();
+  return new Promise((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
+}

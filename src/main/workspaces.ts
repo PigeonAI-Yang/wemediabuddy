@@ -5,9 +5,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { openDataRoot, validateDataRoot } from './data-root.ts';
 
 export type WorkspaceRecord = { id: string; displayName: string; rootPath: string };
-export type WorkspaceRegistry = { version: 1; activeWorkspaceId: string | null; workspaces: WorkspaceRecord[] };
+export type WorkspaceSwitchJournal = { previousWorkspaceId: string; pendingWorkspaceId: string; state: 'pending' | 'attempting' };
+export type WorkspaceRegistry = { version: 1; activeWorkspaceId: string | null; workspaces: WorkspaceRecord[]; switchJournal: WorkspaceSwitchJournal | null };
 
-const emptyRegistry = (): WorkspaceRegistry => ({ version: 1, activeWorkspaceId: null, workspaces: [] });
+const emptyRegistry = (): WorkspaceRegistry => ({ version: 1, activeWorkspaceId: null, workspaces: [], switchJournal: null });
 
 function workspaceError(code: 'WORKSPACE_ID_MISMATCH' | 'WORKSPACE_NOT_FOUND', message: string): Error {
   return Object.assign(new Error(message), { code });
@@ -26,7 +27,12 @@ function normalizeRegistry(value: unknown): WorkspaceRegistry {
     return { id: workspace.id, displayName: workspace.displayName, rootPath: path.resolve(workspace.rootPath) };
   });
   if (new Set(workspaces.map((workspace) => workspace.id)).size !== workspaces.length) throw workspaceError('WORKSPACE_NOT_FOUND', '工作空间注册表存在重复身份。');
-  return { version: 1, activeWorkspaceId: raw.activeWorkspaceId ?? null, workspaces };
+  const switchJournal = raw.switchJournal;
+  if (switchJournal !== null && switchJournal !== undefined && (
+    typeof switchJournal !== 'object' || typeof switchJournal.previousWorkspaceId !== 'string' ||
+    typeof switchJournal.pendingWorkspaceId !== 'string' || !['pending', 'attempting'].includes(switchJournal.state)
+  )) throw workspaceError('WORKSPACE_NOT_FOUND', '工作空间切换记录无效。');
+  return { version: 1, activeWorkspaceId: raw.activeWorkspaceId ?? null, workspaces, switchJournal: switchJournal ?? null };
 }
 
 export async function readWorkspaceRegistry(registryPath: string): Promise<WorkspaceRegistry> {
@@ -81,7 +87,7 @@ export async function enrollAiWorkspace(input: { registryPath: string; rootPath:
   if (existing && existing.rootPath !== root.path) throw workspaceError('WORKSPACE_ID_MISMATCH', '移动后的数据根必须通过重新关联更新位置。');
   writeRootWorkspaceId(root.path, workspaceId);
   const workspace = existing ?? { id: workspaceId, displayName: input.displayName ?? 'AI', rootPath: root.path };
-  if (!existing) await writeWorkspaceRegistry(input.registryPath, { version: 1, activeWorkspaceId: workspace.id, workspaces: [workspace] });
+  if (!existing) await writeWorkspaceRegistry(input.registryPath, { version: 1, activeWorkspaceId: workspace.id, workspaces: [workspace], switchJournal: null });
   return workspace;
 }
 
@@ -95,4 +101,39 @@ export async function relinkWorkspace(input: { registryPath: string; workspaceId
   const next = { ...registry, workspaces: registry.workspaces.map((item, itemIndex) => itemIndex === index ? workspace : item) };
   await writeWorkspaceRegistry(input.registryPath, next);
   return workspace;
+}
+
+export async function beginWorkspaceSwitch(input: { registryPath: string; targetWorkspaceId: string }): Promise<WorkspaceSwitchJournal> {
+  const registry = await readWorkspaceRegistry(input.registryPath);
+  if (registry.switchJournal) throw workspaceError('WORKSPACE_NOT_FOUND', '已有未恢复的工作空间切换。');
+  if (!registry.activeWorkspaceId) throw workspaceError('WORKSPACE_NOT_FOUND', '当前没有活动工作空间。');
+  if (!registry.workspaces.some((workspace) => workspace.id === input.targetWorkspaceId)) throw workspaceError('WORKSPACE_NOT_FOUND', '未找到目标工作空间。');
+  if (registry.activeWorkspaceId === input.targetWorkspaceId) throw workspaceError('WORKSPACE_NOT_FOUND', '目标工作空间已处于活动状态。');
+  const switchJournal = { previousWorkspaceId: registry.activeWorkspaceId, pendingWorkspaceId: input.targetWorkspaceId, state: 'pending' } as const;
+  await writeWorkspaceRegistry(input.registryPath, { ...registry, switchJournal });
+  return switchJournal;
+}
+
+export async function markWorkspaceSwitchAttempting(registryPath: string): Promise<WorkspaceSwitchJournal | null> {
+  const registry = await readWorkspaceRegistry(registryPath);
+  if (!registry.switchJournal) return null;
+  const switchJournal = { ...registry.switchJournal, state: 'attempting' as const };
+  await writeWorkspaceRegistry(registryPath, { ...registry, switchJournal });
+  return switchJournal;
+}
+
+export async function finishWorkspaceSwitch(registryPath: string, workspaceId: string): Promise<WorkspaceRegistry> {
+  const registry = await readWorkspaceRegistry(registryPath);
+  if (!registry.switchJournal || registry.switchJournal.pendingWorkspaceId !== workspaceId) throw workspaceError('WORKSPACE_NOT_FOUND', '没有匹配的待切换工作空间。');
+  const next = { ...registry, activeWorkspaceId: workspaceId, switchJournal: null };
+  await writeWorkspaceRegistry(registryPath, next);
+  return next;
+}
+
+export async function rollbackWorkspaceSwitch(registryPath: string): Promise<WorkspaceRegistry> {
+  const registry = await readWorkspaceRegistry(registryPath);
+  if (!registry.switchJournal) return registry;
+  const next = { ...registry, activeWorkspaceId: registry.switchJournal.previousWorkspaceId, switchJournal: null };
+  await writeWorkspaceRegistry(registryPath, next);
+  return next;
 }

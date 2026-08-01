@@ -10,6 +10,8 @@ declare global {
     wmb: {
       getDataRoot(): Promise<{ path: string; isNew: boolean } | null>;
       chooseDataRoot(): Promise<{ path: string; isNew: boolean } | null>;
+      listWorkspaces(): Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
+      switchWorkspace(workspaceId: string): Promise<{ relaunching: boolean }>;
       getSettings(): Promise<{
         paths: Record<string, string>;
         usage: Record<string, number>;
