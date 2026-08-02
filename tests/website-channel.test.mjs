@@ -116,6 +116,27 @@ test('trial read returns real page facts and marks inaccessible pages accurately
   assert.equal(redirectedPrivate.errorCode, 'WEBSITE_URL_NOT_PUBLIC');
 });
 
+test('a public redirect keeps the selected request identity and confirms the final canonical entry', async () => {
+  const { root, database } = await makeRoot();
+  try {
+    const candidate = await directCandidate('https://www.example.com/updates');
+    const trial = await trialReadWebsite({
+      url: candidate.url,
+      fetchImpl: async () => ({
+        ok: true, status: 200, url: 'https://example.com/news', headers: new Headers({ 'content-type': 'text/html' }),
+        text: async () => html('Redirected news', '<p>The selected public page redirects to this readable official news entry.</p>')
+      })
+    });
+    assert.equal(trial.requestedUrl, 'https://www.example.com/updates');
+    assert.equal(trial.url, 'https://example.com/news');
+    const source = confirmWebsiteSource(database, { inputText: candidate.inputText, candidate, trialRead: trial });
+    assert.equal(source.canonicalUrl, 'https://example.com/news');
+  } finally {
+    database.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('website confirmation manages canonical sources and remove keeps historical feed/items', async () => {
   const { root, database } = await makeRoot();
   try {

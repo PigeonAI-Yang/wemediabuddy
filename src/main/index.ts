@@ -56,7 +56,7 @@ protocol.registerSchemesAsPrivileged([
   }
 ]);
 const dailyRuns = new Map<string, Promise<unknown>>();
-const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate, ['workspaces:switch', 'workspaces:proposal-confirm', 'intelligence-channels:proposal-confirm']);
+const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate, ['workspaces:switch', 'workspaces:proposal-confirm']);
 const workspaceProposals = new WorkspaceProposalStore(); const channelProposals = new IntelligenceChannelProposalStore();
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;

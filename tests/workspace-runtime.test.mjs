@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { stopProcessIdTree, WorkspaceRuntimeGate } from '../src/main/workspace-runtime.ts';
+import { installWorkspaceIpcGate, stopProcessIdTree, WorkspaceRuntimeGate } from '../src/main/workspace-runtime.ts';
 
 test('workspace gate drains accepted work and rejects later work', async () => {
   const gate = new WorkspaceRuntimeGate();
@@ -16,6 +16,36 @@ test('workspace gate drains accepted work and rejects later work', async () => {
   await draining;
   gate.reopen();
   assert.equal(await gate.run(() => 'next'), 'next');
+});
+
+test('channel confirmation drains before a workspace switch and rejects late writes', async () => {
+  const handlers = new Map();
+  const ipcMain = { handle(channel, listener) { handlers.set(channel, listener); } };
+  const gate = new WorkspaceRuntimeGate();
+  installWorkspaceIpcGate(ipcMain, gate, ['workspaces:switch', 'workspaces:proposal-confirm']);
+  let release;
+  let writes = 0;
+  const hold = new Promise((resolve) => { release = resolve; });
+  ipcMain.handle('intelligence-channels:proposal-confirm', async () => {
+    await hold;
+    writes += 1;
+    return 'confirmed';
+  });
+
+  const accepted = handlers.get('intelligence-channels:proposal-confirm')({}, {});
+  await delay(10);
+  const draining = gate.closeAndDrain();
+  let drained = false;
+  void draining.then(() => { drained = true; });
+  await delay(10);
+  assert.equal(drained, false);
+  await assert.rejects(() => handlers.get('intelligence-channels:proposal-confirm')({}, {}), { code: 'WORKSPACE_BUSY' });
+  assert.equal(writes, 0);
+
+  release();
+  assert.equal(await accepted, 'confirmed');
+  await draining;
+  assert.equal(writes, 1);
 });
 
 test('workspace shutdown terminates the owned Windows process tree', { skip: process.platform !== 'win32' }, async () => {

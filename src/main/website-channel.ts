@@ -269,8 +269,7 @@ function parseBingCandidates(html: string, inputText: string, limit: number): { 
 async function readWebsitePage(url: string, fetchImpl: typeof fetch): Promise<WebsitePage> {
   try { assertPublicUrl(url); }
   catch (error) { return unreadableTrial(canonicalOrFallback(url, url), errorCode(error, 'WEBSITE_URL_NOT_PUBLIC'), errorMessage(error)); }
-  let response: Response;
-  let body = '';
+  let response: Response; let body = '';
   try {
     response = await fetchWithTimeout(fetchImpl, url, READ_TIMEOUT_MS);
     body = await response.text();
@@ -278,16 +277,17 @@ async function readWebsitePage(url: string, fetchImpl: typeof fetch): Promise<We
     return unreadableTrial(url, 'WEBSITE_TRIAL_FAILED', errorMessage(error));
   }
 
-  let requestedUrl: string;
+  const requestedUrl = normalizePublicFetchUrl(url);
+  let finalUrl: string;
   try {
-    requestedUrl = normalizeFetchUrl(response.url || url);
-    assertPublicUrl(requestedUrl);
+    const responseUrl = normalizeFetchUrl(response.url || requestedUrl);
+    assertPublicUrl(responseUrl);
+    finalUrl = canonicalOrFallback(responseUrl, requestedUrl);
   } catch (error) {
-    const finalUrl = canonicalOrFallback(response.url || url, url);
+    const finalUrl = canonicalOrFallback(response.url || requestedUrl, requestedUrl);
     return unreadableTrial(finalUrl, errorCode(error, 'WEBSITE_URL_NOT_PUBLIC'), errorMessage(error), response.status,
-      response.headers.get('content-type'), response.url || url);
+      response.headers.get('content-type'), requestedUrl);
   }
-  const finalUrl = canonicalOrFallback(requestedUrl, url);
   const contentType = response.headers.get('content-type');
   if (!response.ok) {
     return unreadableTrial(finalUrl, response.status === 401 || response.status === 403 || response.status === 429 ? 'WEBSITE_NEEDS_USER' : 'WEBSITE_TRIAL_FAILED',

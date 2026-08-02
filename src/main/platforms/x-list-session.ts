@@ -100,17 +100,17 @@ export class XListSession {
         this.assertCurrent(opId);
         await ensureQuietXBrowserWindow(this.poolKey).catch(() => {});
         this.assertCurrent(opId);
-        let timedOut = false;
-        const timeoutError = sleep(timeoutMs).then(() => {
-          timedOut = true;
-          // Invalidate this op so a hung action stops touching the shared page ASAP.
-          if (this.currentOp === opId) this.preempt();
-          throw new Error(`X 操作超时（${Math.round(timeoutMs / 1000)}s）。请重试。`);
+        let timedOut = false, timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+        const timeoutError = new Promise<never>((_resolve, reject) => {
+          timeoutTimer = setTimeout(() => {
+            timedOut = true; if (this.currentOp === opId) this.preempt();
+            reject(new Error(`X 操作超时（${Math.round(timeoutMs / 1000)}s）。请重试。`));
+          }, timeoutMs);
         });
         try {
           return await Promise.race([action(this), timeoutError]);
         } finally {
-          // If we timed out, keep the supersede signal; otherwise leave latest-wins alone.
+          clearTimeout(timeoutTimer ?? undefined);
           if (timedOut) {
             void this.page.evaluate(() => {
               try { window.stop(); } catch {}
@@ -186,10 +186,10 @@ export class XListSession {
     }
     pooled.refs = Math.max(0, pooled.refs - 1);
     if (pooled.refs > 0) return;
+    if (!process.versions.electron) return await this.dispose();
     clearTimeout(pooled.idleTimer ?? undefined);
-    pooled.idleTimer = setTimeout(() => {
-      void this.dispose();
-    }, SESSION_IDLE_MS);
+    pooled.idleTimer = setTimeout(() => void this.dispose(), SESSION_IDLE_MS);
+    pooled.idleTimer.unref();
   }
 
   async dispose(): Promise<void> {

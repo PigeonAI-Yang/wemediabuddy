@@ -1295,7 +1295,7 @@ function startListManagementCapture(page: Page): {
   };
 }
 
-function extractListsFromManagementPayload(payload: unknown): XListRef[] {
+export function extractListsFromManagementPayload(payload: unknown): XListRef[] {
   const output: XListRef[] = [];
   const seen = new Set<string>();
   const walk = (node: unknown): void => {
