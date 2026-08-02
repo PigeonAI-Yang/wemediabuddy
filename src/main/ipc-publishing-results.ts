@@ -10,6 +10,7 @@ import { collectXAccountMetrics, collectXMetrics, identifyXAccount, prepareXImag
 import { identifyWechatAccount, prepareWechatArticle, readBackWechatArticle } from './platforms/wechat';
 import { claimDueMetricJobs, completeMetricJob, failMetricJob, listAccountMetricSnapshots, listMetricJobs, listPublicationMetricSnapshots, processDueMetricJobs, saveAccountMetricSnapshot, savePublicationMetricSnapshot, schedulePublicationMetricJobs } from './metrics';
 import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
+import { assertPublishingPlatforms } from './workspace-profiles';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -188,8 +189,9 @@ export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser,
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const configDatabase = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const browser = await ensureBrowser(configDatabase);
-    configDatabase.close();
+    let browser: BrowserRuntime;
+    try { assertPublishingPlatforms(configDatabase, ['x']); browser = await ensureBrowser(configDatabase); }
+    finally { configDatabase.close(); }
     const identity = await identifyXAccount(browser.cdpUrl);
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
@@ -222,6 +224,7 @@ export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser,
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
+      assertPublishingPlatforms(database, ['wechat']);
       const browser = await ensureBrowser(database);
       const identity = await identifyWechatAccount(browser.cdpUrl);
       const existing = database.prepare("SELECT id FROM platform_accounts WHERE platform = 'wechat'").get() as { id: string } | undefined;

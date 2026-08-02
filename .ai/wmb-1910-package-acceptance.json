@@ -1,0 +1,81 @@
+{
+  "runs": [
+    {
+      "displayName": "AI",
+      "platforms": [
+        "x",
+        "xiaohongshu",
+        "wechat"
+      ],
+      "denied": [],
+      "platformOptions": [
+        "全部平台",
+        "X",
+        "小红书",
+        "公众号"
+      ],
+      "publishDenied": false,
+      "xhsDenied": false,
+      "historicalReadOnly": null,
+      "needsUserTaskIds": [
+        "3c608afc-3a05-487c-a483-4027d1779948",
+        "db025e48-ae27-448c-89b2-d4a5855a3bfe",
+        "1aad3b6d-aeba-4e9e-9a46-a086a3e467c9"
+      ],
+      "listSourceChain": "c8891c98-b79f-41be-a50c-ce707b30fa3f"
+    },
+    {
+      "displayName": "英国生活",
+      "platforms": [
+        "x",
+        "xiaohongshu"
+      ],
+      "denied": [
+        "wechat"
+      ],
+      "platformOptions": [
+        "全部平台",
+        "X",
+        "小红书"
+      ],
+      "publishDenied": true,
+      "xhsDenied": false,
+      "historicalReadOnly": {
+        "notice": true,
+        "action": false
+      },
+      "needsUserTaskIds": [
+        "118c2170-b754-4338-ad55-27272fdadc14",
+        "1f24346e-095b-4076-b243-4c377d8526ea",
+        "b6ec56aa-ff1d-4a83-b3b6-02b3b9a2cfe9"
+      ],
+      "listSourceChain": "f11c31f9-4b5b-4aea-9cd4-970132009e36"
+    },
+    {
+      "displayName": "游戏资讯",
+      "platforms": [
+        "x"
+      ],
+      "denied": [
+        "xiaohongshu",
+        "wechat"
+      ],
+      "platformOptions": [
+        "全部平台",
+        "X"
+      ],
+      "publishDenied": true,
+      "xhsDenied": true,
+      "historicalReadOnly": {
+        "notice": true,
+        "action": false
+      },
+      "needsUserTaskIds": [
+        "504f2fe4-945b-4a60-814e-66154cd741f8",
+        "abb8b832-7412-4a49-a9d9-260f935f5704",
+        "d9c79ac1-fe25-4c26-8fb3-54a109f0bf9a"
+      ],
+      "listSourceChain": "8b58a65f-dcb5-4625-b7a7-8946236736b6"
+    }
+  ]
+}

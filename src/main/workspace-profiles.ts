@@ -110,3 +110,9 @@ export function assertAiOnlyRoute(database: DatabaseSync, routeId: typeof AI_ONL
 export function allowsAiOnlyRoutes(database: DatabaseSync): boolean {
   return requireWorkspaceProfile(database).intelligencePackId === 'wemedia-intelligence-engine';
 }
+
+export function assertPublishingPlatforms(database: DatabaseSync, platforms: readonly string[]): void {
+  const allowed = new Set(requireWorkspaceProfile(database).platforms);
+  const denied = [...new Set(platforms)].filter((platform) => !allowed.has(platform as WorkspaceProfileV1['platforms'][number]));
+  if (denied.length) throw Object.assign(new Error(`当前工作空间未启用发布平台：${denied.join('、')}`), { code: 'VALIDATION_ERROR' });
+}

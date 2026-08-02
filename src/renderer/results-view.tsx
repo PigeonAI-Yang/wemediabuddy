@@ -23,10 +23,11 @@ const nearestWindow = (hours: number) => WINDOWS.reduce((a, b) =>
 const stripQuotes = (title: string) => title.replace(/^[《「『\[]+|[》」』\]]+$/g, '');
 
 // WMB-1510 结果页 = 运营学习闭环驾驶舱:周期聚合优先,单帖钻取在图表区内原位完成
-export function ResultsView({ publications, planDate }: {
+export function ResultsView({ publications, planDate, enabledPlatforms }: {
   publications: Publications;
   refresh: () => void;
   planDate: string;
+  enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
 }): React.JSX.Element {
   const published = (publications ?? []).filter((item) => item.publication.status === 'published' && item.publication.publishedAt);
   const [snapshots, setSnapshots] = useState<MetricSnapshotRow[]>([]);
@@ -115,7 +116,7 @@ export function ResultsView({ publications, planDate }: {
   const patterns: PatternCard[] = [
     { title: '晚间 20–23 点发布 → 24h 阅读更高', ratio: nightRatio, desc: '20:00–23:00 发布的内容，24h 阅读中位数对比其他时段。', evidence: night.length, ok: nightRatio !== null && nightRatio > 1.2, prompt: `请读取指标快照数据,核验这个模式是否成立:晚间 20-23 点发布的内容 24h 阅读更高(本期倍数 ${nightRatio?.toFixed(1) ?? '未知'}×,证据 ${night.length} 帖)。给出判断,必要时在下次复盘定稿时固化为方法结论。` },
     { title: '视频形式 → 阅读体量更大', ratio: videoRatio, desc: '视频/口播内容的 24h 阅读中位数对比图文与文字。', evidence: videos.length, ok: videoRatio !== null && videoRatio > 1.2, prompt: `请读取指标快照数据,核验视频形式是否带来更大阅读体量(本期倍数 ${videoRatio?.toFixed(1) ?? '未知'}×,证据 ${videos.length} 帖),同时评估其收藏率是否同步成立。` },
-    { title: '小红书 → 收藏型资产平台', ratio: xhsRatio, desc: '小红书内容的 24h 阅读中位数对比 X。', evidence: xhs.length, ok: xhsRatio !== null && xhsRatio > 1.2, prompt: `请读取指标快照数据,对比小红书与 X 的内容表现(本期阅读中位倍数 ${xhsRatio?.toFixed(1) ?? '未知'}×,证据 ${xhs.length} 帖),判断平台精力分配是否需要调整。` }
+    ...(enabledPlatforms.includes('xiaohongshu') && enabledPlatforms.includes('x') ? [{ title: '小红书 → 收藏型资产平台', ratio: xhsRatio, desc: '小红书内容的 24h 阅读中位数对比 X。', evidence: xhs.length, ok: xhsRatio !== null && xhsRatio > 1.2, prompt: `请读取指标快照数据,对比小红书与 X 的内容表现(本期阅读中位倍数 ${xhsRatio?.toFixed(1) ?? '未知'}×,证据 ${xhs.length} 帖),判断平台精力分配是否需要调整。` }] : [])
   ];
 
   const visibleIds = new Set(visible.map((p) => p.id));
@@ -151,6 +152,7 @@ export function ResultsView({ publications, planDate }: {
     try {
       const result = await window.wmb.startResultsReview({ businessDate: planDate, publicationId: post.id });
       if (!result.ok) throw new Error(result.error?.message || 'Pi 复盘失败');
+      if (result.data?.task.status === 'needs_user') { setStatusText(result.data.task.errorMessage || '需要用户处理'); return; }
       await reload();
       setStatusText('Pi 复盘已完成');
     } catch (error) {
@@ -168,7 +170,7 @@ export function ResultsView({ publications, planDate }: {
       setStatusText(`Pi 正在批量复盘 ${done + 1}/${pending.length}：《${post.title}》…`);
       try {
         const result = await window.wmb.startResultsReview({ businessDate: planDate, publicationId: post.id });
-        if (result.ok) done += 1;
+        if (result.ok && result.data?.task.status === 'succeeded') done += 1;
       } catch { /* 单条失败不阻塞批量 */ }
     }
     await reload();

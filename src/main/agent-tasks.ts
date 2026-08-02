@@ -182,6 +182,13 @@ export function startAgentTask(
   return { ok: true, data: created, error: null, reused: false };
 }
 
+export function getReusableNeedsUserAgentTask(database: DatabaseSync, intent: AgentIntent, businessDate: string, contextRefs: Record<string, unknown>, errorCode: string): AgentTask | null {
+  const task = getLatestAgentTask(database, intent, businessDate);
+  if (!task || task.status !== 'needs_user' || task.errorCode !== errorCode) return null;
+  const expected = { ...contextRefs, ...readTaskProfileContext(database) };
+  return Object.entries(expected).every(([key, value]) => JSON.stringify(task.contextRefs[key]) === JSON.stringify(value)) ? task : null;
+}
+
 function readTaskProfileContext(database: DatabaseSync): Record<string, unknown> {
   if (!database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_profiles'").get()) return {};
   const profile = database.prepare("SELECT profile_id AS profileId, revision FROM workspace_profiles WHERE id='effective'").get() as { profileId: string; revision: number } | undefined;

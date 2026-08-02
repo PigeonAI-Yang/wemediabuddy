@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { platformNames } from './app-types';
 import { PlatformMark } from './platform-mark';
-export function PublishView({ publications, refresh, openStudio, onEditProject, takeover, selectedId, onSelect, settings }: {
+export function PublishView({ publications, refresh, openStudio, onEditProject, takeover, selectedId, onSelect, settings, enabledPlatforms }: {
   publications: Awaited<ReturnType<typeof window.wmb.getPublications>>;
   refresh: () => void;
   openStudio: () => void;
@@ -10,11 +10,13 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
   selectedId: string | null;
   onSelect: (publicationId: string) => void;
   settings: Awaited<ReturnType<typeof window.wmb.getSettings>>;
+  enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
 }): React.JSX.Element {
   const [articleUrl, setArticleUrl] = useState('');
   const selected = publications.find((item) => item.publication.id === selectedId) ?? publications[0] ?? null;
   useEffect(() => { if (selected && selected.publication.id !== selectedId) onSelect(selected.publication.id); }, [selected?.publication.id]);
   const publication = selected?.publication;
+  const platformEnabled = publication ? enabledPlatforms.includes(publication.platform) : false;
   const reconcile = async () => {
     if (!publication) return;
     const reconciled = await window.wmb.reconcileNotPublished(publication.id, publication.revision);
@@ -64,9 +66,9 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
         </div>
         <div className="pub-foot">
           <span className="pub-account">账号身份已核对：<b>{publication?.accountKey || '未识别'}</b></span>
-          {publication?.status === 'awaiting_confirmation' && publication.platform !== 'xiaohongshu' && <><button className="secondary-button" onClick={() => onEditProject(publication.projectId)}>继续编辑</button><button className="primary-button" onClick={takeover}>我已核对，去平台发布</button></>}
-          {publication?.status === 'needs_user' && publication.platform !== 'xiaohongshu' && <button className="primary-button" onClick={takeover}>打开浏览器接管</button>}
-          {publication?.status === 'unknown' && publication.platform !== 'wechat' && <button className="secondary-button" onClick={reconcile}>我已核对，确认未发布</button>}
+          {platformEnabled && publication?.status === 'awaiting_confirmation' && publication.platform !== 'xiaohongshu' && <><button className="secondary-button" onClick={() => onEditProject(publication.projectId)}>继续编辑</button><button className="primary-button" onClick={takeover}>我已核对，去平台发布</button></>}
+          {platformEnabled && publication?.status === 'needs_user' && publication.platform !== 'xiaohongshu' && <button className="primary-button" onClick={takeover}>打开浏览器接管</button>}
+          {platformEnabled && publication?.status === 'unknown' && publication.platform !== 'wechat' && <button className="secondary-button" onClick={reconcile}>我已核对，确认未发布</button>}
         </div>
         <section className="timeline"><h3>状态时间线</h3>{selected.events.map((event, index) => <div className="tl-item" key={index}><span className={`tl-dot ${timelineDot(String(event.to_status))}`}/><div className="tl-text"><b>{publicationStatus(String(event.to_status))}</b><span className="faint">{event.created_at ? `${new Date(String(event.created_at)).toLocaleString('zh-CN')} · ` : ''}{String(event.reason || '')}</span></div></div>)}</section>
       </article> : <div className="preview-placeholder"><span>最终内容预览</span><h2>尚未取得编辑器回读</h2><p>准备完成后，这里会原样显示标题、正文和媒体素材。</p></div>}
@@ -99,8 +101,9 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
           <div className="env-row"><div className="env-text"><b>专用浏览器</b><small>{browserReady ? '已由本应用启动' : '浏览器未启动'}</small></div><span className={`pill-status ${browserReady ? 'green' : 'gray'}`}><span className="dot"/>{browserReady ? '已连接' : '未启动'}</span></div>
           <div className="env-row"><div className="env-text"><b>MCP 服务</b><small>{mcpReady ? settings?.mcp.url ?? '仅本机' : '本地服务未启动'}</small></div><span className={`pill-status ${mcpReady ? 'green' : 'gray'}`}><span className="dot"/>{mcpReady ? '运行中' : '未启动'}</span></div>
         </div>
-        {publication?.platform === 'xiaohongshu' && <p className="notice">请在小红书客户端中人工发布。</p>}
-        {publication?.platform === 'wechat' && ['awaiting_confirmation', 'needs_user', 'unknown'].includes(publication.status) && <div className="readback-form"><input value={articleUrl} onChange={(event) => setArticleUrl(event.target.value)} placeholder="粘贴已发布的公众号文章链接"/><button className="secondary-button full-button" disabled={!articleUrl.trim()} onClick={readBackWechat}>核对文章并记录结果</button></div>}
+        {!platformEnabled && publication && <p className="notice">当前工作空间未启用该发布平台，仅保留历史记录。</p>}
+        {platformEnabled && publication?.platform === 'xiaohongshu' && <p className="notice">请在小红书客户端中人工发布。</p>}
+        {platformEnabled && publication?.platform === 'wechat' && ['awaiting_confirmation', 'needs_user', 'unknown'].includes(publication.status) && <div className="readback-form"><input value={articleUrl} onChange={(event) => setArticleUrl(event.target.value)} placeholder="粘贴已发布的公众号文章链接"/><button className="secondary-button full-button" disabled={!articleUrl.trim()} onClick={readBackWechat}>核对文章并记录结果</button></div>}
       </aside>
     </div>
   </section>;

@@ -27,7 +27,7 @@ import {
 } from './agent-tasks';
 import { createDataRootSelection } from './data-root-selection';
 import { assertWorkspaceSwitchable, installWorkspaceIpcGate, WorkspaceRuntimeGate } from './workspace-runtime';
-import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner'; import { resolveAgentPiPrerequisite } from './agent-prerequisites';
 import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -40,8 +40,7 @@ import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals';
 import { createWorkspaceConfirmation } from './workspace-confirmation';
-if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
-if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
+if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'wmb-asset',
@@ -371,6 +370,7 @@ app.whenReady().then(() => {
     if (!mcp) await refreshMcp(dataRoot);
     if (!mcp) throw new Error('WMB MCP 尚未就绪。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+    const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate, contextRefs: { planDate: businessDate } }); if (prerequisite.waiting) { database.close(); return { ok: true, data: prerequisite.waiting, error: null }; }
     const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate, contextRefs: { planDate: businessDate } });
     database.close();
     if (!started.ok) return started;
@@ -412,7 +412,7 @@ app.whenReady().then(() => {
         onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
-      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
+      broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
       return { ok: true, data: result, error: null };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
@@ -437,7 +437,7 @@ app.whenReady().then(() => {
         onEvent: broadcastPiRuntimeProgress
       });
       broadcastPiEvent({ type: 'agent_task', task: result.task });
-      broadcastPiEvent({ type: result.task.status === 'succeeded' ? 'idle' : 'failed', text: result.task.status });
+      broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
       return { ok: true, data: result, error: null };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
@@ -469,7 +469,7 @@ app.whenReady().then(() => {
   });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
   registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
-  registerXListIpc({ loadSelectedDataRoot });
+  registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

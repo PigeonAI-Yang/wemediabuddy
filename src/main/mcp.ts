@@ -22,7 +22,7 @@ import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
-import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
+import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
@@ -362,6 +362,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const db = database(); try {
       const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('plans.save', request_id) as { resultJson: string } | undefined;
       if (prior) return text(JSON.parse(prior.resultJson));
+      assertPublishingPlatforms(db, items.flatMap((item) => item.platforms));
       db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: saveCurrentPlan(db, { planDate: plan_date, timezone: 'Asia/Shanghai', summary, items: items as PlanItemInput[] }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('plans.save', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
     } finally { db.close(); }
   });
@@ -369,6 +370,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const db = database(); try {
       const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.save_version', input.request_id) as { resultJson: string } | undefined;
       if (prior) return text(JSON.parse(prior.resultJson));
+      if (input.platform) assertPublishingPlatforms(db, [input.platform]);
       db.exec('BEGIN IMMEDIATE'); try {
         const data = input.platform
           ? savePlatformVersion(db, { projectId: input.project_id, contentVersionId: input.content_version_id!, platform: input.platform, format: input.format!, title: input.title, body: input.body, expectedRevision: input.expected_revision, id: input.version_id })

@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron';
+import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
+import { migrateDatabase } from './db/migrations.ts';
 import { startXhsMcp, type XhsMcpRuntime, type XhsMcpStatus } from './xiaohongshu-mcp.ts';
+import { assertPublishingPlatforms } from './workspace-profiles.ts';
 
 const emptyStatus = (): XhsMcpStatus => ({
   status: 'not_started',
@@ -43,6 +46,7 @@ export function registerXhsIpc(input: {
   ipcMain.handle('xhs:ensure', async () => {
     const dataRoot = await input.loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
+    assertXhsEnabled(dataRoot);
     let runtime = input.getXhs();
     if (!runtime) {
       runtime = await input.refreshXhs(dataRoot);
@@ -54,6 +58,7 @@ export function registerXhsIpc(input: {
   ipcMain.handle('xhs:start-login', async () => {
     const dataRoot = await input.loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
+    assertXhsEnabled(dataRoot);
     let runtime = input.getXhs();
     if (!runtime) {
       runtime = await input.refreshXhs(dataRoot);
@@ -62,4 +67,9 @@ export function registerXhsIpc(input: {
     if (!runtime) throw new Error('小红书 MCP 未能启动。');
     return runtime.startLogin();
   });
+}
+
+function assertXhsEnabled(dataRoot: DataRoot): void {
+  const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
+  try { assertPublishingPlatforms(database, ['xiaohongshu']); } finally { database.close(); }
 }

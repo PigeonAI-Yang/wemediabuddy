@@ -105,12 +105,12 @@ function wrapTextareaSelection(textarea: HTMLTextAreaElement, before: string, af
   return next;
 }
 
-export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, planDate }: {
+export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, planDate, enabledPlatforms }: {
   openPublish: () => void;
   selectedId: string | null;
   onSelect: (projectId: string | null) => void;
   onContext: (project: { id: string; title: string } | null) => void;
-  planDate: string;
+  planDate: string; enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
 }): React.JSX.Element {
   const [projects, setProjects] = useState<ContentProjectSummary[]>([]);
   const [topics,setTopics]=useState<any[]>([]);
@@ -454,7 +454,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     setBusy(true); setMessage('Pi 正在写初稿…');
     try {
       const result = await window.wmb.startStudioDraft({ businessDate: planDate, projectId: selected.id });
-      setMessage(result.ok ? 'Pi 初稿任务已完成' : result.error?.message || '初稿失败');
+      setMessage(result.ok ? result.data?.task.status === 'needs_user' ? result.data.task.errorMessage || '需要用户处理' : 'Pi 初稿任务已完成' : result.error?.message || '初稿失败');
       await reload();
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
@@ -522,7 +522,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       <div className="studio-library-tools">
         <label className="studio-search-wrap">⌕ <input className="studio-search" type="search" value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} placeholder="搜索项目标题或正文" aria-label="搜索内容项目"/></label>
         <select aria-label="项目排序" value={order} onChange={(event) => setOrder(event.target.value as ContentProjectOrder)}><option value="recent">最近更新</option><option value="oldest">最早更新</option><option value="versions">版本最多</option></select>
-        <select aria-label="平台筛选" value={platform ?? 'all'} onChange={(event) => setPlatform(event.target.value === 'all' ? undefined : event.target.value as ContentProjectPlatform)}><option value="all">全部平台</option><option value="xiaohongshu">小红书</option><option value="wechat">微信公众号</option><option value="x">X</option></select>
+        <select aria-label="平台筛选" value={platform ?? 'all'} onChange={(event) => setPlatform(event.target.value === 'all' ? undefined : event.target.value as ContentProjectPlatform)}><option value="all">全部平台</option>{enabledPlatforms.map((value) => <option key={value} value={value}>{platformNames[value]}</option>)}</select>
         <span>找到 {projects.length}{hasMore || offset ? '+' : ''} 个项目</span>
       </div>
       <div className="studio-project-table" role="table">
@@ -530,7 +530,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         {projects.map((project) => <div className="studio-project-row" role="row" tabIndex={0} key={project.id} onClick={() => onSelect(project.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(project.id); } }}>
           <span><strong>{project.title}</strong><small>项目 {project.id.slice(0, 8)} · 最新正文按需读取</small></span>
           <span className="studio-project-state"><i data-status={project.status}/>{project.archivedAt ? '已归档' : statuses.find((item) => item.value === project.status)?.label}</span>
-          <span className="studio-project-platform">{Object.values(project.platforms).filter(Boolean).length} / 3<i><b style={{ width: `${Object.values(project.platforms).filter(Boolean).length / 3 * 100}%` }}/></i></span>
+          <span className="studio-project-platform">{enabledPlatforms.filter((value) => project.platforms[value] > 0).length} / {enabledPlatforms.length}<i><b style={{ width: `${enabledPlatforms.filter((value) => project.platforms[value] > 0).length / Math.max(1, enabledPlatforms.length) * 100}%` }}/></i></span>
           <time>{formatTime(project.updatedAt)}</time>
           <span>{project.versionCount} 个版本</span>
           <span className="studio-row-actions">

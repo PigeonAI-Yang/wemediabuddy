@@ -18,8 +18,8 @@ import {
   updateAgentTaskPhase,
   type AgentTask
 } from './agent-tasks.ts';
+import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
-import { resolvePiConfig } from './pi-config.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { readBrowserConfig } from './browser.ts';
@@ -108,8 +108,7 @@ function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: strin
   return lines.join('\n');
 }
 export async function startDailyIntelligence(input: {
-  dataRootPath: string;
-  businessDate: string;
+  dataRootPath: string; businessDate: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
@@ -117,11 +116,13 @@ export async function startDailyIntelligence(input: {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   let taskId: string | null = null;
   try {
+    const contextRefs = { planDate: input.businessDate }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}` });
+    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {
       intent: 'daily_intelligence',
       businessDate: input.businessDate,
-      contextRefs: { planDate: input.businessDate },
+      contextRefs,
       // Keep dock chat session separate; daily wire must not inherit image-bearing chat history.
       piSessionId: `daily-${input.businessDate}`
     });
@@ -129,7 +130,6 @@ export async function startDailyIntelligence(input: {
     taskId = started.data.id;
     if (started.reused && !['resume_pending', 'starting'].includes(started.data.phase)) return { task: started.data, reused: true };
 
-    const config = resolvePiConfig(database);
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await prepareSkillDir(layout.agentDir);
     await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
@@ -426,8 +426,7 @@ function draftPrompt(task: AgentTask, projectId: string, requestId: string): str
 }
 
 export async function startStudioDraft(input: {
-  dataRootPath: string;
-  businessDate: string;
+  dataRootPath: string; businessDate: string;
   projectId: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
@@ -435,17 +434,18 @@ export async function startStudioDraft(input: {
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
+    const contextRefs = { projectId: input.projectId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs });
+    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {
       intent: 'studio_draft',
       businessDate: input.businessDate,
-      contextRefs: { projectId: input.projectId },
+      contextRefs,
       piSessionId: conversation.sessionId
     });
     if (!started.ok) throw new Error(started.error.message);
     if (started.reused) return { task: started.data, reused: true };
 
-    const config = resolvePiConfig(database);
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
       providers: {
@@ -533,8 +533,7 @@ function reviewPrompt(task: AgentTask, publicationId: string, requestId: string)
 }
 
 export async function startResultsReview(input: {
-  dataRootPath: string;
-  businessDate: string;
+  dataRootPath: string; businessDate: string;
   publicationId: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
@@ -542,17 +541,18 @@ export async function startResultsReview(input: {
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
+    const contextRefs = { publicationId: input.publicationId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'results_review', businessDate: input.businessDate, contextRefs });
+    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {
       intent: 'results_review',
       businessDate: input.businessDate,
-      contextRefs: { publicationId: input.publicationId },
+      contextRefs,
       piSessionId: conversation.sessionId
     });
     if (!started.ok) throw new Error(started.error.message);
     if (started.reused) return { task: started.data, reused: true };
 
-    const config = resolvePiConfig(database);
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
       providers: {
