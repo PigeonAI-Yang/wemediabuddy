@@ -1,7 +1,7 @@
 {
   "runs": [
     {
-      "workspaceId": "d05e6179-c100-4bde-8ba0-a2e010ea2b38",
+      "workspaceId": "fe78d383-8d3c-41b8-b70b-81a541bbecd6",
       "displayName": "AI",
       "pack": "wemedia-intelligence-engine",
       "tabs": [
@@ -10,11 +10,11 @@
       ],
       "xLoginState": null,
       "aiSourcePresentation": true,
-      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\ai\\browser-profile",
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-GCLy1o\\ai\\browser-profile",
       "forbiddenAiIpcObserved": false
     },
     {
-      "workspaceId": "5fe932fc-174f-42ce-8f51-596f72c05aec",
+      "workspaceId": "c089c153-784e-409e-a781-c04af56a8b0b",
       "displayName": "英国生活",
       "pack": "uk-life-content-radar",
       "tabs": [
@@ -22,11 +22,11 @@
       ],
       "xLoginState": "needs_user",
       "aiSourcePresentation": false,
-      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\uk\\browser-profile",
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-GCLy1o\\uk\\browser-profile",
       "forbiddenAiIpcObserved": false
     },
     {
-      "workspaceId": "867dc1d6-d59f-40c8-aff1-b2a92529f6a6",
+      "workspaceId": "8bcfbea7-3f02-4670-b659-76228d56211e",
       "displayName": "游戏资讯",
       "pack": "game-news-radar",
       "tabs": [
@@ -34,7 +34,7 @@
       ],
       "xLoginState": "needs_user",
       "aiSourcePresentation": false,
-      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\game\\browser-profile",
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-GCLy1o\\game\\browser-profile",
       "forbiddenAiIpcObserved": false
     }
   ]

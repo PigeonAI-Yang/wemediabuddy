@@ -18,11 +18,11 @@
       "xhsDenied": false,
       "historicalReadOnly": null,
       "needsUserTaskIds": [
-        "3c608afc-3a05-487c-a483-4027d1779948",
-        "db025e48-ae27-448c-89b2-d4a5855a3bfe",
-        "1aad3b6d-aeba-4e9e-9a46-a086a3e467c9"
+        "03b27a31-8997-4f7e-a1fb-68f67ba33a8a",
+        "8e52b271-bcdc-4493-88f6-ed3c07b9689d",
+        "9aa82343-89b4-4a6c-b822-7a57c13697c4"
       ],
-      "listSourceChain": "c8891c98-b79f-41be-a50c-ce707b30fa3f"
+      "listSourceChain": "22f0e80b-0acf-450b-9e42-805381446e55"
     },
     {
       "displayName": "英国生活",
@@ -45,11 +45,11 @@
         "action": false
       },
       "needsUserTaskIds": [
-        "118c2170-b754-4338-ad55-27272fdadc14",
-        "1f24346e-095b-4076-b243-4c377d8526ea",
-        "b6ec56aa-ff1d-4a83-b3b6-02b3b9a2cfe9"
+        "05718d2a-c938-4487-926f-c6e6579d926d",
+        "1014bc88-457c-4f78-a0e4-9f767a6b8b9d",
+        "edaada96-74ff-4abe-9661-31407b6ea429"
       ],
-      "listSourceChain": "f11c31f9-4b5b-4aea-9cd4-970132009e36"
+      "listSourceChain": "89481156-07e5-4fcf-9bbd-2622aaf34458"
     },
     {
       "displayName": "游戏资讯",
@@ -71,11 +71,11 @@
         "action": false
       },
       "needsUserTaskIds": [
-        "504f2fe4-945b-4a60-814e-66154cd741f8",
-        "abb8b832-7412-4a49-a9d9-260f935f5704",
-        "d9c79ac1-fe25-4c26-8fb3-54a109f0bf9a"
+        "fc746a77-ad50-4d0c-88d3-de722111f0fb",
+        "a6f160e0-83df-4cf7-8ef1-cf6ad79d0c69",
+        "b6c83a42-0786-4d50-87fe-f8d22270d354"
       ],
-      "listSourceChain": "8b58a65f-dcb5-4625-b7a7-8946236736b6"
+      "listSourceChain": "7651123d-a783-4fa1-b9e9-2ab7e9e34f55"
     }
   ]
 }
