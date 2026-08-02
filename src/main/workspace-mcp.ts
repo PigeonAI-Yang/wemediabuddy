@@ -4,6 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import { WORKSPACE_CATALOG, WorkspaceProposalStore } from './workspace-proposals.ts';
+import { readIntelligenceChannelsSummary, type IntelligenceChannelsSummary } from './intelligence-channels.ts';
 
 type WorkspaceListing = { activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> };
 
@@ -24,6 +25,7 @@ export type WorkspaceCapabilitySnapshot = {
   rootPath: string;
   dataRoot: { workspaceId: string; path: string };
   profile: ReturnType<typeof requireWorkspaceProfile>;
+  intelligenceChannels: IntelligenceChannelsSummary;
   capabilities: {
     xLists: true;
     aiIntelligence: boolean;
@@ -50,6 +52,7 @@ export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspa
       ...workspace,
       dataRoot: { workspaceId, path: resolvedRootPath },
       profile,
+      intelligenceChannels: readIntelligenceChannelsSummary(db),
       capabilities: {
         xLists: true,
         ...intelligence,

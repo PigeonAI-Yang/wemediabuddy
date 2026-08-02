@@ -118,5 +118,46 @@ export const lateMigrations = [
       DROP TABLE agent_tasks_v35;
       CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
     `
+  },
+  {
+    version: 37,
+    sql: `
+      CREATE TABLE website_sources (
+        id TEXT PRIMARY KEY,
+        source_feed_id TEXT NOT NULL REFERENCES source_feeds(id),
+        input_text TEXT NOT NULL,
+        canonical_url TEXT NOT NULL UNIQUE,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        resolution_status TEXT NOT NULL CHECK (resolution_status IN ('ready', 'unresolved', 'unreadable', 'needs_user', 'failed')),
+        resolution_json TEXT NOT NULL DEFAULT '{}',
+        last_error_code TEXT,
+        last_error_message TEXT,
+        last_checked_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL
+      );
+      CREATE INDEX website_sources_enabled_status ON website_sources(enabled, resolution_status, updated_at DESC);
+      CREATE TABLE source_scan_receipts (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        module TEXT NOT NULL CHECK (module IN ('official_web', 'x_lists')),
+        source_id TEXT NOT NULL,
+        source_feed_id TEXT NOT NULL REFERENCES source_feeds(id),
+        checked_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed', 'needs_user')),
+        candidate_count INTEGER NOT NULL DEFAULT 0 CHECK (candidate_count >= 0),
+        saved_count INTEGER NOT NULL DEFAULT 0 CHECK (saved_count >= 0),
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        UNIQUE (task_id, module, source_id)
+      );
+      CREATE INDEX source_scan_receipts_task ON source_scan_receipts(task_id, checked_at DESC);
+      CREATE INDEX source_scan_receipts_workspace ON source_scan_receipts(workspace_id, checked_at DESC);
+    `
   }
 ] as const;
