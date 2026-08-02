@@ -4,8 +4,8 @@ export type OfficialTemplateId = 'official.ai' | 'official.uk';
 export type WorkspaceProfileV1 = {
   profileId: string;
   revision: number;
-  officialTemplateId: OfficialTemplateId;
-  officialTemplateVersion: number;
+  officialTemplateId: OfficialTemplateId | null;
+  officialTemplateVersion: number | null;
   displayName: string;
   audience: string;
   contentGoal: string;
@@ -77,9 +77,9 @@ export function requireWorkspaceProfile(database: DatabaseSync): WorkspaceProfil
 
 export function assertAiOnlyRoute(database: DatabaseSync, routeId: typeof AI_ONLY_ROUTE_IDS[number]): void {
   const profile = requireWorkspaceProfile(database);
-  if (profile.officialTemplateId !== 'official.ai') throw Object.assign(new Error(`当前工作空间不允许 AI 专属路线：${routeId}`), { code: 'OFFICIAL_PACK_UNAVAILABLE' });
+  if (profile.intelligencePackId !== 'wemedia-intelligence-engine') throw Object.assign(new Error(`当前工作空间不允许 AI 专属路线：${routeId}`), { code: 'OFFICIAL_PACK_UNAVAILABLE' });
 }
 
 export function allowsAiOnlyRoutes(database: DatabaseSync): boolean {
-  return requireWorkspaceProfile(database).officialTemplateId === 'official.ai';
+  return requireWorkspaceProfile(database).intelligencePackId === 'wemedia-intelligence-engine';
 }

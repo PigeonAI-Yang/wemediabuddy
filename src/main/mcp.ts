@@ -23,17 +23,20 @@ import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } 
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
 import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
+import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
 
-function createServerFor(rootPath: string): McpServer {
+function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp): McpServer {
   const server = new McpServer({ name: 'wemedia-buddy', version: '0.1.0' });
   const database = () => migrateDatabase(path.join(rootPath, 'wmb.db'));
   const profileDatabase = database();
   const aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase);
   profileDatabase.close();
+
+  if (application) registerWorkspaceApplicationMcp(server, rootPath, application);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -445,8 +448,8 @@ function createServerFor(rootPath: string): McpServer {
   return server;
 }
 
-export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate): Promise<McpRuntime> {
-  const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath)));
+export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp): Promise<McpRuntime> {
+  const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath, application)));
   const http = createServer((request, response) => {
     if (request.url?.split('?')[0] !== '/mcp') { response.writeHead(404).end(); return; }
     void (gate ? gate.run(() => handler(request, response)) : handler(request, response)).catch((error: unknown) => {

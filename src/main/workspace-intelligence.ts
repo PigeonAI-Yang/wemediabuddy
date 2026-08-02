@@ -31,7 +31,7 @@ export async function startWorkspaceDailyIntelligence(
   runners: { ai?: (input: IntelligenceInput) => Promise<DailyIntelligenceRun>; uk?: (input: IntelligenceInput, profile: WorkspaceProfileV1) => Promise<DailyIntelligenceRun> } = {}
 ): Promise<DailyIntelligenceRun> {
   const profile = readWorkspaceIntelligenceProfile(input.dataRootPath);
-  return profile.officialTemplateId === 'official.ai'
+  return profile.intelligencePackId === 'wemedia-intelligence-engine'
     ? (runners.ai ?? startDailyIntelligence)(input)
     : (runners.uk ?? startUkDailyIntelligence)(input, profile);
 }

@@ -38,7 +38,7 @@ import { registerPiDockIpc } from './ipc-pi-dock';
 import { registerXListIpc } from './ipc-x-lists';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
-
+import { WorkspaceProposalStore } from './workspace-proposals';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
 if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
@@ -56,6 +56,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 const dailyRuns = new Map<string, Promise<unknown>>();
 const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate);
+const workspaceProposals = new WorkspaceProposalStore();
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
@@ -63,7 +64,6 @@ let pi: PiRpcSupervisor | null = null;
 let piSessionFile: string | null = null;
 let shuttingDown = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
-
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
@@ -150,7 +150,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
 
 async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   await mcp?.close();
-  mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate) : null;
+  mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate, { listWorkspaces, proposals: workspaceProposals }) : null;
 }
 
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
