@@ -33,7 +33,8 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     assert.equal(running.data.contextRefs.workspaceProfileRevision, 1);
     aiDb.close();
     const currentProposal = store.prepare({ ...proposalInput('update-current'), target: 'current', displayName: base.displayName, contentGoal: '持续创作可复现的 AI 开发自媒体内容' }, { workspaceId: ai.id, currentProfile: base });
-    const currentConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { throw new Error('existing profile must not choose a root'); }, loadSelectedDataRoot: async () => aiRoot, proposals: store });
+    let relaunches = 0;
+    const currentConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { throw new Error('existing profile must not choose a root'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => { const result = await apply(); relaunches += 1; return result; }, proposals: store });
     const durableBefore = await profileState(registryPath, aiRoot.path);
     await assert.rejects(() => currentConfirmation.confirm(proposalBinding(currentProposal)), { code: 'WORKSPACE_BUSY' });
     assert.equal(await profileState(registryPath, aiRoot.path), durableBefore);
@@ -43,6 +44,7 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     const updated = await currentConfirmation.confirm(proposalBinding(currentProposal));
     assert.equal(updated.profile.revision, 2);
     assert.equal(updated.profile.contentGoal, '持续创作可复现的 AI 开发自媒体内容');
+    assert.equal(relaunches, 1);
 
     const activeId = (await readWorkspaceRegistry(registryPath)).activeWorkspaceId;
     for (const phase of ['root_ready', 'schema_ready', 'identity_ready', 'profile_ready', 'before_registry']) {
@@ -69,7 +71,7 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
 
     const newProposal = store.prepare({ ...proposalInput('ui-new'), displayName: '第三赛道测试' }, { workspaceId: null, currentProfile: null });
     const thirdRoot = path.join(parent, 'third');
-    const confirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => thirdRoot, loadSelectedDataRoot: async () => aiRoot, proposals: store });
+    const confirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => thirdRoot, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
     await confirmation.selectRoot(proposalBinding(newProposal));
     assert.equal(confirmation.list().find((item) => item.proposal.id === newProposal.id).selectedRootPath, thirdRoot);
     const created = await confirmation.confirm(proposalBinding(newProposal));
@@ -95,7 +97,7 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
 
     const staleProposal = store.prepare({ ...proposalInput('stale-ui'), displayName: '过期提案' }, { workspaceId: null, currentProfile: null });
     let chooserCalls = 0;
-    const staleConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { chooserCalls += 1; return path.join(parent, 'must-not-open'); }, loadSelectedDataRoot: async () => aiRoot, proposals: store });
+    const staleConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { chooserCalls += 1; return path.join(parent, 'must-not-open'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
     await assert.rejects(() => staleConfirmation.selectRoot({ ...proposalBinding(staleProposal), normalizedHash: 'changed' }), { code: 'PROFILE_STALE' });
     assert.equal(chooserCalls, 0);
 

@@ -8,6 +8,8 @@ import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
+import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
+import { allowsAiOnlyRoutes } from './workspace-profiles';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -40,7 +42,9 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     const selectedBrowser = readBrowserConfig(database);
     const pi = readPiConfig(database);
+    const legacyBrowserAllowed = allowsAiOnlyRoutes(database);
     database.close();
+    const workspace = await readCurrentWorkspaceSnapshot(dataRoot.path, listWorkspaces);
     return {
       ...settings,
       mcp: getMcp() ? { status: 'ready', url: getMcp()!.url } : { status: 'not_started', url: null },
@@ -48,18 +52,22 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       browser: getBrowser()
         ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath, mode: getBrowser()!.mode }
         : { status: 'not_started' },
-      browserOptions: await discoverBrowserProfiles(),
+      browserOptions: discoverBrowserProfiles(dataRoot.path, legacyBrowserAllowed ? selectedBrowser : null),
       selectedBrowser,
-      pi
+      pi,
+      workspace
     };
   });
   ipcMain.handle('browser:configure', async (_event, id: string) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const config = (await discoverBrowserProfiles()).find((candidate) => candidate.id === id);
-    if (!config) throw new Error('浏览器 profile 不存在。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return saveBrowserConfig(database, config); } finally { database.close(); }
+    try {
+      const selected = allowsAiOnlyRoutes(database) ? readBrowserConfig(database) : null;
+      const config = discoverBrowserProfiles(dataRoot.path, selected).find((candidate) => candidate.id === id);
+      if (!config) throw new Error('浏览器 profile 不存在。');
+      return saveBrowserConfig(database, config);
+    } finally { database.close(); }
   });
   ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; apiKey?: string }) => {
     const api = requirePiApiType(input.api);

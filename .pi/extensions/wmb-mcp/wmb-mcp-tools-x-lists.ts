@@ -31,8 +31,7 @@ const readTimeline: ToolDefinition = {
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('x_lists.read_timeline', {
-      list_id: String(params.listId ?? ''),
-      limit: typeof params.limit === 'number' ? params.limit : 50
+      list_id: String(params.listId ?? ''), limit: typeof params.limit === 'number' ? params.limit : 50
     }));
   }
 };
@@ -53,7 +52,7 @@ const getOperation: ToolDefinition = {
 
 const prepareOperation: ToolDefinition = {
   name: 'wmb_prepare_x_list_operation', label: '准备 X List 操作',
-  description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。真正写入 X 前必须再调用 wmb_confirm_x_list_operation。members_* 建议每次只传 1 个 handle，串行执行。',
+  description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。只准备，最终确认只能由 WMB UI 完成。',
   parameters: {
     type: 'object',
     properties: {
@@ -70,26 +69,15 @@ const prepareOperation: ToolDefinition = {
   }
 };
 
-const confirmOperation: ToolDefinition = {
-  name: 'wmb_confirm_x_list_operation', label: '确认并执行 X List 操作',
-  description: '确认并执行已 prepare 的 X List 操作。会读取真实网页快照、arm，再后台 quiet 串行执行。delete 必须提供 typedListName 且与当前 List 名称完全一致。用于 members_add/members_remove/create/update/delete。',
-  parameters: {
-    type: 'object',
-    properties: {
-      operationId: { type: 'string' },
-      expectedRevision: { type: 'number' },
-      typedListName: { type: 'string' }
-    },
-    required: ['operationId'],
-    additionalProperties: false
-  },
+const collectTimeline: ToolDefinition = {
+  name: 'wmb_collect_x_list_timeline', label: '采集已绑定 X List 动态',
+  description: '将当前工作空间已启用 List 的有限最新动态采集为现有资料。只读平台、只写当前根，不含确认。',
+  parameters: { type: 'object', properties: { accountKey: { type: 'string' }, listId: { type: 'string' }, limit: { type: 'number' } }, required: ['accountKey', 'listId'], additionalProperties: false },
   async execute(_toolCallId, params) {
-    return textResult(await callTool('x_lists.confirm', {
-      operation_id: String(params.operationId ?? ''),
-      expected_revision: typeof params.expectedRevision === 'number' ? params.expectedRevision : undefined,
-      typed_list_name: params.typedListName === undefined ? undefined : String(params.typedListName)
+    return textResult(await callTool('x_lists.collect_timeline', {
+      account_key: String(params.accountKey ?? ''), list_id: String(params.listId ?? ''), limit: typeof params.limit === 'number' ? params.limit : undefined
     }));
   }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, confirmOperation];
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline];

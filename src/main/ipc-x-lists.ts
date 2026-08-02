@@ -4,7 +4,7 @@ import type { DataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListPostDetail, readXListTimeline, seedListTimelineMemory } from './platforms/x-list-browser.ts';
-import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
+import { pyaireaderXProfileId, type XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import { captureXListOperationSnapshot, collectBoundXListTimeline, confirmAndRunXListOperation } from './x-list-execution.ts';
 import {
   armXListOperation, bindXList, getXListBinding, getXListOperation, listXListBindings, listXListOperations, prepareXListOperation,
@@ -19,30 +19,28 @@ import {
 } from './x-list-timeline-cache.ts';
 import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
-import { assertAiOnlyRoute } from './workspace-profiles.ts';
+import { XListNeedsUserError } from './platforms/x-list-session.ts';
+import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null> };
 
 export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencies): void {
-  const loadSelectedDataRoot = async () => {
-    const root = await loadRoot();
-    if (!root) return null;
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try { assertAiOnlyRoute(database, 'ai.x_lists.workspace'); } finally { database.close(); }
-    return root;
-  };
+  const loadSelectedDataRoot = loadRoot;
   ipcMain.handle('x-lists:get-cached-index', async () => {
-    const root = await loadSelectedDataRoot();
-    if (!root) return null;
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try { return readXListIndexCache(database); } finally { database.close(); }
+    const context = await currentXListContext(loadSelectedDataRoot);
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
+    try {
+      const cached = readXListIndexCache(database);
+      return cached && sameAccount(cached.accountKey, context.accountKey) ? cached : null;
+    } finally { database.close(); }
   });
   ipcMain.handle('x-lists:read-index', async () => {
     const root = await requiredRoot(loadSelectedDataRoot);
     const first = migrateDatabase(path.join(root.path, 'wmb.db'));
     let config: XListBrowserConfig;
     try { config = await ensureSelectedXListBrowser(first); } finally { first.close(); }
-    const value = await readXListIndex(config);
+    let value;
+    try { value = await readXListIndex(config); } catch (error) { throw needsUser(error); }
     if (value.lists.length > 0) {
       const database = migrateDatabase(path.join(root.path, 'wmb.db'));
       try { writeXListIndexCache(database, value); } finally { database.close(); }
@@ -52,17 +50,14 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
   ipcMain.handle('x-lists:read-detail', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, (config) => readXListDetail(config, listId)));
   ipcMain.handle('x-lists:read-members', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, (config) => readXListMembers(config, listId)));
   ipcMain.handle('x-lists:read-timeline', async (_event, input: { listId: string; limit?: number; knownUrls?: string[] }) => {
-    const root = await requiredRoot(loadSelectedDataRoot);
-    const first = migrateDatabase(path.join(root.path, 'wmb.db'));
-    let config: XListBrowserConfig;
-    try { config = await ensureSelectedXListBrowser(first); } finally { first.close(); }
+    const context = await currentXListContext(loadSelectedDataRoot);
     const continuing = Array.isArray(input.knownUrls) && input.knownUrls.length > 0;
     const value = await withTimeout(
-      readXListTimeline(config, input.listId, input.limit, { knownUrls: input.knownUrls }),
+      readXListTimeline(context.config, input.listId, input.limit, { knownUrls: input.knownUrls }),
       continuing ? 20_000 : 15_000,
       continuing ? '加载更多超时，请再试一次。' : '读取动态超时，请再试一次。'
     );
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
     try {
       const existing = readXListTimelineCache(database, value.accountKey, input.listId, { touch: false });
       const known = new Set((input.knownUrls ?? []).map((item) => item.replace(/[?#].*$/, '')));
@@ -87,6 +82,8 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
         fetchedAt: value.detail.observation?.capturedAt
       });
       seedListTimelineMemory({
+        workspaceId: context.workspaceId,
+        browserId: context.browserId,
         listId: input.listId,
         accountKey: value.accountKey,
         detail: { name: value.detail.name, canonicalUrl: value.detail.canonicalUrl },
@@ -96,19 +93,26 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     return value;
   });
   ipcMain.handle('x-lists:read-post', async (_event, input: { statusUrl: string; replyLimit?: number; bypassCache?: boolean }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
     if (!input.bypassCache) {
-      const cached = readXListPostCache(input.statusUrl);
+      const cached = readXListPostCache(context, input.statusUrl);
       if (cached) return { accountKey: cached.accountKey, post: cached.post, cached: true, fetchedAt: cached.fetchedAt, stale: cached.stale };
     }
-    const value = await withXListBrowser(loadSelectedDataRoot, (config) => readXListPostDetail(config, input.statusUrl, input.replyLimit ?? 30));
-    writeXListPostCache(input.statusUrl, value);
+    const value = await readXListPostDetail(context.config, input.statusUrl, input.replyLimit ?? 30);
+    if (!sameAccount(value.accountKey, context.accountKey)) throw accountMismatch();
+    writeXListPostCache(context, input.statusUrl, value);
     return { ...value, cached: false, fetchedAt: new Date().toISOString(), stale: false };
   });
   ipcMain.handle('x-lists:get-cached-timeline', async (_event, input: { accountKey: string; listId: string }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
     return withDatabase(loadSelectedDataRoot, (database) => {
+      if (!getXListBinding(database, context.accountKey, input.listId)) return null;
       const cached = readXListTimelineCache(database, input.accountKey, input.listId);
       if (cached?.payload?.posts?.length) {
         seedListTimelineMemory({
+          workspaceId: context.workspaceId,
+          browserId: context.browserId,
           listId: input.listId,
           accountKey: cached.accountKey || input.accountKey,
           detail: cached.payload.detail ?? null,
@@ -119,6 +123,8 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     });
   });
   ipcMain.handle('x-lists:list-cached-timeline', async (_event, input: { accountKey: string; listId: string; limit?: number; offset?: number }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
     return withDatabase(loadSelectedDataRoot, (database) => {
       const binding = getXListBinding(database, input.accountKey, input.listId);
       if (!binding) return { items: [], limit: input.limit ?? 50, offset: input.offset ?? 0, hasMore: false, binding: null };
@@ -127,48 +133,88 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     });
   });
   ipcMain.handle('x-lists:clear-timeline-cache', async (_event, input: { accountKey?: string } = {}) => {
-    return withDatabase(loadSelectedDataRoot, (database) => clearXListTimelineCache(database, input.accountKey));
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (input.accountKey && !sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
+    return withDatabase(loadSelectedDataRoot, (database) => clearXListTimelineCache(database, context.accountKey));
   });
   ipcMain.handle('x-lists:timeline-cache-stats', async () => {
-    return withDatabase(loadSelectedDataRoot, (database) => summarizeXListTimelineCache(database));
+    const context = await currentXListContext(loadSelectedDataRoot);
+    return withDatabase(loadSelectedDataRoot, (database) => summarizeXListTimelineCache(database, context.accountKey));
   });
-  ipcMain.handle('x-lists:list-bindings', async (_event, accountKey?: string) => withDatabase(loadSelectedDataRoot, (database) => listXListBindings(database, accountKey)));
-  ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => withDatabase(loadSelectedDataRoot, (database) => listXListOperations(database, input)));
-  ipcMain.handle('x-lists:get-operation', async (_event, operationId: string) => withDatabase(loadSelectedDataRoot, (database) => getXListOperation(database, operationId)));
-  ipcMain.handle('x-lists:prepare', async (_event, input: PrepareXListOperationInput) => withDatabase(loadSelectedDataRoot, (database) => prepareXListOperation(database, input)));
+  ipcMain.handle('x-lists:list-bindings', async (_event, accountKey?: string) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (accountKey && !sameAccount(context.accountKey, accountKey)) throw accountMismatch();
+    return withDatabase(loadSelectedDataRoot, (database) => listXListBindings(database, context.accountKey));
+  });
+  ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (input.accountKey && !sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
+    return withDatabase(loadSelectedDataRoot, (database) => listXListOperations(database, { ...input, accountKey: context.accountKey }));
+  });
+  ipcMain.handle('x-lists:get-operation', async (_event, operationId: string) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    return withDatabase(loadSelectedDataRoot, (database) => {
+      const operation = getXListOperation(database, operationId);
+      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
+      return operation;
+    });
+  });
+  ipcMain.handle('x-lists:prepare', async (_event, input: PrepareXListOperationInput) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
+    return withDatabase(loadSelectedDataRoot, (database) => prepareXListOperation(database, input));
+  });
   ipcMain.handle('x-lists:arm', async (_event, input: { operationId: string; expectedRevision: number }) => {
-    const root = await requiredRoot(loadSelectedDataRoot);
-    const first = migrateDatabase(path.join(root.path, 'wmb.db'));
-    let config: XListBrowserConfig; let operation;
-    try { config = await ensureSelectedXListBrowser(first); operation = getXListOperation(first, input.operationId); } finally { first.close(); }
+    const context = await currentXListContext(loadSelectedDataRoot);
+    const first = migrateDatabase(path.join(context.root.path, 'wmb.db'));
+    let operation;
+    try { operation = getXListOperation(first, input.operationId); } finally { first.close(); }
     if (!operation) throw new Error('List 操作不存在。');
-    const snapshot = await captureXListOperationSnapshot(config, operation);
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    if (!sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
+    const snapshot = await captureXListOperationSnapshot(context.config, operation);
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
     try { return armXListOperation(database, { ...input, snapshot }); } finally { database.close(); }
   });
   ipcMain.handle('x-lists:confirm', async (_event, input: { operationId: string; expectedRevision: number; typedListName?: string }) => {
-    const root = await requiredRoot(loadSelectedDataRoot);
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try { return await confirmAndRunXListOperation(database, await ensureSelectedXListBrowser(database), input); } finally { database.close(); }
+    const context = await currentXListContext(loadSelectedDataRoot);
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
+    try {
+      const operation = getXListOperation(database, input.operationId);
+      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
+      return await confirmAndRunXListOperation(database, context.config, input);
+    } finally { database.close(); }
   });
-  ipcMain.handle('x-lists:stop', async (_event, input: { operationId: string; expectedRevision: number }) => withDatabase(loadSelectedDataRoot, (database) => requestXListOperationStop(database, input)));
+  ipcMain.handle('x-lists:stop', async (_event, input: { operationId: string; expectedRevision: number }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    return withDatabase(loadSelectedDataRoot, (database) => {
+      const operation = getXListOperation(database, input.operationId);
+      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
+      return requestXListOperationStop(database, input);
+    });
+  });
   ipcMain.handle('x-lists:bind', async (_event, input: { listId: string; expectedRevision?: number }) => {
     const root = await requiredRoot(loadSelectedDataRoot);
     const first = migrateDatabase(path.join(root.path, 'wmb.db'));
     let config: XListBrowserConfig;
     try { config = await ensureSelectedXListBrowser(first); } finally { first.close(); }
-    const index = await readXListIndex(config);
+    let index;
+    try { index = await readXListIndex(config); } catch (error) { throw needsUser(error); }
     const list = index.lists.find((candidate) => candidate.listId === input.listId);
     if (!list) throw new Error('当前账号未读到该 List，不能绑定。');
     const database = migrateDatabase(path.join(root.path, 'wmb.db'));
     try { return bindXList(database, { accountKey: index.accountKey, list, observation: { index: index.observation }, expectedRevision: input.expectedRevision }); } finally { database.close(); }
   });
-  ipcMain.handle('x-lists:set-binding-enabled', async (_event, input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }) => withDatabase(loadSelectedDataRoot, (database) => setXListBindingEnabled(database, input)));
+  ipcMain.handle('x-lists:set-binding-enabled', async (_event, input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
+    return withDatabase(loadSelectedDataRoot, (database) => setXListBindingEnabled(database, input));
+  });
   ipcMain.handle('x-lists:collect-timeline', async (_event, input: { accountKey: string; listId: string; limit?: number }) => {
-    const root = await requiredRoot(loadSelectedDataRoot);
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    const context = await currentXListContext(loadSelectedDataRoot);
+    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
     try {
-      const result = await collectBoundXListTimeline(database, await ensureSelectedXListBrowser(database), input);
+      const result = await collectBoundXListTimeline(database, context.config, input);
       return result;
     } finally { database.close(); }
   });
@@ -181,11 +227,31 @@ async function withDatabase<T>(loadSelectedDataRoot: Dependencies['loadSelectedD
 }
 
 async function withXListBrowser<T>(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'], action: (config: XListBrowserConfig) => Promise<T>): Promise<T> {
+  const context = await currentXListContext(loadSelectedDataRoot);
+  try { return await action(context.config); }
+  catch (error) {
+    if (error instanceof XListNeedsUserError) throw needsUser(error);
+    throw error;
+  }
+}
+
+type CurrentXListContext = { root: DataRoot; workspaceId: string; browserId: string; accountKey: string; config: XListBrowserConfig };
+
+async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<CurrentXListContext> {
   const root = await requiredRoot(loadSelectedDataRoot);
   const database = migrateDatabase(path.join(root.path, 'wmb.db'));
   let config: XListBrowserConfig;
-  try { config = await ensureSelectedXListBrowser(database); } finally { database.close(); }
-  return action(config);
+  let workspaceId: string | undefined;
+  try {
+    workspaceId = (database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
+    if (!workspaceId) throw new Error('当前工作空间身份缺失。');
+    config = await ensureSelectedXListBrowser(database);
+  } catch (error) { throw needsUser(error); }
+  finally { database.close(); }
+  try {
+    const index = await readXListIndex({ ...config!, workspaceId });
+    return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey } };
+  } catch (error) { throw needsUser(error); }
 }
 
 async function requiredRoot(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<DataRoot> {
@@ -197,8 +263,15 @@ async function requiredRoot(loadSelectedDataRoot: Dependencies['loadSelectedData
 async function ensureSelectedXListBrowser(database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
   const config = readBrowserConfig(database);
   if (!config) throw new Error('请先选择 Pyaireader 专用 X 登录态。');
+  if (config.id === pyaireaderXProfileId && !allowsAiOnlyRoutes(database)) throw new Error('此根尚未配置独立 X 登录态。');
   const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
   return { id: config.id, cdpUrl: runtime.cdpUrl };
+}
+
+function sameAccount(left: string, right: string): boolean { return left.trim().toLowerCase() === right.trim().toLowerCase(); }
+function accountMismatch(): Error { return Object.assign(new Error('当前浏览器账号与本根绑定账号不一致。'), { code: 'ACCOUNT_MISMATCH' }); }
+function needsUser(error: unknown): Error {
+  return Object.assign(new Error(error instanceof Error ? error.message : String(error)), { code: (error as { code?: string })?.code ?? 'BROWSER_NEEDS_USER' });
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

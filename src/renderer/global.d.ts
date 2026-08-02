@@ -34,6 +34,12 @@ declare global {
           configured: boolean;
         };
         piRuntime: { version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null };
+        workspace: {
+          id: string; displayName: string; rootPath: string;
+          dataRoot: { workspaceId: string; path: string };
+          profile: { profileId: string; revision: number; intelligencePackId: string; creationPackId: string; platforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
+          capabilities: { xLists: true; aiIntelligence: boolean; fixedAiLists: boolean; rankings: boolean; sourceWire: boolean; publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
+        };
       } | null>;
       openLogs(): Promise<void>;
       openExternal(url: string): Promise<void>;

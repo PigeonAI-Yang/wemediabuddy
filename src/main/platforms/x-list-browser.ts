@@ -158,6 +158,7 @@ export async function readXListMembers(config: XListBrowserConfig, listId: strin
 }
 
 type ListTimelineMemory = {
+  workspaceId: string; browserId: string;
   listId: string;
   accountKey: string;
   detail: XListDetail;
@@ -168,8 +169,12 @@ type ListTimelineMemory = {
 
 const listTimelineMemory = new Map<string, ListTimelineMemory>();
 
-/** Seed/merge in-memory GraphQL pages so load-more survives app restarts + cache-first UI. */
+function timelineMemoryKey(workspaceId: string, browserId: string, accountKey: string, listId: string): string {
+  return `${workspaceId}\u0000${browserId}\u0000${accountKey.toLowerCase()}\u0000${listId}`;
+}
+
 export function seedListTimelineMemory(input: {
+  workspaceId: string; browserId: string;
   listId: string;
   accountKey: string;
   detail?: { name?: string; canonicalUrl?: string } | null;
@@ -195,8 +200,9 @@ export function seedListTimelineMemory(input: {
   }>;
   bottomCursor?: string | null;
 }): void {
-  if (!input.listId || !input.accountKey || !Array.isArray(input.posts) || input.posts.length === 0) return;
-  const previous = listTimelineMemory.get(input.listId);
+  if (!input.workspaceId || !input.listId || !input.accountKey || !Array.isArray(input.posts) || input.posts.length === 0) return;
+  const key = timelineMemoryKey(input.workspaceId, input.browserId, input.accountKey, input.listId);
+  const previous = listTimelineMemory.get(key);
   const merged = new Map<string, XListPost>();
   for (const post of previous?.posts ?? []) {
     const key = normalizeStatusKey(post.url);
@@ -248,7 +254,8 @@ export function seedListTimelineMemory(input: {
   };
   if (input.detail?.name) detail.name = input.detail.name;
   if (input.detail?.canonicalUrl) detail.canonicalUrl = input.detail.canonicalUrl;
-  listTimelineMemory.set(input.listId, {
+  listTimelineMemory.set(key, {
+    workspaceId: input.workspaceId, browserId: input.browserId,
     listId: input.listId,
     accountKey: input.accountKey,
     detail,
@@ -267,10 +274,9 @@ export async function readXListTimeline(
   const known = new Set((options.knownUrls ?? []).map((item) => normalizeStatusKey(item)).filter(Boolean));
   const continuing = known.size > 0;
   const target = Math.max(1, Math.min(limit, 20));
-
-  // Fast path: serve additional pages from memory without touching the browser.
-  if (continuing) {
-    const cached = listTimelineMemory.get(listId);
+  const memoryKey = config.workspaceId && config.accountKey ? timelineMemoryKey(config.workspaceId, config.id, config.accountKey, listId) : null;
+  if (continuing && memoryKey) {
+    const cached = listTimelineMemory.get(memoryKey);
     if (cached && Date.now() - cached.updatedAt < 10 * 60_000) {
       const posts: XListPost[] = [];
       for (const post of cached.posts) {
@@ -293,14 +299,12 @@ export async function readXListTimeline(
       }
     }
   }
-
   const session = await XListSession.open(config);
   try {
     return await session.run(async (active) => {
       const listHref = xListUrl(listId);
       const timelineCapture = captureListLatestTweetsTimeline(active.page, listId);
 
-      // Always land on the list page. Do not assume prior page state.
       if (!isXListPage(active.page.url(), listId) || !continuing) {
         await active.navigate(listHref, { mode: 'browse' });
       }
@@ -311,14 +315,12 @@ export async function readXListTimeline(
         throw new Error(missing);
       }
 
-      // Wait briefly for first paint / first GraphQL page.
       await active.page.locator('main article').first().waitFor({ state: 'attached', timeout: 4_000 }).catch(() => {});
       for (let nudge = 0; nudge < 3 && timelineCapture.snapshot().posts.length < Math.max(target, 30); nudge += 1) {
         await active.page.mouse.wheel(0, 1_600 + nudge * 500);
         await active.page.waitForTimeout(280);
       }
 
-      // Continuation with empty memory: a couple more scrolls to ensure payload is rich.
       if (continuing && timelineCapture.snapshot().posts.length <= known.size) {
         for (let i = 0; i < 5; i += 1) {
           const unknown = timelineCapture.snapshot().posts.filter((post) => !known.has(normalizeStatusKey(post.url))).length;
@@ -329,8 +331,7 @@ export async function readXListTimeline(
       }
 
       const captured = timelineCapture.stop();
-      // Skip expensive detail parsing on load-more; keep previous detail if present.
-      const previous = listTimelineMemory.get(listId);
+      const previous = memoryKey ? listTimelineMemory.get(memoryKey) : undefined;
       const detail = previous?.detail ?? await detailFromCurrentPage(active, listId).catch(() => ({
         listId,
         canonicalUrl: listHref,
@@ -357,15 +358,14 @@ export async function readXListTimeline(
         const key = normalizeStatusKey(post.url);
         if (key) mergedMap.set(key, post);
       }
-      const accountKey = previous?.accountKey || await readAccountKey(active);
+      const accountKey = await readAccountKey(active);
+      if (config.accountKey && config.accountKey.toLowerCase() !== accountKey.toLowerCase()) {
+        throw Object.assign(new XListNeedsUserError('当前浏览器账号已变化，请重新读取并确认本根 List。'), { code: 'ACCOUNT_MISMATCH' });
+      }
       const mergedPosts = [...mergedMap.values()];
-      listTimelineMemory.set(listId, {
-        listId,
-        accountKey,
-        detail,
-        posts: mergedPosts,
-        bottomCursor: captured.bottomCursor ?? previous?.bottomCursor ?? null,
-        updatedAt: Date.now()
+      if (memoryKey) listTimelineMemory.set(memoryKey, {
+        workspaceId: config.workspaceId!, browserId: config.id, listId, accountKey, detail, posts: mergedPosts,
+        bottomCursor: captured.bottomCursor ?? previous?.bottomCursor ?? null, updatedAt: Date.now()
       });
 
       const posts: XListPost[] = [];

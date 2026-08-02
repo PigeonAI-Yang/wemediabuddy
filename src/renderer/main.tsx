@@ -352,7 +352,7 @@ function App(): React.JSX.Element {
   }, [view, todaySelectedItems, todaySelectedSources, today?.fermenting, xListContext, rankingContext, libraryTopicContext, pageFocus, canvasContext, studioContext, publishSelected, publications]);
   return <main className={`app-shell${piDockCollapsed ? ' pi-collapsed' : ' pi-open'}${view === 'settings' ? ' settings-mode' : ''}${view === 'studio' ? ' studio-mode' : ''}${view === 'topic' ? ' topic-mode' : ''}`} style={{ '--pi-open-width': `${piDockWidth}px` } as React.CSSProperties}>
     <header className="topbar">
-      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong></div>
+      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName} · r{settings.workspace.profile.revision}</small>}</div>
       <div className="global-search"><input aria-label="全局搜索" placeholder="搜索主题或项目" value={globalQuery} onChange={event=>setGlobalQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'){setGlobalQuery('');setGlobalResults([]);}else if(event.key==='Enter'&&globalResults[0]){event.preventDefault();openGlobalResult(globalResults[0]);}}}/>{globalResults.length>0&&<div role="listbox" aria-label="全局搜索结果">{globalResults.map(item=><button key={`${item.kind}:${item.id}`} onClick={()=>openGlobalResult(item)}><small>{item.kind==='topic'?'主题':'项目'}</small><span>{item.title}</span></button>)}</div>}</div>
       {view === 'settings' && <span className="topbar-page-title">设置</span>}
       {view === 'studio' && <div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div>}
@@ -387,6 +387,7 @@ function App(): React.JSX.Element {
     <footer className="status-bar">
       <div className="status-bar-left">
         <span className="status-item" data-phase={piPhase}><span className="status-dot"/>{piStatusText}</span>
+        {settings?.workspace && <span className="status-item" title={settings.workspace.dataRoot.path}><span className="status-dot ok"/>{settings.workspace.displayName} · {settings.workspace.profile.profileId}</span>}
         <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'MCP 已连接' : 'MCP 未连接'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
         {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}

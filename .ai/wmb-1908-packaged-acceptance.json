@@ -1,0 +1,79 @@
+{
+  "runs": [
+    {
+      "workspaceId": "0a8330aa-f6d7-462b-b573-31fa7e76a8bd",
+      "displayName": "AI",
+      "rootPath": "J:\\Users\\yangda01\\Temp\\wmb-1908-package-tgeSDU\\ai",
+      "profileId": "profile.ai.official",
+      "mcpUrl": "http://127.0.0.1:65228/mcp",
+      "pid": 29912,
+      "genericXTools": [
+        "x_lists.collect_timeline",
+        "x_lists.get_operation",
+        "x_lists.list_bindings",
+        "x_lists.prepare",
+        "x_lists.read_detail",
+        "x_lists.read_index",
+        "x_lists.read_members",
+        "x_lists.read_timeline"
+      ],
+      "wireHealth": true,
+      "missingLoginZeroWrite": true,
+      "oldMcpRejected": true,
+      "activeProfileRelaunch": {
+        "revision": 2,
+        "newIntelligencePack": "game-news-radar",
+        "newMcpUrl": "http://127.0.0.1:55846/mcp",
+        "oldRuntimeClosed": true,
+        "newWireHealth": false
+      }
+    },
+    {
+      "workspaceId": "80c205e7-d891-4bc4-9d97-a08827729f83",
+      "displayName": "英国生活",
+      "rootPath": "J:\\Users\\yangda01\\Temp\\wmb-1908-package-tgeSDU\\uk",
+      "profileId": "profile.uk.official",
+      "mcpUrl": "http://127.0.0.1:65459/mcp",
+      "pid": 45804,
+      "genericXTools": [
+        "x_lists.collect_timeline",
+        "x_lists.get_operation",
+        "x_lists.list_bindings",
+        "x_lists.prepare",
+        "x_lists.read_detail",
+        "x_lists.read_index",
+        "x_lists.read_members",
+        "x_lists.read_timeline"
+      ],
+      "wireHealth": false,
+      "missingLoginZeroWrite": true,
+      "oldMcpRejected": true
+    },
+    {
+      "workspaceId": "aec18f38-71c2-4622-8b6a-d109817e6dd9",
+      "displayName": "游戏资讯",
+      "rootPath": "J:\\Users\\yangda01\\Temp\\wmb-1908-package-tgeSDU\\game",
+      "profileId": "profile.game.dd76fd5d-a4a4-40eb-880a-f52c4a55b8f6",
+      "mcpUrl": "http://127.0.0.1:55290/mcp",
+      "pid": 9984,
+      "genericXTools": [
+        "x_lists.collect_timeline",
+        "x_lists.get_operation",
+        "x_lists.list_bindings",
+        "x_lists.prepare",
+        "x_lists.read_detail",
+        "x_lists.read_index",
+        "x_lists.read_members",
+        "x_lists.read_timeline"
+      ],
+      "wireHealth": false,
+      "missingLoginZeroWrite": true,
+      "oldMcpRejected": true
+    }
+  ],
+  "piConfirmTools": 0,
+  "package": {
+    "exeSha256": "fcc17b0bcd4091fd1571f371b0c57c85d63cd8c05a1ec0c7c50b2307f65098c3",
+    "asarSha256": "221cc33b67b9946690bd53cb8c7ebc80b07689c786c0ab232cd179ab3a88e1ee"
+  }
+}

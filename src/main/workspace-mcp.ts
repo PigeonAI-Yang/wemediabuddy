@@ -2,27 +2,62 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
-import { readWorkspaceProfile } from './workspace-profiles.ts';
+import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import { WORKSPACE_CATALOG, WorkspaceProposalStore } from './workspace-proposals.ts';
 
+type WorkspaceListing = { activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> };
+
 export type WorkspaceApplicationMcp = {
-  listWorkspaces: () => Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
+  listWorkspaces: () => Promise<WorkspaceListing>;
   proposals: WorkspaceProposalStore;
+};
+
+export type WorkspaceCapabilitySnapshot = {
+  id: string;
+  displayName: string;
+  rootPath: string;
+  dataRoot: { workspaceId: string; path: string };
+  profile: ReturnType<typeof requireWorkspaceProfile>;
+  capabilities: {
+    xLists: true;
+    aiIntelligence: boolean;
+    fixedAiLists: boolean;
+    rankings: boolean;
+    sourceWire: boolean;
+    publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  };
 };
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
 
+export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspaces: () => Promise<WorkspaceListing>): Promise<WorkspaceCapabilitySnapshot> {
+  const registry = await listWorkspaces();
+  const workspace = registry.workspaces.find((item) => item.id === registry.activeWorkspaceId);
+  const resolvedRootPath = path.resolve(rootPath);
+  const db = new DatabaseSync(path.join(resolvedRootPath, 'wmb.db'), { readOnly: true });
+  try {
+    const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
+    if (!workspace || workspace.id !== workspaceId || path.resolve(workspace.rootPath) !== resolvedRootPath) throw new Error('活动工作空间身份不一致。');
+    const profile = requireWorkspaceProfile(db);
+    const aiIntelligence = profile.intelligencePackId === 'wemedia-intelligence-engine';
+    return {
+      ...workspace,
+      dataRoot: { workspaceId, path: resolvedRootPath },
+      profile,
+      capabilities: {
+        xLists: true,
+        aiIntelligence,
+        fixedAiLists: aiIntelligence,
+        rankings: aiIntelligence,
+        sourceWire: aiIntelligence,
+        publishingPlatforms: [...profile.platforms]
+      }
+    };
+  } finally { db.close(); }
+}
+
 export function registerWorkspaceApplicationMcp(server: McpServer, rootPath: string, application: WorkspaceApplicationMcp): void {
-  const currentWorkspace = async () => {
-    const registry = await application.listWorkspaces();
-    const workspace = registry.workspaces.find((item) => item.id === registry.activeWorkspaceId);
-    const db = new DatabaseSync(path.join(rootPath, 'wmb.db'), { readOnly: true });
-    try {
-      const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
-      if (!workspace || workspace.id !== workspaceId || path.resolve(workspace.rootPath) !== path.resolve(rootPath)) throw new Error('活动工作空间身份不一致。');
-      return { ...workspace, profile: readWorkspaceProfile(db) };
-    } finally { db.close(); }
-  };
+  const currentWorkspace = () => readCurrentWorkspaceSnapshot(rootPath, application.listWorkspaces);
   server.registerTool('workspaces.list', { description: '列出应用登记的工作空间和当前活动身份。' }, async () => text(await application.listWorkspaces()));
   server.registerTool('workspaces.get_current', { description: '读取当前 MCP URL 绑定的工作空间和有效配方。' }, async () => text(await currentWorkspace()));
   server.registerTool('workspaces.catalog', { description: '读取 WMB 编译期官方能力包和受支持平台。' }, async () => text(WORKSPACE_CATALOG));

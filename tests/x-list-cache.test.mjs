@@ -6,7 +6,9 @@ import test from 'node:test';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { listSourcesByFeed, upsertSource } from '../src/main/sources.ts';
 import { readXListIndexCache, writeXListIndexCache } from '../src/main/x-list-cache.ts';
+import { clearXListPostCache, readXListPostCache, writeXListPostCache } from '../src/main/x-list-post-cache.ts';
 import { bindXList } from '../src/main/x-lists.ts';
+import { readXListTimeline, seedListTimelineMemory } from '../src/main/platforms/x-list-browser.ts';
 
 const sampleIndex = {
   accountKey: '@KimbomArtist',
@@ -24,6 +26,28 @@ const sampleIndex = {
     visibleText: '赚钱信息差博主'
   }
 };
+
+test('process caches stay scoped by workspace and account before a hit', async () => {
+  const url = 'https://x.com/a/status/99';
+  const post = { url, authorHandle: '@a', displayName: 'A', avatarUrl: null, text: 'root A', postedAt: null, images: [], imageThumbs: [], hasVideo: false, videoPoster: null, metrics: { replies: null, reposts: null, likes: null, bookmarks: null, views: null }, replies: [], hasMoreReplies: false };
+  writeXListPostCache({ workspaceId: 'root-a', browserId: 'browser-a', accountKey: '@A' }, url, { accountKey: '@A', post });
+  assert.equal(readXListPostCache({ workspaceId: 'root-b', browserId: 'browser-a', accountKey: '@A' }, url), null);
+  assert.equal(readXListPostCache({ workspaceId: 'root-a', browserId: 'browser-b', accountKey: '@A' }, url), null);
+  assert.equal(readXListPostCache({ workspaceId: 'root-a', browserId: 'browser-a', accountKey: '@B' }, url), null);
+  assert.equal(readXListPostCache({ workspaceId: 'root-a', browserId: 'browser-a', accountKey: '@A' }, url)?.post.text, 'root A');
+  clearXListPostCache();
+
+  seedListTimelineMemory({ workspaceId: 'root-a', browserId: 'test-a', accountKey: '@A', listId: '123', posts: [
+    { url: 'https://x.com/a/status/1', text: 'known A' }, { url: 'https://x.com/a/status/2', text: 'only A' }
+  ] });
+  seedListTimelineMemory({ workspaceId: 'root-b', browserId: 'test-b', accountKey: '@B', listId: '123', posts: [
+    { url: 'https://x.com/b/status/1', text: 'known B' }, { url: 'https://x.com/b/status/2', text: 'only B' }
+  ] });
+  const a = await readXListTimeline({ id: 'test-a', workspaceId: 'root-a', accountKey: '@A' }, '123', 10, { knownUrls: ['https://x.com/a/status/1'] });
+  const b = await readXListTimeline({ id: 'test-b', workspaceId: 'root-b', accountKey: '@B' }, '123', 10, { knownUrls: ['https://x.com/b/status/1'] });
+  assert.deepEqual([a.accountKey, a.posts.map((item) => item.text)], ['@A', ['only A']]);
+  assert.deepEqual([b.accountKey, b.posts.map((item) => item.text)], ['@B', ['only B']]);
+});
 
 test('x_list_index_cache persists and overwrites the single row', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-x-list-cache-'));

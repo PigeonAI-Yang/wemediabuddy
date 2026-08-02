@@ -7,11 +7,13 @@ import { createContentProjectWithVersion, savePlatformVersion } from '../src/mai
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { discoverBrowserProfiles } from '../src/main/browser.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { createOfficialWorkspace, enrollAiWorkspace } from '../src/main/workspaces.ts';
 import { AI_ONLY_ROUTE_IDS, assertAiOnlyRoute, readWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intelligence.ts';
+import { WorkspaceProposalStore } from '../src/main/workspace-proposals.ts';
 
 test('official AI and UK profiles isolate one linked text chain without AI-only routes', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-profiles-'));
@@ -56,12 +58,42 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(ukDb.prepare('SELECT COUNT(*) AS count FROM source_feeds WHERE registry_id IS NOT NULL').get().count, 0);
     } finally { aiDb.close(); ukDb.close(); }
 
-    const mcp = await startMcp(ukRoot.path);
+    const mcp = await startMcp(ukRoot.path, undefined, { listWorkspaces: async () => ({ activeWorkspaceId: uk.id, workspaces: [uk] }), proposals: new WorkspaceProposalStore(() => true) });
     try {
       const initialized = await mcpRequest(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wmb-profile-test', version: '1' } });
       const listed = await mcpRequest(mcp.url, 'tools/list', {}, initialized.sessionId);
-      assert.equal(listed.data.tools.some((tool) => tool.name.startsWith('x_lists.')), false);
+      const names = new Set(listed.data.tools.map((tool) => tool.name));
+      assert.deepEqual([...names].filter((name) => name.startsWith('x_lists.')).sort(), [
+        'x_lists.collect_timeline', 'x_lists.get_operation', 'x_lists.list_bindings', 'x_lists.prepare',
+        'x_lists.read_detail', 'x_lists.read_index', 'x_lists.read_members', 'x_lists.read_timeline'
+      ]);
+      assert.equal(names.has('x_lists.confirm'), false);
+      assert.equal(names.has('sources.wire_health_get'), false);
+      const current = await mcpRequest(mcp.url, 'tools/call', { name: 'workspaces.get_current', arguments: {} }, initialized.sessionId);
+      const snapshot = JSON.parse(current.data.content[0].text);
+      assert.equal(snapshot.id, uk.id);
+      assert.equal(snapshot.profile.intelligencePackId, 'uk-life-content-radar');
+      assert.deepEqual(snapshot.capabilities, { xLists: true, aiIntelligence: false, fixedAiLists: false, rankings: false, sourceWire: false, publishingPlatforms: ['x', 'xiaohongshu'] });
+      const rejected = await mcpRequest(mcp.url, 'tools/call', { name: 'x_lists.prepare', arguments: { request_id: 'missing-login', account_key: '@wrong', kind: 'create', name: 'must-not-write' } }, initialized.sessionId);
+      const failure = JSON.parse(rejected.data.content[0].text);
+      assert.equal(failure.error.code, 'BROWSER_NEEDS_USER');
+      assert.equal(failure.error.details.state, 'needs_user');
+      const check = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+      assert.equal(check.prepare('SELECT COUNT(*) AS count FROM x_list_operations').get().count, 0);
+      check.close();
     } finally { await mcp.close(); }
+    const aiMcp = await startMcp(aiRoot.path);
+    try {
+      const initialized = await mcpRequest(aiMcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wmb-ai-profile-test', version: '1' } });
+      const listed = await mcpRequest(aiMcp.url, 'tools/list', {}, initialized.sessionId);
+      const names = new Set(listed.data.tools.map((tool) => tool.name));
+      assert.equal(names.has('sources.wire_health_get'), true);
+      assert.equal(names.has('x_lists.read_index'), true);
+      assert.equal(names.has('x_lists.confirm'), false);
+    } finally { await aiMcp.close(); }
+    const ukBrowser = discoverBrowserProfiles(ukRoot.path)[0];
+    assert.equal(ukBrowser.userDataDir, path.join(ukRoot.path, 'browser-profile'));
+    assert.notEqual(ukBrowser.cdpUrl, 'http://127.0.0.1:9334');
 
     const calls = { ai: 0, uk: 0 };
     const result = await startWorkspaceDailyIntelligence({ dataRootPath: ukRoot.path, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp' }, {

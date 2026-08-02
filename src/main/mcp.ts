@@ -16,8 +16,8 @@ import * as z from 'zod';
 import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
 import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
 import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
-import { armXListOperation, getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
-import { captureXListOperationSnapshot, confirmAndRunXListOperation } from './x-list-execution.ts';
+import { getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
+import { collectBoundXListTimeline } from './x-list-execution.ts';
 import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
@@ -112,7 +112,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   }, async ({ query, limit }) => {
     const db = database(); try { return text(searchSources(db, query, limit)); } finally { db.close(); }
   });
-  server.registerTool('sources.wire_health_get', {
+  if (aiOnlyRoutes) server.registerTool('sources.wire_health_get', {
     description: '读取最近一次今日情报导线巡检健康台账（按 registry/X List 源）。',
     inputSchema: { business_date: z.string().optional() }
   }, async ({ business_date }) => {
@@ -148,93 +148,87 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const db = database();
     try {
       const config = readBrowserConfig(db);
-      if (!config || !isPyaireaderXProfile({ id: config.id, cdpUrl: config.cdpUrl }) || !config.cdpUrl) {
+      const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
+      if (!workspaceId || !config || (config.id === 'edge:pyaireader-default' && !aiOnlyRoutes) || !isPyaireaderXProfile({ id: config.id, cdpUrl: config.cdpUrl })) {
         throw new Error('请先选择 Pyaireader 专用 X 登录态。');
       }
       const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
-      return { id: config.id, cdpUrl: runtime.cdpUrl };
+      return { id: config.id, cdpUrl: runtime.cdpUrl, workspaceId };
     } finally { db.close(); }
   };
-  if (aiOnlyRoutes) server.registerTool('x_lists.read_index', {
+  const xListResult = async <T>(work: () => Promise<T>) => {
+    try { return text(await work()); }
+    catch (error) { return text({ ok: false, data: null, error: { code: (error as { code?: string })?.code ?? 'BROWSER_NEEDS_USER', message: error instanceof Error ? error.message : String(error), details: { state: 'needs_user' } } }); }
+  };
+  const selectedXListAccount = async () => {
+    const config = await selectedXListBrowser();
+    const index = await readXListIndex(config);
+    return { config: { ...config, accountKey: index.accountKey }, accountKey: index.accountKey };
+  };
+  const accountMatches = (actual: string, expected: string) => actual.trim().toLowerCase() === expected.trim().toLowerCase();
+  server.registerTool('x_lists.read_index', {
     description: '读取当前专用 X 登录账号可见的 List 索引（真实网页，不是仅本地绑定）。只读。后台静默浏览器，含拟人间隔。',
     inputSchema: {}
-  }, async () => text(await readXListIndex(await selectedXListBrowser())));
-  if (aiOnlyRoutes) server.registerTool('x_lists.read_detail', {
+  }, async () => xListResult(async () => readXListIndex(await selectedXListBrowser())));
+  server.registerTool('x_lists.read_detail', {
     description: '读取指定 X List 的详情。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => text(await readXListDetail(await selectedXListBrowser(), list_id)));
-  if (aiOnlyRoutes) server.registerTool('x_lists.read_members', {
+  }, async ({ list_id }) => xListResult(async () => readXListDetail(await selectedXListBrowser(), list_id)));
+  server.registerTool('x_lists.read_members', {
     description: '读取指定 X List 当前可见成员。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => text(await readXListMembers(await selectedXListBrowser(), list_id)));
-  if (aiOnlyRoutes) server.registerTool('x_lists.read_timeline', {
+  }, async ({ list_id }) => xListResult(async () => readXListMembers(await selectedXListBrowser(), list_id)));
+  server.registerTool('x_lists.read_timeline', {
     description: '读取指定 X List 当前可见动态，最多 50 条。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
-  }, async ({ list_id, limit }) => text(await readXListTimeline(await selectedXListBrowser(), list_id, limit ?? 50)));
-  if (aiOnlyRoutes) server.registerTool('x_lists.list_bindings', {
+  }, async ({ list_id, limit }) => xListResult(async () => {
+    const { config } = await selectedXListAccount();
+    return readXListTimeline(config, list_id, limit ?? 50);
+  }));
+  server.registerTool('x_lists.list_bindings', {
     description: '读取已绑定到 WMB 发现的 X List，不读取或操作 X 网页。',
     inputSchema: { account_key: z.string().optional() }
-  }, async ({ account_key }) => {
-    const db = database(); try { return text(listXListBindings(db, account_key)); } finally { db.close(); }
-  });
-  if (aiOnlyRoutes) server.registerTool('x_lists.get_operation', {
+  }, async ({ account_key }) => xListResult(async () => {
+    const { accountKey } = await selectedXListAccount();
+    if (account_key && !accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
+    const db = database(); try { return listXListBindings(db, accountKey); } finally { db.close(); }
+  }));
+  server.registerTool('x_lists.get_operation', {
     description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
     inputSchema: { id: z.string() }
-  }, async ({ id }) => {
-    const db = database(); try { return text(getXListOperation(db, id)); } finally { db.close(); }
-  });
-  if (aiOnlyRoutes) server.registerTool('x_lists.prepare', {
-    description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。默认先 prepared；真正写入 X 需再调用 x_lists.confirm。members_* 建议每次 1 个 handle 串行。',
+  }, async ({ id }) => xListResult(async () => {
+    const { accountKey } = await selectedXListAccount();
+    const db = database();
+    try {
+      const operation = getXListOperation(db, id);
+      return operation && !accountMatches(operation.accountKey, accountKey)
+        ? { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与操作绑定账号不一致。' } }
+        : operation;
+    } finally { db.close(); }
+  }));
+  server.registerTool('x_lists.prepare', {
+    description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。只准备，最终确认只能在 WMB UI 完成。',
     inputSchema: {
       request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
       name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional()
     }
-  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles }) => {
+  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles }) => xListResult(async () => {
+    const { accountKey } = await selectedXListAccount();
+    if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
     const db = database();
-    try { return text(prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles })); }
+    try { return prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles }); }
     finally { db.close(); }
-  });
-  if (aiOnlyRoutes) server.registerTool('x_lists.confirm', {
-    description: '确认并执行已 prepare 的 X List 操作。会先读取真实网页快照并 arm，再后台 quiet 执行。delete 必须提供与当前 List 名称完全一致的 typed_list_name。members_add/remove 按 handle 串行执行。',
-    inputSchema: {
-      operation_id: z.string(),
-      expected_revision: z.number().int().optional(),
-      typed_list_name: z.string().optional()
-    }
-  }, async ({ operation_id, expected_revision, typed_list_name }) => {
+  }));
+  server.registerTool('x_lists.collect_timeline', {
+    description: '采集当前根已启用 List 的有限最新动态到现有资料库。只操作当前根绑定，不含确认。',
+    inputSchema: { account_key: z.string(), list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
+  }, async ({ account_key, list_id, limit }) => xListResult(async () => {
+    const { config, accountKey } = await selectedXListAccount();
+    if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与绑定账号不一致。' } };
     const db = database();
-    try {
-      let operation = getXListOperation(db, operation_id);
-      if (!operation) return text({ ok: false, data: null, error: { code: 'NOT_FOUND', message: 'List 操作不存在。' } });
-      if (operation.state === 'succeeded' || operation.state === 'partial' || operation.state === 'failed' || operation.state === 'needs_user' || operation.state === 'unknown') {
-        return text({ ok: true, data: operation, error: null });
-      }
-      const config = await selectedXListBrowser();
-      if (operation.state === 'prepared') {
-        const snapshot = await captureXListOperationSnapshot(config, operation);
-        const armed = armXListOperation(db, {
-          operationId: operation.id,
-          expectedRevision: expected_revision ?? operation.revision,
-          snapshot
-        });
-        if (!armed.ok) return text(armed);
-        operation = armed.data;
-      }
-      if (operation.state !== 'awaiting_confirmation') {
-        return text({ ok: false, data: operation, error: { code: 'INVALID_STATE', message: `操作状态不可确认: ${operation.state}` } });
-      }
-      if (operation.kind === 'delete' && !(typed_list_name && typed_list_name.trim())) {
-        return text({ ok: false, data: operation, error: { code: 'VALIDATION_ERROR', message: '删除 List 必须提供 typed_list_name，且与当前名称完全一致。' } });
-      }
-      return text(await confirmAndRunXListOperation(db, config, {
-        operationId: operation.id,
-        expectedRevision: operation.revision,
-        typedListName: typed_list_name
-      }));
-    } finally {
-      db.close();
-    }
-  });
+    try { return collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
+    finally { db.close(); }
+  }));
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',
     inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }

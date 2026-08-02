@@ -1,11 +1,11 @@
-import { access, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
-import { isPyaireaderXProfile, pyaireaderXEndpoint, pyaireaderXProfileId } from './platforms/x-list-primitives.ts';
+import { isPyaireaderXProfile, pyaireaderWorkspaceProfilePrefix } from './platforms/x-list-primitives.ts';
 import { X_BROWSER_VIEWPORT } from './platforms/x-humanization.ts';
 import { stopProcessIdTree, stopProcessTree } from './workspace-runtime.ts';
 
@@ -42,35 +42,19 @@ const managedRuntimes = new Map<string, BrowserRuntime>();
 const lastQuietHideAt = new Map<string, number>();
 const QUIET_HIDE_THROTTLE_MS = 2_500;
 
-export async function discoverBrowserProfiles(): Promise<BrowserConfig[]> {
-  const profiles: BrowserConfig[] = [];
-  try {
-    const pyaireaderDir = path.join(process.env.USERPROFILE!, '.pyaireader', 'edge-cdp-profiles', 'default');
-    await access(pyaireaderDir);
-    profiles.push({
-      id: pyaireaderXProfileId,
-      label: 'Edge · Pyaireader 独立登录态',
-      executablePath: edgeExecutable,
-      userDataDir: pyaireaderDir,
-      profileDirectory: 'Default',
-      cdpUrl: pyaireaderXEndpoint
-    });
-  } catch {}
-  try {
-    await access(edgeExecutable);
-    const userDataDir = path.join(process.env.LOCALAPPDATA!, 'Microsoft', 'Edge', 'User Data');
-    const state = JSON.parse(await readFile(path.join(userDataDir, 'Local State'), 'utf8')) as {
-      profile?: { info_cache?: Record<string, { name?: string }> };
-    };
-    profiles.push(...Object.entries(state.profile?.info_cache ?? {}).map(([profileDirectory, info]) => ({
-      id: `edge:${profileDirectory}`,
-      label: `Edge · ${info.name ?? profileDirectory}`,
-      executablePath: edgeExecutable,
-      userDataDir,
-      profileDirectory
-    })));
-  } catch {}
-  return profiles;
+export function discoverBrowserProfiles(dataRootPath: string, selected?: BrowserConfig | null): BrowserConfig[] {
+  const root = path.resolve(dataRootPath);
+  const rootProfile: BrowserConfig = {
+    id: `${pyaireaderWorkspaceProfilePrefix}${createHash('sha256').update(root).digest('hex').slice(0, 12)}`,
+    label: 'Edge · 本工作空间专用 X 登录态',
+    executablePath: edgeExecutable,
+    userDataDir: path.join(root, 'browser-profile'),
+    profileDirectory: 'Default'
+  };
+  // Preserve only the already-selected AI legacy profile; new roots never discover it implicitly.
+  return selected?.id === 'edge:pyaireader-default' && selected.cdpUrl === 'http://127.0.0.1:9334'
+    ? [selected, rootProfile]
+    : [rootProfile];
 }
 
 export function readBrowserConfig(database: DatabaseSync): BrowserConfig | null {
@@ -84,6 +68,7 @@ export function saveBrowserConfig(database: DatabaseSync, config: BrowserConfig)
     INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 1)
     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, revision=app_meta.revision + 1
   `).run(configKey, JSON.stringify(config), now, now);
+  database.exec('DELETE FROM x_list_index_cache; DELETE FROM x_list_timeline_cache;');
   return config;
 }
 

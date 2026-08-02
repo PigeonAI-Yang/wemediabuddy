@@ -39,8 +39,7 @@ export const AI_ONLY_ROUTE_IDS = [
   'ai.intelligence.x_lists',
   'ai.intelligence.release_sources',
   'ai.intelligence.topic_routes',
-  'ai.library.rankings',
-  'ai.x_lists.workspace'
+  'ai.library.rankings'
 ] as const;
 
 export function readWorkspaceProfile(database: DatabaseSync): WorkspaceProfileV1 | null {

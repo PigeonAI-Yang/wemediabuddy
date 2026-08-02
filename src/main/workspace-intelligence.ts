@@ -72,7 +72,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
       '--session', path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`),
       '--skill', installedSkill, '-e', extensionPath, '--provider', 'wmb-api', '--model', config.model,
-      '--append-system-prompt', `你是 WeMediaBuddy 内置 Pi。当前工作空间是${profile.displayName}。只使用 ${profile.intelligencePackId} 和 wmb_* MCP；禁止 AI 榜单、AI source-index、X List 与最终发布。`
+      '--append-system-prompt', `你是 WeMediaBuddy 内置 Pi。当前工作空间是${profile.displayName}。只使用 ${profile.intelligencePackId} 和 wmb_* MCP；禁止 AI 榜单、AI source-index、固定 AI List/wire 与最终发布。通用 X List 只能读取、准备或采集当前根已启用绑定，不能确认。`
     ], {
       ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
@@ -99,7 +99,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
 function lanePrompt(profile: WorkspaceProfileV1, taskId: string, businessDate: string): string {
   return [
     `执行${profile.displayName}工作空间的今日情报任务。`, `task_id=${taskId}`, `plan_date=${businessDate}`, `skill=${profile.intelligencePackId}`,
-    '只通过 wmb_* MCP 读取和写入当前工作空间。只使用当前 Skill；禁止 AI 榜单、AI source-index、UK 路线、X List 或其他工作空间专属路线。',
+    '只通过 wmb_* MCP 读取和写入当前工作空间。只使用当前 Skill；禁止 AI 榜单、AI source-index、固定 AI List/wire、UK 路线或其他工作空间专属路线。通用 X List 仅限当前根已启用绑定，不能确认。',
     `资料使用稳定 request_id=${agentRequestId(taskId, 'source')}:<序号>；方案使用 request_id=${agentRequestId(taskId, 'plan')}。`,
     `先保存有当前来源的${profile.displayName}资料，再保存引用真实 sourceIds 的完整方案；保留全部达到机会标准的结果。`,
     '最后调用 wmb_get_workbench 读回资料和方案；禁止直接写文件/数据库，禁止最终发布。'

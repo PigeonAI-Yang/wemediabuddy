@@ -1,10 +1,17 @@
 export const pyaireaderXProfileId = 'edge:pyaireader-default';
 export const pyaireaderXEndpoint = 'http://127.0.0.1:9334';
+export const pyaireaderWorkspaceProfilePrefix = 'edge:pyaireader-workspace-';
 
-export type XListBrowserConfig = { id: string; cdpUrl?: string };
+export type XListBrowserConfig = { id: string; cdpUrl?: string; workspaceId?: string; accountKey?: string };
 
 export function isPyaireaderXProfile(config: XListBrowserConfig): boolean {
-  return config.id === pyaireaderXProfileId && normalizeEndpoint(config.cdpUrl) === pyaireaderXEndpoint;
+  if (config.id === pyaireaderXProfileId) return normalizeEndpoint(config.cdpUrl) === pyaireaderXEndpoint;
+  if (!config.id.startsWith(pyaireaderWorkspaceProfilePrefix)) return false;
+  if (!config.cdpUrl) return true;
+  try {
+    const url = new URL(config.cdpUrl);
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1' && Number.isInteger(Number(url.port)) && Number(url.port) > 0;
+  } catch { return false; }
 }
 
 export function isXHomeUrl(value: string): boolean {

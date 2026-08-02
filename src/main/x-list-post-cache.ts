@@ -11,6 +11,8 @@ type CacheEntry = {
 
 const cache = new Map<string, CacheEntry>();
 
+export type XListPostCacheScope = { workspaceId: string; browserId: string; accountKey: string };
+
 function normalizeKey(statusUrl: string): string | null {
   try {
     const url = new URL(statusUrl);
@@ -23,8 +25,8 @@ function normalizeKey(statusUrl: string): string | null {
   }
 }
 
-export function readXListPostCache(statusUrl: string): { accountKey: string; post: XListPostDetail; fetchedAt: string; stale: boolean } | null {
-  const key = normalizeKey(statusUrl);
+export function readXListPostCache(scope: XListPostCacheScope, statusUrl: string): { accountKey: string; post: XListPostDetail; fetchedAt: string; stale: boolean } | null {
+  const key = cacheKey(scope, statusUrl);
   if (!key) return null;
   const entry = cache.get(key);
   if (!entry) return null;
@@ -42,8 +44,8 @@ export function readXListPostCache(statusUrl: string): { accountKey: string; pos
   };
 }
 
-export function writeXListPostCache(statusUrl: string, value: { accountKey: string; post: XListPostDetail }): void {
-  const key = normalizeKey(statusUrl);
+export function writeXListPostCache(scope: XListPostCacheScope, statusUrl: string, value: { accountKey: string; post: XListPostDetail }): void {
+  const key = cacheKey(scope, statusUrl);
   if (!key) return;
   const now = Date.now();
   cache.set(key, { value, fetchedAt: now, lastAccessedAt: now });
@@ -51,6 +53,12 @@ export function writeXListPostCache(statusUrl: string, value: { accountKey: stri
   const ordered = [...cache.entries()].sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt);
   const overflow = ordered.slice(0, Math.max(0, cache.size - POST_DETAIL_MAX));
   for (const [itemKey] of overflow) cache.delete(itemKey);
+}
+
+function cacheKey(scope: XListPostCacheScope, statusUrl: string): string | null {
+  const statusKey = normalizeKey(statusUrl);
+  if (!statusKey || !scope.workspaceId || !scope.browserId || !scope.accountKey) return null;
+  return `${scope.workspaceId}\u0000${scope.browserId}\u0000${scope.accountKey.toLowerCase()}\u0000${statusKey}`;
 }
 
 export function clearXListPostCache(): number {

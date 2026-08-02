@@ -220,7 +220,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           </div>
         </section>}
         {section === 'agent' && settings && <section className="settings-section">
-          <div className="settings-row"><div><h3>本地接入地址</h3><p>{settings.mcp.status === 'ready' ? settings.mcp.url : '本地接入服务未启动'}</p></div><span className={`pill-status ${settings.mcp.status === 'ready' ? 'green' : 'gray'}`}><span className="dot"/>{settings.mcp.status === 'ready' ? '运行中' : '未启动'}</span></div>
+          <div className="settings-row"><div><h3>本地接入地址</h3><p>{settings.mcp.status === 'ready' ? settings.mcp.url : '本地接入服务未启动'}</p><p>{settings.workspace.displayName} · {settings.workspace.id} · 配方 r{settings.workspace.profile.revision}</p></div><span className={`pill-status ${settings.mcp.status === 'ready' ? 'green' : 'gray'}`}><span className="dot"/>{settings.mcp.status === 'ready' ? '运行中' : '未启动'}</span></div>
         </section>}
         {section === 'diagnostics' && <section className="settings-section diagnostic-list">
           <article><div><h2>本地数据</h2><p>资料、内容和运行记录的存储状态</p></div><span className={`pill-status ${settings?.health.database === 'ready' ? 'green' : 'gray'}`}><span className="dot"/>{settings?.health.database === 'ready' ? '健康' : String(settings?.health.database ?? '未连接')}</span></article>

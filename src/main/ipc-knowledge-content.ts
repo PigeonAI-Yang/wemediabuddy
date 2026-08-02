@@ -95,7 +95,7 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
       return { taskId: null, businessDate: input?.businessDate ?? null, status: null, phase: null, updatedAt: null, entries: [], summary: { total: 0, ok: 0, failed: 0, saved: 0 } };
     }
     const db = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try { return getWireHealthLedger(db, input ?? {}); } finally { db.close(); }
+    try { assertAiOnlyRoute(db, 'ai.intelligence.release_sources'); return getWireHealthLedger(db, input ?? {}); } finally { db.close(); }
   });
   ipcMain.handle('knowledge:list-topics', async (_event, input = {}) => {
     const root = await loadSelectedDataRoot(); if (!root) return { items: [], total: 0, limit: 50, offset: 0, hasMore: false };

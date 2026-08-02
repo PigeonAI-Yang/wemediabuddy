@@ -32,6 +32,14 @@ try {
   assert.equal((await readWorkspaceRegistry(registryPath)).activeWorkspaceId, uk.id);
   assert.equal((await readWorkspaceRegistry(registryPath)).switchJournal, null);
 
+  let currentReloads = 0; let stopped = 0;
+  const activeReload = selection(userData, { relaunch: () => { currentReloads += 1; }, stopRuntime: async () => { stopped += 1; } });
+  assert.equal(await activeReload.relaunchCurrentWorkspace(async () => 'profile-r2'), 'profile-r2');
+  assert.equal(currentReloads, 1);
+  assert.equal(stopped, 1);
+  assert.equal((await readWorkspaceRegistry(registryPath)).activeWorkspaceId, uk.id);
+  assert.equal((await readWorkspaceRegistry(registryPath)).switchJournal, null);
+
   const now = new Date().toISOString();
   const aiDbPath = path.join(aiRoot.path, 'wmb.db');
   const aiDb = new DatabaseSync(aiDbPath);
@@ -79,10 +87,10 @@ function selection(userData, overrides = {}) {
     userDataPath: () => userData,
     chooseDirectory: overrides.chooseDirectory ?? (async () => null),
     refreshRuntime: overrides.refreshRuntime ?? (async () => {}),
-    canSwitch: async () => {},
+    canSwitch: overrides.canSwitch ?? (async () => {}),
     closeMutationGate: () => gate.closeAndDrain(),
     openMutationGate: () => gate.reopen(),
-    stopRuntime: async () => {},
+    stopRuntime: overrides.stopRuntime ?? (async () => {}),
     relaunch: overrides.relaunch ?? (() => {})
   });
 }

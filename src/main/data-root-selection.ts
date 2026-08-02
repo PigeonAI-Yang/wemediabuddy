@@ -133,9 +133,27 @@ export function createDataRootSelection(input: {
       throw error;
     }
   }
+  async function relaunchCurrentWorkspace<T>(apply: () => Promise<T>): Promise<T> {
+    const current = await loadSelectedDataRoot();
+    if (!current) throw Object.assign(new Error('当前工作空间不可用。'), { code: 'WORKSPACE_NOT_FOUND' });
+    await input.closeMutationGate();
+    let committed = false;
+    try {
+      await input.canSwitch(current);
+      const result = await apply();
+      committed = true;
+      await input.stopRuntime();
+      input.relaunch();
+      return result;
+    } catch (error) {
+      // ponytail: after a committed profile revision, a closed mutation gate is safer than an old runtime serving it.
+      if (!committed) input.openMutationGate();
+      throw error;
+    }
+  }
   async function createUkWorkspace() {
     const rootPath = await input.chooseDirectory();
     return rootPath ? createOfficialWorkspace({ registryPath: registryPath(), rootPath, templateId: 'official.uk' }) : null;
   }
-  return { loadSelectedDataRoot, chooseDataRoot, migrate, switchWorkspace, createUkWorkspace, listWorkspaces: () => readWorkspaceRegistry(registryPath()) };
+  return { loadSelectedDataRoot, chooseDataRoot, migrate, switchWorkspace, relaunchCurrentWorkspace, createUkWorkspace, listWorkspaces: () => readWorkspaceRegistry(registryPath()) };
 }

@@ -216,11 +216,11 @@ export function clearXListTimelineCache(database: DatabaseSync, accountKey?: str
   return { deleted: Number(result.changes ?? 0) };
 }
 
-export function summarizeXListTimelineCache(database: DatabaseSync): { rows: number; bytes: number; accounts: number } {
+export function summarizeXListTimelineCache(database: DatabaseSync, accountKey?: string): { rows: number; bytes: number; accounts: number } {
   const row = database.prepare(`
     SELECT COUNT(*) AS rows, COALESCE(SUM(payload_bytes), 0) AS bytes, COUNT(DISTINCT account_key) AS accounts
-    FROM x_list_timeline_cache
-  `).get() as { rows: number; bytes: number; accounts: number };
+    FROM x_list_timeline_cache${accountKey ? ' WHERE account_key = ?' : ''}
+  `).get(...(accountKey ? [accountKey] : [])) as { rows: number; bytes: number; accounts: number };
   return { rows: Number(row.rows), bytes: Number(row.bytes), accounts: Number(row.accounts) };
 }
 

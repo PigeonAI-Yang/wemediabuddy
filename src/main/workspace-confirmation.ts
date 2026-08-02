@@ -9,6 +9,7 @@ export function createWorkspaceConfirmation(input: {
   userDataPath: () => string;
   chooseDirectory: () => Promise<string | null>;
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
+  relaunchCurrentWorkspace: <T>(apply: () => Promise<T>) => Promise<T>;
   proposals: WorkspaceProposalStore;
 }) {
   const selectedRoots = new Map<string, string>();
@@ -32,17 +33,19 @@ export function createWorkspaceConfirmation(input: {
       selectedRoots.delete(proposal.id);
       return { workspace, profile: proposal.profile };
     }
-    const root = await input.loadSelectedDataRoot();
-    if (!root) throw Object.assign(new Error('当前工作空间不可用。'), { code: 'WORKSPACE_NOT_FOUND' });
-    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try {
-      const workspaceId = await readRootWorkspaceId(root.path);
-      const currentProfile = readWorkspaceProfile(database);
-      const proposal = input.proposals.validateConfirmation(binding, { workspaceId, currentProfile });
-      const profile = activateWorkspaceProfile(database, proposal.profile, proposal.baseProfileRevision!);
-      input.proposals.consume(proposal.id);
-      return { workspace: { id: workspaceId, displayName: profile.displayName, rootPath: root.path }, profile };
-    } finally { database.close(); }
+    return input.relaunchCurrentWorkspace(async () => {
+      const root = await input.loadSelectedDataRoot();
+      if (!root) throw Object.assign(new Error('当前工作空间不可用。'), { code: 'WORKSPACE_NOT_FOUND' });
+      const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+      try {
+        const workspaceId = await readRootWorkspaceId(root.path);
+        const currentProfile = readWorkspaceProfile(database);
+        const proposal = input.proposals.validateConfirmation(binding, { workspaceId, currentProfile });
+        const profile = activateWorkspaceProfile(database, proposal.profile, proposal.baseProfileRevision!);
+        input.proposals.consume(proposal.id);
+        return { workspace: { id: workspaceId, displayName: profile.displayName, rootPath: root.path }, profile };
+      } finally { database.close(); }
+    });
   }
   return { list: () => input.proposals.list().map((item) => ({ ...item, selectedRootPath: selectedRoots.get(item.proposal.id) ?? null })), selectRoot, confirm };
 }

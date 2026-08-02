@@ -56,7 +56,7 @@ protocol.registerSchemesAsPrivileged([
   }
 ]);
 const dailyRuns = new Map<string, Promise<unknown>>();
-const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate);
+const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate, ['workspaces:switch', 'workspaces:proposal-confirm']);
 const workspaceProposals = new WorkspaceProposalStore();
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
@@ -108,7 +108,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     '--provider', 'wmb-api',
     '--model', config.model,
     ...(config.thinking ? ['--thinking', config.thinking] : []),
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时：先 wmb_prepare_x_list_operation 创建提议，再在用户明确要求执行时调用 wmb_confirm_x_list_operation 确认执行；members_add/remove 每次只处理少量 handle 并串行确认。删除 List 必须提供与名称完全一致的 typedListName。禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
+    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时只可读取、准备或采集当前根已绑定 List；最终确认只能由用户在 WMB UI 完成。禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -155,16 +155,16 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot && readWorkspaceIntelligenceProfile(dataRoot.path).platforms.includes('xiaohongshu') ? dataRoot : null, xhs);
 }
-const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace, createUkWorkspace } = createDataRootSelection({
+const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace, relaunchCurrentWorkspace, createUkWorkspace } = createDataRootSelection({
   userDataPath: () => app.getPath('userData'),
   chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; },
   refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); },
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(pi?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: () => workspaceGate.closeAndDrain(), openMutationGate: () => workspaceGate.reopen(),
-  stopRuntime: async () => { await pi?.stop(); pi = null; await stopManagedBrowsers(); browser = null; await mcp?.close(); mcp = null; await xhs?.stop(); xhs = null; },
+  stopRuntime: async () => { const results = await Promise.allSettled([pi?.stop(), stopManagedBrowsers(), mcp?.close(), xhs?.stop()]); pi = null; browser = null; mcp = null; xhs = null; const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected'); if (failed) throw failed.reason; },
   relaunch: () => { app.relaunch(); app.quit(); }
 });
-const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, proposals: workspaceProposals });
+const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   void loadSelectedDataRoot().then(async (dataRoot) => {
@@ -449,9 +449,9 @@ app.whenReady().then(() => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const config = readBrowserConfig(database);
-    database.close();
+    const config = readBrowserConfig(database); const legacyBrowserAllowed = (database.prepare("SELECT intelligence_pack_id AS id FROM workspace_profiles WHERE id='effective'").get() as { id?: string } | undefined)?.id === 'wemedia-intelligence-engine'; database.close();
     if (!config) throw new Error('请先在设置中选择浏览器 profile。');
+    if (config.id === 'edge:pyaireader-default' && !legacyBrowserAllowed) throw new Error('此根尚未配置独立浏览器登录态。');
     // Takeover/login should force a fresh visible launch preference even if a quiet runtime is cached.
     browser = await startBrowser(config, { mode: input.mode });
     return { pid: browser.pid, cdpUrl: browser.cdpUrl, profilePath: browser.profilePath, mode: browser.mode };
