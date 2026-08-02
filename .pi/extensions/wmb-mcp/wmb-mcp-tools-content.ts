@@ -115,6 +115,7 @@ const createContentProject: ToolDefinition = {
       requestId: { type: 'string' },
       title: { type: 'string' },
       body: { type: 'string' },
+      planItemId: { type: 'string' },
       sourceIds: { type: 'array', items: { type: 'string' } }
     },
     required: ['requestId', 'title', 'body'],
@@ -125,6 +126,7 @@ const createContentProject: ToolDefinition = {
       request_id: String(params.requestId ?? ''),
       title: String(params.title ?? ''),
       body: String(params.body ?? ''),
+      plan_item_id: params.planItemId,
       source_ids: params.sourceIds
     }));
   }

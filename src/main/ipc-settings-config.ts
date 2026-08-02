@@ -7,6 +7,7 @@ import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, type Bro
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
+import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -14,18 +15,24 @@ type Dependencies = {
   listWorkspaces: () => Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
   switchWorkspace: (workspaceId: string) => Promise<void>;
   createUkWorkspace: () => Promise<{ id: string; displayName: string; rootPath: string } | null>;
+  listWorkspaceProposals: () => Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding; selectedRootPath: string | null }>;
+  selectWorkspaceProposalRoot: (binding: WorkspaceProposalBinding) => Promise<unknown>;
+  confirmWorkspaceProposal: (binding: WorkspaceProposalBinding) => Promise<unknown>;
   getMcp: () => McpRuntime | null;
   getXhs?: () => XhsMcpRuntime | null;
   getBrowser: () => BrowserRuntime | null;
   stopPi: () => Promise<void>;
 };
 
-export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, getMcp, getXhs, getBrowser, stopPi }: Dependencies): void {
+export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals, selectWorkspaceProposalRoot, confirmWorkspaceProposal, getMcp, getXhs, getBrowser, stopPi }: Dependencies): void {
   ipcMain.handle('data-root:get', loadSelectedDataRoot);
   ipcMain.handle('data-root:choose', chooseDataRoot);
   ipcMain.handle('workspaces:list', listWorkspaces);
   ipcMain.handle('workspaces:switch', async (_event, workspaceId: string) => { await switchWorkspace(workspaceId); return { relaunching: true }; });
   ipcMain.handle('workspaces:create-uk', createUkWorkspace);
+  ipcMain.handle('workspaces:proposals-list', listWorkspaceProposals);
+  ipcMain.handle('workspaces:proposal-select-root', async (_event, binding: WorkspaceProposalBinding) => selectWorkspaceProposalRoot(binding));
+  ipcMain.handle('workspaces:proposal-confirm', async (_event, binding: WorkspaceProposalBinding) => confirmWorkspaceProposal(binding));
   ipcMain.handle('settings:get', async () => {
     const dataRoot = await loadSelectedDataRoot();
     const settings = dataRoot ? await readSettings(dataRoot.path) : null;

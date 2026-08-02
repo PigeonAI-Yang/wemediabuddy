@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { OFFICIAL_WORKSPACE_TEMPLATES, type WorkspaceProfileV1 } from './workspace-profiles.ts';
 
 export const WORKSPACE_CATALOG = {
-  version: 1,
+  version: 2,
   templates: Object.values(OFFICIAL_WORKSPACE_TEMPLATES),
   intelligencePacks: [
     { id: 'wemedia-intelligence-engine', version: 1, label: 'AI 情报' },
-    { id: 'uk-life-content-radar', version: 1, label: '英国生活情报' }
+    { id: 'uk-life-content-radar', version: 1, label: '英国生活情报' },
+    { id: 'game-news-radar', version: 1, label: '游戏资讯情报' }
   ],
   creationPacks: [{ id: 'wmb-core-creation', version: 1, label: 'WMB 文字创作' }],
   platforms: ['x', 'xiaohongshu', 'wechat']
@@ -68,6 +69,7 @@ export class WorkspaceProposalStore {
   prepare(input: WorkspaceProposalInput, context: ProposalContext): WorkspaceProposal {
     const normalized = normalizeInput(input);
     if (normalized.target === 'current' && (!context.workspaceId || !context.currentProfile)) throw workspaceError('PROFILE_STALE', '当前工作空间配方不存在。');
+    if (normalized.target === 'current' && normalized.displayName !== context.currentProfile?.displayName) throw workspaceError('VALIDATION_ERROR', '当前阶段不支持重命名工作空间。');
     if (normalized.target === 'new' && (context.workspaceId || context.currentProfile)) throw workspaceError('PROFILE_STALE', '新工作空间提案不能绑定现有配方。');
     requireCatalogEntry(normalized, this.packAvailable);
     const inputHash = hash({ normalized, workspaceId: context.workspaceId, baseProfileRevision: context.currentProfile?.revision ?? null });
@@ -76,20 +78,18 @@ export class WorkspaceProposalStore {
       if (replay.inputHash !== inputHash) throw workspaceError('PROFILE_STALE', 'request_id 已绑定其他提案内容。');
       return replay.proposal;
     }
+    const profileFields = {
+      displayName: normalized.displayName, audience: normalized.audience, contentGoal: normalized.contentGoal,
+      editorialBrief: normalized.editorialBrief, intelligencePackId: normalized.intelligencePackId,
+      intelligencePackVersion: normalized.intelligencePackVersion, creationPackId: normalized.creationPackId,
+      creationPackVersion: normalized.creationPackVersion, platforms: normalized.platforms
+    };
     const profile: WorkspaceProfileV1 = {
-      profileId: context.currentProfile?.profileId ?? `profile.custom.${randomUUID()}`,
+      profileId: context.currentProfile?.profileId ?? `profile.custom.${hash(profileFields).slice(0, 16)}`,
       revision: (context.currentProfile?.revision ?? 0) + 1,
       officialTemplateId: null,
       officialTemplateVersion: null,
-      displayName: normalized.displayName,
-      audience: normalized.audience,
-      contentGoal: normalized.contentGoal,
-      editorialBrief: normalized.editorialBrief,
-      intelligencePackId: normalized.intelligencePackId,
-      intelligencePackVersion: normalized.intelligencePackVersion,
-      creationPackId: normalized.creationPackId,
-      creationPackVersion: normalized.creationPackVersion,
-      platforms: normalized.platforms
+      ...profileFields
     };
     const proposal: WorkspaceProposal = {
       id: randomUUID(), revision: 1, target: normalized.target,
@@ -119,6 +119,13 @@ export class WorkspaceProposalStore {
     requireCatalogEntry(proposal.profile, this.packAvailable);
     return proposal;
   }
+
+  list(): Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding }> {
+    return [...this.proposals.values()].map((proposal) => ({ proposal: structuredClone(proposal), binding: proposalBinding(proposal) }));
+  }
+
+  get(proposalId: string): WorkspaceProposal | null { return this.proposals.get(proposalId) ?? null; }
+  consume(proposalId: string): void { this.proposals.delete(proposalId); }
 }
 
 export function proposalBinding(proposal: WorkspaceProposal): WorkspaceProposalBinding {

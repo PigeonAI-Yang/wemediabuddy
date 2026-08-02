@@ -348,11 +348,11 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       return text(payload);
     } finally { db.close(); }
   });
-  server.registerTool('content.create', { description: '原子创建内容项目和首个核心版本。新主题必须使用此工具。', inputSchema: { request_id: z.string(), title: z.string(), body: z.string(), source_ids: z.array(z.string()).optional() } }, async ({ request_id, title, body, source_ids }) => {
+  server.registerTool('content.create', { description: '原子创建内容项目和首个核心版本。新主题必须使用此工具。', inputSchema: { request_id: z.string(), title: z.string(), body: z.string(), plan_item_id: z.string().optional(), source_ids: z.array(z.string()).optional() } }, async ({ request_id, title, body, plan_item_id, source_ids }) => {
     const db = database(); try {
       const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.create', request_id) as { resultJson: string } | undefined;
       if (prior) return text(JSON.parse(prior.resultJson));
-      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: createContentProjectWithVersion(db, { title, body, sourceIds: source_ids }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.create', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
+      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: createContentProjectWithVersion(db, { title, body, planItemId: plan_item_id, sourceIds: source_ids }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.create', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
     } finally { db.close(); }
   });
   server.registerTool('plans.save', { description: '保存完整当日运营方案。', inputSchema: {

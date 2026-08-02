@@ -26,7 +26,7 @@ const prepareWorkspaceProfile: ToolDefinition = {
     properties: {
       requestId: { type: 'string' }, target: { type: 'string', enum: ['current', 'new'] }, purpose: { type: 'string', enum: ['self_media'] },
       displayName: { type: 'string' }, audience: { type: 'string' }, contentGoal: { type: 'string' }, editorialBrief: { type: 'string' },
-      intelligencePackId: { type: 'string', enum: ['wemedia-intelligence-engine', 'uk-life-content-radar'] }, intelligencePackVersion: { type: 'number' },
+      intelligencePackId: { type: 'string', enum: ['wemedia-intelligence-engine', 'uk-life-content-radar', 'game-news-radar'] }, intelligencePackVersion: { type: 'number' },
       creationPackId: { type: 'string', enum: ['wmb-core-creation'] }, creationPackVersion: { type: 'number' },
       platforms: { type: 'array', items: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat'] } }
     },

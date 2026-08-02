@@ -39,6 +39,7 @@ import { registerXListIpc } from './ipc-x-lists';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals';
+import { createWorkspaceConfirmation } from './workspace-confirmation';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
 if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
@@ -75,7 +76,6 @@ if (!hasSingleInstanceLock) {
     window.focus();
   });
 }
-
 async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
   if (pi?.isRunning) return pi;
   pi = null;
@@ -152,7 +152,6 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   await mcp?.close();
   mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate, { listWorkspaces, proposals: workspaceProposals }) : null;
 }
-
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot, xhs);
 }
@@ -165,6 +164,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   stopRuntime: async () => { await pi?.stop(); pi = null; await stopManagedBrowsers(); browser = null; await mcp?.close(); mcp = null; await xhs?.stop(); xhs = null; },
   relaunch: () => { app.relaunch(); app.quit(); }
 });
+const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, proposals: workspaceProposals });
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
   void loadSelectedDataRoot().then(async (dataRoot) => {
@@ -187,7 +187,7 @@ app.whenReady().then(() => {
     }).finally(() => dailyRuns.delete(pending.id));
     dailyRuns.set(pending.id, run);
   });
-  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
+  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals: workspaceConfirmation.list, selectWorkspaceProposalRoot: workspaceConfirmation.selectRoot, confirmWorkspaceProposal: workspaceConfirmation.confirm, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
   protocol.handle('wmb-asset', async (request) => {
     try {
       const dataRoot = await loadSelectedDataRoot();

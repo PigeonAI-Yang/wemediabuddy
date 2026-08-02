@@ -2,6 +2,7 @@ node_modules/
 .pi-runtime/
 out/
 .vite/
+/data/
 .wmb-*.log
 
 # Local Electron/Chromium acceptance profile. Keep adjacent screenshots/scripts.

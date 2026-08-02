@@ -29,6 +29,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [workspaceNote, setWorkspaceNote] = useState('');
   const [timelineCacheStats, setTimelineCacheStats] = useState<{ rows: number; bytes: number; accounts: number } | null>(null);
   const [workspaces, setWorkspaces] = useState<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>({ activeWorkspaceId: null, workspaces: [] });
+  const [workspaceProposals, setWorkspaceProposals] = useState<Awaited<ReturnType<typeof window.wmb.listWorkspaceProposals>>>([]);
   const selectPiProfile = (id: string) => {
     const profile = settings?.pi.profiles.find((item) => item.id === id);
     setPiProfileId(id);
@@ -47,7 +48,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     if (section !== 'browser') return;
     void window.wmb.getXListTimelineCacheStats().then(setTimelineCacheStats).catch(() => setTimelineCacheStats(null));
   }, [section, settings?.browser.status]);
-  useEffect(() => { if (section === 'data') void window.wmb.listWorkspaces().then(setWorkspaces); }, [section, dataRoot]);
+  useEffect(() => { if (section === 'data') void Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]).then(([listed, proposals]) => { setWorkspaces(listed); setWorkspaceProposals(proposals); }); }, [section, dataRoot]);
   const saveProfile = async () => {
     try {
       await window.wmb.savePiConfig({
@@ -169,6 +170,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         </>}
         {section === 'data' && <section className="settings-section">
           <div className="settings-row"><div><h3>数据目录</h3><p>所有业务数据集中保存在此，可整体移动。</p></div><div className="settings-row-actions"><span className="path-chip">{dataRoot || '尚未选择数据根目录'}</span><button className="secondary-button" onClick={() => void window.wmb.chooseDataRoot().then(refresh)}>选择目录</button></div></div>
+          {workspaceProposals.map(({ proposal, binding, selectedRootPath }) => <div className="settings-row" key={proposal.id}><div><h3>待确认：{proposal.profile.displayName}</h3><p>受众：{proposal.profile.audience}</p><p>目标：{proposal.profile.contentGoal}</p><p>编辑简报：{proposal.profile.editorialBrief}</p><p>能力：{proposal.profile.intelligencePackId}@{proposal.profile.intelligencePackVersion} · {proposal.profile.creationPackId}@{proposal.profile.creationPackVersion} · {proposal.profile.platforms.join(' / ')}</p>{proposal.target === 'new' && <p>新工作空间目录：{selectedRootPath ?? '尚未选择'}</p>}<p>完整差异：{proposal.displayedDiff.map((item) => `${item.field}: ${JSON.stringify(item.before)} → ${JSON.stringify(item.after)}`).join('；')}</p></div><div className="settings-row-actions">{proposal.target === 'new' && <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.selectWorkspaceProposalRoot(binding).then(() => window.wmb.listWorkspaceProposals()).then(setWorkspaceProposals).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>选择数据目录</button>}<button className="primary-button" disabled={proposal.target === 'new' && !selectedRootPath} onClick={() => { setWorkspaceNote(''); void window.wmb.confirmWorkspaceProposal(binding).then(async () => { const [listed, proposals] = await Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]); setWorkspaces(listed); setWorkspaceProposals(proposals); setWorkspaceNote(proposal.target === 'new' ? '工作空间已创建，切换后重启即可使用。' : '当前工作空间配方已更新。'); }).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>{proposal.target === 'new' ? '确认创建' : '确认更新当前工作空间'}</button></div></div>)}
           {workspaces.workspaces.map((workspace) => <div className="settings-row" key={workspace.id}><div><h3>{workspace.displayName}</h3><p>{workspace.id} · {workspace.rootPath}</p></div>{workspace.id === workspaces.activeWorkspaceId ? <span className="pill-status green"><span className="dot"/>当前</span> : <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.switchWorkspace(workspace.id).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>切换后重启</button>}</div>)}
           {!workspaces.workspaces.some((workspace) => workspace.displayName === '英国生活') && <div className="settings-row"><div><h3>英国生活官方工作空间</h3><p>使用独立数据根和 UK 官方能力创建，不需要模型配置。</p></div><button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.createUkWorkspace().then(() => window.wmb.listWorkspaces()).then(setWorkspaces).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>创建 UK 工作空间</button></div>}
           {workspaceNote && <p className="settings-note error">{workspaceNote}</p>}

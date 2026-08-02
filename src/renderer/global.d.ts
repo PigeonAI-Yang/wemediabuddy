@@ -2,6 +2,7 @@ import type { ContentProjectDetail } from '../main/content';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import type { XListOperation, XListOperationKind } from '../main/x-lists';
 import type { CommandResult } from '../main/result';
+import type { WorkspaceProposal, WorkspaceProposalBinding } from '../main/workspace-proposals';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -13,6 +14,9 @@ declare global {
       listWorkspaces(): Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
       switchWorkspace(workspaceId: string): Promise<{ relaunching: boolean }>;
       createUkWorkspace(): Promise<{ id: string; displayName: string; rootPath: string } | null>;
+      listWorkspaceProposals(): Promise<Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding; selectedRootPath: string | null }>>;
+      selectWorkspaceProposalRoot(binding: WorkspaceProposalBinding): Promise<{ proposalId: string; rootPath: string } | null>;
+      confirmWorkspaceProposal(binding: WorkspaceProposalBinding): Promise<unknown>;
       getSettings(): Promise<{
         paths: Record<string, string>;
         usage: Record<string, number>;

@@ -1,0 +1,4 @@
+interface:
+  display_name: "游戏资讯雷达"
+  short_description: "发现并核验游戏发布更新赛事平台服务以及行业动态内容机会"
+  default_prompt: "Use $game-news-radar to find and verify current gaming news for a Chinese audience."

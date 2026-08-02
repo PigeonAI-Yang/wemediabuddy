@@ -33,12 +33,12 @@ test('session proposals reject every stale binding and expose prepare-only MCP a
     assert.equal(unavailable.prepare(validInput('missing-pack'), { workspaceId: null, currentProfile: null }).target, 'new');
     assert.equal(await durableState(registryPath, root.path), before);
 
-    const proposal = store.prepare({ ...validInput('current-proposal'), target: 'current' }, context);
+    const proposal = store.prepare({ ...validInput('current-proposal'), target: 'current', displayName: currentProfile.displayName }, context);
     const normalized = store.prepare({ ...validInput('normalized-platforms'), platforms: ['xiaohongshu', 'x'] }, { workspaceId: null, currentProfile: null });
     assert.equal(store.prepare({ ...validInput('normalized-platforms'), platforms: ['x', 'xiaohongshu'] }, { workspaceId: null, currentProfile: null }).id, normalized.id);
     const binding = proposalBinding(proposal);
     const staleBindings = [
-      { proposalId: 'missing' }, { proposalRevision: 2 }, { normalizedHash: 'changed' }, { baseProfileRevision: 2 }, { catalogVersion: 2 },
+      { proposalId: 'missing' }, { proposalRevision: 2 }, { normalizedHash: 'changed' }, { baseProfileRevision: 2 }, { catalogVersion: 99 },
       { intelligencePackId: 'uk-life-content-radar' }, { intelligencePackVersion: 2 }, { creationPackId: 'missing' }, { creationPackVersion: 2 },
       { platforms: ['x'] }, { displayedDiff: [] }
     ];

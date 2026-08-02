@@ -153,6 +153,7 @@ export function startAgentTask(
 
   const now = new Date().toISOString();
   const id = randomUUID();
+  const profileContext = readTaskProfileContext(database);
   database.prepare(`INSERT INTO agent_tasks (
     id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
     progress_json, checkpoint_json, events_json, heartbeat_at,
@@ -163,7 +164,7 @@ export function startAgentTask(
     input.intent,
     input.businessDate,
     input.piSessionId ?? null,
-    JSON.stringify(input.contextRefs ?? {}),
+    JSON.stringify({ ...(input.contextRefs ?? {}), ...profileContext }),
     now,
     now,
     now
@@ -179,6 +180,13 @@ export function startAgentTask(
   if (!created) return failure<AgentTask>('NOT_FOUND', '创建 Agent 任务后读取失败。');
   broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.start' });
   return { ok: true, data: created, error: null, reused: false };
+}
+
+function readTaskProfileContext(database: DatabaseSync): Record<string, unknown> {
+  if (!database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_profiles'").get()) return {};
+  const profile = database.prepare("SELECT profile_id AS profileId, revision FROM workspace_profiles WHERE id='effective'").get() as { profileId: string; revision: number } | undefined;
+  const workspace = database.prepare("SELECT value AS workspaceId FROM app_meta WHERE key='workspace_id'").get() as { workspaceId: string } | undefined;
+  return profile ? { workspaceId: workspace?.workspaceId ?? null, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision } : {};
 }
 export function updateAgentTaskPhase(
   database: DatabaseSync,

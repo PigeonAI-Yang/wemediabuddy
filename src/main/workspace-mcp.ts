@@ -30,7 +30,7 @@ export function registerWorkspaceApplicationMcp(server: McpServer, rootPath: str
     description: '提交当前 Main 会话有效的完整自媒体配方提案；不能确认、激活或指定数据目录。',
     inputSchema: {
       request_id: z.string(), target: z.enum(['current', 'new']), purpose: z.string(), display_name: z.string(), audience: z.string(),
-      content_goal: z.string(), editorial_brief: z.string(), intelligence_pack_id: z.enum(['wemedia-intelligence-engine', 'uk-life-content-radar']),
+      content_goal: z.string(), editorial_brief: z.string(), intelligence_pack_id: z.enum(['wemedia-intelligence-engine', 'uk-life-content-radar', 'game-news-radar']),
       intelligence_pack_version: z.number().int(), creation_pack_id: z.literal('wmb-core-creation'), creation_pack_version: z.number().int(),
       platforms: z.array(z.enum(['x', 'xiaohongshu', 'wechat'])).min(1)
     }

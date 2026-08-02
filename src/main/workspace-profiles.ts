@@ -10,7 +10,7 @@ export type WorkspaceProfileV1 = {
   audience: string;
   contentGoal: string;
   editorialBrief: string;
-  intelligencePackId: 'wemedia-intelligence-engine' | 'uk-life-content-radar';
+  intelligencePackId: 'wemedia-intelligence-engine' | 'uk-life-content-radar' | 'game-news-radar';
   intelligencePackVersion: number;
   creationPackId: 'wmb-core-creation';
   creationPackVersion: number;
@@ -57,16 +57,44 @@ export function ensureOfficialWorkspaceProfile(database: DatabaseSync, templateI
   const existing = readWorkspaceProfile(database);
   if (existing) return existing;
   const profile = { ...OFFICIAL_WORKSPACE_TEMPLATES[templateId], revision: 1 };
+  insertWorkspaceProfile(database, profile);
+  return profile;
+}
+
+export function insertWorkspaceProfile(database: DatabaseSync, profile: WorkspaceProfileV1): WorkspaceProfileV1 {
+  const existing = readWorkspaceProfile(database);
+  if (existing) {
+    if (JSON.stringify(existing) !== JSON.stringify(profile)) throw Object.assign(new Error('候选根已有不同的工作空间配方。'), { code: 'PROFILE_STALE' });
+    return existing;
+  }
   const now = new Date().toISOString();
   database.prepare(`INSERT INTO workspace_profiles (id, profile_id, revision, official_template_id, official_template_version,
     display_name, audience, content_goal, editorial_brief, intelligence_pack_id, intelligence_pack_version,
     creation_pack_id, creation_pack_version, platforms_json, created_at, updated_at)
-    VALUES ('effective', ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      profile.profileId, profile.officialTemplateId, profile.officialTemplateVersion, profile.displayName, profile.audience,
+    VALUES ('effective', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      profile.profileId, profile.revision, profile.officialTemplateId, profile.officialTemplateVersion, profile.displayName, profile.audience,
       profile.contentGoal, profile.editorialBrief, profile.intelligencePackId, profile.intelligencePackVersion,
       profile.creationPackId, profile.creationPackVersion, JSON.stringify(profile.platforms), now, now
     );
   return profile;
+}
+
+export function activateWorkspaceProfile(database: DatabaseSync, profile: WorkspaceProfileV1, expectedRevision: number): WorkspaceProfileV1 {
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const current = requireWorkspaceProfile(database);
+    if (current.revision !== expectedRevision || profile.revision !== expectedRevision + 1) throw Object.assign(new Error('有效配方已变化。'), { code: 'PROFILE_STALE' });
+    if (database.prepare("SELECT 1 FROM agent_tasks WHERE status='running' LIMIT 1").get()) throw Object.assign(new Error('运行中的 Agent 任务仍绑定当前配方。'), { code: 'WORKSPACE_BUSY' });
+    database.prepare(`UPDATE workspace_profiles SET profile_id=?, revision=?, official_template_id=?, official_template_version=?,
+      display_name=?, audience=?, content_goal=?, editorial_brief=?, intelligence_pack_id=?, intelligence_pack_version=?,
+      creation_pack_id=?, creation_pack_version=?, platforms_json=?, updated_at=? WHERE id='effective' AND revision=?`).run(
+      profile.profileId, profile.revision, profile.officialTemplateId, profile.officialTemplateVersion, profile.displayName, profile.audience,
+      profile.contentGoal, profile.editorialBrief, profile.intelligencePackId, profile.intelligencePackVersion,
+      profile.creationPackId, profile.creationPackVersion, JSON.stringify(profile.platforms), new Date().toISOString(), expectedRevision
+    );
+    database.exec('COMMIT');
+    return requireWorkspaceProfile(database);
+  } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
 
 export function requireWorkspaceProfile(database: DatabaseSync): WorkspaceProfileV1 {

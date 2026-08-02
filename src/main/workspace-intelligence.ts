@@ -28,15 +28,19 @@ export function readWorkspaceIntelligenceProfile(dataRootPath: string): Workspac
 
 export async function startWorkspaceDailyIntelligence(
   input: IntelligenceInput,
-  runners: { ai?: (input: IntelligenceInput) => Promise<DailyIntelligenceRun>; uk?: (input: IntelligenceInput, profile: WorkspaceProfileV1) => Promise<DailyIntelligenceRun> } = {}
+  runners: {
+    ai?: (input: IntelligenceInput) => Promise<DailyIntelligenceRun>;
+    uk?: (input: IntelligenceInput, profile: WorkspaceProfileV1) => Promise<DailyIntelligenceRun>;
+    game?: (input: IntelligenceInput, profile: WorkspaceProfileV1) => Promise<DailyIntelligenceRun>;
+  } = {}
 ): Promise<DailyIntelligenceRun> {
   const profile = readWorkspaceIntelligenceProfile(input.dataRootPath);
-  return profile.intelligencePackId === 'wemedia-intelligence-engine'
-    ? (runners.ai ?? startDailyIntelligence)(input)
-    : (runners.uk ?? startUkDailyIntelligence)(input, profile);
+  if (profile.intelligencePackId === 'wemedia-intelligence-engine') return (runners.ai ?? startDailyIntelligence)(input);
+  if (profile.intelligencePackId === 'uk-life-content-radar') return (runners.uk ?? startLaneDailyIntelligence)(input, profile);
+  return (runners.game ?? startLaneDailyIntelligence)(input, profile);
 }
 
-async function startUkDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
+async function startLaneDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
     const started = startAgentTask(database, {
@@ -57,7 +61,7 @@ async function startUkDailyIntelligence(input: IntelligenceInput, profile: Works
       models: [{ id: config.model, name: config.model, reasoning: true, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 272000, maxTokens: 16000 }]
     } } }), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
-    const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-uk-daily-'));
+    const workDir = await mkdtemp(path.join(os.tmpdir(), `wmb-${profile.intelligencePackId}-daily-`));
     const runtime = new PiRpcSupervisor(process.execPath, [
       piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
       '--session', path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`),
@@ -70,14 +74,14 @@ async function startUkDailyIntelligence(input: IntelligenceInput, profile: Works
     try {
       updateAgentTaskPhase(database, started.data.id, 'running_pi');
       await runtime.start();
-      await runtime.promptUntilSettled(ukPrompt(started.data.id, input.businessDate), { timeoutMs: 10 * 60_000 });
+      await runtime.promptUntilSettled(lanePrompt(profile, started.data.id, input.businessDate), { timeoutMs: 10 * 60_000 });
       updateAgentTaskPhase(database, started.data.id, 'validating');
       const completed = completeAgentTask(database, started.data.id);
       if (!completed.ok) throw new Error(completed.error.message);
       return { task: completed.data, reused: false };
     } catch (error) {
       const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') failAgentTask(database, current.id, 'UK_INTELLIGENCE_FAILED', error instanceof Error ? error.message : String(error));
+      if (current?.status === 'running') failAgentTask(database, current.id, profile.intelligencePackId === 'game-news-radar' ? 'GAME_INTELLIGENCE_FAILED' : 'UK_INTELLIGENCE_FAILED', error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       await runtime.stop().catch(() => {});
@@ -86,12 +90,12 @@ async function startUkDailyIntelligence(input: IntelligenceInput, profile: Works
   } finally { database.close(); }
 }
 
-function ukPrompt(taskId: string, businessDate: string): string {
+function lanePrompt(profile: WorkspaceProfileV1, taskId: string, businessDate: string): string {
   return [
-    '执行英国生活工作空间的今日情报任务。', `task_id=${taskId}`, `plan_date=${businessDate}`, 'skill=uk-life-content-radar',
-    '只通过 wmb_* MCP 读取和写入当前工作空间。禁止调用 AI 榜单、AI source-index、X List 或任何 AI 专属路线。',
-    `资料使用稳定 request_id=${agentRequestId(taskId, 'uk-sources')}:<序号>；方案使用 request_id=${agentRequestId(taskId, 'uk-plan')}。`,
-    '先保存有当前来源的英国生活资料，再保存引用真实 sourceIds 的完整方案；保留全部达到机会标准的结果。',
+    `执行${profile.displayName}工作空间的今日情报任务。`, `task_id=${taskId}`, `plan_date=${businessDate}`, `skill=${profile.intelligencePackId}`,
+    '只通过 wmb_* MCP 读取和写入当前工作空间。只使用当前 Skill；禁止 AI 榜单、AI source-index、UK 路线、X List 或其他工作空间专属路线。',
+    `资料使用稳定 request_id=${agentRequestId(taskId, 'source')}:<序号>；方案使用 request_id=${agentRequestId(taskId, 'plan')}。`,
+    `先保存有当前来源的${profile.displayName}资料，再保存引用真实 sourceIds 的完整方案；保留全部达到机会标准的结果。`,
     '最后调用 wmb_get_workbench 读回资料和方案；禁止直接写文件/数据库，禁止最终发布。'
   ].join('\n');
 }
