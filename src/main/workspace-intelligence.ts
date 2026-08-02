@@ -14,7 +14,7 @@ import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager
 import { requireWorkspaceProfile, type WorkspaceProfileV1 } from './workspace-profiles.ts';
 
 type IntelligenceInput = {
-  dataRootPath: string;
+  dataRootPath: string; piConfigPath?: string;
   businessDate: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
@@ -44,7 +44,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
     const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
-    const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}` });
+    const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting;
     const config = prerequisite.config;
     const started = startAgentTask(database, {

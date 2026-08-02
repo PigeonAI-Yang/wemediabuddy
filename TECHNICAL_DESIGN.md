@@ -213,7 +213,7 @@ MCP 工具按业务能力组织：
 - 安装包的 `resources/.pi-runtime` 保存固定版本的官方 Pi CLI 及其生产依赖；
 - 该目录不进入 `app.asar`，可独立替换升级；升级必须先验证版本和 RPC 启停，失败时保留现有版本；
 - Electron Main 只管理一个 Pi RPC 子进程，通过 LF JSONL 发送固定 intent 并转发流式事件；
-- WMB 为 Pi 单独注入 API 协议、Base URL、API key、model、WMB MCP URL 和任务上下文，不读取其他 Agent OAuth；
+- WMB 在安装级用户目录保存一套加密的 Pi API/model 预设，并为每个根的 Pi 进程注入当前共享预设、该根 MCP URL 和任务上下文；Pi 会话与运行文件仍按 data-root 隔离，不读取其他 Agent OAuth；
 - Pi 业务写入只能经过现有 WMB MCP，最终发布能力不暴露给 Pi。
 
 ## 7. 浏览器执行器

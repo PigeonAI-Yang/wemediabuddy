@@ -97,7 +97,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   ];
   const headings: Record<SettingsSection, { title: string; description: string }> = {
     general: { title: '常规', description: '设置 WMB 启动后的默认工作方式。' },
-    ai: { title: 'AI 与模型', description: '管理 Pi 使用的接口配置。你可以保存多个预设，并随时切换当前模型。' },
+    ai: { title: 'AI 与模型', description: '管理本机所有工作空间共享的 Pi 接口预设，并随时切换当前模型。' },
     data: { title: '数据与存储', description: '查看 WMB 数据保存位置并管理本地文件。' },
     browser: { title: '浏览器与账号', description: '管理 WMB 专用浏览器和平台登录环境。' },
     agent: { title: 'Agent 接入', description: '让其他 Agent 读取和操作 WMB 中的同一份业务资料。' },
@@ -120,7 +120,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         </section>}
         {section === 'ai' && settings && <>
           <section className="settings-section">
-            <div className="settings-section-heading"><h3>配置预设</h3><p>当前预设会用于新的 Pi 对话和内容任务。</p></div>
+            <div className="settings-section-heading"><h3>配置预设</h3><p>本机共享，当前预设会用于所有工作空间的新 Pi 对话和内容任务。</p></div>
             <div className="settings-profile-list">
               {settings.pi.profiles.map((profile) => <button type="button" key={profile.id} className={`settings-profile${profile.id === piProfileId ? ' selected' : ''}`} onClick={() => selectPiProfile(profile.id)}>
                 <span className="settings-provider-mark">{profile.name.slice(0, 1).toUpperCase()}</span>

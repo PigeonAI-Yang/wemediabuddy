@@ -8,7 +8,7 @@ import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, resolvePiConfig, savePiConfig, type PiThinkingLevel } from './pi-config';
+import { migratePiConfigToInstallation, resolvePiConfig } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
@@ -78,9 +78,7 @@ if (!hasSingleInstanceLock) {
 async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
   if (pi?.isRunning) return pi;
   pi = null;
-  const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-  const config = resolvePiConfig(database);
-  database.close();
+  const config = resolvePiConfig();
   const layout = await ensurePiConversationLayout(dataRoot.path);
   const conversationForSession = await readPiConversation(dataRoot.path);
   piSessionFile = conversationForSession.sessionFile || layout.sessionFile;
@@ -164,28 +162,30 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   relaunch: () => { app.relaunch(); app.quit(); }
 });
 const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
-  void loadSelectedDataRoot().then(async (dataRoot) => {
-    await refreshMcp(dataRoot);
-    await refreshXhs(dataRoot);
-    if (!dataRoot || !mcp) return;
+  const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces();
+  migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
+  await refreshMcp(dataRoot);
+  await refreshXhs(dataRoot);
+  if (dataRoot && mcp) {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     const pending = getLatestAgentTask(database);
     database.close();
-    if (pending?.intent !== 'daily_intelligence' || pending.status !== 'running' || pending.phase !== 'resume_pending') return;
-    const run = startWorkspaceDailyIntelligence({
-      dataRootPath: dataRoot.path,
-      businessDate: pending.businessDate,
-      mcpUrl: mcp.url,
-      xhsMcpUrl: xhs?.getUrl() || '',
-      onEvent: (event) => {
-        broadcastPiRuntimeProgress(event);
-        if (event.type === 'agent_task') broadcastPiEvent(event);
-      }
-    }).finally(() => dailyRuns.delete(pending.id));
-    dailyRuns.set(pending.id, run);
-  });
+    if (pending?.intent === 'daily_intelligence' && pending.status === 'running' && pending.phase === 'resume_pending') {
+      const run = startWorkspaceDailyIntelligence({
+        dataRootPath: dataRoot.path,
+        businessDate: pending.businessDate,
+        mcpUrl: mcp.url,
+        xhsMcpUrl: xhs?.getUrl() || '',
+        onEvent: (event) => {
+          broadcastPiRuntimeProgress(event);
+          if (event.type === 'agent_task') broadcastPiEvent(event);
+        }
+      }).finally(() => dailyRuns.delete(pending.id));
+      dailyRuns.set(pending.id, run);
+    }
+  }
   registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals: workspaceConfirmation.list, selectWorkspaceProposalRoot: workspaceConfirmation.selectRoot, confirmWorkspaceProposal: workspaceConfirmation.confirm, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
   protocol.handle('wmb-asset', async (request) => {
     try {

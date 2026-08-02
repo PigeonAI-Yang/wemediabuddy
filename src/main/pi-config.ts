@@ -1,9 +1,11 @@
 import electron from 'electron';
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 const configKey = 'pi-api-config';
-const { safeStorage } = electron;
+const { app, safeStorage } = electron;
 
 type StoredProfile = {
   id: string;
@@ -16,6 +18,7 @@ type StoredProfile = {
 };
 type StoredState = { activeId: string | null; profiles: StoredProfile[] };
 type LegacyConfig = { baseUrl: string; model: string; encryptedApiKey: string };
+type StoredEnvelope = { version: 1; state: StoredState };
 
 export type PiConfigProfile = {
   id: string;
@@ -42,8 +45,8 @@ export function requirePiApiType(value: unknown): PiApiType {
   throw new Error(`Pi 接口类型不受支持：${String(value)}。仅支持 OpenAI Responses 或 OpenAI Chat Completions。`);
 }
 
-export function readPiConfig(database: DatabaseSync): PiConfig {
-  const state = readStored(database);
+export function readPiConfig(configPath = defaultConfigPath()): PiConfig {
+  const state = readStored(configPath);
   const active = state.profiles.find((profile) => profile.id === state.activeId) ?? null;
   return {
     activeId: active?.id ?? null,
@@ -63,7 +66,7 @@ export function readPiConfig(database: DatabaseSync): PiConfig {
   };
 }
 
-export function savePiConfig(database: DatabaseSync, input: {
+export function savePiConfig(input: {
   id?: string;
   name: string;
   baseUrl: string;
@@ -71,7 +74,7 @@ export function savePiConfig(database: DatabaseSync, input: {
   api: PiApiType;
   thinking?: PiThinkingLevel;
   apiKey?: string;
-}): PiConfig {
+}, configPath = defaultConfigPath()): PiConfig {
   const api = requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
@@ -80,7 +83,7 @@ export function savePiConfig(database: DatabaseSync, input: {
   const model = input.model.trim();
   if (!model) throw new Error('请填写 Pi 使用的模型名称。');
 
-  const state = readStored(database);
+  const state = readStored(configPath);
   const id = input.id ?? randomUUID();
   const current = state.profiles.find((profile) => profile.id === id);
   const encryptedApiKey = input.apiKey?.trim()
@@ -97,41 +100,41 @@ export function savePiConfig(database: DatabaseSync, input: {
     thinking: input.thinking,
     encryptedApiKey
   };
-  writeStored(database, {
+  writeStored(configPath, {
     activeId: id,
     profiles: [profile, ...state.profiles.filter((item) => item.id !== id)]
   });
-  return readPiConfig(database);
+  return readPiConfig(configPath);
 }
 
-export function activatePiConfig(database: DatabaseSync, id: string): PiConfig {
-  const state = readStored(database);
+export function activatePiConfig(id: string, configPath = defaultConfigPath()): PiConfig {
+  const state = readStored(configPath);
   if (!state.profiles.some((profile) => profile.id === id)) throw new Error('API 配置不存在。');
-  writeStored(database, { ...state, activeId: id });
-  return readPiConfig(database);
+  writeStored(configPath, { ...state, activeId: id });
+  return readPiConfig(configPath);
 }
 
-export function deletePiConfig(database: DatabaseSync, id: string): PiConfig {
-  const state = readStored(database);
+export function deletePiConfig(id: string, configPath = defaultConfigPath()): PiConfig {
+  const state = readStored(configPath);
   const profiles = state.profiles.filter((profile) => profile.id !== id);
   if (profiles.length === state.profiles.length) throw new Error('API 配置不存在。');
-  writeStored(database, {
+  writeStored(configPath, {
     activeId: state.activeId === id ? (profiles[0]?.id ?? null) : state.activeId,
     profiles
   });
-  return readPiConfig(database);
+  return readPiConfig(configPath);
 }
 
-export async function listPiModels(database: DatabaseSync, input: {
+export async function listPiModels(input: {
   id?: string;
   baseUrl: string;
   api: PiApiType;
   apiKey?: string;
-}): Promise<string[]> {
+}, configPath = defaultConfigPath()): Promise<string[]> {
   requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
-  const stored = input.id ? readStored(database).profiles.find((profile) => profile.id === input.id) : null;
+  const stored = input.id ? readStored(configPath).profiles.find((profile) => profile.id === input.id) : null;
   const apiKey = input.apiKey?.trim()
     || (stored ? safeStorage.decryptString(Buffer.from(stored.encryptedApiKey, 'base64')) : '');
   if (!apiKey) throw new Error('请先填写 API Key。');
@@ -150,8 +153,8 @@ export async function listPiModels(database: DatabaseSync, input: {
   return models;
 }
 
-export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; apiKey: string } {
-  const state = readStored(database);
+export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; apiKey: string } {
+  const state = readStored(configPath);
   const active = state.profiles.find((profile) => profile.id === state.activeId);
   if (!active) throw new Error('请先在设置中配置 Pi API。');
   return {
@@ -163,10 +166,40 @@ export function resolvePiConfig(database: DatabaseSync): { baseUrl: string; mode
   };
 }
 
-function readStored(database: DatabaseSync): StoredState {
-  const row = database.prepare('SELECT value FROM app_meta WHERE key = ?').get(configKey) as { value: string } | undefined;
-  if (!row) return { activeId: null, profiles: [] };
-  const value = JSON.parse(row.value) as StoredState | LegacyConfig;
+export function migratePiConfigToInstallation(configPath: string, rootPaths: string[]): { migratedFrom: string | null; profileCount: number } {
+  if (existsSync(configPath)) return { migratedFrom: null, profileCount: readStored(configPath).profiles.length };
+  const candidates: Array<{ rootPath: string; state: StoredState }> = [];
+  for (const rootPath of rootPaths) {
+    const databasePath = path.join(rootPath, 'wmb.db');
+    if (!existsSync(databasePath)) continue;
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      const profile = database.prepare("SELECT official_template_id AS templateId FROM workspace_profiles WHERE id='effective'").get() as { templateId?: string } | undefined;
+      if (profile?.templateId !== 'official.ai') continue;
+      const row = database.prepare('SELECT value FROM app_meta WHERE key = ?').get(configKey) as { value: string } | undefined;
+      if (row) candidates.push({ rootPath, state: normalizeStored(JSON.parse(row.value) as StoredState | LegacyConfig) });
+    } finally { database.close(); }
+  }
+  if (candidates.length > 1 && candidates.some((candidate) => JSON.stringify(candidate.state) !== JSON.stringify(candidates[0].state))) {
+    throw new Error('检测到多个不同的 AI 模型预设来源，无法自动迁移。');
+  }
+  const selected = candidates[0] ?? null;
+  writeStored(configPath, selected?.state ?? { activeId: null, profiles: [] });
+  return { migratedFrom: selected?.rootPath ?? null, profileCount: selected?.state.profiles.length ?? 0 };
+}
+
+function defaultConfigPath(): string {
+  return path.join(app.getPath('userData'), 'pi-api-config.json');
+}
+
+function readStored(configPath: string): StoredState {
+  if (!existsSync(configPath)) return { activeId: null, profiles: [] };
+  const envelope = JSON.parse(readFileSync(configPath, 'utf8')) as StoredEnvelope;
+  if (envelope.version !== 1) throw new Error('Pi 配置文件版本不受支持。');
+  return normalizeStored(envelope.state);
+}
+
+function normalizeStored(value: StoredState | LegacyConfig): StoredState {
   if ('profiles' in value) return value;
   const id = 'default';
   return {
@@ -175,9 +208,9 @@ function readStored(database: DatabaseSync): StoredState {
   };
 }
 
-function writeStored(database: DatabaseSync, state: StoredState): void {
-  const now = new Date().toISOString();
-  database.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 1)
-    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, revision=app_meta.revision + 1`)
-    .run(configKey, JSON.stringify(state), now, now);
+function writeStored(configPath: string, state: StoredState): void {
+  mkdirSync(path.dirname(configPath), { recursive: true });
+  const temporaryPath = `${configPath}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporaryPath, `${JSON.stringify({ version: 1, state } satisfies StoredEnvelope, null, 2)}\n`, 'utf8');
+  renameSync(temporaryPath, configPath);
 }

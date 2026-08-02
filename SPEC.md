@@ -430,7 +430,7 @@ WMB ships a pinned Pi runtime as an independent application resource. The Pi run
 
 Pi uses only the API protocol, Base URL, API key, and model configured in WMB. Current protocols are OpenAI Responses and OpenAI Chat Completions. WMB must not read, copy, refresh, or invalidate another Agent's OAuth session.
 
-Settings may save multiple named API presets. Exactly one configured preset is active for new Pi processes; switching presets stops the current Pi process before the next turn. API keys remain encrypted locally and are never returned to the renderer.
+Settings may save multiple named API presets for the current WMB installation. Exactly one configured preset is active for new Pi processes in every workspace; switching presets stops the current Pi process before the next turn. API keys remain encrypted locally and are never returned to the renderer. Presets are installation preferences, while Pi conversations, tasks, generated runtime files and business context remain bound to their data root.
 Settings must fetch model IDs from the configured protocol's `/models` endpoint using that protocol's authentication headers and let the user select one; manual model entry remains available when the endpoint cannot enumerate models.
 DeepSeek V4 Flash, GPT-5.6 Luna and MiMo-V2.5-Pro are common Pi choices, not hard-coded aliases or fallback routes. WMB must pass the exact provider-returned or user-entered model ID and must surface an unavailable model, protocol or provider as an error or `needs_user` without silent substitution.
 

@@ -108,7 +108,7 @@ function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: strin
   return lines.join('\n');
 }
 export async function startDailyIntelligence(input: {
-  dataRootPath: string; businessDate: string;
+  dataRootPath: string; businessDate: string; piConfigPath?: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
@@ -116,7 +116,7 @@ export async function startDailyIntelligence(input: {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   let taskId: string | null = null;
   try {
-    const contextRefs = { planDate: input.businessDate }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}` });
+    const contextRefs = { planDate: input.businessDate }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {
@@ -426,7 +426,7 @@ function draftPrompt(task: AgentTask, projectId: string, requestId: string): str
 }
 
 export async function startStudioDraft(input: {
-  dataRootPath: string; businessDate: string;
+  dataRootPath: string; businessDate: string; piConfigPath?: string;
   projectId: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
@@ -434,7 +434,7 @@ export async function startStudioDraft(input: {
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
-    const contextRefs = { projectId: input.projectId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs });
+    const contextRefs = { projectId: input.projectId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {
@@ -533,7 +533,7 @@ function reviewPrompt(task: AgentTask, publicationId: string, requestId: string)
 }
 
 export async function startResultsReview(input: {
-  dataRootPath: string; businessDate: string;
+  dataRootPath: string; businessDate: string; piConfigPath?: string;
   publicationId: string;
   mcpUrl: string;
   xhsMcpUrl?: string | null;
@@ -541,7 +541,7 @@ export async function startResultsReview(input: {
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
   try {
-    const contextRefs = { publicationId: input.publicationId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'results_review', businessDate: input.businessDate, contextRefs });
+    const contextRefs = { publicationId: input.publicationId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
     const started = startAgentTask(database, {

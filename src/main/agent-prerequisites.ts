@@ -3,9 +3,9 @@ import { getReusableNeedsUserAgentTask, needsUserAgentTask, startAgentTask, type
 import { resolvePiConfig } from './pi-config.ts';
 
 export function resolveAgentPiPrerequisite(database: DatabaseSync, input: {
-  intent: AgentIntent; businessDate: string; contextRefs: Record<string, unknown>; piSessionId?: string | null;
+  intent: AgentIntent; businessDate: string; contextRefs: Record<string, unknown>; piSessionId?: string | null; piConfigPath?: string;
 }): { config: ReturnType<typeof resolvePiConfig>; waiting: null } | { config: null; waiting: { task: AgentTask; reused: boolean } } {
-  try { return { config: resolvePiConfig(database), waiting: null }; }
+  try { return { config: resolvePiConfig(input.piConfigPath), waiting: null }; }
   catch (error) {
     const existing = getReusableNeedsUserAgentTask(database, input.intent, input.businessDate, input.contextRefs, 'PI_CONFIG_REQUIRED');
     if (existing) return { config: null, waiting: { task: existing, reused: true } };
