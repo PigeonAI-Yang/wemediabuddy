@@ -13,17 +13,19 @@ type Dependencies = {
   chooseDataRoot: () => Promise<DataRoot | null>;
   listWorkspaces: () => Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
   switchWorkspace: (workspaceId: string) => Promise<void>;
+  createUkWorkspace: () => Promise<{ id: string; displayName: string; rootPath: string } | null>;
   getMcp: () => McpRuntime | null;
   getXhs?: () => XhsMcpRuntime | null;
   getBrowser: () => BrowserRuntime | null;
   stopPi: () => Promise<void>;
 };
 
-export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, getMcp, getXhs, getBrowser, stopPi }: Dependencies): void {
+export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, getMcp, getXhs, getBrowser, stopPi }: Dependencies): void {
   ipcMain.handle('data-root:get', loadSelectedDataRoot);
   ipcMain.handle('data-root:choose', chooseDataRoot);
   ipcMain.handle('workspaces:list', listWorkspaces);
   ipcMain.handle('workspaces:switch', async (_event, workspaceId: string) => { await switchWorkspace(workspaceId); return { relaunching: true }; });
+  ipcMain.handle('workspaces:create-uk', createUkWorkspace);
   ipcMain.handle('settings:get', async () => {
     const dataRoot = await loadSelectedDataRoot();
     const settings = dataRoot ? await readSettings(dataRoot.path) : null;

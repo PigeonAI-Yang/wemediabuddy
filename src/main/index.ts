@@ -27,7 +27,8 @@ import {
 } from './agent-tasks';
 import { createDataRootSelection } from './data-root-selection';
 import { assertWorkspaceSwitchable, installWorkspaceIpcGate, WorkspaceRuntimeGate } from './workspace-runtime';
-import { abortDailyIntelligence, startDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
@@ -40,7 +41,6 @@ import { preparePiExtension } from './pi-extension';
 
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA);
 if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
-
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'wmb-asset',
@@ -156,7 +156,7 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot, xhs);
 }
-const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace } = createDataRootSelection({
+const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace, createUkWorkspace } = createDataRootSelection({
   userDataPath: () => app.getPath('userData'),
   chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; },
   refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); },
@@ -175,7 +175,7 @@ app.whenReady().then(() => {
     const pending = getLatestAgentTask(database);
     database.close();
     if (pending?.intent !== 'daily_intelligence' || pending.status !== 'running' || pending.phase !== 'resume_pending') return;
-    const run = startDailyIntelligence({
+    const run = startWorkspaceDailyIntelligence({
       dataRootPath: dataRoot.path,
       businessDate: pending.businessDate,
       mcpUrl: mcp.url,
@@ -187,7 +187,7 @@ app.whenReady().then(() => {
     }).finally(() => dailyRuns.delete(pending.id));
     dailyRuns.set(pending.id, run);
   });
-  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
+  registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
   protocol.handle('wmb-asset', async (request) => {
     try {
       const dataRoot = await loadSelectedDataRoot();
@@ -375,7 +375,7 @@ app.whenReady().then(() => {
     database.close();
     if (!started.ok) return started;
     if (!dailyRuns.has(started.data.id)) {
-      const run = startDailyIntelligence({
+      const run = startWorkspaceDailyIntelligence({
         dataRootPath: dataRoot.path,
         businessDate,
         mcpUrl: mcp.url,

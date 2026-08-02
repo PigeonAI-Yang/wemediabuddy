@@ -22,6 +22,7 @@ import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
+import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -30,6 +31,9 @@ const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON
 function createServerFor(rootPath: string): McpServer {
   const server = new McpServer({ name: 'wemedia-buddy', version: '0.1.0' });
   const database = () => migrateDatabase(path.join(rootPath, 'wmb.db'));
+  const profileDatabase = database();
+  const aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase);
+  profileDatabase.close();
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -148,35 +152,35 @@ function createServerFor(rootPath: string): McpServer {
       return { id: config.id, cdpUrl: runtime.cdpUrl };
     } finally { db.close(); }
   };
-  server.registerTool('x_lists.read_index', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.read_index', {
     description: '读取当前专用 X 登录账号可见的 List 索引（真实网页，不是仅本地绑定）。只读。后台静默浏览器，含拟人间隔。',
     inputSchema: {}
   }, async () => text(await readXListIndex(await selectedXListBrowser())));
-  server.registerTool('x_lists.read_detail', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.read_detail', {
     description: '读取指定 X List 的详情。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
   }, async ({ list_id }) => text(await readXListDetail(await selectedXListBrowser(), list_id)));
-  server.registerTool('x_lists.read_members', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.read_members', {
     description: '读取指定 X List 当前可见成员。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
   }, async ({ list_id }) => text(await readXListMembers(await selectedXListBrowser(), list_id)));
-  server.registerTool('x_lists.read_timeline', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.read_timeline', {
     description: '读取指定 X List 当前可见动态，最多 50 条。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
   }, async ({ list_id, limit }) => text(await readXListTimeline(await selectedXListBrowser(), list_id, limit ?? 50)));
-  server.registerTool('x_lists.list_bindings', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.list_bindings', {
     description: '读取已绑定到 WMB 发现的 X List，不读取或操作 X 网页。',
     inputSchema: { account_key: z.string().optional() }
   }, async ({ account_key }) => {
     const db = database(); try { return text(listXListBindings(db, account_key)); } finally { db.close(); }
   });
-  server.registerTool('x_lists.get_operation', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.get_operation', {
     description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
     inputSchema: { id: z.string() }
   }, async ({ id }) => {
     const db = database(); try { return text(getXListOperation(db, id)); } finally { db.close(); }
   });
-  server.registerTool('x_lists.prepare', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.prepare', {
     description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。默认先 prepared；真正写入 X 需再调用 x_lists.confirm。members_* 建议每次 1 个 handle 串行。',
     inputSchema: {
       request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
@@ -187,7 +191,7 @@ function createServerFor(rootPath: string): McpServer {
     try { return text(prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles })); }
     finally { db.close(); }
   });
-  server.registerTool('x_lists.confirm', {
+  if (aiOnlyRoutes) server.registerTool('x_lists.confirm', {
     description: '确认并执行已 prepare 的 X List 操作。会先读取真实网页快照并 arm，再后台 quiet 执行。delete 必须提供与当前 List 名称完全一致的 typed_list_name。members_add/remove 按 handle 串行执行。',
     inputSchema: {
       operation_id: z.string(),

@@ -7,6 +7,7 @@ import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from '
 import { recoverInterruptedAgentTasks } from './agent-tasks.ts';
 import {
   beginWorkspaceSwitch,
+  createOfficialWorkspace,
   enrollAiWorkspace,
   finishWorkspaceSwitch,
   markWorkspaceSwitchAttempting,
@@ -132,5 +133,9 @@ export function createDataRootSelection(input: {
       throw error;
     }
   }
-  return { loadSelectedDataRoot, chooseDataRoot, migrate, switchWorkspace, listWorkspaces: () => readWorkspaceRegistry(registryPath()) };
+  async function createUkWorkspace() {
+    const rootPath = await input.chooseDirectory();
+    return rootPath ? createOfficialWorkspace({ registryPath: registryPath(), rootPath, templateId: 'official.uk' }) : null;
+  }
+  return { loadSelectedDataRoot, chooseDataRoot, migrate, switchWorkspace, createUkWorkspace, listWorkspaces: () => readWorkspaceRegistry(registryPath()) };
 }

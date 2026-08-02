@@ -199,6 +199,7 @@ export async function verifyBaseline(rootPath, manifest) {
   const current = await captureDataRoot(rootPath);
   const violations = [];
   for (const [tableName, baseline] of Object.entries(manifest.root.businessTables)) {
+    if (ALLOWED_NEW_TABLES.includes(tableName)) continue;
     const observed = current.businessTables[tableName];
     if (!observed || observed.sha256 !== baseline.sha256 || observed.rowCount !== baseline.rowCount) violations.push(`business table changed: ${tableName}`);
   }

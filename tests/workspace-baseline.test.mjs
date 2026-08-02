@@ -30,7 +30,7 @@ try {
   assert.equal(verification.ok, true);
 
   const metadata = new DatabaseSync(path.join(root, 'wmb.db'));
-  metadata.exec("INSERT INTO app_meta VALUES ('workspace_id', 'workspace-ai'); CREATE TABLE workspace_profiles (id TEXT PRIMARY KEY);");
+  metadata.exec("INSERT INTO app_meta VALUES ('workspace_id', 'workspace-ai'); CREATE TABLE workspace_profiles (id TEXT PRIMARY KEY); INSERT INTO workspace_profiles VALUES ('effective');");
   metadata.close();
   verification = await verifyBaseline(root, baseline);
   assert.equal(verification.ok, true);

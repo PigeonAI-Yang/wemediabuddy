@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('wmb', {
   chooseDataRoot: () => ipcRenderer.invoke('data-root:choose'),
   listWorkspaces: () => ipcRenderer.invoke('workspaces:list'),
   switchWorkspace: (workspaceId: string) => ipcRenderer.invoke('workspaces:switch', workspaceId),
+  createUkWorkspace: () => ipcRenderer.invoke('workspaces:create-uk'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   openLogs: () => ipcRenderer.invoke('settings:open-logs'),
   openExternal: (url: string) => ipcRenderer.invoke('link:open', url),

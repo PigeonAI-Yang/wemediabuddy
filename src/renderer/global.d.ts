@@ -12,6 +12,7 @@ declare global {
       chooseDataRoot(): Promise<{ path: string; isNew: boolean } | null>;
       listWorkspaces(): Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
       switchWorkspace(workspaceId: string): Promise<{ relaunching: boolean }>;
+      createUkWorkspace(): Promise<{ id: string; displayName: string; rootPath: string } | null>;
       getSettings(): Promise<{
         paths: Record<string, string>;
         usage: Record<string, number>;

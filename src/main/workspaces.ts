@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openDataRoot, validateDataRoot } from './data-root.ts';
+import { migrateDatabase } from './db/migrations.ts';
+import { ensureOfficialWorkspaceProfile, OFFICIAL_WORKSPACE_TEMPLATES, type OfficialTemplateId } from './workspace-profiles.ts';
 
 export type WorkspaceRecord = { id: string; displayName: string; rootPath: string };
 export type WorkspaceSwitchJournal = { previousWorkspaceId: string; pendingWorkspaceId: string; state: 'pending' | 'attempting' };
@@ -86,8 +88,30 @@ export async function enrollAiWorkspace(input: { registryPath: string; rootPath:
   const existing = registry.workspaces.find((workspace) => workspace.id === workspaceId);
   if (existing && existing.rootPath !== root.path) throw workspaceError('WORKSPACE_ID_MISMATCH', '移动后的数据根必须通过重新关联更新位置。');
   writeRootWorkspaceId(root.path, workspaceId);
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  try { ensureOfficialWorkspaceProfile(database, 'official.ai'); } finally { database.close(); }
   const workspace = existing ?? { id: workspaceId, displayName: input.displayName ?? 'AI', rootPath: root.path };
   if (!existing) await writeWorkspaceRegistry(input.registryPath, { version: 1, activeWorkspaceId: workspace.id, workspaces: [workspace], switchJournal: null });
+  return workspace;
+}
+
+export async function createOfficialWorkspace(input: { registryPath: string; rootPath: string; templateId: OfficialTemplateId }): Promise<WorkspaceRecord> {
+  const registry = await readWorkspaceRegistry(input.registryPath);
+  await mkdir(input.rootPath, { recursive: true });
+  const entries = await readdir(input.rootPath);
+  if (entries.length > 0 && !entries.includes('wmb.db')) throw Object.assign(new Error('新工作空间必须使用空目录。'), { code: 'VALIDATION_ERROR' });
+  const root = await openDataRoot(input.rootPath);
+  migrateDatabase(path.join(root.path, 'wmb.db')).close();
+  const existingId = await readRootWorkspaceId(root.path);
+  const workspaceId = existingId ?? randomUUID();
+  if (registry.workspaces.some((workspace) => workspace.id === workspaceId || workspace.rootPath === root.path)) {
+    throw workspaceError('WORKSPACE_ID_MISMATCH', '该工作空间已登记。');
+  }
+  writeRootWorkspaceId(root.path, workspaceId);
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  try { ensureOfficialWorkspaceProfile(database, input.templateId); } finally { database.close(); }
+  const workspace = { id: workspaceId, displayName: OFFICIAL_WORKSPACE_TEMPLATES[input.templateId].displayName, rootPath: root.path };
+  await writeWorkspaceRegistry(input.registryPath, { ...registry, workspaces: [...registry.workspaces, workspace] });
   return workspace;
 }
 

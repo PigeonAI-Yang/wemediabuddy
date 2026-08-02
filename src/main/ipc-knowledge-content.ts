@@ -16,6 +16,7 @@ import { mkdir } from 'node:fs/promises';
 import { fetchAndCacheSourceBody, getSourceBodyCache, listSourceBodyCaches } from './source-body-cache';
 import { getWireHealthLedger } from './source-wire-health';
 import { success } from './result';
+import { assertAiOnlyRoute } from './workspace-profiles';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -27,14 +28,15 @@ export function registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate }: D
     const root = await loadSelectedDataRoot();
     if (!root) return null;
     const db = migrateDatabase(path.join(root.path, 'wmb.db'));
-    try { return readRankingCache(db); } finally { db.close(); }
+    try { assertAiOnlyRoute(db, 'ai.library.rankings'); return readRankingCache(db); } finally { db.close(); }
   });
   ipcMain.handle('rankings:github-ai', async (_event, refresh = false) => {
-    const value = await getGitHubRankings(refresh);
     const root = await loadSelectedDataRoot();
-    if (!root) return value;
+    if (!root) return null;
     const db = migrateDatabase(path.join(root.path, 'wmb.db'));
     try {
+      assertAiOnlyRoute(db, 'ai.library.rankings');
+      const value = await getGitHubRankings(refresh);
       const cached = readRankingCache(db);
       const freshReady = value.boards.some((board) => board.status === 'ready');
       if (!freshReady && cached?.boards.some((board) => board.status === 'ready')) return cached;

@@ -19,10 +19,18 @@ import {
 } from './x-list-timeline-cache.ts';
 import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
+import { assertAiOnlyRoute } from './workspace-profiles.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null> };
 
-export function registerXListIpc({ loadSelectedDataRoot }: Dependencies): void {
+export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencies): void {
+  const loadSelectedDataRoot = async () => {
+    const root = await loadRoot();
+    if (!root) return null;
+    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try { assertAiOnlyRoute(database, 'ai.x_lists.workspace'); } finally { database.close(); }
+    return root;
+  };
   ipcMain.handle('x-lists:get-cached-index', async () => {
     const root = await loadSelectedDataRoot();
     if (!root) return null;
