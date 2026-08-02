@@ -59,6 +59,7 @@ test('metric jobs create four windows and are idempotent', async () => {
     assert.equal(first.ok, true);
     assert.equal(first.data.created, 4);
     assert.equal(first.data.jobs.length, 4);
+    const firstLogCount = database.prepare("SELECT COUNT(*) AS count FROM operation_log WHERE command='metrics.schedule'").get().count;
     const second = schedulePublicationMetricJobs(database, {
       publicationId: 'pub-1',
       publishedAt: '2026-07-28T00:00:00.000Z',
@@ -67,6 +68,7 @@ test('metric jobs create four windows and are idempotent', async () => {
     });
     assert.equal(second.ok, true);
     assert.equal(second.data.created, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM operation_log WHERE command='metrics.schedule'").get().count, firstLogCount);
     assert.equal(listMetricJobs(database, 'pub-1').length, 4);
     const dues = first.data.jobs.map((job) => job.dueAt).sort();
     assert.deepEqual(dues, [

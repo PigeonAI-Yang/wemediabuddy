@@ -1,0 +1,43 @@
+{
+  "packagedExe": "J:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\WeMediaBuddy.exe",
+  "roots": {
+    "ai": "J:\\Users\\yangda01\\Temp\\wmb-1903-live-gwoqDm\\ai",
+    "uk": "J:\\Users\\yangda01\\Temp\\wmb-1903-live-gwoqDm\\uk"
+  },
+  "workspaceIds": {
+    "ai": "6a5be489-0421-4ea3-9fe2-a08f14cf87b8",
+    "uk": "4eba2682-ce1e-493d-b843-adf65615cc87"
+  },
+  "first": {
+    "pid": 39720,
+    "mcpUrl": "http://127.0.0.1:53047/mcp",
+    "oldTree": [
+      39720,
+      27100,
+      48536,
+      47080,
+      20752,
+      36080
+    ]
+  },
+  "second": {
+    "pid": 32664,
+    "mcpUrl": "http://127.0.0.1:64006/mcp",
+    "activeWorkspaceId": "4eba2682-ce1e-493d-b843-adf65615cc87"
+  },
+  "ui": {
+    "listed": [
+      "AI",
+      "英国生活"
+    ],
+    "showedWorkspaceId": true
+  },
+  "inactiveDueWindow": {
+    "dueAt": "2026-08-02T09:28:23.814Z",
+    "observedMs": 2500,
+    "digest": "483b1da088b243b609694640fac132eb8f3b2347f4256fe0b8034823cdab0de8",
+    "jobStatus": "pending"
+  },
+  "oldMcpRejected": true,
+  "oldProcessTreeExited": true
+}

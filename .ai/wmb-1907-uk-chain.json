@@ -1,0 +1,22 @@
+{
+  "root": "J:\\Users\\yangda01\\Temp\\wmb-1907-uk-iccoSM\\uk",
+  "workspaceId": "5ea585c2-7d2a-45fa-8171-38cf0d6888ce",
+  "profile": "official.uk@1",
+  "intelligencePack": "uk-life-content-radar@1",
+  "piConfigured": false,
+  "sourceId": "90d24618-ed8f-4459-8eef-a08bc71120cd",
+  "planId": "670d170b-e427-4422-b895-e81297bee666",
+  "planItemId": "beb5d4c4-d378-456f-aa15-b576b69175d5",
+  "projectId": "46e64f7e-5336-45db-a086-ddc65ad54c54",
+  "platformVersionId": "f6d44c62-a51f-45eb-b04c-a4ad584548da",
+  "sourceUrl": "https://www.gov.uk/government/news/schools-out-free-bus-travel-for-kids-set-to-launch-in-summer-holiday-cost-of-living-boost",
+  "uiReadback": true,
+  "packagedPiReadback": true,
+  "externalMcpReadback": true,
+  "aiOnlyWrites": {
+    "ranking": 0,
+    "xLists": 0,
+    "registryFeeds": 0
+  },
+  "forbiddenTools": 0
+}

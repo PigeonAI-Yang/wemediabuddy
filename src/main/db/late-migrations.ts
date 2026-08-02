@@ -89,5 +89,34 @@ export const lateMigrations = [
         updated_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 36,
+    sql: `
+      ALTER TABLE agent_tasks RENAME TO agent_tasks_v35;
+      CREATE TABLE agent_tasks (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN ('daily_intelligence', 'studio_draft', 'results_review')),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted', 'needs_user')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks SELECT * FROM agent_tasks_v35;
+      DROP TABLE agent_tasks_v35;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+    `
   }
 ] as const;

@@ -47,7 +47,11 @@ test('yesterday high-value plan item appears in today fermenting rail', () => {
   const database = migrateDatabase(path.join(directory, 'wmb.db'));
   try {
     seedPlan(database, '2026-07-31');
+    refreshWorkCarry(database, '2026-08-01');
+    const before = database.prepare('SELECT id, revision, updated_at FROM work_carry_items ORDER BY id').all();
     const today = getToday(database, '2026-08-01');
+    getToday(database, '2026-08-01');
+    assert.deepEqual(database.prepare('SELECT id, revision, updated_at FROM work_carry_items ORDER BY id').all(), before);
     assert.ok(today.fermenting);
     const hit = today.fermenting.items.find((item) => item.objectType === 'plan_item' && item.title.includes('DeepSeek-V4-Flash'));
     assert.ok(hit, 'expected yesterday plan item in fermenting rail');

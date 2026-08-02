@@ -28,7 +28,7 @@ import {
 import { createDataRootSelection } from './data-root-selection';
 import { assertWorkspaceSwitchable, installWorkspaceIpcGate, WorkspaceRuntimeGate } from './workspace-runtime';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
-import { startWorkspaceDailyIntelligence } from './workspace-intelligence';
+import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
@@ -153,7 +153,7 @@ async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate, { listWorkspaces, proposals: workspaceProposals }) : null;
 }
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
-  xhs = await refreshXhsRuntime(dataRoot, xhs);
+  xhs = await refreshXhsRuntime(dataRoot && readWorkspaceIntelligenceProfile(dataRoot.path).platforms.includes('xiaohongshu') ? dataRoot : null, xhs);
 }
 const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace, createUkWorkspace } = createDataRootSelection({
   userDataPath: () => app.getPath('userData'),

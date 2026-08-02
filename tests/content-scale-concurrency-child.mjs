@@ -4,6 +4,7 @@ import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { getContentProject, listContentProjects } from '../src/main/content.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 function measured(database) {
   let queryCount = 0;
@@ -25,6 +26,7 @@ const directory = externalDirectory??await mkdtemp(path.join(os.tmpdir(), 'wmb-c
 let mcp;
 try {
   const db = migrateDatabase(path.join(directory, 'wmb.db'));
+  ensureOfficialWorkspaceProfile(db, 'official.ai');
   let insertProject = db.prepare(`INSERT INTO content_projects
     (id, title, status, archived_at, created_at, updated_at, revision)
     VALUES (?, ?, 'drafting', NULL, ?, ?, 1)`);

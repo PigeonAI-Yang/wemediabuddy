@@ -121,7 +121,6 @@ export function refreshWorkCarry(database: DatabaseSync, planDate = shanghaiDate
 }
 
 export function listFermentingBundle(database: DatabaseSync, planDate = shanghaiDate()): FermentingBundle {
-  expireDueCarryItems(database);
   const todayPlan = loadTodayPlanDedup(database, planDate);
   const all = listCarryItems(database, { states: ['active', 'watching'], limit: 80, planDate })
     .filter((item) => item.objectType === 'plan_item' || item.objectType === 'source')

@@ -103,12 +103,8 @@ export function schedulePublicationMetricJobs(
     created += 1;
     jobs.push(parseJob(database.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as JobRow));
   }
-  recordOperation(database, {
-    actorType: 'ui',
-    command: 'metrics.schedule',
-    entityType: 'publication',
-    entityId: input.publicationId,
-    result: 'ok'
+  if (created) recordOperation(database, {
+    actorType: 'ui', command: 'metrics.schedule', entityType: 'publication', entityId: input.publicationId, result: 'ok'
   });
   return success({ created, jobs });
 }

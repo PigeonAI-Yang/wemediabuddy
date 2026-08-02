@@ -28,7 +28,7 @@ async function hashFile(filePath) {
   return hash.digest('hex');
 }
 
-async function hashTree(rootPath) {
+async function hashTree(rootPath, ignore = () => false) {
   try {
     await stat(rootPath);
   } catch {
@@ -42,6 +42,7 @@ async function hashTree(rootPath) {
       if (entry.isDirectory()) await visit(fullPath);
       else if (entry.isFile()) {
         const fileStats = await stat(fullPath);
+        if (ignore(relativePath, fileStats)) continue;
         entries.push({ path: relativePath, bytes: fileStats.size, sha256: await hashFile(fullPath) });
       } else {
         throw new Error(`数据根目录不允许非普通文件/目录：${relativePath}`);
@@ -217,7 +218,16 @@ export async function verifyBaseline(rootPath, manifest) {
     if (!manifest.root.rootEntries.includes(entry) && !ALLOWED_ROOT_ENTRIES.includes(entry)) violations.push(`unexpected root entry: ${entry}`);
   }
   for (const treeName of PRESERVED_TREES) {
-    if (current.trees[treeName].sha256 !== manifest.root.trees[treeName].sha256) violations.push(`preserved tree changed: ${treeName}`);
+    let preserved = current.trees[treeName].sha256 === manifest.root.trees[treeName].sha256;
+    if (!preserved && treeName === 'xiaohongshu-mcp' && manifest.capturedAt) {
+      const capturedAt = Date.parse(manifest.capturedAt);
+      const historical = await hashTree(path.join(current.resolvedRoot, treeName), (relativePath) => {
+        const match = relativePath.match(/^logs\/xhs-mcp-(\d+)\.log$/);
+        return Boolean(match && Number(match[1]) > capturedAt);
+      });
+      preserved = historical.sha256 === manifest.root.trees[treeName].sha256;
+    }
+    if (!preserved) violations.push(`preserved tree changed: ${treeName}`);
   }
   return { ok: violations.length === 0, violations, current };
 }

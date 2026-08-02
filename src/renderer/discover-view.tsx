@@ -30,18 +30,8 @@ export function DiscoverView({ rankingContext, onRankingContextChange, onStatusC
     finally { setLoadingRankings(false); }
   };
   useEffect(() => {
-    void (async () => {
-      let cached: Awaited<ReturnType<typeof window.wmb.getCachedRankings>> = null;
-      try { cached = await window.wmb.getCachedRankings(); } catch { /* ignore stale cache read failures */ }
-      if (cached) setRankings(cached);
-      setLoadingRankings(true);
-      setRankingError('');
-      try { setRankings(await window.wmb.getGitHubRankings(true)); }
-      catch (error) {
-        if (!cached) setRankingError(error instanceof Error ? error.message : String(error));
-      }
-      finally { setLoadingRankings(false); }
-    })();
+    void window.wmb.getCachedRankings().then((cached) => { if (cached) setRankings(cached); })
+      .catch((error) => setRankingError(error instanceof Error ? error.message : String(error)));
   }, []);
   useEffect(() => { localStorage.setItem('wmb.discoverSection', section); }, [section]);
   useEffect(() => {

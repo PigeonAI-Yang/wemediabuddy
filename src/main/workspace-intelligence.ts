@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
+import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, needsUserAgentTask, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
 import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runner.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { preparePiExtension } from './pi-extension.ts';
@@ -49,8 +49,14 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       piSessionId: `daily-${input.businessDate}`
     });
     if (!started.ok) throw new Error(started.error.message);
-    if (started.reused) return { task: started.data, reused: true };
-    const config = resolvePiConfig(database);
+    if (started.reused && !['resume_pending', 'starting'].includes(started.data.phase)) return { task: started.data, reused: true };
+    let config;
+    try { config = resolvePiConfig(database); }
+    catch (error) {
+      const waiting = needsUserAgentTask(database, started.data.id, 'PI_CONFIG_REQUIRED', error instanceof Error ? error.message : String(error));
+      if (!waiting.ok) throw new Error(waiting.error.message);
+      return { task: waiting.data, reused: started.reused === true };
+    }
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const skillRoot = workspaceSkillSourcePath(profile.intelligencePackId);
     const installedSkill = path.join(layout.agentDir, 'skills', profile.intelligencePackId);

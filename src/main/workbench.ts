@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { listFermentingBundle, refreshWorkCarry, type FermentingBundle } from './ferment.ts';
+import { listFermentingBundle, type FermentingBundle } from './ferment.ts';
 
 export type TodaySource = {
   id: string;
@@ -68,7 +68,7 @@ export function getToday(database: DatabaseSync, planDate: string): {
       LIMIT 500`).all() as SourceRow[];
   const sources = mapSourceRows(fallbackRows);
   const sourcesTotal = todayRows.length ? Number(sourcesTotalRow?.total || sources.length) : sources.length;
-  const fermenting = refreshWorkCarry(database, planDate);
+  const fermenting = listFermentingBundle(database, planDate);
   const plan = database.prepare('SELECT id, summary FROM plans WHERE plan_date = ? AND is_current = 1').get(planDate) as { id: string; summary: string } | undefined;
   if (!plan) return { sources, sourcesTotal, plan: null, pendingActions: ['创建今日运营方案'], fermenting };
   const rows = database.prepare(`SELECT id, topic_id AS topicId, title, priority, why_now AS whyNow, timeliness,

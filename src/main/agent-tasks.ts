@@ -8,7 +8,7 @@ import { getStudio } from './content.ts';
 import { listReviews } from './reviews.ts';
 
 export type AgentIntent = 'daily_intelligence' | 'studio_draft' | 'results_review';
-export type AgentTaskStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted';
+export type AgentTaskStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted' | 'needs_user';
 export type AgentTaskControl = 'skip_source' | 'save_partial' | 'cancel';
 export type AgentTaskProgress = {
   currentSource?: string;
@@ -276,6 +276,18 @@ export function failAgentTask(database: DatabaseSync, id: string, errorCode: str
     errorCode
   });
   broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.fail' });
+  return success(requireTask(database, id));
+}
+
+export function needsUserAgentTask(database: DatabaseSync, id: string, errorCode: string, errorMessage: string): CommandResult<AgentTask> {
+  const current = getRow(database, id);
+  if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (current.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以等待用户处理。');
+  const now = new Date().toISOString();
+  database.prepare(`UPDATE agent_tasks SET status='needs_user', phase='needs_user', error_code=?, error_message=?, updated_at=?, finished_at=? WHERE id=?`)
+    .run(errorCode, errorMessage, now, now, id);
+  recordOperation(database, { actorType: 'ui', command: 'agent_tasks.needs_user', entityType: 'agent_task', entityId: id, result: 'error', errorCode });
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.needs_user' });
   return success(requireTask(database, id));
 }
 

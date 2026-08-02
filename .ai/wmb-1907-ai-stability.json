@@ -1,0 +1,50 @@
+{
+  "aiRoot": "J:\\PigeonYang\\WeMediaBuddyData",
+  "gameRoot": "J:\\PigeonYang\\WeMediaBuddy\\data\\gamedata",
+  "activeAfter": "71fc446c-6e5b-4f4f-91a0-3b7d0c669ff2",
+  "aiMigrations": 36,
+  "observedMs": 3000,
+  "activeBusinessProjection": "f38588da015489e9eb308967dd4f946c0706d3b3380ccfd5b3655ceba4cec7fb",
+  "inactiveBusinessProjection": "f38588da015489e9eb308967dd4f946c0706d3b3380ccfd5b3655ceba4cec7fb",
+  "activeAiUnchanged": true,
+  "inactiveAiUnchanged": true,
+  "drainedBeforeDeactivation": [],
+  "aiPiConfigured": true,
+  "gamePiConfigured": false,
+  "gameXhsStatus": "not_started",
+  "oldGameMcpRejected": true,
+  "baseline": {
+    "immutableManifestPreserved": true,
+    "historicalViolations": [
+      "business table changed: operation_log",
+      "business table changed: ranking_cache",
+      "business table changed: work_carry_items"
+    ]
+  },
+  "allowedRuntimeLogs": {
+    "before": [
+      "xhs-mcp-1785540103416.log",
+      "xhs-mcp-1785630964857.log",
+      "xhs-mcp-1785630982477.log",
+      "xhs-mcp-1785634801074.log",
+      "xhs-mcp-1785662542475.log",
+      "xhs-mcp-1785662562529.log",
+      "xhs-mcp-1785662613884.log",
+      "xhs-mcp-1785662671350.log",
+      "xhs-mcp-1785662879892.log",
+      "xhs-mcp-1785662882996.log"
+    ],
+    "after": [
+      "xhs-mcp-1785540103416.log",
+      "xhs-mcp-1785630964857.log",
+      "xhs-mcp-1785630982477.log",
+      "xhs-mcp-1785634801074.log",
+      "xhs-mcp-1785662542475.log",
+      "xhs-mcp-1785662562529.log",
+      "xhs-mcp-1785662613884.log",
+      "xhs-mcp-1785662671350.log",
+      "xhs-mcp-1785662879892.log",
+      "xhs-mcp-1785662882996.log"
+    ]
+  }
+}

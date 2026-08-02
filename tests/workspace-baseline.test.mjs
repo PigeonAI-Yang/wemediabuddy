@@ -25,7 +25,7 @@ try {
   `);
   database.close();
 
-  const baseline = { schema: 'wmb.workspace-baseline.v1', root: await captureDataRoot(root) };
+  const baseline = { schema: 'wmb.workspace-baseline.v1', capturedAt: new Date().toISOString(), root: await captureDataRoot(root) };
   let verification = await verifyBaseline(root, baseline);
   assert.equal(verification.ok, true);
 
@@ -34,6 +34,16 @@ try {
   metadata.close();
   verification = await verifyBaseline(root, baseline);
   assert.equal(verification.ok, true);
+
+  await mkdir(path.join(root, 'xiaohongshu-mcp', 'logs'));
+  await writeFile(path.join(root, 'xiaohongshu-mcp', 'logs', `xhs-mcp-${Date.now() + 1000}.log`), 'runtime log');
+  verification = await verifyBaseline(root, baseline);
+  assert.equal(verification.ok, true);
+
+  await writeFile(path.join(root, 'xiaohongshu-mcp', 'state.json'), '{"changed":true}');
+  verification = await verifyBaseline(root, baseline);
+  assert.deepEqual(verification.violations, ['preserved tree changed: xiaohongshu-mcp']);
+  await writeFile(path.join(root, 'xiaohongshu-mcp', 'state.json'), '{}');
 
   const changed = new DatabaseSync(path.join(root, 'wmb.db'));
   changed.exec("UPDATE content_projects SET revision = 2 WHERE id = 'project-1'");

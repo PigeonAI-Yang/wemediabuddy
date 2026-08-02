@@ -10,22 +10,21 @@ import { DatabaseSync } from 'node:sqlite';
 import { chromium } from 'playwright-core';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { enrollAiWorkspace } from '../src/main/workspaces.ts';
+import { createOfficialWorkspace, enrollAiWorkspace } from '../src/main/workspaces.ts';
 
 const execFileAsync = promisify(execFile);
 const temp = await mkdtemp(path.join(os.tmpdir(), 'wmb-1903-live-'));
 const userData = path.join(temp, 'user-data');
-const receiptPath = path.join(process.cwd(), '.ai', 'wmb-1903-acceptance.json');
+const receiptPath = path.resolve(process.env.WMB_ACCEPTANCE_RECEIPT ?? path.join(process.cwd(), '.ai', 'wmb-1903-acceptance.json'));
 const cdpPort = 29403;
 let launched;
 try {
   await mkdir(userData, { recursive: true });
   const aiRoot = await createRoot(path.join(temp, 'ai'));
-  const ukRoot = await createRoot(path.join(temp, 'uk'));
   const registryPath = path.join(userData, 'workspace-registry.json');
   const ai = await enrollAiWorkspace({ registryPath, rootPath: aiRoot.path, displayName: 'AI' });
-  const uk = await enrollAiWorkspace({ registryPath: path.join(temp, 'uk-registry.json'), rootPath: ukRoot.path, displayName: 'UK' });
-  await writeFile(registryPath, JSON.stringify({ version: 1, activeWorkspaceId: ai.id, workspaces: [ai, uk], switchJournal: null }), 'utf8');
+  const uk = await createOfficialWorkspace({ registryPath, rootPath: path.join(temp, 'uk'), templateId: 'official.uk' });
+  const ukRoot = { path: uk.rootPath };
   await writeFile(path.join(userData, 'data-root.json'), JSON.stringify({ path: aiRoot.path }), 'utf8');
   const dueAt = new Date(Date.now() + 1_500).toISOString();
   const db = new DatabaseSync(path.join(aiRoot.path, 'wmb.db'));
@@ -48,12 +47,12 @@ try {
   const firstSettings = await firstPage.evaluate(() => window.wmb.getSettings());
   const firstWorkspaces = await firstPage.evaluate(() => window.wmb.listWorkspaces());
   assert.equal(firstWorkspaces.activeWorkspaceId, ai.id);
-  assert.deepEqual(firstWorkspaces.workspaces.map((item) => item.displayName), ['AI', 'UK']);
+  assert.deepEqual(firstWorkspaces.workspaces.map((item) => item.displayName), ['AI', '英国生活']);
   await firstPage.getByTitle('设置').click();
   await firstPage.getByRole('button', { name: '数据与存储' }).click();
   await firstPage.waitForFunction((id) => document.body.innerText.includes(id), ai.id);
   const uiText = await firstPage.locator('.settings-content').innerText();
-  assert.match(uiText, /AI/); assert.match(uiText, /UK/); assert.match(uiText, new RegExp(ai.id));
+  assert.match(uiText, /AI/); assert.match(uiText, /英国生活/); assert.match(uiText, new RegExp(ai.id));
   await firstPage.evaluate((targetId) => window.wmb.switchWorkspace(targetId).catch(() => null), uk.id).catch(() => {});
 
   const second = await waitForWorkspace(cdpPort, uk.id);
@@ -82,7 +81,7 @@ try {
     workspaceIds: { ai: ai.id, uk: uk.id },
     first: { pid: firstMainPid, mcpUrl: firstSettings.mcp.url, oldTree },
     second: { pid: secondMainPid, mcpUrl: secondSettings.mcp.url, activeWorkspaceId: secondWorkspaces.activeWorkspaceId },
-    ui: { listed: ['AI', 'UK'], showedWorkspaceId: true },
+    ui: { listed: ['AI', '英国生活'], showedWorkspaceId: true },
     inactiveDueWindow: { dueAt, observedMs: 2_500, digest: inactiveAfter.digest, jobStatus: dueJobStatus },
     oldMcpRejected: true,
     oldProcessTreeExited: true
