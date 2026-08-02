@@ -220,19 +220,19 @@ Scope: CAP-017.
 
 Deliver:
 
-- fixed, visible, serial X List executor using the selected dedicated X profile;
+- fixed, visible, serial X List executor using the active data-root's selected dedicated X profile;
 - persisted List bindings, confirmation-bound operation records and per-member readback;
 - owned/followed/member List read model and permission-bounded management commands;
 - UI-only confirmation, MCP/Pi read-and-prepare commands, and Discover List workspace;
 - explicit bounded List-timeline collection into existing sources.
 
-Gate: EVAL-016 passes with a real selected X profile, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback.
+Gate: EVAL-016 passes with a real selected X profile, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback. X Lists remains available independently of the publishing-platform subset; workspace acceptance additionally proves the same X List identity/cache fixture is root-local and never reused across roots.
 
 ## M-1700 Official-release intelligence wire
 
 Scope: CAP-002, CAP-003, CAP-014 and CAP-017.
 
-Deliver: expand and validate the official AI source index, run the enabled AI-frontier X List and primary-source checklist before judgment routes, persist per-source health, and prove named release evidence enters existing sources.
+Deliver: expand and validate the official AI source index, run the enabled AI-frontier X List and primary-source checklist before judgment routes, persist per-source health, and prove named release evidence enters existing sources. This AI-only source-index/List wire does not restrict M-1600 generic `x_lists.*` in other roots.
 
 Gate: source-index validation, focused wire tests, durable source-item readback and List-operation evidence pass without creating a second intelligence store.
 
@@ -240,13 +240,13 @@ Gate: source-index validation, focused wire tests, durable source-item readback 
 
 Scope: CAP-002 and CAP-014.
 
-Deliver: canonical source identity and upsert semantics, registry-to-feed binding, bounded source-body cache rules, and a shared wire-health read API.
+Deliver: canonical source identity and upsert semantics, registry-to-feed binding, root-local bounded source-body cache rules with no cross-root hit, and a shared wire-health read API.
 
 Gate: source/migration/settings focused tests and typecheck prove every ingress resolves to one durable source and the latest wire health is readable through the shared business surface.
 
 ## M-1900 Modular data-root workspaces
 
-Scope: CAP-018 and CAP-019.
+Scope: CAP-002, CAP-003, CAP-004, CAP-006, CAP-011, CAP-012, CAP-013, CAP-014, CAP-015, CAP-016, CAP-017, CAP-018 and CAP-019.
 
 Detailed design: `docs/spark/2026-08-02-modular-workspace-content-terminal-design.md`.
 
@@ -260,8 +260,13 @@ Order:
 6. `WMB-1905` — extract only the intelligence/creation catalog boundaries proven by AI/UK, then add session-bound proposals and read-or-prepare-only application MCP tools with the full stale negative matrix;
 7. `WMB-1906` — add UI result/diff confirmation and prove an Owner-supplied third self-media goal through manual confirmation, cold reopen and a linked X pure-text chain;
 8. `WMB-1907` — run focused packaged acceptance for enrollment, relaunch switching, failure recovery, UK, the third lane and truthful `needs_user`, reusing unchanged legacy receipts.
+9. `WMB-1908` — publish one authoritative workspace capability snapshot; make active-profile changes replace every bound runtime and old MCP URL; make generic X Lists available in every root while keeping caches, accounts and AI fixed-List policy root/pack isolated;
+10. `WMB-1909` — render Discover from a finite intelligence-pack mapping, keep rankings/AI source presentation AI-only, and expose the shared root-local X Lists workspace in AI, UK and game without a plugin loader;
+11. `WMB-1910` — enforce profile publishing-platform subsets at shared write/runtime boundaries and make missing-model/login task states truthful without disabling generic X List inputs;
+12. `WMB-1911` — isolate workspace-bound renderer selections and remove mount-time business writes;
+13. `WMB-1912` — run the packaged AI/UK/game module, generic X Lists, platform, process and zero-cross-root acceptance matrix.
 
-Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
+Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Generic `x_lists.*` is available in every active self-media root independently of publishing platforms, while accounts, bindings, caches, operations and collected sources stay root-local and fixed AI Lists/AI wire stay AI-only. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
 
 ## M-2000 Pi model contract correction
 
