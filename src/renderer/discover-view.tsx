@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { RankingContext, RankingContextItem, XListPiContext } from './app-types';
+import { IntelligenceChannelsView } from './intelligence-channels-view';
 import { XListsView } from './x-lists-view';
 import { workspaceStorageKey } from './workspace-storage';
 
@@ -17,12 +18,15 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   const stored = (key: string) => workspaceId ? localStorage.getItem(workspaceStorageKey(workspaceId, key)) : null;
   const [sourceId, setSourceId] = useState(() => stored('discoverSource') ?? 'github');
   const [boardId, setBoardId] = useState(() => stored('discoverBoard') ?? 'github-daily');
-  const [section, setSection] = useState<'rankings' | 'lists'>(() => stored('discoverSection') === 'lists' ? 'lists' : 'rankings');
+  const [section, setSection] = useState<'channels' | 'rankings' | 'lists'>(() => {
+    const saved = stored('discoverSection');
+    return saved === 'rankings' || saved === 'lists' || saved === 'channels' ? saved : 'channels';
+  });
   const [rankingError, setRankingError] = useState('');
   const [loadingRankings, setLoadingRankings] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const [saveNote, setSaveNote] = useState('');
-  const activeSection = rankingsEnabled ? section : 'lists';
+  const activeSection = !rankingsEnabled && section === 'rankings' ? 'channels' : section;
   const loadRankings = async (refresh = true) => {
     setLoadingRankings(true);
     setRankingError('');
@@ -42,11 +46,9 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   }, [rankingsEnabled]);
   useEffect(() => { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'discoverSection'), section); }, [section, workspaceId]);
   useEffect(() => {
-    if (activeSection !== 'lists') {
-      onStatusChange?.(null);
-      onXListContextChange?.(null);
-    }
-  }, [activeSection, onStatusChange, onXListContextChange]);
+    if (activeSection !== 'lists') { onStatusChange?.(null); onXListContextChange?.(null); }
+    if (activeSection !== 'rankings') onRankingContextChange({ boards: [], items: [] });
+  }, [activeSection, onStatusChange, onXListContextChange, onRankingContextChange]);
   const categories = useMemo(() => {
     const grouped: Array<{ id: string; label: string; sources: Array<{ id: string; label: string; boards: NonNullable<typeof rankings>['boards'] }> }> = [];
     for (const board of rankings?.boards ?? []) {
@@ -97,8 +99,8 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   };
   if (!workspace || !workspaceId) return <section className="ranking-loading">正在读取工作空间…</section>;
   return <section className="page library-page discover-page" data-intelligence-pack={workspace.profile.intelligencePackId}>
-    <nav className="discover-categories" aria-label="发现分页面">{rankingsEnabled && <button className={`library-section-tab${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>榜单</button>}<button className={`library-section-tab${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>X Lists</button></nav>
-    {activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
+    <nav className="discover-categories" aria-label="发现分页面"><button className={`library-section-tab${activeSection === 'channels' ? ' active' : ''}`} onClick={() => setSection('channels')}>情报渠道</button>{rankingsEnabled && <button className={`library-section-tab${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>榜单</button>}<button className={`library-section-tab${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>List 管理</button></nav>
+    {activeSection === 'channels' ? <IntelligenceChannelsView onStatusChange={onStatusChange}/> : activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('[data-ranking-item], button, a, input, select, textarea')) onRankingContextChange({ boards: [], items: [] });
   }}>

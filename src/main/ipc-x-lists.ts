@@ -235,9 +235,16 @@ async function withXListBrowser<T>(loadSelectedDataRoot: Dependencies['loadSelec
   }
 }
 
-type CurrentXListContext = { root: DataRoot; workspaceId: string; browserId: string; accountKey: string; config: XListBrowserConfig };
+export type CurrentXListContext = {
+  root: DataRoot;
+  workspaceId: string;
+  browserId: string;
+  accountKey: string;
+  config: XListBrowserConfig;
+  index: Awaited<ReturnType<typeof readXListIndex>>;
+};
 
-async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<CurrentXListContext> {
+export async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<CurrentXListContext> {
   const root = await requiredRoot(loadSelectedDataRoot);
   const database = migrateDatabase(path.join(root.path, 'wmb.db'));
   let config: XListBrowserConfig;
@@ -250,7 +257,7 @@ async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelec
   finally { database.close(); }
   try {
     const index = await readXListIndex({ ...config!, workspaceId });
-    return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey } };
+    return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey }, index };
   } catch (error) { throw needsUser(error); }
 }
 

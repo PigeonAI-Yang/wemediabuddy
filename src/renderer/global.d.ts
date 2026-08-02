@@ -1,8 +1,11 @@
 import type { ContentProjectDetail } from '../main/content';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
-import type { XListOperation, XListOperationKind } from '../main/x-lists';
+import type { XListBinding, XListOperation, XListOperationKind } from '../main/x-lists';
 import type { CommandResult } from '../main/result';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from '../main/workspace-proposals';
+import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt, WebsiteSource, WebsiteTrialRead } from '../main/intelligence-channels';
+import type { WebsiteCandidate } from '../main/website-channel';
+import type { XListCandidate, XListResolution } from '../main/x-list-channel';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -38,6 +41,7 @@ declare global {
           id: string; displayName: string; rootPath: string;
           dataRoot: { workspaceId: string; path: string };
           profile: { profileId: string; revision: number; intelligencePackId: string; creationPackId: string; platforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
+          intelligenceChannels: IntelligenceChannelsSummary;
           capabilities: { xLists: true; aiIntelligence: boolean; fixedAiLists: boolean; rankings: boolean; sourceWire: boolean; publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
         };
       } | null>;
@@ -57,6 +61,15 @@ declare global {
           items: Array<{ rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string }>;
         }>;
       } | null>;
+      getIntelligenceChannels(): Promise<{ summary: IntelligenceChannelsSummary; receipts: SourceScanReceipt[] }>;
+      resolveWebsiteCandidates(input: { inputText: string }): Promise<WebsiteCandidate[]>;
+      trialReadWebsite(input: { url: string }): Promise<WebsiteTrialRead>;
+      confirmWebsiteSource(input: { inputText: string; candidate: WebsiteCandidate; trialRead: WebsiteTrialRead }): Promise<WebsiteSource>;
+      resolveXListCandidates(input: { inputText: string }): Promise<XListCommand<XListResolution>>;
+      confirmResolvedXList(input: { resolution: XListResolution; candidate: XListCandidate }): Promise<XListCommand<XListBinding>>;
+      setIntelligenceChannelEnabled(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number; enabled: boolean }): Promise<unknown>;
+      removeIntelligenceChannel(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number }): Promise<unknown>;
+      scanIntelligenceChannel(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number }): Promise<unknown>;
       readXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } }>;
       getCachedXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } | null>;
       readXListDetail(listId: string): Promise<{ accountKey: string; detail: { listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown'; description: string; isPrivate: boolean; memberCount: number | null; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } }>;
@@ -254,7 +267,7 @@ declare global {
       failAgentTask(input: { id: string; errorCode: string; errorMessage: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       cancelAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       controlDailyIntelligence(input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      startDailyIntelligence(businessDate: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      startDailyIntelligence(input: { businessDate: string; modules: IntelligenceModule[] }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startBrowser(input?: { mode?: 'quiet' | 'visible' | 'headless' }): Promise<{ pid: number; cdpUrl: string; profilePath: string; mode: 'quiet' | 'visible' | 'headless' }>;

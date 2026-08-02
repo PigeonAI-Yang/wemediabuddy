@@ -36,6 +36,7 @@ import { visiblePiPrompt } from './pi-persistence';
 import { registerSettingsConfigIpc } from './ipc-settings-config';
 import { registerPiDockIpc } from './ipc-pi-dock';
 import { registerXListIpc } from './ipc-x-lists';
+import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals';
@@ -365,7 +366,9 @@ app.whenReady().then(async () => {
       return requested;
     } finally { database.close(); }
   });
-  ipcMain.handle('agent:start-daily-intelligence', async (_event, businessDate: string) => {
+  ipcMain.handle('agent:start-daily-intelligence', async (_event, input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'> }) => {
+    const businessDate = input?.businessDate?.trim();
+    if (!businessDate) throw new Error('请选择今日情报日期。');
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     if (!mcp) await refreshMcp(dataRoot);
@@ -375,7 +378,7 @@ app.whenReady().then(async () => {
     if (active && (dailyRuns.has(runKey) || active.phase !== 'resume_pending')) { broadcastPiEvent({ type: 'agent_task', task: active }); return { ok: true, data: { task: active, reused: true }, error: null }; }
     let coordinatorError: unknown = null;
     const run = startWorkspaceDailyIntelligence({
-      dataRootPath: dataRoot.path, businessDate, mcpUrl: mcp.url, xhsMcpUrl: xhs?.getUrl() || '',
+      dataRootPath: dataRoot.path, businessDate, modules: input.modules, mcpUrl: mcp.url, xhsMcpUrl: xhs?.getUrl() || '',
       onEvent: (event) => { broadcastPiRuntimeProgress(event); if (event.type === 'agent_task') broadcastPiEvent(event); }
     }).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; }).catch((error) => {
       coordinatorError = error; broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) }); return null;
@@ -465,7 +468,7 @@ app.whenReady().then(async () => {
   });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
   registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
-  registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
+  registerIntelligenceChannelsIpc({ loadSelectedDataRoot }); registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

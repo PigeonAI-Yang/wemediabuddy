@@ -1,9 +1,11 @@
 import type { PiFocusObject } from './app-types';
 import { useEffect, useRef, useState } from 'react';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
+import type { IntelligenceChannelsSummary, IntelligenceModule } from '../main/intelligence-channels';
 import { SourceMark } from './source-mark';
 import { PlatformMark } from './platform-mark';
 import { formatNames, platformNames } from './app-types';
+import { channelReadiness, dailyPreflightMessage, intelligenceModuleLabels, intelligenceModules } from './intelligence-channel-ui';
 export function formatSourcePublishedAt(value?: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -249,7 +251,7 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
   </article>;
 }
 
-export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange, aiSourcePresentation }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void;
   openStudio: () => void;
@@ -260,6 +262,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   onSelectedSourcesChange: (sources: SelectedTodaySource[]) => void;
   planDate: string;
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void; aiSourcePresentation: boolean;
+  intelligenceChannels: IntelligenceChannelsSummary | null; piConfigured: boolean;
 }): React.JSX.Element {
   const phaseLabels: Record<string, string> = {
     starting: '正在启动',
@@ -279,6 +282,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const [taskStatus, setTaskStatus] = useState<string>('');
   const [running, setRunning] = useState(false);
   const [task, setTask] = useState<any>(null);
+  const [selectedModules, setSelectedModules] = useState<IntelligenceModule[]>(intelligenceModules);
   const [, tick] = useState(0);
   const sources = today?.sources ?? [];
   const fermenting = today?.fermenting ?? { items: [], watchingItems: [], topics: [], pinnedSources: [] };
@@ -529,10 +533,12 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   };
   const startIntelligence = async () => {
     if (running) return;
+    const blocker = dailyPreflightMessage({ summary: intelligenceChannels, piConfigured, modules: selectedModules });
+    if (blocker) { setTaskStatus(blocker); return; }
     setRunning(true);
     setTaskStatus('今日情报正在启动…');
     try {
-      const result = await window.wmb.startDailyIntelligence(planDate) as {
+      const result = await window.wmb.startDailyIntelligence({ businessDate: planDate, modules: selectedModules }) as {
         ok: boolean;
         data?: { task?: { status?: string; phase?: string; errorMessage?: string | null; resultRefs?: { opportunityCount?: number } }; reused?: boolean };
         error?: { message?: string } | null;
@@ -554,6 +560,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
       window.setTimeout(() => refresh(), 300);
     }
   };
+  const toggleModule = (module: IntelligenceModule) => setSelectedModules((current) => current.includes(module)
+    ? current.filter((item) => item !== module) : [...current, module]);
+  const preflightMessage = dailyPreflightMessage({ summary: intelligenceChannels, piConfigured, modules: selectedModules });
   const taskPhaseLabel = task?.phase ? (phaseLabels[task.phase] ?? '正在处理') : '正在处理';
   const planned = Math.max(0, Number(task?.progress?.planned ?? 0));
   const processed = Math.max(0, Number(task?.progress?.processed ?? 0));
@@ -630,14 +639,13 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
                 <span><b>{opportunityCount}</b>机会</span>
               </div>
               {reallyStuck ? (
-                <p className="intelligence-last-event">任务心跳超过 60 秒未更新，进程可能已挂起；可跳过当前来源或取消后重试。</p>
+                <p className="intelligence-last-event">任务心跳超过 60 秒未更新，进程可能已挂起；可保存并停止或取消后重试。</p>
               ) : lastEventText && lastEventText !== currentSource && !(currentSource && lastEventText.includes(currentSource)) ? (
                 <p className="intelligence-last-event">{lastEventText}</p>
               ) : null}
             </div>
             <div className="today-command-actions">
               <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
-              <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'skip_source' }); }}>跳过当前来源</button>
               <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' }); }}>保存并停止</button>
               <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' }); }}>取消任务</button>
             </div>
@@ -663,10 +671,19 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
                 <strong className="stat-value">{studioActive ?? '–'}</strong>
               </div>
             </div>
+            <section className="today-channel-selection" aria-label="本次情报渠道">
+              <div><strong>本次情报渠道</strong><span>默认检查当前已启用来源，本次取消勾选不会改变渠道设置。</span></div>
+              {intelligenceModules.map((module) => {
+                const readiness = channelReadiness(intelligenceChannels, module);
+                const sourcesForModule = intelligenceChannels?.sources.filter((source) => source.module === module) ?? [];
+                return <label key={module}><input type="checkbox" checked={selectedModules.includes(module)} onChange={() => toggleModule(module)} /><span><b>{intelligenceModuleLabels[module]}</b><small>已配置 {readiness.configuredCount}，已启用 {readiness.enabledCount}，可运行 {readiness.readyCount}，需处理 {readiness.blockedCount}</small>{sourcesForModule.length ? <em>{sourcesForModule.map((source) => source.name).join('、')}</em> : <em>尚未配置来源</em>}</span></label>;
+              })}
+              {preflightMessage && <p>{preflightMessage}</p>}
+            </section>
             <div className="today-command-actions">
               <button className="refresh-button" onClick={refresh} title="刷新" aria-label="刷新">↻</button>
               <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
-              <button className="primary-button" onClick={() => void startIntelligence()}>{primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
+              <button className="primary-button" disabled={Boolean(preflightMessage)} onClick={() => void startIntelligence()}>{primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
             </div>
           </>
         )}
@@ -681,7 +698,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
             <p>{running
               ? (currentSource ? `正在处理：${currentSource}` : '来源扫描和整理完成后，机会会自动出现在这里。')
               : '点击上方“开始今日情报”，让 Pi 扫描并写入今天的内容机会。'}</p>
-            {!running && <button className="primary-button" onClick={() => void startIntelligence()}>开始今日情报</button>}
+            {!running && <button className="secondary-button" disabled={Boolean(preflightMessage)} onClick={() => void startIntelligence()}>开始今日情报</button>}
           </section>}
           {(fermenting.items?.length ?? 0) > 0 && <section className="fermenting-rail light" aria-label="仍在发酵">
             <div className="fermenting-head">
@@ -716,7 +733,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
               <div>
                 <div className="action-title">{action}</div>
                 <div className="action-sub">需要人工处理后流程才能继续</div>
-                {action.includes('运营方案') && <button className="action-go" disabled={running} onClick={() => void startIntelligence()}>开始今日情报</button>}
+                {action.includes('运营方案') && <button className="action-go" disabled={running || Boolean(preflightMessage)} onClick={() => void startIntelligence()}>开始今日情报</button>}
               </div>
             </div>)}
           </>}

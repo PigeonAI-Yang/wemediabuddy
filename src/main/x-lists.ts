@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { broadcastDataChanged } from './data-changed.ts';
 import { createSourceFeed } from './sources.ts';
 import { failure, success, type CommandResult } from './result.ts';
 import { xListUrl } from './platforms/x-list-primitives.ts';
@@ -207,7 +208,9 @@ export function bindXList(database: DatabaseSync, input: {
         .run(randomUUID(), accountKey, listId, canonicalUrl, ownerHandle, name, input.list.kind, sourceFeedId, now, JSON.stringify(input.observation ?? {}), now, now);
     }
     database.exec('COMMIT');
-    return success(getXListBinding(database, accountKey, listId)!);
+    const binding = getXListBinding(database, accountKey, listId)!;
+    broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.bind' });
+    return success(binding);
   } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
 
@@ -216,7 +219,9 @@ export function setXListBindingEnabled(database: DatabaseSync, input: { accountK
   if (!binding) return failure('NOT_FOUND', 'List 绑定不存在。');
   if (binding.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 绑定已变化，请重新加载。', { current: binding });
   database.prepare('UPDATE x_list_bindings SET enabled=?, updated_at=?, revision=revision+1 WHERE id=?').run(input.enabled ? 1 : 0, new Date().toISOString(), binding.id);
-  return success(getXListBinding(database, binding.accountKey, binding.listId)!);
+  const updated = getXListBinding(database, binding.accountKey, binding.listId)!;
+  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.enabled' });
+  return success(updated);
 }
 
 export function updateXListBindingObservation(database: DatabaseSync, accountKey: string, listId: string, observation: Record<string, unknown>): XListBinding | null {
