@@ -231,58 +231,6 @@ h1, h2, h3, p { text-wrap: pretty; }
   font-size: 14px;
   transform: translateX(-50%);
 }
-.global-search {
-  -webkit-app-region: no-drag;
-  position: absolute;
-  /* Match workspace content left padding (studio/editor uses clamp(18px,1.8vw,28px)). */
-  left: calc(var(--nav-width) + clamp(18px, 1.8vw, 28px));
-  width: min(360px, 32vw);
-  margin: 0;
-}
-.global-search > input {
-  width: 100%;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-raised);
-  color: var(--ink);
-  padding: 0 12px;
-}
-.global-search > input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.global-search > div {
-  position: absolute;
-  z-index: 60;
-  top: 40px;
-  left: 0;
-  right: 0;
-  display: grid;
-  max-height: 320px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 12px 30px var(--overlay);
-}
-.global-search button {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 10px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--ink);
-  padding: 10px 12px;
-  text-align: left;
-  cursor: pointer;
-}
-@media (max-width: 1180px) {
-  .global-search {
-    width: 220px;
-  }
-}
 .titlebar-actions button {
   width: 46px;
   border: 0;

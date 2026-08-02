@@ -60,8 +60,6 @@ function App(): React.JSX.Element {
   const [xListContext, setXListContext] = useState<XListPiContext | null>(null);
   const [canvasOpenId, setCanvasOpenId] = useState<string | null>(null);
   const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string } | null>(null);
-  const [globalQuery, setGlobalQuery] = useState('');
-  const [globalResults, setGlobalResults] = useState<Array<{ kind: 'topic' | 'project'; id: string; title: string }>>([]);
   const [studioSelectedId, setStudioSelectedId] = useState<string | null>(null);
   const [studioContext, setStudioContext] = useState<{ id: string; title: string } | null>(null);
   const [libraryTopicContext, setLibraryTopicContext] = useState<{ id: string; title: string } | null>(null);
@@ -131,38 +129,6 @@ function App(): React.JSX.Element {
     if (view !== 'discover' && view !== 'today') setPageStatus(null);
   }, [view]);
   useEffect(() => { localStorage.removeItem('wmb.creativeContext'); localStorage.removeItem('wmb.knowledgeDomainId'); localStorage.removeItem('wmb.knowledgeTopicId'); }, []);
-  useEffect(() => {
-    const query = globalQuery.trim();
-    if (query.length < 2) { setGlobalResults([]); return; }
-    let active = true;
-    void Promise.all([
-      window.wmb.listKnowledgeTopics({ query, limit: 8 }),
-      window.wmb.listStudioProjects({ query, limit: 6 })
-    ]).then(([topicsRaw, projects]) => {
-      if (!active) return;
-      let topicItems: unknown[] = [];
-      if (Array.isArray(topicsRaw)) {
-        topicItems = topicsRaw;
-      } else if (topicsRaw && typeof topicsRaw === 'object' && 'items' in topicsRaw) {
-        const items = topicsRaw.items;
-        if (Array.isArray(items)) topicItems = items;
-      }
-      const topicResults: Array<{ kind: 'topic'; id: string; title: string }> = [];
-      for (const entry of topicItems) {
-        if (!entry || typeof entry !== 'object') continue;
-        if (!('id' in entry) || !('title' in entry)) continue;
-        const id = entry.id;
-        const title = entry.title;
-        if (typeof id !== 'string' || typeof title !== 'string') continue;
-        topicResults.push({ kind: 'topic', id, title });
-      }
-      setGlobalResults([
-        ...topicResults,
-        ...(projects?.items ?? []).map((item) => ({ kind: 'project' as const, id: item.id, title: item.title }))
-      ]);
-    });
-    return () => { active = false; };
-  }, [globalQuery]);
   useEffect(() => { localStorage.setItem('wmb.piDockCollapsed', String(piDockCollapsed)); }, [piDockCollapsed]);
   useEffect(() => {
     if (!workspaceId || skipStudioPersist.current) { skipStudioPersist.current = false; return; }
@@ -238,18 +204,6 @@ function App(): React.JSX.Element {
     if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryTopicId'), topicId);
     navigate('topic');
     window.dispatchEvent(new CustomEvent('wmb-open-library-topic', { detail: { topicId } }));
-  };
-  const openGlobalResult = (item: (typeof globalResults)[number]) => {
-    if (item.kind === 'topic') {
-      openTopic(item.id);
-    } else if (item.kind === 'project') {
-      setStudioSelectedId(item.id);
-      navigate('studio');
-    } else {
-      navigate('topic');
-    }
-    setGlobalQuery('');
-    setGlobalResults([]);
   };
   const nav = [{ id: 'today', label: '今日' }, { id: 'discover', label: '发现' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
   const pageLabels: Record<View, string> = { today: '今日内容', discover: '发现', knowledge: '主题', topic: '主题', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
@@ -362,7 +316,6 @@ function App(): React.JSX.Element {
   return <main className={`app-shell${piDockCollapsed ? ' pi-collapsed' : ' pi-open'}${view === 'settings' ? ' settings-mode' : ''}${view === 'studio' ? ' studio-mode' : ''}${view === 'topic' ? ' topic-mode' : ''}`} style={{ '--pi-open-width': `${piDockWidth}px` } as React.CSSProperties}>
     <header className="topbar">
       <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName} · r{settings.workspace.profile.revision}</small>}</div>
-      <div className="global-search"><input aria-label="全局搜索" placeholder="搜索主题或项目" value={globalQuery} onChange={event=>setGlobalQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'){setGlobalQuery('');setGlobalResults([]);}else if(event.key==='Enter'&&globalResults[0]){event.preventDefault();openGlobalResult(globalResults[0]);}}}/>{globalResults.length>0&&<div role="listbox" aria-label="全局搜索结果">{globalResults.map(item=><button key={`${item.kind}:${item.id}`} onClick={()=>openGlobalResult(item)}><small>{item.kind==='topic'?'主题':'项目'}</small><span>{item.title}</span></button>)}</div>}</div>
       {view === 'settings' && <span className="topbar-page-title">设置</span>}
       {view === 'studio' && <div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div>}
       <div className="titlebar-actions">
