@@ -232,7 +232,7 @@ Gate: EVAL-016 passes with a real selected X profile, an owned List mutation wit
 
 Scope: CAP-002, CAP-003, CAP-014 and CAP-017.
 
-Deliver: expand and validate the official AI source index, run the enabled AI-frontier X List and primary-source checklist before judgment routes, persist per-source health, and prove named release evidence enters existing sources. This AI-only source-index/List wire does not restrict M-1600 generic `x_lists.*` in other roots.
+Deliver: expand and validate the official AI source index, run the enabled AI-frontier X List and primary-source checklist before judgment routes, persist per-source health, and prove named release evidence enters existing sources. M-2100 later migrates these accepted source identities into the AI root's ordinary website/X Lists configuration and replaces this AI-only execution route without losing the accepted source readback.
 
 Gate: source-index validation, focused wire tests, durable source-item readback and List-operation evidence pass without creating a second intelligence store.
 
@@ -261,12 +261,12 @@ Order:
 7. `WMB-1906` — add UI result/diff confirmation and prove an Owner-supplied third self-media goal through manual confirmation, cold reopen and a linked X pure-text chain;
 8. `WMB-1907` — run focused packaged acceptance for enrollment, relaunch switching, failure recovery, UK, the third lane and truthful `needs_user`, reusing unchanged legacy receipts.
 9. `WMB-1908` — publish one authoritative workspace capability snapshot; make active-profile changes replace every bound runtime and old MCP URL; make generic X Lists available in every root while keeping caches, accounts and AI fixed-List policy root/pack isolated;
-10. `WMB-1909` — render Discover from a finite intelligence-pack mapping, keep rankings/AI source presentation AI-only, and expose the shared root-local X Lists workspace in AI, UK and game without a plugin loader;
+10. `WMB-1909` — render Discover from a finite intelligence-pack mapping, keep rankings/then-current AI source presentation AI-only, and expose the shared root-local X Lists workspace in AI, UK and game without a plugin loader; M-2100 later migrates source presentation to shared root-local channels;
 11. `WMB-1910` — enforce profile publishing-platform subsets at shared write/runtime boundaries and make missing-model/login task states truthful without disabling generic X List inputs;
 12. `WMB-1911` — isolate workspace-bound renderer selections and remove mount-time business writes;
 13. `WMB-1912` — run the packaged AI/UK/game module, generic X Lists, platform, process and zero-cross-root acceptance matrix.
 
-Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Generic `x_lists.*` is available in every active self-media root independently of publishing platforms, while accounts, bindings, caches, operations and collected sources stay root-local and fixed AI Lists/AI wire stay AI-only. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
+Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Generic `x_lists.*` is available in every active self-media root independently of publishing platforms, while accounts, bindings, caches, operations and collected sources stay root-local. M-2100 subsequently replaces the fixed AI source wire with the shared root-local channel configuration while retaining AI rankings. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
 
 ## M-2000 Pi model contract correction
 
@@ -275,3 +275,22 @@ Scope: CAP-014.
 Deliver: state the built-in Pi boundary accurately, retain only OpenAI Responses and OpenAI Chat Completions configuration, store one encrypted preset set for the WMB installation, reject unsupported protocols at the shared config boundary, and keep model selection bound to the provider catalog or explicit user input without fallback.
 
 Gate: focused Pi configuration tests, Windows packaging and live configuration readback prove the removed protocol is unavailable while the existing OpenAI-compatible profile remains unchanged. Run typecheck and record unrelated baseline failures without expanding this task.
+
+## M-2100 Workspace intelligence channels
+
+Scope: CAP-002, CAP-003, CAP-014, CAP-017, CAP-018, CAP-019, CAP-020 and CAP-021.
+
+Detailed design: `docs/spark/2026-08-03-workspace-intelligence-channel-modules-design.md`.
+
+Order:
+
+1. `WMB-2100` — approve REQ-020–022, AC-016–018, CAP-020–021, EVAL-020–023 and this sequential task chain;
+2. `WMB-2101` — add root-local website source configuration, generic per-source scan receipts, shared readiness readback and migrations while reusing existing source/List objects;
+3. `WMB-2102` — add arbitrary public website name/URL candidate resolution, canonical trial read, confirmation, management and truthful zero-item scans;
+4. `WMB-2103` — add current-account X List name/URL/ID resolution, same-name candidate selection and existing-binding reuse;
+5. `WMB-2104` — move deterministic channel preflight/scans above pack-specific judgment, freeze selected source revisions, aggregate per-source receipts and replace the zero-source/non-empty-plan completion gate;
+6. `WMB-2105` — deliver Discover intelligence-channel management and Today default-all/per-run selection/preflight UI from the authoritative shared snapshot;
+7. `WMB-2106` — expose read/prepare-only channel MCP/Pi tools and UI-only exact batched source confirmation with stale zero-write behavior;
+8. `WMB-2107` — run focused packaged AI/UK acceptance for arbitrary websites, same-name X Lists, cold-switch isolation, zero-update success, partial preservation, all-blocked preflight and exact authorization.
+
+Gate: EVAL-020–EVAL-023 pass. AI/UK use the same two fixed channel modules and shared daily scan path; the AI source-index/List fixtures are retained as visible AI-root configuration rather than a privileged collector. At least one truthful source check may succeed with zero new items and an empty plan, while no trustworthy receipt cannot claim success. Source configuration, account identity, receipts and collected items stay root-local; Agents prepare but UI confirms exact source changes. X accounts, Xiaohongshu, communities, third-party modules, plugin loading and the separate Pi stale temporary-working-directory BUG are outside M-2100.

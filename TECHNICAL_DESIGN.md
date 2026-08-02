@@ -1,6 +1,6 @@
 # WeMediaBuddy 技术设计
 
-- 本次架构修订：2026-08-02，模块化 data-root 工作空间
+- 本次架构修订：2026-08-03，工作空间情报渠道模块
 
 - 产品：WeMediaBuddy（WMB）
 - 状态：已确认
@@ -89,7 +89,7 @@ External Agent ─MCP─┘
 
 MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库。
 
-工作空间列表、当前身份、官方目录和配方提案属于有限的应用级控制命令；资料、内容、发布、复盘及其他业务命令始终只访问当前 MCP URL 绑定的活动根。当前身份由一个共享业务读取生成权威 workspace/capability snapshot，统一带出 workspace/data-root 身份、profile revision、能力包、发布平台子集和固定能力可用性；UI、IPC、MCP 与 Pi 不各自重构或缓存另一份真相。
+工作空间列表、当前身份、官方目录和配方提案属于有限的应用级控制命令；资料、内容、发布、复盘及其他业务命令始终只访问当前 MCP URL 绑定的活动根。当前身份由一个共享业务读取生成权威 workspace/capability snapshot，统一带出 workspace/data-root 身份、profile revision、能力包、发布平台子集、固定能力可用性和官网/X Lists 渠道就绪摘要；UI、IPC、MCP 与 Pi 不各自重构或缓存另一份真相。
 
 ## 4. 领域模块
 
@@ -108,6 +108,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `mcp`：MCP 工具到业务命令的映射；
 - `browser`：Chrome 生命周期、CDP 连接和平台适配器。
 - `x-lists`：所有自媒体工作空间共享的固定 X List 读写、确认、读回和发现信源绑定；账号、缓存、绑定、操作和资料始终随当前 data-root 隔离。
+- `intelligence-channels`：固定官网/X Lists 来源配置、解析/试读、逐来源回执和共享每日预检/扫描编排；不是插件加载器。
 - `workspaces`：应用级注册表、根身份校验和单活动根切换；
 - `workspace-profiles`：有限字段的当前配方、编译期官方目录和会话级提案确认。
 
@@ -160,14 +161,18 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `x_list_bindings`
 - `x_list_operations`
 - `x_list_operation_items`
+- `website_sources`
+- `source_scan_receipts`
 
 平台特有字段和原始指标使用 JSON 保存；跨平台稳定字段使用普通列。不同平台不建立重复业务表。
 
 内容修改创建新版本。更新命令携带当前 revision，旧版本写入返回冲突和最新版本，防止不同 Agent 用旧上下文覆盖新内容。
 
-每个根只保存一个带 revision 的当前有效 `WorkspaceProfileV1`。字段固定为显示名称、受众、内容目标、纯文本编辑简报、情报包与创作包 ID/版本和平台子集；复盘暂留固定内核，不接受任意执行配置。AI/UK 官方模板先以编译期数据随应用发布，UK 真实文字链路通过后再把实际交换点整理成同一编译期目录，不实现插件加载器、旧包兼容层或通用执行图。
+每个根只保存一个带 revision 的当前有效 `WorkspaceProfileV1`。字段固定为显示名称、受众、内容目标、纯文本编辑简报、情报包与创作包 ID/版本和平台子集；情报包只承载受众/编辑上下文和真正的赛道展示/判断差异，不承载官网/X Lists 执行代码。复盘暂留固定内核，不接受任意执行配置。AI/UK 官方模板先以编译期数据随应用发布，不实现插件加载器、旧包兼容层或通用执行图。
 
-平台子集限制新方案的平台选择、新平台版本、发布执行和平台专属运行时，不删除历史读回，也不限制情报输入。X Lists 是固定共享能力而不是新的 profile 字段：每个根使用自己的浏览器配置、X 登录态、List 绑定、缓存、操作记录和 source feed；只有 AI intelligence pack 可以自动选择 `AI前沿` 等固定 AI List 或运行 AI source-index/List wire，其他包只能消费本根用户明确启用的 List。
+平台子集限制新方案的平台选择、新平台版本、发布执行和平台专属运行时，不删除历史读回，也不限制情报输入。官网与 X Lists 是固定共享能力而不是新的 profile 字段：每个根使用自己的 website source、浏览器配置、X 登录态、List binding、缓存、扫描回执和 source feed。既有 AI source-index 与 `AI前沿` 转成 AI 根的普通可见配置；所有包只消费本根明确启用的来源，AI profile 只继续控制排行榜等真正的 AI 专属能力。
+
+`website_sources` 只保存当前根网站配置并引用一个既有 `source_feeds`：用户输入、规范入口 URL、启用/解析状态、最近错误和 revision。`x_list_bindings` 继续是 X List 配置真相。一个共享业务读取把两者投影成相同的渠道来源摘要，不复制 X List 身份。`source_scan_receipts` 记录 task/workspace/module/source 身份、检查时间、状态、候选/保存数量和错误；它是任务证据，不是第二资料库。Agent 准备的来源变更提案只在当前 Main 会话保存，UI 确认后通过共享业务命令写入，重启即失效。
 
 未确认提案只保存在当前 Main 进程内，重启即失效。已有工作空间的确认在其根内单事务更新 profile revision；若它是活动根，随后必须用既有有界重启协议替换所有 profile-bound runtime 和 MCP URL，不在活进程内重绑。新工作空间先在用户选择的空目录中幂等完成根身份、schema 和有效 profile，再原子加入注册表，激活仍走独立的重启协议。注册前崩溃不会改变当前活动根，候选根可按稳定身份重新校验或关联。
 
@@ -200,11 +205,12 @@ MCP 工具按业务能力组织：
 - 复盘和方法结论读写；
 - 待处理工作查询。
 - 通用 `x_lists.*`：当前根 X List 读取、操作准备、绑定和限量信源收集，不含确认工具；
+- 通用 `intelligence_channels.*`：当前根官网/X Lists 配置与就绪读取、网站名称/URL候选解析和试读、List 名称/URL/ID候选解析、来源变更准备、今日预检和逐来源回执读取，不含确认工具；
 - 工作空间列表/当前身份、官方模板与能力包目录读取、配方提案提交。
 
 最后一组应用级 MCP 工具只读或准备提案；不能确认、激活、删除工作空间，也不能接收任意文件系统路径。新 data-root 的选择与有效配方激活仅通过窄 IPC 交给 UI 最终确认。
 
-外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次 X List 调用均在同一业务边界重验当前 workspace、data-root、根内 X 账号和 List binding。
+外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次渠道调用均在同一业务边界重验当前 workspace、data-root、profile/source revision；X Lists 还重验根内 X 账号和 List binding。MCP/Pi 只能准备来源变更，最终确认只在 UI。
 
 每日侦察、运营方案和创作可由用户在 WMB 中显式触发 Pi，也可从任意外部 Agent 发起。WMB 不定时唤醒 Agent；模型推理由用户配置的 OpenAI Responses 或 OpenAI Chat Completions 兼容服务完成，协议、模型或服务失败时不做静默替换。
 
@@ -331,9 +337,10 @@ SQLite `jobs` 表保存：
 
 ## 11. 界面信息架构
 
-第一版完整界面包含五个主区域：
+第一版完整界面包含六个主区域：
 
 - `Today`：待处理工作、每日情报和运营方案；
+- `Discover`：当前根官网/X Lists 情报渠道、来源配置、就绪状态和最近扫描回执；
 - `Studio`：资料、选题、内容项目、版本和素材；
 - `Publish`：平台版本、账号、确认、执行状态和人工接管；
 - `Results`：指标快照、趋势、复盘和方法结论；
@@ -360,6 +367,6 @@ SQLite `jobs` 表保存：
 9. Agent 根据内容版本和指标写入具体复盘与方法结论；
 10. 后续运营方案能引用此前资料、复盘和方法结论。
 
-工作空间扩展还必须完成：现有 AI 根零业务搬迁登记；AI/UK 冷切换和失败回滚不串线；活动根 profile 更新冷重启并使旧 runtime/MCP URL 失效；UI、IPC、MCP 与 Pi 读回同一权威 workspace/capability snapshot；UK 新根的 AI-only sentinel 保持零调用；第三自媒体工作空间经 Agent 提案和 UI 确认后完成资料、方案、内容及至少一个平台版本；发布平台子集在新方案、平台版本、发布和平台运行时边界拒绝越界写入且保留历史读回；空页面冷开不隐式创建业务对象；AI、UK 和第三根都能通过本根 `x_lists.*` 接入独立信源，且相同账号/List/URL/cache 不跨根。
+工作空间扩展还必须完成：现有 AI 根零业务搬迁登记；AI/UK 冷切换和失败回滚不串线；活动根 profile 更新冷重启并使旧 runtime/MCP URL 失效；UI、IPC、MCP 与 Pi 读回同一权威 workspace/capability snapshot；UK 新根的真正 AI-only sentinel 保持零调用；第三自媒体工作空间经 Agent 提案和 UI 确认后完成资料、方案、内容及至少一个平台版本；发布平台子集在新方案、平台版本、发布和平台运行时边界拒绝越界写入且保留历史读回；空页面冷开不隐式创建业务对象；AI、UK 和第三根都能通过相同官网/X Lists 模块管理本根来源，逐来源回执证明零更新成功、部分失败保留和全部阻塞预检，相同账号/List/URL/receipt/source item 不跨根。
 
 三个平台的约定平台版本均属于当前完成条件；真实发布本身不是完成门槛。

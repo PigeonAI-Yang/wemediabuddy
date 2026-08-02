@@ -2,7 +2,7 @@
 
 - Status: approved design, implementation contract
 - Date: 2026-07-27
-- Scope revision: 2026-08-02 modular data-root workspaces
+- Scope revision: 2026-08-03 workspace intelligence channels
 - Product source: `PRD.md`
 - Architecture source: `TECHNICAL_DESIGN.md`
 - Scope: PRD current product range only
@@ -120,9 +120,11 @@ Requirements:
 
 ### CAP-002 Sources and daily workbench
 
-Links: REQ-002, REQ-013, AC-001.
+Links: REQ-002, REQ-013, REQ-020, REQ-021, AC-001, AC-016.
 
 `source_feeds` represent recurring sites, accounts, or channels. `source_items` represent individual articles, posts, videos, tools, Skills, or documents.
+
+The fixed website and X Lists channel modules reuse this model. A root-local website configuration references one `source_feed`, stores the user's input plus resolved canonical entry URL, enabled/resolution state, last truthful error and revision, and may be created only after a real trial read and exact UI confirmation. X Lists continue to use the existing `x_list_bindings → source_feed_id` identity. Neither module creates a second source store.
 
 A source item must store:
 
@@ -438,7 +440,7 @@ Only explicit user intents that require research, judgment, writing, rewriting, 
 
 Pi runs as one supervised RPC subprocess with LF-delimited JSON messages, streamed events, abort, shutdown, and restart-safe task state. Pi may write WMB business state only through the existing MCP tools; it must not write SQLite or business files directly and must not execute final publication.
 
-Every main view shares one collapsible Pi conversation dock. Page changes preserve the conversation and active task. A text response or `agent_end` alone is not success; WMB marks a task successful only after required business objects read back through the existing business API.
+Every main view shares one collapsible Pi conversation dock. Page changes preserve the conversation and active task. A text response or `agent_end` alone is not success; WMB marks a task successful only after the intent-specific evidence reads back through the existing business API. Daily intelligence uses CAP-021 source-check receipts and may succeed with zero new source items and an empty plan; Studio and Results keep their required business-object gates.
 
 普通 Pi 对话不设 WMB 级总时限：仅在 Pi 发出 `agent_settled`、用户显式 `abort`，或 Pi 返回真实错误/退出时结束。生成期间编辑框保持可用；空编辑框的主按钮为停止方块，非空编辑框发送 Pi 原生 `steer`，`Alt+Enter` 发送原生 `followUp`。WMB 只展示 Pi 的 `queue_update` 队列，不自建逐条取消、重排或伪撤回。历史撤回和重发必须由 Pi 原生 `fork` 创建新分支，不能只裁剪本地聊天记录；固定业务 Agent 的显式任务时限不受此条影响。
 
@@ -478,7 +480,7 @@ Links: REQ-001, REQ-002, REQ-005, REQ-006, REQ-013, REQ-016, AC-001, AC-012.
 
 「发现」中的 X Lists 是所有自媒体工作空间固定具备的列表管理与情报接入工作台，不是通用 X 客户端。它从当前 data-root 已选择的专用 X 登录态实时读取三类可访问 List：用户创建、用户关注、用户在其中。稳定身份是 workspace ID、账号、X List ID 与规范 URL；名称不是身份。WMB 只在当前根持久化用户绑定为发现信源的 List 及每次操作的证据，不镜像全部成员或完整动态历史。
 
-X Lists 是通用情报来源能力，不由 `WorkspaceProfileV1.platforms` 启停，也不因工作空间未选择 X 作为发布平台而消失。每个根独立保存浏览器配置、登录态、List 绑定、缓存、操作记录和收集得到的资料；不得继承、转发或命中其他根的账号、固定 List、缓存或 source feed。`AI前沿` 等固定 List、AI List 选择策略、AI source-index 和 AI wire 仍只属于 AI intelligence pack，UK、游戏资讯或其他赛道只能使用本根用户明确启用的 List。
+X Lists 是通用情报来源能力，不由 `WorkspaceProfileV1.platforms` 启停，也不因工作空间未选择 X 作为发布平台而消失。每个根独立保存浏览器配置、登录态、List 绑定、缓存、操作记录和收集得到的资料；不得继承、转发或命中其他根的账号、List、缓存或 source feed。既有 `AI前沿` binding 转为 AI 根中可见、可管理的普通来源配置；UK、游戏资讯或其他赛道使用相同模块但只能读取本根用户明确启用的 List。
 
 用户创建的 List 支持创建、读取详情、编辑名称/描述/公开性、删除、分页查看成员以及按精确 handle 串行批量添加或移除成员。非当前账号拥有的 List 仅支持读取详情、成员和时间线，以及接入/移出 WMB 发现；WMB 不自动执行退出别人 List、拉黑创建者、私信、推荐搜索、置顶或任何未列出的 X 社交动作。
 
@@ -486,7 +488,7 @@ X Lists 是通用情报来源能力，不由 `WorkspaceProfileV1.platforms` 启�
 
 执行始终使用可见的专用 X 页面、单个可操作标签和串行节奏；用户可以随时接管或请求停止，停止只在当前原子页面动作完成后生效。平台出现登录、验证码、挑战、权限不足或选择器无法安全确认时，操作进入 `needs_user`。点击后无法读回实际状态时，操作进入 `unknown`，停止后续项目且不自动重试。操作状态为 `prepared`、`awaiting_confirmation`、`running`、`succeeded`、`partial`、`needs_user`、`unknown` 或 `failed`，与发布和指标 jobs 分开保存。
 
-绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源，不创建定时全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
+绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取，也可参加用户显式启动的 CAP-021 今日情报；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源，不创建定时全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
 
 通用 `x_lists.*` UI/IPC、MCP 和 Pi 读写准备能力使用同一业务命令，在每个有效自媒体工作空间可用，并在每次调用时重新验证当前 workspace、data-root、根内账号和 List 绑定。缺少登录、账号不匹配、挑战或权限不足进入准确的 `needs_user`；账号不匹配的稳定 reason/error code 为 `ACCOUNT_MISMATCH`，不得借用其他根账号或静默回退。MCP/Pi 不暴露确认工具，最终外部写入仍只由 UI 精确确认。
 
@@ -506,15 +508,15 @@ Startup marks a pending switch as attempting, opens and migrates the target root
 
 Each successful switch starts a new process and a new random MCP URL. Every old HTTP connection, stream and URL must close and must never forward to the new root. Inactive roots run no background process or scheduled write. Safe overdue jobs use the existing real-time recovery rule when that root is activated again; unsafe jobs remain `needs_user`/`unknown` and are never replayed. Listing and explicit relink after a move are in scope; rename, archive, permanent deletion and parallel runtimes are not.
 
-One shared business read returns the authoritative current workspace/capability snapshot to UI, IPC, MCP and Pi. It is derived from the active registry entry and that root's effective profile, and includes workspace identity, resolved data-root identity, profile ID/revision, selected intelligence/creation packs, publishing-platform subset and the fixed capability availability used by the renderer and runtime. Identity-sensitive surfaces must not reconstruct or cache a competing snapshot.
+One shared business read returns the authoritative current workspace/capability snapshot to UI, IPC, MCP and Pi. It is derived from the active registry entry and that root's effective profile, and includes workspace identity, resolved data-root identity, profile ID/revision, selected intelligence/creation packs, publishing-platform subset, fixed capability availability and current website/X Lists readiness summary used by the renderer and runtime. Identity-sensitive surfaces must not reconstruct or cache a competing snapshot.
 
 ### CAP-019 Official workspace profiles and AI proposals
 
 Links: REQ-018, REQ-019, AC-015.
 
-AI and UK are versioned official templates shipped with WMB. `WorkspaceProfileV1` has only these fields: stable profile ID, integer revision, optional official template ID/version, display name, audience, content goal, plain-text editorial brief, exactly one official intelligence-pack ID/version, one creation-pack ID/version, and one or more currently supported platforms. Text fields are context, never executable configuration. Review remains fixed WMB behavior until real lane differences justify another field. A profile cannot contain arbitrary code, file paths, tool names, new business stages, cross-stage graphs, or a generic `module.run` instruction. Third-party plugins and a free workflow builder are outside scope.
+AI and UK are versioned official templates shipped with WMB. `WorkspaceProfileV1` has only these fields: stable profile ID, integer revision, optional official template ID/version, display name, audience, content goal, plain-text editorial brief, exactly one official intelligence-pack ID/version, one creation-pack ID/version, and one or more currently supported platforms. The intelligence-pack selection supplies audience/editorial context and truly lane-specific presentation such as AI rankings; fixed website/X Lists collectors and the CAP-021 daily orchestration are shared. Text fields are context, never executable configuration. Review remains fixed WMB behavior until real lane differences justify another field. A profile cannot contain arbitrary code, file paths, tool names, new business stages, cross-stage graphs, or a generic `module.run` instruction. Third-party plugins and a free workflow builder are outside scope.
 
-The platform subset controls new plan platform selections, platform versions, publishing actions and platform-specific runtimes. It does not hide historical records or control shared intelligence inputs such as X Lists. X Lists remains a fixed root-local WMB capability rather than another profile field or plugin; intelligence packs may consume only the Lists explicitly enabled in the current root.
+The platform subset controls new plan platform selections, platform versions, publishing actions and platform-specific runtimes. It does not hide historical records or control shared intelligence inputs. Website and X Lists modules remain fixed root-local WMB capabilities rather than profile fields or plugins; every intelligence pack may consume only sources explicitly enabled in the current root.
 
 Each root stores one effective profile revision. An Agent task or job records the profile revision it starts with, and profile activation is rejected while a profile-bound task is running; WMB does not keep multiple pack runtimes or implement old-pack compatibility. An Agent may read the compile-time official catalog and create a complete proposal from the user's natural-language self-media goal, but WMB only validates its finite fields, references and state; it does not claim the proposed content strategy is correct. AI and UK official templates can also be created directly from UI without a configured model.
 
@@ -522,13 +524,33 @@ Unconfirmed proposals are session-bound Main-process state and disappear on rest
 
 For an existing root, UI confirmation updates its effective profile in one root-local transaction. If that root is active, confirmation then uses the bounded relaunch protocol to replace every profile-bound runtime and MCP URL; it never rebinds the live process or leaves the old URL serving the new revision. For a new workspace, the UI alone selects an empty root; WMB idempotently writes a root identity, schema and effective profile before atomically adding it to the registry. A crash before registry insertion leaves no visible/active workspace and the candidate root can be safely revalidated and relinked; the current active root is unchanged. Activating a new or inactive workspace remains a separate normal relaunch switch.
 
-The UK template must route intelligence and creation through UK-approved capabilities. Its acceptance includes an inventory at the shared dispatch boundary proving zero calls and zero writes through every AI-only Skill, creation route, fixed AI List/AI List policy, AI source-index/wire or other discovered AI-only entry. Root-local generic X Lists remain available and may feed UK intelligence only after the current-root user explicitly enables a binding. Missing model credentials or platform login makes the attempted Pi task or job persist the existing `needs_user` state with a stable reason plus workspace/profile revision; WMB must not silently substitute another model, tool, account or pack.
+The UK template must route creation and opportunity judgment through UK-approved audience/editorial context. Its deterministic website/X Lists scan uses the same CAP-020 modules as every root and only the sources explicitly configured in UK. Acceptance proves zero calls and zero writes through AI-only rankings, creation routes or other genuinely AI-only entries; it no longer treats website collection or fixed channel execution as an AI-only capability. Missing model credentials or platform login makes the attempted task persist the existing `needs_user` state with a stable reason plus workspace/profile revision; WMB must not silently substitute another model, tool, account or pack.
 
-The finite compile-time intelligence-pack mapping is also the auditable AI-only inventory. It must cover the AI Skill dispatcher, rankings, fixed AI Lists and selection policy, AI source-index/wire and wire-health/source presentation. UK/game DOM modules, IPC, MCP registration/direct calls and runtime dispatch all fail closed for those entries with zero write; generic root-local X Lists and their Settings controls remain available.
+The finite compile-time intelligence-pack mapping is also the auditable AI-only inventory. It covers only truly lane-specific presentation and judgment/creation routes, including AI rankings. Website/X Lists configuration, scanning, readiness and receipt presentation are fixed shared capabilities and must not be hidden or dispatched by pack. UK/game DOM modules, IPC, MCP registration/direct calls and runtime dispatch still fail closed for the remaining AI-only entries with zero write.
+
+### CAP-020 Root-local intelligence channel configuration
+
+Links: REQ-020, REQ-021, REQ-022, AC-016, AC-018.
+
+WMB ships exactly two compile-time intelligence channel modules in this scope: `official_web` and `x_lists`. They are fixed business capabilities, not installable plugins, profile fields or arbitrary module execution. Their definitions are shared by the installation; every source configuration, account identity, enabled state, resolution status, revision, receipt and collected item remains inside the active data root.
+
+The website module accepts a public-site name or URL. It resolves one or more real candidates, canonicalizes the selected content-entry URL, performs a bounded trial read, and returns the exact title/URL/readability result before confirmation. A name is never guessed into a URL, the same canonical URL cannot create two active website configurations in one root, and an unreadable/login/challenge/dynamic source returns an accurate reason instead of becoming ready. Official templates may propose a visible initial website list, but it is not a permanent whitelist.
+
+The X Lists module accepts a List name, URL or ID and resolves only against the current root account's real accessible List index. A unique ID/URL match may be selected directly; same-name matches return every account/List-ID/canonical-URL candidate and require user choice. Confirmation reuses CAP-017 binding and account validation rather than creating another List identity.
+
+UI, Pi and external Agents use shared prepare/read commands. Pi or MCP may prepare one exact batched add/enable/disable/remove diff but cannot confirm it. UI confirmation binds workspace ID, profile revision, source module, stable source identities and the displayed diff; any change returns `CONFIRMATION_STALE` with zero write. Removing or disabling a source preserves existing source items.
+
+### CAP-021 Shared daily intelligence orchestration and receipts
+
+Links: REQ-020, REQ-022, AC-017, AC-018.
+
+One shared daily entry freezes the current workspace/profile revision, the default set of all enabled website/X Lists sources, any per-run module deselection, and every selected source revision. Deterministic channel preflight and scans happen before lane-specific opportunity judgment. Independent source reads may run concurrently; each source produces one durable receipt containing task/workspace/source identity, module, checked time, status, candidate/save counts and stable error details.
+
+Preflight returns `needs_user` without launching Pi when no enabled source is runnable because of missing configuration, login or account identity. Once scanning starts, one source failure never rolls back another source's committed receipt or items. Task aggregation is: `succeeded` when at least one selected source was truthfully checked, including zero candidates and an empty current plan; `partial` when at least one source was checked and another failed or needs user; `needs_user` when every selected source is blocked; `failed` only when orchestration/runtime failure prevents any trustworthy check receipt. Non-empty plan items must still reference real source items. Placeholder heartbeat source items are forbidden.
 
 ## 4. UI and IPC contract
 
-The five required views are Today, Studio, Publish, Results, and Settings.
+The required primary views remain Today, Discover, Studio, Publish, Results, and Settings. Discover includes one fixed intelligence-channel workspace for website and X Lists source configuration; it is not a plugin manager.
 
 Preload exposes narrow IPC for:
 
@@ -540,6 +562,7 @@ Preload exposes narrow IPC for:
 - open data/log directories.
 - fixed Pi task start/read/cancel and Pi connection settings.
 - fixed X List reads, preparation and UI-only confirmation.
+- website/X Lists channel configuration reads, website resolution/trial read, daily preflight/selection, scan receipts and source-change preparation with UI-only confirmation.
 - workspace list, current identity, relaunch-based safe switch, moved-root relink, proposal preparation and UI-only profile activation.
 
 Renderer must not pass SQL, arbitrary command names, arbitrary filesystem paths, or arbitrary browser URLs.
@@ -570,6 +593,10 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-016 | X List workspace | AI、UK、游戏资讯三个真实根的 MCP `tools/list` 均包含不带确认权限的通用 `x_lists.*`；a valid profile fixture whose publishing platforms exclude X still exposes X Lists; each active workspace uses only its root-local selected X profile to read owned/followed/member List identities; an owned List member batch is frozen, UI-confirmed, serially read back and stoppable. Changing root/account/profile between prepare and confirm makes the old confirmation stale with zero platform/business write. A same-root account-A warm `read-post`/timeline cache followed by account B with the same List ID/URL returns only B data, or accurate `needs_user` with the specified zero-write preflight when B lacks login. A bound List timeline writes traceable current-root source items; identical account/List/URL/cache/source-feed fixtures remain mutually invisible across roots; unsafe external-list actions remain absent. |
 | EVAL-017 | AI root enrollment | A sealed pre-enrollment manifest binds Git/diff ownership, acceptance-script and package hashes, resolved root/schema, stable business projections, asset/export hashes, login readback and Pi sessions. Post-enrollment differs only by declared workspace/profile/migration metadata and runtime logs; current capability receipts remain valid. |
 | EVAL-018 | Workspace switch and isolation | AI/UK duplicate-value fixtures remain isolated; an in-flight mutation or unsafe task rejects switching; a safe switch relaunches, terminates old HTTP streams/sessions and the complete old process tree, uses a new MCP URL, and leaves the inactive root's DB/WAL/files/jobs unchanged across a due-time observation window. Confirming a new profile revision for the active root uses the same bounded relaunch result: every old profile-bound runtime/process and MCP URL/stream closes, and only the new URL exposes the new capability snapshot. The fresh UI and new MCP read the same authoritative current workspace/capability snapshot; top/status, Publish account and MCP connection surfaces show that identity, and duplicate object IDs or persisted view state do not select an object or intelligence subsection from the previous root. Each persisted empty shared view cold-reopens through one polling window with unchanged business tables, revisions and root files until an explicit action. Injected failure and process-kill at each switch-journal phase restore the original root; moved-root relink and identity mismatch are proven. |
-| EVAL-019 | Official profiles and new lanes | Without a configured model, UI creates the fixed UK template; UK completes a linked source → plan → content → X pure-text platform version through UI/Pi/external MCP while every inventoried AI-only route stays at zero. AI positively retains rankings, fixed AI source presentation and generic X Lists; UK/game DOM bundles, IPC, MCP and runtime expose no AI ranking/source-index/wire component or lane-inaccurate copy, while their X Lists UI and Settings controls read the current root and show truthful empty/login states. AI、UK 和 Owner 已确认的游戏资讯根 all expose generic `x_lists.*` tools bound only to their current root; a bound List can feed that root's source → plan → content chain, while fixed AI Lists/AI rankings/AI source-index/wire stay zero outside AI and identical account/List/URL/cache fixtures never cross roots. Studio, Publish and Results show only enabled new actions; UI, IPC, MCP and platform runtimes reject new work outside the current publishing-platform subset with zero write while preserving historical readback; generic X Lists remain available even when X is not a publishing platform. A non-self-media proposal and each stale confirmation binding are rejected with zero registry/root/profile change, and MCP/Pi expose no activate or X List confirm tool. 游戏资讯根 is confirmed manually in the real UI, cold-reopened, and completes the same linked text chain; interrupted candidate-root initialization leaves registry/active unchanged and is safely revalidated. Missing model or X login produces one persistent, accurately attributed `needs_user` with stable reason/workspace/profile revision, no duplicate unchanged attempt, fallback or cross-root write. |
+| EVAL-019 | Official profiles and new lanes | Without a configured model, UI creates the fixed UK template; UK completes a linked source → plan → content → X pure-text platform version through UI/Pi/external MCP while every inventoried genuinely AI-only route stays at zero. AI positively retains rankings, while AI/UK/game all expose the same root-local website/X Lists channel surface and never share source configuration, account, cache or items. Studio, Publish and Results show only enabled new actions; UI, IPC, MCP and platform runtimes reject new work outside the current publishing-platform subset with zero write while preserving historical readback. A non-self-media proposal and each stale confirmation binding are rejected with zero registry/root/profile change. 游戏资讯根 is confirmed manually in the real UI, cold-reopened, and completes the same linked text chain; interrupted candidate-root initialization leaves registry/active unchanged and is safely revalidated. Missing model or X login produces one persistent, accurately attributed `needs_user` with stable reason/workspace/profile revision, no duplicate unchanged attempt, fallback or cross-root write. |
+| EVAL-020 | Website channel configuration | UI/API resolve an arbitrary public website name or URL to real candidates, trial-read the selected canonical entry, reject a duplicate canonical URL, preserve an unreadable reason, and read back the enabled root-local source without creating a source item merely for the check. |
+| EVAL-021 | X List channel resolution | Name, URL and ID inputs resolve only against the current root account; same-name fixtures return every account/List-ID/URL candidate without guessing, and confirmation reuses the exact existing binding while missing login and account change produce zero-write `needs_user`/stale results. |
+| EVAL-022 | Shared daily orchestration | Today defaults to every enabled website/X Lists source and supports per-run module deselection. Each selected source produces a durable receipt. All checked with zero candidates succeeds with an empty plan; one checked plus one failed is partial and preserves success; all blocked returns needs_user before Pi starts; no trustworthy receipt is failed. |
+| EVAL-023 | Channel authorization and root isolation | Pi/external MCP prepares an exact batched source diff but exposes no confirm tool; UI confirmation binds workspace/profile/source identities and exact diff, stale confirmation writes zero, and identical AI/UK URL/List fixtures, receipts and collected items remain mutually invisible after cold switches. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.
