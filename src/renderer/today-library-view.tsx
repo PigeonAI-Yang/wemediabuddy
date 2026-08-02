@@ -561,7 +561,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const verified = Math.max(0, Number(task?.progress?.verified ?? 0));
   const saved = Math.max(0, Number(task?.progress?.saved ?? 0));
   const opportunityCount = Math.max(0, Number(task?.progress?.opportunityCount ?? 0));
-  const progressRatio = planned > 0 ? Math.min(1, processed / planned) : (running ? Math.min(0.9, 0.12 + processed * 0.08) : 0);
+  const progressRatio = planned > 0 ? Math.min(1, processed / planned) : 0;
   const progressPct = Math.round(progressRatio * 100);
   const currentSource = String(task?.progress?.currentSource || '').trim();
   const lastEvent = Array.isArray(task?.events) && task.events.length
