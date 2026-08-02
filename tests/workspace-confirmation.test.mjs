@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { failAgentTask, startAgentTask } from '../src/main/agent-tasks.ts';
+import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, startAgentTask } from '../src/main/agent-tasks.ts';
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
@@ -13,6 +13,7 @@ import { upsertSource } from '../src/main/sources.ts';
 import { createWorkspaceConfirmation } from '../src/main/workspace-confirmation.ts';
 import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intelligence.ts';
 import { readWorkspaceProfile } from '../src/main/workspace-profiles.ts';
+import { createWebsiteSource } from '../src/main/intelligence-channels.ts';
 import { proposalBinding, WorkspaceProposalStore } from '../src/main/workspace-proposals.ts';
 import { createProposedWorkspace, enrollAiWorkspace, readWorkspaceRegistry } from '../src/main/workspaces.ts';
 
@@ -86,13 +87,35 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     assert.equal(cold.prepare('SELECT source_id FROM content_project_sources WHERE project_id=?').get(chain.projectId).source_id, chain.sourceId);
     assert.equal(cold.prepare('SELECT body FROM platform_versions WHERE id=?').get(chain.platformVersionId).body, '第三赛道 X 纯文字版本');
     cold.close();
-    const routes = { ai: 0, uk: 0, game: 0 };
-    const routed = await startWorkspaceDailyIntelligence({ dataRootPath: thirdRoot, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
-      ai: async () => { routes.ai += 1; throw new Error('AI route must stay zero'); },
-      uk: async () => { routes.uk += 1; throw new Error('UK route must stay zero'); },
-      game: async () => { routes.game += 1; return { task: { id: 'game-route' }, reused: false }; }
+    const channelDb = migrateDatabase(path.join(thirdRoot, 'wmb.db'));
+    createWebsiteSource(channelDb, {
+      inputText: 'https://example.com/game-daily', name: 'Game daily source', canonicalUrl: 'https://example.com/game-daily', resolutionStatus: 'ready',
+      trialRead: { title: 'Game daily source', url: 'https://example.com/game-daily', readable: true, summary: 'A readable game workspace source used for shared daily routing.' }
     });
-    assert.equal(routed.task.id, 'game-route');
+    channelDb.close();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response('<html><head><title>Game updates</title></head><body><p>Readable shared channel page with no new links today.</p></body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    const routes = { ai: 0, uk: 0, game: 0 };
+    try {
+      const routed = await startWorkspaceDailyIntelligence({ dataRootPath: thirdRoot, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
+        ai: async () => { routes.ai += 1; throw new Error('AI route must stay zero'); },
+        uk: async () => { routes.uk += 1; throw new Error('UK route must stay zero'); },
+        game: async () => {
+          routes.game += 1;
+          const database = migrateDatabase(path.join(thirdRoot, 'wmb.db'));
+          try {
+            const task = getAgentTask(database, database.prepare("SELECT id FROM agent_tasks WHERE intent='daily_intelligence' AND business_date=?").get('2026-08-02').id);
+            assert.ok(task);
+            saveCurrentPlan(database, { planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
+            database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('plans.save', agentRequestId(task.id, 'plan'), '{}', new Date().toISOString());
+            const completed = completeAgentTask(database, task.id);
+            assert.equal(completed.ok, true);
+            return { task: completed.data, reused: false };
+          } finally { database.close(); }
+        }
+      });
+      assert.equal(routed.task.status, 'succeeded');
+    } finally { globalThis.fetch = originalFetch; }
     assert.deepEqual(routes, { ai: 0, uk: 0, game: 1 });
 
     const staleProposal = store.prepare({ ...proposalInput('stale-ui'), displayName: '过期提案' }, { workspaceId: null, currentProfile: null });

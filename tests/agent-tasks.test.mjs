@@ -7,6 +7,7 @@ import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
+import { createWebsiteSource, recordSourceScanReceipt } from '../src/main/intelligence-channels.ts';
 import { createContentProject, saveCoreVersion } from '../src/main/content.ts';
 import {
   agentRequestId,
@@ -47,7 +48,19 @@ test('agent tasks reuse one running intent/date and mint stable request ids', as
 
 test('agent task completion requires business object readback', async () => {
   await withDb((database) => {
-    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-07-28' });
+    const now = new Date().toISOString();
+    database.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision)
+      VALUES ('workspace_id', 'workspace-agent-task', ?, ?, 1)`).run(now, now);
+    const website = createWebsiteSource(database, {
+      inputText: 'https://example.com/agent-task', name: 'Agent task website', canonicalUrl: 'https://example.com/agent-task', resolutionStatus: 'ready',
+      trialRead: { title: 'Agent task website', url: 'https://example.com/agent-task', readable: true, summary: 'Readable source for the task completion receipt.' }
+    });
+    const started = startAgentTask(database, {
+      intent: 'daily_intelligence', businessDate: '2026-07-28', contextRefs: {
+        workspaceId: 'workspace-agent-task',
+        intelligenceChannels: { sources: [{ module: 'official_web', sourceId: website.id, sourceFeedId: website.sourceFeedId, revision: website.revision }] }
+      }
+    });
     assert.equal(started.ok, true);
     const rejected = completeAgentTask(database, started.data.id);
     assert.equal(rejected.ok, false);
@@ -55,6 +68,7 @@ test('agent task completion requires business object readback', async () => {
     assert.equal(getActiveAgentTask(database, 'daily_intelligence', '2026-07-28')?.status, 'running');
 
     const source = upsertSource(database, {
+      feedId: website.sourceFeedId,
       title: 'Agent task source',
       originalUrl: 'https://example.com/agent-task-source',
       summary: 'for completion gate',
@@ -86,6 +100,10 @@ test('agent task completion requires business object readback', async () => {
     });
     database.prepare(`INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)`)
       .run('sources.upsert_batch', `${started.data.id}:source:0:0`, JSON.stringify({ data: { id: source.id } }), new Date().toISOString());
+    recordSourceScanReceipt(database, {
+      taskId: started.data.id, workspaceId: 'workspace-agent-task', module: 'official_web', sourceId: website.id, sourceFeedId: website.sourceFeedId,
+      status: 'succeeded', candidateCount: 1, savedCount: 1
+    });
     database.prepare(`INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)`)
       .run('plans.save', `${started.data.id}:plan`, '{}', new Date().toISOString());
 

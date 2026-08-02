@@ -1,16 +1,17 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { migrateDatabase } from './db/migrations.ts';
+import { refreshWorkCarry } from './ferment.ts';
 import { listWatchingSources } from './knowledge.ts';
 import {
   agentRequestId,
   cancelAgentTask,
-  clearAgentTaskControl,
   completeAgentTask,
   failAgentTask,
+  finishDailyIntelligenceFromReceipts,
   getAgentTask,
   partialAgentTask,
   reportAgentTaskProgress,
@@ -22,13 +23,6 @@ import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
-import { readBrowserConfig } from './browser.ts';
-import {
-  mergeWireCheckpoint,
-  runEnabledXListWire,
-  runOfficialWebWire
-} from './intelligence-wire.ts';
-import { refreshWorkCarry } from './ferment.ts';
 
 const activeDailyRuntimes = new Map<string, PiRpcSupervisor>();
 export async function abortDailyIntelligence(taskId: string): Promise<boolean> {
@@ -69,43 +63,43 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, requestIds: { sources: string; plan: string }, route?: string, options?: { firstRoute?: boolean; fermentingSummary?: string; watchingSummary?: string }): string {
-  const lines = [
+function dailyPrompt(task: AgentTask, planRequestId: string, context: { watchingSummary: string; fermentingSummary: string }): string {
+  return [
     '执行 WeMediaBuddy 今日情报任务。',
     `task_id=${task.id}`,
     `intent=${task.intent}`,
     `plan_date=${task.businessDate}`,
     'skill=wemedia-intelligence-engine',
-    `sources_request_id=${requestIds.sources}`,
-    `plan_request_id=${requestIds.plan}`,
+    `plan_request_id=${planRequestId}`,
     `checkpoint=${JSON.stringify(task.checkpoint)}`,
     '要求：',
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-    '2. 先调用 wmb_get_workbench 与 wmb_get_agent_task。按检查点跳过已处理来源，重启不得重复劳动。',
-    route ? `3. 本轮只研究来源路线“${route}”；在本轮 4 分钟边界内，保存所有完成核验且达到资料标准的结果，不设条数上限；不要生成方案。开始和结束都调用 wmb_report_agent_progress。` : '3. 来源研究已结束。本轮只基于已保存资料形成最终方案，不再浏览新来源。',
-    '4. 每个来源开始前读取任务控制：skip_source=记录跳过并清除控制；save_partial=停止研究并进入读回；cancel=立即停止。已核验资料应逐步保存。',
-    `5. 每条资料使用稳定子 requestId：${requestIds.sources}:<本路线内序号>，重启必须复用同一 ID。`,
-    route ? '6. 本轮禁止调用 wmb_save_plan。' : `6. 每条资料保存后调用 wmb_get_knowledge_context 查历史，再用 wmb_record_knowledge 归入稳定主题并记录核验状态；最后用 wmb_save_plan 保存全部满足机会标准的去重结果，不得限制数量；request_id=${requestIds.plan}，每个机会必须引用真实 sourceIds 和对应 topicId。`,
-    '7. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。按等级从高到低提交；未达到机会标准的线索只保留为资料，不得凑数。',
-    '8. 写回后调用 wmb_get_workbench 读回，并汇报最终计数。',
-    '如果外部读取失败，仍可用已核验的公开官方 URL 完成最小可用写入，但不得伪造不存在的业务对象。'
-  ];
-  if (options?.firstRoute) {
-    lines.push(
-      '补充：W0/W1 导线（enabled X List + primary release 官方源）已由运行时执行完毕。A 类官宣发现属于导线职责，本轮不要跳过已入库核验资料；请基于 workbench/source_items 做解释、冲突与机会，而不是重复“有没有发版”的盲扫。',
-      '观察雷达：资料库 management_status=watching 的对象是用户明确要持续跟踪的。本轮优先检查它们的相关主题/官方源/后续评测是否有新进展；有进展就入库并在机会里点明“观察对象余波”。',
-      options?.watchingSummary ? `当前观察中：${options.watchingSummary}` : '当前观察中：无'
-    );
-  }
-  if (!route) {
-    lines.push(
-      '9. 方案综合时同时看：今日新资料、资料库观察中对象的余波、workbench.fermenting 未消化差集。',
-      '10. 观察中对象若仍有跟进价值，应生成/保留机会并写清余波理由；若已无跟进必要，可在总结建议取消观察（不要擅自改 management_status）。',
-      options?.watchingSummary ? `当前观察中：${options.watchingSummary}` : '当前观察中：无',
-      options?.fermentingSummary ? `当前发酵差集：${options.fermentingSummary}` : '当前发酵差集：无'
-    );
-  }
-  return lines.join('\n');
+    '2. 官网和 X List 已由共享渠道模块完成真实扫描。只基于当前根已入库资料、受众和编辑目标做机会判断；不得再次调用固定 AI source-index、固定 AI List/wire、扫描其他未选来源，或写入未选渠道的新资料。',
+    '3. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有值得做的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。',
+    `4. 方案使用 request_id=${planRequestId}。非空方案的每个机会必须引用真实 sourceIds。`,
+    '5. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
+    '6. 综合时同时参考以下已有的观察与发酵差集；它们只用于判断，禁止为此另行浏览或扫描新来源。',
+    `当前观察中：${context.watchingSummary}`,
+    `当前发酵差集：${context.fermentingSummary}`,
+    '7. 写回后调用 wmb_get_workbench 读回资料和方案；禁止伪造资料、占位方案或最终发布。'
+  ].join('\n');
+}
+
+export function buildDailyOpportunityPrompt(database: Parameters<typeof refreshWorkCarry>[0], task: AgentTask, planRequestId: string): string {
+  const fermenting = refreshWorkCarry(database, task.businessDate);
+  const watchingSummary = JSON.stringify(listWatchingSources(database, 20).map((item) => ({ id: item.id, title: item.title, topics: item.topics, priority: item.priority })));
+  const fermentingSummary = JSON.stringify({
+    items: fermenting.items.slice(0, 5).map((item) => ({ title: item.title, state: item.state, priority: item.priority, fermentedDays: item.fermentedDays, reason: item.reason, aftershocks: item.aftershocks.slice(0, 2).map((shock) => shock.title) })),
+    topics: fermenting.topics.slice(0, 5)
+  });
+  return dailyPrompt(task, planRequestId, { watchingSummary, fermentingSummary });
+}
+
+export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof cancelAgentTask>[0], task: AgentTask | null | undefined): AgentTask | null {
+  if (task?.status !== 'running' || task.controlAction !== 'cancel') return null;
+  const cancelled = cancelAgentTask(database, task.id);
+  if (!cancelled.ok) throw new Error(cancelled.error.message);
+  return cancelled.data;
 }
 export async function startDailyIntelligence(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string;
@@ -114,7 +108,6 @@ export async function startDailyIntelligence(input: {
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DailyIntelligenceRun> {
   const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
-  let taskId: string | null = null;
   try {
     const contextRefs = { planDate: input.businessDate }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
@@ -127,8 +120,7 @@ export async function startDailyIntelligence(input: {
       piSessionId: `daily-${input.businessDate}`
     });
     if (!started.ok) throw new Error(started.error.message);
-    taskId = started.data.id;
-    if (started.reused && !['resume_pending', 'starting'].includes(started.data.phase)) return { task: started.data, reused: true };
+    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(started.data.phase)) return { task: started.data, reused: true };
 
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await prepareSkillDir(layout.agentDir);
@@ -152,13 +144,9 @@ export async function startDailyIntelligence(input: {
     }), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
 
-    const requestIds = {
-      sources: agentRequestId(started.data.id, 'sources'),
-      plan: agentRequestId(started.data.id, 'plan')
-    };
     reportAgentTaskProgress(database, started.data.id, {
-      phase: started.data.phase === 'resume_pending' ? 'resuming' : 'planning_sources',
-      message: started.data.phase === 'resume_pending' ? '已从持久检查点恢复任务。' : '正在规划今日来源。'
+      phase: started.data.phase === 'resume_pending' ? 'resuming' : 'judging_opportunities',
+      message: started.data.phase === 'resume_pending' ? '已从持久检查点恢复任务。' : '正在根据已扫描来源判断内容机会。'
     });
 
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-daily-'));
@@ -196,171 +184,38 @@ export async function startDailyIntelligence(input: {
         }
       }, 15_000);
       try {
-        let wireCheckpoint = mergeWireCheckpoint(started.data.checkpoint, {});
-        const browserConfig = readBrowserConfig(database);
-        reportAgentTaskProgress(database, started.data.id, {
-          phase: 'scanning_sources',
-          message: '正在巡检 X List',
-          checkpoint: wireCheckpoint
-        });
-        const xListWire = await runEnabledXListWire({
-          database,
-          browserConfig,
-          checkpoint: wireCheckpoint,
-          onProgress: (message, checkpoint) => {
-            wireCheckpoint = checkpoint;
-            reportAgentTaskProgress(database, started.data.id, {
-              phase: 'scanning_sources',
-              message,
-              checkpoint
-            });
-          }
-        });
-        wireCheckpoint = xListWire.checkpoint;
-        reportAgentTaskProgress(database, started.data.id, {
-          phase: 'scanning_sources',
-          message: '正在巡检官方源',
-          checkpoint: wireCheckpoint
-        });
-        const officialWire = await runOfficialWebWire({
-          database,
-          skillRoot: skillSourcePath(),
-          checkpoint: wireCheckpoint,
-          browserConfig,
-          onProgress: (message, checkpoint) => {
-            wireCheckpoint = checkpoint;
-            reportAgentTaskProgress(database, started.data.id, {
-              phase: 'scanning_sources',
-              message,
-              checkpoint
-            });
-          }
-        });
-        wireCheckpoint = officialWire.checkpoint;
-        reportAgentTaskProgress(database, started.data.id, {
-          phase: 'scanning_sources',
-          message: '导线巡检完成，开始主题航线。',
-          checkpoint: wireCheckpoint
-        });
-
-        const routes = ['官方产品与模型发布', '开源项目与开发者工具', 'AI Skill 与 MCP 生态', '研究与模型评测', '社区真实问题与争议', '创作者与商业案例'];
-        const done = new Set(Array.isArray(wireCheckpoint.completedRoutes) ? wireCheckpoint.completedRoutes : []);
-        const firstPendingRoute = routes.find((route) => !done.has(route));
-        for (let index = 0; index < routes.length; index += 1) {
-          const route = routes[index];
-          if (done.has(route)) continue;
-          const current = getAgentTask(database, started.data.id);
-          if (!current || current.status !== 'running') break;
-          if (current.controlAction === 'cancel') {
-            const cancelled = cancelAgentTask(database, current.id);
-            if (cancelled.ok) return { task: cancelled.data, reused: started.reused === true };
-          }
-          if (current.controlAction === 'save_partial') {
-            const partial = partialAgentTask(database, current.id);
-            if (!partial.ok) throw new Error(partial.error.message);
-            return { task: partial.data, reused: started.reused === true };
-          }
-          if (current.controlAction === 'skip_source') {
-            clearAgentTaskControl(database, current.id);
-            reportAgentTaskProgress(database, current.id, {
-              progress: { planned: routes.length, processed: done.size + 1, currentSource: route },
-              checkpoint: mergeWireCheckpoint(getAgentTask(database, current.id)?.checkpoint ?? wireCheckpoint, {
-                completedRoutes: [...done, route]
-              }),
-              message: `已按用户要求跳过：${route}`,
-              level: 'warning'
-            });
-            done.add(route);
-            continue;
-          }
-          reportAgentTaskProgress(database, current.id, {
-            phase: 'scanning_sources',
-            progress: { planned: routes.length, processed: done.size, currentSource: route },
-            message: `开始扫描：${route}`
-          });
-          const runtime = makeRuntime();
-          activeDailyRuntimes.set(current.id, runtime);
-          try {
-            await runtime.start();
-            const watchingSummary = route === firstPendingRoute
-              ? JSON.stringify(listWatchingSources(database, 20).map((item) => ({
-                id: item.id,
-                title: item.title,
-                topics: item.topics,
-                priority: item.priority
-              })))
-              : undefined;
-            await runtime.promptUntilSettled(dailyPrompt(getAgentTask(database, current.id) ?? current, {
-              sources: agentRequestId(current.id, `source:${index}`),
-              plan: requestIds.plan
-            }, route, { firstRoute: route === firstPendingRoute, watchingSummary }), { timeoutMs: 4 * 60_000 });
-            done.add(route);
-            reportAgentTaskProgress(database, current.id, {
-              progress: { processed: done.size, currentSource: route },
-              checkpoint: mergeWireCheckpoint(getAgentTask(database, current.id)?.checkpoint ?? wireCheckpoint, {
-                completedRoutes: [...done]
-              }),
-              message: `完成扫描：${route}`
-            });
-          } catch (error) {
-            const latest = getAgentTask(database, current.id);
-            if (latest?.controlAction) { index -= 1; continue; }
-            done.add(route);
-            reportAgentTaskProgress(database, current.id, {
-              progress: { processed: done.size, failed: (latest?.progress.failed ?? 0) + 1, currentSource: route },
-              checkpoint: mergeWireCheckpoint(latest?.checkpoint ?? wireCheckpoint, {
-                completedRoutes: [...done]
-              }),
-              message: `来源路线失败，已隔离并继续：${route}`,
-              level: 'warning'
-            });
-          } finally {
-            activeDailyRuntimes.delete(current.id);
-            await runtime.stop().catch(() => {});
-          }
-        }
         const beforePlan = getAgentTask(database, started.data.id);
         if (beforePlan?.status !== 'running') return { task: beforePlan!, reused: started.reused === true };
+        const cancelledBeforePlan = cancelDailyIntelligenceIfRequested(database, beforePlan);
+        if (cancelledBeforePlan) return { task: cancelledBeforePlan, reused: started.reused === true };
         if (beforePlan.controlAction === 'save_partial') {
           const partial = partialAgentTask(database, beforePlan.id);
           if (!partial.ok) throw new Error(partial.error.message);
           return { task: partial.data, reused: started.reused === true };
         }
-        reportAgentTaskProgress(database, beforePlan.id, { phase: 'synthesizing', message: '来源扫描结束，正在整理全部合格内容机会。' });
-        const fermenting = refreshWorkCarry(database, beforePlan.businessDate);
-        const watchingSummary = JSON.stringify(listWatchingSources(database, 20).map((item) => ({
-          id: item.id,
-          title: item.title,
-          topics: item.topics,
-          priority: item.priority
-        })));
-        const fermentingSummary = JSON.stringify({
-          items: fermenting.items.slice(0, 5).map((item) => ({
-            title: item.title,
-            state: item.state,
-            priority: item.priority,
-            fermentedDays: item.fermentedDays,
-            reason: item.reason,
-            aftershocks: item.aftershocks.slice(0, 2).map((shock) => shock.title)
-          })),
-          topics: fermenting.topics.slice(0, 5)
-        });
+        reportAgentTaskProgress(database, beforePlan.id, { phase: 'synthesizing', message: '共享来源扫描结束，正在整理内容机会。' });
         const synthesis = makeRuntime();
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
           await synthesis.start();
-          await synthesis.promptUntilSettled(dailyPrompt(getAgentTask(database, beforePlan.id) ?? beforePlan, requestIds, undefined, { fermentingSummary, watchingSummary }), { timeoutMs: 6 * 60_000 });
+          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 6 * 60_000 });
         } catch (error) {
-          // Wire + route scanning already persisted sources/opportunities. Don't discard the day
+          // Shared channel scans already persisted sources and receipts. Don't discard the day
           // just because final synthesis provider call failed (e.g. model modality mismatch).
           const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
+          const cancelled = cancelDailyIntelligenceIfRequested(database, latest);
+          if (cancelled) return { task: cancelled, reused: started.reused === true };
           const message = error instanceof Error ? error.message : String(error);
           reportAgentTaskProgress(database, latest.id, {
             phase: 'synthesis_failed',
             message: `综合整理失败，保留已扫描结果：${message.slice(0, 180)}`,
             level: 'warning'
           });
-          const partial = partialAgentTask(database, latest.id);
+          const partial = finishDailyIntelligenceFromReceipts(database, latest.id, {
+            forcePartial: true,
+            errorCode: 'DAILY_INTELLIGENCE_FAILED',
+            errorMessage: message
+          });
           if (partial.ok) return { task: partial.data, reused: started.reused === true };
           throw error;
         } finally {
@@ -371,8 +226,10 @@ export async function startDailyIntelligence(input: {
         clearInterval(heartbeat);
       }
       const afterRun = getAgentTask(database, started.data.id);
+      const cancelledAfterRun = cancelDailyIntelligenceIfRequested(database, afterRun);
+      if (cancelledAfterRun) return { task: cancelledAfterRun, reused: started.reused === true };
       if (afterRun?.controlAction === 'save_partial') {
-        const partial = partialAgentTask(database, started.data.id);
+        const partial = finishDailyIntelligenceFromReceipts(database, started.data.id, { forcePartial: true });
         if (!partial.ok) throw new Error(partial.error.message);
         return { task: partial.data, reused: started.reused === true };
       }
@@ -386,7 +243,11 @@ export async function startDailyIntelligence(input: {
           message: `完成校验未完全通过，尝试保留结果：${completed.error.message}`,
           level: 'warning'
         });
-        const partial = partialAgentTask(database, started.data.id);
+        const partial = finishDailyIntelligenceFromReceipts(database, started.data.id, {
+          forcePartial: true,
+          errorCode: completed.error.code,
+          errorMessage: completed.error.message
+        });
         if (partial.ok) return { task: partial.data, reused: started.reused === true };
         failAgentTask(database, started.data.id, completed.error.code, completed.error.message);
         throw new Error(completed.error.message);
@@ -395,17 +256,18 @@ export async function startDailyIntelligence(input: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') failAgentTask(database, started.data.id, 'DAILY_INTELLIGENCE_FAILED', message);
+      const cancelled = cancelDailyIntelligenceIfRequested(database, current);
+      if (cancelled) return { task: cancelled, reused: started.reused === true };
+      if (current?.status === 'running') finishDailyIntelligenceFromReceipts(database, started.data.id, {
+        forcePartial: true,
+        errorCode: 'DAILY_INTELLIGENCE_FAILED',
+        errorMessage: message
+      });
       throw error;
     } finally {
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }
-  } finally {
-    if (taskId) {
-      // no-op placeholder for future tracing
-    }
-    database.close();
-  }
+  } finally { database.close(); }
 }
 
 function draftPrompt(task: AgentTask, projectId: string, requestId: string): string {

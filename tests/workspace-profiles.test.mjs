@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
+import { agentRequestId, completeAgentTask, getAgentTask } from '../src/main/agent-tasks.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
@@ -14,6 +15,7 @@ import { createOfficialWorkspace, enrollAiWorkspace } from '../src/main/workspac
 import { AI_ONLY_ROUTE_IDS, assertAiOnlyRoute, readWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intelligence.ts';
 import { WorkspaceProposalStore } from '../src/main/workspace-proposals.ts';
+import { createWebsiteSource } from '../src/main/intelligence-channels.ts';
 
 test('official AI and UK profiles isolate one linked text chain without AI-only routes', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-profiles-'));
@@ -95,12 +97,38 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
     assert.equal(ukBrowser.userDataDir, path.join(ukRoot.path, 'browser-profile'));
     assert.notEqual(ukBrowser.cdpUrl, 'http://127.0.0.1:9334');
 
-    const calls = { ai: 0, uk: 0 };
-    const result = await startWorkspaceDailyIntelligence({ dataRootPath: ukRoot.path, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
-      ai: async () => { calls.ai += 1; throw new Error('AI route must stay zero'); },
-      uk: async () => { calls.uk += 1; return { task: { id: 'uk-test' }, reused: false }; }
+    const channelDb = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+    const channelSource = createWebsiteSource(channelDb, {
+      inputText: 'https://example.com/uk-daily', name: 'UK daily source', canonicalUrl: 'https://example.com/uk-daily', resolutionStatus: 'ready',
+      trialRead: { title: 'UK daily source', url: 'https://example.com/uk-daily', readable: true, summary: 'A readable UK workspace source used for shared daily routing.' }
     });
-    assert.equal(result.task.id, 'uk-test');
+    channelDb.close();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response('<html><head><title>UK updates</title></head><body><p>Readable shared channel page with no new links today.</p></body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    const calls = { ai: 0, uk: 0 };
+    try {
+      const result = await startWorkspaceDailyIntelligence({ dataRootPath: ukRoot.path, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
+        ai: async () => { calls.ai += 1; throw new Error('AI route must stay zero'); },
+        uk: async () => {
+          calls.uk += 1;
+          const database = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+          try {
+            const task = getAgentTask(database, database.prepare("SELECT id FROM agent_tasks WHERE intent='daily_intelligence' AND business_date=?").get('2026-08-02').id);
+            assert.ok(task);
+            assert.deepEqual(task.contextRefs.intelligenceChannels, {
+              workspaceId: uk.id, profileRevision: 1, modules: ['official_web', 'x_lists'],
+              sources: [{ module: 'official_web', sourceId: channelSource.id, sourceFeedId: channelSource.sourceFeedId, revision: channelSource.revision }]
+            });
+            saveCurrentPlan(database, { planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
+            database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('plans.save', agentRequestId(task.id, 'plan'), '{}', new Date().toISOString());
+            const completed = completeAgentTask(database, task.id);
+            assert.equal(completed.ok, true);
+            return { task: completed.data, reused: false };
+          } finally { database.close(); }
+        }
+      });
+      assert.equal(result.task.status, 'succeeded');
+    } finally { globalThis.fetch = originalFetch; }
     assert.deepEqual(calls, { ai: 0, uk: 1 });
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 3 }); }
 });

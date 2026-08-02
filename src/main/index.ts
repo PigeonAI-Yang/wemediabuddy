@@ -27,7 +27,7 @@ import {
 } from './agent-tasks';
 import { createDataRootSelection } from './data-root-selection';
 import { assertWorkspaceSwitchable, installWorkspaceIpcGate, WorkspaceRuntimeGate } from './workspace-runtime';
-import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner'; import { resolveAgentPiPrerequisite } from './agent-prerequisites';
+import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -173,6 +173,7 @@ app.whenReady().then(async () => {
     const pending = getLatestAgentTask(database);
     database.close();
     if (pending?.intent === 'daily_intelligence' && pending.status === 'running' && pending.phase === 'resume_pending') {
+      const runKey = `${dataRoot.path}\u0000${pending.businessDate}`;
       const run = startWorkspaceDailyIntelligence({
         dataRootPath: dataRoot.path,
         businessDate: pending.businessDate,
@@ -182,8 +183,8 @@ app.whenReady().then(async () => {
           broadcastPiRuntimeProgress(event);
           if (event.type === 'agent_task') broadcastPiEvent(event);
         }
-      }).finally(() => dailyRuns.delete(pending.id));
-      dailyRuns.set(pending.id, run);
+      }).finally(() => dailyRuns.delete(runKey));
+      dailyRuns.set(runKey, run);
     }
   }
   registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals: workspaceConfirmation.list, selectWorkspaceProposalRoot: workspaceConfirmation.selectRoot, confirmWorkspaceProposal: workspaceConfirmation.confirm, getMcp: () => mcp, getXhs: () => xhs, getBrowser: () => browser, stopPi: async () => { await pi?.stop(); pi = null; } });
@@ -369,31 +370,26 @@ app.whenReady().then(async () => {
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     if (!mcp) await refreshMcp(dataRoot);
     if (!mcp) throw new Error('WMB MCP 尚未就绪。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate, contextRefs: { planDate: businessDate } }); if (prerequisite.waiting) { database.close(); return { ok: true, data: prerequisite.waiting, error: null }; }
-    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate, contextRefs: { planDate: businessDate } });
-    database.close();
-    if (!started.ok) return started;
-    if (!dailyRuns.has(started.data.id)) {
-      const run = startWorkspaceDailyIntelligence({
-        dataRootPath: dataRoot.path,
-        businessDate,
-        mcpUrl: mcp.url,
-      xhsMcpUrl: xhs?.getUrl() || '',
-        onEvent: (event) => {
-          broadcastPiRuntimeProgress(event);
-          if (event.type === 'agent_task') broadcastPiEvent(event);
-        }
-      }).then((result) => {
-        broadcastPiEvent({ type: 'agent_task', task: result.task });
-        return result;
-      }).catch((error) => {
-        broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) });
-      }).finally(() => dailyRuns.delete(started.data.id));
-      dailyRuns.set(started.data.id, run);
+    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db')); const active = getActiveAgentTask(database, 'daily_intelligence', businessDate); const previous = getLatestAgentTask(database, 'daily_intelligence', businessDate); database.close();
+    const runKey = `${dataRoot.path}\u0000${businessDate}`;
+    if (active && (dailyRuns.has(runKey) || active.phase !== 'resume_pending')) { broadcastPiEvent({ type: 'agent_task', task: active }); return { ok: true, data: { task: active, reused: true }, error: null }; }
+    let coordinatorError: unknown = null;
+    const run = startWorkspaceDailyIntelligence({
+      dataRootPath: dataRoot.path, businessDate, mcpUrl: mcp.url, xhsMcpUrl: xhs?.getUrl() || '',
+      onEvent: (event) => { broadcastPiRuntimeProgress(event); if (event.type === 'agent_task') broadcastPiEvent(event); }
+    }).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; }).catch((error) => {
+      coordinatorError = error; broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) }); return null;
+    }).finally(() => dailyRuns.delete(runKey));
+    const readback = migrateDatabase(path.join(dataRoot.path, 'wmb.db')); const task = getActiveAgentTask(readback, 'daily_intelligence', businessDate) ?? getLatestAgentTask(readback, 'daily_intelligence', businessDate); readback.close();
+    if (!task || (task.id === previous?.id && !active)) {
+      const result = await run;
+      if (result) return { ok: true, data: result, error: null };
+      const message = coordinatorError instanceof Error ? coordinatorError.message : coordinatorError ? String(coordinatorError) : '每日情报任务未创建。';
+      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message } };
     }
-    broadcastPiEvent({ type: 'agent_task', task: started.data });
-    return { ok: true, data: { task: started.data, reused: started.reused === true }, error: null };
+    dailyRuns.set(runKey, run);
+    broadcastPiEvent({ type: 'agent_task', task });
+    return { ok: true, data: { task, reused: Boolean(active) }, error: null };
   });
   ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string }) => {
     const dataRoot = await loadSelectedDataRoot();

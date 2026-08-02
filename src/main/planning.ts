@@ -12,7 +12,6 @@ export function createTopic(database: DatabaseSync, title: string): { id: string
 }
 
 export function saveCurrentPlan(database: DatabaseSync, input: { planDate: string; timezone: string; summary: string; items: PlanItemInput[] }, transaction = true): { id: string; revision: number } {
-  if (!input.items.length) throw new Error('计划至少需要一项。');
   for (const item of input.items) {
     if (!Number.isInteger(item.priority) || item.priority < 0 || item.priority > 7) throw new Error('机会等级必须是 0–7 的整数。');
     if (!item.sourceIds.length) throw new Error('计划条目必须引用资料。');
@@ -20,8 +19,11 @@ export function saveCurrentPlan(database: DatabaseSync, input: { planDate: strin
   const items = input.items.map((item, index) => ({ item, index }))
     .sort((a, b) => a.item.priority - b.item.priority || a.index - b.index)
     .map(({ item }) => item);
-  const sourceCount = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${input.items.flatMap((item) => item.sourceIds).map(() => '?').join(',')})`).get(...input.items.flatMap((item) => item.sourceIds)) as { count: number }).count);
-  if (sourceCount !== new Set(input.items.flatMap((item) => item.sourceIds)).size) throw new Error('计划引用了不存在的资料。');
+  const sourceIds = input.items.flatMap((item) => item.sourceIds);
+  if (sourceIds.length) {
+    const sourceCount = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')})`).get(...sourceIds) as { count: number }).count);
+    if (sourceCount !== new Set(sourceIds).size) throw new Error('计划引用了不存在的资料。');
+  }
   validateReferences(database, 'topics', input.items.flatMap((item) => item.topicId ? [item.topicId] : []), '计划引用了不存在的主题。');
   validateReferences(database, 'reviews', input.items.flatMap((item) => item.reviewIds ?? []), '计划引用了不存在的复盘。', "status='final'");
   const now = new Date().toISOString(); const id = randomUUID();

@@ -51,32 +51,47 @@ export async function confirmAndRunXListOperation(database: DatabaseSync, config
   return runStartedXListOperation(database, config, started.data);
 }
 
-export async function collectBoundXListTimeline(database: DatabaseSync, config: XListBrowserConfig, input: { accountKey: string; listId: string; limit?: number }): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[] }>> {
+export async function collectBoundXListTimeline(database: DatabaseSync, config: XListBrowserConfig, input: {
+  accountKey: string;
+  listId: string;
+  limit?: number;
+  expectedBindingId?: string;
+  expectedRevision?: number;
+  readTimeline?: typeof readXListTimeline;
+}): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[]; candidateCount: number }>> {
   const binding = getXListBinding(database, input.accountKey, input.listId);
   if (!binding) return failure('NOT_FOUND', 'List 绑定不存在。');
   if (!binding.enabled) return failure('INVALID_STATE', '该 List 已移出发现，不能采集。');
+  if ((input.expectedBindingId && input.expectedBindingId !== binding.id) || (input.expectedRevision !== undefined && input.expectedRevision !== binding.revision)) {
+    return failure('REVISION_CONFLICT', 'X List 来源已变化，请重新开始本次扫描。');
+  }
   try {
-    const result = await readXListTimeline(config, binding.listId, Math.min(Math.max(input.limit ?? 50, 1), 50));
+    const result = await (input.readTimeline ?? readXListTimeline)(config, binding.listId, Math.min(Math.max(input.limit ?? 50, 1), 50));
     if (!sameHandle(result.accountKey, binding.accountKey)) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与绑定 List 的账号不一致。');
+    const current = getXListBinding(database, binding.accountKey, binding.listId);
+    if (!current || !current.enabled || current.id !== binding.id || current.revision !== binding.revision
+      || (config.accountKey && !sameHandle(config.accountKey, binding.accountKey))) {
+      return failure('REVISION_CONFLICT', 'X List 来源或账号在读取期间已变化，未写入迟到结果。');
+    }
     const sourceIds = result.posts.map((post) => upsertSource(database, {
-      feedId: binding.sourceFeedId,
+      feedId: current.sourceFeedId,
       originalUrl: post.url,
-      title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${binding.name} 动态`,
+      title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
       author: post.authorHandle ?? undefined,
       publishedAt: post.postedAt ?? undefined,
       summary: post.text,
-      evidence: JSON.stringify({ listId: binding.listId, listUrl: binding.canonicalUrl, collectedAt: new Date().toISOString() })
+      evidence: JSON.stringify({ listId: current.listId, listUrl: current.canonicalUrl, collectedAt: new Date().toISOString() })
     }).id);
-    const updated = updateXListBindingObservation(database, binding.accountKey, binding.listId, { detail: result.detail.observation, collected: sourceIds.length });
+    const updated = updateXListBindingObservation(database, current.accountKey, current.listId, { detail: result.detail.observation, collected: sourceIds.length });
     writeXListTimelineCacheIfImproved(database, {
-      accountKey: binding.accountKey,
-      listId: binding.listId,
+      accountKey: current.accountKey,
+      listId: current.listId,
       posts: result.posts,
       detail: { name: result.detail.name, canonicalUrl: result.detail.canonicalUrl },
       source: 'collect',
       fetchedAt: result.detail.observation?.capturedAt
     });
-    return success({ binding: updated!, sourceIds });
+    return success({ binding: updated!, sourceIds, candidateCount: result.posts.length });
   } catch (error) {
     return failure('BROWSER_NEEDS_USER', error instanceof Error ? error.message : String(error));
   }

@@ -6,6 +6,7 @@ import { recordOperation } from './operations.ts';
 import { getToday } from './workbench.ts';
 import { getStudio } from './content.ts';
 import { listReviews } from './reviews.ts';
+import { listSourceScanReceipts, type SourceScanReceipt } from './intelligence-channels.ts';
 
 export type AgentIntent = 'daily_intelligence' | 'studio_draft' | 'results_review';
 export type AgentTaskStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted' | 'needs_user';
@@ -21,6 +22,11 @@ export type AgentTaskProgress = {
   lastActivityAt?: string;
 };
 export type AgentTaskEvent = { at: string; message: string; level?: 'info' | 'warning' };
+export type DailyReceiptAggregation = {
+  status: 'succeeded' | 'partial' | 'needs_user' | 'failed';
+  receipts: SourceScanReceipt[];
+  missingReceiptCount: number;
+};
 
 export type AgentTask = {
   id: string;
@@ -315,6 +321,7 @@ export function partialAgentTask(database: DatabaseSync, id: string): CommandRes
   const task = getAgentTask(database, id);
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
   if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以部分完成。');
+  if (task.intent === 'daily_intelligence') return finishDailyIntelligenceFromReceipts(database, id, { forcePartial: true });
   const today = getToday(database, task.businessDate);
   const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results
     WHERE tool='sources.upsert_batch' AND request_id LIKE ?`).all(`${id}:source:%`) as Array<{ resultJson: string }>;
@@ -333,46 +340,84 @@ export function partialAgentTask(database: DatabaseSync, id: string): CommandRes
   return success(requireTask(database, id));
 }
 
-function validateDailyIntelligence(database: DatabaseSync, taskId: string, businessDate: string): CommandResult<Record<string, unknown>> {
-  const today = getToday(database, businessDate);
-  const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results
-    WHERE tool='sources.upsert_batch' AND request_id LIKE ?`).all(`${taskId}:source:%`) as Array<{ resultJson: string }>;
-  const receiptText = receipts.map((row) => row.resultJson).join('\n');
-  const receiptSources = (today.sources ?? []).filter((source) => receiptText.includes(source.id));
-  // Official wire / X-list wire upsert directly into SQLite (not only via MCP receipts).
-  const todaySources = today.sources ?? [];
-  const sources = todaySources.length ? todaySources : receiptSources;
-  const plan = today.plan;
-  if (!sources.length && !receiptSources.length) {
-    // Fall back to any source_items collected on the business date window.
-    const dayStart = `${businessDate}T00:00:00.000+08:00`;
-    const dayEnd = `${businessDate}T23:59:59.999+08:00`;
-    const count = database.prepare(`SELECT COUNT(*) AS total FROM source_items WHERE collected_at >= ? AND collected_at <= ?`)
-      .get(dayStart, dayEnd) as { total: number };
-    if (!Number(count?.total || 0)) return failure('VALIDATION_ERROR', '成功要求至少一条真实资料落库。');
+export function readDailyReceiptAggregation(database: DatabaseSync, task: Pick<AgentTask, 'id' | 'contextRefs'>): DailyReceiptAggregation {
+  const workspaceId = typeof task.contextRefs.workspaceId === 'string' ? task.contextRefs.workspaceId : '';
+  const frozen = task.contextRefs.intelligenceChannels as { sources?: unknown } | undefined;
+  const selected = Array.isArray(frozen?.sources) ? frozen.sources.filter((source): source is { module: string; sourceId: string; sourceFeedId: string } => {
+    if (!source || typeof source !== 'object') return false;
+    const item = source as { module?: unknown; sourceId?: unknown; sourceFeedId?: unknown };
+    return (item.module === 'official_web' || item.module === 'x_lists') && typeof item.sourceId === 'string' && typeof item.sourceFeedId === 'string';
+  }) : [];
+  if (!workspaceId || !Array.isArray(frozen?.sources)) return { status: 'failed', receipts: [], missingReceiptCount: 0 };
+  const expected = new Map(selected.map((source) => [`${source.module}:${source.sourceId}:${source.sourceFeedId}`, source]));
+  const all = listSourceScanReceipts(database, { taskId: task.id, workspaceId, limit: 500 });
+  const byIdentity = new Map(all.map((receipt) => [`${receipt.module}:${receipt.sourceId}:${receipt.sourceFeedId}`, receipt]));
+  const receipts = [...expected.keys()].flatMap((identity) => byIdentity.has(identity) ? [byIdentity.get(identity)!] : []);
+  const missingReceiptCount = Math.max(0, expected.size - receipts.length);
+  const succeeded = receipts.filter((receipt) => receipt.status === 'succeeded').length;
+  const failed = receipts.filter((receipt) => receipt.status === 'failed').length + missingReceiptCount;
+  const needsUser = receipts.filter((receipt) => receipt.status === 'needs_user').length;
+  if (succeeded) return { status: failed || needsUser ? 'partial' : 'succeeded', receipts, missingReceiptCount };
+  if (needsUser && !failed) return { status: 'needs_user', receipts, missingReceiptCount };
+  return { status: 'failed', receipts, missingReceiptCount };
+}
+
+export function finishDailyIntelligenceFromReceipts(database: DatabaseSync, id: string, input: { forcePartial?: boolean; errorCode?: string; errorMessage?: string } = {}): CommandResult<AgentTask> {
+  const task = getAgentTask(database, id);
+  if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以结束。');
+  const aggregation = readDailyReceiptAggregation(database, task);
+  if (aggregation.status === 'needs_user') {
+    return needsUserAgentTask(database, id, input.errorCode ?? 'CHANNELS_NEEDS_USER', input.errorMessage ?? '全部已选情报来源需要用户处理。');
   }
+  if (aggregation.status === 'failed') {
+    return failAgentTask(database, id, input.errorCode ?? 'CHANNEL_SCAN_FAILED', input.errorMessage ?? '没有可信的来源检查回执。');
+  }
+  const now = new Date().toISOString();
+  const status = input.forcePartial || aggregation.status === 'partial' ? 'partial' : 'succeeded';
+  database.prepare(`UPDATE agent_tasks SET status=?, phase=?, result_refs_json=?, error_code=?, error_message=?,
+    control_action=NULL, updated_at=?, finished_at=? WHERE id=?`).run(
+    status,
+    status === 'partial' ? 'partial' : 'completed',
+    JSON.stringify({ receiptIds: aggregation.receipts.map((receipt) => receipt.id), checkedSourceCount: aggregation.receipts.length, missingReceiptCount: aggregation.missingReceiptCount }),
+    input.errorCode ?? null,
+    input.errorMessage ?? null,
+    now,
+    now,
+    id
+  );
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: `agent.daily.${status}` });
+  return success(requireTask(database, id));
+}
+
+function validateDailyIntelligence(database: DatabaseSync, taskId: string, businessDate: string): CommandResult<Record<string, unknown>> {
+  const task = getAgentTask(database, taskId);
+  if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  const aggregation = readDailyReceiptAggregation(database, task);
+  if (aggregation.status === 'needs_user') return failure('BROWSER_NEEDS_USER', '全部已选情报来源需要用户处理。');
+  if (aggregation.status === 'failed') return failure('VALIDATION_ERROR', '成功要求至少一条可信来源检查回执。');
+
+  const today = getToday(database, businessDate);
+  const plan = today.plan;
   if (!plan) return failure('VALIDATION_ERROR', '成功要求存在当日 current plan。');
   if (!database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`)
     .get(agentRequestId(taskId, 'plan'))) return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
-  if (!plan.items.length) return failure('VALIDATION_ERROR', '成功要求至少一个合格的 plan item。');
 
   const existsStmt = database.prepare('SELECT 1 AS ok FROM source_items WHERE id = ?');
-  const usableItems: typeof plan.items = [];
   for (const item of plan.items) {
-    const rawIds = Array.isArray(item.sourceIds) ? item.sourceIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0) : [];
-    if (!rawIds.length) continue;
-    const validIds = rawIds.filter((sourceId) => Boolean(existsStmt.get(sourceId)));
-    // Keep the opportunity if it still has at least one real source. Stale/deleted refs are ignored.
-    if (!validIds.length) continue;
-    usableItems.push({ ...item, sourceIds: validIds });
+    const sourceIds = Array.isArray(item.sourceIds) ? item.sourceIds.filter((sourceId): sourceId is string => typeof sourceId === 'string' && sourceId.trim().length > 0) : [];
+    if (!sourceIds.length || sourceIds.some((sourceId) => !existsStmt.get(sourceId))) {
+      return failure('VALIDATION_ERROR', '非空方案的每个条目必须引用真实资料。');
+    }
   }
-  if (!usableItems.length) return failure('VALIDATION_ERROR', '成功要求至少一个引用真实资料的 plan item。');
-
   return success({
-    sourceIds: sources.map((source) => source.id),
+    taskStatus: aggregation.status,
+    receiptIds: aggregation.receipts.map((receipt) => receipt.id),
+    checkedSourceCount: aggregation.receipts.length,
+    missingReceiptCount: aggregation.missingReceiptCount,
     planId: plan.id,
-    planItemIds: usableItems.map((item) => item.id),
-    opportunityCount: usableItems.length
+    planItemIds: plan.items.map((item) => item.id),
+    opportunityCount: plan.items.length
   });
 }
 
@@ -429,8 +474,11 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
   }
 
   const now = new Date().toISOString();
-  database.prepare(`UPDATE agent_tasks SET status = 'succeeded', phase = 'completed', result_refs_json = ?,
+  const dailyStatus = current.intent === 'daily_intelligence' && validation.data.taskStatus === 'partial' ? 'partial' : 'succeeded';
+  database.prepare(`UPDATE agent_tasks SET status = ?, phase = ?, result_refs_json = ?,
     error_code = NULL, error_message = NULL, updated_at = ?, finished_at = ? WHERE id = ?`).run(
+    dailyStatus,
+    dailyStatus === 'partial' ? 'partial' : 'completed',
     JSON.stringify(validation.data),
     now,
     now,
@@ -441,8 +489,8 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
     command: 'agent_tasks.complete',
     entityType: 'agent_task',
     entityId: id,
-    result: 'ok'
+    result: dailyStatus === 'partial' ? 'error' : 'ok'
   });
-  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.complete' });
+  broadcastDataChanged({ scopes: ['agent', 'today'], reason: `agent.${dailyStatus === 'partial' ? 'partial' : 'complete'}` });
   return success(requireTask(database, id));
 }

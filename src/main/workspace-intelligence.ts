@@ -3,15 +3,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
+import { agentRequestId, completeAgentTask, finishDailyIntelligenceFromReceipts, getAgentTask, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runner.ts';
+import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { preparePiExtension } from './pi-extension.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { requireWorkspaceProfile, type WorkspaceProfileV1 } from './workspace-profiles.ts';
+import type { IntelligenceModule } from './intelligence-channels.ts';
 
 type IntelligenceInput = {
   dataRootPath: string; piConfigPath?: string;
@@ -19,6 +21,7 @@ type IntelligenceInput = {
   mcpUrl: string;
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
+  modules?: IntelligenceModule[];
 };
 
 export function readWorkspaceIntelligenceProfile(dataRootPath: string): WorkspaceProfileV1 {
@@ -35,9 +38,25 @@ export async function startWorkspaceDailyIntelligence(
   } = {}
 ): Promise<DailyIntelligenceRun> {
   const profile = readWorkspaceIntelligenceProfile(input.dataRootPath);
-  if (profile.intelligencePackId === 'wemedia-intelligence-engine') return (runners.ai ?? startDailyIntelligence)(input);
-  if (profile.intelligencePackId === 'uk-life-content-radar') return (runners.uk ?? startLaneDailyIntelligence)(input, profile);
-  return (runners.game ?? startLaneDailyIntelligence)(input, profile);
+  const hasInjected = profile.intelligencePackId === 'wemedia-intelligence-engine' ? Boolean(runners.ai)
+    : profile.intelligencePackId === 'uk-life-content-radar' ? Boolean(runners.uk) : Boolean(runners.game);
+  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  try {
+    const workspace = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
+    if (!workspace?.value) throw new Error('WORKSPACE_ID_REQUIRED');
+    const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
+    if (!hasInjected) {
+      const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
+      if (prerequisite.waiting) return prerequisite.waiting;
+    }
+    const channels = await startDailyChannelRun(database, {
+      businessDate: input.businessDate, workspaceId: workspace.value, profileRevision: profile.revision, modules: input.modules
+    } satisfies DailyChannelInput);
+    if (!channels.shouldRunJudgment) return { task: channels.task, reused: channels.reused };
+  } finally { database.close(); }
+  if (profile.intelligencePackId === 'wemedia-intelligence-engine') return runners.ai ? runners.ai(input) : startDailyIntelligence(input);
+  if (profile.intelligencePackId === 'uk-life-content-radar') return runners.uk ? runners.uk(input, profile) : startLaneDailyIntelligence(input, profile);
+  return runners.game ? runners.game(input, profile) : startLaneDailyIntelligence(input, profile);
 }
 
 async function startLaneDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
@@ -53,7 +72,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       piSessionId: `daily-${input.businessDate}`
     });
     if (!started.ok) throw new Error(started.error.message);
-    if (started.reused && !['resume_pending', 'starting'].includes(started.data.phase)) return { task: started.data, reused: true };
+    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(started.data.phase)) return { task: started.data, reused: true };
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const skillRoot = workspaceSkillSourcePath(profile.intelligencePackId);
     const installedSkill = path.join(layout.agentDir, 'skills', profile.intelligencePackId);
@@ -84,7 +103,11 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       return { task: completed.data, reused: false };
     } catch (error) {
       const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') failAgentTask(database, current.id, profile.intelligencePackId === 'game-news-radar' ? 'GAME_INTELLIGENCE_FAILED' : 'UK_INTELLIGENCE_FAILED', error instanceof Error ? error.message : String(error));
+      if (current?.status === 'running') finishDailyIntelligenceFromReceipts(database, current.id, {
+        forcePartial: true,
+        errorCode: profile.intelligencePackId === 'game-news-radar' ? 'GAME_INTELLIGENCE_FAILED' : 'UK_INTELLIGENCE_FAILED',
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     } finally {
       await runtime.stop().catch(() => {});
@@ -96,9 +119,8 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
 function lanePrompt(profile: WorkspaceProfileV1, taskId: string, businessDate: string): string {
   return [
     `执行${profile.displayName}工作空间的今日情报任务。`, `task_id=${taskId}`, `plan_date=${businessDate}`, `skill=${profile.intelligencePackId}`,
-    '只通过 wmb_* MCP 读取和写入当前工作空间。只使用当前 Skill；禁止 AI 榜单、AI source-index、固定 AI List/wire、UK 路线或其他工作空间专属路线。通用 X List 仅限当前根已启用绑定，不能确认。',
-    `资料使用稳定 request_id=${agentRequestId(taskId, 'source')}:<序号>；方案使用 request_id=${agentRequestId(taskId, 'plan')}。`,
-    `先保存有当前来源的${profile.displayName}资料，再保存引用真实 sourceIds 的完整方案；保留全部达到机会标准的结果。`,
+    '只通过 wmb_* MCP 读取和写入当前工作空间。官网和 X List 已由共享渠道模块扫描完成；只判断当前根已有资料，不得写入未选渠道的新资料，也不得调用 AI 榜单、AI source-index、固定 AI List/wire、UK 路线或其他工作空间专属路线。',
+    `方案使用 request_id=${agentRequestId(taskId, 'plan')}。非空方案必须引用真实 sourceIds；没有值得做的机会时保存空 items 方案。`,
     '最后调用 wmb_get_workbench 读回资料和方案；禁止直接写文件/数据库，禁止最终发布。'
   ].join('\n');
 }
