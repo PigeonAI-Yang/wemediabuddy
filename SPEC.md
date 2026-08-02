@@ -488,7 +488,7 @@ X Lists 是通用情报来源能力，不由 `WorkspaceProfileV1.platforms` 启�
 
 执行始终使用可见的专用 X 页面、单个可操作标签和串行节奏；用户可以随时接管或请求停止，停止只在当前原子页面动作完成后生效。平台出现登录、验证码、挑战、权限不足或选择器无法安全确认时，操作进入 `needs_user`。点击后无法读回实际状态时，操作进入 `unknown`，停止后续项目且不自动重试。操作状态为 `prepared`、`awaiting_confirmation`、`running`、`succeeded`、`partial`、`needs_user`、`unknown` 或 `failed`，与发布和指标 jobs 分开保存。
 
-绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取，也可参加用户显式启动的 CAP-021 今日情报；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源，不创建定时全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
+绑定到发现的 List 可以由用户显式触发一次有上限的最新动态读取，也可参加用户显式启动的 CAP-021 今日情报；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源。除一次显式动作按 CAP-022 创建的三个有界指标复查窗口外，不创建定时或全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
 
 通用 `x_lists.*` UI/IPC、MCP 和 Pi 读写准备能力使用同一业务命令，在每个有效自媒体工作空间可用，并在每次调用时重新验证当前 workspace、data-root、根内账号和 List 绑定。缺少登录、账号不匹配、挑战或权限不足进入准确的 `needs_user`；账号不匹配的稳定 reason/error code 为 `ACCOUNT_MISMATCH`，不得借用其他根账号或静默回退。MCP/Pi 不暴露确认工具，最终外部写入仍只由 UI 精确确认。
 
@@ -548,6 +548,22 @@ One shared daily entry freezes the current workspace/profile revision, the defau
 
 Preflight returns `needs_user` without launching Pi when no enabled source is runnable because of missing configuration, login or account identity. Once scanning starts, one source failure never rolls back another source's committed receipt or items. Task aggregation is: `succeeded` when at least one selected source was truthfully checked, including zero candidates and an empty current plan; `partial` when at least one source was checked and another failed or needs user; `needs_user` when every selected source is blocked; `failed` only when orchestration/runtime failure prevents any trustworthy check receipt. Non-empty plan items must still reference real source items. Placeholder heartbeat source items are forbidden.
 
+### CAP-022 Root-local X post trend observations
+
+Links: REQ-011, REQ-023, AC-007, AC-019.
+
+After the user explicitly starts daily intelligence or one X List trend observation, WMB may create only three bounded non-AI follow-up reads for each selected, frozen List at +15m, +60m and +180m. No observation is created before that explicit action. Reads remain visible, serial and bound to the active workspace, data root, browser account, List binding and binding revision; they do not wake Pi or run in an inactive root.
+
+UI, Pi and external MCP call the same explicit-start business command. The caller may select only currently enabled root-local List bindings and cannot supply an arbitrary URL, account, root, cadence or job payload. No additional confirmation is required because the command performs read-only platform access, but it still creates only the bounded root-local jobs defined here.
+
+Every returned post continues to reuse its canonical `source_item`. A separate append-only X post metric snapshot stores source item, account/List/binding identity, scheduled and real capture times, normalized values, raw labels/page evidence and per-field status. Missing values are never zero. Replaying one observation job is idempotent, while a later real capture appends rather than overwrites. The latest List cache remains disposable and is never the historical source of truth.
+
+A trend read is deterministic. Two snapshots at least ten minutes apart with visible, non-decreasing views produce `views_per_hour`; three comparable snapshots also produce the change between consecutive interval velocities. Missing, reversed, decreasing or insufficient samples return `data_insufficient` with a stable reason and no inferred score. Pi may use only these persisted facts when explaining why an opportunity is timely.
+
+On restart, at most the latest still-relevant overdue observation for a List may run and it records the real capture time. Older windows finish with `OBSERVATION_WINDOW_EXPIRED` and write no snapshot. A root switch stops new claims, drains the current atomic read, terminates the old browser/runtime and rejects every late response with zero snapshot/cache/source/receipt write. One List failure does not roll back another List's committed snapshots.
+
+Topic/event aggregation, plan opportunities and content projects reuse CAP-003, CAP-004 and CAP-015. Trend evidence references real source and snapshot IDs. It may recommend an editorial format or angle but never performs replies, likes, quotes, reposts or final publication.
+
 ## 4. UI and IPC contract
 
 The required primary views remain Today, Discover, Studio, Publish, Results, and Settings. Discover includes one fixed intelligence-channel workspace for website and X Lists source configuration; it is not a plugin manager.
@@ -563,6 +579,7 @@ Preload exposes narrow IPC for:
 - fixed Pi task start/read/cancel and Pi connection settings.
 - fixed X List reads, preparation and UI-only confirmation.
 - website/X Lists channel configuration reads, website resolution/trial read, daily preflight/selection, scan receipts and source-change preparation with UI-only confirmation.
+- X post trend snapshot reads and explicit bounded-observation start/read/stop; no arbitrary cadence, URL, account or root.
 - workspace list, current identity, relaunch-based safe switch, moved-root relink, proposal preparation and UI-only profile activation.
 
 Renderer must not pass SQL, arbitrary command names, arbitrary filesystem paths, or arbitrary browser URLs.
@@ -598,5 +615,7 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-021 | X List channel resolution | Name, URL and ID inputs resolve only against the current root account; same-name fixtures return every account/List-ID/URL candidate without guessing, and confirmation reuses the exact existing binding while missing login and account change produce zero-write `needs_user`/stale results. |
 | EVAL-022 | Shared daily orchestration | Today defaults to every enabled website/X Lists source and supports per-run module deselection. Each selected source produces a durable receipt. All checked with zero candidates succeeds with an empty plan; one checked plus one failed is partial and preserves success; all blocked returns needs_user before Pi starts; no trustworthy receipt is failed. |
 | EVAL-023 | Channel authorization and root isolation | Pi/external MCP prepares an exact batched source diff but exposes no confirm tool; UI confirmation binds workspace/profile/source identities and exact diff, stale confirmation writes zero, and identical AI/UK URL/List fixtures, receipts and collected items remain mutually invisible after cold switches. |
+| EVAL-024 | X post metric history and trend | A current Windows package with a real logged-in X profile reads one bound List at least three times. One canonical source item retains three append-only snapshots with raw labels, field status and real capture times; exact two-point velocity and three-point velocity change read back, while null/parse-failed/decreasing/short/insufficient samples produce no fake trend. |
+| EVAL-025 | Bounded observation and opportunity lineage | One explicit start creates only the three frozen follow-up windows per selected List; replay is idempotent, account/root/binding changes and late responses write zero, inactive roots do not run, partial List failure preserves success, and a multi-source event opportunity exposes trend evidence through Today and retains the same plan/topic/source chain when UI or MCP creates content. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

@@ -163,8 +163,11 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `x_list_operation_items`
 - `website_sources`
 - `source_scan_receipts`
+- `x_post_metric_snapshots`
 
 平台特有字段和原始指标使用 JSON 保存；跨平台稳定字段使用普通列。不同平台不建立重复业务表。
+
+X List 帖子继续以规范 URL 复用 `source_items`。`x_post_metric_snapshots` 只追加当前根真实读取到的指标时间点，保存 account/List/binding 身份、scheduled/actual time、normalized/raw/status/evidence；它不复制帖子正文或充当第二资料库。List 浏览 cache 仍可覆盖最新 payload，但不得用于历史趋势。
 
 内容修改创建新版本。更新命令携带当前 revision，旧版本写入返回冲突和最新版本，防止不同 Agent 用旧上下文覆盖新内容。
 
@@ -318,6 +321,8 @@ SQLite `jobs` 表保存：
 - 其他不需要模型推理的确定性任务。
 
 主进程用一个定时器等待最近的 `due_at`。应用退出时不运行；重新启动后恢复到期任务。
+
+用户显式启动的 X List 趋势观察复用同一 jobs 基础，但使用独立 kind：初次真实读取后只为冻结 List 创建 +15m、+60m、+180m 三个窗口。任务重新核验活动 workspace、浏览器账号、binding ID/revision 后串行读取并追加快照；切换根时停止领取、排空当前读取并随旧 Chrome/runtime 一起关闭。旧根不运行，过期窗口不补造快照。
 
 任务状态：
 

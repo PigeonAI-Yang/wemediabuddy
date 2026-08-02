@@ -294,3 +294,20 @@ Order:
 8. `WMB-2107` — run focused packaged AI/UK acceptance for arbitrary websites, same-name X Lists, cold-switch isolation, zero-update success, partial preservation, all-blocked preflight and exact authorization.
 
 Gate: EVAL-020–EVAL-023 pass. AI/UK use the same two fixed channel modules and shared daily scan path; the AI source-index/List fixtures are retained as visible AI-root configuration rather than a privileged collector. At least one truthful source check may succeed with zero new items and an empty plan, while no trustworthy receipt cannot claim success. Source configuration, account identity, receipts and collected items stay root-local; Agents prepare but UI confirms exact source changes. X accounts, Xiaohongshu, communities, third-party modules, plugin loading and the separate Pi stale temporary-working-directory BUG are outside M-2100.
+
+## M-2200 X List trend opportunity radar
+
+Scope: CAP-002, CAP-003, CAP-011, CAP-015, CAP-017, CAP-018, CAP-021 and CAP-022.
+
+Detailed design: `docs/spark/2026-08-03-x-list-trend-opportunity-radar-design.md`.
+
+Order:
+
+1. `WMB-2200` — freeze REQ-023/AC-019/CAP-022/EVAL-024–025, capture one current real structured-metrics baseline and falsifiably test List-ID response isolation;
+2. `WMB-2201` — add per-field parsing status and append-only root-local X post metric snapshots after account/binding revalidation;
+3. `WMB-2202` — add deterministic bounded snapshot/trend reads with exact insufficient-data semantics and shared IPC/MCP/Pi access;
+4. `WMB-2203` — add explicit-start +15m/+60m/+180m observation jobs, idempotency, stop/restart/expiry and active-root lifecycle;
+5. `WMB-2204` — feed trend evidence into existing event/topic aggregation, Today/Discover and the plan-to-content chain without social automation or a second source/event store;
+6. `WMB-2205` — run focused current-Windows-package EVAL-024–025 acceptance with real X metrics, root switching, partial/needs_user and responsive UI readback.
+
+Gate: EVAL-024–EVAL-025 pass. One explicit run creates only bounded active-root observation work; the same post retains one source identity and multiple truthful metric snapshots; deterministic speed evidence reaches an existing multi-source opportunity and survives UI/MCP creation into the same topic/source lineage. Missing metrics, app exit, root switch and late responses never create fake trends or cross-root writes. Full-network monitoring, X official APIs, background services, automatic social interaction and unrelated X utility tools remain outside M-2200.
