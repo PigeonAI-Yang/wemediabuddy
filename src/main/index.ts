@@ -39,7 +39,7 @@ import { registerXListIpc } from './ipc-x-lists';
 import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
-import { WorkspaceProposalStore } from './workspace-proposals';
+import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals';
 import { createWorkspaceConfirmation } from './workspace-confirmation';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
@@ -56,8 +56,8 @@ protocol.registerSchemesAsPrivileged([
   }
 ]);
 const dailyRuns = new Map<string, Promise<unknown>>();
-const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate, ['workspaces:switch', 'workspaces:proposal-confirm']);
-const workspaceProposals = new WorkspaceProposalStore();
+const workspaceGate = new WorkspaceRuntimeGate(); installWorkspaceIpcGate(ipcMain, workspaceGate, ['workspaces:switch', 'workspaces:proposal-confirm', 'intelligence-channels:proposal-confirm']);
+const workspaceProposals = new WorkspaceProposalStore(); const channelProposals = new IntelligenceChannelProposalStore();
 let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
@@ -106,7 +106,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     '--provider', 'wmb-api',
     '--model', config.model,
     ...(config.thinking ? ['--thinking', config.thinking] : []),
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及 X List 时只可读取、准备或采集当前根已绑定 List；最终确认只能由用户在 WMB UI 完成。禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
+    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及官网或 X List 情报来源时，先读取/解析/试读，再用 wmb_prepare_intelligence_channel_changes 准备精确 diff；最终确认只能由用户在 WMB UI 完成。涉及 X List 时只可读取、准备或采集当前根已绑定 List；禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -148,7 +148,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
 
 async function refreshMcp(dataRoot: DataRoot | null): Promise<void> {
   await mcp?.close();
-  mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate, { listWorkspaces, proposals: workspaceProposals }) : null;
+  mcp = dataRoot ? await startMcp(dataRoot.path, workspaceGate, { listWorkspaces, proposals: workspaceProposals, channelProposals }) : null;
 }
 async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
   xhs = await refreshXhsRuntime(dataRoot && readWorkspaceIntelligenceProfile(dataRoot.path).platforms.includes('xiaohongshu') ? dataRoot : null, xhs);
@@ -468,7 +468,7 @@ app.whenReady().then(async () => {
   });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
   registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
-  registerIntelligenceChannelsIpc({ loadSelectedDataRoot }); registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
+  registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals }); registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

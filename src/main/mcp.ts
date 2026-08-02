@@ -24,6 +24,7 @@ import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
 import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
+import { registerIntelligenceChannelsMcp } from './intelligence-channel-mcp.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -37,6 +38,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   profileDatabase.close();
 
   if (application) registerWorkspaceApplicationMcp(server, rootPath, application);
+  if (application?.channelProposals) registerIntelligenceChannelsMcp(server, rootPath, application);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }

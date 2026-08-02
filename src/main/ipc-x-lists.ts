@@ -2,9 +2,9 @@ import { ipcMain } from 'electron';
 import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
-import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListPostDetail, readXListTimeline, seedListTimelineMemory } from './platforms/x-list-browser.ts';
-import { pyaireaderXProfileId, type XListBrowserConfig } from './platforms/x-list-primitives.ts';
+import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
+import { currentXListContextForRoot, selectedXListBrowser, type CurrentXListContext } from './x-list-context.ts';
 import { captureXListOperationSnapshot, collectBoundXListTimeline, confirmAndRunXListOperation } from './x-list-execution.ts';
 import {
   armXListOperation, bindXList, getXListBinding, getXListOperation, listXListBindings, listXListOperations, prepareXListOperation,
@@ -20,7 +20,6 @@ import {
 import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
-import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null> };
 
@@ -38,7 +37,7 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     const root = await requiredRoot(loadSelectedDataRoot);
     const first = migrateDatabase(path.join(root.path, 'wmb.db'));
     let config: XListBrowserConfig;
-    try { config = await ensureSelectedXListBrowser(first); } finally { first.close(); }
+    try { config = await selectedXListBrowser(first); } finally { first.close(); }
     let value;
     try { value = await readXListIndex(config); } catch (error) { throw needsUser(error); }
     if (value.lists.length > 0) {
@@ -196,7 +195,7 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     const root = await requiredRoot(loadSelectedDataRoot);
     const first = migrateDatabase(path.join(root.path, 'wmb.db'));
     let config: XListBrowserConfig;
-    try { config = await ensureSelectedXListBrowser(first); } finally { first.close(); }
+    try { config = await selectedXListBrowser(first); } finally { first.close(); }
     let index;
     try { index = await readXListIndex(config); } catch (error) { throw needsUser(error); }
     const list = index.lists.find((candidate) => candidate.listId === input.listId);
@@ -235,44 +234,15 @@ async function withXListBrowser<T>(loadSelectedDataRoot: Dependencies['loadSelec
   }
 }
 
-export type CurrentXListContext = {
-  root: DataRoot;
-  workspaceId: string;
-  browserId: string;
-  accountKey: string;
-  config: XListBrowserConfig;
-  index: Awaited<ReturnType<typeof readXListIndex>>;
-};
-
 export async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<CurrentXListContext> {
-  const root = await requiredRoot(loadSelectedDataRoot);
-  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  let config: XListBrowserConfig;
-  let workspaceId: string | undefined;
-  try {
-    workspaceId = (database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
-    if (!workspaceId) throw new Error('当前工作空间身份缺失。');
-    config = await ensureSelectedXListBrowser(database);
-  } catch (error) { throw needsUser(error); }
-  finally { database.close(); }
-  try {
-    const index = await readXListIndex({ ...config!, workspaceId });
-    return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey }, index };
-  } catch (error) { throw needsUser(error); }
+  try { return await currentXListContextForRoot(await requiredRoot(loadSelectedDataRoot)); }
+  catch (error) { throw needsUser(error); }
 }
 
 async function requiredRoot(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<DataRoot> {
   const root = await loadSelectedDataRoot();
   if (!root) throw new Error('请先选择数据根目录。');
   return root;
-}
-
-async function ensureSelectedXListBrowser(database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
-  const config = readBrowserConfig(database);
-  if (!config) throw new Error('请先选择 Pyaireader 专用 X 登录态。');
-  if (config.id === pyaireaderXProfileId && !allowsAiOnlyRoutes(database)) throw new Error('此根尚未配置独立 X 登录态。');
-  const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
-  return { id: config.id, cdpUrl: runtime.cdpUrl };
 }
 
 function sameAccount(left: string, right: string): boolean { return left.trim().toLowerCase() === right.trim().toLowerCase(); }

@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import { WORKSPACE_CATALOG, WorkspaceProposalStore } from './workspace-proposals.ts';
 import { readIntelligenceChannelsSummary, type IntelligenceChannelsSummary } from './intelligence-channels.ts';
+import type { IntelligenceChannelProposalStore } from './intelligence-channel-proposals.ts';
 
 type WorkspaceListing = { activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> };
 
@@ -17,6 +18,7 @@ const WORKSPACE_INTELLIGENCE_CAPABILITIES = {
 export type WorkspaceApplicationMcp = {
   listWorkspaces: () => Promise<WorkspaceListing>;
   proposals: WorkspaceProposalStore;
+  channelProposals?: IntelligenceChannelProposalStore;
 };
 
 export type WorkspaceCapabilitySnapshot = {

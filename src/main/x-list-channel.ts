@@ -26,6 +26,12 @@ export type XListResolution = {
   observation: XListObservation;
 };
 
+export type VerifiedXListResolution = {
+  accountKey: string;
+  list: XListRef;
+  observation: XListObservation;
+};
+
 type ParsedInput = { inputText: string; matchKind: XListResolution['matchKind']; listId?: string; normalizedName?: string };
 
 export async function resolveXListCandidates(
@@ -58,9 +64,27 @@ export async function resolveXListCandidates(
 export async function confirmResolvedXList(
   database: DatabaseSync,
   config: XListBrowserConfig,
-  input: { resolution: XListResolution; candidate: XListCandidate; expectedRevision?: number },
+  input: { resolution: XListResolution; candidate: XListCandidate; expectedRevision?: number; transaction?: boolean; notify?: boolean },
   readIndex: XListIndexReader = readXListIndex
 ): Promise<CommandResult<XListBinding>> {
+  const verified = await verifyResolvedXList(database, config, input, readIndex);
+  if (!verified.ok) return failure(verified.error.code, verified.error.message, verified.error.details);
+  return bindXList(database, {
+    accountKey: verified.data.accountKey,
+    list: verified.data.list,
+    observation: { index: verified.data.observation },
+    expectedRevision: input.expectedRevision,
+    transaction: input.transaction,
+    notify: input.notify
+  });
+}
+
+export async function verifyResolvedXList(
+  database: DatabaseSync,
+  config: XListBrowserConfig,
+  input: { resolution: XListResolution; candidate: XListCandidate },
+  readIndex: XListIndexReader = readXListIndex
+): Promise<CommandResult<VerifiedXListResolution>> {
   const workspace = currentWorkspace(database, config);
   if (!workspace.ok) return workspace;
   if (input.resolution.workspaceId !== workspace.data || !sameAccount(input.resolution.accountKey, input.candidate.accountKey)
@@ -77,12 +101,7 @@ export async function confirmResolvedXList(
   if (!list || xListUrl(list.listId) !== input.candidate.canonicalUrl) {
     return failure('CONFIRMATION_STALE', '当前账号不再包含这个 X List，请重新解析后确认。');
   }
-  return bindXList(database, {
-    accountKey: index.data.accountKey,
-    list,
-    observation: { index: index.data.observation },
-    expectedRevision: input.expectedRevision
-  });
+  return success({ accountKey: index.data.accountKey, list, observation: index.data.observation });
 }
 
 function currentWorkspace(database: DatabaseSync, config: XListBrowserConfig): CommandResult<string> {

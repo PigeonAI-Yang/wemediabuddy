@@ -183,7 +183,7 @@ export function listXListOperations(database: DatabaseSync, input: { accountKey?
 
 export function bindXList(database: DatabaseSync, input: {
   accountKey: string; list: { listId: string; canonicalUrl: string; ownerHandle: string | null; name: string; kind: XListBindingKind | 'unknown' };
-  observation?: Record<string, unknown>; expectedRevision?: number;
+  observation?: Record<string, unknown>; expectedRevision?: number; transaction?: boolean; notify?: boolean;
 }): CommandResult<XListBinding> {
   const accountKey = normalizeHandle(input.accountKey, '账号');
   if (!input.list.ownerHandle || input.list.kind === 'unknown') return failure('BROWSER_NEEDS_USER', '当前 List 的创建者或归类未能可靠读回。');
@@ -194,7 +194,7 @@ export function bindXList(database: DatabaseSync, input: {
     .get(accountKey, listId) as { id: string; revision: number; sourceFeedId: string } | undefined;
   if (existing && input.expectedRevision !== undefined && existing.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 绑定已变化，请重新加载。');
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (!input.transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const sourceFeedId = existing?.sourceFeedId ?? createSourceFeed(database, { name: `X List · ${name}`, url: canonicalUrl }).id;
     database.prepare('UPDATE source_feeds SET name=?, url=?, updated_at=?, revision=revision+1 WHERE id=?').run(`X List · ${name}`, canonicalUrl, now, sourceFeedId);
@@ -207,20 +207,20 @@ export function bindXList(database: DatabaseSync, input: {
         enabled, last_observed_at, last_observation_json, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 1)`)
         .run(randomUUID(), accountKey, listId, canonicalUrl, ownerHandle, name, input.list.kind, sourceFeedId, now, JSON.stringify(input.observation ?? {}), now, now);
     }
-    database.exec('COMMIT');
+    if (!input.transaction) database.exec('COMMIT');
     const binding = getXListBinding(database, accountKey, listId)!;
-    broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.bind' });
+    if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.bind' });
     return success(binding);
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
+  } catch (error) { if (!input.transaction) database.exec('ROLLBACK'); throw error; }
 }
 
-export function setXListBindingEnabled(database: DatabaseSync, input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }): CommandResult<XListBinding> {
+export function setXListBindingEnabled(database: DatabaseSync, input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean; notify?: boolean }): CommandResult<XListBinding> {
   const binding = getXListBinding(database, input.accountKey, input.listId);
   if (!binding) return failure('NOT_FOUND', 'List 绑定不存在。');
   if (binding.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 绑定已变化，请重新加载。', { current: binding });
   database.prepare('UPDATE x_list_bindings SET enabled=?, updated_at=?, revision=revision+1 WHERE id=?').run(input.enabled ? 1 : 0, new Date().toISOString(), binding.id);
   const updated = getXListBinding(database, binding.accountKey, binding.listId)!;
-  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.enabled' });
+  if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.x-list.enabled' });
   return success(updated);
 }
 

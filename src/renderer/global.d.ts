@@ -3,9 +3,10 @@ import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import type { XListBinding, XListOperation, XListOperationKind } from '../main/x-lists';
 import type { CommandResult } from '../main/result';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from '../main/workspace-proposals';
-import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt, WebsiteSource, WebsiteTrialRead } from '../main/intelligence-channels';
+import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt, WebsiteTrialRead } from '../main/intelligence-channels';
 import type { WebsiteCandidate } from '../main/website-channel';
-import type { XListCandidate, XListResolution } from '../main/x-list-channel';
+import type { XListResolution } from '../main/x-list-channel';
+import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceChannelProposalBinding } from '../main/intelligence-channel-proposals';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -64,12 +65,11 @@ declare global {
       getIntelligenceChannels(): Promise<{ summary: IntelligenceChannelsSummary; receipts: SourceScanReceipt[] }>;
       resolveWebsiteCandidates(input: { inputText: string }): Promise<WebsiteCandidate[]>;
       trialReadWebsite(input: { url: string }): Promise<WebsiteTrialRead>;
-      confirmWebsiteSource(input: { inputText: string; candidate: WebsiteCandidate; trialRead: WebsiteTrialRead }): Promise<WebsiteSource>;
       resolveXListCandidates(input: { inputText: string }): Promise<XListCommand<XListResolution>>;
-      confirmResolvedXList(input: { resolution: XListResolution; candidate: XListCandidate }): Promise<XListCommand<XListBinding>>;
-      setIntelligenceChannelEnabled(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number; enabled: boolean }): Promise<unknown>;
-      removeIntelligenceChannel(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number }): Promise<unknown>;
       scanIntelligenceChannel(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number }): Promise<unknown>;
+      prepareIntelligenceChannelProposal(input: ChannelProposalInput): Promise<IntelligenceChannelProposal>;
+      listIntelligenceChannelProposals(): Promise<Array<{ proposal: IntelligenceChannelProposal; binding: IntelligenceChannelProposalBinding }>>;
+      confirmIntelligenceChannelProposal(binding: IntelligenceChannelProposalBinding): Promise<{ applied: number }>;
       readXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } }>;
       getCachedXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } | null>;
       readXListDetail(listId: string): Promise<{ accountKey: string; detail: { listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown'; description: string; isPrivate: boolean; memberCount: number | null; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } }>;

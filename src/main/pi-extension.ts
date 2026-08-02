@@ -8,6 +8,7 @@ const files = [
   'wmb-mcp-xhs-client.ts',
   'wmb-mcp-tools-core.ts',
   'wmb-mcp-tools-content.ts',
+  'wmb-mcp-tools-intelligence-channels.ts',
   'wmb-mcp-tools-workspaces.ts',
   'wmb-mcp-tools-x-lists.ts',
   'wmb-mcp-tools-xhs.ts'
@@ -18,6 +19,7 @@ const staleFlatFiles = [
   'wmb-mcp-xhs-client.ts',
   'wmb-mcp-tools-core.ts',
   'wmb-mcp-tools-content.ts',
+  'wmb-mcp-tools-intelligence-channels.ts',
   'wmb-mcp-tools-workspaces.ts',
   'wmb-mcp-tools-x-lists.ts',
   'wmb-mcp-tools-xhs.ts'

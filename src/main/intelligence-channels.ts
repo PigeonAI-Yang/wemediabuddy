@@ -114,6 +114,8 @@ export function createWebsiteSource(database: DatabaseSync, input: {
   resolutionStatus: 'ready';
   trialRead: WebsiteTrialRead;
   enabled?: boolean;
+  transaction?: boolean;
+  notify?: boolean;
 }): WebsiteSource {
   const inputText = input.inputText.trim();
   const name = input.name.trim();
@@ -133,7 +135,7 @@ export function createWebsiteSource(database: DatabaseSync, input: {
   }
   const now = new Date().toISOString();
   const id = randomUUID();
-  database.exec('BEGIN IMMEDIATE');
+  if (!input.transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const feedId = sourceFeedId ?? createSourceFeed(database, { name, url: canonicalUrl }).id;
     database.prepare(`INSERT INTO website_sources (id, source_feed_id, input_text, canonical_url, enabled,
@@ -142,9 +144,9 @@ export function createWebsiteSource(database: DatabaseSync, input: {
       id, feedId, inputText, canonicalUrl, input.enabled === false ? 0 : 1,
       JSON.stringify(input.trialRead), now, now, now
     );
-    database.exec('COMMIT');
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
-  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.create' });
+    if (!input.transaction) database.exec('COMMIT');
+  } catch (error) { if (!input.transaction) database.exec('ROLLBACK'); throw error; }
+  if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.create' });
   return getWebsiteSource(database, id)!;
 }
 
@@ -160,23 +162,23 @@ export function listWebsiteSources(database: DatabaseSync, input: { enabled?: bo
   return rows.map(parseWebsite);
 }
 
-export function setWebsiteSourceEnabled(database: DatabaseSync, input: { id: string; enabled: boolean; expectedRevision?: number }): WebsiteSource {
+export function setWebsiteSourceEnabled(database: DatabaseSync, input: { id: string; enabled: boolean; expectedRevision?: number; notify?: boolean }): WebsiteSource {
   const current = getWebsiteSource(database, input.id);
   if (!current) throw new Error('WEBSITE_SOURCE_NOT_FOUND');
   if (input.expectedRevision !== undefined && input.expectedRevision !== current.revision) throw new Error('REVISION_CONFLICT');
   if (input.enabled && current.resolutionStatus !== 'ready') throw new Error('WEBSITE_SOURCE_NOT_READY');
   const now = new Date().toISOString();
   database.prepare('UPDATE website_sources SET enabled=?, updated_at=?, revision=revision+1 WHERE id=?').run(input.enabled ? 1 : 0, now, input.id);
-  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.enabled' });
+  if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.enabled' });
   return getWebsiteSource(database, input.id)!;
 }
 
-export function removeWebsiteSource(database: DatabaseSync, input: { id: string; expectedRevision?: number }): { id: string; deleted: true } {
+export function removeWebsiteSource(database: DatabaseSync, input: { id: string; expectedRevision?: number; notify?: boolean }): { id: string; deleted: true } {
   const current = getWebsiteSource(database, input.id);
   if (!current) throw new Error('WEBSITE_SOURCE_NOT_FOUND');
   if (input.expectedRevision !== undefined && input.expectedRevision !== current.revision) throw new Error('REVISION_CONFLICT');
   database.prepare('DELETE FROM website_sources WHERE id=?').run(input.id);
-  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.remove' });
+  if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.remove' });
   return { id: input.id, deleted: true };
 }
 

@@ -92,7 +92,7 @@ export function confirmWebsiteSource(database: DatabaseSync, input: {
   candidate: WebsiteCandidate;
   trialRead: WebsiteTrialRead;
   sourceFeedId?: string;
-  enabled?: boolean;
+  enabled?: boolean; transaction?: boolean; notify?: boolean;
 }): WebsiteSource {
   if (!input.trialRead.readable || !input.trialRead.title.trim()) {
     throw websiteError('WEBSITE_TRIAL_READ_REQUIRED', '网站必须先完成成功的试读。');
@@ -113,7 +113,9 @@ export function confirmWebsiteSource(database: DatabaseSync, input: {
     ...(requestedFeed ? { sourceFeedId: requestedFeed } : {}),
     resolutionStatus: 'ready',
     trialRead: input.trialRead,
-    enabled: input.enabled
+    enabled: input.enabled,
+    transaction: input.transaction,
+    notify: input.notify
   });
 }
 

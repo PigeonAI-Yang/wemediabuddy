@@ -4,7 +4,8 @@ import { contentTools } from './wmb-mcp-tools-content.ts';
 import { xListTools } from './wmb-mcp-tools-x-lists.ts';
 import { xhsTools } from './wmb-mcp-tools-xhs.ts';
 import { workspaceTools } from './wmb-mcp-tools-workspaces.ts';
+import { intelligenceChannelTools } from './wmb-mcp-tools-intelligence-channels.ts';
 
 export default function (pi: { registerTool(tool: ToolDefinition): void }) {
-  for (const tool of [...coreTools, ...contentTools, ...xListTools, ...xhsTools, ...workspaceTools]) pi.registerTool(tool);
+  for (const tool of [...coreTools, ...contentTools, ...xListTools, ...xhsTools, ...workspaceTools, ...intelligenceChannelTools]) pi.registerTool(tool);
 }
