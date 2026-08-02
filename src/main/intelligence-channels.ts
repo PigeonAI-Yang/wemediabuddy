@@ -12,7 +12,14 @@ export type SourceScanStatus = 'succeeded' | 'failed' | 'needs_user';
 export type WebsiteTrialRead = {
   title: string;
   url: string;
+  requestedUrl?: string;
   readable: boolean;
+  itemCount?: number;
+  summary?: string;
+  httpStatus?: number;
+  contentType?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
   details?: Record<string, unknown>;
 };
 
@@ -162,6 +169,15 @@ export function setWebsiteSourceEnabled(database: DatabaseSync, input: { id: str
   database.prepare('UPDATE website_sources SET enabled=?, updated_at=?, revision=revision+1 WHERE id=?').run(input.enabled ? 1 : 0, now, input.id);
   broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.enabled' });
   return getWebsiteSource(database, input.id)!;
+}
+
+export function removeWebsiteSource(database: DatabaseSync, input: { id: string; expectedRevision?: number }): { id: string; deleted: true } {
+  const current = getWebsiteSource(database, input.id);
+  if (!current) throw new Error('WEBSITE_SOURCE_NOT_FOUND');
+  if (input.expectedRevision !== undefined && input.expectedRevision !== current.revision) throw new Error('REVISION_CONFLICT');
+  database.prepare('DELETE FROM website_sources WHERE id=?').run(input.id);
+  broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.remove' });
+  return { id: input.id, deleted: true };
 }
 
 export function updateWebsiteSourceResolution(database: DatabaseSync, input: {

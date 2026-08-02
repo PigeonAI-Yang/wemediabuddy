@@ -6,7 +6,7 @@ import test from 'node:test';
 import { reportAgentTaskProgress, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { loadPrimaryReleaseSources, runOfficialWebWire } from '../src/main/intelligence-wire.ts';
-import { ensureRegistrySourceFeed, getSource } from '../src/main/sources.ts';
+import { ensureRegistrySourceFeed } from '../src/main/sources.ts';
 import { getWireHealthLedger } from '../src/main/source-wire-health.ts';
 
 test('official wire binds registry feed and health ledger reads checkpoint', async () => {
@@ -67,14 +67,11 @@ test('official wire binds registry feed and health ledger reads checkpoint', asy
       onProgress: () => {},
       fetchImpl
     });
-    assert.equal(wire.sourceIds.length, 1);
+    assert.equal(wire.sourceIds.length, 0);
     assert.equal(wire.checkpoint.sourceHealth['deepseek-api-docs']?.ok, true);
     assert.equal(wire.checkpoint.sourceHealth['broken-release']?.ok, false);
 
-    const saved = getSource(database, wire.sourceIds[0]);
-    assert.equal(saved?.feedId, feed.id);
-    assert.equal(saved?.clientLabel, 'deepseek-api-docs');
-    assert.equal(saved?.canonicalUrl, 'https://api-docs.deepseek.com/');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM source_items WHERE feed_id=?').get(feed.id).count, 0);
 
     const started = startAgentTask(database, {
       intent: 'daily_intelligence',

@@ -241,31 +241,6 @@ export async function runOfficialWebWire(input: {
           });
           savedIds.push(saved.id);
         }
-      } else {
-        const saved = upsertSource(input.database, {
-          feedId: feed.id,
-          title: `[官宣巡检] ${source.name}`,
-          summary: summary || pageTitle,
-          originalUrl: source.url,
-          priority: 1,
-          categories: ['official_release'],
-          clientLabel: source.id,
-          verificationStatus: 'pending',
-          managementStatus: 'active',
-          evidence: JSON.stringify({
-            wire: 'official_web',
-            sourceId: source.id,
-            collector: source.collector,
-            checkedAt: at,
-            httpStatus: page.status,
-            pageTitle,
-            feedId: feed.id,
-            itemExtraction: false,
-            fetchMode: page.mode,
-            fetchedUrl: page.finalUrl
-          })
-        });
-        savedIds.push(saved.id);
       }
       sourceIds.push(...savedIds);
       checkpoint = mergeWireCheckpoint(checkpoint, {
