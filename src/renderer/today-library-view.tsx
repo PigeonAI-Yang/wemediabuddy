@@ -909,10 +909,10 @@ export function LibraryView(props: {
   onOpenCanvas?: (canvasId?: string) => void;
   focusSourceId?: string | null;
   onFocusSourceConsumed?: () => void;
-  onFocusChange?: (focus: PiFocusObject | null) => void; aiSourcePresentation: boolean;
+  onFocusChange?: (focus: PiFocusObject | null) => void; aiSourcePresentation: boolean; sectionStorageKey: string;
 }): React.JSX.Element {
-  const { onOpenTopic, focusSourceId, onFocusSourceConsumed, onFocusChange, aiSourcePresentation } = props;
-  const storedSection = localStorage.getItem('wmb.librarySection');
+  const { onOpenTopic, focusSourceId, onFocusSourceConsumed, onFocusChange, aiSourcePresentation, sectionStorageKey } = props;
+  const storedSection = localStorage.getItem(sectionStorageKey);
   const initialSection = storedSection === 'topics' ? 'saved' : storedSection;
   const [section, setSection] = useState<LibrarySection>(isLibrarySection(initialSection) ? initialSection : 'saved');
   const [knowledge, setKnowledge] = useState<KnowledgeSourcePage | null>(null);
@@ -967,7 +967,7 @@ export function LibraryView(props: {
 
   const openSection = (next: LibrarySection) => {
     setSection(next);
-    localStorage.setItem('wmb.librarySection', next);
+    localStorage.setItem(sectionStorageKey, next);
   };
 
   const openSourceDrawer = async (source: LibrarySourceItem) => {

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { RankingContext, RankingContextItem, XListPiContext } from './app-types';
 import { XListsView } from './x-lists-view';
+import { workspaceStorageKey } from './workspace-storage';
 
 // 发现页:AI 榜单是临时发现流,不是已入库资产;点「入库」才通过 upsertSource 真正写入资料库。
-export function DiscoverView({ workspace, rankingContext, onRankingContextChange, onStatusChange, onXListContextChange }: {
+export function DiscoverView({ workspace, workspaceId, rankingContext, onRankingContextChange, onStatusChange, onXListContextChange }: {
   workspace: NonNullable<Awaited<ReturnType<typeof window.wmb.getSettings>>>['workspace'] | null;
+  workspaceId: string | null;
   rankingContext: RankingContext;
   onRankingContextChange: (context: RankingContext) => void;
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
@@ -12,9 +14,10 @@ export function DiscoverView({ workspace, rankingContext, onRankingContextChange
 }): React.JSX.Element {
   const rankingsEnabled = workspace?.capabilities.rankings === true;
   const [rankings, setRankings] = useState<Awaited<ReturnType<typeof window.wmb.getGitHubRankings>> | null>(null);
-  const [sourceId, setSourceId] = useState(() => localStorage.getItem('wmb.discoverSource') ?? 'github');
-  const [boardId, setBoardId] = useState(() => localStorage.getItem('wmb.discoverBoard') ?? 'github-daily');
-  const [section, setSection] = useState<'rankings' | 'lists'>(() => localStorage.getItem('wmb.discoverSection') === 'lists' ? 'lists' : 'rankings');
+  const stored = (key: string) => workspaceId ? localStorage.getItem(workspaceStorageKey(workspaceId, key)) : null;
+  const [sourceId, setSourceId] = useState(() => stored('discoverSource') ?? 'github');
+  const [boardId, setBoardId] = useState(() => stored('discoverBoard') ?? 'github-daily');
+  const [section, setSection] = useState<'rankings' | 'lists'>(() => stored('discoverSection') === 'lists' ? 'lists' : 'rankings');
   const [rankingError, setRankingError] = useState('');
   const [loadingRankings, setLoadingRankings] = useState(false);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
@@ -37,7 +40,7 @@ export function DiscoverView({ workspace, rankingContext, onRankingContextChange
     void window.wmb.getCachedRankings().then((cached) => { if (cached) setRankings(cached); })
       .catch((error) => setRankingError(error instanceof Error ? error.message : String(error)));
   }, [rankingsEnabled]);
-  useEffect(() => { localStorage.setItem('wmb.discoverSection', section); }, [section]);
+  useEffect(() => { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'discoverSection'), section); }, [section, workspaceId]);
   useEffect(() => {
     if (activeSection !== 'lists') {
       onStatusChange?.(null);
@@ -92,9 +95,10 @@ export function DiscoverView({ workspace, rankingContext, onRankingContextChange
       setSaveNote(result.error?.message || '入库失败');
     }
   };
-  return <section className="page library-page discover-page" data-intelligence-pack={workspace?.profile.intelligencePackId ?? 'unknown'}>
+  if (!workspace || !workspaceId) return <section className="ranking-loading">正在读取工作空间…</section>;
+  return <section className="page library-page discover-page" data-intelligence-pack={workspace.profile.intelligencePackId}>
     <nav className="discover-categories" aria-label="发现分页面">{rankingsEnabled && <button className={`library-section-tab${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>榜单</button>}<button className={`library-section-tab${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>X Lists</button></nav>
-    {activeSection === 'lists' ? <XListsView onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
+    {activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('[data-ranking-item], button, a, input, select, textarea')) onRankingContextChange({ boards: [], items: [] });
   }}>

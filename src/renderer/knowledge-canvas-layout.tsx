@@ -172,6 +172,7 @@ export function KnowledgeCanvasLayout({ c }: { c: any }) {
             }}
             onPointerDown={beginBox}
           >
+            {!canvas && <section className="empty-state"><h2>还没有关系画布</h2><p>画布只会在你明确创建后写入当前工作空间。</p><button className="primary-button" onClick={() => void createCanvas()}>创建第一张画布</button></section>}
             <svg className="kc-edges" aria-label="语义关系列表">
               <defs>
                 <marker

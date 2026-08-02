@@ -74,13 +74,12 @@ export function KnowledgeCanvasView({
     ]).then(async ([list, sourcePage, topicPage]) => {
       setSources(sourcePage?.items ?? []);
       setTopics(topicPage?.items ?? []);
-      const next = list.length
-        ? list
-        : [await window.wmb.createKnowledgeCanvas({ title: "长期主题工作台" })];
+      const next = list;
       setCanvases(next);
       const target =
         next.find((item: any) => item.id === initialCanvasId) ?? next[0];
       if (target) await loadCanvas(target.id);
+      else setCanvas(null);
     });
   }, []);
   useEffect(() => {

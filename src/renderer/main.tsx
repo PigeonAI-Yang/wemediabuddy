@@ -13,6 +13,7 @@ import { SettingsView } from './settings-view';
 import { PiDock } from './pi-dock';
 import type { PiContextRef, PiFocusObject, RankingContext, Theme, View, XListPiContext } from './app-types';
 import { logoUrl, views } from './app-types';
+import { workspaceStorageKey } from './workspace-storage';
 import './styles.css';
 
 function normalizeView(raw: string | null): View {
@@ -61,7 +62,7 @@ function App(): React.JSX.Element {
   const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string } | null>(null);
   const [globalQuery, setGlobalQuery] = useState('');
   const [globalResults, setGlobalResults] = useState<Array<{ kind: 'topic' | 'project'; id: string; title: string }>>([]);
-  const [studioSelectedId, setStudioSelectedId] = useState<string | null>(() => localStorage.getItem('wmb.studioSelectedId'));
+  const [studioSelectedId, setStudioSelectedId] = useState<string | null>(null);
   const [studioContext, setStudioContext] = useState<{ id: string; title: string } | null>(null);
   const [libraryTopicContext, setLibraryTopicContext] = useState<{ id: string; title: string } | null>(null);
   const [pageFocus, setPageFocus] = useState<PiFocusObject | null>(null);
@@ -69,6 +70,8 @@ function App(): React.JSX.Element {
   const [piPhase, setPiPhase] = useState<'idle' | 'starting' | 'running' | 'failed' | 'stopped'>('idle');
   const [piStatusText, setPiStatusText] = useState('Pi 空闲');
   const [pageStatus, setPageStatus] = useState<{ text: string; running?: boolean } | null>(null);
+  const workspaceId = settings?.workspace.id ?? null;
+  const skipStudioPersist = useRef(false);
   const planDate = useMemo(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()), []);
   const todaySigRef = useRef('');
   const publicationsSigRef = useRef('');
@@ -117,6 +120,12 @@ function App(): React.JSX.Element {
   }, [refreshToday, refreshPublications]);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('wmb.theme', theme); }, [theme]);
   useEffect(() => localStorage.setItem('wmb.view', view), [view]);
+  useEffect(() => {
+    if (!workspaceId) return;
+    skipStudioPersist.current = true;
+    setStudioSelectedId(localStorage.getItem(workspaceStorageKey(workspaceId, 'studioSelectedId')));
+    setRankingContext({ boards: [], items: [] }); setXListContext(null); setCanvasOpenId(null); setLibraryTopicContext(null); setPageFocus(null); setPublishSelectedId(null);
+  }, [workspaceId]);
   useEffect(() => { setPageFocus(null); }, [view]);
   useEffect(() => {
     if (view !== 'discover' && view !== 'today') setPageStatus(null);
@@ -156,9 +165,9 @@ function App(): React.JSX.Element {
   }, [globalQuery]);
   useEffect(() => { localStorage.setItem('wmb.piDockCollapsed', String(piDockCollapsed)); }, [piDockCollapsed]);
   useEffect(() => {
-    if (studioSelectedId) localStorage.setItem('wmb.studioSelectedId', studioSelectedId);
-    else localStorage.removeItem('wmb.studioSelectedId');
-  }, [studioSelectedId]);
+    if (!workspaceId || skipStudioPersist.current) { skipStudioPersist.current = false; return; }
+    const key = workspaceStorageKey(workspaceId, 'studioSelectedId'); if (studioSelectedId) localStorage.setItem(key, studioSelectedId); else localStorage.removeItem(key);
+  }, [studioSelectedId, workspaceId]);
   const resizePiDock = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const move = (pointer: PointerEvent) => setPiDockWidth(Math.max(300, Math.min(640, window.innerWidth - pointer.clientX)));
@@ -226,7 +235,7 @@ function App(): React.JSX.Element {
     if (view !== 'topic') setLibraryTopicContext(null);
   }, [view]);
   const openTopic = (topicId: string) => {
-    localStorage.setItem('wmb.libraryTopicId', topicId);
+    if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryTopicId'), topicId);
     navigate('topic');
     window.dispatchEvent(new CustomEvent('wmb-open-library-topic', { detail: { topicId } }));
   };
@@ -364,19 +373,19 @@ function App(): React.JSX.Element {
     </header>
     <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view === 'topic' ? 'active' : ''} onClick={() => navigate('topic')} title="主题"><Icon name="knowledge"/><span>主题</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="canvas"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
     <section className="workspace">
-      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={() => navigate('studio')} openLibrary={(sourceId) => { if (sourceId) localStorage.setItem('wmb.libraryFocusSourceId', sourceId); navigate('library'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} planDate={planDate} onStatusChange={setPageStatus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}/>}
-      {view === 'discover' && <DiscoverView workspace={settings?.workspace ?? null} rankingContext={rankingContext} onRankingContextChange={setRankingContext} onStatusChange={setPageStatus} onXListContextChange={setXListContext}/>}
+      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={() => navigate('studio')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} planDate={planDate} onStatusChange={setPageStatus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}/>}
+      {view === 'discover' && <DiscoverView key={workspaceId ?? 'discover-loading'} workspace={settings?.workspace ?? null} workspaceId={workspaceId} rankingContext={rankingContext} onRankingContextChange={setRankingContext} onStatusChange={setPageStatus} onXListContextChange={setXListContext}/>}
       {view === 'topic' && (
         <LibraryTopicsView
-          initialTopicId={localStorage.getItem('wmb.libraryTopicId')}
+          key={workspaceId ?? 'topics-loading'} workspaceId={workspaceId} initialTopicId={workspaceId ? localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryTopicId')) : null}
           onTopicContextChange={setLibraryTopicContext}
           onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }}
           onGoStudio={() => navigate('studio')}
           onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }}
         />
       )}
-      {view === 'library' && <LibraryView onOpenTopic={(topicId) => openTopic(topicId)} onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }} onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }} focusSourceId={localStorage.getItem('wmb.libraryFocusSourceId')} onFocusSourceConsumed={() => localStorage.removeItem('wmb.libraryFocusSourceId')} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}/>}
-      {view === 'canvas' && <KnowledgeCanvasView initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
+      {view === 'library' && workspaceId && <LibraryView key={workspaceId} onOpenTopic={(topicId) => openTopic(topicId)} onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }} onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }} focusSourceId={localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusSourceConsumed={() => localStorage.removeItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} sectionStorageKey={workspaceStorageKey(workspaceId, 'librarySection')}/>}
+      {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
 
       {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
       {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => void window.wmb.startBrowser({ mode: 'visible' }).then(refreshSettings)} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}

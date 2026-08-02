@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { workspaceStorageKey } from './workspace-storage';
 
 export type LibraryTopicPiContext = { id: string; title: string } | null;
 
@@ -414,11 +415,6 @@ function itemKey(item: DossierItem): string {
   return `${item.category}:${item.objectId}:${item.occurredAt ?? ''}`;
 }
 
-function persistTopicId(topicId: string | null): void {
-  if (topicId) localStorage.setItem('wmb.libraryTopicId', topicId);
-  else localStorage.removeItem('wmb.libraryTopicId');
-}
-
 function patchSourceItem(
   item: DossierItem,
   patch: { revision: number; verificationStatus?: string; managementStatus?: string },
@@ -447,6 +443,7 @@ function listTopicMeta(item: TopicListItem): string {
 }
 
 export function LibraryTopicsView(props: {
+  workspaceId: string | null;
   initialTopicId?: string | null;
   onTopicContextChange?: (ctx: LibraryTopicPiContext) => void;
   onOpenStudio?: (projectId: string) => void;
@@ -454,6 +451,7 @@ export function LibraryTopicsView(props: {
   onOpenCanvas?: (canvasId?: string) => void;
 }): React.JSX.Element {
   const {
+    workspaceId,
     initialTopicId = null,
     onTopicContextChange,
     onOpenStudio,
@@ -587,7 +585,7 @@ export function LibraryTopicsView(props: {
   const selectTopic = useCallback((topicId: string | null, title?: string | null) => {
     setSelectedTopicId(topicId);
     selectedTopicIdRef.current = topicId;
-    persistTopicId(topicId);
+    if (workspaceId) { const key = workspaceStorageKey(workspaceId, 'libraryTopicId'); if (topicId) localStorage.setItem(key, topicId); else localStorage.removeItem(key); }
     setDeepMode(false);
     setDeepCategory('');
     setExpandedReviews({});
@@ -602,7 +600,7 @@ export function LibraryTopicsView(props: {
       ?? topicsRef.current.find((item) => item.id === topicId)?.title
       ?? null;
     if (knownTitle) emitContext(topicId, knownTitle);
-  }, [clearWorkspace, emitContext]);
+  }, [clearWorkspace, emitContext, workspaceId]);
 
   const loadTopicList = useCallback(async (options?: {
     preferId?: string | null;
@@ -1075,7 +1073,7 @@ export function LibraryTopicsView(props: {
       onOpenStudio?.(projectId);
       return;
     }
-    localStorage.setItem('wmb.studioTopicId', displayTopic.id);
+    if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'studioTopicId'), displayTopic.id);
     if (onGoStudio) {
       onGoStudio();
       return;

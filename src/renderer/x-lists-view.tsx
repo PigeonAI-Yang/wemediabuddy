@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { XListPiContext } from './app-types';
+import { workspaceStorageKey } from './workspace-storage';
 
 type ListIndex = Awaited<ReturnType<typeof window.wmb.readXListIndex>>;
 type ListRef = ListIndex['lists'][number];
@@ -265,14 +266,13 @@ function TimelineCard({
   );
 }
 
-export function XListsView({ onStatusChange, onContextChange }: {
-  onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
-  onContextChange?: (context: XListPiContext | null) => void;
-} = {}): React.JSX.Element {
+export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
+  workspaceId: string; onStatusChange?: (status: { text: string; running?: boolean } | null) => void; onContextChange?: (context: XListPiContext | null) => void;
+}): React.JSX.Element {
   const [index, setIndex] = useState<ListIndex | null>(null);
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
-  const [selectedListId, setSelectedListId] = useState<string | null>(() => localStorage.getItem('wmb.xListSelectedId'));
+  const selectedListStorageKey = workspaceStorageKey(workspaceId, 'xListSelectedId'); const [selectedListId, setSelectedListId] = useState<string | null>(() => localStorage.getItem(selectedListStorageKey));
   const [kindFilter, setKindFilter] = useState<ListRef['kind'] | 'all'>(() => {
     const stored = localStorage.getItem('wmb.xListKindFilter');
     return stored === 'owned' || stored === 'following' || stored === 'member' || stored === 'unknown' || stored === 'all' ? stored : 'all';
@@ -387,9 +387,9 @@ export function XListsView({ onStatusChange, onContextChange }: {
   };
   useEffect(() => { selectedListIdRef.current = selectedListId; }, [selectedListId]);
   useEffect(() => {
-    if (selectedListId) localStorage.setItem('wmb.xListSelectedId', selectedListId);
-    else localStorage.removeItem('wmb.xListSelectedId');
-  }, [selectedListId]);
+    if (selectedListId) localStorage.setItem(selectedListStorageKey, selectedListId);
+    else localStorage.removeItem(selectedListStorageKey);
+  }, [selectedListId, selectedListStorageKey]);
   useEffect(() => { localStorage.setItem('wmb.xListKindFilter', kindFilter); }, [kindFilter]);
     useEffect(() => {
     if (!index) return;
