@@ -7,6 +7,12 @@ import { WORKSPACE_CATALOG, WorkspaceProposalStore } from './workspace-proposals
 
 type WorkspaceListing = { activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> };
 
+const WORKSPACE_INTELLIGENCE_CAPABILITIES = {
+  'wemedia-intelligence-engine': { aiIntelligence: true, fixedAiLists: true, rankings: true, sourceWire: true },
+  'uk-life-content-radar': { aiIntelligence: false, fixedAiLists: false, rankings: false, sourceWire: false },
+  'game-news-radar': { aiIntelligence: false, fixedAiLists: false, rankings: false, sourceWire: false }
+} as const;
+
 export type WorkspaceApplicationMcp = {
   listWorkspaces: () => Promise<WorkspaceListing>;
   proposals: WorkspaceProposalStore;
@@ -39,17 +45,14 @@ export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspa
     const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
     if (!workspace || workspace.id !== workspaceId || path.resolve(workspace.rootPath) !== resolvedRootPath) throw new Error('活动工作空间身份不一致。');
     const profile = requireWorkspaceProfile(db);
-    const aiIntelligence = profile.intelligencePackId === 'wemedia-intelligence-engine';
+    const intelligence = WORKSPACE_INTELLIGENCE_CAPABILITIES[profile.intelligencePackId];
     return {
       ...workspace,
       dataRoot: { workspaceId, path: resolvedRootPath },
       profile,
       capabilities: {
         xLists: true,
-        aiIntelligence,
-        fixedAiLists: aiIntelligence,
-        rankings: aiIntelligence,
-        sourceWire: aiIntelligence,
+        ...intelligence,
         publishingPlatforms: [...profile.platforms]
       }
     };

@@ -1,0 +1,41 @@
+{
+  "runs": [
+    {
+      "workspaceId": "d05e6179-c100-4bde-8ba0-a2e010ea2b38",
+      "displayName": "AI",
+      "pack": "wemedia-intelligence-engine",
+      "tabs": [
+        "榜单",
+        "X Lists"
+      ],
+      "xLoginState": null,
+      "aiSourcePresentation": true,
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\ai\\browser-profile",
+      "forbiddenAiIpcObserved": false
+    },
+    {
+      "workspaceId": "5fe932fc-174f-42ce-8f51-596f72c05aec",
+      "displayName": "英国生活",
+      "pack": "uk-life-content-radar",
+      "tabs": [
+        "X Lists"
+      ],
+      "xLoginState": "needs_user",
+      "aiSourcePresentation": false,
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\uk\\browser-profile",
+      "forbiddenAiIpcObserved": false
+    },
+    {
+      "workspaceId": "867dc1d6-d59f-40c8-aff1-b2a92529f6a6",
+      "displayName": "游戏资讯",
+      "pack": "game-news-radar",
+      "tabs": [
+        "X Lists"
+      ],
+      "xLoginState": "needs_user",
+      "aiSourcePresentation": false,
+      "browserProfile": "J:\\Users\\yangda01\\Temp\\wmb-1909-renderer-1ycmNh\\game\\browser-profile",
+      "forbiddenAiIpcObserved": false
+    }
+  ]
+}

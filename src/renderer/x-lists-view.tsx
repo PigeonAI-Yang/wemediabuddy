@@ -308,10 +308,9 @@ export function XListsView({ onStatusChange, onContextChange }: {
     const requestId = ++indexRequestId.current;
     const stillCurrent = () => requestId === indexRequestId.current;
     void (async () => {
-      await loadLocal();
-      if (!stillCurrent()) return;
       let cached: Awaited<ReturnType<typeof window.wmb.getCachedXListIndex>> = null;
-      try { cached = await window.wmb.getCachedXListIndex(); } catch { /* ignore cache miss */ }
+      try { cached = await window.wmb.getCachedXListIndex(); }
+      catch (error) { if (stillCurrent()) setNote((error instanceof Error ? error.message : String(error)).replace(/^Error invoking remote method '[^']+':\s*/i, '').replace(/^Error:\s*/i, '')); return; }
       if (!stillCurrent()) return;
       if (cached?.lists?.length) {
         setIndex(cached);
@@ -1000,7 +999,7 @@ export function XListsView({ onStatusChange, onContextChange }: {
   return <section className="x-lists-view">
     {!index ? <section className="empty-state library-empty">
       <h2>尚未读取 X List</h2>
-      <p>从设置中选定 Pyaireader 专用 X 登录态后，点击刷新读取列表。</p>
+      <p>{note || '从设置中选定 Pyaireader 专用 X 登录态后，点击刷新读取列表。'}</p>
       <button className="refresh-button" disabled={loading} onClick={() => void loadIndex()}>{loading ? '读取中…' : '读取 X Lists'}</button>
     </section> : <>
       <div className="discover-sources" aria-label="List 分组">
@@ -1086,7 +1085,7 @@ function XListComposer({ accountKey, selected, detail, disabled, onPrepare }: { 
   };
   const modes: Array<{ id: typeof kind; label: string }> = [{ id: 'create', label: '新建' }, ...(canManage ? [{ id: 'update' as const, label: '编辑' }, { id: 'members_add' as const, label: '添加成员' }, { id: 'members_remove' as const, label: '移除成员' }, { id: 'delete' as const, label: '删除' }] : [])];
   return <section className="x-list-composer"><header><div><p className="eyebrow">管理</p><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div>{detail && <small>当前：{detail.isPrivate ? '私密' : '公开'}</small>}</header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
-    {(kind === 'create' || kind === 'update') && <div className="x-list-form"><label>名称<input value={name} placeholder={kind === 'create' ? '例如：AI前沿' : detail?.name ?? '不修改'} onChange={(event) => setName(event.target.value)}/></label><label className="x-list-description-toggle"><input type="checkbox" checked={kind === 'create' || changeDescription} onChange={(event) => setChangeDescription(event.target.checked)} disabled={kind === 'create'}/> {kind === 'create' ? '添加描述' : '修改或清空描述'}</label>{(kind === 'create' || changeDescription) && <label>描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={detail?.description ?? '这份 List 关注什么？'}/></label>}<label>公开性<select value={privacy} onChange={(event) => setPrivacy(event.target.value as typeof privacy)}><option value="unchanged">{kind === 'create' ? '公开' : '不修改'}</option><option value="public">公开</option><option value="private">私密</option></select></label></div>}
+    {(kind === 'create' || kind === 'update') && <div className="x-list-form"><label>名称<input value={name} placeholder={kind === 'create' ? '例如：行业观察' : detail?.name ?? '不修改'} onChange={(event) => setName(event.target.value)}/></label><label className="x-list-description-toggle"><input type="checkbox" checked={kind === 'create' || changeDescription} onChange={(event) => setChangeDescription(event.target.checked)} disabled={kind === 'create'}/> {kind === 'create' ? '添加描述' : '修改或清空描述'}</label>{(kind === 'create' || changeDescription) && <label>描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={detail?.description ?? '这份 List 关注什么？'}/></label>}<label>公开性<select value={privacy} onChange={(event) => setPrivacy(event.target.value as typeof privacy)}><option value="unchanged">{kind === 'create' ? '公开' : '不修改'}</option><option value="public">公开</option><option value="private">私密</option></select></label></div>}
     {(kind === 'members_add' || kind === 'members_remove') && <label className="x-list-form">精确 handle（一行一个）<textarea value={handles} onChange={(event) => setHandles(event.target.value)} placeholder={'@karpathy\n@ylecun'}/></label>}
     {kind === 'delete' && <p className="x-list-danger">删除不会立即执行；下一步仍需读取快照，并要求输入当前 List 名称确认。</p>}
     <button className="x-list-primary" disabled={disabled || (kind !== 'create' && !selected) || (kind === 'create' && !name.trim())} onClick={submit}>读取快照并准备确认</button>

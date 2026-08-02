@@ -135,11 +135,11 @@ export function Icon({ name }: { name: string }): React.JSX.Element {
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
 
-function SourceList({ sources, open, close, openLibrary }: {
+function SourceList({ sources, open, close, openLibrary, aiSourcePresentation }: {
   sources: TodaySource[];
-  open: boolean;
-  close: () => void;
+  open: boolean; close: () => void;
   openLibrary: (sourceId?: string) => void;
+  aiSourcePresentation: boolean;
 }): React.JSX.Element {
   const ordered = sortFeedSources(sources);
   return <aside className={`sources-panel${open ? ' open' : ''}`} aria-label="今日资料">
@@ -150,7 +150,7 @@ function SourceList({ sources, open, close, openLibrary }: {
     </div>
     <div className="source-list">
       {ordered.map((source) => <article className="source-row" key={source.id}>
-        <SourceMark canonicalUrl={source.canonicalUrl}/>
+        <SourceMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/>
         <div>
           <span className="source-type">{isHeartbeatSource(source) ? '巡检打卡' : (source.categories[0] || '入库资料')}</span>
           <h3>{source.title}</h3>
@@ -249,7 +249,7 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
   </article>;
 }
 
-export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange, aiSourcePresentation }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void;
   openStudio: () => void;
@@ -259,7 +259,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   selectedSources: SelectedTodaySource[];
   onSelectedSourcesChange: (sources: SelectedTodaySource[]) => void;
   planDate: string;
-  onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
+  onStatusChange?: (status: { text: string; running?: boolean } | null) => void; aiSourcePresentation: boolean;
 }): React.JSX.Element {
   const phaseLabels: Record<string, string> = {
     starting: '正在启动',
@@ -736,7 +736,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
                   toggleSourceSelection(source);
                 }}
               >
-                <SourceMark canonicalUrl={source.canonicalUrl}/>
+                <SourceMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/>
                 <div className="feed-main">
                   <div
                     className="feed-title"
@@ -770,7 +770,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
       </div>
     </section>
     <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>
-    <SourceList sources={today?.sources ?? []} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()}/>
+    <SourceList sources={today?.sources ?? []} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()} aiSourcePresentation={aiSourcePresentation}/>
     {detailSource && <aside className="sources-panel open source-detail-panel" data-source-detail aria-label="资料详情">
       <div className="panel-heading">
         <p className="eyebrow">{isHeartbeatSource(detailSource) ? '巡检打卡 · 摘要可能很薄' : '资料详情'}</p>
@@ -909,9 +909,9 @@ export function LibraryView(props: {
   onOpenCanvas?: (canvasId?: string) => void;
   focusSourceId?: string | null;
   onFocusSourceConsumed?: () => void;
-  onFocusChange?: (focus: PiFocusObject | null) => void;
-} = {}): React.JSX.Element {
-  const { onOpenTopic, focusSourceId, onFocusSourceConsumed, onFocusChange } = props;
+  onFocusChange?: (focus: PiFocusObject | null) => void; aiSourcePresentation: boolean;
+}): React.JSX.Element {
+  const { onOpenTopic, focusSourceId, onFocusSourceConsumed, onFocusChange, aiSourcePresentation } = props;
   const storedSection = localStorage.getItem('wmb.librarySection');
   const initialSection = storedSection === 'topics' ? 'saved' : storedSection;
   const [section, setSection] = useState<LibrarySection>(isLibrarySection(initialSection) ? initialSection : 'saved');
@@ -1318,7 +1318,7 @@ export function LibraryView(props: {
           : { cls: 'gray', text: '待验证' };
         const tags = String(source.topics || '').split(/[,，、]/).map((tag) => tag.trim()).filter((tag) => tag && tag !== '尚未归入主题').slice(0, 4);
         return <article className="lib-row" key={source.id} onClick={() => { void openSourceDrawer(source); }}>
-          <SourceMark canonicalUrl={source.originalUrl ?? null}/>
+          <SourceMark canonicalUrl={source.originalUrl ?? null} aiSourcePresentation={aiSourcePresentation}/>
           <div className="lib-main">
             <div className="lib-title">{source.title}</div>
             <div className="lib-sum">{source.summary || '暂无摘要'}</div>

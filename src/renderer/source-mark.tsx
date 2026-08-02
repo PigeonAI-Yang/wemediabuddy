@@ -8,8 +8,8 @@ const logoAssets = import.meta.glob('../../images/source-logos/*', {
 }) as Record<string, string>;
 const registeredSources = sourceIndex.sources as RegisteredSourceLogo[];
 
-export function SourceMark({ canonicalUrl }: { canonicalUrl: string | null }): React.JSX.Element {
-  const source = findSourceLogo(canonicalUrl, registeredSources);
+export function SourceMark({ canonicalUrl, aiSourcePresentation }: { canonicalUrl: string | null; aiSourcePresentation: boolean }): React.JSX.Element {
+  const source = aiSourcePresentation ? findSourceLogo(canonicalUrl, registeredSources) : null;
   const logoUrl = source ? logoAssets[`../../images/source-logos/${source.logo}`] : null;
   if (!source || !logoUrl) {
     return <span className="source-mark source-mark-fallback" aria-hidden="true">
