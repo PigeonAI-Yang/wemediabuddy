@@ -5,9 +5,10 @@ import { migrateDatabase } from './db/migrations.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListPostDetail, readXListTimeline, seedListTimelineMemory } from './platforms/x-list-browser.ts';
 import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import { currentXListContextForRoot, selectedXListBrowser, type CurrentXListContext } from './x-list-context.ts';
-import { captureXListOperationSnapshot, collectBoundXListTimeline, confirmAndRunXListOperation } from './x-list-execution.ts';
+import { acceptXListOperation, captureXListOperationSnapshot, collectBoundXListTimeline, runAcceptedXListOperation } from './x-list-execution.ts';
 import {
-  armXListOperation, bindXList, getXListBinding, getXListOperation, listXListBindings, listXListOperations, prepareXListOperation,
+  armXListOperation, bindXList, finishXListOperation, getXListBinding, getXListOperation, listXListBindings, listXListOperations, prepareXListOperation,
+  recoverOrphanedXListOperations,
   requestXListOperationStop, setXListBindingEnabled, type PrepareXListOperationInput
 } from './x-lists.ts';
 import { readXListIndexCache, writeXListIndexCache } from './x-list-cache.ts';
@@ -24,16 +25,12 @@ import { getXPostTrend, listXPostMetricSnapshots, listXPostTrends } from './x-po
 import { getXObservationSession, startXObservationSession, stopXObservationSession } from './x-observation-jobs.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null>; wakeObservationScheduler?: () => void };
+const activeXListOperations = new Set<string>();
 
 export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservationScheduler }: Dependencies): void {
   const loadSelectedDataRoot = loadRoot;
   ipcMain.handle('x-lists:get-cached-index', async () => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
-    try {
-      const cached = readXListIndexCache(database);
-      return cached && sameAccount(cached.accountKey, context.accountKey) ? cached : null;
-    } finally { database.close(); }
+    return withDatabase(loadSelectedDataRoot, (database) => readXListIndexCache(database));
   });
   ipcMain.handle('x-lists:read-index', async () => {
     const root = await requiredRoot(loadSelectedDataRoot);
@@ -105,27 +102,13 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
     return { ...value, cached: false, fetchedAt: new Date().toISOString(), stale: false };
   });
   ipcMain.handle('x-lists:get-cached-timeline', async (_event, input: { accountKey: string; listId: string }) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
     return withDatabase(loadSelectedDataRoot, (database) => {
-      if (!getXListBinding(database, context.accountKey, input.listId)) return null;
+      if (!getXListBinding(database, input.accountKey, input.listId)) return null;
       const cached = readXListTimelineCache(database, input.accountKey, input.listId);
-      if (cached?.payload?.posts?.length) {
-        seedListTimelineMemory({
-          workspaceId: context.workspaceId,
-          browserId: context.browserId,
-          listId: input.listId,
-          accountKey: cached.accountKey || input.accountKey,
-          detail: cached.payload.detail ?? null,
-          posts: cached.payload.posts
-        });
-      }
       return cached;
     });
   });
   ipcMain.handle('x-lists:list-cached-timeline', async (_event, input: { accountKey: string; listId: string; limit?: number; offset?: number }) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    if (!sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
     return withDatabase(loadSelectedDataRoot, (database) => {
       const binding = getXListBinding(database, input.accountKey, input.listId);
       if (!binding) return { items: [], limit: input.limit ?? 50, offset: input.offset ?? 0, hasMore: false, binding: null };
@@ -139,13 +122,10 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
     return withDatabase(loadSelectedDataRoot, (database) => clearXListTimelineCache(database, context.accountKey));
   });
   ipcMain.handle('x-lists:timeline-cache-stats', async () => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    return withDatabase(loadSelectedDataRoot, (database) => summarizeXListTimelineCache(database, context.accountKey));
+    return withDatabase(loadSelectedDataRoot, (database) => summarizeXListTimelineCache(database));
   });
   ipcMain.handle('x-lists:list-bindings', async (_event, accountKey?: string) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    if (accountKey && !sameAccount(context.accountKey, accountKey)) throw accountMismatch();
-    return withDatabase(loadSelectedDataRoot, (database) => listXListBindings(database, context.accountKey));
+    return withDatabase(loadSelectedDataRoot, (database) => listXListBindings(database, accountKey));
   });
   ipcMain.handle('x-lists:list-post-metric-snapshots', async (_event, input: { sourceId: string; limit?: number }) =>
     withDatabase(loadSelectedDataRoot, (database) => listXPostMetricSnapshots(database, input.sourceId, input.limit)));
@@ -167,17 +147,10 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
   ipcMain.handle('x-lists:stop-observation', async (_event, input: { sessionId: string }) =>
     withDatabase(loadSelectedDataRoot, (database) => stopXObservationSession(database, input.sessionId)));
   ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    if (input.accountKey && !sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
-    return withDatabase(loadSelectedDataRoot, (database) => listXListOperations(database, { ...input, accountKey: context.accountKey }));
+    return withDatabase(loadSelectedDataRoot, (database) => { recoverOrphanedXListOperations(database, activeXListOperations); return listXListOperations(database, input); });
   });
   ipcMain.handle('x-lists:get-operation', async (_event, operationId: string) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    return withDatabase(loadSelectedDataRoot, (database) => {
-      const operation = getXListOperation(database, operationId);
-      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
-      return operation;
-    });
+    return withDatabase(loadSelectedDataRoot, (database) => getXListOperation(database, operationId));
   });
   ipcMain.handle('x-lists:prepare', async (_event, input: PrepareXListOperationInput) => {
     const context = await currentXListContext(loadSelectedDataRoot);
@@ -196,21 +169,19 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
     try { return armXListOperation(database, { ...input, snapshot }); } finally { database.close(); }
   });
   ipcMain.handle('x-lists:confirm', async (_event, input: { operationId: string; expectedRevision: number; typedListName?: string }) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
+    const root = await requiredRoot(loadSelectedDataRoot);
+    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    let accepted;
     try {
       const operation = getXListOperation(database, input.operationId);
-      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
-      return await confirmAndRunXListOperation(database, context.config, input);
+      if (!operation) throw new Error('List 操作不存在。');
+      accepted = acceptXListOperation(database, input);
     } finally { database.close(); }
+    if (accepted.ok) { activeXListOperations.add(accepted.data.id); void runAcceptedXListOperationForRoot(root.path, accepted.data.id); }
+    return accepted;
   });
   ipcMain.handle('x-lists:stop', async (_event, input: { operationId: string; expectedRevision: number }) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    return withDatabase(loadSelectedDataRoot, (database) => {
-      const operation = getXListOperation(database, input.operationId);
-      if (operation && !sameAccount(operation.accountKey, context.accountKey)) throw accountMismatch();
-      return requestXListOperationStop(database, input);
-    });
+    return withDatabase(loadSelectedDataRoot, (database) => requestXListOperationStop(database, input));
   });
   ipcMain.handle('x-lists:bind', async (_event, input: { listId: string; expectedRevision?: number }) => {
     const root = await requiredRoot(loadSelectedDataRoot);
@@ -253,6 +224,24 @@ async function withXListBrowser<T>(loadSelectedDataRoot: Dependencies['loadSelec
     if (error instanceof XListNeedsUserError) throw needsUser(error);
     throw error;
   }
+}
+
+async function runAcceptedXListOperationForRoot(rootPath: string, operationId: string): Promise<void> {
+  const database = migrateDatabase(path.join(rootPath, 'wmb.db'));
+  try {
+    const operation = getXListOperation(database, operationId);
+    if (!operation || operation.state !== 'running') return;
+    const workspaceId = (database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
+    try {
+      const browser = await selectedXListBrowser(database);
+      await runAcceptedXListOperation(database, { ...browser, workspaceId, accountKey: operation.accountKey }, operation);
+    } catch (error) {
+      const current = getXListOperation(database, operation.id);
+      if (current?.state === 'running') finishXListOperation(database, operation.id, {
+        state: 'needs_user', phase: 'needs_user', errorCode: 'BROWSER_NEEDS_USER', errorMessage: error instanceof Error ? error.message : String(error)
+      });
+    }
+  } finally { activeXListOperations.delete(operationId); database.close(); }
 }
 
 export async function currentXListContext(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<CurrentXListContext> {

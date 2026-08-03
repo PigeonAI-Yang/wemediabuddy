@@ -11,6 +11,7 @@ import { PublishView } from './publishing-results-view';
 import { ResultsView } from './results-view';
 import { SettingsView } from './settings-view';
 import { PiDock } from './pi-dock';
+import { XListOperationTray } from './x-list-operation-tray';
 import type { PiContextRef, PiFocusObject, RankingContext, Theme, View, XListPiContext } from './app-types';
 import { logoUrl, views } from './app-types';
 import { workspaceStorageKey } from './workspace-storage';
@@ -354,9 +355,10 @@ function App(): React.JSX.Element {
         <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'MCP 已连接' : 'MCP 未连接'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
         {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}
+        <XListOperationTray/>
       </div>
       <div className="status-bar-right">
-        <button type="button" className="status-theme" title={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} aria-label={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☀' : '☾'} <span>{theme === 'dark' ? '黑夜紫罗兰' : '白昼紫罗兰'}</span></button>
+        <button type="button" className="status-theme" title={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} aria-label={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☾' : '☀'} <span>{theme === 'dark' ? '黑夜紫罗兰' : '白昼紫罗兰'}</span></button>
         <StatusClock />
       </div>
     </footer>

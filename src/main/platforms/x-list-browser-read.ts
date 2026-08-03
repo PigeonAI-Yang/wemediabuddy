@@ -12,7 +12,7 @@ import type {
 import { captureListLatestTweetsTimeline, detectMissingListPage, extractPostsFromListTimelinePayload, normalizeStatusKey, readArticlesFromPage, sleepMs } from './x-list-browser-timeline.ts';
 import { isXListPage } from './x-list-browser-timeline.ts';
 import { detailFromCurrentPage, firstHandle, handleFromPath, observe, readAccountKey, readListCells, readListCellsLight, startListManagementCapture } from './x-list-browser-dom.ts';
-import { openManagedMembers } from './x-list-browser-actions.ts';
+import { membersRoot, openManagedMembers } from './x-list-browser-actions.ts';
 
 export async function readXListIndex(config: XListBrowserConfig): Promise<{ accountKey: string; lists: XListRef[]; observation: XListObservation }> {
   const session = await XListSession.open(config);
@@ -98,26 +98,51 @@ export async function readXListMembers(config: XListBrowserConfig, listId: strin
       await active.navigateInitially(xListUrl(listId), { mode: 'browse' });
       const detail = await detailFromCurrentPage(active, listId);
       await openManagedMembers(active, listId, 'members');
-      const cells = active.page.locator('[data-testid="UserCell"]');
-      await cells.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
-      const members: XListMember[] = [];
-      const seen = new Set<string>();
-      const count = await cells.count();
-      for (let index = 0; index < count; index += 1) {
-        const cell = cells.nth(index);
-        const text = (await cell.innerText().catch(() => '')).trim();
-        // Members show a Remove action; suggested accounts show Follow and must be ignored.
-        if (!/(移除|Remove)/i.test(text)) continue;
-        const href = await cell.locator('a[href^="/"]').first().getAttribute('href').catch(() => null);
-        const handle = (href ? handleFromPath(href) : null) ?? firstHandle(text);
-        if (!handle || seen.has(handle)) continue;
-        const displayName = text.split('\n').map((line) => line.trim()).find((line) => line && line !== handle && !/^@/.test(line) && !/(移除|Remove|关注|Follow)/i.test(line)) || handle;
-        seen.add(handle);
-        members.push({ handle, displayName, profileUrl: `https://x.com/${handle.slice(1)}` });
+      const root = await membersRoot(active);
+      const expectedMemberCount = detail.memberCount ?? memberCountFromManagerText(await root.innerText().catch(() => ''));
+      const members = new Map<string, XListMember>();
+      let unchanged = 0;
+      for (let round = 0; round < 30; round += 1) {
+        const cells = root.locator('[data-testid="UserCell"]');
+        await cells.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+        const before = members.size;
+        for (let index = 0; index < await cells.count(); index += 1) {
+          const cell = cells.nth(index);
+          const text = (await cell.innerText().catch(() => '')).trim();
+          if (!/(移除|Remove)/i.test(text)) continue;
+          const href = await cell.locator('a[href^="/"]').first().getAttribute('href').catch(() => null);
+          const handle = (href ? handleFromPath(href) : null) ?? firstHandle(text);
+          if (!handle) continue;
+          const displayName = text.split('\n').map((line) => line.trim()).find((line) => line && line !== handle && !/^@/.test(line) && !/(移除|Remove|关注|Follow)/i.test(line)) || handle;
+          members.set(handle.toLowerCase(), { handle, displayName, profileUrl: `https://x.com/${handle.slice(1)}` });
+        }
+        if (expectedMemberCount !== null && members.size >= expectedMemberCount) break;
+        unchanged = members.size === before ? unchanged + 1 : 0;
+        if (unchanged >= 3) break;
+        const moved = await root.evaluate((node) => {
+          const candidates = [node, ...node.querySelectorAll('*')].filter((item) => item.scrollHeight > item.clientHeight + 20);
+          candidates.sort((left, right) => (right.scrollHeight - right.clientHeight) - (left.scrollHeight - left.clientHeight));
+          const scroller = candidates[0];
+          if (!scroller) return false;
+          const before = scroller.scrollTop;
+          scroller.scrollTop = Math.min(scroller.scrollHeight, before + Math.max(400, scroller.clientHeight * 0.8));
+          return scroller.scrollTop > before;
+        }).catch(() => false);
+        if (!moved) unchanged += 1;
+        await active.page.waitForTimeout(450);
       }
-      return { accountKey: await readAccountKey(active), detail, members };
+      if (expectedMemberCount !== null && members.size < expectedMemberCount) throw new XListNeedsUserError(`X 成员读取不完整：页面显示 ${expectedMemberCount} 位，实际读到 ${members.size} 位。`);
+      const accountKey = await readAccountKey(active);
+      return { accountKey, detail: { ...detail, ownerHandle: accountKey, kind: 'owned', memberCount: expectedMemberCount }, members: [...members.values()] };
     }, { timeoutMs: 180_000 });
   } finally { await session.close(); }
+}
+
+export function memberCountFromManagerText(value: string): number | null {
+  const match = value.match(/(?:成员|Members?)\s*\(([\d,]+)\)/i);
+  if (!match) return null;
+  const count = Number(match[1].replaceAll(',', ''));
+  return Number.isFinite(count) ? count : null;
 }
 
 type ListTimelineMemory = {

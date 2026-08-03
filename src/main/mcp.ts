@@ -17,7 +17,7 @@ import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './
 import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
 import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
 import { getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
-import { collectBoundXListTimeline } from './x-list-execution.ts';
+import { addXListMembersWithReplay, collectBoundXListTimeline } from './x-list-execution.ts';
 import { ensurePyaireaderXBrowser } from './browser.ts';
 import { readBrowserConfig } from './browser-config.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
@@ -209,15 +209,18 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   }));
   server.registerTool('x_lists.prepare', {
     description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。只准备，最终确认只能在 WMB UI 完成。',
-    inputSchema: {
-      request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
-      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional()
-    }
+    inputSchema: { request_id: z.string(), account_key: z.string(), kind: z.enum(xListOperationKinds), list_id: z.string().optional(),
+      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional() }
   }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles }) => xListResult(async () => {
     const { accountKey } = await selectedXListAccount();
     if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
-    const db = database();
-    try { return prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles }); }
+    const db = database(); try { return prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles }); } finally { db.close(); }
+  }));
+  server.registerTool('x_lists.members_add', {
+    description: '用户明确要求添加成员时直接调用且无需 UI 确认。步骤：先读 index 确认账号和稳定 list_id；续跑先读 members 并排除已存在账号；每个新业务动作使用新 request_id；handles 只传唯一精确 @handle。replayed=true/attemptedNow=false 是旧结果回放，禁止说刚执行；attemptedNow=true 才是本次尝试，最终按逐项状态汇报。禁止通过 bash/源码猜参数。',
+    inputSchema: { request_id: z.string().describe('本次业务动作的唯一 ID；新添加或部分结果续跑必须使用新值，仅同一次未取得终态响应的传输重试可复用。'), account_key: z.string().describe('wmb_read_x_list_index 返回的当前账号精确 @handle。'), list_id: z.string().describe('wmb_read_x_list_index 返回的目标 List 稳定数字 ID，不传名称或 URL。'), handles: z.array(z.string().describe('唯一精确 @handle，必须以 @ 开头；禁止显示名、关键词或模糊候选。')).min(1).max(100).describe('本次仍需加入的账号；续跑前先读 members，排除已存在成员。') }
+  }, async ({ request_id, account_key, list_id, handles }) => xListResult(async () => {
+    const db = database(); try { return await addXListMembersWithReplay(db, { requestId: request_id, accountKey: account_key, listId: list_id, handles }, async () => (await selectedXListAccount()).config); }
     finally { db.close(); }
   }));
   server.registerTool('x_lists.collect_timeline', {

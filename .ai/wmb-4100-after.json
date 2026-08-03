@@ -1,0 +1,91 @@
+{
+  "title": "WeMediaBuddy",
+  "dark": {
+    "viewport": {
+      "width": 1600,
+      "height": 960
+    },
+    "theme": "dark",
+    "themeText": "☾ 黑夜紫罗兰",
+    "themeTitle": "切换到白昼紫罗兰",
+    "triggerParent": "status-bar-left",
+    "triggerPosition": "static",
+    "bar": {
+      "left": 0,
+      "right": 1600,
+      "top": 926,
+      "bottom": 960,
+      "width": 1600,
+      "height": 34
+    },
+    "left": {
+      "left": 14,
+      "right": 525.140625,
+      "top": 934.875,
+      "bottom": 952.125,
+      "width": 511.140625,
+      "height": 17.25
+    },
+    "right": {
+      "left": 1361.234375,
+      "right": 1586,
+      "top": 931.875,
+      "bottom": 955.125,
+      "width": 224.765625,
+      "height": 23.25
+    },
+    "trigger": {
+      "left": 434,
+      "right": 525.140625,
+      "top": 935.25,
+      "bottom": 951.75,
+      "width": 91.140625,
+      "height": 16.5
+    },
+    "overlaps": []
+  },
+  "light": {
+    "viewport": {
+      "width": 1600,
+      "height": 960
+    },
+    "theme": "light",
+    "themeText": "☀ 白昼紫罗兰",
+    "themeTitle": "切换到黑夜紫罗兰",
+    "triggerParent": "status-bar-left",
+    "triggerPosition": "static",
+    "bar": {
+      "left": 0,
+      "right": 1600,
+      "top": 926,
+      "bottom": 960,
+      "width": 1600,
+      "height": 34
+    },
+    "left": {
+      "left": 14,
+      "right": 525.140625,
+      "top": 934.875,
+      "bottom": 952.125,
+      "width": 511.140625,
+      "height": 17.25
+    },
+    "right": {
+      "left": 1356.3125,
+      "right": 1586,
+      "top": 931.875,
+      "bottom": 955.125,
+      "width": 229.6875,
+      "height": 23.25
+    },
+    "trigger": {
+      "left": 434,
+      "right": 525.140625,
+      "top": 935.25,
+      "bottom": 951.75,
+      "width": 91.140625,
+      "height": 16.5
+    },
+    "overlaps": []
+  }
+}

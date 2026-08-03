@@ -148,8 +148,24 @@
 .pi-context-chip em { color: var(--accent-soft); font-style: normal; font-weight: 700; white-space: nowrap; }
 .pi-context-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); }
 .pi-toast { color: var(--accent-soft); font-size: 12px; }
+.pi-conversation-shell { position: relative; display: flex; flex: 1; min-height: 0; }
 .pi-conversation { flex: 1; min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 16px 16px 28px; }
 .pi-conversation-end-spacer { height: 36px; flex: none; }
+.pi-jump-latest { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); opacity: 1; transition: opacity 160ms ease; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-raised); color: var(--accent-soft); padding: 7px 12px; box-shadow: 0 6px 18px rgb(0 0 0 / 22%); cursor: pointer; }
+button.pi-jump-latest:not(:disabled):not([aria-disabled="true"]):active { transform: translateX(-50%) translateY(1px) scale(0.98); }
+.pi-jump-latest.leaving { opacity: 0; pointer-events: none; }
+.x-list-operation-trigger { position: static; flex: none; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; }
+.x-list-operation-tray { position: fixed; left: 220px; bottom: 32px; z-index: 40; width: min(420px, calc(100vw - 250px)); padding: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 12px 40px rgb(0 0 0 / 28%); display: grid; gap: 8px; }
+.x-list-operation-tray header, .x-list-operation-tray header > div, .x-list-operation-actions { display: flex; align-items: center; gap: 8px; }
+.x-list-operation-tray header { justify-content: space-between; }
+.x-list-operation-tray header > div { align-items: flex-start; flex-direction: column; gap: 2px; }
+.x-list-operation-tray header > button { border: 0; background: transparent; color: var(--muted); font-size: 18px; }
+.x-list-operation-tray p, .x-list-operation-tray small { margin: 0; color: var(--muted); font-size: 12px; }
+.x-list-operation-handles { max-height: 54px; overflow: auto; overflow-wrap: anywhere; }
+.x-list-operation-tray label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.x-list-operation-tray input { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 7px; }
+.x-list-operation-actions button { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; background: var(--accent); color: var(--accent-ink); }
+.x-list-operation-error { color: var(--danger) !important; }
 .pi-empty, .pi-conversation > .pi-empty { margin: 0; border-radius: 10px; background: var(--surface-raised); padding: 13px 14px; color: var(--muted); }
 .pi-bubble-wrap { display: grid; gap: 6px; margin: 0 0 16px; min-width: 0; max-width: 100%; }
 .pi-bubble-wrap.user { justify-items: end; }
@@ -317,6 +333,9 @@
 .pi-bubble-actions button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pi-bubble-actions button:hover { color: var(--ink); background: var(--surface-hover); }
 .pi-bubble-actions button:disabled { opacity: .45; cursor: default; }
+.pi-bubble-actions button.pending { opacity: 1; color: var(--accent-soft); }
+.pi-bubble-actions button.pending svg { animation: pi-action-spin 700ms linear infinite; }
+@keyframes pi-action-spin { to { transform: rotate(360deg); } }
 .pi-native-queue {
   display: grid;
   gap: 8px;

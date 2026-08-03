@@ -1,0 +1,24 @@
+{
+  "title": "WeMediaBuddy",
+  "geometry": {
+    "shell": {
+      "left": 1084,
+      "right": 1600,
+      "bottom": 778,
+      "centerX": 1342
+    },
+    "button": {
+      "left": 1301,
+      "right": 1383,
+      "bottom": 768,
+      "centerX": 1342
+    },
+    "centerDelta": 0,
+    "computed": {
+      "left": "258px",
+      "right": "176px",
+      "transform": "matrix(1, 0, 0, 1, -41, 0)"
+    }
+  },
+  "distanceAfterClick": 0
+}

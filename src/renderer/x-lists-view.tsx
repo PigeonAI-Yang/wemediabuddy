@@ -5,7 +5,6 @@ import { parseVisibleXListIds } from './x-list-visibility';
 type ListIndex = Awaited<ReturnType<typeof window.wmb.readXListIndex>>;
 type ListRef = ListIndex['lists'][number];
 type Binding = Awaited<ReturnType<typeof window.wmb.listXListBindings>>[number];
-type Operation = Awaited<ReturnType<typeof window.wmb.listXListOperations>>[number];
 type Detail = Awaited<ReturnType<typeof window.wmb.readXListDetail>>['detail'];
 type TimelinePost = {
   url: string;
@@ -33,9 +32,7 @@ type TimelinePost = {
   };
 };
 type TimelinePostDetail = TimelinePost & { replies: TimelinePost[]; hasMoreReplies?: boolean };
-type ComposerInput = Parameters<typeof window.wmb.prepareXListOperation>[0];
 const groupLabels: Record<ListRef['kind'], string> = { owned: '我创建的', following: '我关注的', member: '我在其中', unknown: '待确认' };
-const stateLabels: Record<Operation['state'], string> = { prepared: '待读取快照', awaiting_confirmation: '等待确认', running: '执行中', succeeded: '已完成', partial: '已停止', needs_user: '需要接管', unknown: '结果未知', failed: '失败' };
 function toThumbUrl(value: string): string {
   try {
     const url = new URL(value);
@@ -260,7 +257,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
 }): React.JSX.Element {
   const [index, setIndex] = useState<ListIndex | null>(null);
   const [bindings, setBindings] = useState<Binding[]>([]);
-  const [operations, setOperations] = useState<Operation[]>([]);
   const selectedListStorageKey = workspaceStorageKey(workspaceId, 'xListSelectedId'); const [selectedListId, setSelectedListId] = useState<string | null>(() => localStorage.getItem(selectedListStorageKey));
   const visibleListStorageKey = workspaceStorageKey(workspaceId, 'xListVisibleIds'); const [visibleListIds] = useState<string[] | null>(() => parseVisibleXListIds(localStorage.getItem(visibleListStorageKey)));
   const [kindFilter, setKindFilter] = useState<ListRef['kind'] | 'all'>(() => {
@@ -269,14 +265,12 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   });
   const [detail, setDetail] = useState<Detail | null>(null);
   const [members, setMembers] = useState<Awaited<ReturnType<typeof window.wmb.readXListMembers>>['members'] | null>(null);
-  const [showManage, setShowManage] = useState(false);
   const [posts, setPosts] = useState<TimelinePost[] | null>(null);
   const [postsHasMore, setPostsHasMore] = useState(false);
   const [postsOffset, setPostsOffset] = useState(0);
   const [postsMeta, setPostsMeta] = useState<{ origin: 'browse' | 'collect' | 'live'; fetchedAt?: string; stale?: boolean } | null>(null);
   const [selectedPost, setSelectedPost] = useState<TimelinePostDetail | null>(null);
   const [loadingPost, setLoadingPost] = useState(false);
-  const [activeOperation, setActiveOperation] = useState<Operation | null>(null);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
@@ -287,12 +281,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   const isIgnorableIndexError = (message: string) => /已切换到更新的 X 操作|旧请求已取消|superseded/i.test(message);
 
   const loadLocal = async (accountKey?: string) => {
-    const [nextBindings, nextOperations] = await Promise.all([
-      window.wmb.listXListBindings(accountKey),
-      window.wmb.listXListOperations({ accountKey, limit: 24 })
-    ]);
-    setBindings(nextBindings); setOperations(nextOperations);
-    setActiveOperation((current) => current ? nextOperations.find((item) => item.id === current.id) ?? current : null);
+    setBindings(await window.wmb.listXListBindings(accountKey));
   };
   useEffect(() => {
     const requestId = ++indexRequestId.current;
@@ -309,46 +298,12 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
         await loadLocal(cached.accountKey);
         if (!stillCurrent()) return;
       }
-      // Background revalidate — keep cached content visible while loading.
-      setLoading(true);
-      try {
-        const next = await window.wmb.readXListIndex();
-        if (!stillCurrent()) return;
-        setIndex(next);
-        setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : null);
-        await loadLocal(next.accountKey);
-        if (!stillCurrent()) return;
-        setNote(`已更新 ${next.accountKey} 的 ${next.lists.length} 个可见 List。`);
-      } catch (error) {
-        if (!stillCurrent()) return;
-        const message = error instanceof Error ? error.message : String(error);
-        // A newer refresh/preempted run owns the page now — never paint stale failure over cache.
-        if (isIgnorableIndexError(message)) return;
-        if (!cached?.lists?.length) setNote(message);
-        else {
-          const short = /超时/.test(message) ? '后台刷新超时' : (/占用|冷却/.test(message) ? '后台繁忙' : '后台刷新失败');
-          setNote(`${short}，继续显示缓存 · ${cached.lists.length} 个 List。`);
-        }
-      } finally {
-        if (stillCurrent()) setLoading(false);
-      }
     })();
     return () => {
-      // Invalidate in-flight mount refresh if the view unmounts or remounts.
+      // Invalidate in-flight cache load if the view unmounts or remounts.
       if (indexRequestId.current === requestId) indexRequestId.current += 1;
     };
   }, []);
-  useEffect(() => {
-    if (!activeOperation || activeOperation.state !== 'running') return;
-    const timer = window.setInterval(() => {
-      void window.wmb.getXListOperation(activeOperation.id).then((current) => {
-        if (!current) return;
-        setActiveOperation(current);
-        setOperations((items) => [current, ...items.filter((item) => item.id !== current.id)]);
-      });
-    }, 800);
-    return () => window.clearInterval(timer);
-  }, [activeOperation?.id, activeOperation?.state]);
 
   const selected = index?.lists.find((item) => item.listId === selectedListId) ?? null;
   const selectedBinding = selected && index ? bindings.find((item) => item.accountKey.toLowerCase() === index.accountKey.toLowerCase() && item.listId === selected.listId) ?? null : null;
@@ -489,10 +444,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   useEffect(() => () => { onStatusChange?.(null); }, [onStatusChange]);
 
 
-  const mergeOperation = (operation: Operation) => {
-    setActiveOperation(operation);
-    setOperations((items) => [operation, ...items.filter((item) => item.id !== operation.id)]);
-  };
   const applyIndex = async (next: ListIndex, label: string) => {
     setIndex(next);
     setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : null);
@@ -911,18 +862,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     node.addEventListener('scroll', onScroll, { passive: true });
     return () => node.removeEventListener('scroll', onScroll);
   }, [postsHasMore, working, loadingMore, postsMeta?.origin, postsOffset, selectedListId, posts?.length]);
-  const toggleBinding = async () => {
-    if (!selected || !index) return;
-    setWorking(true); setNote('');
-    try {
-      const result = selectedBinding
-        ? await window.wmb.setXListBindingEnabled({ accountKey: selectedBinding.accountKey, listId: selectedBinding.listId, expectedRevision: selectedBinding.revision, enabled: !selectedBinding.enabled })
-        : await window.wmb.bindXList({ listId: selected.listId });
-      if (!result.ok) setNote(result.error.message);
-      else { await loadLocal(index.accountKey); setNote(selectedBinding?.enabled ? '已移出今日情报；已有资料与 X List 均未删除。' : '已接入今日情报。'); }
-    } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
-    finally { setWorking(false); }
-  };
   const collectTimeline = async () => {
     if (!selectedBinding?.enabled || !index) return;
     setWorking(true); setNote('');
@@ -942,53 +881,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setWorking(false); }
   };
-  const prepare = async (draft: ComposerInput) => {
-    setWorking(true); setNote('');
-    try {
-      const proposed = await window.wmb.prepareXListOperation(draft);
-      if (!proposed.ok) { setNote(proposed.error.message); return; }
-      const armed = await window.wmb.armXListOperation({ operationId: proposed.data.operation.id, expectedRevision: proposed.data.operation.revision });
-      if (!armed.ok) { mergeOperation(proposed.data.operation); setNote(armed.error.message); return; }
-      mergeOperation(armed.data); setNote('已冻结账号、List 与精确变更集，请在下方确认。');
-    } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
-    finally { setWorking(false); }
-  };
-  const rearm = async () => {
-    if (!activeOperation) return;
-    setWorking(true);
-    try {
-      const armed = await window.wmb.armXListOperation({ operationId: activeOperation.id, expectedRevision: activeOperation.revision });
-      if (!armed.ok) setNote(armed.error.message); else { mergeOperation(armed.data); setNote('已重新冻结快照，请确认。'); }
-    } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
-    finally { setWorking(false); }
-  };
-  const confirm = async (typedListName?: string) => {
-    if (!activeOperation) return;
-    if (activeOperation.kind === 'delete' && typedListName?.trim() !== activeOperation.snapshot.list?.name) { setNote('请输入当前 List 名称后再删除。'); return; }
-    const pending = activeOperation;
-    setActiveOperation({ ...pending, state: 'running', phase: 'starting', revision: pending.revision + 1 });
-    setWorking(true); setNote('正在执行；成员批处理可在动作边界停止。');
-    try {
-      const result = await window.wmb.confirmXListOperation({ operationId: pending.id, expectedRevision: pending.revision, typedListName });
-      if (result.ok) { mergeOperation(result.data); setNote(`操作${stateLabels[result.data.state]}。`); }
-      else {
-        const latest = await window.wmb.getXListOperation(pending.id);
-        if (latest) mergeOperation(latest);
-        setNote(result.error.message);
-      }
-      if (index) { await loadLocal(index.accountKey); await loadIndex(); }
-    } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
-    finally { setWorking(false); }
-  };
-  const stop = async () => {
-    if (!activeOperation) return;
-    const latest = await window.wmb.getXListOperation(activeOperation.id);
-    if (!latest || latest.state !== 'running') return;
-    const result = await window.wmb.stopXListOperation({ operationId: latest.id, expectedRevision: latest.revision });
-    if (result.ok) { mergeOperation(result.data); setNote('将在当前页面动作完成后停止。'); }
-    else setNote(result.error.message);
-  };
-
   return <section className="x-lists-view">
     {!index ? <section className="empty-state library-empty">
       <h2>尚未读取 X List</h2>
@@ -1023,9 +915,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
             <button disabled={working} onClick={() => void readTimeline(true)}>刷新动态</button>
             <button disabled={working} onClick={() => void readMembers()}>成员</button>
             <button disabled={working} onClick={() => void readDetail()}>详情</button>
-            <button disabled={working} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出今日情报' : '接入今日情报'}</button>
             {selectedBinding?.enabled && <button disabled={working} onClick={() => void collectTimeline()}>采集一批</button>}
-            <button disabled={working} onClick={() => setShowManage((value) => !value)}>{showManage ? '收起管理' : '管理'}</button>
           </div>
         </div>
         
@@ -1053,47 +943,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
             ))}
           </div>}
         </section>}
-        {showManage && <>
-          <XListComposer accountKey={index.accountKey} selected={selected} detail={detail} disabled={working} onPrepare={prepare}/>
-          <XListConfirmation operation={activeOperation} disabled={working} onConfirm={confirm} onStop={() => void stop()} onRearm={() => void rearm()}/>
-          {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabels[operation.state]} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
-        </>}
       </div> : <section className="empty-state library-empty"><h2>选择一个 List</h2></section>}
     </>}
   </section>;
-}
-
-function XListComposer({ accountKey, selected, detail, disabled, onPrepare }: { accountKey: string; selected: ListRef | null; detail: Detail | null; disabled: boolean; onPrepare: (input: ComposerInput) => Promise<void> }): React.JSX.Element {
-  const canManage = selected?.kind === 'owned';
-  const [kind, setKind] = useState<'create' | 'update' | 'delete' | 'members_add' | 'members_remove'>('create');
-  const [name, setName] = useState(''); const [description, setDescription] = useState(''); const [changeDescription, setChangeDescription] = useState(false);
-  const [privacy, setPrivacy] = useState<'unchanged' | 'public' | 'private'>('unchanged'); const [handles, setHandles] = useState('');
-  useEffect(() => { if (!canManage && kind !== 'create') setKind('create'); }, [canManage, kind]);
-  const submit = () => {
-    const input: ComposerInput = { requestId: crypto.randomUUID(), accountKey, kind };
-    if (kind !== 'create') input.listId = selected?.listId;
-    if (kind === 'create') { input.name = name.trim(); input.description = description || undefined; input.isPrivate = privacy === 'private'; }
-    if (kind === 'update') { if (name.trim()) input.name = name.trim(); if (changeDescription) input.description = description; if (privacy !== 'unchanged') input.isPrivate = privacy === 'private'; }
-    if (kind === 'members_add' || kind === 'members_remove') input.handles = handles.split(/[\s,，]+/).filter(Boolean);
-    void onPrepare(input);
-  };
-  const modes: Array<{ id: typeof kind; label: string }> = [{ id: 'create', label: '新建' }, ...(canManage ? [{ id: 'update' as const, label: '编辑' }, { id: 'members_add' as const, label: '添加成员' }, { id: 'members_remove' as const, label: '移除成员' }, { id: 'delete' as const, label: '删除' }] : [])];
-  return <section className="x-list-composer"><header><div><p className="eyebrow">管理</p><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div>{detail && <small>当前：{detail.isPrivate ? '私密' : '公开'}</small>}</header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
-    {(kind === 'create' || kind === 'update') && <div className="x-list-form"><label>名称<input value={name} placeholder={kind === 'create' ? '例如：行业观察' : detail?.name ?? '不修改'} onChange={(event) => setName(event.target.value)}/></label><label className="x-list-description-toggle"><input type="checkbox" checked={kind === 'create' || changeDescription} onChange={(event) => setChangeDescription(event.target.checked)} disabled={kind === 'create'}/> {kind === 'create' ? '添加描述' : '修改或清空描述'}</label>{(kind === 'create' || changeDescription) && <label>描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={detail?.description ?? '这份 List 关注什么？'}/></label>}<label>公开性<select value={privacy} onChange={(event) => setPrivacy(event.target.value as typeof privacy)}><option value="unchanged">{kind === 'create' ? '公开' : '不修改'}</option><option value="public">公开</option><option value="private">私密</option></select></label></div>}
-    {(kind === 'members_add' || kind === 'members_remove') && <label className="x-list-form">精确 handle（一行一个）<textarea value={handles} onChange={(event) => setHandles(event.target.value)} placeholder={'@karpathy\n@ylecun'}/></label>}
-    {kind === 'delete' && <p className="x-list-danger">删除不会立即执行；下一步仍需读取快照，并要求输入当前 List 名称确认。</p>}
-    <button className="x-list-primary" disabled={disabled || (kind !== 'create' && !selected) || (kind === 'create' && !name.trim())} onClick={submit}>读取快照并准备确认</button>
-  </section>;
-}
-
-function XListConfirmation({ operation, disabled, onConfirm, onStop, onRearm }: { operation: Operation | null; disabled: boolean; onConfirm: (typedListName?: string) => Promise<void>; onStop: () => void; onRearm: () => void }): React.JSX.Element | null {
-  const [typedName, setTypedName] = useState('');
-  if (!operation) return null;
-  const canConfirm = operation.state === 'awaiting_confirmation' && (operation.kind !== 'delete' || typedName.trim() === operation.snapshot.list?.name);
-  return <section className={`x-list-confirmation state-${operation.state}`}><header><div><p className="eyebrow">确认</p><h3>{operationLabel(operation)}</h3></div><span>{stateLabels[operation.state]}</span></header><p>账号 {operation.snapshot.accountKey} · {operation.snapshot.list?.name ?? '新建 List'} · {operation.phase}</p>{operation.kind === 'delete' && <label>输入“{operation.snapshot.list?.name}”以删除<input value={typedName} onChange={(event) => setTypedName(event.target.value)}/></label>}{(operation.kind === 'members_add' || operation.kind === 'members_remove') && <p>精确成员：{operation.items.map((item) => item.handle).join('、')}</p>}<div className="x-list-confirm-actions">{operation.state === 'prepared' && <button disabled={disabled} onClick={onRearm}>重新读取快照</button>}{canConfirm && <button className="x-list-primary" disabled={disabled} onClick={() => void onConfirm(typedName)}>最终确认并执行</button>}{operation.state === 'running' && <button className="x-list-stop" onClick={onStop}>停止后续成员</button>}</div>{operation.errorMessage && <small>{operation.errorMessage}</small>}</section>;
-}
-
-function operationLabel(operation: Operation): string {
-  const labels: Record<Operation['kind'], string> = { create: '新建 List', update: '编辑 List', delete: '删除 List', members_add: '添加成员', members_remove: '移除成员' };
-  return labels[operation.kind];
 }

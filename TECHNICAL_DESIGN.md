@@ -107,7 +107,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `operations`：最小业务操作记录；
 - `mcp`：MCP 工具到业务命令的映射；
 - `browser`：安装级专用 Edge profile、进程生命周期、CDP 连接和平台适配器。
-- `x-lists`：所有自媒体工作空间共享的固定 X List 读写、确认、读回和发现信源绑定；登录态安装级共享，账号快照、缓存、绑定、操作和资料始终随当前 data-root 隔离。
+- `x-lists`：所有自媒体工作空间共享的固定 X List 读写、确认、读回和发现信源绑定；用户明确要求的成员添加由 Pi 通过 `x_lists.members_add` 直接执行，其他写入仍经应用级确认；所有路径先持久化 operation，再由同一 Main 浏览器执行器串行完成。登录态安装级共享，账号快照、缓存、绑定、操作和资料始终随当前 data-root 隔离。
 - `intelligence-channels`：固定官网/X Lists 来源配置、解析/试读、逐来源回执和共享每日预检/扫描编排；不是插件加载器。
 - `workspaces`：应用级注册表、根身份校验和单活动根切换；
 - `workspace-profiles`：有限字段的当前配方、编译期官方目录和会话级提案确认。
@@ -215,7 +215,7 @@ MCP 工具按业务能力组织：
 
 最后一组应用级 MCP 工具只读或准备提案；不能确认、激活、删除工作空间，也不能接收任意文件系统路径。新 data-root 的选择与有效配方激活仅通过窄 IPC 交给 UI 最终确认。
 
-外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次渠道调用均在同一业务边界重验当前 workspace、data-root、profile/source revision；X Lists 还重验安装级当前 X 账号、本根账号快照和 List binding。MCP/Pi 只能准备来源变更，最终确认只在 UI。
+外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次渠道调用均在同一业务边界重验当前 workspace、data-root、profile/source revision；X Lists 还重验安装级当前 X 账号、本根账号快照和 List binding。`x_lists.members_add` 是唯一直接外部写入工具，只接受精确 handles 并复用 operation/readback；其他 X List 写入只能准备，最终确认在应用级操作托盘。Pi dock 不渲染确定性任务控件，也不把 WMB 后台状态冒充模型消息。
 
 每日侦察、运营方案和创作可由用户在 WMB 中显式触发 Pi，也可从任意外部 Agent 发起。WMB 不定时唤醒 Agent；模型推理由用户配置的 OpenAI Responses 或 OpenAI Chat Completions 兼容服务完成，协议、模型或服务失败时不做静默替换。
 

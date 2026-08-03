@@ -20,9 +20,9 @@ export const X_HUMANIZATION = {
   /** Extra random jitter after the minimum gap (ms). */
   actionJitterMs: 10_000,
   /** Soft hourly budget for automated X page actions. */
-  hourlyActionBudget: 80,
+  hourlyActionBudget: 120,
   /** Daily budget across automation sessions. */
-  dailyActionBudget: 260,
+  dailyActionBudget: 300,
   /** After N actions, take a longer human pause. */
   longPauseEveryMin: 2,
   longPauseEveryMax: 4,

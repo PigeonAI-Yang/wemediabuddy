@@ -108,7 +108,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     data: { title: '数据与存储', description: '查看 WMB 数据保存位置并管理本地文件。' },
     browser: { title: '浏览器与账号', description: '管理 WMB 专用浏览器和平台登录环境。' },
     channels: { title: '情报渠道', description: '管理当前工作空间每天检查的官网和 X Lists。' },
-    lists: { title: 'X Lists', description: '选择当前工作空间在 List 工作台显示的账号 Lists。' },
+    lists: { title: 'X Lists', description: '管理当前工作空间显示、接入和操作的账号 Lists。' },
     agent: { title: 'Agent 接入', description: '让其他 Agent 读取和操作 WMB 中的同一份业务资料。' },
     diagnostics: { title: '系统诊断', description: '仅在异常时检查本地数据、创作助手连接和专用浏览器。' },
     about: { title: '关于 WMB', description: '查看应用和 Pi 运行组件版本。' }

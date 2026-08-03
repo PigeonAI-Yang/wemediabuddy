@@ -93,3 +93,7 @@ export function piErrorMessage(error: unknown): string {
     .replace(/^Error:\s*/i, '')
     .trim() || 'Pi 回复失败。';
 }
+
+export function isPiConversationNearBottom(scrollTop: number, scrollHeight: number, clientHeight: number): boolean {
+  return scrollHeight - clientHeight - scrollTop <= 48;
+}

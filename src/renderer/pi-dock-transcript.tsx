@@ -1,9 +1,9 @@
-import type { RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
-import { coalescePiMessages, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
+import { coalescePiMessages, isPiConversationNearBottom, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
 
 export type PiDockMessage = PiChatMessage;
 
@@ -64,6 +64,7 @@ export function PiDockTranscript({
   messages,
   queue,
   busy,
+  pendingAction,
   configured,
   statusText,
   conversationRef,
@@ -74,6 +75,7 @@ export function PiDockTranscript({
   messages: PiDockMessage[];
   queue: PiNativeQueue;
   busy: boolean;
+  pendingAction: { entryId: string; retry: boolean } | null;
   configured: boolean;
   statusText: string;
   conversationRef: RefObject<HTMLDivElement | null>;
@@ -81,15 +83,61 @@ export function PiDockTranscript({
   onFork: (entryId: string) => void;
   onRetry: (entryId: string) => void;
 }): React.JSX.Element {
+  const followingLatest = useRef(true);
+  const jumpingLatest = useRef(false);
+  const jumpFrame = useRef<number | null>(null);
+  const hideLatestTimer = useRef<number | null>(null);
+  const [showLatest, setShowLatest] = useState(false);
+  const [latestLeaving, setLatestLeaving] = useState(false);
   let retryEntryId: string | undefined;
   const displayMessages = coalescePiMessages(messages);
-  return <div className="pi-conversation" ref={conversationRef}>
+  useEffect(() => {
+    const node = conversationRef.current;
+    if (node && followingLatest.current) node.scrollTop = node.scrollHeight;
+  }, [messages, queue, conversationRef]);
+  useEffect(() => () => {
+    if (jumpFrame.current !== null) cancelAnimationFrame(jumpFrame.current);
+    if (hideLatestTimer.current !== null) window.clearTimeout(hideLatestTimer.current);
+  }, []);
+  const updateFollowing = () => {
+    const node = conversationRef.current;
+    if (!node || jumpingLatest.current) return;
+    followingLatest.current = isPiConversationNearBottom(node.scrollTop, node.scrollHeight, node.clientHeight);
+    setShowLatest(!followingLatest.current);
+  };
+  const jumpToLatest = () => {
+    const node = conversationRef.current;
+    if (!node || jumpingLatest.current) return;
+    jumpingLatest.current = true;
+    followingLatest.current = false;
+    node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+    const deadline = performance.now() + 900;
+    const watch = () => {
+      const atBottom = isPiConversationNearBottom(node.scrollTop, node.scrollHeight, node.clientHeight);
+      if (!atBottom && performance.now() < deadline) {
+        jumpFrame.current = requestAnimationFrame(watch);
+        return;
+      }
+      if (!atBottom) node.scrollTop = node.scrollHeight;
+      followingLatest.current = true;
+      setLatestLeaving(true);
+      hideLatestTimer.current = window.setTimeout(() => {
+        jumpingLatest.current = false;
+        setShowLatest(false);
+        setLatestLeaving(false);
+      }, 160);
+    };
+    jumpFrame.current = requestAnimationFrame(watch);
+  };
+  return <div className="pi-conversation-shell"><div className="pi-conversation" ref={conversationRef} onScroll={updateFollowing}>
     {displayMessages.length ? displayMessages.map((message, index) => {
         if (message.role === 'user' && message.entryId) retryEntryId = message.entryId;
         const timeLabel = formatPiMessageTime(message.createdAt);
         const segments = piMessageSegments(message);
         const showActions = Boolean(segments.length) && message.status !== 'streaming';
         const retryId = retryEntryId;
+        const forkPending = pendingAction?.entryId === message.entryId && pendingAction?.retry === false;
+        const retryPending = pendingAction?.entryId === retryId && pendingAction?.retry === true;
         return (
           <div className={`pi-bubble-wrap ${message.role}`} key={message.entryId ?? `${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`}>
             {message.role === 'assistant'
@@ -110,10 +158,10 @@ export function PiDockTranscript({
                 <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy(segments.map(segmentText).join('\n\n'))}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
                 </button>
-                {message.role === 'user' && message.entryId && <button type="button" title="按 Pi 原生分叉撤回" aria-label="按 Pi 原生分叉撤回" disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
+                {message.role === 'user' && message.entryId && <button type="button" className={forkPending ? 'pending' : undefined} title={forkPending ? '正在创建分支' : '按 Pi 原生分叉撤回'} aria-label="按 Pi 原生分叉撤回" aria-busy={forkPending || undefined} disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-3"/></svg>
                 </button>}
-                {retryId && <button type="button" title="按 Pi 原生分叉重发" aria-label="按 Pi 原生分叉重发" disabled={!showActions || busy || !configured} onClick={() => onRetry(retryId)}>
+                {retryId && <button type="button" className={retryPending ? 'pending' : undefined} title={retryPending ? '正在重新发送' : '按 Pi 原生分叉重发'} aria-label="按 Pi 原生分叉重发" aria-busy={retryPending || undefined} disabled={!showActions || busy || !configured} onClick={() => onRetry(retryId)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
                 </button>}
               </div>
@@ -129,5 +177,5 @@ export function PiDockTranscript({
       </ol>
     </section>}
     <div className="pi-conversation-end-spacer" aria-hidden="true" />
-  </div>;
+  </div>{showLatest && <button type="button" className={`pi-jump-latest${latestLeaving ? ' leaving' : ''}`} onClick={jumpToLatest}>回到最新</button>}</div>;
 }

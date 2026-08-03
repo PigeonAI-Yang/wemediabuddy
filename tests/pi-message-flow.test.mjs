@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { messagesFromPiEntries } from '../src/main/pi-transcript-projection.ts';
 import { piToolSummary } from '../src/shared/pi-message.ts';
-import { coalescePiMessages, piThinkingSummary } from '../src/renderer/pi-dock-utils.ts';
+import { coalescePiMessages, isPiConversationNearBottom, piThinkingSummary } from '../src/renderer/pi-dock-utils.ts';
 
 test('Pi transcript preserves visible order and keeps tool details behind one summary', () => {
   const messages = messagesFromPiEntries([
@@ -53,4 +53,27 @@ test('completed thinking uses a compact truthful summary without semantic deleti
   assert.match(transcript, /streaming \? segments\.map\(\(segment\) => segment\.kind\)\.lastIndexOf\('thinking'\)/);
   assert.match(transcript, /<details className="pi-thinking-line"/);
   assert.match(css, /\.pi-thinking-line:not\(\[open\]\) > \.pi-thinking-detail \{ display: none; \}/);
+});
+
+test('Pi retry exposes a guarded pending action before awaiting native fork', async () => {
+  const dock = await readFile(new URL('../src/renderer/pi-dock.tsx', import.meta.url), 'utf8');
+  const transcript = await readFile(new URL('../src/renderer/pi-dock-transcript.tsx', import.meta.url), 'utf8');
+  assert.ok(dock.indexOf('setForkAction({ entryId, retry })') < dock.indexOf('await window.wmb.forkPiConversation(entryId)'));
+  assert.match(dock, /if \(busy \|\| forkActionRef\.current\) return/);
+  assert.match(dock, /finally \{\s*forkActionRef\.current = false; setForkAction\(null\)/);
+  assert.match(transcript, /aria-busy=\{retryPending \|\| undefined\}/);
+});
+
+test('Pi streaming follows only while the reader remains near the bottom', async () => {
+  assert.equal(isPiConversationNearBottom(752, 1200, 400), true);
+  assert.equal(isPiConversationNearBottom(700, 1200, 400), false);
+  const dock = await readFile(new URL('../src/renderer/pi-dock.tsx', import.meta.url), 'utf8');
+  const transcript = await readFile(new URL('../src/renderer/pi-dock-transcript.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(dock, /node\.scrollTop = node\.scrollHeight/);
+  assert.match(transcript, /if \(node && followingLatest\.current\) node\.scrollTop = node\.scrollHeight/);
+  assert.match(transcript, /scrollTo\(\{ top: node\.scrollHeight, behavior: 'smooth' \}\)/);
+  assert.match(transcript, /latestLeaving \? ' leaving' : ''/);
+  const css = await readFile(new URL('../src/renderer/styles-pi.css', import.meta.url), 'utf8');
+  assert.match(css, /button\.pi-jump-latest:not\(:disabled\):not\(\[aria-disabled="true"\]\):active \{ transform: translateX\(-50%\) translateY\(1px\) scale\(0\.98\); \}/);
+  assert.match(transcript, />回到最新<\/button>/);
 });

@@ -154,25 +154,16 @@ export async function ensureXListMember(config: XListBrowserConfig, input: { lis
       await active.navigateInitially(xListUrl(input.listId), { mode: 'browse' });
       const accountKey = await readAccountKey(active);
 
-      // Always use Edit List -> Manage members. The header "N 成员" sheet is read-only (no Suggested/search).
-      await openManagedMembers(active, input.listId, input.desiredState === 'present' ? 'members' : 'members');
-      const present = await hasMember(active, normalizedHandle);
-      if (input.desiredState === 'present' && present) {
-        return { accountKey, outcome: 'already_present', evidenceUrl: active.page.url() };
+      if (input.desiredState === 'present') {
+        await openManagedMembers(active, input.listId, 'suggested');
+        const outcome = await addMemberInOpenSheet(active, input.listId, normalizedHandle, hooks);
+        return { accountKey, outcome, evidenceUrl: active.page.url() };
       }
-      if (input.desiredState === 'absent' && !present) {
+
+      await openManagedMembers(active, input.listId, 'members');
+      if (!await hasMember(active, normalizedHandle)) {
         return { accountKey, outcome: 'already_absent', evidenceUrl: active.page.url() };
       }
-
-      if (input.desiredState === 'present') {
-        await addMemberInOpenSheet(active, input.listId, normalizedHandle, hooks);
-        await switchMembersTab(active, input.listId, 'members');
-        if (!await hasMember(active, normalizedHandle)) {
-          throw new XListUnknownError(`添加 ${normalizedHandle} 后未能在成员页读回。`);
-        }
-        return { accountKey, outcome: 'added', evidenceUrl: active.page.url() };
-      }
-
       await removeMember(active, input.listId, normalizedHandle, hooks);
       if (await hasMember(active, normalizedHandle)) {
         throw new XListUnknownError(`移除 ${normalizedHandle} 后仍显示在成员页。`);
@@ -232,9 +223,15 @@ export async function openManagedMembers(session: XListSession, listId: string, 
   await session.page.locator(
     `a[href="/i/lists/${listId}/info"], a:has-text("编辑列表"), a:has-text("Edit List")`
   ).first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
-  const edit = await firstVisible(session.page.locator(
+  let edit = await firstVisible(session.page.locator(
     `a[href="/i/lists/${listId}/info"], a:has-text("编辑列表"), a:has-text("Edit List")`
   ));
+  if (!edit) {
+    await session.navigateWithinOperation(xListUrl(listId), { mode: 'browse' });
+    edit = await firstVisible(session.page.locator(
+      `a[href="/i/lists/${listId}/info"], a:has-text("编辑列表"), a:has-text("Edit List")`
+    ));
+  }
   if (!edit) throw new XListNeedsUserError('X 列表页未出现“编辑列表”入口；请接管浏览器后重试。');
 
   await session.click(edit, { force: true });
@@ -259,8 +256,7 @@ export async function openManagedMembers(session: XListSession, listId: string, 
     '[role="dialog"] [data-testid="UserCell"], [role="dialog"] button:has-text("移除"), [role="dialog"] a:has-text("已推荐"), [role="dialog"] [role="tab"]:has-text("已推荐")'
   ).first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
 
-  if (tab === 'suggested') await switchMembersTab(session, listId, 'suggested');
-  else await switchMembersTab(session, listId, 'members');
+  if (!await membersSheetReady(session, tab)) await switchMembersTab(session, listId, tab);
 
   if (!await membersSheetReady(session, tab)) {
     throw new XListNeedsUserError('X 成员管理页未出现可操作控件；请接管浏览器后重试。');
@@ -312,11 +308,11 @@ export async function membersRoot(session: XListSession) {
     ).first().isVisible().catch(() => false);
     if (hasControls) return candidate;
   }
-  return session.page.locator('[data-testid="primaryColumn"], main').first();
+  return session.page.locator('[data-wmb-members-root-missing]');
 }
 
 /** Add one handle inside an already-open members manager sheet (serial). */
-export async function addMemberInOpenSheet(session: XListSession, listId: string, handle: string, hooks: XListActionHooks): Promise<void> {
+export async function addMemberInOpenSheet(session: XListSession, listId: string, handle: string, hooks: XListActionHooks): Promise<'already_present' | 'added'> {
   const bare = handle.replace(/^@/, '');
   // Prefer staying in the current sheet and switching to Suggested.
   if (!await membersSheetReady(session, 'suggested')) {
@@ -343,11 +339,12 @@ export async function addMemberInOpenSheet(session: XListSession, listId: string
   await search.fill(bare);
   await sleepMs(1600);
 
-  let row = session.page.locator(
+  let rows = session.page.locator(
     '[role="dialog"] [data-testid="typeaheadResult"], [role="dialog"] [data-testid="TypeaheadUser"], [role="dialog"] [role="option"], [aria-modal="true"] [data-testid="typeaheadResult"], [aria-modal="true"] [data-testid="TypeaheadUser"]'
-  ).filter({ hasText: new RegExp(`@?${bare}`, 'i') }).first();
-  await row.waitFor({ state: 'visible', timeout: 12_000 }).catch(() => {});
-  if (!await row.isVisible().catch(() => false)) {
+  );
+  await rows.first().waitFor({ state: 'visible', timeout: 12_000 }).catch(() => {});
+  let row = await exactHandleRow(rows, bare);
+  if (!row) {
     // Retry once with slow type in case fill was ignored.
     await search.click({ force: true });
     await search.fill('');
@@ -355,12 +352,13 @@ export async function addMemberInOpenSheet(session: XListSession, listId: string
       await session.page.keyboard.type(bare, { delay: 40 });
     });
     await sleepMs(1800);
-    row = session.page.locator(
+    rows = session.page.locator(
       '[role="dialog"] [data-testid="typeaheadResult"], [role="dialog"] [data-testid="TypeaheadUser"], [role="dialog"] [role="option"]'
-    ).filter({ hasText: new RegExp(`@?${bare}`, 'i') }).first();
-    await row.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+    );
+    await rows.first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+    row = await exactHandleRow(rows, bare);
   }
-  if (!await row.isVisible().catch(() => false)) {
+  if (!row || !await row.isVisible().catch(() => false)) {
     const sample = await session.page.locator('[role="dialog"]').last().innerText().catch(() => '');
     throw new XListNeedsUserError(`X 搜索 ${handle} 后未出现对应用户。sheet=${sample.slice(0, 180).replace(/\s+/g, ' ')}`);
   }
@@ -368,7 +366,7 @@ export async function addMemberInOpenSheet(session: XListSession, listId: string
   const removeBtn = row.locator(
     'button[aria-label="移除"], button[aria-label="Remove"], button:has-text("移除"), button:has-text("Remove")'
   ).first();
-  if (await removeBtn.isVisible().catch(() => false)) return;
+  if (await removeBtn.isVisible().catch(() => false)) return 'already_present';
 
   // IMPORTANT: do not match the whole TypeaheadUser row button (its innerText also contains "添加").
   // Only the compact control with aria-label 添加/Add performs membership changes.
@@ -396,6 +394,24 @@ export async function addMemberInOpenSheet(session: XListSession, listId: string
   if (!await removeBtn.isVisible().catch(() => false)) {
     throw new XListUnknownError(`点击添加 ${handle} 后按钮未变为移除。`);
   }
+  return 'added';
+}
+
+async function exactHandleRow(rows: Locator, handle: string): Promise<Locator | null> {
+  const count = await rows.count();
+  for (let index = 0; index < count; index += 1) {
+    const row = rows.nth(index);
+    const hrefs = await row.locator('a[href]').evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
+    if (hrefs.some((href) => xProfileHrefMatchesHandle(href, handle))) return row;
+  }
+  return null;
+}
+
+export function xProfileHrefMatchesHandle(href: string, handle: string): boolean {
+  try {
+    const pathname = new URL(href, 'https://x.com').pathname.replace(/\/$/, '');
+    return pathname.toLowerCase() === `/${handle.replace(/^@/, '').toLowerCase()}`;
+  } catch { return false; }
 }
 
 export async function addMember(session: XListSession, listId: string, handle: string, hooks: XListActionHooks): Promise<void> {
@@ -422,7 +438,7 @@ export async function removeMember(session: XListSession, listId: string, handle
 }
 
 export async function hasMember(session: XListSession, handle: string): Promise<boolean> {
-  const cells = session.page.locator('[data-testid="UserCell"]');
+  const cells = (await membersRoot(session)).locator('[data-testid="UserCell"]');
   const count = await cells.count();
   for (let index = 0; index < count; index += 1) {
     const cell = cells.nth(index);

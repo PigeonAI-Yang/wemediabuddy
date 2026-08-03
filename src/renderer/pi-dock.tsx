@@ -22,6 +22,8 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const [statusText, setStatusText] = useState(configured ? '已配置' : '等待配置');
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const conversationTouched = useRef(false);
+  const forkActionRef = useRef(false);
+  const [forkAction, setForkAction] = useState<{ entryId: string; retry: boolean } | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
   const busy = phase === 'starting' || phase === 'running';
   const [modelLabel, setModelLabel] = useState('默认模型');
@@ -58,11 +60,6 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   useEffect(() => {
     setStatusText(configured ? (phase === 'idle' ? '已配置' : statusText) : '等待配置');
   }, [configured]);
-
-  useEffect(() => {
-    const node = conversationRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, nativeQueue, phase]);
 
   useEffect(() => {
     if (!sessionMenuOpen) return;
@@ -421,11 +418,13 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
   };
   const forkMessage = async (entryId: string, retry: boolean) => {
-    if (busy) return;
+    if (busy || forkActionRef.current) return;
+    forkActionRef.current = true; setForkAction({ entryId, retry });
+    setStatusText(retry ? '正在重新发送' : '正在创建分支');
     conversationTouched.current = true;
     try {
       const forked = await window.wmb.forkPiConversation(entryId);
-      if (forked.cancelled) { showToast('Pi 未创建分支'); return; }
+      if (forked.cancelled) { showToast('Pi 未创建分支'); setStatusText(configured ? '已配置' : '等待配置'); return; }
       setMessages(forked.conversation.messages);
       setNativeQueue({ steering: [], followUp: [] });
       setActiveSessionId(forked.conversation.id || null);
@@ -436,6 +435,9 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       else setDraftSeed(forked.text);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Pi 分叉失败');
+      setStatusText(configured ? '已配置' : '等待配置');
+    } finally {
+      forkActionRef.current = false; setForkAction(null);
     }
   };
   const activeTitle = sessions.find((item) => item.id === activeSessionId)?.title || 'Pi';
@@ -446,24 +448,17 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? 'M14.5 6.5 9 12l5.5 5.5' : 'M9.5 6.5 15 12l-5.5 5.5'} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
     </button>
     {!collapsed && <>
-      <PiDockHeader
-        headerRef={headerRef}
-        sessionMenuOpen={sessionMenuOpen}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        activeTitle={activeTitle}
-        phase={phase}
-        statusText={statusText}
-        contextChip={contextChip}
-        toast={toast}
+      <PiDockHeader headerRef={headerRef} sessionMenuOpen={sessionMenuOpen} sessions={sessions}
+        activeSessionId={activeSessionId} activeTitle={activeTitle} phase={phase} statusText={statusText}
+        contextChip={contextChip} toast={toast}
         onToggleSessions={() => { setSessionMenuOpen((open) => !open); void refreshSessions(); }}
-        onNewConversation={() => { void newConversation(); }}
-        onOpenSession={(id) => { void openSession(id); }}
+        onNewConversation={() => { void newConversation(); }} onOpenSession={(id) => { void openSession(id); }}
       />
       <PiDockTranscript
         messages={messages}
         queue={nativeQueue}
-        busy={busy}
+        busy={busy || Boolean(forkAction)}
+        pendingAction={forkAction}
         configured={configured}
         statusText={statusText}
         conversationRef={conversationRef}

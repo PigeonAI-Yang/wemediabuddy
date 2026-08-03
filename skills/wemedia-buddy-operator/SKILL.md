@@ -20,7 +20,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 ### 了解现场
 
 - 用 `wmb_get_current_workspace` 读取权威工作空间、能力和渠道摘要。
-- 用 `wmb_get_workbench` 读取今日资料、方案和待办。
+- 用 `wmb_get_workbench` 读取今日资料、方案和待办。`plan` 只代表请求日期的当前方案；`latestPlan` 仅供日期切换后的连续查看，不能冒充今日方案或当前任务写回结果。
 - 用 `wmb_list_workspaces` 了解登记状态；不要自行切换或指定 data-root。
 
 ### 管理 Pi Skills
@@ -41,9 +41,19 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 ### 操作和采集 X Lists
 
+- Discover 打开时只展示当前 data-root 最近一次缓存，不自动访问 X；需要最新 List 或动态时再执行对应读取/刷新。缓存标注的账号仅代表上次读取账号，任何平台操作仍以实时账号校验为准。
 - 读取真实列表使用 `wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`。
 - 查看已接入 WMB 的列表使用 `wmb_list_x_list_bindings`。
-- 创建、修改、删除或变更成员只用 `wmb_prepare_x_list_operation` 准备；等待 UI 确认后用 `wmb_get_x_list_operation` 读回。
+- 添加成员严格照以下步骤执行，不得用 bash、grep、读取仓库源码或自行推测参数：
+  1. 调用 `wmb_read_x_list_index`，从返回值原样取得当前 `accountKey` 和目标 List 的稳定数字 `listId`；同名 List 让用户选择。
+  2. 调用 `wmb_read_x_list_members` 读取目标 List 当前真实成员。把用户要求的账号统一为唯一、以 `@` 开头的精确 handle；删除已经存在的成员。显示名、关键词和模糊候选不得传入。
+  3. 若删除后为空，直接报告全部已存在，不调用写工具。否则为这一次新业务动作生成从未使用过的 `requestId`。只有同一次调用尚未取得终态响应时，传输重试才可复用原 ID。
+  4. 调用一次 `wmb_add_x_list_members({ requestId, accountKey, listId, handles })`。用户的明确添加指令就是授权，不要求第二次 UI 确认。
+  5. 返回 `replayed=true, attemptedNow=false` 时明确说“未重新执行”，引用原 `finishedAt`；只有 `attemptedNow=true` 才能说本次进行了尝试。最后按 operation ID 及每个 handle 的 `succeeded / needs_user / failed / unknown` 逐项汇报。
+  6. 继续 `partial / needs_user / failed` 时重新从第 1 步开始，必须重读当前成员、只提交仍未存在的 handle，并使用新的业务 `requestId`。禁止复用终态 ID、盲目重交完整名单或把历史回放当成续跑。
+- 创建、修改、移除成员或删除仍只用 `wmb_prepare_x_list_operation` 准备，并等待应用级操作托盘确认；不要把添加成员也送入这条确认路径。
+- 用户因找不到 UI、按钮未出现或确认未完成而说“重新来一次”时，先回读原 operation；只要精确 diff 未变且仍为 `prepared` / `awaiting_confirmation`，就继续引导同一 operation，禁止换 `requestId` 制造重复提议。只有用户明确改变账号、List 或成员 diff，才是新的业务动作。
+- 状态解释必须准确：`prepared` 是 WMB 正在自动读取确认快照，`awaiting_confirmation` 是应用级操作托盘等待用户一次确认且平台写入仍为零，`running` 表示确认已持久化并交给后台浏览器执行器；结束后按每项真实状态读回。不得把 `awaiting_confirmation` 说成已经执行，也不得把 WMB 执行动态说成 Pi 正在回复。
 - 采集已启用绑定使用 `wmb_collect_x_list_timeline`，不得采集任意未绑定 List。
 - 趋势观察只在用户显式要求时调用 `wmb_start_x_list_observation`；用 `wmb_get_x_list_observation` 读取状态，必要时用 `wmb_stop_x_list_observation` 停止。
 - 帖子趋势只引用 `wmb_list_x_post_metric_snapshots` 和 `wmb_get_x_post_trend` 返回的真实快照、速度和不足原因，不制造热度分。
@@ -54,7 +64,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点。
 - 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
 - 保存方案使用 `wmb_save_plan`。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
-- 保存后用 `wmb_get_workbench` 回读当日方案。历史判断使用 `wmb_get_knowledge_context`。
+- 保存后用 `wmb_get_workbench` 回读并确认精确日期的 `plan`；不要用 `latestPlan` 代替当前任务的保存结果。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。
 
 ### 创建和续写内容
@@ -92,7 +102,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 渠道：`wmb_get_intelligence_channels`、`wmb_list_intelligence_channel_receipts`、`wmb_resolve_intelligence_website`、`wmb_trial_intelligence_website`、`wmb_resolve_intelligence_x_list`、`wmb_prepare_intelligence_channel_changes`。
 
-X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
+X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_add_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
 资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。
 

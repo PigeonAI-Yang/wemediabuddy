@@ -1,37 +1,27 @@
 {
-  "active_loop": "",
+  "active_loop": "wmb-4106-x-list-social-structure-cache",
   "status": "complete",
-  "symptom": "Pi appears to repeat the same content because every historical max-reasoning segment remains fully expanded.",
+  "symptom": "Cached X List cards no longer show repost and quote relationships.",
   "observation_packet": {
-    "url": "packaged WeMediaBuddy Pi dock",
-    "viewport": "user screenshot 583x193 crop",
-    "user_action": "let Pi use several tools and read the resulting assistant turn",
-    "expected": "current reasoning remains visible without completed raw reasoning dominating and repeating the conversation",
-    "actual": "all 38 historical thinking segments are permanently expanded; exact duplicate DOM text count is zero but semantic repetition is high",
-    "screenshot": "live packaged DOM inspection",
-    "console": "pending runtime reproduction",
-    "network_ws": "not applicable; Electron IPC path",
-    "dom_selector": ".pi-message-segment.thinking",
-    "computed_style_layout": "pending runtime reproduction",
-    "state_store_snapshot": "active preset is deepseek-v4-flash with thinking=max; raw JSONL contains the same repeated reasoning progression seen in DOM"
+    "url": "packaged WeMediaBuddy Discover X Lists",
+    "viewport": "1600x960",
+    "user_action": "open Discover X Lists after restart",
+    "expected": "repost label and nested quote card survive cache persistence and remount",
+    "actual": "packaged UI renders 3 repost labels and 12 quote cards; SQLite retains social kinds and nested authors after write/read",
+    "screenshot": ".ai/wmb-4106-after.png",
+    "console": "no renderer error",
+    "network_ws": "not applicable",
+    "dom_selector": ".discover-page XListsView",
+    "computed_style_layout": "x-social-context and x-quote-card visible from real post data",
+    "state_store_snapshot": "cache readback retains repost/quote kinds, reposter handles and quoted authors"
   },
-  "hypotheses": [
-    {
-      "hypothesis": "WMB is not duplicating nodes; it makes provider repetition feel worse by permanently expanding every completed thinking segment",
-      "would_disprove": "the same thinking text appears more times in DOM than in the raw projected session, or completed thinking is already collapsed",
-      "result": "confirmed: exact DOM duplicates 0, completed thinking segments 38 and all expanded"
-    }
-  ],
-  "breakpoint": "Renderer presentation policy permanently expanded every completed raw thinking segment.",
-  "owner_check": {
-    "user_blocked_on": "repeated max reasoning dominated the conversation",
-    "now_usable": true,
-    "real_data_or_state": "same active deepseek-v4-flash max conversation",
-    "loading_empty_error_states": "latest streaming thinking remains expanded; completed state collapses non-lossily",
-    "v1_v2_baseline_preserved": true,
-    "regression_risk_checked": "reply/tool counts and chronology retained",
-    "would_user_return_this": false
-  },
+  "hypotheses": [{
+    "hypothesis": "timeline cache normalization omits postKind, repostedBy and quotedPost",
+    "would_disprove": "normalizePayload copies those fields into the persisted payload",
+    "result": "confirmed and repaired in normalizePayload"
+  }],
+  "breakpoint": null,
+  "owner_check": null,
   "attempts": 1,
-  "last_gate": "42 thinking summaries closed by default; one click opened exactly one full detail"
+  "last_gate": "real UI 3 repost labels and 12 quote cards; cache readback retains kinds and nested authors; 12/12 focused; typecheck; package"
 }

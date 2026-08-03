@@ -486,13 +486,13 @@ X Lists 是通用情报来源能力，不由 `WorkspaceProfileV1.platforms` 启�
 
 用户创建的 List 支持创建、读取详情、编辑名称/描述/公开性、删除、分页查看成员以及按精确 handle 串行批量添加或移除成员。非当前账号拥有的 List 仅支持读取详情、成员和时间线，以及接入/移出 WMB 情报渠道；WMB 不自动执行退出别人 List、拉黑创建者、私信、推荐搜索、置顶或任何未列出的 X 社交动作。
 
-每个外部写入先读取当前账号、List 身份/所有者、权限和必要的页面快照，生成冻结的变更集。创建、编辑、删除和成员批处理都必须由 UI 最终确认；MCP 和 Pi 只能读取或准备，不能确认。确认绑定账号、List、变更前快照和精确 diff；其中任一项变化使确认失效。删除还要求用户输入当前 List 名称再次确认。批量成员操作只需一次确认，但每个成员都要有平台读回结果。
+每个外部写入先读取当前账号、List 身份/所有者、权限和必要的页面快照，生成冻结的变更集。成员添加是唯一例外：用户在当前 Pi 对话中明确指定目标 List 和添加意图后，Pi 必须先确定唯一 `@handle`，再调用 `x_lists.members_add`；该 MCP 调用本身即为执行入口，不再生成第二次 UI 确认。命令必须绑定 workspace、当前账号、List ID、request ID 和完整 handles，逐项点击前从结果 profile URL 精确验证 handle，相似显示名或文字包含不得命中。创建、编辑、移除成员和删除仍由应用级 UI 最终确认；删除还要求输入当前 List 名称。所有路径使用同一 operation 保存进度、停止能力和逐项读回。
 
-执行始终使用可见的专用 X 页面、单个可操作标签和串行节奏；用户可以随时接管或请求停止，停止只在当前原子页面动作完成后生效。平台出现登录、验证码、挑战、权限不足或选择器无法安全确认时，操作进入 `needs_user`。点击后无法读回实际状态时，操作进入 `unknown`，停止后续项目且不自动重试。操作状态为 `prepared`、`awaiting_confirmation`、`running`、`succeeded`、`partial`、`needs_user`、`unknown` 或 `failed`，与发布和指标 jobs 分开保存。
+执行始终使用可见的专用 X 页面、单个可操作标签和串行节奏；用户可以随时接管或请求停止，停止只在当前原子页面动作完成后生效。平台出现登录、验证码、挑战、权限不足或选择器无法安全确认时，操作进入 `needs_user`。点击后无法读回实际状态时，操作进入 `unknown`，停止后续项目且不自动重试。操作状态为 `prepared`、`awaiting_confirmation`、`running`、`succeeded`、`partial`、`needs_user`、`unknown` 或 `failed`，与发布和指标 jobs 分开保存；页面导航不得取消已确认的后台操作，应用关闭不得把残留 `running` 伪装成仍在执行。
 
 绑定为情报渠道的 List 可以由用户显式触发一次有上限的最新动态读取，也可参加用户显式启动的 CAP-021 今日情报；每条动态通过既有 `source_feeds` / `source_items` 写入并带 List 来源。除一次显式动作按 CAP-022 创建的三个有界指标复查窗口外，不创建定时或全量抓取。解除绑定不改动 X List，也不删除已经入库的资料。
 
-通用 `x_lists.*` UI/IPC、MCP 和 Pi 读写准备能力使用同一业务命令，在每个有效自媒体工作空间可用，并在每次调用时重新验证当前 workspace、data-root、安装级当前账号和本根 List 绑定。缺少登录、当前账号与本根绑定快照不匹配、挑战或权限不足进入准确的 `needs_user`；账号不匹配的稳定 reason/error code 为 `ACCOUNT_MISMATCH`，不得迁移旧账号 binding、复用旧账号 cache 或静默回退。MCP/Pi 不暴露确认工具，最终外部写入仍只由 UI 精确确认。
+通用 `x_lists.*` UI/IPC、MCP 和 Pi 能力使用同一业务命令，在每个有效自媒体工作空间可用，并在每次调用时重新验证当前 workspace、data-root、安装级当前账号和本根 List 绑定。缺少登录、当前账号与本根绑定快照不匹配、挑战或权限不足进入准确的 `needs_user`；账号不匹配的稳定 reason/error code 为 `ACCOUNT_MISMATCH`，不得迁移旧账号 binding、复用旧账号 cache 或静默回退。MCP/Pi 不暴露确认工具；仅 `members_add` 在用户明确指令下直接执行，其余外部写入仍由 UI 精确确认。
 
 读、准备或采集在平台动作前发现缺少登录或账号不匹配时，直接返回 `needs_user`，且不写根内 binding、cache、operation、source feed/item、业务对象、registry/profile 或平台状态。只有一个已经由用户明确启动并持久化的 operation/job 在执行中失去前置条件时，才可幂等更新该原记录为 `needs_user`；不得另建重复 operation/job 或写入其他表。缺模型任务沿用 CAP-019 的同一条“仅更新原任务状态”规则。
 

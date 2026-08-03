@@ -2,6 +2,57 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-4100 Footer status and theme semantics
+
+Scope: current packaged footer only; no status data, operation lifecycle or theme palette change.
+
+Order:
+
+1. `WMB-4100` — place the X operation indicator in the footer flow without overlap and make the icon match the current dark/light theme.
+2. `WMB-4101` — center the existing return-to-latest control at the bottom of the Pi transcript.
+3. `WMB-4102` — smoothly scroll to latest, then fade the centered control without horizontal motion.
+
+Gate: at the Owner viewport all footer items have disjoint rectangles, dark/light show moon/sun respectively, and return-to-latest remains centered through a smooth scroll before fading only after the exact transcript bottom.
+
+## M-4000 Deterministic direct X List member addition
+
+Scope: existing CAP-014 and CAP-017 direct Pi member-add contract; UI-confirmed List create/update/delete/remove flows remain unchanged.
+
+Order:
+
+1. `WMB-4000` — make direct authorized member addition validate one frozen account/List/owner/handle snapshot before idempotent per-handle execution, and publish a complete small-model SOP in the tool schema and built-in operator Skill.
+2. `WMB-4001` — execute the remaining authorized UK List additions through the packaged MCP without Pi, require current-member filtering and per-handle platform readback, and repair any confirmed live failure before completion.
+
+Gate: one direct call cannot reject its own progressively rendered second snapshot; UI-confirmed mutations retain freshness checks; Pi can select every parameter, distinguish replay from attempt and continue a partial result without reading source code or guessing; the packaged direct tool completes a real authorized member-add operation with truthful per-handle readback.
+
+## M-3900 Truthful X List member-add replay
+
+Scope: existing CAP-014 and CAP-017 direct Pi member-add contract; no idempotency, authorization or browser-execution change.
+
+Order:
+
+1. `WMB-3900` — mark terminal request-id replay separately from a current execution attempt and teach Pi to continue a partial operation only by reading current members, filtering unresolved handles and using a new business request ID.
+
+Gate: a terminal replay is machine-readable and cannot be truthfully described as a fresh execution; a new continuation never reuses the terminal request ID or blindly resubmits already-present handles.
+
+## M-3800 Pi user-controlled streaming scroll
+
+Scope: existing CAP-014 Pi dock presentation; no Pi runtime, persistence or message-order change.
+
+Order:
+
+1. `WMB-3800` — follow streaming output only while the reader remains near the bottom; preserve an upward manual scroll and expose an explicit return-to-latest action.
+
+Gate: a reader at the bottom keeps seeing new output; scrolling upward is not overridden by later Pi deltas, tool updates or phase changes; returning to the bottom resumes following.
+
+## M-3700 Settings-owned X List management
+
+Scope: CAP-013, CAP-017 and CAP-020 information architecture; no business-command or confirmation-authority change.
+
+Gate: Settings owns List visibility, daily-source binding, owned-List mutation, prepared-operation confirmation and operation history; Discover retains selected-List content browsing and collection only, with no configuration or external-write controls.
+
+Follow-up `WMB-3701` makes the persisted two-step confirmation and execution result unambiguous across navigation, always reopening the newest operation instead of an older still-pending duplicate.
+
 ## M-3600 Pi action acknowledgement
 
 Scope: CAP-014 fork/retry interaction feedback.

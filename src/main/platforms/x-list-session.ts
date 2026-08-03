@@ -14,6 +14,7 @@ import { ensureQuietXBrowserWindow } from '../browser.ts';
 import {
   SharedXRequestGuard,
   XInteractionLease,
+  XListCooldownError,
   XListDataError,
   XListNeedsUserError,
   XListSupersededError,
@@ -71,7 +72,7 @@ export class XListSession {
     this.poolKey = poolKey;
   }
 
-  /** Cancel any in-flight/queued op so a newer user action can take the page immediately. */
+  /** Cancel the current op only for its own timeout/disposal path. */
   preempt(): void {
     this.currentOp += 1;
     void this.page.evaluate(() => {
@@ -85,13 +86,13 @@ export class XListSession {
 
   async run<T>(action: (session: XListSession) => Promise<T>, options: { timeoutMs?: number } = {}): Promise<T> {
     const opId = ++this.opSerial;
-    this.currentOp = opId;
-    void this.page.evaluate(() => {
-      try { window.stop(); } catch {}
-    }).catch(() => {});
-
     const timeoutMs = Math.max(3_000, options.timeoutMs ?? 20_000);
     const execute = async () => {
+      // One shared X page is a serial executor. A later read must never cancel a user-confirmed write.
+      this.currentOp = opId;
+      void this.page.evaluate(() => {
+        try { window.stop(); } catch {}
+      }).catch(() => {});
       this.assertCurrent(opId);
       this.previousForegroundHwnd = await captureForegroundWindowHwnd();
       this.assertCurrent(opId);
@@ -263,7 +264,7 @@ export class XListSession {
       await this.guard.recordSuccess();
     } catch (error) {
       if (error instanceof XListSupersededError) throw error;
-      if (!(error instanceof XListNeedsUserError) && !(error instanceof XListDataError)) await this.guard.recordFailure();
+      if (!(error instanceof XListNeedsUserError) && !(error instanceof XListCooldownError)) await this.guard.recordFailure();
       throw error;
     } finally {
       void ensureQuietXBrowserWindow(this.poolKey).catch(() => {});
@@ -296,11 +297,16 @@ export class XListSession {
       // Never Escape away a useful List sheet just before clicking inside it.
       if (!options.preserveOverlay) await this.dismissBlockingOverlays();
       await locator.scrollIntoViewIfNeeded().catch(() => {});
-      const box = await locator.boundingBox();
-      if (!box) throw new XListNeedsUserError('X List 控件不可见，无法安全点击。');
       if (options.force) {
-        await locator.click({ force: true, timeout: 8_000 });
+        try {
+          await locator.click({ force: true, timeout: 8_000 });
+        } catch (error) {
+          if (!/element is not visible/i.test(error instanceof Error ? error.message : String(error))) throw error;
+          await locator.evaluate((element) => (element as HTMLElement).click());
+        }
       } else {
+        const box = await locator.boundingBox();
+        if (!box) throw new XListNeedsUserError('X List 控件不可见，无法安全点击。');
         const targetX = box.x + box.width * randomFloat(0.35, 0.65);
         const targetY = box.y + box.height * randomFloat(0.35, 0.65);
         const startX = Math.max(8, targetX - randomInt(100, 220));
@@ -316,7 +322,7 @@ export class XListSession {
       await this.settle('browse');
       await this.guard.recordSuccess();
     } catch (error) {
-      if (!(error instanceof XListNeedsUserError) && !(error instanceof XListDataError)) await this.guard.recordFailure();
+      if (!(error instanceof XListNeedsUserError) && !(error instanceof XListCooldownError)) await this.guard.recordFailure();
       throw error;
     } finally {
       await this.restoreUserForeground();

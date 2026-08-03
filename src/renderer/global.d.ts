@@ -288,7 +288,9 @@ declare global {
       getToday(planDate: string): Promise<{
         sources: TodaySource[];
         sourcesTotal: number;
-        plan: { id: string; summary: string; items: TodayPlanItem[] } | null;
+        sourcesDate: string | null;
+        plan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
+        latestPlan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
         pendingActions: string[];
         fermenting: {
           items: Array<{

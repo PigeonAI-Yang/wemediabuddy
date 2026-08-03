@@ -325,38 +325,10 @@ function normalizePayload(value: XListTimelineCachePayload): XListTimelineCacheP
   const posts: XListTimelineCachePost[] = [];
   const seen = new Set<string>();
   for (const item of Array.isArray(value.posts) ? value.posts : []) {
-    const url = typeof item?.url === 'string' ? item.url.trim() : '';
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    const images = Array.isArray(item.images)
-      ? item.images.filter((src): src is string => typeof src === 'string' && /^https?:\/\//i.test(src)).slice(0, 4)
-      : [];
-    const thumbs = Array.isArray(item.imageThumbs)
-      ? item.imageThumbs.filter((src): src is string => typeof src === 'string' && /^https?:\/\//i.test(src)).slice(0, 4)
-      : images;
-    const metrics = item && typeof item.metrics === 'object' && item.metrics
-      ? {
-        replies: Number.isFinite(Number((item.metrics as { replies?: unknown }).replies)) ? Number((item.metrics as { replies?: unknown }).replies) : null,
-        reposts: Number.isFinite(Number((item.metrics as { reposts?: unknown }).reposts)) ? Number((item.metrics as { reposts?: unknown }).reposts) : null,
-        likes: Number.isFinite(Number((item.metrics as { likes?: unknown }).likes)) ? Number((item.metrics as { likes?: unknown }).likes) : null,
-        bookmarks: Number.isFinite(Number((item.metrics as { bookmarks?: unknown }).bookmarks)) ? Number((item.metrics as { bookmarks?: unknown }).bookmarks) : null,
-        views: Number.isFinite(Number((item.metrics as { views?: unknown }).views)) ? Number((item.metrics as { views?: unknown }).views) : null
-      }
-      : undefined;
-    posts.push({
-      url,
-      authorHandle: typeof item.authorHandle === 'string' && item.authorHandle ? item.authorHandle : null,
-      displayName: typeof item.displayName === 'string' && item.displayName ? item.displayName : null,
-      avatarUrl: typeof item.avatarUrl === 'string' && /^https?:\/\//i.test(item.avatarUrl) ? item.avatarUrl : null,
-      text: String(item.text ?? '').slice(0, X_LIST_TIMELINE_CACHE_LIMITS.maxTextChars),
-      postedAt: typeof item.postedAt === 'string' && item.postedAt ? item.postedAt : null,
-      images,
-      imageThumbs: thumbs,
-      hasVideo: Boolean(item.hasVideo),
-      videoPoster: typeof item.videoPoster === 'string' && /^https?:\/\//i.test(item.videoPoster) ? item.videoPoster : null,
-      videoUrl: typeof item.videoUrl === 'string' && /^https?:\/\//i.test(item.videoUrl) ? item.videoUrl : null,
-      metrics
-    });
+    const post = normalizePost(item);
+    if (!post || seen.has(post.url)) continue;
+    seen.add(post.url);
+    posts.push(post);
     if (posts.length >= X_LIST_TIMELINE_CACHE_LIMITS.maxPosts) break;
   }
   // Ensure payload bytes stay under cap by dropping trailing posts if needed.
@@ -370,6 +342,48 @@ function normalizePayload(value: XListTimelineCachePayload): XListTimelineCacheP
     payload = { ...payload, posts: payload.posts.slice(0, -1) };
   }
   return payload;
+}
+
+function normalizePost(item: XListTimelineCachePost, allowQuote = true): XListTimelineCachePost | null {
+  const url = typeof item?.url === 'string' ? item.url.trim() : '';
+  if (!url) return null;
+  const images = Array.isArray(item.images)
+    ? item.images.filter((src): src is string => typeof src === 'string' && /^https?:\/\//i.test(src)).slice(0, 4)
+    : [];
+  const imageThumbs = Array.isArray(item.imageThumbs)
+    ? item.imageThumbs.filter((src): src is string => typeof src === 'string' && /^https?:\/\//i.test(src)).slice(0, 4)
+    : images;
+  const metrics = item && typeof item.metrics === 'object' && item.metrics
+    ? {
+      replies: Number.isFinite(Number(item.metrics.replies)) ? Number(item.metrics.replies) : null,
+      reposts: Number.isFinite(Number(item.metrics.reposts)) ? Number(item.metrics.reposts) : null,
+      likes: Number.isFinite(Number(item.metrics.likes)) ? Number(item.metrics.likes) : null,
+      bookmarks: Number.isFinite(Number(item.metrics.bookmarks)) ? Number(item.metrics.bookmarks) : null,
+      views: Number.isFinite(Number(item.metrics.views)) ? Number(item.metrics.views) : null
+    }
+    : undefined;
+  const repostedBy = item.repostedBy && typeof item.repostedBy === 'object' ? {
+    handle: typeof item.repostedBy.handle === 'string' && item.repostedBy.handle ? item.repostedBy.handle : null,
+    displayName: typeof item.repostedBy.displayName === 'string' && item.repostedBy.displayName ? item.repostedBy.displayName : null,
+    avatarUrl: typeof item.repostedBy.avatarUrl === 'string' && /^https?:\/\//i.test(item.repostedBy.avatarUrl) ? item.repostedBy.avatarUrl : null
+  } : null;
+  return {
+    url,
+    authorHandle: typeof item.authorHandle === 'string' && item.authorHandle ? item.authorHandle : null,
+    displayName: typeof item.displayName === 'string' && item.displayName ? item.displayName : null,
+    avatarUrl: typeof item.avatarUrl === 'string' && /^https?:\/\//i.test(item.avatarUrl) ? item.avatarUrl : null,
+    text: String(item.text ?? '').slice(0, X_LIST_TIMELINE_CACHE_LIMITS.maxTextChars),
+    postedAt: typeof item.postedAt === 'string' && item.postedAt ? item.postedAt : null,
+    images,
+    imageThumbs,
+    hasVideo: Boolean(item.hasVideo),
+    videoPoster: typeof item.videoPoster === 'string' && /^https?:\/\//i.test(item.videoPoster) ? item.videoPoster : null,
+    videoUrl: typeof item.videoUrl === 'string' && /^https?:\/\//i.test(item.videoUrl) ? item.videoUrl : null,
+    postKind: item.postKind === 'repost' || item.postKind === 'quote' ? item.postKind : 'tweet',
+    repostedBy,
+    quotedPost: allowQuote && item.quotedPost ? normalizePost(item.quotedPost, false) : null,
+    metrics
+  };
 }
 
 function fingerprintPosts(posts: XListTimelineCachePost[]): string {

@@ -1,0 +1,14 @@
+{
+  "title": "WeMediaBuddy",
+  "rowCount": 2,
+  "actions": [
+    "继续做",
+    "观察",
+    "不再显示",
+    "继续做",
+    "观察",
+    "不再显示"
+  ],
+  "creationActions": 0,
+  "sourceUrl": "file:///J:/PigeonYang/WeMediaBuddy/out/WeMediaBuddy-win32-x64/resources/app.asar/.vite/renderer/main_window/index.html"
+}

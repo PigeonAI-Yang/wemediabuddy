@@ -69,6 +69,27 @@ const prepareOperation: ToolDefinition = {
   }
 };
 
+const addMembers: ToolDefinition = {
+  name: 'wmb_add_x_list_members', label: '添加 X List 成员',
+  description: '明确 SOP：①先用 wmb_read_x_list_index 取得 accountKey/listId；②续跑先用 wmb_read_x_list_members 排除已存在成员；③新业务动作生成新 requestId；④handles 只传唯一精确 @handle；⑤直接执行，无第二次 UI 确认；⑥replayed=true 且 attemptedNow=false 只回放旧结果，attemptedNow=true 才是本次尝试，按逐项状态汇报。禁止读源码猜用法。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string', description: '本次业务动作唯一 ID；新添加或部分结果续跑必须用新值，仅同一次未取得终态响应的传输重试可复用。' },
+      accountKey: { type: 'string', description: 'wmb_read_x_list_index 返回的当前账号精确 @handle。' },
+      listId: { type: 'string', description: 'wmb_read_x_list_index 返回的目标 List 稳定数字 ID，不传名称或 URL。' },
+      handles: { type: 'array', description: '本次仍需加入的账号；续跑前先读 members 并排除已存在成员。', items: { type: 'string', description: '必须是唯一精确 @handle，以 @ 开头；禁止显示名、关键词或模糊候选。' }, minItems: 1, maxItems: 100 }
+    },
+    required: ['requestId', 'accountKey', 'listId', 'handles'], additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('x_lists.members_add', {
+      request_id: String(params.requestId ?? ''), account_key: String(params.accountKey ?? ''), list_id: String(params.listId ?? ''),
+      handles: Array.isArray(params.handles) ? params.handles.map(String) : []
+    }));
+  }
+};
+
 const collectTimeline: ToolDefinition = {
   name: 'wmb_collect_x_list_timeline', label: '采集已绑定 X List 动态',
   description: '将当前工作空间已启用 List 的有限最新动态采集为现有资料。只读平台、只写当前根，不含确认。',
@@ -129,4 +150,4 @@ const stopObservation: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('x_lists.observation_stop', { session_id: String(params.sessionId ?? '') })); }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline, listMetricSnapshots, getPostTrend, startObservation, getObservation, stopObservation];
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, addMembers, collectTimeline, listMetricSnapshots, getPostTrend, startObservation, getObservation, stopObservation];

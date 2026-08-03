@@ -247,6 +247,8 @@
 .settings-list-choices span, .settings-list-choices strong, .settings-list-choices small { display: block; min-width: 0; }
 .settings-list-choices strong, .settings-list-choices small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-list-choices small { margin-top: 2px; color: var(--muted-low); font-size: 11px; font-weight: 400; }
+.x-list-settings-management .settings-inline-actions { align-items: center; gap: 10px; }
+.x-list-settings-management .settings-inline-actions select { min-width: 220px; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--ink); padding: 8px 10px; }
 .settings-form { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr); gap: 18px; }
 .settings-form label { display: grid; gap: 7px; color: var(--ink-soft); font-size: 13px; font-weight: 650; }
 .settings-form .wide, .settings-form .pi-config-note, .settings-form-actions { grid-column: 1 / -1; }

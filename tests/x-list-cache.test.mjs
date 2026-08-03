@@ -7,6 +7,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { listSourcesByFeed, upsertSource } from '../src/main/sources.ts';
 import { readXListIndexCache, writeXListIndexCache } from '../src/main/x-list-cache.ts';
 import { clearXListPostCache, readXListPostCache, writeXListPostCache } from '../src/main/x-list-post-cache.ts';
+import { readXListTimelineCache, writeXListTimelineCache } from '../src/main/x-list-timeline-cache.ts';
 import { bindXList } from '../src/main/x-lists.ts';
 import { readXListTimeline, seedListTimelineMemory } from '../src/main/platforms/x-list-browser.ts';
 
@@ -71,6 +72,33 @@ test('x_list_index_cache persists and overwrites the single row', async () => {
     assert.equal(second.prepare('SELECT COUNT(*) AS count FROM x_list_index_cache').get().count, 1);
     second.close();
   } finally {
+    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+});
+
+test('timeline cache preserves repost and nested quote structure', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-x-list-social-cache-'));
+  let database;
+  try {
+    database = migrateDatabase(path.join(directory, 'wmb.db'));
+    writeXListTimelineCache(database, { accountKey: '@owner', listId: 'social', source: 'live', posts: [{
+      url: 'https://x.com/original/status/1', authorHandle: '@original', text: 'original', postedAt: null,
+      postKind: 'repost', repostedBy: { handle: '@reposter', displayName: 'Reposter', avatarUrl: 'https://example.com/reposter.jpg' }
+    }, {
+      url: 'https://x.com/author/status/2', authorHandle: '@author', text: 'comment', postedAt: null,
+      postKind: 'quote', quotedPost: {
+        url: 'https://x.com/quoted/status/3', authorHandle: '@quoted', text: 'quoted body', postedAt: null,
+        postKind: 'tweet', metrics: { replies: 1, reposts: 2, likes: 3, bookmarks: 4, views: 5 }
+      }
+    }] });
+    const posts = readXListTimelineCache(database, '@owner', 'social')?.payload.posts ?? [];
+    assert.equal(posts[0]?.postKind, 'repost');
+    assert.equal(posts[0]?.repostedBy?.handle, '@reposter');
+    assert.equal(posts[1]?.postKind, 'quote');
+    assert.equal(posts[1]?.quotedPost?.authorHandle, '@quoted');
+    assert.equal(posts[1]?.quotedPost?.metrics?.views, 5);
+  } finally {
+    database?.close();
     await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });

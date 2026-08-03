@@ -10,8 +10,9 @@ import {
 import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
 import {
-  beginXListOperation, finishXListOperation, getXListBinding, getXListOperation, isXListOperationStopRequested,
-  recordXListOperationIntent, skipPendingXListOperationItems, type XListOperation, type XListSnapshot,
+  armXListOperation, beginXListOperation, finishXListOperation, getXListBinding, getXListOperation, isXListOperationStopRequested,
+  prepareXListOperation, recordXListOperationIntent, skipPendingXListOperationItems, type XListOperation, type XListSnapshot,
+  xListSnapshotFingerprint,
   updateXListBindingObservation, updateXListOperationItem, type XListBinding
 } from './x-lists.ts';
 
@@ -36,20 +37,78 @@ export async function captureXListOperationSnapshot(config: XListBrowserConfig, 
 }
 
 export async function confirmAndRunXListOperation(database: DatabaseSync, config: XListBrowserConfig, input: { operationId: string; expectedRevision: number; typedListName?: string }): Promise<CommandResult<XListOperation>> {
+  const accepted = acceptXListOperation(database, input);
+  if (!accepted.ok) return accepted;
+  return runAcceptedXListOperation(database, config, accepted.data);
+}
+
+export function acceptXListOperation(database: DatabaseSync, input: { operationId: string; expectedRevision: number; typedListName?: string }): CommandResult<XListOperation> {
   const operation = getXListOperation(database, input.operationId);
   if (!operation) return failure('NOT_FOUND', 'List 操作不存在。');
   if (operation.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 操作已变化，请重新加载。', { current: operation });
   if (operation.state !== 'awaiting_confirmation') return failure('CONFIRMATION_REQUIRED', 'List 操作尚未等待 UI 最终确认。');
   if (operation.kind === 'delete' && input.typedListName?.trim() !== operation.snapshot.list?.name) return failure('VALIDATION_ERROR', '删除 List 前必须输入当前 List 名称。');
+  return beginXListOperation(database, { operationId: operation.id, expectedRevision: operation.revision, currentSnapshot: operation.snapshot });
+}
+
+export function beginDirectXListMemberAdd(database: DatabaseSync, operation: XListOperation): CommandResult<XListOperation> {
+  if (operation.kind !== 'members_add') return failure('VALIDATION_ERROR', '直接执行入口只接受成员添加操作。');
+  return beginXListOperation(database, { operationId: operation.id, expectedRevision: operation.revision, currentSnapshot: operation.snapshot });
+}
+
+export async function runAcceptedXListOperation(database: DatabaseSync, config: XListBrowserConfig, operation: XListOperation): Promise<CommandResult<XListOperation>> {
   let snapshot: XListSnapshot;
   try {
     snapshot = await captureXListOperationSnapshot(config, operation);
   } catch (error) {
-    return failure('BROWSER_NEEDS_USER', error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    return success(finishXListOperation(database, operation.id, { state: 'needs_user', phase: 'needs_user', errorCode: 'BROWSER_NEEDS_USER', errorMessage: message }));
   }
-  const started = beginXListOperation(database, { operationId: operation.id, expectedRevision: operation.revision, currentSnapshot: snapshot });
-  if (!started.ok) return started;
-  return runStartedXListOperation(database, config, started.data);
+  if (operation.confirmationFingerprint !== xListSnapshotFingerprint(snapshot)) {
+    return success(finishXListOperation(database, operation.id, { state: 'failed', phase: 'confirmation_stale', errorCode: 'CONFIRMATION_STALE', errorMessage: '账号、List 或冻结变更集已变化，未执行任何平台写入。' }));
+  }
+  return runStartedXListOperation(database, config, operation);
+}
+
+export async function addXListMembers(database: DatabaseSync, config: XListBrowserConfig, input: {
+  requestId: string; accountKey: string; listId: string; handles: string[];
+}): Promise<CommandResult<XListOperation>> {
+  const proposed = prepareXListOperation(database, { ...input, kind: 'members_add' });
+  if (!proposed.ok) return proposed as CommandResult<XListOperation>;
+  let operation = proposed.data.operation;
+  if (operation.state === 'running' || ['succeeded', 'partial', 'needs_user', 'unknown', 'failed'].includes(operation.state)) return success(operation);
+  if (operation.state === 'prepared') {
+    try {
+      const snapshot = await captureXListOperationSnapshot(config, operation);
+      const armed = armXListOperation(database, { operationId: operation.id, expectedRevision: operation.revision, snapshot });
+      if (!armed.ok) return armed;
+      operation = armed.data;
+    } catch (error) {
+      return success(finishXListOperation(database, operation.id, {
+        state: 'needs_user', phase: 'needs_user', errorCode: 'BROWSER_NEEDS_USER', errorMessage: error instanceof Error ? error.message : String(error)
+      }));
+    }
+  }
+  const accepted = beginDirectXListMemberAdd(database, operation);
+  if (!accepted.ok) return accepted;
+  return runStartedXListOperation(database, config, accepted.data);
+}
+
+export function xListMemberAddReceipt(operation: XListOperation, replayed: boolean): XListOperation & { replayed: boolean; attemptedNow: boolean } {
+  return { ...operation, replayed, attemptedNow: !replayed };
+}
+
+export async function addXListMembersWithReplay(database: DatabaseSync, input: {
+  requestId: string; accountKey: string; listId: string; handles: string[];
+}, loadConfig: () => Promise<XListBrowserConfig>): Promise<CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>> {
+  const prior = prepareXListOperation(database, { ...input, kind: 'members_add' });
+  if (!prior.ok) return prior as CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>;
+  if (prior.data.replayed && ['running', 'succeeded', 'partial', 'needs_user', 'unknown', 'failed'].includes(prior.data.operation.state))
+    return success(xListMemberAddReceipt(prior.data.operation, true));
+  const config = await loadConfig();
+  if (config.accountKey?.trim().toLowerCase() !== input.accountKey.trim().toLowerCase()) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与请求账号不一致。');
+  const result = await addXListMembers(database, config, input);
+  return result.ok ? success(xListMemberAddReceipt(result.data, false)) : result as CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>;
 }
 
 export async function collectBoundXListTimeline(database: DatabaseSync, config: XListBrowserConfig, input: {

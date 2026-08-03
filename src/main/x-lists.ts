@@ -116,9 +116,17 @@ export function beginXListOperation(database: DatabaseSync, input: { operationId
     return failure('CONFIRMATION_STALE', '账号、List 或冻结变更集已变化，确认失效。');
   }
   const now = new Date().toISOString();
-  database.prepare(`UPDATE x_list_operations SET state='running', phase='running', confirmed_at=?, started_at=?, updated_at=?, revision=revision+1 WHERE id=?`)
+  database.prepare(`UPDATE x_list_operations SET state='running', phase='running', confirmed_at=?, started_at=?, error_code=NULL, error_message=NULL, updated_at=?, revision=revision+1 WHERE id=?`)
     .run(now, now, now, operation.id);
   return success(getXListOperation(database, operation.id)!);
+}
+
+export function recordXListConfirmationFailure(database: DatabaseSync, input: { operationId: string; expectedRevision: number; code: string; message: string }): XListOperation | null {
+  const now = new Date().toISOString();
+  database.prepare(`UPDATE x_list_operations SET phase='confirmation_blocked', error_code=?, error_message=?, updated_at=?, revision=revision+1
+    WHERE id=? AND revision=? AND state='awaiting_confirmation'`)
+    .run(input.code, input.message, now, input.operationId, input.expectedRevision);
+  return getXListOperation(database, input.operationId);
 }
 
 export function requestXListOperationStop(database: DatabaseSync, input: { operationId: string; expectedRevision: number }): CommandResult<XListOperation> {
@@ -155,6 +163,19 @@ export function finishXListOperation(database: DatabaseSync, operationId: string
     .run(input.state, input.phase, JSON.stringify({ ...operation.evidence, ...(input.evidence ?? {}) }), input.errorCode ?? null,
       input.errorMessage ?? null, now, now, operationId);
   return getXListOperation(database, operationId)!;
+}
+
+export function recoverOrphanedXListOperations(database: DatabaseSync, activeIds: ReadonlySet<string>): number {
+  const running = listXListOperations(database, { limit: 100 }).filter((operation) => operation.state === 'running' && !activeIds.has(operation.id));
+  for (const operation of running) {
+    const uncertain = operation.phase.startsWith('intent_recorded:');
+    database.prepare("UPDATE x_list_operation_items SET state=?, updated_at=? WHERE operation_id=? AND state='pending'")
+      .run(uncertain ? 'unknown' : 'needs_user', new Date().toISOString(), operation.id);
+    finishXListOperation(database, operation.id, uncertain
+      ? { state: 'unknown', phase: 'interrupted_after_intent', errorCode: 'X_LIST_UNKNOWN', errorMessage: '应用在平台动作后中断，实际结果需要人工核对。' }
+      : { state: 'needs_user', phase: 'interrupted_before_action', errorCode: 'INTERRUPTED', errorMessage: '后台操作在平台动作前中断，请重新准备。' });
+  }
+  return running.length;
 }
 
 export function updateXListOperationItem(database: DatabaseSync, input: { operationId: string; handle: string; state: XListOperationItemState; evidence?: Record<string, unknown> }): void {

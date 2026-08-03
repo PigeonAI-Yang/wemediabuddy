@@ -33,7 +33,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const fermenting = today?.fermenting ?? { items: [], watchingItems: [], topics: [], pinnedSources: [] };
   const feedSources = sortFeedSources(sources);
   const pinnedSourceIds = new Set((fermenting.pinnedSources || []).map((item) => item.id));
-  const items = today?.plan?.items ?? [];
+  const displayPlan = today?.plan ?? today?.latestPlan ?? null;
+  const items = displayPlan?.items ?? [];
   const primary = items[0] ?? null;
   const pendingActions = today?.pendingActions ?? [];
   const pendingCount = pendingActions.length;
@@ -43,7 +44,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
   const [detailBodyLoading, setDetailBodyLoading] = useState(false);
   const [detailBodyError, setDetailBodyError] = useState('');
-  const [carryBusyId, setCarryBusyId] = useState<string | null>(null);
   const oppsRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const feedListRef = useRef<HTMLDivElement | null>(null);
@@ -126,7 +126,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
       setStudioActive(result.items.filter((item) => item.status !== 'completed' && !item.archivedAt).length);
     }).catch(() => {});
     return () => { active = false; };
-  }, [today?.plan?.id]);
+  }, [displayPlan?.id]);
   useEffect(() => {
     const available = new Set(items.map((item) => item.id));
     const next = selectedItems.filter((item) => available.has(item.id));
@@ -209,28 +209,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const createFromCarry = async (item: { objectType: string; objectId: string }) => {
     if (item.objectType !== 'plan_item') return;
     await window.wmb.createProjectFromPlanItem(item.objectId);
-    refresh();
     openStudio();
-  };
-  const updateCarry = async (item: { id: string; revision: number }, state: 'active' | 'done' | 'dismissed') => {
-    setCarryBusyId(item.id);
-    try {
-      await window.wmb.setCarryState({ id: item.id, expectedRevision: item.revision, state });
-      refresh();
-    } finally {
-      setCarryBusyId(null);
-    }
-  };
-  const observeCarry = async (item: { id: string; revision: number; sourceIds?: string[] }) => {
-    setCarryBusyId(item.id);
-    try {
-      const sourceIds = item.sourceIds ?? [];
-      if (sourceIds.length) await window.wmb.markSourcesWatching({ sourceIds });
-      await window.wmb.setCarryState({ id: item.id, expectedRevision: item.revision, state: 'dismissed' });
-      refresh();
-    } finally {
-      setCarryBusyId(null);
-    }
   };
   const toggleSelection = (item: TodayPlanItem) => {
     onSelectionChange(selectedItems.some((selected) => selected.id === item.id)
@@ -395,7 +374,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
           <>
             <div className="today-command-stats" aria-label="今日指标">
               <div className="today-command-stat">
-                <span className="stat-label">今日新资料</span>
+                <span className="stat-label">{today?.sourcesDate === planDate ? '今日新资料' : '最近资料'}</span>
                 <strong className="stat-value">{today?.sourcesTotal ?? sources.length}</strong>
               </div>
               <div className="today-command-stat">
@@ -415,7 +394,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
             <div className="today-command-actions">
               <button className="refresh-button" onClick={refresh} title="刷新" aria-label="刷新">↻</button>
               <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
-              <button className="primary-button" onClick={() => void startIntelligence()}>{primary ? '⟳ 重新侦察' : '开始今日情报'}</button>
+              <button className="primary-button" onClick={() => void startIntelligence()}>{today?.plan ? '⟳ 重新侦察' : '开始今日情报'}</button>
             </div>
           </>
         )}
@@ -423,6 +402,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
       <div className="today-grid">
         <div className="today-opps" ref={oppsRef}>
           {primary ? <>
+            {!today?.plan && displayPlan ? <p className="eyebrow">最近方案 · {displayPlan.planDate}</p> : null}
             <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>
             {items.length > 1 && <div className="opp-list">{items.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>)}</div>}
           </> : <section className="empty-state">
@@ -431,7 +411,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
               ? (currentSource ? `正在处理：${currentSource}` : '来源扫描和整理完成后，机会会自动出现在这里。')
               : '完成今日情报后，内容机会会自动出现在这里。'}</p>
           </section>}
-          <FermentingRail fermenting={fermenting} carryBusyId={carryBusyId} createFromCarry={createFromCarry} observeCarry={observeCarry} updateCarry={updateCarry}/>
+          <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry}/>
         </div>
         <aside className="today-rail" ref={railRef}>
           {pendingActions.length > 0 && <>

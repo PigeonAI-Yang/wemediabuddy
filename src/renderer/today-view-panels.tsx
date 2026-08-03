@@ -1,15 +1,12 @@
 import type { TodaySource } from '../main/workbench';
-import { MAX_SELECTED_SOURCES, domainOf, formatSourcePublishedAt, isHeartbeatSource, priorityGrade, priorityLabel, type SelectedTodaySource } from './today-view-parts';
+import { CreateIconButton, MAX_SELECTED_SOURCES, domainOf, formatSourcePublishedAt, isHeartbeatSource, priorityGrade, priorityLabel, type SelectedTodaySource } from './today-view-parts';
 
 type Fermenting = NonNullable<NonNullable<Awaited<ReturnType<typeof window.wmb.getToday>>>['fermenting']>;
 type FermentingItem = Fermenting['items'][number];
 
-export function FermentingRail({ fermenting, carryBusyId, createFromCarry, observeCarry, updateCarry }: {
+export function FermentingRail({ fermenting, createFromCarry }: {
   fermenting: Fermenting;
-  carryBusyId: string | null;
   createFromCarry: (item: FermentingItem) => Promise<void>;
-  observeCarry: (item: FermentingItem) => Promise<void>;
-  updateCarry: (item: FermentingItem, state: 'active' | 'done' | 'dismissed') => Promise<void>;
 }): React.JSX.Element | null {
   return <>{(fermenting.items?.length ?? 0) > 0 && <section className="fermenting-rail light" aria-label="仍在发酵">
             <div className="fermenting-head">
@@ -28,9 +25,7 @@ export function FermentingRail({ fermenting, carryBusyId, createFromCarry, obser
                   </div>
                 </div>
                 <div className="fermenting-actions">
-                  {item.objectType === 'plan_item' ? <button className="secondary-button" onClick={() => void createFromCarry(item)}>继续做</button> : null}
-                  <button className="secondary-button" disabled={carryBusyId === item.id || !(item.sourceIds?.length)} onClick={() => void observeCarry(item)}>观察</button>
-                  <button className="text-button" disabled={carryBusyId === item.id} onClick={() => void updateCarry(item, 'dismissed')}>不再显示</button>
+                  {item.objectType === 'plan_item' ? <CreateIconButton onClick={() => void createFromCarry(item)}/> : null}
                 </div>
               </article>)}
             </div>
