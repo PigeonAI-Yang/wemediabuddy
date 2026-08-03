@@ -319,7 +319,7 @@ Scope: CAP-020 and CAP-021.
 
 1. `WMB-2300` — remove channel selection, source counts, readiness management and configuration guidance from Today; start every enabled Discover channel automatically and report preflight failure only after an explicit start.
 
-Gate: Today contains no channel checkbox/count/name/readiness/configuration surface, its start payload cannot deselect modules, Discover retains the full management surface, and a renderer readback confirms content opportunities remain the primary first-screen hierarchy.
+Gate: Today contains no channel checkbox/count/name/readiness/configuration surface, its start payload cannot deselect modules, Settings retains the full management surface, and renderer readback confirms Today remains opportunity-first while Discover remains content-discovery-only.
 
 ## M-2400 Installation-wide Pi operation Skill
 
@@ -415,3 +415,13 @@ Order:
 1. `WMB-3200` — remove display configuration from Discover, expose it as one Settings section, and prove the same root-local preference controls the clean List workbench after return/reopen.
 
 Gate: Discover contains only selected Lists and their content/actions; Settings exposes the complete cached account index plus refresh and display checkboxes; changing display never changes enabled bindings or daily sources.
+
+## M-3300 Discover content surface and Settings-owned channels
+
+Scope: CAP-013, CAP-017, CAP-020 and CAP-021 information architecture; existing source business commands and confirmation rules remain unchanged.
+
+Order:
+
+1. `WMB-3300` — move the complete website/X List channel configuration workspace to Settings, leave rankings and selected X List content in Discover, and update PRD/SPEC/technical ownership language.
+
+Gate: Discover contains no source add/enable/disable/remove, readiness or receipt-management controls; Settings retains all existing channel operations and confirmations; Today still runs every enabled source; AI rankings and selected X List content remain discoverable.

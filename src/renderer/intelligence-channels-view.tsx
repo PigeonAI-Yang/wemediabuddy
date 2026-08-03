@@ -23,8 +23,9 @@ const receiptStatusLabels = { succeeded: '已检查', failed: '检查失败', ne
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function displayTime(value: string): string { return new Date(value).toLocaleString('zh-CN', { hour12: false }); }
 
-export function IntelligenceChannelsView({ onStatusChange }: {
+export function IntelligenceChannelsView({ onStatusChange, settingsMode = false }: {
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
+  settingsMode?: boolean;
 }): React.JSX.Element {
   const [data, setData] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,7 +157,7 @@ export function IntelligenceChannelsView({ onStatusChange }: {
 
   return <section className="intelligence-channels" aria-label="情报渠道">
     <header className="intelligence-channels-head">
-      <div><h1>情报渠道</h1><p>管理当前工作空间每天会检查的官网和 X Lists。来源各自同等参与今日情报。</p></div>
+      <div>{settingsMode ? <h3>来源与扫描</h3> : <h1>情报渠道</h1>}<p>管理当前工作空间每天会检查的官网和 X Lists。来源各自同等参与今日情报。</p></div>
       <button className="refresh-button" onClick={() => void load()} disabled={loading || Boolean(busy)} title="刷新渠道" aria-label="刷新渠道">↻</button>
     </header>
     <div className="channel-readiness" aria-label="渠道就绪情况">

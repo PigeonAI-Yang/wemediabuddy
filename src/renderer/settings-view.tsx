@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Theme } from './app-types';
+import { IntelligenceChannelsView } from './intelligence-channels-view';
 import { PiSkillsSettings } from './pi-skills-settings';
 import { XListDisplaySettings } from './x-list-display-settings';
 
@@ -15,7 +16,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   setBrowserChoice: (value: string) => void; refresh: () => void; theme: Theme;
   setTheme: (value: Theme) => void; back: () => void;
 }): React.JSX.Element {
-  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'lists' | 'agent' | 'diagnostics' | 'about';
+  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
   const [section, setSection] = useState<SettingsSection>('ai');
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
@@ -95,6 +96,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     { id: 'skills', label: 'Pi Skills', icon: '◇' },
     { id: 'data', label: '数据与存储', icon: '▱' },
     { id: 'browser', label: '浏览器与账号', icon: '◎' },
+    { id: 'channels', label: '情报渠道', icon: '⌁' },
     { id: 'lists', label: 'X Lists', icon: '≡' },
     { id: 'agent', label: 'Agent 接入', icon: '↔' },
     { id: 'diagnostics', label: '系统诊断', icon: '⌁' }
@@ -105,6 +107,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     skills: { title: 'Pi Skills', description: '管理 Pi 在创作和操作中按需使用的安装级能力。' },
     data: { title: '数据与存储', description: '查看 WMB 数据保存位置并管理本地文件。' },
     browser: { title: '浏览器与账号', description: '管理 WMB 专用浏览器和平台登录环境。' },
+    channels: { title: '情报渠道', description: '管理当前工作空间每天检查的官网和 X Lists。' },
     lists: { title: 'X Lists', description: '选择当前工作空间在 List 工作台显示的账号 Lists。' },
     agent: { title: 'Agent 接入', description: '让其他 Agent 读取和操作 WMB 中的同一份业务资料。' },
     diagnostics: { title: '系统诊断', description: '仅在异常时检查本地数据、创作助手连接和专用浏览器。' },
@@ -226,6 +229,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             })()}>清理浏览缓存</button>
           </div>
         </section>}
+        {section === 'channels' && settings && <IntelligenceChannelsView settingsMode />}
         {section === 'lists' && settings && <XListDisplaySettings workspaceId={settings.workspace.id} />}
         {section === 'agent' && settings && <section className="settings-section">
           <div className="settings-row"><div><h3>本地接入地址</h3><p>{settings.mcp.status === 'ready' ? settings.mcp.url : '本地接入服务未启动'}</p><p>{settings.workspace.displayName} · {settings.workspace.id} · 配方 r{settings.workspace.profile.revision}</p></div><span className={`pill-status ${settings.mcp.status === 'ready' ? 'green' : 'gray'}`}><span className="dot"/>{settings.mcp.status === 'ready' ? '运行中' : '未启动'}</span></div>
