@@ -360,3 +360,16 @@ Order:
 4. `WMB-2603` — package and prove actual command discovery, zero-send insertion, native Skill loading and create/edit/delete catalog refresh against a real Pi process.
 
 Gate: the palette contains only commands returned by the current Pi RPC process, never fabricates interactive-only commands or exposes source paths, selecting never sends, normal queue semantics remain unchanged, and installation Skill mutations are visible and executable through the next real Pi process.
+
+## M-2700 Acceptance gate reconciliation
+
+Scope: existing CAP-004, CAP-014 and CAP-017 behavior plus the project verification Harness; no product-contract change.
+
+Order:
+
+1. `WMB-2700` — reproduce every reported acceptance remainder and freeze its root cause without changing behavior;
+2. `WMB-2701` — move content-list fixture cleanup outside the SQLite-owning child process and make the source-logo test enforce the live registry contract instead of a stale count;
+3. `WMB-2702` — remove the three TypeScript diagnostics by preserving validated URL narrowing and counting the persisted X List item state actually written by the shared outcome mapper;
+4. `WMB-2703` — restrict placeholder scanning to relevant project deliverables, then pass typecheck, the full test suite, lightweight Harness and package gate.
+
+Gate: no acceptance command relies on ignored runtime data, stale fixture counts or in-process deletion of an open Windows SQLite file; typecheck is clean; full tests, lightweight Harness and Windows packaging pass from a clean worktree.
