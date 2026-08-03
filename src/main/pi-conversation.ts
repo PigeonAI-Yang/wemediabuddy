@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installPiOperatorSkill, installPiWorkspaceLaneSkill } from './pi-operator-skill.ts';
+import type { PiMessageSegment } from '../shared/pi-message.ts';
+import { messagesFromPiEntries } from './pi-transcript-projection.ts';
 
 export type PiChatMessage = {
   role: 'user' | 'assistant';
   text: string;
   thinking?: string;
+  segments?: PiMessageSegment[];
   entryId?: string;
   status?: 'streaming' | 'stopped' | 'failed';
   createdAt?: string;
@@ -80,6 +83,7 @@ function normalizeMessage(message: PiChatMessage, fallbackCreatedAt?: string): P
     role: message.role,
     text: message.text,
     ...(message.thinking && message.thinking.trim() ? { thinking: message.thinking } : {}),
+    ...(Array.isArray(message.segments) && message.segments.length ? { segments: message.segments } : {}),
     ...(message.entryId ? { entryId: message.entryId } : {}),
     ...(message.status ? { status: message.status } : {}),
     ...(message.createdAt || fallbackCreatedAt ? { createdAt: message.createdAt ?? fallbackCreatedAt } : {})
@@ -151,13 +155,20 @@ async function readConversationFile(dataRootPath: string, id: string): Promise<P
     const raw = JSON.parse(await readFile(conversationFilePath(dataRootPath, id), 'utf8')) as Partial<PiConversationSnapshot>;
     if (typeof raw.id !== 'string') return null;
     const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : nowIso();
-    const messages = Array.isArray(raw.messages)
+    let messages = Array.isArray(raw.messages)
       ? raw.messages
         .filter((message): message is PiChatMessage => Boolean(message)
           && (message.role === 'user' || message.role === 'assistant')
           && typeof message.text === 'string')
         .map((message) => normalizeMessage(message, updatedAt))
       : [];
+    if (messages.some((message) => message.role === 'assistant') && !messages.some((message) => message.segments?.length) && typeof raw.sessionFile === 'string') {
+      try {
+        const entries = (await readFile(raw.sessionFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as unknown);
+        const projected = messagesFromPiEntries(entries);
+        if (projected.length) messages = projected;
+      } catch { /* keep the stored snapshot when the Pi session is unavailable */ }
+    }
     return {
       id: raw.id,
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : titleFromMessages(messages),

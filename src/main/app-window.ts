@@ -45,8 +45,8 @@ export function broadcastPiRuntimeProgress(event: Record<string, unknown>, scope
   if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? ''), scope });
   if (event.type === 'wmb_thinking_delta') broadcastPiEvent({ type: 'thinking', text: String(event.text ?? ''), scope });
   if (event.type === 'agent_start') broadcastPiEvent({ type: 'running', scope });
-  if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? ''), scope });
-  if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'running', scope });
+  if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? ''), toolCallId: String(event.toolCallId ?? ''), toolArgs: event.args, scope });
+  if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'tool-result', toolName: String(event.toolName ?? ''), toolCallId: String(event.toolCallId ?? ''), toolResult: event.result, isError: event.isError === true, scope });
   if (event.type === 'queue_update') {
     broadcastPiEvent({
       type: 'queue',

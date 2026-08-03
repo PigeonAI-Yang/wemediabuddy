@@ -3,7 +3,7 @@ import type { PiContextRef } from './app-types';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 import { PiComposer } from './pi-composer';
 import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
-import { piErrorMessage, piToolActivity } from './pi-dock-utils';
+import { appendPiStream, finishPiTool, piErrorMessage, piToolActivity, streamingToolSegment } from './pi-dock-utils';
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
   toggle: () => void;
@@ -85,7 +85,15 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     if (event.scope !== 'dock') return;
     if (event.type === 'starting') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
     if (event.type === 'running') { setPhase('running'); setStatusText('正在思考'); return; }
-    if (event.type === 'tool') { setPhase('running'); setStatusText(piToolActivity(event.toolName)); return; }
+    if (event.type === 'tool') {
+      setPhase('running'); setStatusText(piToolActivity(event.toolName));
+      setMessages((items) => appendPiStream(items, streamingToolSegment(event.toolName, event.toolCallId, event.toolArgs)));
+      return;
+    }
+    if (event.type === 'tool-result') {
+      setMessages((items) => finishPiTool(items, event.toolCallId, event.toolResult, event.isError));
+      return;
+    }
     if (event.type === 'queue') {
       setNativeQueue({ steering: event.steering ?? [], followUp: event.followUp ?? [] });
       return;
@@ -97,24 +105,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
     if (event.type === 'thinking') {
       setPhase('running'); setStatusText('正在思考');
-      setMessages((items) => {
-        const next = items.slice();
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant' && last.status === 'streaming') next[next.length - 1] = { ...last, thinking: event.text ?? '' };
-        else next.push({ role: 'assistant', text: '', thinking: event.text ?? '', status: 'streaming', createdAt: new Date().toISOString() });
-        return next;
-      });
+      setMessages((items) => appendPiStream(items, { kind: 'thinking', text: event.text ?? '' }, { thinking: event.text ?? '' }));
       return;
     }
     if (event.type === 'delta') {
       setPhase('running'); setStatusText('正在回复');
-      setMessages((items) => {
-        const next = items.slice();
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant' && last.status === 'streaming') next[next.length - 1] = { ...last, text: event.text ?? '' };
-        else next.push({ role: 'assistant', text: event.text ?? '', status: 'streaming', createdAt: new Date().toISOString() });
-        return next;
-      });
+      setMessages((items) => appendPiStream(items, { kind: 'text', text: event.text ?? '' }, { text: event.text ?? '' }));
       return;
     }
     if (event.type === 'stopped') {

@@ -2,6 +2,12 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-3500 Pi chronological transcript
+
+Scope: CAP-014 conversation presentation.
+
+Gate: one real persisted Pi turn renders visible thinking and replies in chronological order inside one assistant bubble; each tool call defaults to one compact `tool · task` line, while its raw arguments and result remain hidden unless the user explicitly expands that line.
+
 ## M-000 Harness and contracts
 
 Scope: CAP-001–CAP-015 documentation and traceability.

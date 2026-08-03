@@ -227,6 +227,7 @@ MCP 工具按业务能力组织：
 - WMB 在安装级用户目录保存一套加密的 Pi API/model 预设，并为每个根的 Pi 进程注入当前共享预设、该根 MCP URL 和任务上下文；Pi 会话与运行文件仍按 data-root 隔离，不读取其他 Agent OAuth；
 - WMB 把安装级普通 Pi Skills 原子同步到每个根的 `pi-agent/skills/`；Pi 原生按 name/description 发现并按需读取，系统 operator 和根专属 lane Skill 不受普通 Skill CRUD 影响；
 - Pi dock 在用户输入 `/` 时按需读取该进程的 `get_commands`；Main 只返回 name、description 和受限 source，Renderer 负责筛选与键鼠插入，提交仍走现有 `pi:chat`；
+- Pi 会话投影保留 assistant content 中 thinking、text、toolCall 与对应 toolResult 的发生顺序并合并连续 assistant 条目；Renderer 对旧快照做同样的兼容合并，工具节点默认只渲染一行摘要，原始输入/输出留在该行的按需展开详情中；
 - Pi 业务写入只能经过现有 WMB MCP，最终发布能力不暴露给 Pi。
 
 ## 7. 浏览器执行器

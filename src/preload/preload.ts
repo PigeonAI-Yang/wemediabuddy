@@ -157,8 +157,8 @@ contextBridge.exposeInMainWorld('wmb', {
     messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
-    const handler = (_event: unknown, payload: { type: string; text?: string; error?: string; toolName?: string; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
+  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
+    const handler = (_event: unknown, payload: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
   },

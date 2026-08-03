@@ -1,15 +1,11 @@
 import type { RefObject } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import type { PiChatMessage } from '../main/pi-conversation';
+import type { PiMessageSegment } from '../shared/pi-message';
+import { coalescePiMessages, piMessageSegments } from './pi-dock-utils';
 
-export type PiDockMessage = {
-  role: 'user' | 'assistant';
-  text: string;
-  thinking?: string;
-  entryId?: string;
-  status?: 'streaming' | 'stopped' | 'failed';
-  createdAt?: string;
-};
+export type PiDockMessage = PiChatMessage;
 
 export type PiNativeQueue = {
   steering: string[];
@@ -38,6 +34,24 @@ export function formatPiMessageTime(value?: string | null): string {
   }).format(date);
 }
 
+function segmentText(segment: PiMessageSegment): string {
+  return segment.kind === 'tool' ? segment.text : segment.text;
+}
+
+function PiAssistantSegments({ segments }: { segments: PiMessageSegment[] }): React.JSX.Element {
+  return <>
+    {segments.map((segment, index) => segment.kind === 'tool'
+      ? <details className={`pi-tool-line${segment.isError ? ' failed' : ''}`} key={`${segment.toolCallId ?? segment.text}-${index}`}>
+          <summary>{segment.text}</summary>
+          {(segment.input || segment.output) && <div className="pi-tool-detail">
+            {segment.input && <><b>输入</b><pre>{segment.input}</pre></>}
+            {segment.output && <><b>{segment.isError ? '错误' : '输出'}</b><pre>{segment.output}</pre></>}
+          </div>}
+        </details>
+      : <div className={`pi-message-segment ${segment.kind}`} key={`${segment.kind}-${index}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />)}
+  </>;
+}
+
 export function PiDockTranscript({
   messages,
   queue,
@@ -60,41 +74,32 @@ export function PiDockTranscript({
   onRetry: (entryId: string) => void;
 }): React.JSX.Element {
   let retryEntryId: string | undefined;
+  const displayMessages = coalescePiMessages(messages);
   return <div className="pi-conversation" ref={conversationRef}>
-    {messages.length ? messages.map((message, index) => {
+    {displayMessages.length ? displayMessages.map((message, index) => {
         if (message.role === 'user' && message.entryId) retryEntryId = message.entryId;
         const timeLabel = formatPiMessageTime(message.createdAt);
-        const showActions = Boolean(message.text || message.thinking) && message.status !== 'streaming';
+        const segments = piMessageSegments(message);
+        const showActions = Boolean(segments.length) && message.status !== 'streaming';
         const retryId = retryEntryId;
-        const thinking = message.thinking?.trim() ?? '';
-        const openThinking = message.status === 'streaming' && !message.text && Boolean(thinking);
         return (
           <div className={`pi-bubble-wrap ${message.role}`} key={message.entryId ?? `${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`}>
             {message.role === 'assistant'
               ? <>
-                  {thinking ? (
-                    <details className={`pi-thinking${message.status === 'streaming' ? ' streaming' : ''}`} open={openThinking || undefined}>
-                      <summary>
-                        <span>{message.status === 'streaming' && !message.text ? '正在思考' : '思考过程'}</span>
-                        <small>{thinking.length > 40 ? `${thinking.slice(0, 40)}…` : thinking}</small>
-                      </summary>
-                      <pre>{thinking}</pre>
-                    </details>
-                  ) : null}
-                  {message.status === 'streaming' && !message.text
+                  {message.status === 'streaming' && !segments.length
                     ? <div className="assistant pi-bubble streaming pi-activity" role="status" aria-live="polite">
                         <span className="pi-activity-mark" aria-hidden="true"><i /></span>
-                        <span className="pi-activity-copy"><strong>{statusText}</strong><small>{thinking ? '边想边组织回复' : 'Pi 正在继续处理'}</small></span>
+                        <span className="pi-activity-copy"><strong>{statusText}</strong><small>Pi 正在继续处理</small></span>
                       </div>
-                    : message.text
-                      ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }} />
+                    : segments.length
+                      ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} /></div>
                       : null}
                 </>
               : <p className="user pi-bubble">{message.text}</p>}
             <div className="pi-bubble-meta">
               <time className="pi-bubble-time">{timeLabel || (message.status === 'streaming' ? '发送中' : '')}</time>
               <div className="pi-bubble-actions" aria-hidden={showActions ? undefined : true} style={showActions ? undefined : { visibility: 'hidden' }}>
-                <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy([thinking && `思考过程：\n${thinking}`, message.text].filter(Boolean).join('\n\n'))}>
+                <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy(segments.map(segmentText).join('\n\n'))}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
                 </button>
                 {message.role === 'user' && message.entryId && <button type="button" title="按 Pi 原生分叉撤回" aria-label="按 Pi 原生分叉撤回" disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>

@@ -444,6 +444,8 @@ Every main view shares one collapsible Pi conversation dock. Page changes preser
 
 普通 Pi 对话不设 WMB 级总时限：仅在 Pi 发出 `agent_settled`、用户显式 `abort`，或 Pi 返回真实错误/退出时结束。生成期间编辑框保持可用；空编辑框的主按钮为停止方块，非空编辑框发送 Pi 原生 `steer`，`Alt+Enter` 发送原生 `followUp`。WMB 只展示 Pi 的 `queue_update` 队列，不自建逐条取消、重排或伪撤回。历史撤回和重发必须由 Pi 原生 `fork` 创建新分支，不能只裁剪本地聊天记录；固定业务 Agent 的显式任务时限不受此条影响。
 
+Pi dock 必须按 Pi 会话中的真实发生顺序，在同一个助手回合气泡内连续呈现运行时主动输出的可见思考、正式回复和工具进度。每次工具调用默认只呈现一行 `工具名 · 当前任务` 摘要；参数和原始结果仅在用户主动展开该行后显示，默认状态不得倾倒完整工具调用链。
+
 ### CAP-015 Long-term knowledge compounding
 
 Links: REQ-002, REQ-003, REQ-004, REQ-011, REQ-012, REQ-014, AC-001, AC-002, AC-009, AC-010.
