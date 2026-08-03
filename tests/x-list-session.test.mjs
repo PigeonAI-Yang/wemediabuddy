@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cubicBezier, isPyaireaderXProfile, isXHomeUrl, parseXListId, xListUrl } from '../src/main/platforms/x-list-primitives.ts';
+import { hasUsableDocumentText } from '../src/main/platforms/x-list-session-support.ts';
 
 test('X List session accepts only the Pyaireader profile and stable List URLs', () => {
   assert.equal(isPyaireaderXProfile({ id: 'edge:pyaireader-default', cdpUrl: 'http://127.0.0.1:9334/' }), true);
@@ -18,4 +19,10 @@ test('human pointer curve starts and ends at the intended coordinates', () => {
   const end = { x: 110, y: 220 };
   assert.deepEqual(cubicBezier(start, { x: 20, y: 80 }, { x: 90, y: 160 }, end, 0), start);
   assert.deepEqual(cubicBezier(start, { x: 20, y: 80 }, { x: 90, y: 160 }, end, 1), end);
+});
+
+test('same-URL navigation reuses only a document with readable content', () => {
+  assert.equal(hasUsableDocumentText(''), false);
+  assert.equal(hasUsableDocumentText('  \n '), false);
+  assert.equal(hasUsableDocumentText('Home'), true);
 });

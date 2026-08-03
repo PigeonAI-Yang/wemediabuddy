@@ -385,3 +385,13 @@ Order:
 3. `WMB-2802` — package and prove one real completed body produces all three platform versions visible in Studio and Publish while final publication remains UI-confirmed only.
 
 Gate: Pi uses the same existing content/version business API as UI and external MCP, creates no parallel draft store, reads back exact platform/title/body/project/core-version identities, and gains no final-publication or confirmation authority.
+
+## M-2900 Shared X List index read recovery
+
+Scope: existing CAP-017 shared X login and List read contract; no account, confirmation or data-isolation change.
+
+Order:
+
+1. `WMB-2900` — reproduce the authenticated shared-profile failure, repair same-URL reuse of an empty stopped document, and prove the real shared login returns its account and List index without another login.
+
+Gate: an authenticated installation Edge page is reused only while its document is usable; an empty stopped same-URL page is reloaded, and the real shared profile returns the current account and Lists through the existing business read path.

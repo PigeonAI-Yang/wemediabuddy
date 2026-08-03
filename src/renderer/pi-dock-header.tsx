@@ -37,8 +37,7 @@ export function PiDockHeader({
         <span className="pi-session-current" title={activeTitle}>{activeTitle === 'Pi' ? '会话' : activeTitle}</span>
         <em className="pi-session-caret" aria-hidden="true">▾</em>
       </button>
-      <span data-phase={phase}>{statusText}</span>
-      <button type="button" className="pi-icon-button pi-new-session" title="新会话" aria-label="新会话" onClick={onNewConversation}>＋</button>
+      <span data-phase={phase}>状态：{statusText}</span>
     </div>
     {sessionMenuOpen && <div className="pi-session-menu" role="listbox" aria-label="会话列表">
       <div className="pi-session-menu-head"><span>会话</span><button type="button" onClick={onNewConversation}>新建</button></div>

@@ -21,6 +21,10 @@ export class XListSupersededError extends Error {
 
 export type NavMode = 'full' | 'browse' | 'fast';
 
+export function hasUsableDocumentText(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 export async function applyHumanViewport(page: Page): Promise<void> {
   await page.setViewportSize({ width: X_BROWSER_VIEWPORT.width, height: X_BROWSER_VIEWPORT.height }).catch(() => {});
 }

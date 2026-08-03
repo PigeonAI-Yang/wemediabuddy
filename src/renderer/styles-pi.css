@@ -14,7 +14,7 @@
 }
 .pi-dock-title-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -54,15 +54,10 @@
   font-size: 11px;
 }
 .pi-dock-title-row > span[data-phase] {
-  max-width: 42%;
-  min-width: 0;
-  overflow: hidden;
   color: var(--muted-low);
   font-size: 12px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pi-new-session { width: 28px; height: 28px; }
 .pi-session-menu {
   position: absolute;
   top: calc(100% - 6px);

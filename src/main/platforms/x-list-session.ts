@@ -20,6 +20,7 @@ import {
   applyHumanViewport,
   captureForegroundWindowHwnd,
   humanPointerClick,
+  hasUsableDocumentText,
   restoreForegroundWindowHwnd,
   sleep,
   typeHumanly,
@@ -227,7 +228,11 @@ export class XListSession {
       this.assertCurrent(opId);
       const current = this.page.url().replace(/[?#].*$/, '').replace(/\/$/, '');
       const target = url.replace(/[?#].*$/, '').replace(/\/$/, '');
-      if (current === target && (mode === 'fast' || mode === 'browse')) {
+      if (
+        current === target
+        && (mode === 'fast' || mode === 'browse')
+        && hasUsableDocumentText(await this.visibleText())
+      ) {
         await sleep(randomInt(
           mode === 'fast' ? X_HUMANIZATION.detailSettleMinMs : X_HUMANIZATION.browseSettleMinMs,
           mode === 'fast' ? X_HUMANIZATION.detailSettleMaxMs : X_HUMANIZATION.browseSettleMaxMs
