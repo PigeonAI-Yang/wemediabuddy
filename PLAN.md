@@ -373,3 +373,15 @@ Order:
 4. `WMB-2703` — restrict placeholder scanning to relevant project deliverables, then pass typecheck, the full test suite, lightweight Harness and package gate.
 
 Gate: no acceptance command relies on ignored runtime data, stale fixture counts or in-process deletion of an open Windows SQLite file; typecheck is clean; full tests, lightweight Harness and Windows packaging pass from a clean worktree.
+
+## M-2800 Pi platform-version completion
+
+Scope: existing CAP-004, CAP-005, CAP-007 and CAP-014 contracts; no publication-confirmation change.
+
+Order:
+
+1. `WMB-2800` — reproduce the reported post-draft failure against the real MCP registry, packaged Pi extension, active Pi tool list and operator Skill, then identify the exact missing boundary;
+2. `WMB-2801` — repair the confirmed shared boundary so Pi can save X, Xiaohongshu and WeChat platform versions through the existing business command with exact project/core-version linkage and readback;
+3. `WMB-2802` — package and prove one real completed body produces all three platform versions visible in Studio and Publish while final publication remains UI-confirmed only.
+
+Gate: Pi uses the same existing content/version business API as UI and external MCP, creates no parallel draft store, reads back exact platform/title/body/project/core-version identities, and gains no final-publication or confirmation authority.
