@@ -174,7 +174,7 @@ contextBridge.exposeInMainWorld('wmb', {
   cancelAgentTask: (id: string) => ipcRenderer.invoke('agent:cancel', id),
   controlDailyIntelligence: (input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }) => ipcRenderer.invoke('agent:control-daily', input),
   startResultsReview: (input: { businessDate: string; publicationId: string }) => ipcRenderer.invoke('agent:start-results-review', input),
-  startDailyIntelligence: (input: { businessDate: string; modules: Array<'official_web' | 'x_lists'> }) => ipcRenderer.invoke('agent:start-daily-intelligence', input),
+  startDailyIntelligence: (input: { businessDate: string }) => ipcRenderer.invoke('agent:start-daily-intelligence', input),
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
   startBrowser: (input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => ipcRenderer.invoke('browser:start', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),

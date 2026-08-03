@@ -289,7 +289,7 @@ Order:
 3. `WMB-2102` — add arbitrary public website name/URL candidate resolution, canonical trial read, confirmation, management and truthful zero-item scans;
 4. `WMB-2103` — add current-account X List name/URL/ID resolution, same-name candidate selection and existing-binding reuse;
 5. `WMB-2104` — move deterministic channel preflight/scans above pack-specific judgment, freeze selected source revisions, aggregate per-source receipts and replace the zero-source/non-empty-plan completion gate;
-6. `WMB-2105` — deliver Discover intelligence-channel management and Today default-all/per-run selection/preflight UI from the authoritative shared snapshot;
+6. `WMB-2105` — deliver Discover intelligence-channel management and the original Today default-all/per-run selection/preflight UI from the authoritative shared snapshot; WMB-2300 later removes the Today management surface while retaining automatic default-all preflight;
 7. `WMB-2106` — expose read/prepare-only channel MCP/Pi tools and UI-only exact batched source confirmation with stale zero-write behavior;
 8. `WMB-2107` — run focused packaged AI/UK acceptance for arbitrary websites, same-name X Lists, cold-switch isolation, zero-update success, partial preservation, all-blocked preflight and exact authorization.
 
@@ -311,3 +311,11 @@ Order:
 6. `WMB-2205` — run focused current-Windows-package EVAL-024–025 acceptance with real X metrics, root switching, partial/needs_user and responsive UI readback.
 
 Gate: EVAL-024–EVAL-025 pass. One explicit run creates only bounded active-root observation work; the same post retains one source identity and multiple truthful metric snapshots; deterministic speed evidence reaches an existing multi-source opportunity and survives UI/MCP creation into the same topic/source lineage. Missing metrics, app exit, root switch and late responses never create fake trends or cross-root writes. Full-network monitoring, X official APIs, background services, automatic social interaction and unrelated X utility tools remain outside M-2200.
+
+## M-2300 Today information-first restoration
+
+Scope: CAP-020 and CAP-021.
+
+1. `WMB-2300` — remove channel selection, source counts, readiness management and configuration guidance from Today; start every enabled Discover channel automatically and report preflight failure only after an explicit start.
+
+Gate: Today contains no channel checkbox/count/name/readiness/configuration surface, its start payload cannot deselect modules, Discover retains the full management surface, and a renderer readback confirms content opportunities remain the primary first-screen hierarchy.

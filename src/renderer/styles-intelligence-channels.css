@@ -64,27 +64,13 @@
 .channel-proposal small { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
 .today-command[data-mode="idle"] { align-items: stretch; flex-wrap: wrap; }
 .today-command[data-mode="idle"] .today-command-stats { flex: 1 1 360px; }
-.today-command[data-mode="idle"] .today-channel-selection { flex: 1 1 520px; }
 .today-command[data-mode="idle"] .today-command-actions { margin-left: auto; }
-.today-channel-selection { display: grid; grid-template-columns: minmax(170px, .8fr) repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 12px; border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; background: var(--border-soft); }
-.today-channel-selection > div, .today-channel-selection > label { min-width: 0; padding: 10px 12px; background: var(--surface); }
-.today-channel-selection > div { display: grid; align-content: center; gap: 4px; }
-.today-channel-selection > div strong { color: var(--ink); font-size: 13px; }
-.today-channel-selection > div span { color: var(--muted); font-size: 12px; line-height: 1.45; }
-.today-channel-selection > label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; cursor: pointer; }
-.today-channel-selection input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); }
-.today-channel-selection label > span { display: grid; min-width: 0; gap: 2px; }
-.today-channel-selection b { color: var(--ink-soft); font-size: 13px; }
-.today-channel-selection small, .today-channel-selection em { overflow-wrap: anywhere; color: var(--muted); font-size: 11px; font-style: normal; line-height: 1.35; }
-.today-channel-selection > p { grid-column: 1 / -1; margin: 0; padding: 9px 12px; background: color-mix(in srgb, var(--amber) 9%, var(--surface)); color: var(--amber); font-size: 12px; line-height: 1.4; }
 
 @media (max-width: 1180px) {
   .channel-add-grid { grid-template-columns: 1fr; }
   .channel-source-row { grid-template-columns: minmax(0, 1fr) auto; }
   .channel-receipt { grid-column: 1; }
   .channel-source-actions { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-  .today-channel-selection { grid-template-columns: 1fr 1fr; }
-  .today-channel-selection > div { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
@@ -94,5 +80,4 @@
   .channel-source-actions { grid-column: auto; grid-row: auto; justify-content: flex-start; }
   .channel-confirm-row .primary-button { margin-left: 0; }
   .channel-proposal { align-items: stretch; flex-direction: column; }
-  .today-channel-selection { grid-template-columns: 1fr; }
 }

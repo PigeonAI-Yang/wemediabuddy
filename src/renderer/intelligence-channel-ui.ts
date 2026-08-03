@@ -16,12 +16,9 @@ export function channelReadiness(summary: IntelligenceChannelsSummary | null | u
 export function dailyPreflightMessage(input: {
   summary: IntelligenceChannelsSummary | null | undefined;
   piConfigured: boolean;
-  modules: IntelligenceModule[];
 }): string | null {
   if (!input.piConfigured) return '请先在设置中配置 Pi API。';
-  if (!input.modules.length) return '请至少选择一个情报模块。';
-  const selected = input.modules.map((module) => channelReadiness(input.summary, module));
-  if (selected.some((item) => item.readyCount > 0)) return null;
-  if (selected.some((item) => item.blockedCount > 0)) return '已选来源需要浏览器登录或重新确认。';
-  return '已选模块没有可运行的来源，请先在“发现 → 情报渠道”添加并启用来源。';
+  if (input.summary?.readiness.some((item) => item.readyCount > 0)) return null;
+  if (input.summary?.readiness.some((item) => item.blockedCount > 0)) return '已有来源需要浏览器登录或重新确认。';
+  return '没有可运行的情报渠道，请先在“发现 → 情报渠道”添加并启用来源。';
 }
