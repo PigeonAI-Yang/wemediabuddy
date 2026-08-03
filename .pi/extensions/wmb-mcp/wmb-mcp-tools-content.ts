@@ -105,6 +105,41 @@ const saveCoreVersion: ToolDefinition = {
     }));
   }
 };
+
+const savePlatformVersion: ToolDefinition = {
+  name: 'wmb_save_platform_version',
+  label: '保存 WMB 平台版本',
+  description: '把 X、小红书或公众号文案保存为指定内容项目和核心版本下的平台版本；不执行最终发布。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      projectId: { type: 'string' },
+      contentVersionId: { type: 'string' },
+      platform: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat'] },
+      format: { type: 'string' },
+      title: { type: 'string' },
+      body: { type: 'string' },
+      versionId: { type: 'string' },
+      expectedRevision: { type: 'number' }
+    },
+    required: ['requestId', 'projectId', 'contentVersionId', 'platform', 'format', 'body'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('content.save_version', {
+      request_id: String(params.requestId ?? ''),
+      project_id: String(params.projectId ?? ''),
+      content_version_id: String(params.contentVersionId ?? ''),
+      platform: params.platform,
+      format: String(params.format ?? ''),
+      title: params.title ? String(params.title) : undefined,
+      body: String(params.body ?? ''),
+      version_id: params.versionId ? String(params.versionId) : undefined,
+      expected_revision: typeof params.expectedRevision === 'number' ? params.expectedRevision : undefined
+    }));
+  }
+};
 const createContentProject: ToolDefinition = {
   name: 'wmb_create_content_project',
   label: '新建 WMB 内容项目',
@@ -255,4 +290,4 @@ const saveReview: ToolDefinition = {
   }
 };
 
-export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, saveCoreVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];
+export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];

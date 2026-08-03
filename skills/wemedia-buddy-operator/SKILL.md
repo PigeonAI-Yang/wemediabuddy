@@ -64,6 +64,8 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 不按标题相似度猜项目。需要查找时先用 `wmb_list_content_projects`，再按 ID 读取。
 - 画布选材流程依次使用 `wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`；用 `wmb_get_brief_lineage` 回读追溯链。
 - 每次写入后用 `wmb_get_content` 按返回的项目 ID 回读标题、revision、版本号和正文。
+- 为 X、小红书或公众号适配文案时，先用 `wmb_get_content` 读取准确项目，并选定要绑定的核心正文 `contentVersionId`；再分别调用 `wmb_save_platform_version`，传入当前工作空间已启用的 `platform`、明确 `format`、完整标题/正文。创建新平台版本时不传 `versionId`；更新已有平台版本时必须同时传其 `versionId` 和 `expectedRevision`。
+- 每个平台注册后都用 `wmb_get_content` 回读准确 `projectId`、`contentVersionId`、平台、标题和正文。平台版本保存不等于发布；最终发布仍只由用户在 WMB UI 确认。
 
 ### 工作空间配方
 
@@ -94,7 +96,7 @@ X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_
 
 资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。
 
-内容：`wmb_create_content_project`、`wmb_save_core_version`、`wmb_get_content`、`wmb_list_content_projects`、`wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`、`wmb_get_brief_lineage`。
+内容：`wmb_create_content_project`、`wmb_save_core_version`、`wmb_save_platform_version`、`wmb_get_content`、`wmb_list_content_projects`、`wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`、`wmb_get_brief_lineage`。
 
 指标与复盘：`wmb_get_metrics`、`wmb_get_reviews`、`wmb_save_review`。
 
