@@ -25,3 +25,10 @@ test('Pi operator Skill documents exactly the registered WMB tools and hard boun
   assert.match(skill, /只操作当前 MCP URL 绑定的工作空间/);
   assert.match(skill, /不要另起一次选题或提议重复保存方案/);
 });
+
+test('UK lane routes X work through current-root WMB tools, not the retired external provider', async () => {
+  const skill = await readFile(path.join('skills', 'uk-life-content-radar', 'SKILL.md'), 'utf8');
+  assert.doesNotMatch(skill, /pyaireader/i);
+  assert.match(skill, /`wmb_read_x_list_index`/);
+  assert.match(skill, /不能换账号或浏览器 profile/);
+});

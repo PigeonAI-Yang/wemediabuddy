@@ -53,7 +53,7 @@ export function discoverBrowserProfiles(dataRootPath: string, selected?: Browser
   };
   // Preserve only the already-selected AI legacy profile; new roots never discover it implicitly.
   return selected?.id === 'edge:pyaireader-default' && selected.cdpUrl === 'http://127.0.0.1:9334'
-    ? [selected, rootProfile]
+    ? [{ ...selected, label: 'Edge · 旧版共享 X 登录态（仅 AI 工作空间）' }, rootProfile]
     : [rootProfile];
 }
 
@@ -110,6 +110,14 @@ export function buildBrowserLaunchArgs(config: BrowserConfig, options: { mode: B
 
 export async function startBrowser(config: BrowserConfig, options: StartBrowserOptions = {}): Promise<BrowserRuntime> {
   const mode = resolveBrowserLaunchMode(config, options);
+  const profilePath = path.join(config.userDataDir, config.profileDirectory);
+  const running = [...managedRuntimes.values()].find((runtime) => path.resolve(runtime.profilePath) === path.resolve(profilePath));
+  if (running && await cdpReady(running.cdpUrl)) {
+    const runtime = await attachExistingRuntime(config, running.cdpUrl, mode);
+    if (mode === 'quiet') await ensureQuietXBrowserWindow(running.cdpUrl).catch(() => {});
+    if (mode === 'visible') await revealXBrowserWindow(running.cdpUrl).catch(() => {});
+    return runtime;
+  }
   const preferredCdpUrl = config.cdpUrl;
   if (preferredCdpUrl && await cdpReady(preferredCdpUrl)) {
     const runtime = attachExistingRuntime(config, preferredCdpUrl, mode);
@@ -153,10 +161,10 @@ export async function startBrowser(config: BrowserConfig, options: StartBrowserO
   return runtime;
 }
 
-/** Ensure Pyaireader X browser is reachable. Default mode is quiet headed (not true headless). */
+/** Ensure the selected dedicated X browser is reachable. Default mode is quiet headed (not true headless). */
 export async function ensurePyaireaderXBrowser(config: BrowserConfig, options: StartBrowserOptions = {}): Promise<BrowserRuntime> {
   if (!isPyaireaderXProfile(config)) {
-    throw new Error('X List 只能使用已选择的 Pyaireader 专用 X 登录态。');
+    throw new Error('X List 只能使用当前工作空间已选择的专用 X 登录态。');
   }
   return startBrowser(config, { mode: options.mode ?? 'quiet' });
 }

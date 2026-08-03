@@ -134,7 +134,7 @@ export class XListSession {
 
   static async open(config: XListBrowserConfig): Promise<XListSession> {
     if (!isPyaireaderXProfile(config) || !config.cdpUrl) {
-      throw new XListNeedsUserError('X List 只能使用已选择的 Pyaireader 专用 X 登录态。');
+      throw new XListNeedsUserError('X List 只能使用当前工作空间已选择的专用 X 登录态。');
     }
     const poolKey = config.cdpUrl.replace(/\/$/, '');
     const existing = sessionPool.get(poolKey);

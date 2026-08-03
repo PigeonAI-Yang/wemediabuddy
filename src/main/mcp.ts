@@ -154,7 +154,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       const config = readBrowserConfig(db);
       const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
       if (!workspaceId || !config || (config.id === 'edge:pyaireader-default' && !aiOnlyRoutes) || !isPyaireaderXProfile({ id: config.id, cdpUrl: config.cdpUrl })) {
-        throw new Error('请先选择 Pyaireader 专用 X 登录态。');
+        throw new Error('请先在设置中选择当前工作空间专用的 X 登录态。');
       }
       const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
       return { id: config.id, cdpUrl: runtime.cdpUrl, workspaceId };

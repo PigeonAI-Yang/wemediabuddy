@@ -3,14 +3,20 @@ import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/pro
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import type { WorkspaceProfileV1 } from './workspace-profiles.ts';
 
 export const PI_AUTHORITY_SYSTEM_PROMPT = '你是 WeMediaBuddy 内置 Pi。业务读写只能通过 wmb_* MCP 工具完成；禁止直接写文件或数据库；禁止最终发布；需要确认、激活或发布的动作只能由用户在 WMB UI 完成。按已加载 Skills 操作，回答简洁中文。';
 
 export function operatorSkillSourcePath(): string {
-  const local = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../skills/wemedia-buddy-operator');
+  return skillSourcePath('wemedia-buddy-operator');
+}
+
+function skillSourcePath(skillId: string): string {
+  const local = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../../skills/${skillId}`);
   try {
     const electron = createRequire(import.meta.url)('electron') as { app?: { isPackaged?: boolean } };
-    if (electron.app?.isPackaged) return path.join(process.resourcesPath, 'skills', 'wemedia-buddy-operator');
+    if (electron.app?.isPackaged) return path.join(process.resourcesPath, 'skills', skillId);
   } catch {}
   return local;
 }
@@ -24,18 +30,35 @@ export async function operatorSkillRevision(sourceRoot = operatorSkillSourcePath
 }
 
 export async function installPiOperatorSkill(agentDir: string): Promise<{ path: string; revision: string }> {
-  const sourceRoot = operatorSkillSourcePath();
+  return installPiSkill(agentDir, 'wemedia-buddy-operator', operatorSkillSourcePath());
+}
+
+export async function installPiWorkspaceLaneSkill(dataRootPath: string, agentDir = path.join(dataRootPath, 'pi-agent')): Promise<{ path: string; revision: string } | null> {
+  let database: DatabaseSync | null = null;
+  try {
+    database = new DatabaseSync(path.join(dataRootPath, 'wmb.db'), { readOnly: true });
+    const row = database.prepare("SELECT intelligence_pack_id AS skillId FROM workspace_profiles WHERE id='effective'").get() as { skillId?: WorkspaceProfileV1['intelligencePackId'] } | undefined;
+    return row?.skillId ? installPiSkill(agentDir, row.skillId, skillSourcePath(row.skillId)) : null;
+  } catch (error) {
+    if (/unable to open database|no such table/i.test(error instanceof Error ? error.message : String(error))) return null;
+    throw error;
+  } finally {
+    database?.close();
+  }
+}
+
+async function installPiSkill(agentDir: string, name: string, sourceRoot: string): Promise<{ path: string; revision: string }> {
   const revision = await operatorSkillRevision(sourceRoot);
   const skillsRoot = path.join(agentDir, 'skills');
-  const target = path.join(skillsRoot, 'wemedia-buddy-operator');
+  const target = path.join(skillsRoot, name);
   try {
     if (await operatorSkillRevision(target) === revision) return { path: target, revision };
   } catch {}
-  const staging = path.join(skillsRoot, `.wemedia-buddy-operator.installing-${process.pid}-${randomUUID()}`);
+  const staging = path.join(skillsRoot, `.${name}.installing-${process.pid}-${randomUUID()}`);
   await mkdir(skillsRoot, { recursive: true });
   try {
     await cp(sourceRoot, staging, { recursive: true, force: true });
-    await writeFile(path.join(staging, '.wmb-install.json'), JSON.stringify({ name: 'wemedia-buddy-operator', revision }) + '\n', 'utf8');
+    await writeFile(path.join(staging, '.wmb-install.json'), JSON.stringify({ name, revision }) + '\n', 'utf8');
     await rm(target, { recursive: true, force: true });
     await rename(staging, target);
   } finally {

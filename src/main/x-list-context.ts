@@ -30,7 +30,7 @@ export async function currentXListContextForRoot(root: DataRoot): Promise<Curren
 
 export async function selectedXListBrowser(database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
   const config = readBrowserConfig(database);
-  if (!config) throw new Error('请先选择 Pyaireader 专用 X 登录态。');
+  if (!config) throw new Error('请先在设置中选择当前工作空间专用的 X 登录态。');
   if (config.id === pyaireaderXProfileId && !allowsAiOnlyRoutes(database)) throw new Error('此根尚未配置独立 X 登录态。');
   const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
   return { id: config.id, cdpUrl: runtime.cdpUrl };
