@@ -7,6 +7,7 @@
 3. Move it to `doing`; only one task may have that status.
 4. Inspect the relevant source, callers, tests, live configuration, and runtime state.
 5. For a bug, write and run a minimal falsifiable reproduction before changing code.
+6. If the change affects a WMB workflow, Pi/MCP tool, confirmation/state boundary, workspace identity or Skill packaging, read `docs/pi-operation-skill-maintenance.md` and freeze the operator Skill impact before editing.
 
 ## During editing
 
@@ -15,6 +16,7 @@
 - Keep renderer, MCP, and platform adapters behind business commands.
 - Preserve dirty work and unrelated user changes.
 - Update the task's evidence fields as checks complete.
+- For changes covered by `docs/pi-operation-skill-maintenance.md`, update the canonical operator Skill in the same task or record a concrete no-change reason; do not hand-edit packaged/data-root copies.
 
 ## Desktop dev server isolation
 

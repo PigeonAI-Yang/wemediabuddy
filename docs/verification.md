@@ -80,6 +80,14 @@ Required by capability:
 - Metrics: real creator-page values, capture timestamp, source page, and unsupported/unavailable semantics.
 - Recovery: restart application and verify persisted state and safe job transition.
 
+## Pi operation Skill synchronization
+
+Follow `docs/pi-operation-skill-maintenance.md` whenever a workflow, Pi/MCP tool, confirmation/state boundary, workspace identity or Skill packaging changes.
+
+- Documentation-only rule changes: run the lightweight Harness and `git diff --check`.
+- Operator Skill content changes: verify every named `wmb_*` tool against the current Pi registry and run one focused workflow/readback.
+- Packaging/loader changes: build Windows and prove the shared Skill loads in both a fresh and an existing data root while lane Skills remain root-specific.
+
 ## Prohibited verification waste
 
 - Packaging after an unrelated renderer or copy change.

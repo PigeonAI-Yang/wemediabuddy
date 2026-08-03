@@ -21,6 +21,7 @@ PRD.md
 - `TECHNICAL_DESIGN.md`: approved architecture and stack.
 - `AGENTS.md`: mandatory entrypoint for future Agents.
 - `docs/verification.md`: executable and manual gates.
+- `docs/pi-operation-skill-maintenance.md`: impact matrix and synchronization contract for the installation-wide Pi operation Skill.
 - `.ai/evals/README.md`: feature and regression evidence format.
 
 ## Traceability
@@ -53,5 +54,5 @@ If a rule can prevent data loss, duplicate publication, stale overwrites, or fal
 - Product scope changes update PRD first, then SPEC, PLAN, and TASKS in the same change.
 - A discovered implementation constraint updates TECHNICAL_DESIGN only after user approval when it changes the approved architecture.
 - A repeated failure adds the smallest regression check and a short lesson to the relevant harness document.
+- A change to user workflows, Pi/MCP tools, confirmation/state boundaries, workspace identity or Skill packaging follows `docs/pi-operation-skill-maintenance.md` and records its Skill impact decision in the same task receipt.
 - Task progress changes only in `TASKS.md`; do not create parallel todo lists.
-

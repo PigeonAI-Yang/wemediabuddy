@@ -9,6 +9,7 @@ Scope: CAP-001–CAP-015 documentation and traceability.
 Gate:
 
 - PRD, SPEC, technical design, plan, and task ledger agree;
+- Pi operation-Skill maintenance policy is indexed from the Agent entrypoint and enforced by the lightweight Harness;
 - harness check passes;
 - task ledger contains every capability.
 
@@ -319,3 +320,15 @@ Scope: CAP-020 and CAP-021.
 1. `WMB-2300` — remove channel selection, source counts, readiness management and configuration guidance from Today; start every enabled Discover channel automatically and report preflight failure only after an explicit start.
 
 Gate: Today contains no channel checkbox/count/name/readiness/configuration surface, its start payload cannot deselect modules, Discover retains the full management surface, and a renderer readback confirms content opportunities remain the primary first-screen hierarchy.
+
+## M-2400 Installation-wide Pi operation Skill
+
+Scope: CAP-014 and the existing WMB business workflows it operates. This milestone teaches Pi the supported software workflows; it does not add a new business module or weaken runtime validation.
+
+Order:
+
+1. `WMB-2400` — create the canonical `wemedia-buddy-operator` Skill with current workflow playbooks and a deterministic check that every named `wmb_*` tool exists;
+2. `WMB-2401` — package and refresh the shared operator Skill into every Pi data root while keeping lane Skills root-specific and the system prompt limited to immutable authority boundaries;
+3. `WMB-2402` — prove a fresh root and an existing AI/UK root load and follow the shared Skill for channel proposal and content-project workflows without direct writes or confirmation bypass.
+
+Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names fail a deterministic check, and real Pi readback completes the changed playbooks through WMB business tools and required UI confirmation.

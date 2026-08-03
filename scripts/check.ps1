@@ -14,6 +14,7 @@ $requiredFiles = @(
     'docs/architecture.md',
     'docs/development-workflow.md',
     'docs/verification.md',
+    'docs/pi-operation-skill-maintenance.md',
     '.ai/evals/README.md'
 )
 
@@ -22,6 +23,15 @@ foreach ($relativePath in $requiredFiles) {
     $fullPath = Join-Path $projectRoot $relativePath
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
         throw "Missing required file: $relativePath"
+    }
+}
+
+Write-Host '> checking Pi operation Skill policy indexes'
+$operatorSkillPolicy = 'docs/pi-operation-skill-maintenance.md'
+foreach ($relativePath in @('AGENTS.md', 'docs/ai-harness.md', 'docs/development-workflow.md', 'docs/verification.md')) {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $projectRoot $relativePath)
+    if ($text -notmatch [regex]::Escape($operatorSkillPolicy)) {
+        throw "Missing Pi operation Skill policy index in: $relativePath"
     }
 }
 

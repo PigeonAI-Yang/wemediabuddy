@@ -19,6 +19,8 @@ Before any change, read:
 
 For browser/platform work, also read the matching platform contract in `SPEC.md`.
 
+For any change to user workflows, IPC/MCP/Pi tools, confirmation boundaries, task states, workspace isolation, Skill packaging or Pi launch behavior, also read `docs/pi-operation-skill-maintenance.md` and record the required Pi operator Skill impact decision in `TASKS.md`.
+
 ## Work protocol
 
 1. Select one `todo` task from `TASKS.md`; move only that task to `doing`.
@@ -96,4 +98,5 @@ Include:
 - `docs/architecture.md`
 - `docs/development-workflow.md`
 - `docs/verification.md`
+- `docs/pi-operation-skill-maintenance.md`
 - `.ai/evals/README.md`
