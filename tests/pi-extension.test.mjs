@@ -22,7 +22,7 @@ test('Pi extension copies every companion imported by index and starts with trut
     await rm(agentDir, { recursive: true, force: true });
   }
 
-  const todayView = await readFile('src/renderer/today-library-view.tsx', 'utf8');
+  const todayView = await readFile('src/renderer/today-view.tsx', 'utf8');
   const progressExpression = todayView.match(/const progressRatio = ([^;]+);/)?.[1];
   assert.ok(progressExpression, 'progress ratio expression must exist');
   const calculateProgress = Function('planned', 'processed', 'running', `return ${progressExpression};`);

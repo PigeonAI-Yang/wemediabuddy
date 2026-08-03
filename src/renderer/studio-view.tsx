@@ -1,155 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform, ContentProjectStatus, ContentProjectSummary } from '../main/content';
-import { PlatformMark } from './platform-mark';
-
-const statuses: Array<{ value: ContentProjectStatus; label: string }> = [
-  { value: 'idea', label: '想法' }, { value: 'drafting', label: '创作中' },
-  { value: 'review', label: '待审' }, { value: 'ready', label: '待发布' },
-  { value: 'completed', label: '已完成' }
-];
-const platformNames: Record<string, string> = { x: 'X', xiaohongshu: '小红书', wechat: '公众号' };
-const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN');
-marked.setOptions({
-  gfm: true,
-  breaks: true
-});
-
-const looksLikeMarkdown = (value: string): boolean => {
-  const text = value.trim();
-  if (!text) return false;
-  return /(^|\n)\s{0,3}(#{1,6}\s+\S|```|~~~|\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|(?:^|\n)(?:- |\* |\d+\. )|>\s+\S|\[[^\]]+\]\([^)]+\)|!\[[^\]]*\]\([^)]+\)|\|.+\|)/m.test(text);
-};
-
-const renderMarkdown = (value: string): string => {
-  const html = marked.parse(value ?? '', { async: false }) as string;
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ['target', 'rel'],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|wmb-asset):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
-  });
-};
-
-const bodyWithoutLeadingTitle = (value: string) => value.replace(/^#\s+.+\r?\n+/, '');
-
-function htmlToMarkdown(root: HTMLElement): string {
-  const read = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
-    if (!(node instanceof HTMLElement)) return '';
-    const content = [...node.childNodes].map(read).join('');
-    if (/^H[1-6]$/.test(node.tagName)) return `${'#'.repeat(Number(node.tagName[1]))} ${content.trim()}\n\n`;
-    if (node.tagName === 'P' || node.tagName === 'DIV') return `${content.trim()}\n\n`;
-    if (node.tagName === 'STRONG' || node.tagName === 'B') return `**${content}**`;
-    if (node.tagName === 'EM' || node.tagName === 'I') return `*${content}*`;
-    if (node.tagName === 'S' || node.tagName === 'DEL' || node.tagName === 'STRIKE') return `~~${content}~~`;
-    if (node.tagName === 'CODE') {
-      if (node.parentElement?.tagName === 'PRE') return content;
-      return `\`${content}\``;
-    }
-    if (node.tagName === 'PRE') {
-      const code = node.querySelector('code')?.textContent ?? content;
-      return `\`\`\`\n${code.replace(/\n$/, '')}\n\`\`\`\n\n`;
-    }
-    if (node.tagName === 'HR') return `\n---\n\n`;
-    if (node.tagName === 'U') return `<u>${content}</u>`;
-    if (node.tagName === 'IMG') {
-      const alt = node.getAttribute('alt') || '图片';
-      const src = node.getAttribute('src') || '';
-      return src ? `![${alt}](${src})\n\n` : '';
-    }
-    if (node.tagName === 'BLOCKQUOTE') {
-      return `${content.trim().split('\n').filter(Boolean).map((line) => `> ${line}`).join('\n')}\n\n`;
-    }
-    if (node.tagName === 'A') return `[${content}](${node.getAttribute('href') ?? ''})`;
-    if (node.tagName === 'BR') return '\n';
-    if (node.tagName === 'UL' || node.tagName === 'OL') {
-      return `${[...node.children].map((item, index) => {
-        const bullet = node.tagName === 'OL' ? `${index + 1}.` : '-';
-        return `${bullet} ${read(item).trim()}`;
-      }).join('\n')}\n\n`;
-    }
-    if (node.tagName === 'LI') return content;
-    if (node.tagName === 'TABLE') {
-      const rows = [...node.querySelectorAll('tr')].map((row) => [...row.children].map((cell) => cell.textContent?.trim() ?? ''));
-      if (!rows.length) return '';
-      const head = rows[0];
-      const sep = head.map(() => '---');
-      const bodyRows = rows.slice(1);
-      return `| ${head.join(' | ')} |\n| ${sep.join(' | ')} |\n${bodyRows.map((row) => `| ${row.join(' | ')} |`).join('\n')}\n\n`;
-    }
-    return content;
-  };
-  return [...root.childNodes].map(read).join('').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-function insertTextAtCursor(textarea: HTMLTextAreaElement, text: string): string {
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end = textarea.selectionEnd ?? start;
-  const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
-  const caret = start + text.length;
-  textarea.value = next;
-  textarea.selectionStart = caret;
-  textarea.selectionEnd = caret;
-  return next;
-}
-
-function wrapTextareaSelection(textarea: HTMLTextAreaElement, before: string, after = before, placeholder = '文字'): string {
-  const start = textarea.selectionStart ?? 0;
-  const end = textarea.selectionEnd ?? 0;
-  const selected = textarea.value.slice(start, end) || placeholder;
-  const next = `${textarea.value.slice(0, start)}${before}${selected}${after}${textarea.value.slice(end)}`;
-  textarea.value = next;
-  textarea.selectionStart = start + before.length;
-  textarea.selectionEnd = start + before.length + selected.length;
-  return next;
-}
-
+import { bodyWithoutLeadingTitle, formatTime, htmlToMarkdown, insertTextAtCursor, looksLikeMarkdown, platformNames, renderMarkdown, statuses, wrapTextareaSelection } from './studio-view-helpers';
+import { StudioContext, StudioEditorTop, StudioFormatBar, StudioOutline } from './studio-view-panels';
 export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, planDate, enabledPlatforms }: {
-  openPublish: () => void;
-  selectedId: string | null;
-  onSelect: (projectId: string | null) => void;
-  onContext: (project: { id: string; title: string } | null) => void;
-  planDate: string; enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  openPublish: () => void; selectedId: string | null; onSelect: (projectId: string | null) => void;
+  onContext: (project: { id: string; title: string } | null) => void; planDate: string; enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
 }): React.JSX.Element {
-  const [projects, setProjects] = useState<ContentProjectSummary[]>([]);
-  const [topics,setTopics]=useState<any[]>([]);
-  const [selected, setSelected] = useState<ContentProjectDetail | null>(null);
-  const [queryDraft, setQueryDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<ContentProjectStatus | undefined>();
-  const [archived, setArchived] = useState(false);
-  const [order, setOrder] = useState<ContentProjectOrder>('recent');
-  const [platform, setPlatform] = useState<ContentProjectPlatform | undefined>();
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [projects, setProjects] = useState<ContentProjectSummary[]>([]); const [topics,setTopics]=useState<any[]>([]);
+  const [selected, setSelected] = useState<ContentProjectDetail | null>(null); const [queryDraft, setQueryDraft] = useState('');
+  const [query, setQuery] = useState(''); const [status, setStatus] = useState<ContentProjectStatus | undefined>();
+  const [archived, setArchived] = useState(false); const [order, setOrder] = useState<ContentProjectOrder>('recent');
+  const [platform, setPlatform] = useState<ContentProjectPlatform | undefined>(); const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0); const [loading, setLoading] = useState(true); const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false); const [title, setTitle] = useState(''); const [body, setBody] = useState('');
   const [tab, setTab] = useState<'core' | 'versions' | 'sources' | 'platforms' | 'assets'>('core');
-  const [contextTab, setContextTab] = useState<'versions' | 'sources' | 'assets'>('versions');
-  const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
-  const [copyTitle, setCopyTitle] = useState('');
-  const [findOpen, setFindOpen] = useState(false);
-  const [findText, setFindText] = useState('');
-  const [contextOpen, setContextOpen] = useState(false);
-  const [preview, setPreview] = useState(false);
-  const [editorMode, setEditorMode] = useState<'rich' | 'source'>('source');
-  const [creating, setCreating] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const bodyInput = useRef<HTMLDivElement>(null);
-  const sourceInput = useRef<HTMLTextAreaElement>(null);
-  const imageInput = useRef<HTMLInputElement>(null);
-  const importInput = useRef<HTMLInputElement>(null);
-  const bodyHistory = useRef<string[]>(['']);
-  const bodyHistoryIndex = useRef(0);
-  const latest = selected?.revisions[0];
-  const viewedVersion = selected?.revisions.find((version) => version.id === viewedVersionId) ?? null;
-  const dirty = Boolean(selected) && (title.trim() !== selected?.title.trim() || body !== (latest?.body ?? ''));
-  const input = { query: query || undefined, status, archived, order, platform, limit: 50 };
-
+  const [contextTab, setContextTab] = useState<'versions' | 'sources' | 'assets'>('versions'); const [viewedVersionId, setViewedVersionId] = useState<string | null>(null);
+  const [copyTitle, setCopyTitle] = useState(''); const [findOpen, setFindOpen] = useState(false); const [findText, setFindText] = useState('');
+  const [contextOpen, setContextOpen] = useState(false); const [preview, setPreview] = useState(false); const [editorMode, setEditorMode] = useState<'rich' | 'source'>('source');
+  const [creating, setCreating] = useState(false); const [newTitle, setNewTitle] = useState('');
+  const bodyInput = useRef<HTMLDivElement>(null); const sourceInput = useRef<HTMLTextAreaElement>(null);
+  const imageInput = useRef<HTMLInputElement>(null); const importInput = useRef<HTMLInputElement>(null);
+  const bodyHistory = useRef<string[]>(['']); const bodyHistoryIndex = useRef(0);
+  const latest = selected?.revisions[0]; const viewedVersion = selected?.revisions.find((version) => version.id === viewedVersionId) ?? null;
+  const dirty = Boolean(selected) && (title.trim() !== selected?.title.trim() || body !== (latest?.body ?? '')); const input = { query: query || undefined, status, archived, order, platform, limit: 50 };
   const loadFirst = async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
@@ -220,8 +93,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     const match = /^(#{1,6})\s+(.+)$/.exec(line);
     return match ? [{ level: match[1].length, title: match[2], index }] : [];
   }), [body]);
-  const characterCount = body.replace(/\s/g, '').length;
-  const displayBody = viewedVersion?.body ?? body;
+  const characterCount = body.replace(/\s/g, '').length; const displayBody = viewedVersion?.body ?? body;
   useEffect(() => {
     if (editorMode !== 'rich' && !preview && !viewedVersion) return;
     const editor = bodyInput.current;
@@ -547,62 +419,14 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
 
   return <section className={`studio-editor-view${contextOpen ? ' context-open' : ''}`}>
     <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
-    <div className="studio-editor-top">
-      <div className="studio-head-copy">
-        <div className="studio-crumbs"><button className="studio-top-back" onClick={() => onSelect(null)}>创作 / 项目库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
-        <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>第 {selected.versionCount} 版 · <b>{dirty ? '有未保存修改' : '已保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latest?.createdAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
-      </div>
-      <div className="studio-grow"/>
-      <button className="secondary-button" onClick={() => setContextOpen((value) => !value)}>项目资料</button>
-      {!preview && !viewedVersion ? (
-        <div className="studio-mode-switch" role="group" aria-label="编辑模式">
-          <button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码</button>
-          <button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>渲染编辑</button>
-        </div>
-      ) : null}
-      <button className="secondary-button" onClick={() => setPreview((value) => !value)}>{preview ? '继续编辑' : '预览'}</button>
-      <button className="primary-button" disabled={!selected || busy || Boolean(viewedVersion) || preview} onClick={() => void save()} title={viewedVersion ? '历史版本只读，请返回最新版后再保存' : preview ? '预览模式下不能保存' : dirty ? '保存当前修改' : '内容未改动'}>保存</button>
-    </div>
+    <StudioEditorTop selected={selected} dirty={dirty} latestCreatedAt={latest?.createdAt} onBack={() => onSelect(null)} toggleContext={() => setContextOpen((value) => !value)} preview={preview} setPreview={setPreview} viewedVersion={Boolean(viewedVersion)} editorMode={editorMode} setEditorMode={setEditorMode} busy={busy} save={save}/>
     <div className="studio-editor-grid">
-    <aside className="studio-outline">
-      <p className="studio-panel-title">文章纲要</p>
-      <button className="active">开头</button>
-      {outline.map((item) => <button key={`${item.index}-${item.title}`} className={item.level >= 3 ? 'sub' : ''}>{item.title}</button>)}
-      {!outline.length && <p>标题会显示在这里。</p>}
-      <p className="studio-panel-title platform-title">平台内容</p>
-      <button className={tab === 'core' ? 'active' : ''} onClick={() => setTab('core')}>核心正文</button>
-      {Object.entries(selected?.platformVersions ?? {}).map(([platform, versions]) => <button key={platform} onClick={() => setTab('platforms')}><span className={`pf-tag ${platform}`}><PlatformMark platform={platform}/>{platformNames[platform]}</span> <small>{versions.length ? `${versions.length} 个版本` : '未创建'}</small><i className="st-dot" data-state={versions.length ? 'ready' : 'none'} aria-hidden="true"/></button>)}
-    </aside>
+    <StudioOutline outline={outline} tab={tab} setTab={setTab} platformVersions={selected?.platformVersions ?? {}}/>
     <main className="studio-document">
       {selected ? <>
         {(tab === 'core' || tab === 'versions') && <>
           {viewedVersion && <section className="historical-version-notice"><span>正在查看不可修改的版本 v{viewedVersion.number}</span><div><button className="secondary-button" onClick={() => setViewedVersionId(null)}>返回最新版</button><button className="secondary-button" disabled={busy} onClick={() => void saveFromVersion()}>基于此版本另存</button></div><label>新项目标题<input value={copyTitle} onChange={(event) => setCopyTitle(event.target.value)}/></label><button className="primary-button" disabled={busy || !copyTitle.trim()} onClick={() => void copyVersion()}>复制版本为新项目</button></section>}
-          {!preview && !viewedVersion && <div className="studio-formatbar" role="toolbar" aria-label="正文格式" onMouseDown={(event) => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); }}>
-              <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}>
-                <option value="p">正文</option>
-                <option value="h2">二级标题</option>
-                <option value="h3">三级标题</option>
-                <option value="blockquote">引用</option>
-              </select>
-              <span className="studio-divider"/>
-              <button type="button" title="粗体" onClick={() => execRich('bold')}><strong>B</strong></button>
-              <button type="button" title="斜体" onClick={() => execRich('italic')}><em>I</em></button>
-              <button type="button" title="删除线" onClick={() => formatSelection('~~')}>S</button>
-              <button type="button" title="行内代码" onClick={() => formatSelection('`')}>{'<>'}</button>
-              <span className="studio-divider"/>
-              <button type="button" onClick={() => execRich('insertUnorderedList')}>• 列表</button>
-              <button type="button" onClick={() => execRich('insertOrderedList')}>1. 列表</button>
-              <button type="button" onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button>
-              <button type="button" onClick={() => insertMarkdown('\n```\n代码\n```\n')}>代码块</button>
-              <button type="button" onClick={() => insertMarkdown('\n| 列1 | 列2 |\n| --- | --- |\n| A | B |\n')}>表格</button>
-              <button type="button" onClick={() => insertMarkdown('\n---\n')}>分割线</button>
-              <button type="button" disabled={busy} onClick={() => void insertImageFile()}>图片</button>
-              <button type="button" onClick={() => execRich('removeFormat')}>清除</button>
-              <span className="studio-divider"/>
-              <button type="button" onClick={() => execRich('undo')}>↶</button>
-              <button type="button" onClick={() => execRich('redo')}>↷</button>
-              <button type="button" onClick={() => setFindOpen((value) => !value)}>查找替换</button>
-            </div>}
+          {!preview && !viewedVersion && <StudioFormatBar busy={busy} execRich={execRich} formatSelection={formatSelection} insertMarkdown={insertMarkdown} insertImageFile={insertImageFile} toggleFind={() => setFindOpen((value) => !value)}/>}
             {findOpen && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? body.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !body.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(body.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas"><article className="studio-paper">
             <input id="studio-title" className="studio-title-input" value={title} disabled={busy || Boolean(viewedVersion)} onChange={(event) => setTitle(event.target.value)}/>
@@ -670,15 +494,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>SHA-256 {asset.sha256}</p><small>{asset.byteCount} bytes{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} ms` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
       </> : <section className="empty-state editor-empty"><h2>{message ? '项目详情读取失败' : '选择一个内容项目'}</h2><p>{message || '左侧会显示符合当前条件的项目。'}</p>{selectedId && message && <button onClick={() => void loadDetail(selectedId)}>重新读取</button>}</section>}
     </main>
-    <aside className="studio-context-v2">
-      <div className="studio-context-tabs"><button className={contextTab === 'versions' ? 'active' : ''} onClick={() => setContextTab('versions')}>版本</button><button className={contextTab === 'sources' ? 'active' : ''} onClick={() => setContextTab('sources')}>来源</button><button className={contextTab === 'assets' ? 'active' : ''} onClick={() => setContextTab('assets')}>素材</button></div>
-      <div className="studio-context-body">
-        {!selected && <p className="studio-panel-title">正在读取项目资料…</p>}
-        {selected && contextTab === 'versions' && <><p className="studio-panel-title">版本历史</p>{selected.revisions.map((version) => <button className="studio-context-version" key={version.id} onClick={() => { setTab('versions'); setViewedVersionId(version.id); }}><strong>第 {version.number} 版{version.id === latest?.id ? ' · 最新' : ''}</strong><small>{formatTime(version.createdAt)} · {version.author === 'user' ? '你修改' : 'Pi 创建'}</small></button>)}<div className="studio-context-hint">选择历史版本后进入只读查看，可另存为新版本或复制成新项目。</div><div className="studio-project-controls"><label>长期主题<select aria-label="项目长期主题" value={selected.topicId??''} disabled={busy} onChange={(event)=>void update({topicId:event.target.value||null})}><option value="">未归入主题</option>{topics.map(topic=><option key={topic.id} value={topic.id}>{topic.title}</option>)}</select></label><label>工作状态<select value={selected.status} disabled={busy} onChange={(event) => void update({ status: event.target.value as ContentProjectStatus })}>{statuses.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button className="secondary-button" disabled={busy} onClick={() => void update({ archived: !selected.archivedAt })}>{selected.archivedAt ? '恢复项目' : '归档项目'}</button><button className="secondary-button" disabled={busy} onClick={() => void writeDraft()}>让 Pi 写初稿</button><button className="secondary-button" disabled={busy} onClick={() => void reload()}>读取最新内容</button></div></>}
-        {selected && contextTab === 'sources' && <>{selected.creativeBrief&&<article><strong>{selected.creativeBrief.title}</strong><small>创作简报 · 第 {selected.creativeBrief.revision} 版 · {selected.creativeBrief.contextNodeIds.length} 项证据</small></article>}{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><strong>{source.title}</strong><small>{source.author || '资料来源'}</small></article>) : <p>没有关联来源。</p>}</>}
-        {selected && contextTab === 'assets' && (selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><strong>{asset.relativePath}</strong><small>{asset.mimeType}</small></article>) : <p>没有关联素材。</p>)}
-      </div>
-    </aside>
+    <StudioContext selected={selected} contextTab={contextTab} setContextTab={setContextTab} setTab={setTab} setViewedVersionId={setViewedVersionId} latestId={latest?.id} busy={busy} update={update} topics={topics} writeDraft={writeDraft} reload={reload}/>
     </div>
   </section>;
 }

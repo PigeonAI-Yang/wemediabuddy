@@ -19,7 +19,11 @@ test('Today uses authoritative readiness and always starts all enabled Discover 
   assert.equal(dailyPreflightMessage({ summary: { ...summary, readiness: [readiness('official_web', {}), readiness('x_lists', { blockedCount: 1, status: 'needs_user' })] }, piConfigured: true }), '已有来源需要浏览器登录或重新确认。');
   assert.equal(dailyPreflightMessage({ summary, piConfigured: false }), '请先在设置中配置 Pi API。');
 
-  const today = await readFile(new URL('../src/renderer/today-library-view.tsx', import.meta.url), 'utf8');
+  const today = (await Promise.all([
+    'today-view.tsx',
+    'today-view-parts.tsx',
+    'today-view-panels.tsx'
+  ].map((name) => readFile(new URL(`../src/renderer/${name}`, import.meta.url), 'utf8')))).join('\n');
   const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const workspaceIntelligence = await readFile(new URL('../src/main/workspace-intelligence.ts', import.meta.url), 'utf8');
