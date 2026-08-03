@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PiRpcSupervisor } from '../src/main/pi-runtime.ts';
+import { readPiCommands } from '../src/main/pi-commands.ts';
 
 test('Pi RPC supervisor streams deltas, settles prompts, aborts and stops', async () => {
   const fixture = `
@@ -146,6 +147,10 @@ process.stdin.on('data',d=>{
       process.stdout.write(JSON.stringify({id:r.id,type:'response',command:'get_entries',success:true,data:{entries:[{type:'message',id:'u1',timestamp:'2026-07-30T00:00:00.000Z',message:{role:'user',content:'hello'}}],leafId:'u1'}})+'\\n');
       continue;
     }
+    if(r.type==='get_commands'){
+      process.stdout.write(JSON.stringify({id:r.id,type:'response',command:'get_commands',success:true,data:{commands:[{name:'skill:writer',description:'Write with evidence',source:'skill',path:'C:/secret/SKILL.md'},{name:'fix-tests',description:'Fix tests',source:'prompt',location:'project'},{name:'session-name',source:'extension'}]}})+'\\n');
+      continue;
+    }
     if(r.type==='fork'){
       process.stdout.write(JSON.stringify({id:r.id,type:'response',command:'fork',success:true,data:{text:'hello',cancelled:false}})+'\\n');
       continue;
@@ -186,8 +191,23 @@ process.stdin.on('data',d=>{
   }
   assert.equal(hasQueue, true);
   assert.equal((await runtime.getEntries()).data.entries[0].id, 'u1');
+  assert.deepEqual(readPiCommands(await runtime.getCommands()), [
+    { name: 'skill:writer', description: 'Write with evidence', source: 'skill' },
+    { name: 'fix-tests', description: 'Fix tests', source: 'prompt' },
+    { name: 'session-name', description: '', source: 'extension' }
+  ]);
   assert.equal((await runtime.fork('u1')).data.cancelled, false);
   await runtime.stop();
+});
+
+test('Pi command catalog drops paths and invalid commands', () => {
+  assert.deepEqual(readPiCommands({ data: { commands: [
+    { name: ' skill:real ', description: ' Real ', source: 'skill', path: 'C:/secret/SKILL.md' },
+    { name: 'bad', source: 'builtin' },
+    { name: '', source: 'prompt' },
+    null
+  ] } }), [{ name: 'skill:real', description: 'Real', source: 'skill' }]);
+  assert.deepEqual(readPiCommands({ data: { commands: 'bad' } }), []);
 });
 
 

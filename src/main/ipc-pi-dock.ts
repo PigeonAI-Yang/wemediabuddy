@@ -5,6 +5,7 @@ import { readPiTranscript, syncPiConversation, visiblePiPrompt } from './pi-pers
 import type { PiRpcSupervisor } from './pi-runtime';
 import { broadcastPiEvent } from './app-window';
 import { routePiSkillPrompt } from './pi-skill-routing';
+import { readPiCommands } from './pi-commands';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -29,6 +30,12 @@ function closeTurnGate(): void {
 }
 
 export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPiSessionFile, setPiSessionFile }: Dependencies): void {
+  ipcMain.handle('pi:commands', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    return readPiCommands(await (await ensurePi(dataRoot)).getCommands());
+  });
+
   ipcMain.handle('pi:chat', async (_event, input: string | { message: string; delivery?: 'steer' | 'followUp' }) => {
     const raw = (typeof input === 'string' ? input : input.message).trim();
     if (!raw) throw new Error('请输入内容。');

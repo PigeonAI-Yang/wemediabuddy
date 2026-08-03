@@ -187,6 +187,10 @@ export class PiRpcSupervisor {
     return this.send({ type: 'get_state' });
   }
 
+  getCommands(): Promise<RpcMessage> {
+    return this.send({ type: 'get_commands' });
+  }
+
   prompt(message: string): Promise<RpcMessage> {
     return this.send({ type: 'prompt', message });
   }

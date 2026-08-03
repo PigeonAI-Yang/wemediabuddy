@@ -10,6 +10,7 @@ import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceCha
 import type { XPostMetricSnapshot, XPostTrend } from '../main/x-post-metrics';
 import type { XObservationSession } from '../main/x-observation-jobs';
 import type { PiSkillInput, PiSkillSummary } from '../main/pi-skill-library';
+import type { PiCommand } from '../main/pi-commands';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -213,6 +214,7 @@ declare global {
       listPiSkills(): Promise<PiSkillSummary[]>;
       savePiSkill(input: PiSkillInput): Promise<PiSkillSummary>;
       deletePiSkill(name: string): Promise<{ name: string }>;
+      listPiCommands(): Promise<PiCommand[]>;
       chatPi(message: string, delivery?: 'steer' | 'followUp'): Promise<{
         text: string;
         stopped: boolean;

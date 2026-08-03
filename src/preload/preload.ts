@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld('wmb', {
   listPiSkills: () => ipcRenderer.invoke('pi-skills:list'),
   savePiSkill: (input: { originalName?: string; name: string; description: string; instructions: string }) => ipcRenderer.invoke('pi-skills:save', input),
   deletePiSkill: (name: string) => ipcRenderer.invoke('pi-skills:delete', name),
+  listPiCommands: () => ipcRenderer.invoke('pi:commands'),
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),
