@@ -21,10 +21,11 @@ import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts'
 import { listSourcesByFeed } from './sources.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
 import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
+import { getXObservationSession, startXObservationSession, stopXObservationSession } from './x-observation-jobs.ts';
 
-type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null> };
+type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null>; wakeObservationScheduler?: () => void };
 
-export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencies): void {
+export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservationScheduler }: Dependencies): void {
   const loadSelectedDataRoot = loadRoot;
   ipcMain.handle('x-lists:get-cached-index', async () => {
     const context = await currentXListContext(loadSelectedDataRoot);
@@ -150,6 +151,19 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     withDatabase(loadSelectedDataRoot, (database) => listXPostMetricSnapshots(database, input.sourceId, input.limit)));
   ipcMain.handle('x-lists:get-post-trend', async (_event, input: { sourceId: string }) =>
     withDatabase(loadSelectedDataRoot, (database) => getXPostTrend(database, input.sourceId)));
+  ipcMain.handle('x-lists:start-observation', async (_event, input: { requestId: string; bindingIds: string[] }) => {
+    const context = await currentXListContext(loadSelectedDataRoot);
+    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
+    try {
+      const result = await startXObservationSession(database, context.config, input);
+      if (result.ok) wakeObservationScheduler?.();
+      return result;
+    } finally { database.close(); }
+  });
+  ipcMain.handle('x-lists:get-observation', async (_event, input: { sessionId: string }) =>
+    withDatabase(loadSelectedDataRoot, (database) => getXObservationSession(database, input.sessionId)));
+  ipcMain.handle('x-lists:stop-observation', async (_event, input: { sessionId: string }) =>
+    withDatabase(loadSelectedDataRoot, (database) => stopXObservationSession(database, input.sessionId)));
   ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => {
     const context = await currentXListContext(loadSelectedDataRoot);
     if (input.accountKey && !sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();

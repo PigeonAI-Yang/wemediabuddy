@@ -42,6 +42,10 @@ type PooledSession = {
 
 const sessionPool = new Map<string, PooledSession>();
 
+export async function disposeXListSessions(): Promise<void> { await Promise.allSettled(
+  [...new Set([...sessionPool.values()].map((entry) => entry.session))].map((session) => session.dispose())
+); }
+
 export class XListSession {
   readonly guard = new SharedXRequestGuard();
   private actionCount = 0;
@@ -83,7 +87,6 @@ export class XListSession {
   }
 
   async run<T>(action: (session: XListSession) => Promise<T>, options: { timeoutMs?: number } = {}): Promise<T> {
-    // Latest-wins: a new run immediately supersedes older queued/in-flight runs.
     const opId = ++this.opSerial;
     this.currentOp = opId;
     void this.page.evaluate(() => {
@@ -125,7 +128,6 @@ export class XListSession {
     };
 
     const result = this.chain.then(execute, execute);
-    // Keep the chain healthy even if this op fails/times out.
     this.chain = result.then(() => undefined, () => undefined);
     return result;
   }
@@ -199,7 +201,6 @@ export class XListSession {
     clearTimeout(pooled?.idleTimer ?? undefined);
     sessionPool.delete(this.poolKey);
     try {
-      // Keep the real browser profile running; only detach the CDP client.
       await this.browser.close().catch(() => {});
     } finally {
       await this.restoreUserForeground();

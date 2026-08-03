@@ -8,6 +8,7 @@ import type { WebsiteCandidate } from '../main/website-channel';
 import type { XListResolution } from '../main/x-list-channel';
 import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceChannelProposalBinding } from '../main/intelligence-channel-proposals';
 import type { XPostMetricSnapshot, XPostTrend } from '../main/x-post-metrics';
+import type { XObservationSession } from '../main/x-observation-jobs';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -83,6 +84,9 @@ declare global {
       getXListTimelineCacheStats(): Promise<{ rows: number; bytes: number; accounts: number }>;
       listXPostMetricSnapshots(input: { sourceId: string; limit?: number }): Promise<XPostMetricSnapshot[]>;
       getXPostTrend(input: { sourceId: string }): Promise<XPostTrend>;
+      startXObservation(input: { requestId: string; bindingIds: string[] }): Promise<XListCommand<XObservationSession>>;
+      getXObservation(input: { sessionId: string }): Promise<XObservationSession | null>;
+      stopXObservation(input: { sessionId: string }): Promise<XObservationSession | null>;
       listXListBindings(accountKey?: string): Promise<Array<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
       listXListOperations(input?: { accountKey?: string; limit?: number }): Promise<Array<XListOperation>>;
       getXListOperation(operationId: string): Promise<XListOperation | null>;

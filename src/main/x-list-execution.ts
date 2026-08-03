@@ -60,11 +60,14 @@ export async function collectBoundXListTimeline(database: DatabaseSync, config: 
   expectedRevision?: number;
   observationKey?: string;
   scheduledFor?: string | null;
+  expectedObservationJobId?: string;
+  isCurrent?: () => boolean;
   readTimeline?: typeof readXListTimeline;
-}): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[]; snapshotIds: string[]; candidateCount: number }>> {
+}): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[]; snapshotIds: string[]; candidateCount: number; capturedAt: string }>> {
   const binding = getXListBinding(database, input.accountKey, input.listId);
   if (!binding) return failure('NOT_FOUND', 'List 绑定不存在。');
   if (!binding.enabled) return failure('INVALID_STATE', '该 List 已移出发现，不能采集。');
+  if (input.isCurrent && !input.isCurrent()) return failure('REVISION_CONFLICT', 'X List 观察已停止，未开始读取。');
   if (!workspaceMatches(database, config.workspaceId)) return failure('REVISION_CONFLICT', '活动工作空间已变化，未开始 X List 读取。');
   if ((input.expectedBindingId && input.expectedBindingId !== binding.id) || (input.expectedRevision !== undefined && input.expectedRevision !== binding.revision)) {
     return failure('REVISION_CONFLICT', 'X List 来源已变化，请重新开始本次扫描。');
@@ -74,6 +77,7 @@ export async function collectBoundXListTimeline(database: DatabaseSync, config: 
     if (!sameHandle(result.accountKey, binding.accountKey)) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与绑定 List 的账号不一致。');
     const current = getXListBinding(database, binding.accountKey, binding.listId);
     if (!current || !current.enabled || current.id !== binding.id || current.revision !== binding.revision || !workspaceMatches(database, config.workspaceId)
+      || (input.isCurrent && !input.isCurrent()) || !observationJobMatches(database, input.expectedObservationJobId)
       || (config.accountKey && !sameHandle(config.accountKey, binding.accountKey))) {
       return failure('REVISION_CONFLICT', 'X List 来源或账号在读取期间已变化，未写入迟到结果。');
     }
@@ -114,7 +118,7 @@ export async function collectBoundXListTimeline(database: DatabaseSync, config: 
         fetchedAt: capturedAt
       });
       database.exec('COMMIT');
-      return success({ binding: updated!, sourceIds, snapshotIds, candidateCount: result.posts.length });
+      return success({ binding: updated!, sourceIds, snapshotIds, candidateCount: result.posts.length, capturedAt });
     } catch (error) {
       database.exec('ROLLBACK');
       return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
@@ -258,4 +262,10 @@ function workspaceMatches(database: DatabaseSync, workspaceId?: string): boolean
   if (!workspaceId) return true;
   const stored = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
   return stored?.value === workspaceId;
+}
+
+function observationJobMatches(database: DatabaseSync, jobId?: string): boolean {
+  if (!jobId) return true;
+  const job = database.prepare("SELECT status FROM jobs WHERE id=? AND kind='x_list_observation'").get(jobId) as { status?: string } | undefined;
+  return job?.status === 'running';
 }

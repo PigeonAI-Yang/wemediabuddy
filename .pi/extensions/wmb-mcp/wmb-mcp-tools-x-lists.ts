@@ -101,4 +101,32 @@ const getPostTrend: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('x_lists.post_trend_get', { source_id: String(params.sourceId ?? '') })); }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline, listMetricSnapshots, getPostTrend];
+const startObservation: ToolDefinition = {
+  name: 'wmb_start_x_list_observation', label: '开始 X List 趋势观察',
+  description: '显式开始当前根已启用 List 的固定 15/60/180 分钟趋势观察。',
+  parameters: {
+    type: 'object', properties: { requestId: { type: 'string' }, bindingIds: { type: 'array', items: { type: 'string' } } },
+    required: ['requestId', 'bindingIds'], additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('x_lists.observation_start', {
+      request_id: String(params.requestId ?? ''), binding_ids: Array.isArray(params.bindingIds) ? params.bindingIds.map(String) : []
+    }));
+  }
+};
+
+const getObservation: ToolDefinition = {
+  name: 'wmb_get_x_list_observation', label: '读取 X List 趋势观察',
+  description: '读取一个有界趋势观察 session 及其固定窗口状态。',
+  parameters: { type: 'object', properties: { sessionId: { type: 'string' } }, required: ['sessionId'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('x_lists.observation_get', { session_id: String(params.sessionId ?? '') })); }
+};
+
+const stopObservation: ToolDefinition = {
+  name: 'wmb_stop_x_list_observation', label: '停止 X List 趋势观察',
+  description: '停止 session；剩余窗口不再运行，迟到读取不得写入。',
+  parameters: { type: 'object', properties: { sessionId: { type: 'string' } }, required: ['sessionId'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('x_lists.observation_stop', { session_id: String(params.sessionId ?? '') })); }
+};
+
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline, listMetricSnapshots, getPostTrend, startObservation, getObservation, stopObservation];

@@ -32,6 +32,9 @@ test('Pi extension copies every companion imported by index and starts with trut
   assert.match(xListTools, /wmb_list_x_post_metric_snapshots/);
   assert.match(xListTools, /x_lists\.post_metric_snapshots_list/);
   assert.match(xListTools, /wmb_get_x_post_trend/);
+  assert.match(xListTools, /wmb_start_x_list_observation/);
+  assert.match(xListTools, /wmb_get_x_list_observation/);
+  assert.match(xListTools, /wmb_stop_x_list_observation/);
   assert.match(xListTools, /x_lists\.post_trend_get/);
 
   const ipc = await readFile('src/main/ipc-x-lists.ts', 'utf8');

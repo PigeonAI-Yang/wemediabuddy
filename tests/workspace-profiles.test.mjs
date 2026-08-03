@@ -67,6 +67,7 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       const names = new Set(listed.data.tools.map((tool) => tool.name));
       assert.deepEqual([...names].filter((name) => name.startsWith('x_lists.')).sort(), [
         'x_lists.collect_timeline', 'x_lists.get_operation', 'x_lists.list_bindings',
+        'x_lists.observation_get', 'x_lists.observation_start', 'x_lists.observation_stop',
         'x_lists.post_metric_snapshots_list', 'x_lists.post_trend_get', 'x_lists.prepare',
         'x_lists.read_detail', 'x_lists.read_index', 'x_lists.read_members', 'x_lists.read_timeline'
       ]);

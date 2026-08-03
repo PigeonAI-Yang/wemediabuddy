@@ -26,6 +26,7 @@ import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profi
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 import { registerIntelligenceChannelsMcp } from './intelligence-channel-mcp.ts';
 import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
+import { getXObservationSession, startXObservationSession, stopXObservationSession } from './x-observation-jobs.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -243,6 +244,25 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     inputSchema: { source_id: z.string() }
   }, async ({ source_id }) => {
     const db = database(); try { return text(getXPostTrend(db, source_id)); } finally { db.close(); }
+  });
+  server.registerTool('x_lists.observation_start', {
+    description: '显式开始当前根已启用 List 的有界趋势观察；只创建固定 15/60/180 分钟窗口。',
+    inputSchema: { request_id: z.string(), binding_ids: z.array(z.string()).min(1).max(50) }
+  }, async ({ request_id, binding_ids }) => xListResult(async () => {
+    const { config } = await selectedXListAccount();
+    const db = database(); try { return startXObservationSession(db, config, { requestId: request_id, bindingIds: binding_ids }); } finally { db.close(); }
+  }));
+  server.registerTool('x_lists.observation_get', {
+    description: '读取一个有界 X List 趋势观察 session 及固定窗口状态。',
+    inputSchema: { session_id: z.string() }
+  }, async ({ session_id }) => {
+    const db = database(); try { return text(getXObservationSession(db, session_id)); } finally { db.close(); }
+  });
+  server.registerTool('x_lists.observation_stop', {
+    description: '停止一个有界 X List 趋势观察；当前迟到读取不得写入，剩余窗口不再运行。',
+    inputSchema: { session_id: z.string() }
+  }, async ({ session_id }) => {
+    const db = database(); try { return text(stopXObservationSession(db, session_id)); } finally { db.close(); }
   });
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',

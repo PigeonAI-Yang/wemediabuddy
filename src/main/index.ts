@@ -41,6 +41,7 @@ import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals';
 import { createWorkspaceConfirmation } from './workspace-confirmation';
+import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
   {
@@ -62,7 +63,7 @@ let mcp: McpRuntime | null = null;
 let xhs: XhsMcpRuntime | null = null;
 let browser: BrowserRuntime | null = null;
 let pi: PiRpcSupervisor | null = null;
-let piSessionFile: string | null = null;
+let piSessionFile: string | null = null; let xObservationScheduler: XObservationScheduler | null = null;
 let shuttingDown = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -156,19 +157,19 @@ async function refreshXhs(dataRoot: DataRoot | null): Promise<void> {
 const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWorkspace, relaunchCurrentWorkspace, createUkWorkspace } = createDataRootSelection({
   userDataPath: () => app.getPath('userData'),
   chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; },
-  refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); },
+  refreshRuntime: async (dataRoot) => { await refreshMcp(dataRoot); await refreshXhs(dataRoot); xObservationScheduler?.start(); },
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(pi?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: () => workspaceGate.closeAndDrain(), openMutationGate: () => workspaceGate.reopen(),
-  stopRuntime: async () => { const results = await Promise.allSettled([pi?.stop(), stopManagedBrowsers(), mcp?.close(), xhs?.stop()]); pi = null; browser = null; mcp = null; xhs = null; const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected'); if (failed) throw failed.reason; },
+  stopRuntime: async () => { await xObservationScheduler?.stop(); const results = await Promise.allSettled([pi?.stop(), disposeXListSessions(), stopManagedBrowsers(), mcp?.close(), xhs?.stop()]); pi = null; browser = null; mcp = null; xhs = null; const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected'); if (failed) throw failed.reason; },
   relaunch: () => { app.relaunch(); app.quit(); }
-});
+}); xObservationScheduler = new XObservationScheduler({ loadSelectedDataRoot, gate: workspaceGate });
 const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces();
   migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   await refreshMcp(dataRoot);
-  await refreshXhs(dataRoot);
+  await refreshXhs(dataRoot); xObservationScheduler.start();
   if (dataRoot && mcp) {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     const pending = getLatestAgentTask(database);
@@ -468,7 +469,7 @@ app.whenReady().then(async () => {
   });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate });
   registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser: () => browser, setBrowser: (runtime) => { browser = runtime; } });
-  registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals }); registerXListIpc({ loadSelectedDataRoot }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
+  registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals }); registerXListIpc({ loadSelectedDataRoot, wakeObservationScheduler: () => xObservationScheduler?.wake() }); registerXhsIpc({ loadSelectedDataRoot, getXhs: () => xhs, setXhs: (runtime) => { xhs = runtime; }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, xhs) });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -482,7 +483,7 @@ app.on('before-quit', (event) => {
   void (async () => {
     try {
       if (pi?.isActive) await pi.abortTurn().catch(() => {});
-      await pi?.stop();
+      await xObservationScheduler?.stop(); await pi?.stop(); await disposeXListSessions();
       await stopManagedBrowsers();
       await mcp?.close();
       await xhs?.stop().catch(() => {});
