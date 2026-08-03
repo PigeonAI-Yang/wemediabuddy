@@ -1,116 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
-import { PiDockTranscript, formatPiMessageTime, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
-
-function piToolActivity(toolName?: string): string {
-  if (!toolName) return '正在处理';
-  if (['read', 'grep', 'find', 'ls'].includes(toolName)) return '正在查阅资料';
-  if (toolName === 'bash') return '正在执行任务';
-  if (toolName === 'edit' || toolName === 'write') return '正在整理内容';
-  if (toolName.includes('search')) return '正在搜索资料';
-  if (toolName.includes('source') || toolName.includes('workbench')) return '正在读取工作台';
-  if (toolName.includes('save')) return '正在保存成果';
-  return '正在使用工具';
-}
-
-function piErrorMessage(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
-  return raw
-    .replace(/^Error invoking remote method '[^']+':\s*/i, '')
-    .replace(/^Error:\s*/i, '')
-    .trim() || 'Pi 回复失败。';
-}
-const PiComposer = memo(function PiComposer({
-  configured,
-  busy,
-  phase,
-  draftSeed,
-  onDraftSeedConsumed,
-  onSend,
-  onStop,
-  modelLabel,
-  thinkingChoice,
-  modelMenuOpen,
-  modelMenuBusy,
-  modelChoice,
-  modelOptions,
-  onModelChoice,
-  onThinkingChoice,
-  onOpenModelMenu,
-  onCloseModelMenu,
-  onApplyModel
-}: {
-  configured: boolean;
-  busy: boolean;
-  phase: 'idle' | 'starting' | 'running' | 'failed' | 'stopped';
-  draftSeed: string | null;
-  onDraftSeedConsumed: () => void;
-  onSend: (text: string, delivery?: 'steer' | 'followUp') => void;
-  onStop: () => void;
-  modelLabel: string;
-  thinkingChoice: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  modelMenuOpen: boolean;
-  modelMenuBusy: boolean;
-  modelChoice: string;
-  modelOptions: string[];
-  onModelChoice: (value: string) => void;
-  onThinkingChoice: (value: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') => void;
-  onOpenModelMenu: () => void;
-  onCloseModelMenu: () => void;
-  onApplyModel: () => void;
-}): React.JSX.Element {
-  const [input, setInput] = useState('');
-  useEffect(() => {
-    if (draftSeed == null) return;
-    setInput(draftSeed);
-    onDraftSeedConsumed();
-  }, [draftSeed, onDraftSeedConsumed]);
-  const sendCurrent = (delivery?: 'steer' | 'followUp') => {
-    const text = input.trim();
-    if (!text) return;
-    setInput('');
-    onSend(text, delivery);
-  };
-  return <footer className="pi-dock-footer">
-    {modelMenuOpen && <div className="pi-model-menu" role="dialog" aria-label="选择模型和推理强度">
-      <div className="pi-model-menu-head"><strong>模型与推理</strong><button type="button" onClick={onCloseModelMenu}>×</button></div>
-      <label><span>模型</span><select disabled={modelMenuBusy} value={modelChoice} onChange={(event) => onModelChoice(event.target.value)}>
-        {modelOptions.length ? modelOptions.map((model) => <option key={model} value={model}>{model}</option>) : <option value={modelChoice}>{modelMenuBusy ? '正在读取模型…' : modelChoice || '没有可用模型'}</option>}
-      </select></label>
-      <label><span>推理强度</span><select disabled={modelMenuBusy} value={thinkingChoice} onChange={(event) => onThinkingChoice(event.target.value as typeof thinkingChoice)}>
-        <option value="auto">自动</option><option value="off">关闭</option><option value="minimal">极简</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">很高</option><option value="max">最高</option>
-      </select></label>
-      <button type="button" className="primary-button" disabled={modelMenuBusy || !modelChoice} onClick={onApplyModel}>{modelMenuBusy ? '读取中…' : '应用到新回复'}</button>
-    </div>}
-    <div className="pi-composer">
-      <textarea
-        disabled={!configured}
-        value={input}
-        onChange={(event) => setInput(event.target.value)}
-        onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendCurrent(event.altKey ? 'followUp' : 'steer'); } }}
-        placeholder={configured ? (busy ? '继续输入；发送会插入当前回复，Alt+Enter 放到下一轮' : phase === 'failed' ? '失败后可以直接重试' : phase === 'stopped' ? '已停止，可以继续发送' : '给 Pi 发消息') : '配置 Pi API 后可以对话'}
-      />
-      <div className="pi-composer-bar">
-        <div className="pi-composer-tools">
-          <button type="button" className="pi-icon-button" title="插入图片（即将支持）" aria-label="插入图片" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L9 18"/></svg>
-          </button>
-          <button type="button" className="pi-icon-button" title="附件（即将支持）" aria-label="附件" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg>
-          </button>
-        </div>
-        <div className="pi-composer-meta">
-          <button type="button" className={`pi-model-trigger${modelMenuOpen ? ' open' : ''}`} title="选择模型和推理强度" onClick={onOpenModelMenu}><span>{modelLabel}</span><small>{thinkingChoice === 'auto' ? '自动' : thinkingChoice}</small><b>▾</b></button>
-          {busy && !input.trim()
-            ? <button type="button" className="pi-send-button pi-stop-button" title="停止 Pi 当前回复" aria-label="停止 Pi 当前回复" disabled={!configured} onClick={onStop}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
-            : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || !input.trim()} onClick={() => sendCurrent('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
-        </div>
-      </div>
-    </div>
-  </footer>;
-});
-
-
+import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
+import { PiComposer } from './pi-composer';
+import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
+import { piErrorMessage, piToolActivity } from './pi-dock-utils';
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
   toggle: () => void;
@@ -119,7 +12,6 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   resize: (event: React.PointerEvent<HTMLDivElement>) => void;
   resetWidth: () => void;
 }): React.JSX.Element {
-  type PiSessionItem = { id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean };
   const [draftSeed, setDraftSeed] = useState<string | null>(null);
   const [messages, setMessages] = useState<PiDockMessage[]>([]);
   const [nativeQueue, setNativeQueue] = useState<PiNativeQueue>({ steering: [], followUp: [] });
@@ -145,7 +37,6 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     configured: boolean; active: boolean;
   } | null>(null);
   const [toast, setToast] = useState('');
-
   const refreshSessions = async () => {
     try {
       const listed = await window.wmb.listPiConversations();
@@ -559,56 +450,20 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? 'M14.5 6.5 9 12l5.5 5.5' : 'M9.5 6.5 15 12l-5.5 5.5'} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
     </button>
     {!collapsed && <>
-      <header className="pi-dock-header" ref={headerRef}>
-        <div className="pi-dock-title-row">
-          <button
-            type="button"
-            className={`pi-session-trigger${sessionMenuOpen ? ' open' : ''}`}
-            onClick={() => {
-              setSessionMenuOpen((open) => !open);
-              void refreshSessions();
-            }}
-            aria-haspopup="listbox"
-            aria-expanded={sessionMenuOpen}
-            title="会话管理"
-          >
-            <strong>Pi</strong>
-            <span className="pi-session-current" title={activeTitle}>{activeTitle === 'Pi' ? '会话' : activeTitle}</span>
-            <em className="pi-session-caret" aria-hidden="true">▾</em>
-          </button>
-          <span data-phase={phase}>{statusText}</span>
-          <button type="button" className="pi-icon-button pi-new-session" title="新会话" aria-label="新会话" onClick={() => void newConversation()}>＋</button>
-        </div>
-        {sessionMenuOpen && (
-          <div className="pi-session-menu" role="listbox" aria-label="会话列表">
-            <div className="pi-session-menu-head">
-              <span>会话</span>
-              <button type="button" onClick={() => void newConversation()}>新建</button>
-            </div>
-            <div className="pi-session-list">
-              {sessions.length ? sessions.map((session) => (
-                <button
-                  key={session.id}
-                  type="button"
-                  role="option"
-                  aria-selected={session.id === activeSessionId}
-                  className={session.id === activeSessionId ? 'active' : ''}
-                  onClick={() => void openSession(session.id)}
-                >
-                  <strong>{session.title || '新会话'}</strong>
-                  <span>{formatPiMessageTime(session.updatedAt) || session.preview}</span>
-                  <small>{session.preview}</small>
-                </button>
-              )) : <p className="pi-session-empty">还没有历史会话</p>}
-            </div>
-          </div>
-        )}
-        <div className="pi-context-chip" title={`当前会带给 Pi 的对象：${contextChip}`}>
-          <em>当前:</em>
-          <span>{contextChip}</span>
-        </div>
-        {toast && <small className="pi-toast">{toast}</small>}
-      </header>
+      <PiDockHeader
+        headerRef={headerRef}
+        sessionMenuOpen={sessionMenuOpen}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        activeTitle={activeTitle}
+        phase={phase}
+        statusText={statusText}
+        contextChip={contextChip}
+        toast={toast}
+        onToggleSessions={() => { setSessionMenuOpen((open) => !open); void refreshSessions(); }}
+        onNewConversation={() => { void newConversation(); }}
+        onOpenSession={(id) => { void openSession(id); }}
+      />
       <PiDockTranscript
         messages={messages}
         queue={nativeQueue}
