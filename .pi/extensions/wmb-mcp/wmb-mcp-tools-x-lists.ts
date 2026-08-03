@@ -80,4 +80,25 @@ const collectTimeline: ToolDefinition = {
   }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline];
+const listMetricSnapshots: ToolDefinition = {
+  name: 'wmb_list_x_post_metric_snapshots', label: '读取 X 帖子指标快照',
+  description: '读取当前工作空间一个 X 资料的真实指标快照。只读，不访问 X 网页。',
+  parameters: {
+    type: 'object', properties: { sourceId: { type: 'string' }, limit: { type: 'number', minimum: 1, maximum: 500 } },
+    required: ['sourceId'], additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('x_lists.post_metric_snapshots_list', {
+      source_id: String(params.sourceId ?? ''), limit: typeof params.limit === 'number' ? params.limit : undefined
+    }));
+  }
+};
+
+const getPostTrend: ToolDefinition = {
+  name: 'wmb_get_x_post_trend', label: '读取 X 帖子趋势',
+  description: '根据真实指标快照读取确定性浏览速度和速度变化。数据不足返回原因，不生成热度分。',
+  parameters: { type: 'object', properties: { sourceId: { type: 'string' } }, required: ['sourceId'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('x_lists.post_trend_get', { source_id: String(params.sourceId ?? '') })); }
+};
+
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, collectTimeline, listMetricSnapshots, getPostTrend];

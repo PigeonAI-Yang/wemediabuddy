@@ -25,6 +25,7 @@ import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
 import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 import { registerIntelligenceChannelsMcp } from './intelligence-channel-mcp.ts';
+import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
 
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
@@ -231,6 +232,18 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     try { return collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
     finally { db.close(); }
   }));
+  server.registerTool('x_lists.post_metric_snapshots_list', {
+    description: '读取当前根一个 X 资料的真实指标快照。只读，不访问 X 网页。',
+    inputSchema: { source_id: z.string(), limit: z.number().int().min(1).max(500).optional() }
+  }, async ({ source_id, limit }) => {
+    const db = database(); try { return text(listXPostMetricSnapshots(db, source_id, limit)); } finally { db.close(); }
+  });
+  server.registerTool('x_lists.post_trend_get', {
+    description: '按真实快照确定性读取浏览速度和速度变化；数据不足返回稳定原因，不返回热度分。',
+    inputSchema: { source_id: z.string() }
+  }, async ({ source_id }) => {
+    const db = database(); try { return text(getXPostTrend(db, source_id)); } finally { db.close(); }
+  });
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',
     inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }

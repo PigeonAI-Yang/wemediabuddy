@@ -7,6 +7,7 @@ import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt
 import type { WebsiteCandidate } from '../main/website-channel';
 import type { XListResolution } from '../main/x-list-channel';
 import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceChannelProposalBinding } from '../main/intelligence-channel-proposals';
+import type { XPostMetricSnapshot, XPostTrend } from '../main/x-post-metrics';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -80,6 +81,8 @@ declare global {
       listCachedXListTimeline(input: { accountKey: string; listId: string; limit?: number; offset?: number }): Promise<{ items: Array<{ id: string; originalUrl: string | null; title: string; author: string | null; publishedAt: string | null; collectedAt: string; summary: string | null }>; limit: number; offset: number; hasMore: boolean; binding: { id: string; accountKey: string; listId: string; sourceFeedId: string; enabled: boolean } | null }>;
       clearXListTimelineCache(input?: { accountKey?: string }): Promise<{ deleted: number }>;
       getXListTimelineCacheStats(): Promise<{ rows: number; bytes: number; accounts: number }>;
+      listXPostMetricSnapshots(input: { sourceId: string; limit?: number }): Promise<XPostMetricSnapshot[]>;
+      getXPostTrend(input: { sourceId: string }): Promise<XPostTrend>;
       listXListBindings(accountKey?: string): Promise<Array<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
       listXListOperations(input?: { accountKey?: string; limit?: number }): Promise<Array<XListOperation>>;
       getXListOperation(operationId: string): Promise<XListOperation | null>;

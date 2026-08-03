@@ -27,4 +27,17 @@ test('Pi extension copies every companion imported by index and starts with trut
   const calculateProgress = Function('planned', 'processed', 'running', `return ${progressExpression};`);
   assert.equal(calculateProgress(0, 0, true), 0);
   assert.equal(calculateProgress(4, 1, true), 0.25);
+
+  const xListTools = await readFile('.pi/extensions/wmb-mcp/wmb-mcp-tools-x-lists.ts', 'utf8');
+  assert.match(xListTools, /wmb_list_x_post_metric_snapshots/);
+  assert.match(xListTools, /x_lists\.post_metric_snapshots_list/);
+  assert.match(xListTools, /wmb_get_x_post_trend/);
+  assert.match(xListTools, /x_lists\.post_trend_get/);
+
+  const ipc = await readFile('src/main/ipc-x-lists.ts', 'utf8');
+  const preload = await readFile('src/preload/preload.ts', 'utf8');
+  for (const channel of ['x-lists:list-post-metric-snapshots', 'x-lists:get-post-trend']) {
+    assert.match(ipc, new RegExp(channel));
+    assert.match(preload, new RegExp(channel));
+  }
 });

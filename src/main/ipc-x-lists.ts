@@ -20,6 +20,7 @@ import {
 import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
+import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null> };
 
@@ -145,6 +146,10 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot }: Dependencie
     if (accountKey && !sameAccount(context.accountKey, accountKey)) throw accountMismatch();
     return withDatabase(loadSelectedDataRoot, (database) => listXListBindings(database, context.accountKey));
   });
+  ipcMain.handle('x-lists:list-post-metric-snapshots', async (_event, input: { sourceId: string; limit?: number }) =>
+    withDatabase(loadSelectedDataRoot, (database) => listXPostMetricSnapshots(database, input.sourceId, input.limit)));
+  ipcMain.handle('x-lists:get-post-trend', async (_event, input: { sourceId: string }) =>
+    withDatabase(loadSelectedDataRoot, (database) => getXPostTrend(database, input.sourceId)));
   ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => {
     const context = await currentXListContext(loadSelectedDataRoot);
     if (input.accountKey && !sameAccount(context.accountKey, input.accountKey)) throw accountMismatch();
