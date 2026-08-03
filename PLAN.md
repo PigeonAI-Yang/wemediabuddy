@@ -405,3 +405,13 @@ Order:
 1. `WMB-3100` — keep the complete account List index inside a visibility chooser, show only root-selected Lists in the workspace, retain enabled binding as the independent daily-intelligence switch, and keep an empty-timeline retry control at normal height.
 
 Gate: opening one workspace does not expose every account List as a workbench tab; visibility is root-local and survives reopen; toggling display alone does not bind or enable a source; daily intelligence still freezes only enabled bindings; zero-post retry remains readable without stretching.
+
+## M-3200 Settings-owned X List display configuration
+
+Scope: existing CAP-013 Settings and CAP-017 root-local display preference; no channel or platform mutation.
+
+Order:
+
+1. `WMB-3200` — remove display configuration from Discover, expose it as one Settings section, and prove the same root-local preference controls the clean List workbench after return/reopen.
+
+Gate: Discover contains only selected Lists and their content/actions; Settings exposes the complete cached account index plus refresh and display checkboxes; changing display never changes enabled bindings or daily sources.

@@ -50,14 +50,6 @@
 
 .x-list-toolbar { margin-bottom: 8px; }
 .x-list-empty-inline { color: var(--muted); font-size: 12px; padding: 6px 2px; }
-.x-list-visibility { flex: 0 0 auto; margin: 0 0 10px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface-raised); }
-.x-list-visibility summary { padding: 8px 10px; color: var(--ink-soft); cursor: pointer; font-size: 12px; }
-.x-list-visibility summary span { color: var(--muted-low); }
-.x-list-visibility > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px; max-height: 190px; overflow: auto; border-top: 1px solid var(--border-soft); padding: 8px; }
-.x-list-visibility label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2px 7px; min-width: 0; border-radius: 6px; padding: 6px; }
-.x-list-visibility label:hover { background: var(--surface-hover); }
-.x-list-visibility label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.x-list-visibility label small { grid-column: 2; color: var(--muted-low); font-size: 10px; }
 
 .x-list-feed-head,
 .x-list-composer > header,

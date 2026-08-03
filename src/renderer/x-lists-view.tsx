@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { XListPiContext } from './app-types';
 import { workspaceStorageKey } from './workspace-storage';
-import { parseVisibleXListIds, setListVisibility } from './x-list-visibility';
+import { parseVisibleXListIds } from './x-list-visibility';
 type ListIndex = Awaited<ReturnType<typeof window.wmb.readXListIndex>>;
 type ListRef = ListIndex['lists'][number];
 type Binding = Awaited<ReturnType<typeof window.wmb.listXListBindings>>[number];
@@ -262,7 +262,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const selectedListStorageKey = workspaceStorageKey(workspaceId, 'xListSelectedId'); const [selectedListId, setSelectedListId] = useState<string | null>(() => localStorage.getItem(selectedListStorageKey));
-  const visibleListStorageKey = workspaceStorageKey(workspaceId, 'xListVisibleIds'); const [visibleListIds, setVisibleListIds] = useState<string[] | null>(() => parseVisibleXListIds(localStorage.getItem(visibleListStorageKey)));
+  const visibleListStorageKey = workspaceStorageKey(workspaceId, 'xListVisibleIds'); const [visibleListIds] = useState<string[] | null>(() => parseVisibleXListIds(localStorage.getItem(visibleListStorageKey)));
   const [kindFilter, setKindFilter] = useState<ListRef['kind'] | 'all'>(() => {
     const stored = localStorage.getItem('wmb.xListKindFilter');
     return stored === 'owned' || stored === 'following' || stored === 'member' || stored === 'unknown' || stored === 'all' ? stored : 'all';
@@ -398,11 +398,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     }
     setSelectedListId(visibleLists[0]?.listId ?? null);
   }, [index, kindFilter, visibleLists, selectedListId]);
-  const toggleListVisibility = (listId: string, visible: boolean) => setVisibleListIds((current) => {
-    const next = setListVisibility(current ?? bindings.map((item) => item.listId), listId, visible);
-    localStorage.setItem(visibleListStorageKey, JSON.stringify(next));
-    return next;
-  });
   useEffect(() => {
     const indexStamp = index
       ? `${index.accountKey} · 列表更新于 ${new Date(index.observation.capturedAt).toLocaleString('zh-CN')}`
@@ -1000,7 +995,6 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       <p>{note || '使用 WMB 共享的 X 登录态读取列表；只有登录失效时才需前台接管。'}</p>
       <button className="refresh-button" disabled={loading} onClick={() => void loadIndex()}>{loading ? '读取中…' : '读取 X Lists'}</button>
     </section> : <>
-      <details className="x-list-visibility"><summary>管理显示 <span>{managedLists.length}/{index.lists.length}</span></summary><div>{index.lists.map((list) => { const binding = bindings.find((item) => item.listId === list.listId); return <label key={list.listId}><input type="checkbox" checked={displayedListIds.includes(list.listId)} onChange={(event) => toggleListVisibility(list.listId, event.target.checked)}/><span>{listLabel(list)}</span><small>{binding?.enabled ? '今日情报已启用' : '仅显示'}</small></label>; })}</div></details>
       <div className="discover-sources" aria-label="List 分组">
         <button className={`chip${kindFilter === 'all' ? ' on' : ''}`} onClick={() => setKindFilter('all')}>已显示<span className="chip-count">{managedLists.length}</span></button>
         {groups.map((group) => <button key={group.kind} className={`chip${kindFilter === group.kind ? ' on' : ''}`} onClick={() => setKindFilter(group.kind)}>{groupLabels[group.kind]}<span className="chip-count">{group.lists.length}</span></button>)}
