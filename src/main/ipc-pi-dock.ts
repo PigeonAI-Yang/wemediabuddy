@@ -4,6 +4,7 @@ import { createForkedPiConversation, readPiConversation } from './pi-conversatio
 import { readPiTranscript, syncPiConversation, visiblePiPrompt } from './pi-persistence';
 import type { PiRpcSupervisor } from './pi-runtime';
 import { broadcastPiEvent } from './app-window';
+import { routePiSkillPrompt } from './pi-skill-routing';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -40,7 +41,8 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
       const runtime = await ensurePi(dataRoot);
       if (!runtime.isActive) throw new Error('Pi 未接受当前对话。');
       const delivery = typeof input === 'string' ? 'steer' : (input.delivery ?? 'steer');
-      await (delivery === 'followUp' ? runtime.followUp(raw) : runtime.steer(raw));
+      const routed = routePiSkillPrompt(raw);
+      await (delivery === 'followUp' ? runtime.followUp(routed) : runtime.steer(routed));
       broadcastPiEvent({ type: 'queued', delivery, scope: 'dock' });
       return { text: '', stopped: false, queued: true, conversation: null };
     }
@@ -50,7 +52,7 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
     try {
       runtime = await ensurePi(dataRoot);
       const conversation = await readPiConversation(dataRoot.path);
-      const result = await runtime.promptUntilSettled(raw, {
+      const result = await runtime.promptUntilSettled(routePiSkillPrompt(raw), {
         onStreaming: () => {
           closeTurnGate();
           if (stopAfterOpening) {
