@@ -586,6 +586,18 @@ When triggered, the Skill must:
 
 Discovery sources have no global authority ranking. Evidence adequacy is claim-dependent: a first-hand X post may prove what its author posted, while a policy effective date requires the corresponding authoritative record. The Skill may narrow or reject a topic when available evidence cannot support a useful draft.
 
+### CAP-024 Pi slash-command palette
+
+Links: REQ-025, AC-021.
+
+When the Pi composer begins with `/` and contains no command arguments, WMB opens an anchored command palette. Its authority is the active root's actual Pi RPC `get_commands` response. WMB may expose only non-empty commands whose source is `extension`, `prompt` or `skill`; it does not expose absolute source paths. Built-in interactive-only Pi commands absent from `get_commands` must not be invented or shown.
+
+The palette filters current commands by command name and description without adding a dependency. Skills retain Pi's native `skill:<name>` identity and are displayed as `/skill:<name>`. Each row identifies its source type and description. Loading, empty and failure states remain inside the palette and do not alter the draft or silently substitute a cached/static catalog.
+
+Arrow keys move the active option, `Enter` or `Tab` inserts `/<name> ` without sending, `Escape` closes, and pointer selection performs the same insertion. The list uses listbox/option semantics and keeps the active option visible. Once arguments follow the command, normal composer behavior resumes: Enter sends or steers, Alt+Enter follows up, and Shift+Enter adds a line break.
+
+Command discovery is a narrow read IPC. It may start or reuse the current root's supervised Pi RPC runtime, but it cannot accept arbitrary command names, paths or execution payloads. Execution remains the existing `pi:chat` path so Pi performs native command expansion and all existing model, queue, MCP, workspace and publication boundaries still apply. Pi Skill mutations stop the current process under CAP-023; the next palette read starts or reuses the next process and must return the new catalog.
+
 ## 4. UI and IPC contract
 
 The required primary views remain Today, Discover, Studio, Publish, Results, and Settings. Discover includes one fixed intelligence-channel workspace for website and X Lists source configuration; it is not a plugin manager. Settings includes installation-level Pi Skills management under CAP-023; this manages Pi instructions only and is not a business-module or channel plugin manager.
@@ -600,6 +612,7 @@ Preload exposes narrow IPC for:
 - open data/log directories.
 - fixed Pi task start/read/cancel and Pi connection settings.
 - installation-level Pi Skill list/create/update/delete with system-required Skill protection.
+- current-root Pi RPC command-catalog read; no arbitrary path or command execution IPC.
 - fixed X List reads, preparation and UI-only confirmation.
 - website/X Lists channel configuration reads, website resolution/trial read, daily preflight, scan receipts and source-change preparation with UI-only confirmation.
 - X post trend snapshot reads and explicit bounded-observation start/read/stop; no arbitrary cadence, URL, account or root.
@@ -641,5 +654,6 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-024 | X post metric history and trend | A current Windows package with a real logged-in X profile reads one bound List at least three times. One canonical source item retains three append-only snapshots with raw labels, field status and real capture times; exact two-point velocity and three-point velocity change read back, while null/parse-failed/decreasing/short/insufficient samples produce no fake trend. |
 | EVAL-025 | Bounded observation and opportunity lineage | One explicit start creates only the three frozen follow-up windows per selected List; replay is idempotent, account/root/binding changes and late responses write zero, inactive roots do not run, partial List failure preserves success, and a multi-source event opportunity exposes trend evidence through Today and retains the same plan/topic/source chain when UI or MCP creates content. |
 | EVAL-026 | Pi Skills and evidence-grounded writing | Settings lists protected operator/current-lane Skills and editable installation Skills. Create, edit, rename and delete one Skill, then prove exact metadata/content and deletion read back from one fresh and one existing root without touching protected/lane Skills; restart proves a deleted packaged default stays deleted. A real Pi factual-writing turn automatically loads `evidence-grounded-writer`, uses stored or live traceable evidence, narrows/removes unsupported claims, adds non-repetitive mechanism/detail/case/limitation/action layers, rechecks the completed draft and returns the draft plus residual verification summary. |
+| EVAL-027 | Pi slash-command palette | In a current Windows package, `/` opens the actual Pi RPC command catalog and includes the active operator/lane/editable Skills while excluding interactive-only commands absent from RPC. Name/description filtering, ArrowUp/ArrowDown, Enter/Tab insertion, Escape, pointer selection and zero-send-on-selection pass. After Settings creates, edits and deletes an installation Skill, the next Pi process/catalog reflects each change; selecting a real Skill, adding an instruction and sending produces a raw Pi session containing that Skill load while the visible user turn remains usable. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

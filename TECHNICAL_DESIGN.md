@@ -112,6 +112,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `workspaces`：应用级注册表、根身份校验和单活动根切换；
 - `workspace-profiles`：有限字段的当前配方、编译期官方目录和会话级提案确认。
 - `pi-skills`：安装级 Pi Skill 清单、原子 SKILL.md 增删改、默认 Skill tombstone 和已登记 data-root 副本同步；不提供业务插件加载或新权限。
+- `pi-commands`：从当前根受监管 Pi RPC 的 `get_commands` 读取真实扩展命令、提示模板和 Skills，去除源文件路径后交给输入框；不保存静态目录或提供执行 IPC。
 
 不建设通用工作流引擎、事件溯源系统、平台 DSL 或选择器配置平台。
 
@@ -225,6 +226,7 @@ MCP 工具按业务能力组织：
 - Electron Main 只管理一个 Pi RPC 子进程，通过 LF JSONL 发送固定 intent 并转发流式事件；
 - WMB 在安装级用户目录保存一套加密的 Pi API/model 预设，并为每个根的 Pi 进程注入当前共享预设、该根 MCP URL 和任务上下文；Pi 会话与运行文件仍按 data-root 隔离，不读取其他 Agent OAuth；
 - WMB 把安装级普通 Pi Skills 原子同步到每个根的 `pi-agent/skills/`；Pi 原生按 name/description 发现并按需读取，系统 operator 和根专属 lane Skill 不受普通 Skill CRUD 影响；
+- Pi dock 在用户输入 `/` 时按需读取该进程的 `get_commands`；Main 只返回 name、description 和受限 source，Renderer 负责筛选与键鼠插入，提交仍走现有 `pi:chat`；
 - Pi 业务写入只能经过现有 WMB MCP，最终发布能力不暴露给 Pi。
 
 ## 7. 浏览器执行器
@@ -354,6 +356,8 @@ SQLite `jobs` 表保存：
 - `Settings`：数据目录、MCP、Chrome、平台账号、Pi Skills 和日志状态。
 
 顶栏或等价的持久位置显示当前工作空间；Settings 提供列表、重启式安全切换、移动后重新关联，以及官方模板或 Agent 配方提案的精确差异确认。不新增工作空间搭建聊天页，用户继续使用现有 Pi dock 或外部 Agent 描述目标。
+
+Pi dock 输入框提供贴近输入框的斜杆命令面板，直接呈现当前 Pi RPC 实际加载的扩展命令、提示模板和 Skills。面板只负责发现、筛选和插入，不复制命令实现、不自动发送、不绕过既有 Pi/MCP/发布确认边界。
 
 界面只呈现 PRD 当前操作，不增加社交、团队、权限、插件市场或 Agent 聊天界面。
 

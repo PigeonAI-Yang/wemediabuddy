@@ -347,3 +347,16 @@ Order:
 4. `WMB-2503` — package and prove fresh/existing-root CRUD, restart deletion persistence, protected/lane preservation and one real Pi evidence-grounded writing result.
 
 Gate: Settings manages ordinary shared Pi Skills without becoming a business plugin manager; protected operator/lane Skills cannot be changed; editable Skill mutations are identical across registered roots and take effect in the next Pi process; the default writing Skill reduces human verification load by producing a traceable, information-dense factual draft plus only residual conflicts/uncertainty for human review.
+
+## M-2600 Pi slash-command palette
+
+Scope: CAP-014, CAP-023 and CAP-024.
+
+Order:
+
+1. `WMB-2600` — freeze REQ-025/AC-021/CAP-024/EVAL-027 and the actual-RPC-catalog, insert-before-send and no-new-authority boundaries;
+2. `WMB-2601` — expose the supervised Pi RPC `get_commands` catalog through one narrow path-safe Main/preload read boundary with focused runtime and normalization checks;
+3. `WMB-2602` — add the composer-anchored palette with name/description filtering, source labels, loading/error/empty states, keyboard navigation, pointer selection and native command insertion/submission;
+4. `WMB-2603` — package and prove actual command discovery, zero-send insertion, native Skill loading and create/edit/delete catalog refresh against a real Pi process.
+
+Gate: the palette contains only commands returned by the current Pi RPC process, never fabricates interactive-only commands or exposes source paths, selecting never sends, normal queue semantics remain unchanged, and installation Skill mutations are visible and executable through the next real Pi process.
