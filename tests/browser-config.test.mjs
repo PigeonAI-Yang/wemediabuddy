@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
@@ -12,11 +12,16 @@ test('installation browser config persists as one shared Edge identity', async (
   const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-browser-config-'));
   try {
     const configPath = path.join(directory, 'browser-config.json');
-    const saved = saveBrowserConfig({ id: 'legacy', label: 'Legacy', executablePath: 'edge.exe', userDataDir: 'C:/existing', profileDirectory: 'Default' }, configPath);
+    const profilePath = path.join(directory, 'browser-profile');
+    const saved = saveBrowserConfig({ id: 'legacy', label: 'Legacy', executablePath: 'edge.exe', userDataDir: profilePath, profileDirectory: 'Default' }, configPath);
     assert.equal(saved.id, 'edge:wmb-installation');
     assert.equal(saved.label, 'Edge · WMB 共享登录态');
     assert.deepEqual(readBrowserConfig(configPath), saved);
     assert.deepEqual(discoverBrowserProfiles(saved, configPath), [saved]);
+    await assert.doesNotReject(() => stat(profilePath));
+    await rm(profilePath, { recursive: true });
+    migrateBrowserConfigToInstallation(configPath, []);
+    await assert.doesNotReject(() => stat(profilePath));
   } finally { await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
 });
 
@@ -26,7 +31,7 @@ test('migration adopts the existing logged-in AI profile without copying or dele
   await Promise.all([mkdir(aiRoot), mkdir(ukRoot)]);
   const ai = migrateDatabase(path.join(aiRoot, 'wmb.db')); const uk = migrateDatabase(path.join(ukRoot, 'wmb.db'));
   const now = new Date().toISOString();
-  const aiConfig = { id: 'edge:pyaireader-default', label: 'legacy', executablePath: 'edge.exe', userDataDir: 'C:/logged-in', profileDirectory: 'Default', cdpUrl: 'http://127.0.0.1:9334' };
+  const aiConfig = { id: 'edge:pyaireader-default', label: 'legacy', executablePath: 'edge.exe', userDataDir: path.join(directory, 'logged-in'), profileDirectory: 'Default', cdpUrl: 'http://127.0.0.1:9334' };
   const ukConfig = { id: 'edge:pyaireader-workspace-uk', label: 'root', executablePath: 'edge.exe', userDataDir: path.join(ukRoot, 'browser-profile'), profileDirectory: 'Default' };
   try {
     for (const [database, config] of [[ai, aiConfig], [uk, ukConfig]]) database.prepare("INSERT INTO app_meta (key,value,created_at,updated_at,revision) VALUES ('browser.config',?,?,?,1)").run(JSON.stringify(config), now, now);

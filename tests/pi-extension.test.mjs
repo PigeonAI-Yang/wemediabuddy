@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { preparePiExtension } from '../src/main/pi-extension.ts';
+import { intelligenceChannelTools } from '../.pi/extensions/wmb-mcp/wmb-mcp-tools-intelligence-channels.ts';
 
 test('Pi extension copies every companion imported by index and starts with truthful unknown progress', async () => {
   const index = await readFile('.pi/extensions/wmb-mcp/index.ts', 'utf8');
@@ -43,4 +44,12 @@ test('Pi extension copies every companion imported by index and starts with trut
     assert.match(ipc, new RegExp(channel));
     assert.match(preload, new RegExp(channel));
   }
+});
+
+test('channel proposal schema exposes every website field required by Main validation', () => {
+  const tool = intelligenceChannelTools.find((item) => item.name === 'wmb_prepare_intelligence_channel_changes');
+  assert.ok(tool);
+  const change = tool.parameters.properties.changes.items;
+  assert.deepEqual(change.properties.candidate.required, ['inputText', 'name', 'url', 'canonicalUrl', 'origin']);
+  assert.deepEqual(change.properties.trialRead.required, ['title', 'url', 'readable']);
 });

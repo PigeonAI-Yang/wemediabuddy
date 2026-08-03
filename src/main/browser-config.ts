@@ -23,6 +23,7 @@ export function readBrowserConfig(configPath = configuredPath): BrowserConfig | 
 export function saveBrowserConfig(config: BrowserConfig, configPath = requiredPath()): BrowserConfig {
   const normalized = normalize(config);
   mkdirSync(path.dirname(configPath), { recursive: true });
+  mkdirSync(normalized.userDataDir, { recursive: true });
   const temporaryPath = `${configPath}.${process.pid}.${randomUUID()}.tmp`;
   writeFileSync(temporaryPath, `${JSON.stringify({ version: 1, config: normalized } satisfies Envelope, null, 2)}\n`, 'utf8');
   renameSync(temporaryPath, configPath);
@@ -39,7 +40,7 @@ export function discoverBrowserProfiles(selected = readBrowserConfig(), configPa
 export function migrateBrowserConfigToInstallation(configPath: string, rootPaths: string[]): { migratedFrom: string | null; config: BrowserConfig } {
   configureBrowserConfigPath(configPath);
   const existing = readBrowserConfig(configPath);
-  if (existing) return { migratedFrom: null, config: existing };
+  if (existing) { mkdirSync(existing.userDataDir, { recursive: true }); return { migratedFrom: null, config: existing }; }
   const candidates = rootPaths.flatMap((rootPath) => {
     const databasePath = path.join(rootPath, 'wmb.db');
     if (!existsSync(databasePath)) return [];

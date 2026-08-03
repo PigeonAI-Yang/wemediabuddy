@@ -1,6 +1,23 @@
 import { callTool, textResult, type ToolDefinition } from './wmb-mcp-client.ts';
 
 const noParameters = { type: 'object' as const, properties: {}, additionalProperties: false };
+const websiteCandidate = {
+  type: 'object' as const,
+  properties: {
+    inputText: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, canonicalUrl: { type: 'string' },
+    origin: { type: 'string', enum: ['direct', 'search'] }
+  },
+  required: ['inputText', 'name', 'url', 'canonicalUrl', 'origin'], additionalProperties: false
+};
+const websiteTrialRead = {
+  type: 'object' as const,
+  properties: {
+    title: { type: 'string' }, url: { type: 'string' }, requestedUrl: { type: 'string' }, readable: { type: 'boolean' },
+    itemCount: { type: 'number' }, summary: { type: 'string' }, httpStatus: { type: 'number' }, contentType: { type: ['string', 'null'] },
+    errorCode: { type: ['string', 'null'] }, errorMessage: { type: ['string', 'null'] }
+  },
+  required: ['title', 'url', 'readable'], additionalProperties: false
+};
 
 const getChannels: ToolDefinition = {
   name: 'wmb_get_intelligence_channels', label: '读取 WMB 情报渠道', description: '只读当前工作空间官网与 X Lists 来源、就绪状态和稳定身份。', parameters: noParameters,
@@ -39,7 +56,7 @@ const prepareChanges: ToolDefinition = {
       requestId: { type: 'string' },
       changes: { type: 'array', items: { type: 'object', properties: {
         action: { type: 'string', enum: ['add', 'enable', 'disable', 'remove'] }, module: { type: 'string', enum: ['official_web', 'x_lists'] },
-        sourceId: { type: 'string' }, expectedRevision: { type: 'number' }, inputText: { type: 'string' }, candidate: { type: 'object' }, trialRead: { type: 'object' }, resolution: { type: 'object' }
+        sourceId: { type: 'string' }, expectedRevision: { type: 'number' }, inputText: { type: 'string' }, candidate: websiteCandidate, trialRead: websiteTrialRead, resolution: { type: 'object' }
       }, required: ['action', 'module'], additionalProperties: false } }
     },
     required: ['requestId', 'changes'], additionalProperties: false

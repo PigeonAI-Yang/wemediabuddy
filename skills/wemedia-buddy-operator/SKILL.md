@@ -30,7 +30,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 1. 调用 `wmb_get_intelligence_channels` 读取当前配置和 revision。
 2. 官网：用 `wmb_resolve_intelligence_website` 解析候选，再用 `wmb_trial_intelligence_website` 真实试读。
 3. X List：先用 `wmb_read_x_list_index` 读取当前专用 X 账号可见列表，再用 `wmb_resolve_intelligence_x_list` 解析准确候选。同名结果必须让用户选择，不能猜。
-4. 把准确候选、试读/解析结果和已有来源 revision 交给 `wmb_prepare_intelligence_channel_changes`，一次准备完整 diff。
+4. 把工具返回的准确候选、试读/解析结果和已有来源 revision 原样交给 `wmb_prepare_intelligence_channel_changes`，一次准备完整 diff；官网 candidate 必须保留解析结果中的 `inputText`，不要自行重建或省略字段。
 5. 停止并等待用户在 WMB UI 确认。确认后重新调用 `wmb_get_intelligence_channels` 读回；需要时用 `wmb_list_intelligence_channel_receipts` 查看真实检查结果。
 
 读取 X Lists 时 WMB 会自动复用或静默启动安装级共享的专用 Edge profile；工作空间只隔离账号快照、List 绑定、缓存、操作和资料，不要求重复登录、另建浏览器或使用指纹浏览器。只有 WMB 准确返回安装级登录失效时，才请求用户在设置中点“前台接管”完成登录，然后重新读取。不得声称看到未读取的登录态，不得建议使用旧外部工具，也不得迁移其他账号的绑定或绕过本根业务隔离。
