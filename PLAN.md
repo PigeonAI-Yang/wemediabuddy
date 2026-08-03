@@ -395,3 +395,13 @@ Order:
 1. `WMB-2900` — reproduce the authenticated shared-profile failure, repair same-URL reuse of an empty stopped document, and prove the real shared login returns its account and List index without another login.
 
 Gate: an authenticated installation Edge page is reused only while its document is usable; an empty stopped same-URL page is reloaded, and the real shared profile returns the current account and Lists through the existing business read path.
+
+## M-3100 X List workspace visibility
+
+Scope: existing CAP-017 workspace and CAP-021 enabled-source daily orchestration; no new source store or channel state.
+
+Order:
+
+1. `WMB-3100` — keep the complete account List index inside a visibility chooser, show only root-selected Lists in the workspace, retain enabled binding as the independent daily-intelligence switch, and keep an empty-timeline retry control at normal height.
+
+Gate: opening one workspace does not expose every account List as a workbench tab; visibility is root-local and survives reopen; toggling display alone does not bind or enable a source; daily intelligence still freezes only enabled bindings; zero-post retry remains readable without stretching.

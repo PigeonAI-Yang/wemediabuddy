@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { XListPiContext } from './app-types';
 import { workspaceStorageKey } from './workspace-storage';
-
+import { parseVisibleXListIds, setListVisibility } from './x-list-visibility';
 type ListIndex = Awaited<ReturnType<typeof window.wmb.readXListIndex>>;
 type ListRef = ListIndex['lists'][number];
 type Binding = Awaited<ReturnType<typeof window.wmb.listXListBindings>>[number];
@@ -34,10 +34,8 @@ type TimelinePost = {
 };
 type TimelinePostDetail = TimelinePost & { replies: TimelinePost[]; hasMoreReplies?: boolean };
 type ComposerInput = Parameters<typeof window.wmb.prepareXListOperation>[0];
-
 const groupLabels: Record<ListRef['kind'], string> = { owned: '我创建的', following: '我关注的', member: '我在其中', unknown: '待确认' };
 const stateLabels: Record<Operation['state'], string> = { prepared: '待读取快照', awaiting_confirmation: '等待确认', running: '执行中', succeeded: '已完成', partial: '已停止', needs_user: '需要接管', unknown: '结果未知', failed: '失败' };
-
 function toThumbUrl(value: string): string {
   try {
     const url = new URL(value);
@@ -49,17 +47,14 @@ function toThumbUrl(value: string): string {
     return value.replace(/([?&])name=\w+/i, '$1name=thumb');
   }
 }
-
 function postThumbs(post: { images?: string[] | null; imageThumbs?: string[] | null }): string[] {
   const source = (post.imageThumbs && post.imageThumbs.length ? post.imageThumbs : post.images) ?? [];
   return [...new Set(source.map(toThumbUrl))].slice(0, 4);
 }
 const TIMELINE_PAGE = 20;
-
 function emptyMetrics(): NonNullable<TimelinePost['metrics']> {
   return { replies: null, reposts: null, likes: null, bookmarks: null, views: null };
 }
-
 function normalizeMetrics(value?: TimelinePost['metrics'] | null): NonNullable<TimelinePost['metrics']> {
   return {
     replies: value?.replies ?? null,
@@ -69,7 +64,6 @@ function normalizeMetrics(value?: TimelinePost['metrics'] | null): NonNullable<T
     views: value?.views ?? null
   };
 }
-
 function formatMetric(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '';
   const abs = Math.abs(value);
@@ -78,7 +72,6 @@ function formatMetric(value: number | null | undefined): string {
   if (abs >= 1_000) return `${(value / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}K`.replace(/\.0K$/, 'K');
   return String(Math.round(value));
 }
-
 function MetricIcon({ name }: { name: 'reply' | 'repost' | 'like' | 'bookmark' | 'views' }): React.JSX.Element {
   if (name === 'reply') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.046 2.242l-4.148-.01h-.002c-4.374 0-7.8 3.427-7.8 7.802 0 4.098 3.186 7.206 7.465 7.37v3.828c0 .108.044.286.12.403.142.225.384.347.632.347.138 0 .277-.038.402-.118.264-.168 6.473-4.14 8.088-5.506 1.902-1.61 3.04-3.97 3.043-6.312v-.017c-.006-4.367-3.43-7.787-7.8-7.788z"/></svg>;
@@ -94,7 +87,6 @@ function MetricIcon({ name }: { name: 'reply' | 'repost' | 'like' | 'bookmark' |
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10H6v10H4zm9.248 0v-7h2v7h-2z"/></svg>;
 }
-
 function PostMetrics({ metrics, emphasize = false }: { metrics?: TimelinePost['metrics'] | null; emphasize?: boolean }): React.JSX.Element {
   const values = normalizeMetrics(metrics);
   const items: Array<{ key: keyof NonNullable<TimelinePost['metrics']>; icon: 'reply' | 'repost' | 'like' | 'bookmark' | 'views'; label: string }> = [
@@ -120,8 +112,6 @@ function PostMetrics({ metrics, emphasize = false }: { metrics?: TimelinePost['m
   );
 }
 const LIVE_PAGE = 20;
-
-
 function PostVideo({ post, detail = false }: { post: Pick<TimelinePost, 'hasVideo' | 'videoPoster' | 'videoUrl' | 'url'>; detail?: boolean }): React.JSX.Element | null {
   if (!post.hasVideo && !post.videoUrl) return null;
   if (post.videoUrl && !/\.m3u8(?:$|\?)/i.test(post.videoUrl)) {
@@ -150,7 +140,6 @@ function PostVideo({ post, detail = false }: { post: Pick<TimelinePost, 'hasVide
     </div>
   );
 }
-
 function displayNameOf(post: Pick<TimelinePost, 'displayName' | 'authorHandle'>): string {
   const handle = post.authorHandle ?? '';
   return (post.displayName || (handle.startsWith('@') ? handle.slice(1) : handle) || '未知').trim();
@@ -273,6 +262,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const selectedListStorageKey = workspaceStorageKey(workspaceId, 'xListSelectedId'); const [selectedListId, setSelectedListId] = useState<string | null>(() => localStorage.getItem(selectedListStorageKey));
+  const visibleListStorageKey = workspaceStorageKey(workspaceId, 'xListVisibleIds'); const [visibleListIds, setVisibleListIds] = useState<string[] | null>(() => parseVisibleXListIds(localStorage.getItem(visibleListStorageKey)));
   const [kindFilter, setKindFilter] = useState<ListRef['kind'] | 'all'>(() => {
     const stored = localStorage.getItem('wmb.xListKindFilter');
     return stored === 'owned' || stored === 'following' || stored === 'member' || stored === 'unknown' || stored === 'all' ? stored : 'all';
@@ -314,7 +304,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       if (!stillCurrent()) return;
       if (cached?.lists?.length) {
         setIndex(cached);
-        setSelectedListId((current) => current && cached.lists.some((item) => item.listId === current) ? current : cached.lists[0]?.listId ?? null);
+        setSelectedListId((current) => current && cached.lists.some((item) => item.listId === current) ? current : null);
         setNote(`已加载缓存 · ${cached.accountKey} · ${cached.lists.length} 个 List · ${new Date(cached.observation.capturedAt).toLocaleString('zh-CN')}`);
         await loadLocal(cached.accountKey);
         if (!stillCurrent()) return;
@@ -325,7 +315,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
         const next = await window.wmb.readXListIndex();
         if (!stillCurrent()) return;
         setIndex(next);
-        setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : next.lists[0]?.listId ?? null);
+        setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : null);
         await loadLocal(next.accountKey);
         if (!stillCurrent()) return;
         setNote(`已更新 ${next.accountKey} 的 ${next.lists.length} 个可见 List。`);
@@ -362,10 +352,13 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
 
   const selected = index?.lists.find((item) => item.listId === selectedListId) ?? null;
   const selectedBinding = selected && index ? bindings.find((item) => item.accountKey.toLowerCase() === index.accountKey.toLowerCase() && item.listId === selected.listId) ?? null : null;
-  const groups = useMemo(() => (['owned', 'following', 'member', 'unknown'] as const).map((kind) => ({ kind, lists: index?.lists.filter((item) => item.kind === kind) ?? [] })).filter((group) => group.lists.length > 0), [index]);
+  const displayedListIds = visibleListIds ?? bindings.map((item) => item.listId);
+  const displayedIdStamp = displayedListIds.join('|');
+  const managedLists = useMemo(() => (index?.lists ?? []).filter((item) => displayedListIds.includes(item.listId)), [index, displayedIdStamp]);
+  const groups = useMemo(() => (['owned', 'following', 'member', 'unknown'] as const).map((kind) => ({ kind, lists: managedLists.filter((item) => item.kind === kind) })).filter((group) => group.lists.length > 0), [managedLists]);
     const visibleLists = useMemo(() => {
     const rank = (kind: ListRef['kind']) => kind === 'owned' ? 0 : kind === 'member' ? 1 : kind === 'following' ? 2 : 3;
-    const lists = [...(index?.lists ?? [])].sort((a, b) => rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-CN'));
+    const lists = [...managedLists].sort((a, b) => rank(a.kind) - rank(b.kind) || a.name.localeCompare(b.name, 'zh-CN'));
     const filtered = kindFilter === 'all' ? lists : lists.filter((item) => item.kind === kindFilter);
     // Collapse exact same name+owner duplicates, keep higher-priority kind.
     const out: ListRef[] = [];
@@ -377,7 +370,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       out.push(item);
     }
     return out;
-  }, [index, kindFilter]);
+  }, [managedLists, kindFilter]);
   const listLabel = (list: ListRef): string => {
     const sameName = (index?.lists ?? []).filter((item) => item.name === list.name).length > 1;
     if (!sameName) return list.name;
@@ -403,8 +396,13 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
         return;
       }
     }
-    setSelectedListId(visibleLists[0]?.listId ?? index.lists[0]?.listId ?? null);
+    setSelectedListId(visibleLists[0]?.listId ?? null);
   }, [index, kindFilter, visibleLists, selectedListId]);
+  const toggleListVisibility = (listId: string, visible: boolean) => setVisibleListIds((current) => {
+    const next = setListVisibility(current ?? bindings.map((item) => item.listId), listId, visible);
+    localStorage.setItem(visibleListStorageKey, JSON.stringify(next));
+    return next;
+  });
   useEffect(() => {
     const indexStamp = index
       ? `${index.accountKey} · 列表更新于 ${new Date(index.observation.capturedAt).toLocaleString('zh-CN')}`
@@ -502,7 +500,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   };
   const applyIndex = async (next: ListIndex, label: string) => {
     setIndex(next);
-    setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : next.lists[0]?.listId ?? null);
+    setSelectedListId((current) => next.lists.some((item) => item.listId === current) ? current : null);
     setDetail(null); setMembers(null); setPosts(null); setPostsHasMore(false); setPostsOffset(0); setPostsMeta(null);
     await loadLocal(next.accountKey);
     setNote(label);
@@ -926,7 +924,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
         ? await window.wmb.setXListBindingEnabled({ accountKey: selectedBinding.accountKey, listId: selectedBinding.listId, expectedRevision: selectedBinding.revision, enabled: !selectedBinding.enabled })
         : await window.wmb.bindXList({ listId: selected.listId });
       if (!result.ok) setNote(result.error.message);
-      else { await loadLocal(index.accountKey); setNote(selectedBinding?.enabled ? '已移出发现；已有资料与 X List 均未删除。' : '已接入发现信源。'); }
+      else { await loadLocal(index.accountKey); setNote(selectedBinding?.enabled ? '已移出今日情报；已有资料与 X List 均未删除。' : '已接入今日情报。'); }
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setWorking(false); }
   };
@@ -1002,8 +1000,9 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       <p>{note || '使用 WMB 共享的 X 登录态读取列表；只有登录失效时才需前台接管。'}</p>
       <button className="refresh-button" disabled={loading} onClick={() => void loadIndex()}>{loading ? '读取中…' : '读取 X Lists'}</button>
     </section> : <>
+      <details className="x-list-visibility"><summary>管理显示 <span>{managedLists.length}/{index.lists.length}</span></summary><div>{index.lists.map((list) => { const binding = bindings.find((item) => item.listId === list.listId); return <label key={list.listId}><input type="checkbox" checked={displayedListIds.includes(list.listId)} onChange={(event) => toggleListVisibility(list.listId, event.target.checked)}/><span>{listLabel(list)}</span><small>{binding?.enabled ? '今日情报已启用' : '仅显示'}</small></label>; })}</div></details>
       <div className="discover-sources" aria-label="List 分组">
-        <button className={`chip${kindFilter === 'all' ? ' on' : ''}`} onClick={() => setKindFilter('all')}>全部<span className="chip-count">{index.lists.length}</span></button>
+        <button className={`chip${kindFilter === 'all' ? ' on' : ''}`} onClick={() => setKindFilter('all')}>已显示<span className="chip-count">{managedLists.length}</span></button>
         {groups.map((group) => <button key={group.kind} className={`chip${kindFilter === group.kind ? ' on' : ''}`} onClick={() => setKindFilter(group.kind)}>{groupLabels[group.kind]}<span className="chip-count">{group.lists.length}</span></button>)}
       </div>
       <div className="page-toolbar ranking-toolbar x-list-toolbar">
@@ -1030,7 +1029,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
             <button disabled={working} onClick={() => void readTimeline(true)}>刷新动态</button>
             <button disabled={working} onClick={() => void readMembers()}>成员</button>
             <button disabled={working} onClick={() => void readDetail()}>详情</button>
-            <button disabled={working} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出发现' : selectedBinding ? '重新接入' : '接入发现'}</button>
+            <button disabled={working} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出今日情报' : '接入今日情报'}</button>
             {selectedBinding?.enabled && <button disabled={working} onClick={() => void collectTimeline()}>采集一批</button>}
             <button disabled={working} onClick={() => setShowManage((value) => !value)}>{showManage ? '收起管理' : '管理'}</button>
           </div>
