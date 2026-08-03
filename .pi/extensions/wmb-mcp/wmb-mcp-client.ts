@@ -50,4 +50,3 @@ export async function callTool(name: string, args: unknown): Promise<unknown> {
 export function textResult(result: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], details: result };
 }
-

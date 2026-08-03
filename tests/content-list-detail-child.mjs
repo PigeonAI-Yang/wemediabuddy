@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
@@ -10,11 +10,14 @@ import {
   savePlatformVersion
 } from '../src/main/content.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-content-list-'));
+console.log(`WMB_TEST_DIRECTORY=${directory}`);
 let mcp;
 try {
   const db = migrateDatabase(path.join(directory, 'wmb.db'));
+  ensureOfficialWorkspaceProfile(db, 'official.ai');
   const ids = [];
   for (let index = 0; index < 55; index += 1) {
     const project = createContentProjectWithVersion(db, {
@@ -88,5 +91,4 @@ try {
   db.close();
 } finally {
   await mcp?.close();
-  await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }

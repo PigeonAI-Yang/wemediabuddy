@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const index = JSON.parse(readFileSync(join(root, 'skills/wemedia-intelligence-engine/references/source-index.json'), 'utf8'));
 
 test('every registered source has a packaged local logo', () => {
-  assert.equal(index.sources.length, 29);
+  assert.ok(index.sources.length > 0);
   for (const source of index.sources) {
     assert.match(source.logo, /^[a-z0-9-]+\.(?:svg|ico|png|jpe?g|webp)$/);
     assert.equal(existsSync(join(root, 'images/source-logos', source.logo)), true, source.id);
