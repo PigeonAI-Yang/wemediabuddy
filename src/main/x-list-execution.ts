@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
 import { upsertSource } from './sources.ts';
 import { writeXListTimelineCacheIfImproved } from './x-list-timeline-cache.ts';
+import { saveXPostMetricSnapshot } from './x-post-metrics.ts';
 import {
   createXList, deleteXList, ensureXListMember, readXListDetail, readXListIndex, readXListMembers, readXListTimeline,
   updateXList, XListStopRequestedError, XListUnknownError, type XListDetail
@@ -57,11 +58,14 @@ export async function collectBoundXListTimeline(database: DatabaseSync, config: 
   limit?: number;
   expectedBindingId?: string;
   expectedRevision?: number;
+  observationKey?: string;
+  scheduledFor?: string | null;
   readTimeline?: typeof readXListTimeline;
-}): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[]; candidateCount: number }>> {
+}): Promise<CommandResult<{ binding: XListBinding; sourceIds: string[]; snapshotIds: string[]; candidateCount: number }>> {
   const binding = getXListBinding(database, input.accountKey, input.listId);
   if (!binding) return failure('NOT_FOUND', 'List 绑定不存在。');
   if (!binding.enabled) return failure('INVALID_STATE', '该 List 已移出发现，不能采集。');
+  if (!workspaceMatches(database, config.workspaceId)) return failure('REVISION_CONFLICT', '活动工作空间已变化，未开始 X List 读取。');
   if ((input.expectedBindingId && input.expectedBindingId !== binding.id) || (input.expectedRevision !== undefined && input.expectedRevision !== binding.revision)) {
     return failure('REVISION_CONFLICT', 'X List 来源已变化，请重新开始本次扫描。');
   }
@@ -69,29 +73,52 @@ export async function collectBoundXListTimeline(database: DatabaseSync, config: 
     const result = await (input.readTimeline ?? readXListTimeline)(config, binding.listId, Math.min(Math.max(input.limit ?? 50, 1), 50));
     if (!sameHandle(result.accountKey, binding.accountKey)) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与绑定 List 的账号不一致。');
     const current = getXListBinding(database, binding.accountKey, binding.listId);
-    if (!current || !current.enabled || current.id !== binding.id || current.revision !== binding.revision
+    if (!current || !current.enabled || current.id !== binding.id || current.revision !== binding.revision || !workspaceMatches(database, config.workspaceId)
       || (config.accountKey && !sameHandle(config.accountKey, binding.accountKey))) {
       return failure('REVISION_CONFLICT', 'X List 来源或账号在读取期间已变化，未写入迟到结果。');
     }
-    const sourceIds = result.posts.map((post) => upsertSource(database, {
-      feedId: current.sourceFeedId,
-      originalUrl: post.url,
-      title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
-      author: post.authorHandle ?? undefined,
-      publishedAt: post.postedAt ?? undefined,
-      summary: post.text,
-      evidence: JSON.stringify({ listId: current.listId, listUrl: current.canonicalUrl, collectedAt: new Date().toISOString() })
-    }).id);
-    const updated = updateXListBindingObservation(database, current.accountKey, current.listId, { detail: result.detail.observation, collected: sourceIds.length });
-    writeXListTimelineCacheIfImproved(database, {
-      accountKey: current.accountKey,
-      listId: current.listId,
-      posts: result.posts,
-      detail: { name: result.detail.name, canonicalUrl: result.detail.canonicalUrl },
-      source: 'collect',
-      fetchedAt: result.detail.observation?.capturedAt
-    });
-    return success({ binding: updated!, sourceIds, candidateCount: result.posts.length });
+    if (result.posts.some((post) => !post.metricEvidence)) return failure('VALIDATION_ERROR', 'X List 指标缺少原始解析证据，未写入资料或快照。');
+    const capturedAt = result.detail.observation.capturedAt;
+    const observationKey = input.observationKey?.trim() || `${current.id}:${capturedAt}`;
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const saved = result.posts.map((post) => ({ post, source: upsertSource(database, {
+        feedId: current.sourceFeedId,
+        originalUrl: post.url,
+        title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
+        author: post.authorHandle ?? undefined,
+        publishedAt: post.postedAt ?? undefined,
+        summary: post.text,
+        evidence: JSON.stringify({ listId: current.listId, listUrl: current.canonicalUrl, collectedAt: capturedAt })
+      }) }));
+      const snapshotIds = saved.flatMap(({ post, source }) => post.metricEvidence ? [saveXPostMetricSnapshot(database, {
+        sourceItemId: source.id,
+        accountKey: current.accountKey,
+        listId: current.listId,
+        bindingId: current.id,
+        bindingRevision: current.revision,
+        observationKey,
+        scheduledFor: input.scheduledFor,
+        capturedAt,
+        metrics: post.metricEvidence,
+        evidence: { workspaceId: config.workspaceId ?? null, pageUrl: result.detail.observation.pageUrl, fingerprint: result.detail.observation.fingerprint }
+      }).id] : []);
+      const sourceIds = saved.map(({ source }) => source.id);
+      const updated = updateXListBindingObservation(database, current.accountKey, current.listId, { detail: result.detail.observation, collected: sourceIds.length, snapshots: snapshotIds.length });
+      writeXListTimelineCacheIfImproved(database, {
+        accountKey: current.accountKey,
+        listId: current.listId,
+        posts: result.posts,
+        detail: { name: result.detail.name, canonicalUrl: result.detail.canonicalUrl },
+        source: 'collect',
+        fetchedAt: capturedAt
+      });
+      database.exec('COMMIT');
+      return success({ binding: updated!, sourceIds, snapshotIds, candidateCount: result.posts.length });
+    } catch (error) {
+      database.exec('ROLLBACK');
+      return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
+    }
   } catch (error) {
     return failure('BROWSER_NEEDS_USER', error instanceof Error ? error.message : String(error));
   }
@@ -226,3 +253,9 @@ function outcomeState(outcome: 'added' | 'removed' | 'already_present' | 'alread
 }
 
 function sameHandle(left: string, right: string): boolean { return left.toLowerCase() === right.toLowerCase(); }
+
+function workspaceMatches(database: DatabaseSync, workspaceId?: string): boolean {
+  if (!workspaceId) return true;
+  const stored = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
+  return stored?.value === workspaceId;
+}

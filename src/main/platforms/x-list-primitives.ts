@@ -35,6 +35,15 @@ export function xListUrl(listId: string): string {
   return `https://x.com/i/lists/${listId}`;
 }
 
+export function isXListTimelineResponse(urlValue: string, listId: string): boolean {
+  try {
+    const url = new URL(urlValue);
+    if (!url.pathname.endsWith('/ListLatestTweetsTimeline')) return false;
+    const variables = JSON.parse(url.searchParams.get('variables') ?? '{}') as { listId?: unknown };
+    return typeof variables.listId === 'string' && variables.listId === listId;
+  } catch { return false; }
+}
+
 export function cubicBezier(start: { x: number; y: number }, controlA: { x: number; y: number }, controlB: { x: number; y: number }, end: { x: number; y: number }, t: number): { x: number; y: number } {
   const inverse = 1 - t;
   return {

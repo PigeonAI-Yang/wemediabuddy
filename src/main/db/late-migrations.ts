@@ -159,5 +159,28 @@ export const lateMigrations = [
       CREATE INDEX source_scan_receipts_task ON source_scan_receipts(task_id, checked_at DESC);
       CREATE INDEX source_scan_receipts_workspace ON source_scan_receipts(workspace_id, checked_at DESC);
     `
+  },
+  {
+    version: 38,
+    sql: `
+      CREATE TABLE x_post_metric_snapshots (
+        id TEXT PRIMARY KEY,
+        source_item_id TEXT NOT NULL REFERENCES source_items(id) ON DELETE CASCADE,
+        account_key TEXT NOT NULL,
+        list_id TEXT NOT NULL,
+        binding_id TEXT NOT NULL,
+        binding_revision INTEGER NOT NULL,
+        observation_key TEXT NOT NULL,
+        scheduled_for TEXT,
+        captured_at TEXT NOT NULL,
+        normalized_json TEXT NOT NULL,
+        raw_json TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (observation_key, source_item_id)
+      );
+      CREATE INDEX x_post_metric_snapshots_source_captured ON x_post_metric_snapshots(source_item_id, captured_at);
+      CREATE INDEX x_post_metric_snapshots_binding_captured ON x_post_metric_snapshots(binding_id, captured_at);
+    `
   }
 ] as const;

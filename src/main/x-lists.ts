@@ -228,7 +228,7 @@ export function updateXListBindingObservation(database: DatabaseSync, accountKey
   const binding = getXListBinding(database, accountKey, listId);
   if (!binding) return null;
   const now = new Date().toISOString();
-  database.prepare('UPDATE x_list_bindings SET last_observed_at=?, last_observation_json=?, updated_at=?, revision=revision+1 WHERE id=?')
+  database.prepare('UPDATE x_list_bindings SET last_observed_at=?, last_observation_json=?, updated_at=? WHERE id=?')
     .run(now, JSON.stringify(observation), now, binding.id);
   return getXListBinding(database, accountKey, listId);
 }

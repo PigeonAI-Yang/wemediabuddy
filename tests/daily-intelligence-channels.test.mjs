@@ -218,6 +218,7 @@ test('late X results write neither cached nor source data after binding revision
     assert.equal(run.aggregation?.status, 'partial');
     assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_items').get().count, 1);
     assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM x_list_timeline_cache').get().count, 0);
+    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM x_post_metric_snapshots').get().count, 0);
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });

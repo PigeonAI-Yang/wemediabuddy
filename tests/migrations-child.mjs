@@ -4,10 +4,10 @@ import {migrateDatabase} from '../src/main/db/migrations.ts';
 
 const databasePath=path.join(process.env.WMB_TEST_DIRECTORY,'wmb.db');
 const first=migrateDatabase(databasePath);
-assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,37);
+assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,38);
 first.close();
 const second=migrateDatabase(databasePath);
-assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,37);
+assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,38);
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_meta'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ranking_cache'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='x_list_operations'").get());
@@ -19,4 +19,5 @@ assert.ok(second.prepare("SELECT 1 FROM pragma_table_info('source_feeds') WHERE 
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='workspace_profiles'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='website_sources'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='source_scan_receipts'").get());
+assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='x_post_metric_snapshots'").get());
 second.close();

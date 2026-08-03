@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { Locator, Page, Response } from 'playwright-core';
-import { parseXListId, type XListBrowserConfig, xListUrl } from './x-list-primitives.ts';
+import { parseXListId, isXListTimelineResponse, type XListBrowserConfig, xListUrl } from './x-list-primitives.ts';
 import { XListNeedsUserError, XListSession, XListSupersededError } from './x-list-session.ts';
+import { xMetricEvidenceMap, xMetricValues, type XMetricEvidenceMap } from './metric-value.ts';
 
 export type XListKind = 'owned' | 'following' | 'member' | 'unknown';
 export type XListRef = { listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: XListKind };
@@ -38,6 +39,7 @@ export type XListPost = {
     bookmarks: number | null;
     views: number | null;
   };
+  metricEvidence?: XMetricEvidenceMap;
 };
 export type XListPostDetail = XListPost & {
   replies: XListPost[];
@@ -424,10 +426,7 @@ function captureListLatestTweetsTimeline(page: Page, listId: string): {
   const onResponse = (response: Response) => {
     if (stopped) return;
     const url = response.url();
-    if (!url.includes('ListLatestTweetsTimeline')) return;
-    if (!url.includes(listId) && !url.includes(encodeURIComponent(listId))) {
-      // Still accept if body contains this list; URL usually includes listId.
-    }
+    if (!isXListTimelineResponse(url, listId)) return;
     void response.json().then((payload) => {
       if (stopped) return;
       const parsed = extractPostsFromListTimelinePayload(payload);
@@ -563,13 +562,17 @@ function listTimelineTweetToPost(tweet: Record<string, unknown>, options: { allo
   const text = String(legacy.full_text ?? '').trim();
   const createdAt = typeof legacy.created_at === 'string' ? new Date(legacy.created_at).toISOString() : null;
   const media = extractTimelineMedia(legacy);
-  const metrics = {
-    replies: numberOrNull(legacy.reply_count),
-    reposts: numberOrNull(legacy.retweet_count),
-    likes: numberOrNull(legacy.favorite_count),
-    bookmarks: numberOrNull(legacy.bookmark_count),
-    views: numberOrNull((tweet.views as Record<string, unknown> | undefined)?.count)
-  };
+  const metricEvidence = xMetricEvidenceMap({
+    replies: legacy.reply_count,
+    reposts: legacy.retweet_count,
+    likes: legacy.favorite_count,
+    bookmarks: legacy.bookmark_count,
+    views: (tweet.views as Record<string, unknown> | undefined)?.count
+  }, 'graphql', {
+    replies: 'legacy.reply_count', reposts: 'legacy.retweet_count', likes: 'legacy.favorite_count',
+    bookmarks: 'legacy.bookmark_count', views: 'views.count'
+  });
+  const metrics = xMetricValues(metricEvidence);
 
   let quotedPost: XListPost | null = null;
   if (allowNestedQuote) {
@@ -610,7 +613,8 @@ function listTimelineTweetToPost(tweet: Record<string, unknown>, options: { allo
     postKind: quotedPost ? 'quote' : 'tweet',
     repostedBy: null,
     quotedPost,
-    metrics
+    metrics,
+    metricEvidence
   };
 }
 
@@ -662,11 +666,6 @@ function extractTimelineMedia(legacy: Record<string, unknown>): {
   };
 }
 
-function numberOrNull(value: unknown): number | null {
-  if (value == null) return null;
-  const n = typeof value === 'number' ? value : Number(String(value).replace(/[^\d.-]/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
 function isXListPage(url: string, listId: string): boolean {
   try {
     const parsed = new URL(url);
@@ -693,52 +692,21 @@ async function detectMissingListPage(session: XListSession): Promise<string | nu
 
 async function readArticlesFromPage(page: Page, options: { preferFullText?: boolean } = {}): Promise<XListPost[]> {
   const rawItems = await page.evaluate(() => {
-    const parseCount = (value: string | null | undefined): number | null => {
-      if (!value) return null;
-      const normalized = value
-        .replace(/,/g, '')
-        .replace(/\s+/g, '')
-        .replace(/条|次|人|views?|likes?|reposts?|replies?|bookmarks?|quotes?|回复|转帖|转推|喜欢|赞|书签|查看|播放/ig, '')
-        .trim();
-      const match = normalized.match(/(\d+(?:\.\d+)?)([KkMmBb万亿])?/);
-      if (!match) return null;
-      const base = Number(match[1]);
-      if (!Number.isFinite(base)) return null;
-      const unit = match[2] || '';
-      if (unit === '万') return Math.round(base * 10_000);
-      if (unit === '亿') return Math.round(base * 100_000_000);
-      if (/^k$/i.test(unit)) return Math.round(base * 1_000);
-      if (/^m$/i.test(unit)) return Math.round(base * 1_000_000);
-      if (/^b$/i.test(unit)) return Math.round(base * 1_000_000_000);
-      return Math.round(base);
-    };
-    const countFrom = (root: HTMLElement, selectors: string[], patterns: RegExp[]): number | null => {
+    const labelFrom = (root: HTMLElement, selectors: string[], patterns: RegExp[]): string | null => {
       for (const selector of selectors) {
         const el = root.querySelector(selector) as HTMLElement | null;
         if (!el) continue;
         const labeled = el.getAttribute('aria-label') || el.getAttribute('title') || '';
-        const direct = parseCount(labeled);
-        if (direct != null) return direct;
-        for (const pattern of patterns) {
-          const matched = labeled.match(pattern);
-          if (matched) {
-            const parsed = parseCount(matched[1] || matched[0]);
-            if (parsed != null) return parsed;
-          }
-        }
+        if (labeled && patterns.some((pattern) => pattern.test(labeled))) return labeled;
         const nested = el.querySelector('[data-testid="app-text-transition-container"], span span') as HTMLElement | null;
         const nestedText = (nested?.textContent || el.textContent || '').trim();
-        const nestedCount = parseCount(nestedText);
-        if (nestedCount != null) return nestedCount;
+        if (nestedText) return nestedText;
       }
       for (const pattern of patterns) {
         const hit = Array.from(root.querySelectorAll('[aria-label], a, button, span, div'))
           .map((item) => (item as HTMLElement).getAttribute('aria-label') || (item as HTMLElement).textContent || '')
           .find((value) => pattern.test(value));
-        if (!hit) continue;
-        const matched = hit.match(pattern);
-        const parsed = parseCount(matched?.[1] || hit);
-        if (parsed != null) return parsed;
+        if (hit) return hit;
       }
       return null;
     };
@@ -785,12 +753,12 @@ async function readArticlesFromPage(page: Page, options: { preferFullText?: bool
         || (root.querySelector('img[src*="ext_tw_video_thumb"], img[src*="amplify_video_thumb"], img[src*="tweet_video_thumb"]') as HTMLImageElement | null)?.src
         || null;
       const postedAt = root.querySelector('time')?.getAttribute('datetime') || null;
-      const metrics = {
-        replies: countFrom(root, ['[data-testid="reply"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Replies|Reply|回复|条回复)/i]),
-        reposts: countFrom(root, ['[data-testid="retweet"]', '[data-testid="unretweet"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Reposts?|Retweets?|转帖|转推|转发)/i]),
-        likes: countFrom(root, ['[data-testid="like"]', '[data-testid="unlike"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Likes?|喜欢|赞)/i]),
-        bookmarks: countFrom(root, ['[data-testid="bookmark"]', '[data-testid="removeBookmark"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Bookmarks?|书签|收藏)/i]),
-        views: countFrom(root, ['a[href$="/analytics"]', 'a[href*="/analytics"]', '[aria-label*="View" i]', '[aria-label*="view" i]', '[aria-label*="查看" i]', '[aria-label*="播放" i]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Views?|views?|次查看|查看|播放)/i])
+      const metricLabels = {
+        replies: labelFrom(root, ['[data-testid="reply"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Replies|Reply|回复|条回复)/i]),
+        reposts: labelFrom(root, ['[data-testid="retweet"]', '[data-testid="unretweet"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Reposts?|Retweets?|转帖|转推|转发)/i]),
+        likes: labelFrom(root, ['[data-testid="like"]', '[data-testid="unlike"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Likes?|喜欢|赞)/i]),
+        bookmarks: labelFrom(root, ['[data-testid="bookmark"]', '[data-testid="removeBookmark"]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Bookmarks?|书签|收藏)/i]),
+        views: labelFrom(root, ['a[href$="/analytics"]', 'a[href*="/analytics"]', '[aria-label*="View" i]', '[aria-label*="view" i]', '[aria-label*="查看" i]', '[aria-label*="播放" i]'], [/([\d.,.\sKkMmBb万亿]+)\s*(?:Views?|views?|次查看|查看|播放)/i])
       };
       return {
         statusHref,
@@ -803,7 +771,7 @@ async function readArticlesFromPage(page: Page, options: { preferFullText?: bool
         hasVideo,
         videoPoster,
         videoUrl,
-        metrics
+        metricLabels
       };
     }).filter(Boolean);
   }).catch(() => [] as Array<any>);
@@ -815,6 +783,7 @@ async function readArticlesFromPage(page: Page, options: { preferFullText?: bool
     if (!text && !(raw.images?.length) && !raw.hasVideo) continue;
     const images = Array.isArray(raw.images) ? raw.images.map((src: string) => normalizeMediaUrl(src, options.preferFullText ? 'small' : 'thumb')) : [];
     const thumbs = Array.isArray(raw.images) ? raw.images.map((src: string) => normalizeMediaUrl(src, 'thumb')) : [];
+    const metricEvidence = xMetricEvidenceMap(raw.metricLabels ?? {}, 'dom');
     posts.push({
       url: new URL(raw.statusHref, 'https://x.com').toString(),
       authorHandle: raw.authorHandle ?? null,
@@ -827,13 +796,8 @@ async function readArticlesFromPage(page: Page, options: { preferFullText?: bool
       hasVideo: Boolean(raw.hasVideo),
       videoPoster: raw.videoPoster ? normalizeMediaUrl(raw.videoPoster, 'thumb') : null,
       videoUrl: typeof raw.videoUrl === 'string' && raw.videoUrl ? raw.videoUrl : null,
-      metrics: {
-        replies: raw.metrics?.replies ?? null,
-        reposts: raw.metrics?.reposts ?? null,
-        likes: raw.metrics?.likes ?? null,
-        bookmarks: raw.metrics?.bookmarks ?? null,
-        views: raw.metrics?.views ?? null
-      }
+      metrics: xMetricValues(metricEvidence),
+      metricEvidence
     });
   }
   return posts;
@@ -1521,75 +1485,43 @@ async function readArticlePost(article: Locator, options: { preferFullText?: boo
       || null;
     const postedAt = root.querySelector('time')?.getAttribute('datetime') || null;
 
-    const parseCount = (value: string | null | undefined): number | null => {
-      if (!value) return null;
-      const normalized = value
-        .replace(/,/g, '')
-        .replace(/\s+/g, '')
-        .replace(/条|次|人|views?|likes?|reposts?|replies?|bookmarks?|quotes?|回复|转帖|转推|喜欢|赞|书签|查看|播放/ig, '')
-        .trim();
-      const match = normalized.match(/(\d+(?:\.\d+)?)([KkMmBb万亿])?/);
-      if (!match) return null;
-      const base = Number(match[1]);
-      if (!Number.isFinite(base)) return null;
-      const unit = match[2] || '';
-      if (unit === '万') return Math.round(base * 10_000);
-      if (unit === '亿') return Math.round(base * 100_000_000);
-      if (/^k$/i.test(unit)) return Math.round(base * 1_000);
-      if (/^m$/i.test(unit)) return Math.round(base * 1_000_000);
-      if (/^b$/i.test(unit)) return Math.round(base * 1_000_000_000);
-      return Math.round(base);
-    };
-
-    const countFrom = (selectors: string[], patterns: RegExp[]): number | null => {
+    const labelFrom = (selectors: string[], patterns: RegExp[]): string | null => {
       for (const selector of selectors) {
         const el = root.querySelector(selector) as HTMLElement | null;
         if (!el) continue;
         const labeled = el.getAttribute('aria-label') || el.getAttribute('title') || '';
-        const direct = parseCount(labeled);
-        if (direct != null) return direct;
-        for (const pattern of patterns) {
-          const matched = labeled.match(pattern);
-          if (matched) {
-            const parsed = parseCount(matched[1] || matched[0]);
-            if (parsed != null) return parsed;
-          }
-        }
+        if (labeled && patterns.some((pattern) => pattern.test(labeled))) return labeled;
         const nested = el.querySelector('[data-testid="app-text-transition-container"], span span') as HTMLElement | null;
         const nestedText = (nested?.textContent || el.textContent || '').trim();
-        const nestedCount = parseCount(nestedText);
-        if (nestedCount != null) return nestedCount;
+        if (nestedText) return nestedText;
       }
       for (const pattern of patterns) {
         const hit = Array.from(root.querySelectorAll('[aria-label], a, button, span, div'))
           .map((item) => (item as HTMLElement).getAttribute('aria-label') || (item as HTMLElement).textContent || '')
           .find((value) => pattern.test(value));
-        if (!hit) continue;
-        const matched = hit.match(pattern);
-        const parsed = parseCount(matched?.[1] || hit);
-        if (parsed != null) return parsed;
+        if (hit) return hit;
       }
       return null;
     };
 
-    const metrics = {
-      replies: countFrom(
+    const metricLabels = {
+      replies: labelFrom(
         ['[data-testid="reply"]'],
         [/([\d.,.\sKkMmBb万亿]+)\s*(?:Replies|Reply|回复|条回复)/i]
       ),
-      reposts: countFrom(
+      reposts: labelFrom(
         ['[data-testid="retweet"]', '[data-testid="unretweet"]'],
         [/([\d.,.\sKkMmBb万亿]+)\s*(?:Reposts?|Retweets?|转帖|转推|转发)/i]
       ),
-      likes: countFrom(
+      likes: labelFrom(
         ['[data-testid="like"]', '[data-testid="unlike"]'],
         [/([\d.,.\sKkMmBb万亿]+)\s*(?:Likes?|喜欢|赞)/i]
       ),
-      bookmarks: countFrom(
+      bookmarks: labelFrom(
         ['[data-testid="bookmark"]', '[data-testid="removeBookmark"]'],
         [/([\d.,.\sKkMmBb万亿]+)\s*(?:Bookmarks?|书签|收藏)/i]
       ),
-      views: countFrom(
+      views: labelFrom(
         [
           'a[href$="/analytics"]',
           'a[href*="/analytics"]',
@@ -1613,7 +1545,7 @@ async function readArticlePost(article: Locator, options: { preferFullText?: boo
       hasVideo,
       videoPoster,
       videoUrl,
-      metrics
+      metricLabels
     };
   }).catch(() => null);
   if (!raw?.statusHref) return null;
@@ -1623,6 +1555,7 @@ async function readArticlePost(article: Locator, options: { preferFullText?: boo
   const fullImages = options.preferFullText
     ? raw.images.map((src) => normalizeMediaUrl(src, 'small'))
     : thumbs;
+  const metricEvidence = xMetricEvidenceMap(raw.metricLabels ?? {}, 'dom');
   return {
     url: new URL(raw.statusHref, 'https://x.com').toString(),
     authorHandle: raw.authorHandle,
@@ -1635,13 +1568,8 @@ async function readArticlePost(article: Locator, options: { preferFullText?: boo
     hasVideo: raw.hasVideo,
     videoPoster: raw.videoPoster ? normalizeMediaUrl(raw.videoPoster, 'thumb') : null,
     videoUrl: typeof raw.videoUrl === 'string' && raw.videoUrl ? raw.videoUrl : null,
-    metrics: {
-      replies: raw.metrics?.replies ?? null,
-      reposts: raw.metrics?.reposts ?? null,
-      likes: raw.metrics?.likes ?? null,
-      bookmarks: raw.metrics?.bookmarks ?? null,
-      views: raw.metrics?.views ?? null
-    }
+    metrics: xMetricValues(metricEvidence),
+    metricEvidence
   };
 }
 
