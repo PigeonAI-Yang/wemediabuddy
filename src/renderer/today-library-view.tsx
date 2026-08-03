@@ -39,7 +39,6 @@ function isHeartbeatSource(source: TodaySource): boolean {
   if (categories.includes('wire_heartbeat') || categories.includes('official_heartbeat')) return true;
   const summary = (source.summary || '').trim();
   if (!summary) return true;
-  // Very thin homepage shells: short summary that mostly restates the title.
   if (summary.length < 80 && title && summary.includes(title.replace(/^\[官宣巡检\]\s*/, '').slice(0, 12))) return true;
   return false;
 }
@@ -200,6 +199,8 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
   onCreate: (item: TodayPlanItem) => void; sources: TodaySource[];
 }): React.JSX.Element {
+  const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时` : null;
+  const trendTitle = trend?.viewsPerHour.status === 'value' ? `快照 ${trend.viewsPerHour.snapshotIds.join('、')} · 最近采集 ${trend.snapshots.at(-1)?.capturedAt ?? '未知'}` : undefined;
   const sourceTime = latestSourceTime(item.sourceIds, sources);
   const timeText = formatSourcePublishedAt(sourceTime.at);
   const timeLabel = timeText
@@ -213,6 +214,7 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
       <div className="opp-meta">
         {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
         <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
+        {trendText && <span className="pill violet" title={trendTitle}>{trendText}</span>}
       </div>
     </div>
     <span className="opportunity-check" aria-hidden="true">✓</span>
@@ -246,6 +248,7 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
       <span className="pill gray">目标：{item.targetAudience}</span>
       <span className="pill gray">形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
       <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
+      {trendText && <span className="pill violet" title={trendTitle}>{trendText}</span>}
       <CreateIconButton primary onClick={() => onCreate(item)}/>
     </footer>
   </article>;
@@ -291,7 +294,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const items = today?.plan?.items ?? [];
   const primary = items[0] ?? null;
   const pendingActions = today?.pendingActions ?? [];
-  // Publish confirmation belongs on the Publish page, not the Today home rail.
   const pendingCount = pendingActions.length;
   const sssCount = items.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
@@ -441,7 +443,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
     const unsubscribe = window.wmb.onDataChanged((event) => {
       if (event.scopes.includes('agent') || event.scopes.includes('today')) load();
     });
-    // While running, keep a light fallback in case progress emits are coalesced away.
     const poll = running ? window.setInterval(load, 5_000) : 0;
     return () => {
       unsubscribe();
@@ -1076,7 +1077,6 @@ export function LibraryView(props: {
       onFocusSourceConsumed?.();
       return;
     }
-    // Not on current page: still open a minimal shell so deep-link is not a no-op.
     void openSourceDrawer({ id: focusSourceId, title: '定位中的资料' });
     onFocusSourceConsumed?.();
   }, [focusSourceId, section, knowledge?.items?.map((item) => item.id).join('|')]);

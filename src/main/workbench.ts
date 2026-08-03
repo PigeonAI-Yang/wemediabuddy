@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { listFermentingBundle, type FermentingBundle } from './ferment.ts';
+import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
 
 export type TodaySource = {
   id: string;
@@ -33,6 +34,7 @@ export type TodayPlanItem = {
   sourceIds: string[];
   availableMaterials: string[];
   missingMaterials: string[];
+  trendEvidence: XPostTrend[];
 };
 
 type SourceRow = Omit<TodaySource, 'categories'> & { categories: string };
@@ -76,15 +78,18 @@ export function getToday(database: DatabaseSync, planDate: string): {
     formats_json AS formats, title_guidance AS titleGuidance, opening_guidance AS openingGuidance,
     structure_guidance AS structureGuidance, effort_estimate AS effortEstimate, source_ids_json AS sourceIds,
     available_materials_json AS availableMaterials, missing_materials_json AS missingMaterials
-    FROM plan_items WHERE plan_id = ? ORDER BY priority ASC, sort_order ASC`).all(plan.id) as Array<Omit<TodayPlanItem, 'platforms' | 'formats' | 'sourceIds' | 'availableMaterials' | 'missingMaterials'> & { platforms: string; formats: string; sourceIds: string; availableMaterials: string; missingMaterials: string }>;
-  const items = rows.map((item) => ({
+    FROM plan_items WHERE plan_id = ? ORDER BY priority ASC, sort_order ASC`).all(plan.id) as Array<Omit<TodayPlanItem, 'platforms' | 'formats' | 'sourceIds' | 'availableMaterials' | 'missingMaterials' | 'trendEvidence'> & { platforms: string; formats: string; sourceIds: string; availableMaterials: string; missingMaterials: string }>;
+  const items = rows.map((item) => {
+    const sourceIds = JSON.parse(item.sourceIds) as string[];
+    return ({
     ...item,
     platforms: JSON.parse(item.platforms) as string[],
     formats: JSON.parse(item.formats) as string[],
-    sourceIds: JSON.parse(item.sourceIds) as string[],
+    sourceIds,
     availableMaterials: JSON.parse(item.availableMaterials) as string[],
-    missingMaterials: JSON.parse(item.missingMaterials) as string[]
-  }));
+    missingMaterials: JSON.parse(item.missingMaterials) as string[],
+    trendEvidence: listXPostTrends(database, { sourceIds })
+  }); });
   return { sources, sourcesTotal, plan: { ...plan, items }, pendingActions: [], fermenting };
 }
 

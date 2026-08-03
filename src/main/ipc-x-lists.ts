@@ -20,7 +20,7 @@ import {
 import { readXListPostCache, writeXListPostCache } from './x-list-post-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
-import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
+import { getXPostTrend, listXPostMetricSnapshots, listXPostTrends } from './x-post-metrics.ts';
 import { getXObservationSession, startXObservationSession, stopXObservationSession } from './x-observation-jobs.ts';
 
 type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null>; wakeObservationScheduler?: () => void };
@@ -151,6 +151,8 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
     withDatabase(loadSelectedDataRoot, (database) => listXPostMetricSnapshots(database, input.sourceId, input.limit)));
   ipcMain.handle('x-lists:get-post-trend', async (_event, input: { sourceId: string }) =>
     withDatabase(loadSelectedDataRoot, (database) => getXPostTrend(database, input.sourceId)));
+  ipcMain.handle('x-lists:list-post-trends', async (_event, input: { bindingId: string; limit?: number }) =>
+    withDatabase(loadSelectedDataRoot, (database) => listXPostTrends(database, { bindingId: input.bindingId, limit: input.limit })));
   ipcMain.handle('x-lists:start-observation', async (_event, input: { requestId: string; bindingIds: string[] }) => {
     const context = await currentXListContext(loadSelectedDataRoot);
     const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));

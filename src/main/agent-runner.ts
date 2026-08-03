@@ -23,6 +23,7 @@ import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
+import { listXPostTrends } from './x-post-metrics.ts';
 
 const activeDailyRuntimes = new Map<string, PiRpcSupervisor>();
 export async function abortDailyIntelligence(taskId: string): Promise<boolean> {
@@ -63,7 +64,7 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, planRequestId: string, context: { watchingSummary: string; fermentingSummary: string }): string {
+function dailyPrompt(task: AgentTask, planRequestId: string, context: { watchingSummary: string; fermentingSummary: string; trendSummary: string }): string {
   return [
     '执行 WeMediaBuddy 今日情报任务。',
     `task_id=${task.id}`,
@@ -81,7 +82,8 @@ function dailyPrompt(task: AgentTask, planRequestId: string, context: { watching
     '6. 综合时同时参考以下已有的观察与发酵差集；它们只用于判断，禁止为此另行浏览或扫描新来源。',
     `当前观察中：${context.watchingSummary}`,
     `当前发酵差集：${context.fermentingSummary}`,
-    '7. 写回后调用 wmb_get_workbench 读回资料和方案；禁止伪造资料、占位方案或最终发布。'
+    `当前 X 趋势证据：${context.trendSummary}`,
+    '7. 趋势只引用给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。'
   ].join('\n');
 }
 
@@ -92,7 +94,12 @@ export function buildDailyOpportunityPrompt(database: Parameters<typeof refreshW
     items: fermenting.items.slice(0, 5).map((item) => ({ title: item.title, state: item.state, priority: item.priority, fermentedDays: item.fermentedDays, reason: item.reason, aftershocks: item.aftershocks.slice(0, 2).map((shock) => shock.title) })),
     topics: fermenting.topics.slice(0, 5)
   });
-  return dailyPrompt(task, planRequestId, { watchingSummary, fermentingSummary });
+  const trendSummary = JSON.stringify(listXPostTrends(database, { limit: 20 }).map((trend) => ({
+    sourceItemId: trend.sourceItemId, status: trend.status, reason: trend.reason,
+    viewsPerHour: trend.viewsPerHour, velocityChange: trend.velocityChange,
+    capturedAt: trend.snapshots.at(-1)?.capturedAt ?? null
+  })));
+  return dailyPrompt(task, planRequestId, { watchingSummary, fermentingSummary, trendSummary });
 }
 
 export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof cancelAgentTask>[0], task: AgentTask | null | undefined): AgentTask | null {

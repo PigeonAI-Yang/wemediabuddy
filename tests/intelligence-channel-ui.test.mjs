@@ -25,6 +25,7 @@ test('Today preflight uses the authoritative module readiness and preserves the 
   const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const discover = await readFile(new URL('../src/renderer/discover-view.tsx', import.meta.url), 'utf8');
+  const channels = await readFile(new URL('../src/renderer/intelligence-channels-view.tsx', import.meta.url), 'utf8');
   assert.match(today, /startDailyIntelligence\(\{ businessDate: planDate, modules: selectedModules \}\)/);
   assert.doesNotMatch(today, /跳过当前来源/);
   assert.match(today, /className="action-go" disabled=\{running \|\| Boolean\(preflightMessage\)\}/);
@@ -32,6 +33,10 @@ test('Today preflight uses the authoritative module readiness and preserves the 
   assert.match(main, /businessDate, modules: input\.modules, mcpUrl/);
   assert.match(discover, /IntelligenceChannelsView/);
   assert.match(discover, /: 'channels'/);
+  assert.match(today, /trend\.viewsPerHour\.snapshotIds/);
+  assert.match(channels, /startXObservation/);
+  assert.match(channels, /15\/60\/180 分钟三个观察窗口/);
+  assert.match(channels, /停止观察/);
 });
 
 test('selected Today modules freeze only their enabled sources before daily scanning', async () => {

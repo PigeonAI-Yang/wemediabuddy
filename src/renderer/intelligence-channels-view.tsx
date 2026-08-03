@@ -38,12 +38,17 @@ export function IntelligenceChannelsView({ onStatusChange }: {
   const [xResolution, setXResolution] = useState<XResolutionData | null>(null);
   const [selectedXListId, setSelectedXListId] = useState('');
   const [proposals, setProposals] = useState<ChannelProposal[]>([]);
+  const [xTrends, setXTrends] = useState<Record<string, Awaited<ReturnType<typeof window.wmb.listXPostTrends>>>>({});
+  const [observations, setObservations] = useState<Record<string, Awaited<ReturnType<typeof window.wmb.getXObservation>>>>({});
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const [channels, pending] = await Promise.all([window.wmb.getIntelligenceChannels(), window.wmb.listIntelligenceChannelProposals()]);
       setData(channels); setProposals(pending);
+      const trends = await Promise.all(channels.summary.sources.filter((source) => source.module === 'x_lists')
+        .map(async (source) => [source.sourceId, await window.wmb.listXPostTrends({ bindingId: source.sourceId, limit: 20 })] as const));
+      setXTrends(Object.fromEntries(trends));
     }
     catch (error) { setNote(messageOf(error)); }
     finally { if (!silent) setLoading(false); }
@@ -126,6 +131,20 @@ export function IntelligenceChannelsView({ onStatusChange }: {
     catch (error) { setNote(messageOf(error)); }
     finally { setBusy(''); }
   };
+  const observeXList = async (source: ChannelSource) => {
+    setBusy(`正在开始 ${source.name} 趋势观察…`); setNote('');
+    try {
+      const result = await window.wmb.startXObservation({ requestId: crypto.randomUUID(), bindingIds: [source.sourceId] });
+      if (!result.ok) setNote(result.error.message);
+      else { setObservations((current) => ({ ...current, [source.sourceId]: result.data })); setNote('已安排 15/60/180 分钟三个观察窗口。'); await load(true); }
+    } catch (error) { setNote(messageOf(error)); }
+    finally { setBusy(''); }
+  };
+  const stopObservation = async (sourceId: string) => {
+    const session = observations[sourceId]; if (!session) return;
+    const stopped = await window.wmb.stopXObservation({ sessionId: session.id });
+    setObservations((current) => ({ ...current, [sourceId]: stopped })); setNote('趋势观察已停止。');
+  };
   const confirmProposal = async (entry: ChannelProposal) => {
     setBusy('正在确认来源变更…'); setNote('');
     try {
@@ -184,10 +203,12 @@ export function IntelligenceChannelsView({ onStatusChange }: {
       <header><div><h2 id="configured-sources-title">当前来源</h2><p>每次扫描都会留下真实检查回执。停用或移除不会删除已有资料。</p></div></header>
       {loading && !data ? <p className="channel-empty">正在读取来源…</p> : data?.summary.sources.length ? <div>{data.summary.sources.map((source) => {
         const receipt = latestReceipts.get(source.sourceId);
+        const trend = xTrends[source.sourceId]?.find((item) => item.viewsPerHour.status === 'value');
+        const observation = observations[source.sourceId];
         return <article className="channel-source-row" key={source.sourceId}>
-          <div className="channel-source-main"><div className="channel-source-title"><span>{intelligenceModuleLabels[source.module]}</span><h3>{source.name}</h3><em data-state={source.status}>{sourceStatusLabels[source.status]}</em></div><button className="channel-url" onClick={() => void window.wmb.openExternal(source.canonicalUrl)}>{source.canonicalUrl}</button>{source.module === 'x_lists' && <small>{source.accountKey} · List {source.listId}</small>}</div>
+          <div className="channel-source-main"><div className="channel-source-title"><span>{intelligenceModuleLabels[source.module]}</span><h3>{source.name}</h3><em data-state={source.status}>{sourceStatusLabels[source.status]}</em></div><button className="channel-url" onClick={() => void window.wmb.openExternal(source.canonicalUrl)}>{source.canonicalUrl}</button>{source.module === 'x_lists' && <small>{source.accountKey} · List {source.listId}{trend?.viewsPerHour.status === 'value' ? ` · 浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时 · ${trend.viewsPerHour.snapshotIds.length} 个快照证据` : ''}</small>}</div>
           <div className="channel-receipt">{receipt ? <><strong>{receiptStatusLabels[receipt.status]}</strong><span>{displayTime(receipt.checkedAt)} · 发现 {receipt.candidateCount}，入库 {receipt.savedCount}</span>{receipt.errorMessage ? <small>{receipt.errorMessage}</small> : null}</> : <span>尚未检查</span>}</div>
-          <div className="channel-source-actions"><button className="secondary-button" onClick={() => void mutateSource(source, 'toggle')} disabled={Boolean(busy)}>{source.enabled ? '准备停用' : '准备启用'}</button><button className="secondary-button" onClick={() => void mutateSource(source, 'scan')} disabled={!source.enabled || Boolean(busy)}>立即扫描</button><button className="channel-remove" onClick={() => void mutateSource(source, 'remove')} disabled={Boolean(busy)}>{source.module === 'x_lists' ? '准备移出' : '准备移除'}</button></div>
+          <div className="channel-source-actions"><button className="secondary-button" onClick={() => void mutateSource(source, 'toggle')} disabled={Boolean(busy)}>{source.enabled ? '准备停用' : '准备启用'}</button><button className="secondary-button" onClick={() => void mutateSource(source, 'scan')} disabled={!source.enabled || Boolean(busy)}>立即扫描</button>{source.module === 'x_lists' && <button className="secondary-button" onClick={() => void (observation && observation.status !== 'stopped' ? stopObservation(source.sourceId) : observeXList(source))} disabled={!source.enabled || Boolean(busy)}>{observation && observation.status !== 'stopped' ? `停止观察 · ${observation.jobs.filter((job) => job.status === 'pending').length} 待执行` : '观察趋势'}</button>}<button className="channel-remove" onClick={() => void mutateSource(source, 'remove')} disabled={Boolean(busy)}>{source.module === 'x_lists' ? '准备移出' : '准备移除'}</button></div>
         </article>;
       })}</div> : <p className="channel-empty">还没有情报来源。先添加一个公开网站，或接入当前账号可访问的 X List。</p>}
     </section>

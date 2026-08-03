@@ -72,16 +72,31 @@ export async function startXObservationSession(
       expectedBindingId: binding.id, expectedRevision: binding.revision,
       observationKey: `xobs:${sessionId}:${binding.id}:initial`, readTimeline: input.readTimeline
     });
-    const terminalStatus = collected.ok ? 'pending' : needsUser(collected.error.code) ? 'needs_user' : 'failed';
-    scheduleJobs(database, {
-      sessionId, requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision,
-      accountKey: binding.accountKey, browserId: config.id, bindingId: binding.id, bindingRevision: binding.revision, listId: binding.listId,
-      startedAt: collected.ok ? collected.data.capturedAt : startedAt,
-      expiresAt: new Date(Date.parse(collected.ok ? collected.data.capturedAt : startedAt) + observationLifetimeMs).toISOString(),
-      initialSourceIds: collected.ok ? collected.data.sourceIds : [], initialSnapshotIds: collected.ok ? collected.data.snapshotIds : []
-    }, terminalStatus, collected.ok ? null : `${collected.error.code}: ${collected.error.message}`);
+    scheduleCapture(database, config, { sessionId, requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision,
+      binding, capturedAt: collected.ok ? collected.data.capturedAt : startedAt,
+      sourceIds: collected.ok ? collected.data.sourceIds : [], snapshotIds: collected.ok ? collected.data.snapshotIds : []
+    }, collected.ok ? 'pending' : needsUser(collected.error.code) ? 'needs_user' : 'failed', collected.ok ? null : `${collected.error.code}: ${collected.error.message}`);
   }
   return success(toSession(listJobs(database, sessionId), false));
+}
+
+export function scheduleXObservationCapture(database: DatabaseSync, config: XListBrowserConfig, input: {
+  requestId: string; selectedBindingIds: string[]; binding: XListBinding;
+  capturedAt: string; sourceIds: string[]; snapshotIds: string[];
+}): XObservationSession {
+  const requestId = input.requestId.trim(); const selectedBindingIds = [...new Set(input.selectedBindingIds)].sort();
+  const workspaceId = workspaceIdentity(database); const profile = readWorkspaceProfile(database);
+  const current = getXListBinding(database, input.binding.accountKey, input.binding.listId);
+  if (!requestId || !selectedBindingIds.length || !workspaceId || config.workspaceId !== workspaceId || !profile
+    || !current?.enabled || current.id !== input.binding.id || current.revision !== input.binding.revision) throw new Error('OBSERVATION_CONTEXT_STALE');
+  const sessionId = createHash('sha256').update(`${workspaceId}\0${requestId}`).digest('hex');
+  const existing = listJobs(database, sessionId);
+  if (existing.length && JSON.stringify(existing[0].payload.selectedBindingIds) !== JSON.stringify(selectedBindingIds)) throw new Error('OBSERVATION_REQUEST_CONFLICT');
+  if (!existing.some((job) => job.payload.bindingId === current.id)) scheduleCapture(database, config, {
+    sessionId, requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision,
+    binding: current, capturedAt: input.capturedAt, sourceIds: input.sourceIds, snapshotIds: input.snapshotIds
+  }, 'pending', null);
+  return toSession(listJobs(database, sessionId), existing.length > 0);
 }
 
 export function getXObservationSession(database: DatabaseSync, sessionId: string): XObservationSession | null {
@@ -158,6 +173,19 @@ function scheduleJobs(database: DatabaseSync, base: Omit<XObservationPayload, 's
     }
     database.exec('COMMIT');
   } catch (error) { database.exec('ROLLBACK'); throw error; }
+}
+
+function scheduleCapture(database: DatabaseSync, config: XListBrowserConfig, input: {
+  sessionId: string; requestId: string; selectedBindingIds: string[]; workspaceId: string; profileRevision: number;
+  binding: XListBinding; capturedAt: string; sourceIds: string[]; snapshotIds: string[];
+}, status: XObservationJob['status'], error: string | null): void {
+  scheduleJobs(database, {
+    sessionId: input.sessionId, requestId: input.requestId, selectedBindingIds: input.selectedBindingIds,
+    workspaceId: input.workspaceId, profileRevision: input.profileRevision, accountKey: input.binding.accountKey,
+    browserId: config.id, bindingId: input.binding.id, bindingRevision: input.binding.revision, listId: input.binding.listId,
+    startedAt: input.capturedAt, expiresAt: new Date(Date.parse(input.capturedAt) + observationLifetimeMs).toISOString(),
+    initialSourceIds: input.sourceIds, initialSnapshotIds: input.snapshotIds
+  }, status, error);
 }
 
 function expireSupersededWindows(database: DatabaseSync, nowIso: string): void {

@@ -21,6 +21,7 @@ import {
 import { scanWebsiteSource } from './website-channel.ts';
 import { collectBoundXListTimeline } from './x-list-execution.ts';
 import { getXListBinding } from './x-lists.ts';
+import { scheduleXObservationCapture } from './x-observation-jobs.ts';
 
 export type DailyChannelInput = {
   businessDate: string;
@@ -109,9 +110,10 @@ export async function startDailyChannelRun(database: DatabaseSync, input: DailyC
   }));
 
   const browserConfig = dependencies.browserConfig ?? readBrowserConfig(database);
+  const selectedXBindingIds = selected.filter((item) => item.module === 'x_lists').map((item) => item.sourceId);
   for (const source of live.filter((item) => item.module === 'x_lists')) {
     try {
-      await scanXList(database, task.id, stored.workspaceId, source, browserConfig, collectX);
+      await scanXList(database, task.id, stored.workspaceId, source, selectedXBindingIds, browserConfig, collectX);
     } catch (error) {
       recordAttemptFailure(database, task.id, stored.workspaceId, source, error);
     }
@@ -194,12 +196,16 @@ function recordAttemptFailure(database: DatabaseSync, taskId: string, workspaceI
   } catch {}
 }
 
-async function scanXList(database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, browserConfig: BrowserConfig | null, collectX: XCollect): Promise<void> {
+async function scanXList(database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, selectedBindingIds: string[], browserConfig: BrowserConfig | null, collectX: XCollect): Promise<void> {
   if (!source.accountKey || !source.listId || !browserConfig) return recordBlockedReceipt(database, taskId, workspaceId, source);
   const result = await collectX(database, { id: browserConfig.id, cdpUrl: browserConfig.cdpUrl, workspaceId, accountKey: source.accountKey }, {
     accountKey: source.accountKey, listId: source.listId, expectedBindingId: source.sourceId, expectedRevision: source.revision
   });
   if (!result.ok) return recordAttemptFailure(database, taskId, workspaceId, source, Object.assign(new Error(result.error.message), { code: result.error.code }));
+  scheduleXObservationCapture(database, { id: browserConfig.id, cdpUrl: browserConfig.cdpUrl, workspaceId, accountKey: source.accountKey }, {
+    requestId: `daily:${taskId}`, selectedBindingIds, binding: result.data.binding, capturedAt: result.data.capturedAt,
+    sourceIds: result.data.sourceIds, snapshotIds: result.data.snapshotIds
+  });
   recordSourceScanReceipt(database, {
     taskId, workspaceId, module: 'x_lists', sourceId: source.sourceId, sourceFeedId: source.sourceFeedId,
     status: 'succeeded', candidateCount: result.data.candidateCount, savedCount: result.data.sourceIds.length

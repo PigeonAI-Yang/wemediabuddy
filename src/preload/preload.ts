@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('wmb', {
   getXListTimelineCacheStats: () => ipcRenderer.invoke('x-lists:timeline-cache-stats'),
   listXPostMetricSnapshots: (input: { sourceId: string; limit?: number }) => ipcRenderer.invoke('x-lists:list-post-metric-snapshots', input),
   getXPostTrend: (input: { sourceId: string }) => ipcRenderer.invoke('x-lists:get-post-trend', input),
+  listXPostTrends: (input: { bindingId: string; limit?: number }) => ipcRenderer.invoke('x-lists:list-post-trends', input),
   startXObservation: (input: { requestId: string; bindingIds: string[] }) => ipcRenderer.invoke('x-lists:start-observation', input),
   getXObservation: (input: { sessionId: string }) => ipcRenderer.invoke('x-lists:get-observation', input),
   stopXObservation: (input: { sessionId: string }) => ipcRenderer.invoke('x-lists:stop-observation', input),

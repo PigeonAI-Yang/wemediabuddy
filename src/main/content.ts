@@ -232,10 +232,14 @@ export function copyContentVersionToNewProject(
 
 export function createContentProject(database: DatabaseSync, input: { title: string; topicId?: string; planItemId?: string; sourceIds?: string[] }, transaction = true): { id: string; revision: number } {
   const id = randomUUID(); const now = new Date().toISOString();
+  const planItem = input.planItemId ? database.prepare('SELECT topic_id AS topicId, source_ids_json AS sourceIds FROM plan_items WHERE id=?')
+    .get(input.planItemId) as { topicId: string | null; sourceIds: string } | undefined : null;
+  if (input.planItemId && !planItem) throw new Error('内容机会不存在。');
+  const topicId = planItem?.topicId ?? input.topicId; const sourceIds = planItem ? JSON.parse(planItem.sourceIds) as string[] : (input.sourceIds ?? []);
   if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
-    database.prepare('INSERT INTO content_projects (id, topic_id, plan_item_id, title, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, 1)').run(id, input.topicId ?? null, input.planItemId ?? null, input.title, now, now);
-    for (const sourceId of input.sourceIds ?? []) database.prepare('INSERT INTO content_project_sources (project_id, source_id) VALUES (?, ?)').run(id, sourceId);
+    database.prepare('INSERT INTO content_projects (id, topic_id, plan_item_id, title, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, 1)').run(id, topicId ?? null, input.planItemId ?? null, input.title, now, now);
+    for (const sourceId of sourceIds) database.prepare('INSERT INTO content_project_sources (project_id, source_id) VALUES (?, ?)').run(id, sourceId);
     if (transaction) database.exec('COMMIT');
   } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
   return { id, revision: 1 };

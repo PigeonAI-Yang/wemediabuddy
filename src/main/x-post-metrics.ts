@@ -131,6 +131,16 @@ export function getXPostTrend(database: DatabaseSync, sourceItemId: string): XPo
   };
 }
 
+export function listXPostTrends(database: DatabaseSync, input: { sourceIds?: string[]; bindingId?: string; limit?: number }): XPostTrend[] {
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 100);
+  const sourceIds = input.sourceIds?.length
+    ? [...new Set(input.sourceIds)].slice(0, limit)
+    : (database.prepare(`SELECT source_item_id AS id FROM x_post_metric_snapshots
+        WHERE (? IS NULL OR binding_id=?) GROUP BY source_item_id ORDER BY MAX(captured_at) DESC LIMIT ?`)
+      .all(input.bindingId ?? null, input.bindingId ?? null, limit) as Array<{ id: string }>).map((row) => row.id);
+  return sourceIds.map((sourceId) => getXPostTrend(database, sourceId));
+}
+
 function parseSnapshot(row: SnapshotRow): XPostMetricSnapshot {
   return {
     ...row,

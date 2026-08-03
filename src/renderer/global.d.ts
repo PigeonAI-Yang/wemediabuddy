@@ -84,6 +84,7 @@ declare global {
       getXListTimelineCacheStats(): Promise<{ rows: number; bytes: number; accounts: number }>;
       listXPostMetricSnapshots(input: { sourceId: string; limit?: number }): Promise<XPostMetricSnapshot[]>;
       getXPostTrend(input: { sourceId: string }): Promise<XPostTrend>;
+      listXPostTrends(input: { bindingId: string; limit?: number }): Promise<XPostTrend[]>;
       startXObservation(input: { requestId: string; bindingIds: string[] }): Promise<XListCommand<XObservationSession>>;
       getXObservation(input: { sessionId: string }): Promise<XObservationSession | null>;
       stopXObservation(input: { sessionId: string }): Promise<XObservationSession | null>;
