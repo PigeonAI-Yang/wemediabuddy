@@ -4,17 +4,17 @@
 
 User requirement: Pi must not rediscover how to operate WeMediaBuddy on every conversation. WMB therefore maintains one installation-wide operation Skill that explains supported business workflows, tool order, confirmation boundaries, state handling and required readback.
 
-Current gap: the repository does not yet contain that shared operation Skill. The active UK Pi root contains only its lane Skill, while generic WMB operating knowledge is split between the appended system prompt and tool descriptions. This document is the maintenance contract for the shared Skill; it does not claim the missing product asset is already delivered.
+Current implementation: `skills/wemedia-buddy-operator` is the canonical shared operation Skill. The Windows package ships it, and WMB atomically installs or content-hash refreshes the generated copy under every registered data-root's `pi-agent/skills/` without replacing root-specific lane Skills. Detailed operating knowledge lives in this Skill; Pi system prompts retain only immutable authority and lane boundaries.
 
 Delivery of the missing asset, the X List browser/login correction, truthful daily-progress correction, installer and packaged acceptance is tracked serially by `WMB-2400`, `WMB-2403`, `WMB-2404`, `WMB-2401` and `WMB-2402` in `TASKS.md`.
 
-When implemented, the canonical source is:
+The canonical source is:
 
 ```text
 skills/wemedia-buddy-operator/SKILL.md
 ```
 
-Packaged resources and data-root copies are generated artifacts. Development Agents edit only the canonical source. They must not hand-edit `out/`, `data/<root>/pi-agent/skills/`, or another installed copy.
+Packaged resources and data-root copies are generated artifacts. Development Agents edit only the canonical source. They must not hand-edit `out/`, `data/<root>/pi-agent/skills/`, or another installed copy. Each installed copy carries `.wmb-install.json` with the canonical tree hash; WMB refreshes only `wemedia-buddy-operator` and leaves sibling lane Skills untouched.
 
 ## Layer ownership
 

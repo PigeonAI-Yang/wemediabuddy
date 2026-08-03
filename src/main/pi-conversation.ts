@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { installPiOperatorSkill } from './pi-operator-skill.ts';
 
 export type PiChatMessage = {
   role: 'user' | 'assistant';
@@ -275,6 +276,7 @@ export async function ensurePiConversationLayout(dataRootPath: string): Promise<
   await mkdir(sessionDir, { recursive: true });
   await mkdir(workspace, { recursive: true });
   await mkdir(conversationsDir(dataRootPath), { recursive: true });
+  await installPiOperatorSkill(root);
 
   // Prefer active conversation session file when available.
   try {

@@ -9,6 +9,7 @@ import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runne
 import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { preparePiExtension } from './pi-extension.ts';
+import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
@@ -88,7 +89,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
       '--session', path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`),
       '--skill', installedSkill, '-e', extensionPath, '--provider', 'wmb-api', '--model', config.model,
-      '--append-system-prompt', `你是 WeMediaBuddy 内置 Pi。当前工作空间是${profile.displayName}。只使用 ${profile.intelligencePackId} 和 wmb_* MCP；禁止 AI 榜单、AI source-index、固定 AI List/wire 与最终发布。通用 X List 只能读取、准备或采集当前根已启用绑定，不能确认。`
+      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前工作空间是${profile.displayName}；赛道判断只使用 ${profile.intelligencePackId}。`
     ], {
       ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || ''

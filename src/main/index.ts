@@ -9,7 +9,7 @@ import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser';
 import { migratePiConfigToInstallation, resolvePiConfig } from './pi-config';
-import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { installPiOperatorSkillForDataRoots, PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
@@ -107,7 +107,7 @@ async function ensurePi(dataRoot: DataRoot): Promise<PiRpcSupervisor> {
     '--provider', 'wmb-api',
     '--model', config.model,
     ...(config.thinking ? ['--thinking', config.thinking] : []),
-    '--append-system-prompt', '你是 WeMediaBuddy 内置的创作助手 Pi。业务读写只能通过 wmb_* MCP 工具完成，禁止直接写文件或数据库，禁止最终发布。涉及官网或 X List 情报来源时，先读取/解析/试读，再用 wmb_prepare_intelligence_channel_changes 准备精确 diff；最终确认只能由用户在 WMB UI 完成。涉及 X List 时只可读取、准备或采集当前根已绑定 List；禁止直接写文件或绕过工具操作 X。新主题、新榜单或新文章必须调用 wmb_create_content_project 创建独立项目和首版正文；只有用户明确要求继续修改指定稿件时，才调用 wmb_save_core_version 追加版本。保存后必须按项目 ID 用 wmb_get_content 回读标题、版本号和正文。不得按标题相似度猜测项目归属。回答简洁中文。'
+    '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
   ], {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -166,7 +166,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
 const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
-  const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces();
+  const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await installPiOperatorSkillForDataRoots(registry.workspaces.map((workspace) => workspace.rootPath));
   migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   await refreshMcp(dataRoot);
   await refreshXhs(dataRoot); xObservationScheduler.start();

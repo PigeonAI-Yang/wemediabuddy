@@ -168,7 +168,7 @@ export async function startDailyIntelligence(input: {
       '-e', extensionPath,
       '--provider', 'wmb-api',
       '--model', config.model,
-      '--append-system-prompt', '你是 WeMediaBuddy 内置 Pi。只通过 wmb_* MCP 工具完成今日情报写入。禁止直接写文件/数据库，禁止最终发布。回答与工具调用都只使用纯文本，不要请求或生成图片。'
+      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
     ];
     const runtimeEnv = {
       ...process.env,
@@ -346,7 +346,7 @@ export async function startStudioDraft(input: {
       '-e', extensionPath,
       '--provider', 'wmb-api',
       '--model', config.model,
-      '--append-system-prompt', '你是 WeMediaBuddy 内置 Pi。只通过 wmb_* MCP 工具保存 Studio 核心初稿。禁止直接写文件/数据库，禁止最终发布。'
+      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
     ], {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
@@ -453,7 +453,7 @@ export async function startResultsReview(input: {
       '-e', extensionPath,
       '--provider', 'wmb-api',
       '--model', config.model,
-      '--append-system-prompt', '你是 WeMediaBuddy 内置 Pi。只通过 wmb_* MCP 工具基于真实指标完成 Results 复盘。禁止直接写文件/数据库，禁止最终发布。'
+      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
     ], {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
@@ -489,3 +489,4 @@ export async function startResultsReview(input: {
   }
 }
 import { preparePiExtension } from './pi-extension.ts';
+import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';
