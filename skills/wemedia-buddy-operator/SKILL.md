@@ -23,6 +23,10 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 用 `wmb_get_workbench` 读取今日资料、方案和待办。
 - 用 `wmb_list_workspaces` 了解登记状态；不要自行切换或指定 data-root。
 
+### 管理 Pi Skills
+
+安装级普通 Pi Skills 只由用户在 `设置 → Pi Skills` 新增、编辑或删除；系统 operator 和当前工作空间 lane Skill 只读。Pi 可以解释当前已加载 Skill 的用途，但没有管理工具，不得直接修改安装目录、data-root 副本或伪称已经启用/删除。用户保存后，下一次 Pi 进程会读取新版本。
+
 ### 配置情报渠道
 
 官网与 X Lists 是固定共享模块，不是赛道 Skill 或可自由创建的模块。

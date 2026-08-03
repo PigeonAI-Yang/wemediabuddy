@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Theme } from './app-types';
+import { PiSkillsSettings } from './pi-skills-settings';
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0 B';
@@ -13,7 +14,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   setBrowserChoice: (value: string) => void; refresh: () => void; theme: Theme;
   setTheme: (value: Theme) => void; back: () => void;
 }): React.JSX.Element {
-  type SettingsSection = 'general' | 'ai' | 'data' | 'browser' | 'agent' | 'diagnostics' | 'about';
+  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'agent' | 'diagnostics' | 'about';
   const [section, setSection] = useState<SettingsSection>('ai');
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
@@ -90,6 +91,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const sections: Array<{ id: SettingsSection; label: string; icon: string }> = [
     { id: 'general', label: '常规', icon: '⌂' },
     { id: 'ai', label: 'AI 与模型', icon: '✦' },
+    { id: 'skills', label: 'Pi Skills', icon: '◇' },
     { id: 'data', label: '数据与存储', icon: '▱' },
     { id: 'browser', label: '浏览器与账号', icon: '◎' },
     { id: 'agent', label: 'Agent 接入', icon: '↔' },
@@ -98,6 +100,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const headings: Record<SettingsSection, { title: string; description: string }> = {
     general: { title: '常规', description: '设置 WMB 启动后的默认工作方式。' },
     ai: { title: 'AI 与模型', description: '管理本机所有工作空间共享的 Pi 接口预设，并随时切换当前模型。' },
+    skills: { title: 'Pi Skills', description: '管理 Pi 在创作和操作中按需使用的安装级能力。' },
     data: { title: '数据与存储', description: '查看 WMB 数据保存位置并管理本地文件。' },
     browser: { title: '浏览器与账号', description: '管理 WMB 专用浏览器和平台登录环境。' },
     agent: { title: 'Agent 接入', description: '让其他 Agent 读取和操作 WMB 中的同一份业务资料。' },
@@ -168,6 +171,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           </div>
           </section>
         </>}
+        {section === 'skills' && <PiSkillsSettings />}
         {section === 'data' && <section className="settings-section">
           <div className="settings-row"><div><h3>数据目录</h3><p>所有业务数据集中保存在此，可整体移动。</p></div><div className="settings-row-actions"><span className="path-chip">{dataRoot || '尚未选择数据根目录'}</span><button className="secondary-button" onClick={() => void window.wmb.chooseDataRoot().then(refresh)}>选择目录</button></div></div>
           {workspaceProposals.map(({ proposal, binding, selectedRootPath }) => <div className="settings-row" key={proposal.id}><div><h3>待确认：{proposal.profile.displayName}</h3><p>受众：{proposal.profile.audience}</p><p>目标：{proposal.profile.contentGoal}</p><p>编辑简报：{proposal.profile.editorialBrief}</p><p>能力：{proposal.profile.intelligencePackId}@{proposal.profile.intelligencePackVersion} · {proposal.profile.creationPackId}@{proposal.profile.creationPackVersion} · {proposal.profile.platforms.join(' / ')}</p>{proposal.target === 'new' && <p>新工作空间目录：{selectedRootPath ?? '尚未选择'}</p>}<p>完整差异：{proposal.displayedDiff.map((item) => `${item.field}: ${JSON.stringify(item.before)} → ${JSON.stringify(item.after)}`).join('；')}</p></div><div className="settings-row-actions">{proposal.target === 'new' && <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.selectWorkspaceProposalRoot(binding).then(() => window.wmb.listWorkspaceProposals()).then(setWorkspaceProposals).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>选择数据目录</button>}<button className="primary-button" disabled={proposal.target === 'new' && !selectedRootPath} onClick={() => { setWorkspaceNote(''); void window.wmb.confirmWorkspaceProposal(binding).then(async () => { const [listed, proposals] = await Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]); setWorkspaces(listed); setWorkspaceProposals(proposals); setWorkspaceNote(proposal.target === 'new' ? '工作空间已创建，切换后重启即可使用。' : '当前工作空间配方已更新。'); }).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>{proposal.target === 'new' ? '确认创建' : '确认更新当前工作空间'}</button></div></div>)}

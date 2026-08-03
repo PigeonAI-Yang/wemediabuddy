@@ -9,7 +9,7 @@ import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser'; import { migrateBrowserConfigToInstallation, readBrowserConfig } from './browser-config';
 import { migratePiConfigToInstallation, resolvePiConfig } from './pi-config';
-import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { installPiOperatorSkillForDataRoots, PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
@@ -166,7 +166,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
 const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
-  const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await installPiOperatorSkillForDataRoots(registry.workspaces.map((workspace) => workspace.rootPath));
+  const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await syncPiSkillsForDataRoots(app.getPath('userData'), app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills'), registry.workspaces.map((workspace) => workspace.rootPath));
   migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath)); migrateBrowserConfigToInstallation(path.join(app.getPath('userData'), 'browser-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   await refreshMcp(dataRoot);
   await refreshXhs(dataRoot); xObservationScheduler.start();

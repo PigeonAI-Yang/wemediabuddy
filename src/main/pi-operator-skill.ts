@@ -47,7 +47,7 @@ export async function installPiWorkspaceLaneSkill(dataRootPath: string, agentDir
   }
 }
 
-async function installPiSkill(agentDir: string, name: string, sourceRoot: string): Promise<{ path: string; revision: string }> {
+export async function installPiSkill(agentDir: string, name: string, sourceRoot: string, metadata: Record<string, unknown> = {}): Promise<{ path: string; revision: string }> {
   const revision = await operatorSkillRevision(sourceRoot);
   const skillsRoot = path.join(agentDir, 'skills');
   const target = path.join(skillsRoot, name);
@@ -58,7 +58,7 @@ async function installPiSkill(agentDir: string, name: string, sourceRoot: string
   await mkdir(skillsRoot, { recursive: true });
   try {
     await cp(sourceRoot, staging, { recursive: true, force: true });
-    await writeFile(path.join(staging, '.wmb-install.json'), JSON.stringify({ name, revision }) + '\n', 'utf8');
+    await writeFile(path.join(staging, '.wmb-install.json'), JSON.stringify({ name, revision, ...metadata }) + '\n', 'utf8');
     await rm(target, { recursive: true, force: true });
     await rename(staging, target);
   } finally {

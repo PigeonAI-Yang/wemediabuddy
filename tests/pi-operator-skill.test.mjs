@@ -25,6 +25,8 @@ test('Pi operator Skill documents exactly the registered WMB tools and hard boun
   assert.match(skill, /数据库、并发取消或内部错误不是登录失效/);
   assert.match(skill, /只操作当前 MCP URL 绑定的工作空间/);
   assert.match(skill, /不要另起一次选题或提议重复保存方案/);
+  assert.match(skill, /设置 → Pi Skills/);
+  assert.match(skill, /不得直接修改安装目录、data-root 副本/);
 });
 
 test('UK lane routes X work through current-root WMB tools, not the retired external provider', async () => {

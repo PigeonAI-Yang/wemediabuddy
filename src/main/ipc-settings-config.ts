@@ -1,4 +1,4 @@
-import { ipcMain, safeStorage } from 'electron';
+import { app, ipcMain, safeStorage } from 'electron';
 import path from 'node:path';
 import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
@@ -10,6 +10,7 @@ import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
+import { deletePiSkill, listPiSkills, savePiSkill, syncPiSkillsForDataRoots, type PiSkillInput } from './pi-skill-library';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -88,5 +89,25 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const api = requirePiApiType(input.api);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     return listPiModels({ ...input, api });
+  });
+  const packagedSkillsPath = () => app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills');
+  ipcMain.handle('pi-skills:list', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) return [];
+    return listPiSkills(app.getPath('userData'), packagedSkillsPath(), dataRoot.path);
+  });
+  ipcMain.handle('pi-skills:save', async (_event, input: PiSkillInput) => {
+    const saved = await savePiSkill(app.getPath('userData'), packagedSkillsPath(), input);
+    const roots = (await listWorkspaces()).workspaces.map((workspace) => workspace.rootPath);
+    await syncPiSkillsForDataRoots(app.getPath('userData'), packagedSkillsPath(), roots);
+    await stopPi();
+    return saved;
+  });
+  ipcMain.handle('pi-skills:delete', async (_event, name: string) => {
+    await deletePiSkill(app.getPath('userData'), name);
+    const roots = (await listWorkspaces()).workspaces.map((workspace) => workspace.rootPath);
+    await syncPiSkillsForDataRoots(app.getPath('userData'), packagedSkillsPath(), roots);
+    await stopPi();
+    return { name };
   });
 }

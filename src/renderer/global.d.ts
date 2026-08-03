@@ -9,6 +9,7 @@ import type { XListResolution } from '../main/x-list-channel';
 import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceChannelProposalBinding } from '../main/intelligence-channel-proposals';
 import type { XPostMetricSnapshot, XPostTrend } from '../main/x-post-metrics';
 import type { XObservationSession } from '../main/x-observation-jobs';
+import type { PiSkillInput, PiSkillSummary } from '../main/pi-skill-library';
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -209,6 +210,9 @@ declare global {
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
       listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<string[]>;
+      listPiSkills(): Promise<PiSkillSummary[]>;
+      savePiSkill(input: PiSkillInput): Promise<PiSkillSummary>;
+      deletePiSkill(name: string): Promise<{ name: string }>;
       chatPi(message: string, delivery?: 'steer' | 'followUp'): Promise<{
         text: string;
         stopped: boolean;
