@@ -18,9 +18,10 @@ import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnow
 import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
 import { getXListOperation, listXListBindings, prepareXListOperation, xListOperationKinds } from './x-lists.ts';
 import { collectBoundXListTimeline } from './x-list-execution.ts';
-import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
+import { ensurePyaireaderXBrowser } from './browser.ts';
+import { readBrowserConfig } from './browser-config.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
-import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
+import { XListNeedsUserError } from './platforms/x-list-session.ts';
 import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
 import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
@@ -151,10 +152,10 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   const selectedXListBrowser = async () => {
     const db = database();
     try {
-      const config = readBrowserConfig(db);
+      const config = readBrowserConfig();
       const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
-      if (!workspaceId || !config || (config.id === 'edge:pyaireader-default' && !aiOnlyRoutes) || !isPyaireaderXProfile({ id: config.id, cdpUrl: config.cdpUrl })) {
-        throw new Error('请先在设置中选择当前工作空间专用的 X 登录态。');
+      if (!workspaceId || !config) {
+        throw Object.assign(new Error('请先在设置中启用 WMB 共享的 X 登录态。'), { code: 'BROWSER_NEEDS_USER' });
       }
       const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
       return { id: config.id, cdpUrl: runtime.cdpUrl, workspaceId };
@@ -162,7 +163,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   };
   const xListResult = async <T>(work: () => Promise<T>) => {
     try { return text(await work()); }
-    catch (error) { return text({ ok: false, data: null, error: { code: (error as { code?: string })?.code ?? 'BROWSER_NEEDS_USER', message: error instanceof Error ? error.message : String(error), details: { state: 'needs_user' } } }); }
+    catch (error) { const explicit = (error as { code?: string })?.code; const code = explicit ?? (error instanceof XListNeedsUserError ? 'BROWSER_NEEDS_USER' : error instanceof Error && error.name === 'XListSupersededError' ? 'INVALID_STATE' : 'VALIDATION_ERROR'); return text({ ok: false, data: null, error: { code, message: error instanceof Error ? error.message : String(error), details: { state: code === 'BROWSER_NEEDS_USER' || code === 'ACCOUNT_MISMATCH' ? 'needs_user' : 'failed' } } }); }
   };
   const selectedXListAccount = async () => {
     const config = await selectedXListBrowser();
@@ -192,11 +193,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   server.registerTool('x_lists.list_bindings', {
     description: '读取已绑定到 WMB 发现的 X List，不读取或操作 X 网页。',
     inputSchema: { account_key: z.string().optional() }
-  }, async ({ account_key }) => xListResult(async () => {
-    const { accountKey } = await selectedXListAccount();
-    if (account_key && !accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
-    const db = database(); try { return listXListBindings(db, accountKey); } finally { db.close(); }
-  }));
+  }, async ({ account_key }) => xListResult(async () => { const db = database(); try { return listXListBindings(db, account_key); } finally { db.close(); } }));
   server.registerTool('x_lists.get_operation', {
     description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
     inputSchema: { id: z.string() }
@@ -230,7 +227,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const { config, accountKey } = await selectedXListAccount();
     if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与绑定账号不一致。' } };
     const db = database();
-    try { return collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
+    try { return await collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
     finally { db.close(); }
   }));
   server.registerTool('x_lists.post_metric_snapshots_list', {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { readBrowserConfig } from './browser-config.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { canonicalizeUrl, createSourceFeed } from './sources.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
@@ -270,10 +271,10 @@ export function listSourceScanReceipts(database: DatabaseSync, input: {
   return (database.prepare(`${receiptSelect}${where} ORDER BY checked_at DESC, id DESC LIMIT ?`).all(...args, limit) as ReceiptRow[]).map((row) => ({ ...row }));
 }
 
-export function readIntelligenceChannelsSummary(database: DatabaseSync): IntelligenceChannelsSummary {
+export function readIntelligenceChannelsSummary(database: DatabaseSync, browserConfigured = Boolean(readBrowserConfig())): IntelligenceChannelsSummary {
   const websites = listWebsiteSources(database);
   const xLists = listXListBindings(database);
-  const xReady = hasCurrentBrowserConfig(database);
+  const xReady = browserConfigured;
   const sources: IntelligenceChannelSource[] = [
     ...websites.map((website) => ({ module: 'official_web' as const, sourceId: website.id, sourceFeedId: website.sourceFeedId, name: website.name, canonicalUrl: website.canonicalUrl, enabled: website.enabled, status: website.enabled ? website.resolutionStatus === 'ready' ? 'ready' as const : website.resolutionStatus === 'needs_user' ? 'needs_user' as const : 'failed' as const : 'disabled' as const, revision: website.revision })),
     ...xLists.map((binding) => ({ module: 'x_lists' as const, sourceId: binding.id, sourceFeedId: binding.sourceFeedId, name: binding.name, canonicalUrl: binding.canonicalUrl, enabled: binding.enabled, status: binding.enabled ? xReady ? 'ready' as const : 'needs_user' as const : 'disabled' as const, revision: binding.revision, accountKey: binding.accountKey, listId: binding.listId }))
@@ -291,17 +292,8 @@ function readinessFor(module: IntelligenceModule, sources: IntelligenceChannelSo
     status: ready.length ? blocked.length ? 'partial' : 'ready' : enabled.length ? blocked.length ? 'needs_user' : 'needs_config' : 'needs_config' };
 }
 
-export function readIntelligenceChannelReadiness(database: DatabaseSync): IntelligenceChannelReadiness[] {
-  return readIntelligenceChannelsSummary(database).readiness;
-}
-
-function hasCurrentBrowserConfig(database: DatabaseSync): boolean {
-  const row = database.prepare("SELECT value FROM app_meta WHERE key='browser.config'").get() as { value?: string } | undefined;
-  if (!row?.value) return false;
-  try {
-    const config = JSON.parse(row.value) as { id?: unknown };
-    return typeof config.id === 'string' && config.id.trim().length > 0;
-  } catch { return false; }
+export function readIntelligenceChannelReadiness(database: DatabaseSync, browserConfigured = Boolean(readBrowserConfig())): IntelligenceChannelReadiness[] {
+  return readIntelligenceChannelsSummary(database, browserConfigured).readiness;
 }
 
 function parseWebsite(row: WebsiteRow): WebsiteSource {

@@ -12,12 +12,12 @@ export type SettingsSnapshot = {
   piRuntime: PiRuntimeInfo;
 };
 
-export async function readSettings(rootPath: string, options?: { mcpStatus?: 'not_started' | 'ready'; mcpUrl?: string | null; browserStatus?: 'not_started' | 'ready' }): Promise<SettingsSnapshot> {
+export async function readSettings(rootPath: string, options?: { mcpStatus?: 'not_started' | 'ready'; mcpUrl?: string | null; browserStatus?: 'not_started' | 'ready'; browserProfilePath?: string }): Promise<SettingsSnapshot> {
   const paths = {
     dataRoot: rootPath,
     database: path.join(rootPath, 'wmb.db'),
     assets: path.join(rootPath, 'assets'),
-    browserProfile: path.join(rootPath, 'browser-profile'),
+    browserProfile: options?.browserProfilePath ?? path.join(rootPath, 'browser-profile'),
     logs: path.join(rootPath, 'logs'),
     exports: path.join(rootPath, 'exports')
   };

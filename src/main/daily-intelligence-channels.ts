@@ -10,7 +10,8 @@ import {
   type AgentTask,
   type DailyReceiptAggregation
 } from './agent-tasks.ts';
-import { readBrowserConfig, type BrowserConfig } from './browser.ts';
+import type { BrowserConfig } from './browser.ts';
+import { readBrowserConfig } from './browser-config.ts';
 import {
   readIntelligenceChannelsSummary,
   recordSourceScanReceipt,
@@ -86,7 +87,7 @@ export async function startDailyChannelRun(database: DatabaseSync, input: DailyC
   const existingReceipts = readDailyReceiptAggregation(database, task).receipts;
   const checked = new Set(existingReceipts.map((receipt) => `${receipt.module}:${receipt.sourceId}`));
   const pending = selected.filter((source) => !checked.has(`${source.module}:${source.sourceId}`));
-  const live = pending.filter((source) => sourceIsReady(database, source, dependencies.browserConfig ?? readBrowserConfig(database)));
+  const live = pending.filter((source) => sourceIsReady(database, source, dependencies.browserConfig ?? readBrowserConfig()));
   const blocked = pending.filter((source) => !live.includes(source));
   reportAgentTaskProgress(database, task.id, {
     phase: 'channel_preflight',
@@ -109,7 +110,7 @@ export async function startDailyChannelRun(database: DatabaseSync, input: DailyC
     }
   }));
 
-  const browserConfig = dependencies.browserConfig ?? readBrowserConfig(database);
+  const browserConfig = dependencies.browserConfig ?? readBrowserConfig();
   const selectedXBindingIds = selected.filter((item) => item.module === 'x_lists').map((item) => item.sourceId);
   for (const source of live.filter((item) => item.module === 'x_lists')) {
     try {

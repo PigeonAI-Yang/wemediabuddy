@@ -106,8 +106,8 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `jobs`：持久任务和恢复；
 - `operations`：最小业务操作记录；
 - `mcp`：MCP 工具到业务命令的映射；
-- `browser`：Chrome 生命周期、CDP 连接和平台适配器。
-- `x-lists`：所有自媒体工作空间共享的固定 X List 读写、确认、读回和发现信源绑定；账号、缓存、绑定、操作和资料始终随当前 data-root 隔离。
+- `browser`：安装级专用 Edge profile、进程生命周期、CDP 连接和平台适配器。
+- `x-lists`：所有自媒体工作空间共享的固定 X List 读写、确认、读回和发现信源绑定；登录态安装级共享，账号快照、缓存、绑定、操作和资料始终随当前 data-root 隔离。
 - `intelligence-channels`：固定官网/X Lists 来源配置、解析/试读、逐来源回执和共享每日预检/扫描编排；不是插件加载器。
 - `workspaces`：应用级注册表、根身份校验和单活动根切换；
 - `workspace-profiles`：有限字段的当前配方、编译期官方目录和会话级提案确认。
@@ -118,13 +118,13 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 
 ### 5.1 数据目录
 
-应用在 Electron `userData` 下保存最小工作空间注册表，只记录稳定 ID、显示名称、data-root 路径、活动选择和崩溃恢复用的切换日志，不保存业务数据、登录凭证或素材。用户选择的每个 data-root 都完整保存：
+应用在 Electron `userData` 下保存最小工作空间注册表、安装级 Pi 模型预设和一套专用 Edge 配置/profile；不保存业务数据或素材。用户选择的每个 data-root 都完整保存：
 
 ```text
 <data-root>/
 ├─ wmb.db
 ├─ assets/
-├─ browser-profile/
+├─ browser-profile/          # 旧根兼容目录；不再承载活动 Edge 登录态
 ├─ pi-agent/
 ├─ xiaohongshu-mcp/
 ├─ logs/
@@ -173,7 +173,7 @@ X List 帖子继续以规范 URL 复用 `source_items`。`x_post_metric_snapshot
 
 每个根只保存一个带 revision 的当前有效 `WorkspaceProfileV1`。字段固定为显示名称、受众、内容目标、纯文本编辑简报、情报包与创作包 ID/版本和平台子集；情报包只承载受众/编辑上下文和真正的赛道展示/判断差异，不承载官网/X Lists 执行代码。复盘暂留固定内核，不接受任意执行配置。AI/UK 官方模板先以编译期数据随应用发布，不实现插件加载器、旧包兼容层或通用执行图。
 
-平台子集限制新方案的平台选择、新平台版本、发布执行和平台专属运行时，不删除历史读回，也不限制情报输入。官网与 X Lists 是固定共享能力而不是新的 profile 字段：每个根使用自己的 website source、浏览器配置、X 登录态、List binding、缓存、扫描回执和 source feed。既有 AI source-index 与 `AI前沿` 转成 AI 根的普通可见配置；所有包只消费本根明确启用的来源，AI profile 只继续控制排行榜等真正的 AI 专属能力。
+平台子集限制新方案的平台选择、新平台版本、发布执行和平台专属运行时，不删除历史读回，也不限制情报输入。官网与 X Lists 是固定共享能力而不是新的 profile 字段：每个根使用自己的 website source、X 账号快照、List binding、缓存、扫描回执和 source feed；一套 WMB 安装只使用一个专用 Edge 配置/profile 与当前 X 登录态。既有 AI source-index 与 `AI前沿` 转成 AI 根的普通可见配置；所有包只消费本根明确启用的来源，AI profile 只继续控制排行榜等真正的 AI 专属能力。
 
 `website_sources` 只保存当前根网站配置并引用一个既有 `source_feeds`：用户输入、规范入口 URL、启用/解析状态、最近错误和 revision。`x_list_bindings` 继续是 X List 配置真相。一个共享业务读取把两者投影成相同的渠道来源摘要，不复制 X List 身份。`source_scan_receipts` 记录 task/workspace/module/source 身份、检查时间、状态、候选/保存数量和错误；它是任务证据，不是第二资料库。Agent 准备的来源变更提案只在当前 Main 会话保存，UI 确认后通过共享业务命令写入，重启即失效。
 
@@ -213,7 +213,7 @@ MCP 工具按业务能力组织：
 
 最后一组应用级 MCP 工具只读或准备提案；不能确认、激活、删除工作空间，也不能接收任意文件系统路径。新 data-root 的选择与有效配方激活仅通过窄 IPC 交给 UI 最终确认。
 
-外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次渠道调用均在同一业务边界重验当前 workspace、data-root、profile/source revision；X Lists 还重验根内 X 账号和 List binding。MCP/Pi 只能准备来源变更，最终确认只在 UI。
+外部 Agent 直接连接 Streamable HTTP MCP。内置 Pi 只增加一个薄 MCP 工具扩展，不复制业务命令。UI/IPC、MCP 和 Pi 的每次渠道调用均在同一业务边界重验当前 workspace、data-root、profile/source revision；X Lists 还重验安装级当前 X 账号、本根账号快照和 List binding。MCP/Pi 只能准备来源变更，最终确认只在 UI。
 
 每日侦察、运营方案和创作可由用户在 WMB 中显式触发 Pi，也可从任意外部 Agent 发起。WMB 不定时唤醒 Agent；模型推理由用户配置的 OpenAI Responses 或 OpenAI Chat Completions 兼容服务完成，协议、模型或服务失败时不做静默替换。
 
@@ -231,14 +231,14 @@ MCP 工具按业务能力组织：
 
 WMB 负责：
 
-1. 使用专用 `browser-profile` 启动可见 Chrome/Chromium；
+1. 使用 WMB 安装级专用 `browser-profile` 启动可见 Edge；
 2. 启用仅本机可访问的远程调试端口；
 3. 通过 Playwright `connectOverCDP` 连接；
 4. 保持浏览器可见，允许用户随时接管；
 5. 检测浏览器退出、登录失效和连接中断；
 6. 在设置页显示浏览器进程、数据目录、端口和账号状态。
 
-不连接用户日常 Chrome，不复制其 Cookie，不隐藏浏览器用户目录。
+不连接用户日常浏览器，不复制 Cookie，不要求每个工作空间重复登录，也不引入指纹浏览器。工作空间切换会停止旧 Edge 进程和 CDP 连接，但复用同一个持久 profile。
 
 ### 7.2 平台适配器
 

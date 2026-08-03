@@ -7,7 +7,7 @@ import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
-import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser';
+import { startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser'; import { migrateBrowserConfigToInstallation, readBrowserConfig } from './browser-config';
 import { migratePiConfigToInstallation, resolvePiConfig } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { installPiOperatorSkillForDataRoots, PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill';
 import { PiRpcSupervisor } from './pi-runtime';
@@ -167,7 +167,7 @@ const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await installPiOperatorSkillForDataRoots(registry.workspaces.map((workspace) => workspace.rootPath));
-  migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
+  migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath)); migrateBrowserConfigToInstallation(path.join(app.getPath('userData'), 'browser-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   await refreshMcp(dataRoot);
   await refreshXhs(dataRoot); xObservationScheduler.start();
   if (dataRoot && mcp) {
@@ -448,10 +448,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('browser:start', async (_event, input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => {
     const dataRoot = await loadSelectedDataRoot();
     if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const config = readBrowserConfig(database); const legacyBrowserAllowed = (database.prepare("SELECT intelligence_pack_id AS id FROM workspace_profiles WHERE id='effective'").get() as { id?: string } | undefined)?.id === 'wemedia-intelligence-engine'; database.close();
+    const config = readBrowserConfig();
     if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-    if (config.id === 'edge:pyaireader-default' && !legacyBrowserAllowed) throw new Error('此根尚未配置独立浏览器登录态。');
     // Takeover/login should force a fresh visible launch preference even if a quiet runtime is cached.
     browser = await startBrowser(config, { mode: input.mode });
     return { pid: browser.pid, cdpUrl: browser.cdpUrl, profilePath: browser.profilePath, mode: browser.mode };

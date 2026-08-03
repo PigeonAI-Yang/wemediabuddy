@@ -1,11 +1,9 @@
-import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
-import { DatabaseSync } from 'node:sqlite';
-import { isPyaireaderXProfile, pyaireaderWorkspaceProfilePrefix } from './platforms/x-list-primitives.ts';
+import { isPyaireaderXProfile } from './platforms/x-list-primitives.ts';
 import { X_BROWSER_VIEWPORT } from './platforms/x-humanization.ts';
 import { stopProcessIdTree, stopProcessTree } from './workspace-runtime.ts';
 
@@ -36,41 +34,9 @@ export type StartBrowserOptions = {
   mode?: BrowserLaunchMode;
 };
 
-const edgeExecutable = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const configKey = 'browser.config';
 const managedRuntimes = new Map<string, BrowserRuntime>();
 const lastQuietHideAt = new Map<string, number>();
 const QUIET_HIDE_THROTTLE_MS = 2_500;
-
-export function discoverBrowserProfiles(dataRootPath: string, selected?: BrowserConfig | null): BrowserConfig[] {
-  const root = path.resolve(dataRootPath);
-  const rootProfile: BrowserConfig = {
-    id: `${pyaireaderWorkspaceProfilePrefix}${createHash('sha256').update(root).digest('hex').slice(0, 12)}`,
-    label: 'Edge · 本工作空间专用 X 登录态',
-    executablePath: edgeExecutable,
-    userDataDir: path.join(root, 'browser-profile'),
-    profileDirectory: 'Default'
-  };
-  // Preserve only the already-selected AI legacy profile; new roots never discover it implicitly.
-  return selected?.id === 'edge:pyaireader-default' && selected.cdpUrl === 'http://127.0.0.1:9334'
-    ? [{ ...selected, label: 'Edge · 旧版共享 X 登录态（仅 AI 工作空间）' }, rootProfile]
-    : [rootProfile];
-}
-
-export function readBrowserConfig(database: DatabaseSync): BrowserConfig | null {
-  const row = database.prepare('SELECT value FROM app_meta WHERE key = ?').get(configKey) as { value: string } | undefined;
-  return row ? JSON.parse(row.value) as BrowserConfig : null;
-}
-
-export function saveBrowserConfig(database: DatabaseSync, config: BrowserConfig): BrowserConfig {
-  const now = new Date().toISOString();
-  database.prepare(`
-    INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 1)
-    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, revision=app_meta.revision + 1
-  `).run(configKey, JSON.stringify(config), now, now);
-  database.exec('DELETE FROM x_list_index_cache; DELETE FROM x_list_timeline_cache;');
-  return config;
-}
 
 export function resolveBrowserLaunchMode(config: BrowserConfig, options: StartBrowserOptions = {}): BrowserLaunchMode {
   if (options.mode) return options.mode;
@@ -164,7 +130,7 @@ export async function startBrowser(config: BrowserConfig, options: StartBrowserO
 /** Ensure the selected dedicated X browser is reachable. Default mode is quiet headed (not true headless). */
 export async function ensurePyaireaderXBrowser(config: BrowserConfig, options: StartBrowserOptions = {}): Promise<BrowserRuntime> {
   if (!isPyaireaderXProfile(config)) {
-    throw new Error('X List 只能使用当前工作空间已选择的专用 X 登录态。');
+    throw new Error('X List 只能使用 WMB 安装级共享的专用 X 登录态。');
   }
   return startBrowser(config, { mode: options.mode ?? 'quiet' });
 }
@@ -280,7 +246,7 @@ async function showPyaireaderWindowsOnWindows(): Promise<void> {
 }
 
 async function runPyaireaderWindowScript(mode: 'hide' | 'show'): Promise<void> {
-  // Only touch the dedicated pyaireader Edge worker windows. Never the user's normal browser.
+  // Only touch the dedicated WMB/legacy Edge worker windows. Never the user's normal browser.
   // hide: SW_HIDE + toolwindow + cloak => no taskbar button / no visible flash.
   // show: restore appwindow + uncloak + SW_RESTORE for explicit takeover only.
   const script = `
@@ -316,7 +282,7 @@ public static class WmbWin {
 }
 "@
 $targets = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -match 'msedge|chrome' -and $_.CommandLine -match 'pyaireader\\\\edge-cdp-profiles|pyaireader/edge-cdp-profiles'
+  $_.Name -match 'msedge|chrome' -and $_.CommandLine -match 'pyaireader\\\\edge-cdp-profiles|pyaireader/edge-cdp-profiles|wemedia-?buddy\\\\browser-profile|wemedia-?buddy/browser-profile'
 }
 if (-not $targets) { return }
 $pids = @{}

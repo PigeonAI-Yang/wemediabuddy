@@ -3,13 +3,13 @@ import path from 'node:path';
 import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
-import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig, type BrowserRuntime } from './browser';
+import type { BrowserRuntime } from './browser';
+import { discoverBrowserProfiles, readBrowserConfig, saveBrowserConfig } from './browser-config';
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
-import { allowsAiOnlyRoutes } from './workspace-profiles';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -37,13 +37,10 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
   ipcMain.handle('workspaces:proposal-confirm', async (_event, binding: WorkspaceProposalBinding) => confirmWorkspaceProposal(binding));
   ipcMain.handle('settings:get', async () => {
     const dataRoot = await loadSelectedDataRoot();
-    const settings = dataRoot ? await readSettings(dataRoot.path) : null;
+    const selectedBrowser = readBrowserConfig();
+    const settings = dataRoot ? await readSettings(dataRoot.path, { browserProfilePath: selectedBrowser?.userDataDir }) : null;
     if (!settings || !dataRoot) return null;
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    const selectedBrowser = readBrowserConfig(database);
     const pi = readPiConfig();
-    const legacyBrowserAllowed = allowsAiOnlyRoutes(database);
-    database.close();
     const workspace = await readCurrentWorkspaceSnapshot(dataRoot.path, listWorkspaces);
     return {
       ...settings,
@@ -52,7 +49,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       browser: getBrowser()
         ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath, mode: getBrowser()!.mode }
         : { status: 'not_started' },
-      browserOptions: discoverBrowserProfiles(dataRoot.path, legacyBrowserAllowed ? selectedBrowser : null),
+      browserOptions: discoverBrowserProfiles(selectedBrowser),
       selectedBrowser,
       pi,
       workspace
@@ -63,10 +60,11 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     if (!dataRoot) throw new Error('请先选择数据根目录。');
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
     try {
-      const selected = allowsAiOnlyRoutes(database) ? readBrowserConfig(database) : null;
-      const config = discoverBrowserProfiles(dataRoot.path, selected).find((candidate) => candidate.id === id);
+      const config = discoverBrowserProfiles().find((candidate) => candidate.id === id);
       if (!config) throw new Error('浏览器 profile 不存在。');
-      return saveBrowserConfig(database, config);
+      const saved = saveBrowserConfig(config);
+      database.exec('DELETE FROM x_list_index_cache; DELETE FROM x_list_timeline_cache;');
+      return saved;
     } finally { database.close(); }
   });
   ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; apiKey?: string }) => {

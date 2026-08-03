@@ -74,9 +74,7 @@ test('scan receipts replay by task/module/source and project X bindings without 
     assert.equal(summary.sources.find((item) => item.module === 'x_lists').sourceFeedId, binding.sourceFeedId);
     assert.equal(summary.sources.find((item) => item.module === 'x_lists').status, 'needs_user');
     assert.equal(summary.readiness.find((item) => item.module === 'x_lists').status, 'needs_user');
-    const now = new Date().toISOString();
-    database.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('browser.config', ?, ?, ?, 1)`).run(JSON.stringify({ id: 'edge:root' }), now, now);
-    const configuredSummary = readIntelligenceChannelsSummary(database);
+    const configuredSummary = readIntelligenceChannelsSummary(database, true);
     assert.equal(configuredSummary.sources.find((item) => item.module === 'x_lists').status, 'ready');
     assert.equal(configuredSummary.readiness.find((item) => item.module === 'x_lists').status, 'ready');
     database.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('workspace_id', ?, ?, ?, 1)`).run('workspace-a', new Date().toISOString(), new Date().toISOString());
@@ -87,7 +85,7 @@ test('scan receipts replay by task/module/source and project X bindings without 
       platforms: ['x']
     });
     const snapshot = await readCurrentWorkspaceSnapshot(root, async () => ({ activeWorkspaceId: 'workspace-a', workspaces: [{ id: 'workspace-a', displayName: '英国生活', rootPath: root }] }));
-    assert.deepEqual(snapshot.intelligenceChannels.sources, configuredSummary.sources);
+    assert.deepEqual(snapshot.intelligenceChannels.sources, readIntelligenceChannelsSummary(database).sources);
     assert.throws(() => recordSourceScanReceipt(database, {
       taskId: 'bad-web-pair', workspaceId: 'workspace-a', module: 'official_web', sourceId: website.id,
       sourceFeedId: binding.sourceFeedId, status: 'succeeded'

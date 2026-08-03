@@ -8,7 +8,7 @@ import { agentRequestId, completeAgentTask, getAgentTask } from '../src/main/age
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
-import { discoverBrowserProfiles } from '../src/main/browser.ts';
+import { discoverBrowserProfiles } from '../src/main/browser-config.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { createOfficialWorkspace, enrollAiWorkspace } from '../src/main/workspaces.ts';
@@ -78,6 +78,8 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(snapshot.id, uk.id);
       assert.equal(snapshot.profile.intelligencePackId, 'uk-life-content-radar');
       assert.deepEqual(snapshot.capabilities, { xLists: true, aiIntelligence: false, fixedAiLists: false, rankings: false, sourceWire: false, publishingPlatforms: ['x', 'xiaohongshu'] });
+      const bindings = await mcpRequest(mcp.url, 'tools/call', { name: 'x_lists.list_bindings', arguments: {} }, initialized.sessionId);
+      assert.deepEqual(JSON.parse(bindings.data.content[0].text), []);
       const rejected = await mcpRequest(mcp.url, 'tools/call', { name: 'x_lists.prepare', arguments: { request_id: 'missing-login', account_key: '@wrong', kind: 'create', name: 'must-not-write' } }, initialized.sessionId);
       const failure = JSON.parse(rejected.data.content[0].text);
       assert.equal(failure.error.code, 'BROWSER_NEEDS_USER');
@@ -95,8 +97,11 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(names.has('x_lists.read_index'), true);
       assert.equal(names.has('x_lists.confirm'), false);
     } finally { await aiMcp.close(); }
-    const ukBrowser = discoverBrowserProfiles(ukRoot.path)[0];
-    assert.equal(ukBrowser.userDataDir, path.join(ukRoot.path, 'browser-profile'));
+    const configPath = path.join(aiRoot.path, 'installation', 'browser-config.json');
+    const aiBrowser = discoverBrowserProfiles(null, configPath)[0];
+    const ukBrowser = discoverBrowserProfiles(null, configPath)[0];
+    assert.equal(ukBrowser.userDataDir, path.join(aiRoot.path, 'installation', 'browser-profile'));
+    assert.equal(ukBrowser.userDataDir, aiBrowser.userDataDir);
     assert.notEqual(ukBrowser.cdpUrl, 'http://127.0.0.1:9334');
 
     const channelDb = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));

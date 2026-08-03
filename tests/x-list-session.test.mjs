@@ -4,6 +4,7 @@ import { cubicBezier, isPyaireaderXProfile, isXHomeUrl, parseXListId, xListUrl }
 
 test('X List session accepts only the Pyaireader profile and stable List URLs', () => {
   assert.equal(isPyaireaderXProfile({ id: 'edge:pyaireader-default', cdpUrl: 'http://127.0.0.1:9334/' }), true);
+  assert.equal(isPyaireaderXProfile({ id: 'edge:wmb-installation' }), true);
   assert.equal(isPyaireaderXProfile({ id: 'edge:Default', cdpUrl: 'http://127.0.0.1:9334' }), false);
   assert.equal(parseXListId('https://x.com/i/lists/1234567890'), '1234567890');
   assert.equal(parseXListId('https://x.com/i/lists/not-a-list'), null);

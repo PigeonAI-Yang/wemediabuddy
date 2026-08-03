@@ -999,7 +999,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
   return <section className="x-lists-view">
     {!index ? <section className="empty-state library-empty">
       <h2>尚未读取 X List</h2>
-      <p>{note || '从设置中选定当前工作空间专用 X 登录态后，点击刷新读取列表。'}</p>
+      <p>{note || '使用 WMB 共享的 X 登录态读取列表；只有登录失效时才需前台接管。'}</p>
       <button className="refresh-button" disabled={loading} onClick={() => void loadIndex()}>{loading ? '读取中…' : '读取 X Lists'}</button>
     </section> : <>
       <div className="discover-sources" aria-label="List 分组">

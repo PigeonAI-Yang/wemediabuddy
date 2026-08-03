@@ -3,7 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
-import { readBrowserConfig, startBrowser, type BrowserRuntime } from './browser';
+import { startBrowser, type BrowserRuntime } from './browser';
+import { readBrowserConfig } from './browser-config';
 import { createPublication, getPublicationDetail, listPublicationDetails, preparePublication, reconcileAsNotPublished, transitionPublication } from './publishing';
 import { saveAccount, verifyAccount } from './accounts';
 import { collectXAccountMetrics, collectXMetrics, identifyXAccount, prepareXImage, prepareXText, prepareXVideo } from './platforms/x';
@@ -22,7 +23,7 @@ export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser,
   const ensureBrowser = async (database: DatabaseSync): Promise<BrowserRuntime> => {
     const current = getBrowser();
     if (current) return current;
-    const config = readBrowserConfig(database);
+    const config = readBrowserConfig();
     if (!config) throw new Error('请先在设置中选择浏览器 profile。');
     const runtime = await startBrowser(config, { mode: 'quiet' });
     setBrowser(runtime);

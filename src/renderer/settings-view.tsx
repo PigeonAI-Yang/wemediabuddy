@@ -177,7 +177,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           {settings && <>
             <div className="settings-row"><div><h3>数据库</h3><p>wmb.db · {formatBytes(settings.usage.database)} · 迁移 v{settings.counts.migrations}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
             <div className="settings-row"><div><h3>素材目录</h3><p>assets/ · {formatBytes(settings.usage.assets)} · SHA-256 去重</p></div></div>
-            <div className="settings-row"><div><h3>浏览器用户目录</h3><p>browser-profile/ · {formatBytes(settings.usage.browserProfile)} · 独立持久</p></div></div>
+            <div className="settings-row"><div><h3>浏览器用户目录</h3><p>browser-profile/ · {formatBytes(settings.usage.browserProfile)} · WMB 安装内共享</p></div></div>
           </>}
           <div className="settings-row"><div><h3>日志</h3><p>logs/ · {settings ? formatBytes(settings.usage.logs) : '查看应用运行记录和错误信息。'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}

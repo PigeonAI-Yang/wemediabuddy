@@ -12,7 +12,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 3. 复用同一次业务动作的 `requestId`；不要用新 ID 重试同一动作。
 4. Pi 只能准备来源、X List 操作和工作空间配方。最终确认、激活和最终发布只由用户在 WMB UI 或平台页面完成。
 5. 写入后必须按返回 ID 精确回读。不要把工具调用成功、页面跳转或模型叙述当成完成。
-6. 保留 `needs_user`、`failed`、`partial`、`unknown` 和 revision/stale 的区别；不要静默换账号、根、模型、协议或来源。
+6. 保留 `needs_user`、`failed`、`partial`、`unknown` 和 revision/stale 的区别；数据库、并发取消或内部错误不是登录失效，不得建议用户重新登录；不要静默换账号、根、模型、协议或来源。
 7. 只操作当前 MCP URL 绑定的工作空间。切换根后重新读取当前身份，旧提案、旧 revision 和旧 URL 不再使用。
 
 ## 流程路由
@@ -33,7 +33,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 4. 把准确候选、试读/解析结果和已有来源 revision 交给 `wmb_prepare_intelligence_channel_changes`，一次准备完整 diff。
 5. 停止并等待用户在 WMB UI 确认。确认后重新调用 `wmb_get_intelligence_channels` 读回；需要时用 `wmb_list_intelligence_channel_receipts` 查看真实检查结果。
 
-读取 X Lists 时 WMB 会自动复用或静默启动当前工作空间的专用浏览器，不要要求用户在保存选择后额外点击后台启动。只有 WMB 准确返回需要登录时，才请求用户在设置中点“前台接管”完成登录，然后重新读取。不得声称看到未读取的登录态，不得建议使用旧外部工具，也不得绕过当前工作空间的专用浏览器/profile。
+读取 X Lists 时 WMB 会自动复用或静默启动安装级共享的专用 Edge profile；工作空间只隔离账号快照、List 绑定、缓存、操作和资料，不要求重复登录、另建浏览器或使用指纹浏览器。只有 WMB 准确返回安装级登录失效时，才请求用户在设置中点“前台接管”完成登录，然后重新读取。不得声称看到未读取的登录态，不得建议使用旧外部工具，也不得迁移其他账号的绑定或绕过本根业务隔离。
 
 ### 操作和采集 X Lists
 

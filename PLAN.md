@@ -221,13 +221,13 @@ Scope: CAP-017.
 
 Deliver:
 
-- fixed, visible, serial X List executor using the active data-root's selected dedicated X profile;
+- fixed, visible, serial X List executor using the WMB installation's dedicated Edge profile and current account;
 - persisted List bindings, confirmation-bound operation records and per-member readback;
 - owned/followed/member List read model and permission-bounded management commands;
 - UI-only confirmation, MCP/Pi read-and-prepare commands, and Discover List workspace;
 - explicit bounded List-timeline collection into existing sources.
 
-Gate: EVAL-016 passes with a real selected X profile, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback. X Lists remains available independently of the publishing-platform subset; workspace acceptance additionally proves the same X List identity/cache fixture is root-local and never reused across roots.
+Gate: EVAL-016 passes with one real installation-level Edge login reused across AI/UK/game without repeated login, an owned List mutation with exact readback, stale confirmation rejection, safe stop/unknown behavior, and a bound List source readback. X Lists remains available independently of the publishing-platform subset; workspace acceptance additionally proves the same X List identity/cache fixture is root-local and never reused across roots.
 
 ## M-1700 Official-release intelligence wire
 
@@ -261,13 +261,13 @@ Order:
 6. `WMB-1905` — extract only the intelligence/creation catalog boundaries proven by AI/UK, then add session-bound proposals and read-or-prepare-only application MCP tools with the full stale negative matrix;
 7. `WMB-1906` — add UI result/diff confirmation and prove an Owner-supplied third self-media goal through manual confirmation, cold reopen and a linked X pure-text chain;
 8. `WMB-1907` — run focused packaged acceptance for enrollment, relaunch switching, failure recovery, UK, the third lane and truthful `needs_user`, reusing unchanged legacy receipts.
-9. `WMB-1908` — publish one authoritative workspace capability snapshot; make active-profile changes replace every bound runtime and old MCP URL; make generic X Lists available in every root while keeping caches, accounts and AI fixed-List policy root/pack isolated;
+9. `WMB-1908` — publish one authoritative workspace capability snapshot; make active-profile changes replace every bound runtime and old MCP URL; make generic X Lists available in every root while keeping bindings, caches, account snapshots and AI fixed-List policy root/pack isolated;
 10. `WMB-1909` — render Discover from a finite intelligence-pack mapping, keep rankings/then-current AI source presentation AI-only, and expose the shared root-local X Lists workspace in AI, UK and game without a plugin loader; M-2100 later migrates source presentation to shared root-local channels;
 11. `WMB-1910` — enforce profile publishing-platform subsets at shared write/runtime boundaries and make missing-model/login task states truthful without disabling generic X List inputs;
 12. `WMB-1911` — isolate workspace-bound renderer selections and remove mount-time business writes;
 13. `WMB-1912` — run the packaged AI/UK/game module, generic X Lists, platform, process and zero-cross-root acceptance matrix.
 
-Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Generic `x_lists.*` is available in every active self-media root independently of publishing platforms, while accounts, bindings, caches, operations and collected sources stay root-local. M-2100 subsequently replaces the fixed AI source wire with the shared root-local channel configuration while retaining AI rankings. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
+Gate: EVAL-017–EVAL-019 pass. The AI root retains its current data and accepted behavior; AI, UK and the third lane use one WMB codebase but isolated roots; inactive roots have no process or write; Agents can prepare but never activate a profile. Generic `x_lists.*` is available in every active self-media root independently of publishing platforms, one installation-level Edge login is reused, while account snapshots, bindings, caches, operations and collected sources stay root-local. M-2100 subsequently replaces the fixed AI source wire with the shared root-local channel configuration while retaining AI rankings. Legacy UK-terminal data import, rename/archive/delete lifecycle, third-party plugins, shared-database tenancy, parallel workspace runtimes, profile history/old-pack compatibility and native media editors are not part of M-1900.
 
 ## M-2000 Pi model contract correction
 
@@ -294,7 +294,7 @@ Order:
 7. `WMB-2106` — expose read/prepare-only channel MCP/Pi tools and UI-only exact batched source confirmation with stale zero-write behavior;
 8. `WMB-2107` — run focused packaged AI/UK acceptance for arbitrary websites, same-name X Lists, cold-switch isolation, zero-update success, partial preservation, all-blocked preflight and exact authorization.
 
-Gate: EVAL-020–EVAL-023 pass. AI/UK use the same two fixed channel modules and shared daily scan path; the AI source-index/List fixtures are retained as visible AI-root configuration rather than a privileged collector. At least one truthful source check may succeed with zero new items and an empty plan, while no trustworthy receipt cannot claim success. Source configuration, account identity, receipts and collected items stay root-local; Agents prepare but UI confirms exact source changes. X accounts, Xiaohongshu, communities, third-party modules, plugin loading and the separate Pi stale temporary-working-directory BUG are outside M-2100.
+Gate: EVAL-020–EVAL-023 pass. AI/UK use the same two fixed channel modules and shared daily scan path; the AI source-index/List fixtures are retained as visible AI-root configuration rather than a privileged collector. At least one truthful source check may succeed with zero new items and an empty plan, while no trustworthy receipt cannot claim success. Source configuration, account snapshots, bindings, receipts and collected items stay root-local while the Edge login is installation-level; Agents prepare but UI confirms exact source changes. Xiaohongshu, communities, third-party modules, plugin loading and the separate Pi stale temporary-working-directory BUG are outside M-2100.
 
 ## M-2200 X List trend opportunity radar
 
@@ -328,9 +328,9 @@ Scope: CAP-014 and the existing WMB business workflows it operates. This milesto
 Order:
 
 1. `WMB-2400` — create the canonical `wemedia-buddy-operator` Skill with current workflow playbooks and a deterministic check that every named `wmb_*` tool exists;
-2. `WMB-2403` — falsifiably reproduce and repair the current-root browser/login workflow that blocks X List save/read after browser configuration, remove stale user-facing `pyaireader` terminology, and synchronize the operator Skill with the verified flow;
+2. `WMB-2403` — falsifiably reproduce and repair the browser/login workflow that blocks X List save/read: migrate the existing logged-in Edge profile to one installation-level identity shared by every workspace while retaining root-local X business state, remove stale user-facing provider/root-login terminology, and synchronize the operator Skill with the verified flow;
 3. `WMB-2404` — falsifiably reproduce the 13/13 daily-intelligence stall, distinguish channel completion from the later Pi judgment/save phase, and make persisted progress and Today presentation truthful until the plan is actually available; this independent task may proceed while WMB-2403 is at its required human-login gate;
 4. `WMB-2401` — package and refresh the shared operator Skill into every Pi data root while keeping lane Skills root-specific and the system prompt limited to immutable authority boundaries; this installation task may proceed while WMB-2403 waits at its human-login gate;
-5. `WMB-2402` — after both WMB-2401 and WMB-2403, prove a fresh root and an existing AI/UK root load and follow the shared Skill for channel proposal, real X List save/read and content-project workflows without direct writes or confirmation bypass.
+5. `WMB-2402` — after both WMB-2401 and WMB-2403, prove a fresh root and existing AI/UK roots load and follow the shared Skill for channel proposal, real X List save/read through the same installation-level Edge login, and content-project workflows without direct writes or confirmation bypass.
 
-Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names and stale `pyaireader` user guidance fail deterministic checks, daily progress remains truthful across channel and Pi phases, and real Pi readback completes the changed playbooks through WMB business tools, the exact root-local browser/profile and required UI confirmation.
+Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names and stale provider/root-login guidance fail deterministic checks, daily progress remains truthful across channel and Pi phases, and real Pi readback completes the changed playbooks through WMB business tools, one exact installation-level browser/profile, root-local business isolation and required UI confirmation.

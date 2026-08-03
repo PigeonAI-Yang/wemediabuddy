@@ -1,10 +1,10 @@
 import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
-import { ensurePyaireaderXBrowser, readBrowserConfig } from './browser.ts';
+import { ensurePyaireaderXBrowser } from './browser.ts';
+import { readBrowserConfig } from './browser-config.ts';
 import { readXListIndex } from './platforms/x-list-browser.ts';
-import { pyaireaderXProfileId, type XListBrowserConfig } from './platforms/x-list-primitives.ts';
-import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
+import type { XListBrowserConfig } from './platforms/x-list-primitives.ts';
 
 export type CurrentXListContext = {
   root: DataRoot;
@@ -28,10 +28,9 @@ export async function currentXListContextForRoot(root: DataRoot): Promise<Curren
   return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey }, index };
 }
 
-export async function selectedXListBrowser(database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
-  const config = readBrowserConfig(database);
-  if (!config) throw new Error('请先在设置中选择当前工作空间专用的 X 登录态。');
-  if (config.id === pyaireaderXProfileId && !allowsAiOnlyRoutes(database)) throw new Error('此根尚未配置独立 X 登录态。');
+export async function selectedXListBrowser(_database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
+  const config = readBrowserConfig();
+  if (!config) throw new Error('请先在设置中启用 WMB 共享的 X 登录态。');
   const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
   return { id: config.id, cdpUrl: runtime.cdpUrl };
 }

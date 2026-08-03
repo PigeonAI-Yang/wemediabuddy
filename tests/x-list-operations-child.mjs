@@ -59,7 +59,7 @@ try {
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
   if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_collect_x_list_timeline') || tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
   const mcpSource = await readFile(new URL('../src/main/mcp.ts', import.meta.url), 'utf8');
-  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.collect_timeline") || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
+  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.collect_timeline") || !mcpSource.includes('return await collectBoundXListTimeline') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
 } finally {
   await mcp?.close();
   await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

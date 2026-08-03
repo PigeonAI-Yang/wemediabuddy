@@ -52,7 +52,7 @@ description: 为面向在英中国人的小红书账号建立英国生活内容�
 
 用户要求 X、博主或社交平台线索时：
 
-1. 调用 `wmb_read_x_list_index` 读取当前工作空间专用 X 账号的真实 List 索引；需要登录时停止并请求用户在 WMB 前台接管，不能换账号或浏览器 profile。
+1. 调用 `wmb_read_x_list_index` 读取 WMB 安装级共享 X 账号的真实 List 索引；只有登录失效时停止并请求用户在 WMB 前台接管，不能换账号、另建工作空间浏览器 profile 或迁移其他账号绑定。
 2. 只读取本根已配置或用户明确指定的 List；用 `wmb_read_x_list_detail`、`wmb_read_x_list_members` 和 `wmb_read_x_list_timeline` 获取真实页面证据。
 3. 分主题读取相关 List，不用一个无边界列表覆盖全部领域。
 4. 读取候选账号和代表性帖子；需要纳入资料库时使用 WMB 保存工具并按返回 ID 回读。
