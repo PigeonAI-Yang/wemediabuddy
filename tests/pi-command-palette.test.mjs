@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { filterPiCommands, insertPiCommand } from '../src/renderer/pi-command-filter.ts';
+import { routePiSkillPrompt } from '../src/main/pi-skill-routing.ts';
 
 test('Pi command palette filters and inserts native commands without sending', async () => {
   const commands = [
@@ -19,4 +20,12 @@ test('Pi command palette filters and inserts native commands without sending', a
   }
   const choose = source.slice(source.indexOf('const chooseCommand'), source.indexOf('const sendCurrent'));
   assert.equal(choose.includes('onSend('), false);
+});
+
+test('dock context must not hide a native Skill command', () => {
+  const currentDockPayload = '[WMB_CONTEXT]\npage=today\n[USER_MESSAGE]\n/skill:wemedia-buddy-operator 只回复已加载';
+  const routed = routePiSkillPrompt(currentDockPayload);
+  assert.equal(routed.startsWith('/skill:wemedia-buddy-operator '), true);
+  assert.equal(routed.includes(currentDockPayload), true);
+  assert.equal(routePiSkillPrompt('[WMB_CONTEXT]\n[USER_MESSAGE]\n/session-name New name'), '/session-name New name');
 });

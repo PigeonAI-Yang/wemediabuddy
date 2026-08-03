@@ -2,6 +2,12 @@ const FACTUAL_WRITING = /写一篇|写正文|写稿|写文章|写口播稿|写(?
 const NON_FACTUAL = /纯虚构|虚构创作|写(?:一篇)?(?:小说|故事|诗歌|童话)|只(?:改|修改|检查)(?:错别字|标点|语法)|不做事实(?:研究|核查)/;
 
 export function routePiSkillPrompt(raw: string): string {
-  if (raw.startsWith('/skill:') || NON_FACTUAL.test(raw) || !FACTUAL_WRITING.test(raw)) return raw;
+  if (raw.startsWith('/')) return raw;
+  const marker = '[USER_MESSAGE]\n';
+  const markerIndex = raw.indexOf(marker);
+  const userMessage = markerIndex >= 0 ? raw.slice(markerIndex + marker.length).trim() : '';
+  const nativeCommand = userMessage.match(/^\/[^\s]+/)?.[0];
+  if (nativeCommand) return nativeCommand.startsWith('/skill:') ? `${nativeCommand} ${raw}` : userMessage;
+  if (NON_FACTUAL.test(raw) || !FACTUAL_WRITING.test(raw)) return raw;
   return `/skill:evidence-grounded-writer [USER_MESSAGE]\n${raw}`;
 }
