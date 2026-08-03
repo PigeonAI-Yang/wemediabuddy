@@ -564,9 +564,31 @@ On restart, at most the latest still-relevant overdue observation for a List may
 
 Topic/event aggregation, plan opportunities and content projects reuse CAP-003, CAP-004 and CAP-015. Trend evidence references real source and snapshot IDs. It may recommend an editorial format or angle but never performs replies, likes, quotes, reposts or final publication.
 
+### CAP-023 Installation-wide Pi Skills and evidence-grounded writing
+
+Links: REQ-024, AC-020.
+
+Settings must expose one installation-wide Pi Skills page. Its read model lists stable name, description, scope, editable state and current content revision. `wemedia-buddy-operator` and the active root's lane Skill are system-required and read-only. Other installation Skills are editable and shared by every workspace; their source of truth lives under Electron `userData`, not inside any data root or the Git repository at runtime.
+
+Creating or updating an editable Skill accepts only a valid Agent Skills name, non-empty description and non-empty Markdown instructions, writes one canonical `SKILL.md` atomically, and refreshes its generated copy under every registered root's `pi-agent/skills/`. Renaming removes the old managed identity. Deleting records a durable tombstone for a packaged default, removes only installation-managed copies, and must not delete or overwrite the operator or lane Skills. Every mutation stops the current Pi process; existing conversations remain, while the next Pi process discovers the new Skill metadata. Skills cannot add WMB IPC/MCP tools, arbitrary execution authority, direct business-file/SQLite writes, confirmation rights or final publication.
+
+WMB ships editable default Skill `evidence-grounded-writer`. Its description must trigger for factual publishable writing and requests such as writing an article/body/script, deepening a topic, fact-checking, adding evidence/cases/data or making content more substantial; it must not trigger for pure fiction, casual chat or spelling-only edits.
+
+When triggered, the Skill must:
+
+1. define audience, platform, content promise and time sensitivity;
+2. separate externally verifiable claims from inference, opinion and personal experience;
+3. verify each material factual claim against actual source content, using current sources for time-sensitive facts and preserving disagreement and uncertainty;
+4. build richness from mechanism, concrete detail, data, examples/cases, audience impact, limitations/counterarguments and actions, without repetitive padding;
+5. write only within supported claim boundaries;
+6. extract factual claims from the completed draft and recheck them;
+7. delete, narrow or label unsupported claims and return a concise verification summary so human review focuses on conflicts and residual uncertainty.
+
+Discovery sources have no global authority ranking. Evidence adequacy is claim-dependent: a first-hand X post may prove what its author posted, while a policy effective date requires the corresponding authoritative record. The Skill may narrow or reject a topic when available evidence cannot support a useful draft.
+
 ## 4. UI and IPC contract
 
-The required primary views remain Today, Discover, Studio, Publish, Results, and Settings. Discover includes one fixed intelligence-channel workspace for website and X Lists source configuration; it is not a plugin manager.
+The required primary views remain Today, Discover, Studio, Publish, Results, and Settings. Discover includes one fixed intelligence-channel workspace for website and X Lists source configuration; it is not a plugin manager. Settings includes installation-level Pi Skills management under CAP-023; this manages Pi instructions only and is not a business-module or channel plugin manager.
 
 Preload exposes narrow IPC for:
 
@@ -577,6 +599,7 @@ Preload exposes narrow IPC for:
 - settings read/update;
 - open data/log directories.
 - fixed Pi task start/read/cancel and Pi connection settings.
+- installation-level Pi Skill list/create/update/delete with system-required Skill protection.
 - fixed X List reads, preparation and UI-only confirmation.
 - website/X Lists channel configuration reads, website resolution/trial read, daily preflight, scan receipts and source-change preparation with UI-only confirmation.
 - X post trend snapshot reads and explicit bounded-observation start/read/stop; no arbitrary cadence, URL, account or root.
@@ -617,5 +640,6 @@ Every mutation returns the complete latest object. Focused views poll for extern
 | EVAL-023 | Channel authorization and root isolation | Pi/external MCP prepares an exact batched source diff but exposes no confirm tool; UI confirmation binds workspace/profile/source identities and exact diff, stale confirmation writes zero, and identical AI/UK URL/List fixtures, receipts and collected items remain mutually invisible after cold switches. |
 | EVAL-024 | X post metric history and trend | A current Windows package with a real logged-in X profile reads one bound List at least three times. One canonical source item retains three append-only snapshots with raw labels, field status and real capture times; exact two-point velocity and three-point velocity change read back, while null/parse-failed/decreasing/short/insufficient samples produce no fake trend. |
 | EVAL-025 | Bounded observation and opportunity lineage | One explicit start creates only the three frozen follow-up windows per selected List; replay is idempotent, account/root/binding changes and late responses write zero, inactive roots do not run, partial List failure preserves success, and a multi-source event opportunity exposes trend evidence through Today and retains the same plan/topic/source chain when UI or MCP creates content. |
+| EVAL-026 | Pi Skills and evidence-grounded writing | Settings lists protected operator/current-lane Skills and editable installation Skills. Create, edit, rename and delete one Skill, then prove exact metadata/content and deletion read back from one fresh and one existing root without touching protected/lane Skills; restart proves a deleted packaged default stays deleted. A real Pi factual-writing turn automatically loads `evidence-grounded-writer`, uses stored or live traceable evidence, narrows/removes unsupported claims, adds non-repetitive mechanism/detail/case/limitation/action layers, rechecks the completed draft and returns the draft plus residual verification summary. |
 
 All six payload-format evals must pass. Platform authentication and real publication are outside the completion gate.

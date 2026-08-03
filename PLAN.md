@@ -334,3 +334,16 @@ Order:
 5. `WMB-2402` — after both WMB-2401 and WMB-2403, prove a fresh root and existing AI/UK roots load and follow the shared Skill for channel proposal, real X List save/read through the same installation-level Edge login, and content-project workflows without direct writes or confirmation bypass.
 
 Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names and stale provider/root-login guidance fail deterministic checks, daily progress remains truthful across channel and Pi phases, and real Pi readback completes the changed playbooks through WMB business tools, one exact installation-level browser/profile, root-local business isolation and required UI confirmation.
+
+## M-2500 Installation-wide Pi Skills and evidence-grounded writing
+
+Scope: CAP-014 and CAP-023.
+
+Order:
+
+1. `WMB-2500` — freeze REQ-024/AC-020/CAP-023/EVAL-026 and the protected-system versus editable-installation Skill boundary;
+2. `WMB-2501` — implement the installation Skill store, tombstones, atomic CRUD, all-root synchronization and Settings management page;
+3. `WMB-2502` — create and ship `evidence-grounded-writer`, with factual-writing triggers, claim/evidence discipline, information-density rules and post-draft verification;
+4. `WMB-2503` — package and prove fresh/existing-root CRUD, restart deletion persistence, protected/lane preservation and one real Pi evidence-grounded writing result.
+
+Gate: Settings manages ordinary shared Pi Skills without becoming a business plugin manager; protected operator/lane Skills cannot be changed; editable Skill mutations are identical across registered roots and take effect in the next Pi process; the default writing Skill reduces human verification load by producing a traceable, information-dense factual draft plus only residual conflicts/uncertainty for human review.

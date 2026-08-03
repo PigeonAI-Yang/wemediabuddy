@@ -111,6 +111,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 - `intelligence-channels`：固定官网/X Lists 来源配置、解析/试读、逐来源回执和共享每日预检/扫描编排；不是插件加载器。
 - `workspaces`：应用级注册表、根身份校验和单活动根切换；
 - `workspace-profiles`：有限字段的当前配方、编译期官方目录和会话级提案确认。
+- `pi-skills`：安装级 Pi Skill 清单、原子 SKILL.md 增删改、默认 Skill tombstone 和已登记 data-root 副本同步；不提供业务插件加载或新权限。
 
 不建设通用工作流引擎、事件溯源系统、平台 DSL 或选择器配置平台。
 
@@ -118,7 +119,7 @@ MCP、IPC 和浏览器适配器都不能绕过业务命令直接修改数据库�
 
 ### 5.1 数据目录
 
-应用在 Electron `userData` 下保存最小工作空间注册表、安装级 Pi 模型预设和一套专用 Edge 配置/profile；不保存业务数据或素材。用户选择的每个 data-root 都完整保存：
+应用在 Electron `userData` 下保存最小工作空间注册表、安装级 Pi 模型预设、一套专用 Edge 配置/profile，以及普通共享 Pi Skills 的权威副本和默认 Skill 删除记录；不保存业务数据或素材。用户选择的每个 data-root 都完整保存：
 
 ```text
 <data-root>/
@@ -223,6 +224,7 @@ MCP 工具按业务能力组织：
 - 该目录不进入 `app.asar`，可独立替换升级；升级必须先验证版本和 RPC 启停，失败时保留现有版本；
 - Electron Main 只管理一个 Pi RPC 子进程，通过 LF JSONL 发送固定 intent 并转发流式事件；
 - WMB 在安装级用户目录保存一套加密的 Pi API/model 预设，并为每个根的 Pi 进程注入当前共享预设、该根 MCP URL 和任务上下文；Pi 会话与运行文件仍按 data-root 隔离，不读取其他 Agent OAuth；
+- WMB 把安装级普通 Pi Skills 原子同步到每个根的 `pi-agent/skills/`；Pi 原生按 name/description 发现并按需读取，系统 operator 和根专属 lane Skill 不受普通 Skill CRUD 影响；
 - Pi 业务写入只能经过现有 WMB MCP，最终发布能力不暴露给 Pi。
 
 ## 7. 浏览器执行器
@@ -349,7 +351,7 @@ SQLite `jobs` 表保存：
 - `Studio`：资料、选题、内容项目、版本和素材；
 - `Publish`：平台版本、账号、确认、执行状态和人工接管；
 - `Results`：指标快照、趋势、复盘和方法结论；
-- `Settings`：数据目录、MCP、Chrome、平台账号和日志状态。
+- `Settings`：数据目录、MCP、Chrome、平台账号、Pi Skills 和日志状态。
 
 顶栏或等价的持久位置显示当前工作空间；Settings 提供列表、重启式安全切换、移动后重新关联，以及官方模板或 Agent 配方提案的精确差异确认。不新增工作空间搭建聊天页，用户继续使用现有 Pi dock 或外部 Agent 描述目标。
 
