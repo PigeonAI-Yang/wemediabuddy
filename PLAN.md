@@ -425,3 +425,13 @@ Order:
 1. `WMB-3300` — move the complete website/X List channel configuration workspace to Settings, leave rankings and selected X List content in Discover, and update PRD/SPEC/technical ownership language.
 
 Gate: Discover contains no source add/enable/disable/remove, readiness or receipt-management controls; Settings retains all existing channel operations and confirmations; Today still runs every enabled source; AI rankings and selected X List content remain discoverable.
+
+## M-3400 Truthful empty X List timeline
+
+Scope: existing CAP-017 read presentation; no browser, cache or pagination protocol change.
+
+Order:
+
+1. `WMB-3400` — prove whether the reported sequence is one or two reads, then render zero initial posts as one retryable empty state and expose pagination only after at least one post exists.
+
+Gate: one empty response cannot show both no-dynamics and load-more; no automatic second timeline request is introduced; non-empty timelines retain existing pagination.

@@ -650,7 +650,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       const seen = new Set(current.map((item) => item.url));
       return [...current, ...mapped.filter((item) => !seen.has(item.url))];
     });
-    setPostsHasMore(Boolean(result.hasMore));
+    setPostsHasMore(mapped.length > 0 && Boolean(result.hasMore));
     setPostsOffset((current) => append ? current + mapped.length : mapped.length);
     setPostsMeta({ origin: 'live', fetchedAt: result.detail.observation?.capturedAt });
     setDetail(result.detail);
@@ -1032,6 +1032,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
         {members && <section className="x-list-member-strip" aria-label="成员"><div className="x-list-member-grid">{members.map((member) => <span key={member.handle}><b>{member.displayName}</b><small>{member.handle}</small></span>)}</div></section>}
         {selectedPost ? null : working && !posts ? <section className="ranking-loading">正在读取动态…</section>
           : !posts ? <section className="empty-state library-empty"><h2>还没有动态</h2><p>点「刷新动态」读取当前 List。</p><button disabled={working} onClick={() => void readTimeline(true)}>刷新动态</button></section>
+          : posts.length === 0 ? <section className="empty-state library-empty"><h2>当前没有可读动态</h2><p>本次读取没有返回帖子，可以重新读取。</p><button disabled={working} onClick={() => void readTimeline(true)}>重新读取</button></section>
           : <div className="x-timeline-feed" aria-label="List 动态" ref={feedRef}>
             {posts.map((post) => (
               <TimelineCard key={post.url} post={post} onOpen={(item) => void openPost(item)} />
