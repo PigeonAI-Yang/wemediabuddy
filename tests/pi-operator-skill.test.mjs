@@ -23,4 +23,5 @@ test('Pi operator Skill documents exactly the registered WMB tools and hard boun
   assert.match(skill, /最终确认、激活和最终发布只由用户/);
   assert.match(skill, /写入后必须按返回 ID 精确回读/);
   assert.match(skill, /只操作当前 MCP URL 绑定的工作空间/);
+  assert.match(skill, /不要另起一次选题或提议重复保存方案/);
 });

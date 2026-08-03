@@ -33,7 +33,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 4. 把准确候选、试读/解析结果和已有来源 revision 交给 `wmb_prepare_intelligence_channel_changes`，一次准备完整 diff。
 5. 停止并等待用户在 WMB UI 确认。确认后重新调用 `wmb_get_intelligence_channels` 读回；需要时用 `wmb_list_intelligence_channel_receipts` 查看真实检查结果。
 
-遇到浏览器或登录阻塞时，只报告 WMB 返回的准确状态并请求用户在 WMB 内完成所需人工步骤。不得声称看到未读取的登录态，不得建议使用旧外部工具，也不得绕过当前工作空间的专用浏览器/profile。
+读取 X Lists 时 WMB 会自动复用或静默启动当前工作空间的专用浏览器，不要要求用户在保存选择后额外点击后台启动。只有 WMB 准确返回需要登录时，才请求用户在设置中点“前台接管”完成登录，然后重新读取。不得声称看到未读取的登录态，不得建议使用旧外部工具，也不得绕过当前工作空间的专用浏览器/profile。
 
 ### 操作和采集 X Lists
 
@@ -48,6 +48,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 - 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`；保存外部资料使用 `wmb_save_source` 并保留原始 URL。
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点。
+- 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
 - 保存方案使用 `wmb_save_plan`。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
 - 保存后用 `wmb_get_workbench` 回读当日方案。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。

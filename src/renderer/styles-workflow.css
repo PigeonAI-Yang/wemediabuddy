@@ -202,6 +202,17 @@
   box-shadow:0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
   transition:width 280ms ease;
 }
+.intelligence-bar[data-indeterminate="true"] > i{
+  width:32% !important;
+  animation:intelligence-indeterminate 1.4s ease-in-out infinite alternate;
+}
+@keyframes intelligence-indeterminate{
+  from{ transform:translateX(0); }
+  to{ transform:translateX(210%); }
+}
+@media (prefers-reduced-motion: reduce){
+  .intelligence-bar[data-indeterminate="true"] > i{ animation:none; }
+}
 .intelligence-counts{
   display:flex;
   align-items:center;

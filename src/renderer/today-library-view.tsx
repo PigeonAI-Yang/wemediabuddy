@@ -272,7 +272,11 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
     resume_pending: '等待恢复',
     resuming: '正在恢复',
     planning_sources: '正在规划来源',
+    channel_preflight: '正在准备情报渠道',
     scanning_sources: '正在扫描来源',
+    channel_scanned: '渠道扫描已完成',
+    running_pi: '正在生成今日运营方案',
+    judging_opportunities: '正在生成今日运营方案',
     synthesizing: '正在整理内容机会',
     validating: '正在核验结果',
     completed: '已完成',
@@ -567,6 +571,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const verified = Math.max(0, Number(task?.progress?.verified ?? 0));
   const saved = Math.max(0, Number(task?.progress?.saved ?? 0));
   const opportunityCount = Math.max(0, Number(task?.progress?.opportunityCount ?? 0));
+  const judgmentPhase = ['channel_scanned', 'running_pi', 'judging_opportunities', 'synthesizing', 'validating'].includes(String(task?.phase || ''));
   const progressRatio = planned > 0 ? Math.min(1, processed / planned) : 0;
   const progressPct = Math.round(progressRatio * 100);
   const currentSource = String(task?.progress?.currentSource || '').trim();
@@ -620,16 +625,16 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
                     : (currentSource && sourceElapsedSec > 0
                       ? <em className="intelligence-source-timer">本源 {formatDuration(sourceElapsedSec)}</em>
                       : null)}
-                  <span>{planned > 0 ? `${processed}/${planned}` : `${progressPct}%`}</span>
+                  <span>{judgmentPhase ? `渠道 ${processed}/${planned}` : (planned > 0 ? `${processed}/${planned}` : `${progressPct}%`)}</span>
                   <span>已运行 {elapsedMin} 分钟</span>
                 </div>
               </div>
-              <div className="intelligence-bar" aria-label={`进度 ${progressPct}%`}>
+              <div className="intelligence-bar" data-indeterminate={judgmentPhase || undefined} aria-label={judgmentPhase ? `渠道扫描已完成 ${processed}/${planned}，正在生成方案` : `渠道扫描进度 ${progressPct}%`}>
                 <i style={{ width: `${Math.max(progressPct, running ? 6 : 0)}%` }} />
               </div>
               <div className="intelligence-counts" aria-label="进度计数">
-                <span><b>{planned}</b>计划</span>
-                <span><b>{processed}</b>处理</span>
+                <span><b>{planned}</b>渠道</span>
+                <span><b>{processed}</b>已扫描</span>
                 <span><b>{failed}</b>失败</span>
                 <span><b>{verified}</b>核验</span>
                 <span><b>{saved}</b>保存</span>

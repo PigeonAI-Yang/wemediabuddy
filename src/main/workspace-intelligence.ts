@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { agentRequestId, completeAgentTask, finishDailyIntelligenceFromReceipts, getAgentTask, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
+import { agentRequestId, completeAgentTask, finishDailyIntelligenceFromReceipts, getAgentTask, reportAgentTaskProgress, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runner.ts';
 import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
@@ -93,8 +93,15 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir,
       WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
     }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+    const heartbeat = setInterval(() => {
+      const current = getAgentTask(database, started.data.id);
+      if (current?.status === 'running') reportAgentTaskProgress(database, current.id, {});
+    }, 15_000);
     try {
-      updateAgentTaskPhase(database, started.data.id, 'running_pi');
+      reportAgentTaskProgress(database, started.data.id, {
+        phase: 'judging_opportunities',
+        message: '渠道扫描已完成，正在判断内容机会并生成今日运营方案。'
+      });
       await runtime.start();
       await runtime.promptUntilSettled(lanePrompt(profile, started.data.id, input.businessDate), { timeoutMs: 10 * 60_000 });
       updateAgentTaskPhase(database, started.data.id, 'validating');
@@ -110,6 +117,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       });
       throw error;
     } finally {
+      clearInterval(heartbeat);
       await runtime.stop().catch(() => {});
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }

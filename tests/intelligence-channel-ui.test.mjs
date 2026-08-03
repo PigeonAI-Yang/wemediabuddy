@@ -22,6 +22,7 @@ test('Today uses authoritative readiness and always starts all enabled Discover 
   const today = await readFile(new URL('../src/renderer/today-library-view.tsx', import.meta.url), 'utf8');
   const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
+  const workspaceIntelligence = await readFile(new URL('../src/main/workspace-intelligence.ts', import.meta.url), 'utf8');
   const discover = await readFile(new URL('../src/renderer/discover-view.tsx', import.meta.url), 'utf8');
   const channels = await readFile(new URL('../src/renderer/intelligence-channels-view.tsx', import.meta.url), 'utf8');
   assert.match(today, /startDailyIntelligence\(\{ businessDate: planDate \}\)/);
@@ -38,6 +39,11 @@ test('Today uses authoritative readiness and always starts all enabled Discover 
   assert.match(channels, /startXObservation/);
   assert.match(channels, /15\/60\/180 分钟三个观察窗口/);
   assert.match(channels, /停止观察/);
+  assert.match(today, /channel_scanned: '渠道扫描已完成'/);
+  assert.match(today, /judging_opportunities: '正在生成今日运营方案'/);
+  assert.match(today, /data-indeterminate=\{judgmentPhase/);
+  assert.match(workspaceIntelligence, /phase: 'judging_opportunities'/);
+  assert.match(workspaceIntelligence, /setInterval\([\s\S]*15_000\)/);
 });
 
 test('Today default run freezes all enabled sources before daily scanning', async () => {
