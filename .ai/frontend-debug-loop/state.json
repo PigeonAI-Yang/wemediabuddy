@@ -1,37 +1,37 @@
 {
   "active_loop": "",
   "status": "complete",
-  "symptom": "Restart erases the last submitted user message and the interrupted assistant output that was already visible.",
+  "symptom": "Pi appears to repeat the same content because every historical max-reasoning segment remains fully expanded.",
   "observation_packet": {
     "url": "packaged WeMediaBuddy Pi dock",
     "viewport": "user screenshot 583x193 crop",
-    "user_action": "submit a Pi message, interrupt/restart while the turn is in flight, reopen the active conversation",
-    "expected": "the submitted user message and already visible interrupted assistant output survive restart",
-    "actual": "both disappear after restart",
-    "screenshot": "user live report; isolated reproduction pending",
+    "user_action": "let Pi use several tools and read the resulting assistant turn",
+    "expected": "current reasoning remains visible without completed raw reasoning dominating and repeating the conversation",
+    "actual": "all 38 historical thinking segments are permanently expanded; exact duplicate DOM text count is zero but semantic repetition is high",
+    "screenshot": "live packaged DOM inspection",
     "console": "pending runtime reproduction",
     "network_ws": "not applicable; Electron IPC path",
-    "dom_selector": ".pi-conversation",
+    "dom_selector": ".pi-message-segment.thinking",
     "computed_style_layout": "pending runtime reproduction",
-    "state_store_snapshot": "renderer appends the user/streaming messages locally; pi:chat writes the conversation only after promptUntilSettled returns"
+    "state_store_snapshot": "active preset is deepseek-v4-flash with thinking=max; raw JSONL contains the same repeated reasoning progression seen in DOM"
   },
   "hypotheses": [
     {
-      "hypothesis": "the in-flight exchange exists only in renderer memory because Main persists nothing before the awaited Pi turn settles",
-      "would_disprove": "the active conversation file already contains the user turn and streaming assistant checkpoint before Pi settles",
-      "result": "confirmed and repaired"
+      "hypothesis": "WMB is not duplicating nodes; it makes provider repetition feel worse by permanently expanding every completed thinking segment",
+      "would_disprove": "the same thinking text appears more times in DOM than in the raw projected session, or completed thinking is already collapsed",
+      "result": "confirmed: exact DOM duplicates 0, completed thinking segments 38 and all expanded"
     }
   ],
-  "breakpoint": "Main conversation cold read trusted a stale segmented snapshot and ignored newer canonical Pi session entries; new turns were also not written before awaiting Pi.",
+  "breakpoint": "Renderer presentation policy permanently expanded every completed raw thinking segment.",
   "owner_check": {
-    "user_blocked_on": "restart erased the visible in-flight exchange",
+    "user_blocked_on": "repeated max reasoning dominated the conversation",
     "now_usable": true,
-    "real_data_or_state": "same UK data root and exact reported message",
-    "loading_empty_error_states": "pending turn and thrown Pi error persist truthfully",
+    "real_data_or_state": "same active deepseek-v4-flash max conversation",
+    "loading_empty_error_states": "latest streaming thinking remains expanded; completed state collapses non-lossily",
     "v1_v2_baseline_preserved": true,
-    "regression_risk_checked": "legacy projection and normal conversation round-trip passed",
+    "regression_risk_checked": "reply/tool counts and chronology retained",
     "would_user_return_this": false
   },
   "attempts": 1,
-  "last_gate": "packaged cold restart recovered exact user message plus eight following assistant segments"
+  "last_gate": "42 thinking summaries closed by default; one click opened exactly one full detail"
 }

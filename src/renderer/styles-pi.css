@@ -157,7 +157,7 @@
 
 .pi-bubble { margin: 0; max-width: 100%; min-width: 0; border-radius: 10px; background: var(--surface-raised); padding: 13px 14px; color: var(--ink-soft); line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
 .pi-bubble.user, .pi-conversation p.user { max-width: 88%; background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised)); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.pi-message-segment + .pi-message-segment, .pi-message-segment + .pi-tool-line, .pi-tool-line + .pi-message-segment, .pi-tool-line + .pi-tool-line { margin-top: 12px; }
+.pi-message-segment + .pi-message-segment, .pi-message-segment + .pi-tool-line, .pi-message-segment + .pi-thinking-line, .pi-tool-line + .pi-message-segment, .pi-tool-line + .pi-tool-line, .pi-tool-line + .pi-thinking-line, .pi-thinking-line + .pi-message-segment, .pi-thinking-line + .pi-tool-line, .pi-thinking-line + .pi-thinking-line { margin-top: 12px; }
 .pi-message-segment.thinking { color: var(--muted); }
 .pi-message-segment > :first-child { margin-top: 0; }
 .pi-message-segment > :last-child { margin-bottom: 0; }
@@ -171,6 +171,13 @@
 .pi-tool-detail { display: grid; gap: 5px; padding: 3px 0 9px; }
 .pi-tool-detail b { color: var(--muted); font-size: 11px; font-weight: 650; }
 .pi-tool-detail pre { max-height: 280px; overflow: auto; margin: 0; border-radius: 7px; background: var(--surface); padding: 8px 9px; color: var(--ink-soft); white-space: pre-wrap; word-break: break-word; font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.pi-thinking-line { min-width: 0; color: var(--muted); }
+.pi-thinking-line > summary { list-style: none; cursor: pointer; overflow: hidden; padding: 3px 0; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.pi-thinking-line > summary::-webkit-details-marker { display: none; }
+.pi-thinking-line > summary::before { content: '›'; display: inline-block; margin-right: 7px; transition: transform .15s ease; }
+.pi-thinking-line[open] > summary::before { transform: rotate(90deg); }
+.pi-thinking-line:not([open]) > .pi-thinking-detail { display: none; }
+.pi-thinking-detail { padding-top: 8px; }
 .pi-bubble-meta {
   display: flex;
   align-items: center;

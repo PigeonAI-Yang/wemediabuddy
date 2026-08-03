@@ -12,6 +12,11 @@ export function piToolActivity(toolName?: string): string {
   return '正在使用工具';
 }
 
+export function piThinkingSummary(text: string): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  return `思考 · ${compact.length > 64 ? `${compact.slice(0, 64)}…` : compact}`;
+}
+
 export function updatePiMessageSegment(message: PiChatMessage, segment: PiMessageSegment): PiChatMessage {
   const segments = [...(message.segments ?? [])];
   const last = segments[segments.length - 1];

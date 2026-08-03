@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
-import { coalescePiMessages, piMessageSegments } from './pi-dock-utils';
+import { coalescePiMessages, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
 
 export type PiDockMessage = PiChatMessage;
 
@@ -38,17 +38,25 @@ function segmentText(segment: PiMessageSegment): string {
   return segment.kind === 'tool' ? segment.text : segment.text;
 }
 
-function PiAssistantSegments({ segments }: { segments: PiMessageSegment[] }): React.JSX.Element {
+function PiAssistantSegments({ segments, streaming }: { segments: PiMessageSegment[]; streaming: boolean }): React.JSX.Element {
+  const liveThinkingIndex = streaming ? segments.map((segment) => segment.kind).lastIndexOf('thinking') : -1;
   return <>
-    {segments.map((segment, index) => segment.kind === 'tool'
-      ? <details className={`pi-tool-line${segment.isError ? ' failed' : ''}`} key={`${segment.toolCallId ?? segment.text}-${index}`}>
+    {segments.map((segment, index) => segment.kind === 'thinking'
+      ? index === liveThinkingIndex
+        ? <div className="pi-message-segment thinking live" key={`thinking-${index}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />
+        : <details className="pi-thinking-line" key={`thinking-${index}`}>
+            <summary>{piThinkingSummary(segment.text)}</summary>
+            <div className="pi-thinking-detail pi-message-segment thinking" dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />
+          </details>
+      : segment.kind === 'tool'
+        ? <details className={`pi-tool-line${segment.isError ? ' failed' : ''}`} key={`${segment.toolCallId ?? segment.text}-${index}`}>
           <summary>{segment.text}</summary>
           {(segment.input || segment.output) && <div className="pi-tool-detail">
             {segment.input && <><b>输入</b><pre>{segment.input}</pre></>}
             {segment.output && <><b>{segment.isError ? '错误' : '输出'}</b><pre>{segment.output}</pre></>}
           </div>}
         </details>
-      : <div className={`pi-message-segment ${segment.kind}`} key={`${segment.kind}-${index}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />)}
+        : <div className="pi-message-segment text" key={`text-${index}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />)}
   </>;
 }
 
@@ -92,7 +100,7 @@ export function PiDockTranscript({
                         <span className="pi-activity-copy"><strong>{statusText}</strong><small>Pi 正在继续处理</small></span>
                       </div>
                     : segments.length
-                      ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} /></div>
+                      ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} streaming={message.status === 'streaming'} /></div>
                       : null}
                 </>
               : <p className="user pi-bubble">{message.text}</p>}

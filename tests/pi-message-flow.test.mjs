@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { messagesFromPiEntries } from '../src/main/pi-transcript-projection.ts';
 import { piToolSummary } from '../src/shared/pi-message.ts';
-import { coalescePiMessages } from '../src/renderer/pi-dock-utils.ts';
+import { coalescePiMessages, piThinkingSummary } from '../src/renderer/pi-dock-utils.ts';
 
 test('Pi transcript preserves visible order and keeps tool details behind one summary', () => {
   const messages = messagesFromPiEntries([
@@ -44,4 +44,13 @@ test('legacy consecutive assistant entries render as one chronological turn', ()
 test('closed tool rows hide raw details', async () => {
   const css = await readFile(new URL('../src/renderer/styles-pi.css', import.meta.url), 'utf8');
   assert.match(css, /\.pi-tool-line:not\(\[open\]\) > \.pi-tool-detail \{ display: none; \}/);
+});
+
+test('completed thinking uses a compact truthful summary without semantic deletion', async () => {
+  assert.equal(piThinkingSummary('  先检查   资料，再判断。  '), '思考 · 先检查 资料，再判断。');
+  const transcript = await readFile(new URL('../src/renderer/pi-dock-transcript.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/renderer/styles-pi.css', import.meta.url), 'utf8');
+  assert.match(transcript, /streaming \? segments\.map\(\(segment\) => segment\.kind\)\.lastIndexOf\('thinking'\)/);
+  assert.match(transcript, /<details className="pi-thinking-line"/);
+  assert.match(css, /\.pi-thinking-line:not\(\[open\]\) > \.pi-thinking-detail \{ display: none; \}/);
 });
