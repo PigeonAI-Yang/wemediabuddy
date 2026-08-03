@@ -68,6 +68,29 @@ test('stopping an in-flight X observation rejects its late browser result withou
   } finally { await fixture.close(); }
 });
 
+test('account and root changes finish due observations without opening a stale write path', async () => {
+  const account = await createFixture('account-stale'); const root = await createFixture('root-stale');
+  try {
+    const accountRun = await startXObservationSession(account.db, account.config, {
+      requestId: 'account-stale', bindingIds: [account.binding.id], readTimeline: timelineAt('2026-08-02T00:00:00.000Z', 100)
+    });
+    account.db.prepare("UPDATE jobs SET due_at='2026-08-02T00:15:00.000Z' WHERE id=?").run(accountRun.data.jobs[0].id);
+    await processDueXObservationJobs(account.db, {
+      now: '2026-08-02T00:16:00.000Z', getConfig: async () => ({ ...account.config, accountKey: '@other' }),
+      readTimeline: async (...args) => ({ ...await timelineAt('2026-08-02T00:16:00.000Z', 200)(...args), accountKey: '@other' })
+    });
+    assert.equal(count(account.db, 'source_items'), 1); assert.equal(count(account.db, 'x_post_metric_snapshots'), 1);
+
+    const rootRun = await startXObservationSession(root.db, root.config, {
+      requestId: 'root-stale', bindingIds: [root.binding.id], readTimeline: timelineAt('2026-08-02T00:00:00.000Z', 100)
+    });
+    root.db.prepare("UPDATE jobs SET due_at='2026-08-02T00:15:00.000Z' WHERE id=?").run(rootRun.data.jobs[0].id);
+    root.db.prepare("UPDATE app_meta SET value='root-b' WHERE key='workspace_id'").run(); let opens = 0;
+    await processDueXObservationJobs(root.db, { now: '2026-08-02T00:16:00.000Z', getConfig: async () => { opens += 1; return root.config; } });
+    assert.equal(opens, 0); assert.equal(count(root.db, 'source_items'), 1); assert.equal(count(root.db, 'x_post_metric_snapshots'), 1);
+  } finally { await account.close(); await root.close(); }
+});
+
 async function createFixture(name) {
   const directory = await mkdtemp(path.join(os.tmpdir(), `wmb-x-observation-${name}-`));
   const db = migrateDatabase(path.join(directory, 'wmb.db')); const now = new Date().toISOString();

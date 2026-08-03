@@ -199,8 +199,8 @@ function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
   onCreate: (item: TodayPlanItem) => void; sources: TodaySource[];
 }): React.JSX.Element {
-  const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时` : null;
-  const trendTitle = trend?.viewsPerHour.status === 'value' ? `快照 ${trend.viewsPerHour.snapshotIds.join('、')} · 最近采集 ${trend.snapshots.at(-1)?.capturedAt ?? '未知'}` : undefined;
+  const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时${trend.velocityChange.status === 'value' ? ` · 加速 ${Math.round(trend.velocityChange.value).toLocaleString('zh-CN')}` : ''}` : null;
+  const trendTitle = trend?.viewsPerHour.status === 'value' ? `快照 ${(trend.velocityChange.status === 'value' ? trend.velocityChange.snapshotIds : trend.viewsPerHour.snapshotIds).join('、')} · 最近采集 ${trend.snapshots.at(-1)?.capturedAt ?? '未知'}` : undefined;
   const sourceTime = latestSourceTime(item.sourceIds, sources);
   const timeText = formatSourcePublishedAt(sourceTime.at);
   const timeLabel = timeText

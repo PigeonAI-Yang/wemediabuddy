@@ -1,0 +1,118 @@
+{
+  "taskId": "WMB-2205",
+  "startedAt": "2026-08-03T01:02:05.406Z",
+  "package": {
+    "executable": "J:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\WeMediaBuddy.exe",
+    "exeSha256": "e0f13b4d27a36fa00e68ddb27e0dfc26ef154df177b31d3aad6ed291606a48d3",
+    "asarSha256": "989e751128d3064b8f426b4824288863acc908309c1247a304a6b9ac61de2098"
+  },
+  "viewports": [
+    {
+      "width": 1100,
+      "height": 700,
+      "today": {
+        "viewport": [
+          1100,
+          700
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "primaryActionHit": true
+      },
+      "discover": {
+        "viewport": [
+          1100,
+          700
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "observationActionHit": true
+      },
+      "trend": "320 views/hour; acceleration 80; 3 snapshot ids",
+      "screenshots": [
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-today-1100x700.png",
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-discover-1100x700.png"
+      ]
+    },
+    {
+      "width": 1366,
+      "height": 768,
+      "today": {
+        "viewport": [
+          1366,
+          768
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "primaryActionHit": true
+      },
+      "discover": {
+        "viewport": [
+          1366,
+          768
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "observationActionHit": true
+      },
+      "trend": "320 views/hour; acceleration 80; 3 snapshot ids",
+      "screenshots": [
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-today-1366x768.png",
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-discover-1366x768.png"
+      ]
+    },
+    {
+      "width": 1920,
+      "height": 900,
+      "today": {
+        "viewport": [
+          1920,
+          900
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "primaryActionHit": true
+      },
+      "discover": {
+        "viewport": [
+          1920,
+          900
+        ],
+        "horizontalOverflow": 0,
+        "targetVisible": true,
+        "navHit": true,
+        "observationActionHit": true
+      },
+      "trend": "320 views/hour; acceleration 80; 3 snapshot ids",
+      "screenshots": [
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-today-1920x900.png",
+        "J:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-2205-discover-1920x900.png"
+      ]
+    }
+  ],
+  "lifecycle": {
+    "oldMcpClosed": true,
+    "inactiveRootUnchanged": true,
+    "dueJob": {
+      "id": "a57f6b11-1e5d-4799-9769-1a3fb2f60944",
+      "status": "needs_user",
+      "lastError": "请先选择 Pyaireader 专用 X 登录态。"
+    },
+    "snapshotCount": 3
+  },
+  "lineage": {
+    "projectId": "96a896f0-0ef1-4c68-87cb-749ecc0b3af3",
+    "topicId": "c1e8bcd4-a005-4597-a5e1-e2273ed0df14",
+    "planItemId": "cbd545c9-b4e8-4288-8af1-c9a551c3a1fc",
+    "sourceIds": [
+      "83d40cb7-787b-4564-976a-2b49e5041e5a",
+      "9d91e64b-0a46-4d2c-90d9-317ccd85d83c"
+    ]
+  },
+  "finishedAt": "2026-08-03T01:02:52.238Z"
+}

@@ -1,0 +1,623 @@
+{
+  "taskId": "WMB-2205",
+  "finishedAt": "2026-08-03T01:15:50.542Z",
+  "accountKey": "@KimbomArtist",
+  "listId": "2082851520417255750",
+  "captures": [
+    {
+      "capturedAt": "2026-08-03T00:54:55.406Z",
+      "sourceIds": [
+        "27ee05d8-4c7e-465f-bac0-4264dd526e62",
+        "f36a77a4-e19e-4299-87d5-d4fe24cc7ed6",
+        "c4b268bf-3cdb-47eb-b1e3-c3f47f229db5",
+        "e52a9618-cc5a-4d5a-8f56-18ccb948f94e",
+        "a77fbfea-5fab-4881-bb1b-2ce244abf189",
+        "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "e94e5e46-25fb-4e0f-9284-64e14a45c33f",
+        "f3088b1b-cced-4164-846b-c4d160a04409",
+        "50bfaa98-c8ba-4c4d-b9e1-ad97902a7b92",
+        "ca0f2c02-ca0f-47de-8707-5c63fee5ecac",
+        "7a96aab1-1a28-4385-8e92-3eb018b3b427",
+        "3681a717-2e53-48df-aa7d-a062af80eed5",
+        "6472be0f-16b0-481f-9780-56b44ac0a062"
+      ],
+      "snapshotIds": [
+        "f955593d-8f3d-41e9-bced-30dd6d159e3a",
+        "1f687879-adc3-4d54-b9bb-11fac30c9162",
+        "add5763b-af45-4c01-b96e-bd9a9da12b51",
+        "be9304dc-c8f6-4abf-91b9-ca57b50887b3",
+        "d23bb71c-2fb5-414e-afbe-5612b4209022",
+        "d340a797-4c34-42e7-bc8f-d03759ccd250",
+        "cf153fc4-e8d6-4e73-8046-b0411800a26f",
+        "ff633ccf-630c-4025-a3d0-4cfe6b3102fa",
+        "35748035-b7d3-401e-8158-b29c69ae64cc",
+        "2bdf5232-6a32-4ed2-8d42-96c6146f9559",
+        "74c4f535-125b-45ec-bd5e-4a2940367250",
+        "c0f596a8-fb61-4528-a3ff-4c7882c0817a",
+        "4c1391c7-211e-4358-a4e8-5cc04b43adf0"
+      ]
+    },
+    {
+      "capturedAt": "2026-08-03T01:05:25.940Z",
+      "sourceIds": [
+        "a77fbfea-5fab-4881-bb1b-2ce244abf189",
+        "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "e94e5e46-25fb-4e0f-9284-64e14a45c33f",
+        "f3088b1b-cced-4164-846b-c4d160a04409",
+        "50bfaa98-c8ba-4c4d-b9e1-ad97902a7b92",
+        "ca0f2c02-ca0f-47de-8707-5c63fee5ecac",
+        "7a96aab1-1a28-4385-8e92-3eb018b3b427",
+        "3681a717-2e53-48df-aa7d-a062af80eed5",
+        "6472be0f-16b0-481f-9780-56b44ac0a062",
+        "8f1ab609-9ed5-4b5c-95df-949f0775111f",
+        "1cb493f9-61ea-490b-a497-22bece813416",
+        "f6005f45-f817-4757-a6c7-047622663ade",
+        "b0cfc566-7a9b-44cf-9965-b54c9595740b"
+      ],
+      "snapshotIds": [
+        "59a6daab-4848-4460-9386-8deca77f9bdd",
+        "f57c7783-c19a-4b44-a049-4f0f59d69783",
+        "19ad1233-2cce-4d45-8048-8b83ca06a72b",
+        "a29ce13c-b958-414e-9846-1d73dbb16395",
+        "47af6bff-6d47-4fdb-9b86-19b68df33fc1",
+        "f97d43db-089c-48b6-a861-cc3e2e53f09b",
+        "e69f3dfe-0b21-4d79-a6ba-23bc424a9dcf",
+        "1125d798-0a89-4878-a2aa-748376e1e4e6",
+        "d5a74bbf-713c-42f1-8d22-ea495c85ef82",
+        "9c606773-e736-4ede-8d26-a17b03152ba2",
+        "8211bc1b-a01e-412c-915d-75327578a0af",
+        "30907dfd-d755-4956-af8d-acacd78ea847",
+        "3689b94b-05b1-497b-888d-0be3297a7c0c"
+      ]
+    },
+    {
+      "capturedAt": "2026-08-03T01:15:50.483Z",
+      "sourceIds": [
+        "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "e94e5e46-25fb-4e0f-9284-64e14a45c33f",
+        "f3088b1b-cced-4164-846b-c4d160a04409",
+        "50bfaa98-c8ba-4c4d-b9e1-ad97902a7b92",
+        "ca0f2c02-ca0f-47de-8707-5c63fee5ecac",
+        "7a96aab1-1a28-4385-8e92-3eb018b3b427",
+        "3681a717-2e53-48df-aa7d-a062af80eed5",
+        "6472be0f-16b0-481f-9780-56b44ac0a062",
+        "8f1ab609-9ed5-4b5c-95df-949f0775111f",
+        "1cb493f9-61ea-490b-a497-22bece813416",
+        "f6005f45-f817-4757-a6c7-047622663ade"
+      ],
+      "snapshotIds": [
+        "c982eb3c-4e8a-47be-8341-f524406deecd",
+        "3762eff3-0d2d-4146-a14d-b647aa35994e",
+        "15c6c920-1981-4984-b001-76dbd8fb75dd",
+        "949a9057-22c9-4d39-8639-6f031bc07e73",
+        "1b9c399a-e3d9-44f0-b981-fcaee82d0273",
+        "de4abe04-fad1-4dd4-a228-937ff8475e93",
+        "7c037b49-b287-4895-bfbf-b2d9c3026bd0",
+        "1d9d0213-711e-4cf4-88f9-eb796caa7b33",
+        "1a832bf8-1c7c-43fa-8797-7c44a03a3ca0",
+        "e980d8ed-a115-4d67-9adc-cb4a5fc9f972",
+        "8f532cdd-d751-46e3-b16d-3546a7f7bde4"
+      ]
+    }
+  ],
+  "commonPostCount": 8,
+  "sample": {
+    "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+    "snapshots": [
+      {
+        "id": "d340a797-4c34-42e7-bc8f-d03759ccd250",
+        "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "accountKey": "@KimbomArtist",
+        "listId": "2082851520417255750",
+        "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+        "bindingRevision": 1,
+        "observationKey": "wmb-2205-real-652c47b9-8e8c-4fd7-b9c7-47f3e6370753",
+        "scheduledFor": null,
+        "capturedAt": "2026-08-03T00:54:55.406Z",
+        "normalized": {
+          "replies": {
+            "status": "value",
+            "value": 2450
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2580
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765
+          }
+        },
+        "raw": {
+          "replies": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复。回复",
+            "rawValue": "2450 回复。回复",
+            "source": "dom"
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2580,
+            "rawLabel": "2,580",
+            "rawValue": "2,580",
+            "source": "dom"
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591,
+            "rawLabel": "20591 喜欢次数。喜欢",
+            "rawValue": "20591 喜欢次数。喜欢",
+            "source": "dom"
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复、2761 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "rawValue": "2450 回复、2761 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "source": "dom"
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765,
+            "rawLabel": "3078765 次查看。查看帖子分析",
+            "rawValue": "3078765 次查看。查看帖子分析",
+            "source": "dom"
+          }
+        },
+        "evidence": {
+          "workspaceId": "wmb-2205-real",
+          "pageUrl": "https://x.com/i/lists/2082851520417255750",
+          "fingerprint": "5f8be2835e6762a98d45d86dfcc8d8a9798db54515199ae69cee3ed07ec059d4",
+          "profileRevision": 1
+        },
+        "createdAt": "2026-08-03T00:54:55.437Z"
+      },
+      {
+        "id": "f57c7783-c19a-4b44-a049-4f0f59d69783",
+        "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "accountKey": "@KimbomArtist",
+        "listId": "2082851520417255750",
+        "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+        "bindingRevision": 1,
+        "observationKey": "wmb-2205-real-5993185b-3f85-4d6d-a9fd-cb116639caa5",
+        "scheduledFor": null,
+        "capturedAt": "2026-08-03T01:05:25.940Z",
+        "normalized": {
+          "replies": {
+            "status": "value",
+            "value": 2450
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2761
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765
+          }
+        },
+        "raw": {
+          "replies": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复。回复",
+            "rawValue": "2450 回复。回复",
+            "source": "dom"
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2761,
+            "rawLabel": "2,761",
+            "rawValue": "2,761",
+            "source": "dom"
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591,
+            "rawLabel": "20591 喜欢次数。喜欢",
+            "rawValue": "20591 喜欢次数。喜欢",
+            "source": "dom"
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "rawValue": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "source": "dom"
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765,
+            "rawLabel": "3078765 次查看。查看帖子分析",
+            "rawValue": "3078765 次查看。查看帖子分析",
+            "source": "dom"
+          }
+        },
+        "evidence": {
+          "workspaceId": "wmb-2205-real",
+          "pageUrl": "https://x.com/i/lists/2082851520417255750",
+          "fingerprint": "76d86e105e4af9cf01bba8333e66cfca95a232a851d459a4ef4e4752c6605248",
+          "profileRevision": 1
+        },
+        "createdAt": "2026-08-03T01:05:25.968Z"
+      },
+      {
+        "id": "c982eb3c-4e8a-47be-8341-f524406deecd",
+        "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+        "accountKey": "@KimbomArtist",
+        "listId": "2082851520417255750",
+        "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+        "bindingRevision": 1,
+        "observationKey": "wmb-2205-real-7626ad7c-13ae-483e-a167-80daed399b15",
+        "scheduledFor": null,
+        "capturedAt": "2026-08-03T01:15:50.483Z",
+        "normalized": {
+          "replies": {
+            "status": "value",
+            "value": 2450
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2784
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765
+          }
+        },
+        "raw": {
+          "replies": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复。回复",
+            "rawValue": "2450 回复。回复",
+            "source": "dom"
+          },
+          "reposts": {
+            "status": "value",
+            "value": 2784,
+            "rawLabel": "2,784",
+            "rawValue": "2,784",
+            "source": "dom"
+          },
+          "likes": {
+            "status": "value",
+            "value": 20591,
+            "rawLabel": "20591 喜欢次数。喜欢",
+            "rawValue": "20591 喜欢次数。喜欢",
+            "source": "dom"
+          },
+          "bookmarks": {
+            "status": "value",
+            "value": 2450,
+            "rawLabel": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "rawValue": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+            "source": "dom"
+          },
+          "views": {
+            "status": "value",
+            "value": 3078765,
+            "rawLabel": "3078765 次查看。查看帖子分析",
+            "rawValue": "3078765 次查看。查看帖子分析",
+            "source": "dom"
+          }
+        },
+        "evidence": {
+          "workspaceId": "wmb-2205-real",
+          "pageUrl": "https://x.com/i/lists/2082851520417255750",
+          "fingerprint": "f5f14d577761cf6d868b92bccef217579838ae05037e61c2c884d698a716be47",
+          "profileRevision": 1
+        },
+        "createdAt": "2026-08-03T01:15:50.524Z"
+      }
+    ],
+    "trend": {
+      "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+      "sourceUrl": "https://x.com/elonmusk/status/2083979613156340154",
+      "title": "Accurate",
+      "status": "ready",
+      "reason": null,
+      "sampleCount": 3,
+      "snapshots": [
+        {
+          "id": "d340a797-4c34-42e7-bc8f-d03759ccd250",
+          "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+          "accountKey": "@KimbomArtist",
+          "listId": "2082851520417255750",
+          "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+          "bindingRevision": 1,
+          "observationKey": "wmb-2205-real-652c47b9-8e8c-4fd7-b9c7-47f3e6370753",
+          "scheduledFor": null,
+          "capturedAt": "2026-08-03T00:54:55.406Z",
+          "normalized": {
+            "replies": {
+              "status": "value",
+              "value": 2450
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2580
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765
+            }
+          },
+          "raw": {
+            "replies": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复。回复",
+              "rawValue": "2450 回复。回复",
+              "source": "dom"
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2580,
+              "rawLabel": "2,580",
+              "rawValue": "2,580",
+              "source": "dom"
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591,
+              "rawLabel": "20591 喜欢次数。喜欢",
+              "rawValue": "20591 喜欢次数。喜欢",
+              "source": "dom"
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复、2761 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "rawValue": "2450 回复、2761 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "source": "dom"
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765,
+              "rawLabel": "3078765 次查看。查看帖子分析",
+              "rawValue": "3078765 次查看。查看帖子分析",
+              "source": "dom"
+            }
+          },
+          "evidence": {
+            "workspaceId": "wmb-2205-real",
+            "pageUrl": "https://x.com/i/lists/2082851520417255750",
+            "fingerprint": "5f8be2835e6762a98d45d86dfcc8d8a9798db54515199ae69cee3ed07ec059d4",
+            "profileRevision": 1
+          },
+          "createdAt": "2026-08-03T00:54:55.437Z"
+        },
+        {
+          "id": "f57c7783-c19a-4b44-a049-4f0f59d69783",
+          "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+          "accountKey": "@KimbomArtist",
+          "listId": "2082851520417255750",
+          "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+          "bindingRevision": 1,
+          "observationKey": "wmb-2205-real-5993185b-3f85-4d6d-a9fd-cb116639caa5",
+          "scheduledFor": null,
+          "capturedAt": "2026-08-03T01:05:25.940Z",
+          "normalized": {
+            "replies": {
+              "status": "value",
+              "value": 2450
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2761
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765
+            }
+          },
+          "raw": {
+            "replies": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复。回复",
+              "rawValue": "2450 回复。回复",
+              "source": "dom"
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2761,
+              "rawLabel": "2,761",
+              "rawValue": "2,761",
+              "source": "dom"
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591,
+              "rawLabel": "20591 喜欢次数。喜欢",
+              "rawValue": "20591 喜欢次数。喜欢",
+              "source": "dom"
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "rawValue": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "source": "dom"
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765,
+              "rawLabel": "3078765 次查看。查看帖子分析",
+              "rawValue": "3078765 次查看。查看帖子分析",
+              "source": "dom"
+            }
+          },
+          "evidence": {
+            "workspaceId": "wmb-2205-real",
+            "pageUrl": "https://x.com/i/lists/2082851520417255750",
+            "fingerprint": "76d86e105e4af9cf01bba8333e66cfca95a232a851d459a4ef4e4752c6605248",
+            "profileRevision": 1
+          },
+          "createdAt": "2026-08-03T01:05:25.968Z"
+        },
+        {
+          "id": "c982eb3c-4e8a-47be-8341-f524406deecd",
+          "sourceItemId": "0744a18b-d8b0-4f45-88f4-e95167a2d83a",
+          "accountKey": "@KimbomArtist",
+          "listId": "2082851520417255750",
+          "bindingId": "64ef524a-3f98-44bc-b2f0-6c3100d449db",
+          "bindingRevision": 1,
+          "observationKey": "wmb-2205-real-7626ad7c-13ae-483e-a167-80daed399b15",
+          "scheduledFor": null,
+          "capturedAt": "2026-08-03T01:15:50.483Z",
+          "normalized": {
+            "replies": {
+              "status": "value",
+              "value": 2450
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2784
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765
+            }
+          },
+          "raw": {
+            "replies": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复。回复",
+              "rawValue": "2450 回复。回复",
+              "source": "dom"
+            },
+            "reposts": {
+              "status": "value",
+              "value": 2784,
+              "rawLabel": "2,784",
+              "rawValue": "2,784",
+              "source": "dom"
+            },
+            "likes": {
+              "status": "value",
+              "value": 20591,
+              "rawLabel": "20591 喜欢次数。喜欢",
+              "rawValue": "20591 喜欢次数。喜欢",
+              "source": "dom"
+            },
+            "bookmarks": {
+              "status": "value",
+              "value": 2450,
+              "rawLabel": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "rawValue": "2450 回复、2784 次转帖、20591 喜欢、2999 书签、3078765 次观看",
+              "source": "dom"
+            },
+            "views": {
+              "status": "value",
+              "value": 3078765,
+              "rawLabel": "3078765 次查看。查看帖子分析",
+              "rawValue": "3078765 次查看。查看帖子分析",
+              "source": "dom"
+            }
+          },
+          "evidence": {
+            "workspaceId": "wmb-2205-real",
+            "pageUrl": "https://x.com/i/lists/2082851520417255750",
+            "fingerprint": "f5f14d577761cf6d868b92bccef217579838ae05037e61c2c884d698a716be47",
+            "profileRevision": 1
+          },
+          "createdAt": "2026-08-03T01:15:50.524Z"
+        }
+      ],
+      "viewsPerHour": {
+        "status": "value",
+        "value": 0,
+        "snapshotIds": [
+          "f57c7783-c19a-4b44-a049-4f0f59d69783",
+          "c982eb3c-4e8a-47be-8341-f524406deecd"
+        ],
+        "intervals": [
+          {
+            "fromSnapshotId": "f57c7783-c19a-4b44-a049-4f0f59d69783",
+            "toSnapshotId": "c982eb3c-4e8a-47be-8341-f524406deecd",
+            "elapsedHours": 0.17348416666666666,
+            "viewDelta": 0,
+            "viewsPerHour": 0
+          }
+        ]
+      },
+      "velocityChange": {
+        "status": "value",
+        "value": 0,
+        "snapshotIds": [
+          "d340a797-4c34-42e7-bc8f-d03759ccd250",
+          "f57c7783-c19a-4b44-a049-4f0f59d69783",
+          "c982eb3c-4e8a-47be-8341-f524406deecd"
+        ],
+        "intervals": [
+          {
+            "fromSnapshotId": "d340a797-4c34-42e7-bc8f-d03759ccd250",
+            "toSnapshotId": "f57c7783-c19a-4b44-a049-4f0f59d69783",
+            "elapsedHours": 0.17514833333333332,
+            "viewDelta": 0,
+            "viewsPerHour": 0
+          },
+          {
+            "fromSnapshotId": "f57c7783-c19a-4b44-a049-4f0f59d69783",
+            "toSnapshotId": "c982eb3c-4e8a-47be-8341-f524406deecd",
+            "elapsedHours": 0.17348416666666666,
+            "viewDelta": 0,
+            "viewsPerHour": 0
+          }
+        ]
+      }
+    }
+  }
+}
