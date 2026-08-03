@@ -328,7 +328,8 @@ Scope: CAP-014 and the existing WMB business workflows it operates. This milesto
 Order:
 
 1. `WMB-2400` — create the canonical `wemedia-buddy-operator` Skill with current workflow playbooks and a deterministic check that every named `wmb_*` tool exists;
-2. `WMB-2401` — package and refresh the shared operator Skill into every Pi data root while keeping lane Skills root-specific and the system prompt limited to immutable authority boundaries;
-3. `WMB-2402` — prove a fresh root and an existing AI/UK root load and follow the shared Skill for channel proposal and content-project workflows without direct writes or confirmation bypass.
+2. `WMB-2403` — falsifiably reproduce and repair the current-root browser/login workflow that blocks X List save/read after browser configuration, remove stale user-facing `pyaireader` terminology, and synchronize the operator Skill with the verified flow;
+3. `WMB-2401` — package and refresh the shared operator Skill into every Pi data root while keeping lane Skills root-specific and the system prompt limited to immutable authority boundaries;
+4. `WMB-2402` — prove a fresh root and an existing AI/UK root load and follow the shared Skill for channel proposal, real X List save/read and content-project workflows without direct writes or confirmation bypass.
 
-Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names fail a deterministic check, and real Pi readback completes the changed playbooks through WMB business tools and required UI confirmation.
+Gate: the canonical Skill is the sole editable source, every packaged Pi root loads the same current operator Skill plus its own lane Skill, stale tool names and stale `pyaireader` user guidance fail deterministic checks, and real Pi readback completes the changed playbooks through WMB business tools, the exact root-local browser/profile and required UI confirmation.

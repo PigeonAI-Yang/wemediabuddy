@@ -6,7 +6,7 @@ User requirement: Pi must not rediscover how to operate WeMediaBuddy on every co
 
 Current gap: the repository does not yet contain that shared operation Skill. The active UK Pi root contains only its lane Skill, while generic WMB operating knowledge is split between the appended system prompt and tool descriptions. This document is the maintenance contract for the shared Skill; it does not claim the missing product asset is already delivered.
 
-Delivery of the missing asset, its installer and packaged acceptance is tracked serially by `WMB-2400`–`WMB-2402` in `TASKS.md`.
+Delivery of the missing asset, the X List browser/login workflow correction, its installer and packaged acceptance is tracked serially by `WMB-2400`, `WMB-2403`, `WMB-2401` and `WMB-2402` in `TASKS.md`.
 
 When implemented, the canonical source is:
 

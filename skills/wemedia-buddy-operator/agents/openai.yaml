@@ -1,0 +1,4 @@
+interface:
+  display_name: "WeMediaBuddy Operator"
+  short_description: "Operate WMB workflows through verified Pi tools"
+  default_prompt: "Use $wemedia-buddy-operator to complete this WeMediaBuddy workflow through the supported business tools."
