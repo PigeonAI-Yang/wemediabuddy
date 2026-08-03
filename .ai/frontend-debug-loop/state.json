@@ -1,37 +1,37 @@
 {
-  "active_loop": "2026-07-29-semantic-edge",
-  "status": "needs_user",
-  "symptom": "关系画布没有可发现、可拖拽的语义连线操作",
+  "active_loop": "",
+  "status": "complete",
+  "symptom": "Restart erases the last submitted user message and the interrupted assistant output that was already visible.",
   "observation_packet": {
-    "url": "Electron relationship canvas",
-    "viewport": "1100x700",
-    "user_action": "寻找节点连接端口并尝试拖线",
-    "expected": "节点边缘出现端口，拖向目标节点后选择关系并显示有向标签线",
-    "actual": "节点没有端口；只有必须先选中两个节点才可点击的顶部按钮",
-    "screenshot": ".ai/wmb-1300-canvas-1100b.png",
-    "console": "未发现崩溃，问题是交互缺失",
-    "network_ws": "本地 IPC，未触发 create-relation",
-    "dom_selector": ".kc-node 缺少连接端口；.kc-edges pointer-events:none",
-    "computed_style_layout": "只有整卡 cursor:grab，无连接命中区",
-    "state_store_snapshot": "selected.length 必须等于 2 才能调用 connect()"
+    "url": "packaged WeMediaBuddy Pi dock",
+    "viewport": "user screenshot 583x193 crop",
+    "user_action": "submit a Pi message, interrupt/restart while the turn is in flight, reopen the active conversation",
+    "expected": "the submitted user message and already visible interrupted assistant output survive restart",
+    "actual": "both disappear after restart",
+    "screenshot": "user live report; isolated reproduction pending",
+    "console": "pending runtime reproduction",
+    "network_ws": "not applicable; Electron IPC path",
+    "dom_selector": ".pi-conversation",
+    "computed_style_layout": "pending runtime reproduction",
+    "state_store_snapshot": "renderer appends the user/streaming messages locally; pi:chat writes the conversation only after promptUntilSettled returns"
   },
   "hypotheses": [
     {
-      "hypothesis": "实现把设计稿的端口拖线降级成了两节点选择加 prompt",
-      "would_disprove": "DOM 中存在可聚焦端口，pointerdown 到 pointerup 会创建预览线并调用 IPC",
-      "result": "confirmed"
+      "hypothesis": "the in-flight exchange exists only in renderer memory because Main persists nothing before the awaited Pi turn settles",
+      "would_disprove": "the active conversation file already contains the user turn and streaming assistant checkpoint before Pi settles",
+      "result": "confirmed and repaired"
     }
   ],
-  "breakpoint": "event-missing",
+  "breakpoint": "Main conversation cold read trusted a stale segmented snapshot and ignored newer canonical Pi session entries; new turns were also not written before awaiting Pi.",
   "owner_check": {
-    "user_blocked_on": "节点没有端口拖线",
-    "now_usable": "代码已加入端口、拖线预览、落点关系菜单和有向标签线",
-    "real_data_or_state": "真实画布已载入三个资料节点",
-    "loading_empty_error_states": "空画布引导已加入",
-    "v1_v2_baseline_preserved": "全局导航和 Pi dock 未改",
-    "regression_risk_checked": "等待后台自动门禁",
-    "would_user_return_this": "unsure"
+    "user_blocked_on": "restart erased the visible in-flight exchange",
+    "now_usable": true,
+    "real_data_or_state": "same UK data root and exact reported message",
+    "loading_empty_error_states": "pending turn and thrown Pi error persist truthfully",
+    "v1_v2_baseline_preserved": true,
+    "regression_risk_checked": "legacy projection and normal conversation round-trip passed",
+    "would_user_return_this": false
   },
   "attempts": 1,
-  "last_gate": "用户要求停止鼠标控制；不再进行窗口级自动交互，真实端口拖线验收等待用户自行操作"
+  "last_gate": "packaged cold restart recovered exact user message plus eight following assistant segments"
 }

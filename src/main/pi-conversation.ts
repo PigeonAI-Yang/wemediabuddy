@@ -105,6 +105,26 @@ function previewFromMessages(messages: PiChatMessage[]): string {
   return '暂无消息';
 }
 
+function visibleMessageSize(messages: PiChatMessage[]): number {
+  return messages.reduce((total, message) => total + message.text.length + (message.thinking?.length ?? 0)
+    + (message.segments ?? []).reduce((sum, segment) => sum + segment.text.length, 0), 0);
+}
+
+function preferProjectedMessages(stored: PiChatMessage[], projected: PiChatMessage[]): boolean {
+  const storedUsers = stored.filter((message) => message.role === 'user');
+  const projectedUsers = projected.filter((message) => message.role === 'user');
+  if (projectedUsers.length !== storedUsers.length) return projectedUsers.length > storedUsers.length;
+  if (projectedUsers.at(-1)?.text !== storedUsers.at(-1)?.text) return false;
+  return visibleMessageSize(projected) > visibleMessageSize(stored);
+}
+
+function recoverInterruptedTurn(messages: PiChatMessage[]): PiChatMessage[] {
+  const last = messages.at(-1);
+  if (last?.role !== 'assistant' || last.status !== 'streaming') return messages;
+  const text = last.text.trim() ? last.text : '生成被中断。';
+  return [...messages.slice(0, -1), { ...last, text, status: 'stopped', segments: last.segments?.length ? last.segments : [{ kind: 'text', text }] }];
+}
+
 function emptyIndex(): PiConversationIndex {
   return { activeId: null, conversations: [] };
 }
@@ -162,13 +182,14 @@ async function readConversationFile(dataRootPath: string, id: string): Promise<P
           && typeof message.text === 'string')
         .map((message) => normalizeMessage(message, updatedAt))
       : [];
-    if (messages.some((message) => message.role === 'assistant') && !messages.some((message) => message.segments?.length) && typeof raw.sessionFile === 'string') {
+    if (typeof raw.sessionFile === 'string') {
       try {
         const entries = (await readFile(raw.sessionFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as unknown);
         const projected = messagesFromPiEntries(entries);
-        if (projected.length) messages = projected;
+        if (projected.length && (preferProjectedMessages(messages, projected) || !messages.some((message) => message.segments?.length))) messages = projected;
       } catch { /* keep the stored snapshot when the Pi session is unavailable */ }
     }
+    messages = recoverInterruptedTurn(messages);
     return {
       id: raw.id,
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : titleFromMessages(messages),

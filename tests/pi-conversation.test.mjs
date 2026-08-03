@@ -50,3 +50,48 @@ test('Pi conversation snapshot round-trips session identity and messages', async
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
 });
+
+test('Pi conversation cold read prefers newer canonical session entries over a stale segmented snapshot', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-stale-'));
+  try {
+    const active = await readPiConversation(root);
+    await writePiConversation(root, {
+      id: active.id,
+      sessionFile: active.sessionFile,
+      messages: [
+        { role: 'user', text: '旧问题', entryId: 'u1' },
+        { role: 'assistant', text: '旧回答', entryId: 'a1', segments: [{ kind: 'text', text: '旧回答' }] }
+      ]
+    });
+    await writeFile(active.sessionFile, [
+      { type: 'message', id: 'u1', timestamp: '2026-08-03T10:00:00.000Z', message: { role: 'user', content: '旧问题' } },
+      { type: 'message', id: 'a1', timestamp: '2026-08-03T10:00:01.000Z', message: { role: 'assistant', content: [{ type: 'text', text: '旧回答' }] } },
+      { type: 'message', id: 'u2', timestamp: '2026-08-03T10:01:00.000Z', message: { role: 'user', content: '重启前的新问题' } },
+      { type: 'message', id: 'a2', timestamp: '2026-08-03T10:01:01.000Z', message: { role: 'assistant', content: [{ type: 'thinking', thinking: '已开始处理' }, { type: 'text', text: '中断前可见回复' }] } }
+    ].map((entry) => JSON.stringify(entry)).join('\n'), 'utf8');
+
+    const reopened = await readPiConversation(root);
+    assert.equal(reopened.messages.at(-2).text, '重启前的新问题');
+    assert.equal(reopened.messages.at(-1).text, '中断前可见回复');
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Pi conversation cold read preserves a submitted turn when Pi never commits it', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-pending-'));
+  try {
+    const active = await readPiConversation(root);
+    await writePiConversation(root, {
+      id: active.id,
+      sessionFile: active.sessionFile,
+      messages: [{ role: 'user', text: '刚提交的问题' }, { role: 'assistant', text: '', status: 'streaming' }]
+    });
+    const reopened = await readPiConversation(root);
+    assert.equal(reopened.messages[0].text, '刚提交的问题');
+    assert.equal(reopened.messages[1].text, '生成被中断。');
+    assert.equal(reopened.messages[1].status, 'stopped');
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});

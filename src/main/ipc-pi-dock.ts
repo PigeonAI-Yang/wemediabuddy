@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import type { DataRoot } from './data-root';
-import { createForkedPiConversation, readPiConversation } from './pi-conversation';
+import { createForkedPiConversation, readPiConversation, writePiConversation, type PiConversationSnapshot } from './pi-conversation';
 import { readPiTranscript, syncPiConversation, visiblePiPrompt } from './pi-persistence';
 import type { PiRpcSupervisor } from './pi-runtime';
 import { broadcastPiEvent } from './app-window';
@@ -56,9 +56,20 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
     openTurnGate();
     broadcastPiEvent({ type: 'starting', scope: 'dock' });
     let runtime: PiRpcSupervisor | null = null;
+    let conversation: PiConversationSnapshot | null = null;
     try {
+      const current = await readPiConversation(dataRoot.path);
+      const createdAt = new Date().toISOString();
+      conversation = await writePiConversation(dataRoot.path, {
+        id: current.id,
+        title: current.title,
+        sessionFile: current.sessionFile,
+        sessionId: current.sessionId,
+        messages: [...current.messages, { role: 'user', text: visiblePiPrompt(raw), createdAt }, { role: 'assistant', text: '', status: 'streaming', createdAt }],
+        createdAt: current.createdAt,
+        makeActive: true
+      });
       runtime = await ensurePi(dataRoot);
-      const conversation = await readPiConversation(dataRoot.path);
       const result = await runtime.promptUntilSettled(routePiSkillPrompt(raw), {
         onStreaming: () => {
           closeTurnGate();
@@ -74,6 +85,12 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
       return { ...result, queued: false, conversation: synced };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (conversation) {
+        const messages = conversation.messages.slice();
+        const last = messages.at(-1);
+        if (last?.role === 'assistant' && last.status === 'streaming') messages[messages.length - 1] = { ...last, text: message, status: 'failed', segments: [{ kind: 'text', text: message }] };
+        await writePiConversation(dataRoot.path, { id: conversation.id, title: conversation.title, sessionFile: conversation.sessionFile, sessionId: conversation.sessionId, messages, createdAt: conversation.createdAt, makeActive: true }).catch(() => {});
+      }
       if (!runtime || getPi() === runtime) {
         broadcastPiEvent({ type: 'failed', error: message, scope: 'dock' });
       }

@@ -2,6 +2,12 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-3600 Pi action acknowledgement
+
+Scope: CAP-014 fork/retry interaction feedback.
+
+Gate: under a deliberately delayed native fork, the clicked control enters a visible pending state within one render frame, duplicate action is unavailable, and success/failure restores the existing conversation behavior.
+
 ## M-3500 Pi chronological transcript
 
 Scope: CAP-014 conversation presentation.
