@@ -71,22 +71,23 @@ export function loadPrimaryReleaseSources(skillRoot: string): PrimaryReleaseSour
     if (typeof entry.id !== 'string' || !entry.id.trim()) continue;
     if (typeof entry.name !== 'string' || !entry.name.trim()) continue;
     if (typeof entry.url !== 'string' || !entry.url.trim()) continue;
+    const url = entry.url.trim();
     const fallbackUrls = readStringList(entry.fallback_urls ?? entry.fallbackUrls)
       .map((value) => value.trim())
-      .filter((value) => value && value !== entry.url.trim());
+      .filter((value) => value && value !== url);
     // Built-in escape hatch for known Cloudflare-gated OpenAI platform docs.
     if (entry.id.trim() === 'openai-changelog') {
       for (const extra of [
         'https://developers.openai.com/api/docs/changelog.md',
         'https://developers.openai.com/api/docs/changelog'
       ]) {
-        if (!fallbackUrls.includes(extra) && extra !== entry.url.trim()) fallbackUrls.push(extra);
+        if (!fallbackUrls.includes(extra) && extra !== url) fallbackUrls.push(extra);
       }
     }
     out.push({
       id: entry.id.trim(),
       name: entry.name.trim(),
-      url: entry.url.trim(),
+      url,
       collector: typeof entry.collector === 'string' && entry.collector.trim() ? entry.collector.trim() : 'official-web',
       fallbackUrls
     });

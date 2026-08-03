@@ -188,7 +188,7 @@ async function runMemberBatch(database: DatabaseSync, config: XListBrowserConfig
   const items = getXListOperation(database, operation.id)?.items ?? operation.items;
   const needsUser = items.filter((item) => item.state === 'needs_user').length;
   const failed = items.filter((item) => item.state === 'failed').length;
-  const done = items.filter((item) => item.state === 'added' || item.state === 'removed' || item.state === 'already_present' || item.state === 'already_absent').length;
+  const done = items.filter((item) => item.state === 'succeeded' || item.state === 'already_present' || item.state === 'already_absent').length;
   if (needsUser && !failed && !done) {
     return success(finishXListOperation(database, operation.id, {
       state: 'needs_user',
