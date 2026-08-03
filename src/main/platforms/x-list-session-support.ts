@@ -68,21 +68,12 @@ export class SharedXRequestGuard {
       const state = await this.readState();
       const now = Date.now();
       if (state.cooldownUntil > now) throw new XListCooldownError(`X 正在冷却，${Math.ceil((state.cooldownUntil - now) / 1_000)} 秒后再试。`);
-      const recentHour = state.requests.filter((item) => item > now - 3_600_000);
-      if (recentHour.length >= X_HUMANIZATION.hourlyActionBudget) {
-        throw new XListCooldownError(`X 一小时自动化预算已用尽，${Math.ceil((recentHour[0]! + 3_600_000 - now) / 1_000)} 秒后再试。`);
-      }
-      const recentDay = state.requests.filter((item) => item > now - 86_400_000);
-      if (recentDay.length >= X_HUMANIZATION.dailyActionBudget) {
-        throw new XListDataError('X 今日自动化预算已用尽，请明天再试或改用缓存。');
-      }
       const delay = nextActionDelayMs(now, state.lastRequestAt, { mode });
       if (delay) await sleep(delay);
       const requestAt = Date.now();
       await this.writeState({
         ...state,
-        lastRequestAt: requestAt,
-        requests: [...recentDay, requestAt]
+        lastRequestAt: requestAt
       });
     });
   }
@@ -103,29 +94,26 @@ export class SharedXRequestGuard {
     });
   }
 
-  private async readState(): Promise<{ lastRequestAt: number; requests: number[]; cooldownUntil: number; consecutiveFailures: number }> {
+  private async readState(): Promise<{ lastRequestAt: number; cooldownUntil: number; consecutiveFailures: number }> {
     try {
       const parsed = JSON.parse(await readFile(this.statePath, 'utf8')) as {
         last_request_at?: number;
-        requests?: number[];
         cooldown_until?: number;
         consecutive_failures?: number;
       };
       return {
         lastRequestAt: Number(parsed.last_request_at ?? 0) * 1_000,
-        requests: Array.isArray(parsed.requests) ? parsed.requests.filter(Number.isFinite).map((item) => item * 1_000) : [],
         cooldownUntil: Number(parsed.cooldown_until ?? 0) * 1_000,
         consecutiveFailures: Number(parsed.consecutive_failures ?? 0)
       };
     } catch {
-      return { lastRequestAt: 0, requests: [], cooldownUntil: 0, consecutiveFailures: 0 };
+      return { lastRequestAt: 0, cooldownUntil: 0, consecutiveFailures: 0 };
     }
   }
 
-  private async writeState(state: { lastRequestAt: number; requests: number[]; cooldownUntil: number; consecutiveFailures: number }): Promise<void> {
+  private async writeState(state: { lastRequestAt: number; cooldownUntil: number; consecutiveFailures: number }): Promise<void> {
     await writeFile(`${this.statePath}.tmp`, JSON.stringify({
       last_request_at: state.lastRequestAt / 1_000,
-      requests: state.requests.map((item) => item / 1_000),
       cooldown_until: state.cooldownUntil / 1_000,
       consecutive_failures: state.consecutiveFailures
     }) + '\n', 'utf8');

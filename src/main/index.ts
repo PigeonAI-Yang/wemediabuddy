@@ -9,7 +9,7 @@ import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { startBrowser, stopManagedBrowsers, type BrowserRuntime } from './browser'; import { migrateBrowserConfigToInstallation, readBrowserConfig } from './browser-config';
 import { migratePiConfigToInstallation, resolvePiConfig } from './pi-config';
-import { ensurePiConversationLayout, listPiConversations, readPiConversation, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { PiRpcSupervisor } from './pi-runtime';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
@@ -275,6 +275,7 @@ app.whenReady().then(async () => {
     piSessionFile = switched.sessionFile;
     return switched;
   });
+  ipcMain.handle('pi:conversation-archive', async (_event, conversationId: string, archived: boolean) => { const dataRoot = await loadSelectedDataRoot(); if (!dataRoot) throw new Error('请先选择数据根目录。'); if (!conversationId) throw new Error('请选择会话。'); if (archived && pi?.isActive) throw new Error('Pi 正在回复，完成或停止后再归档。'); const current = await readPiConversation(dataRoot.path); if (archived && current.id === conversationId && pi) { await pi.stop().catch(() => {}); pi = null; } const selected = await setPiConversationArchived(dataRoot.path, conversationId, archived); piSessionFile = selected.sessionFile; return selected; });
   registerPiDockIpc({
     loadSelectedDataRoot,
     ensurePi,

@@ -138,7 +138,12 @@ contextBridge.exposeInMainWorld('wmb', {
     messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  listPiConversations: () => ipcRenderer.invoke('pi:conversation-list') as Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean }>>,
+  listPiConversations: () => ipcRenderer.invoke('pi:conversation-list') as Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean; archivedAt: string | null }>>,
+  archivePiConversation: (conversationId: string, archived: boolean) => ipcRenderer.invoke('pi:conversation-archive', conversationId, archived) as Promise<{
+    id: string; title: string; sessionFile: string; sessionId: string | null; createdAt: string;
+    messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+    updatedAt: string;
+  }>,
   switchPiConversation: (conversationId: string) => ipcRenderer.invoke('pi:conversation-switch', conversationId) as Promise<{
     id: string;
     title: string;

@@ -5,7 +5,7 @@
  * 1. Prefer quiet headed browser over true headless (fingerprint + challenge recovery).
  * 2. Read like a person: gap, scroll, pause, never burst parallel sessions.
  * 3. Fail closed on login wall / captcha / rate limit -> needs_user or cooldown.
- * 4. Keep budgets conservative; cache-first UI should absorb most page opens.
+ * 4. Keep pacing conservative; cache-first UI should absorb most page opens.
  */
 
 export const X_BROWSER_VIEWPORT = {
@@ -19,10 +19,6 @@ export const X_HUMANIZATION = {
   minActionGapMs: 12_000,
   /** Extra random jitter after the minimum gap (ms). */
   actionJitterMs: 10_000,
-  /** Soft hourly budget for automated X page actions. */
-  hourlyActionBudget: 120,
-  /** Daily budget across automation sessions. */
-  dailyActionBudget: 300,
   /** After N actions, take a longer human pause. */
   longPauseEveryMin: 2,
   longPauseEveryMax: 4,

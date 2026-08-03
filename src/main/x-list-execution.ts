@@ -53,6 +53,11 @@ export function acceptXListOperation(database: DatabaseSync, input: { operationI
 
 export function beginDirectXListMemberAdd(database: DatabaseSync, operation: XListOperation): CommandResult<XListOperation> {
   if (operation.kind !== 'members_add') return failure('VALIDATION_ERROR', '直接执行入口只接受成员添加操作。');
+  return beginDirectXListMemberChange(database, operation);
+}
+
+function beginDirectXListMemberChange(database: DatabaseSync, operation: XListOperation): CommandResult<XListOperation> {
+  if (operation.kind !== 'members_add' && operation.kind !== 'members_remove') return failure('VALIDATION_ERROR', '直接执行入口只接受成员添加或移除操作。');
   return beginXListOperation(database, { operationId: operation.id, expectedRevision: operation.revision, currentSnapshot: operation.snapshot });
 }
 
@@ -73,7 +78,13 @@ export async function runAcceptedXListOperation(database: DatabaseSync, config: 
 export async function addXListMembers(database: DatabaseSync, config: XListBrowserConfig, input: {
   requestId: string; accountKey: string; listId: string; handles: string[];
 }): Promise<CommandResult<XListOperation>> {
-  const proposed = prepareXListOperation(database, { ...input, kind: 'members_add' });
+  return changeXListMembers(database, config, input, 'members_add');
+}
+
+async function changeXListMembers(database: DatabaseSync, config: XListBrowserConfig, input: {
+  requestId: string; accountKey: string; listId: string; handles: string[];
+}, kind: 'members_add' | 'members_remove'): Promise<CommandResult<XListOperation>> {
+  const proposed = prepareXListOperation(database, { ...input, kind });
   if (!proposed.ok) return proposed as CommandResult<XListOperation>;
   let operation = proposed.data.operation;
   if (operation.state === 'running' || ['succeeded', 'partial', 'needs_user', 'unknown', 'failed'].includes(operation.state)) return success(operation);
@@ -89,26 +100,38 @@ export async function addXListMembers(database: DatabaseSync, config: XListBrows
       }));
     }
   }
-  const accepted = beginDirectXListMemberAdd(database, operation);
+  const accepted = beginDirectXListMemberChange(database, operation);
   if (!accepted.ok) return accepted;
   return runStartedXListOperation(database, config, accepted.data);
 }
 
-export function xListMemberAddReceipt(operation: XListOperation, replayed: boolean): XListOperation & { replayed: boolean; attemptedNow: boolean } {
+function xListMemberChangeReceipt(operation: XListOperation, replayed: boolean): XListOperation & { replayed: boolean; attemptedNow: boolean } {
   return { ...operation, replayed, attemptedNow: !replayed };
 }
 
 export async function addXListMembersWithReplay(database: DatabaseSync, input: {
   requestId: string; accountKey: string; listId: string; handles: string[];
 }, loadConfig: () => Promise<XListBrowserConfig>): Promise<CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>> {
-  const prior = prepareXListOperation(database, { ...input, kind: 'members_add' });
+  return changeXListMembersWithReplay(database, input, 'members_add', loadConfig);
+}
+
+export async function removeXListMembersWithReplay(database: DatabaseSync, input: {
+  requestId: string; accountKey: string; listId: string; handles: string[];
+}, loadConfig: () => Promise<XListBrowserConfig>): Promise<CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>> {
+  return changeXListMembersWithReplay(database, input, 'members_remove', loadConfig);
+}
+
+async function changeXListMembersWithReplay(database: DatabaseSync, input: {
+  requestId: string; accountKey: string; listId: string; handles: string[];
+}, kind: 'members_add' | 'members_remove', loadConfig: () => Promise<XListBrowserConfig>): Promise<CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>> {
+  const prior = prepareXListOperation(database, { ...input, kind });
   if (!prior.ok) return prior as CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>;
   if (prior.data.replayed && ['running', 'succeeded', 'partial', 'needs_user', 'unknown', 'failed'].includes(prior.data.operation.state))
-    return success(xListMemberAddReceipt(prior.data.operation, true));
+    return success(xListMemberChangeReceipt(prior.data.operation, true));
   const config = await loadConfig();
   if (config.accountKey?.trim().toLowerCase() !== input.accountKey.trim().toLowerCase()) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与请求账号不一致。');
-  const result = await addXListMembers(database, config, input);
-  return result.ok ? success(xListMemberAddReceipt(result.data, false)) : result as CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>;
+  const result = await changeXListMembers(database, config, input, kind);
+  return result.ok ? success(xListMemberChangeReceipt(result.data, false)) : result as CommandResult<XListOperation & { replayed: boolean; attemptedNow: boolean }>;
 }
 
 export async function collectBoundXListTimeline(database: DatabaseSync, config: XListBrowserConfig, input: {

@@ -2,6 +2,26 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-4300 Pi conversation archive
+
+Scope: the existing root-local Pi conversation index and header menu only; no deletion, Settings page or transcript rewrite.
+
+Order:
+
+1. `WMB-4300` — persist archive state, add archive/restore in the existing menu, and preserve a valid active conversation.
+
+Gate: archive survives restart, disappears from the default list, restores from the archived view, leaves exact transcript/session files intact, and cannot interrupt an active Pi turn.
+
+## M-4200 Deterministic direct X List member removal
+
+Scope: extend the existing CAP-014/CAP-017 direct member-change contract to explicit removals; reuse the same operation persistence, browser executor, exact-handle validation and truthful readback.
+
+Order:
+
+1. `WMB-4200` — expose `x_lists.members_remove` and `wmb_remove_x_list_members`, synchronize the built-in operator Skill, and complete one real owned-List removal with current-member readback.
+
+Gate: Pi can derive every parameter without source inspection, an explicit remove instruction needs no duplicate UI confirmation, replay is distinguishable from a current attempt, and a real removal is absent from the subsequent member read.
+
 ## M-4100 Footer status and theme semantics
 
 Scope: current packaged footer only; no status data, operation lifecycle or theme palette change.
@@ -16,7 +36,7 @@ Gate: at the Owner viewport all footer items have disjoint rectangles, dark/ligh
 
 ## M-4000 Deterministic direct X List member addition
 
-Scope: existing CAP-014 and CAP-017 direct Pi member-add contract; UI-confirmed List create/update/delete/remove flows remain unchanged.
+Scope: historical CAP-014 and CAP-017 direct Pi member-add contract; this milestone predates M-4200, which later makes explicit member removal direct as well.
 
 Order:
 

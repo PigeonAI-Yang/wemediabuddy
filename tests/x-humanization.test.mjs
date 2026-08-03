@@ -47,10 +47,10 @@ test('quiet launch args keep a real window and avoid headless flags', () => {
   assert.ok(headless.includes('--headless=new'));
 });
 
-test('humanization budgets and delays stay conservative', () => {
+test('humanization pacing and platform cooldowns stay conservative without local action budgets', () => {
   assert.ok(X_HUMANIZATION.minActionGapMs >= 10_000);
-  assert.ok(X_HUMANIZATION.hourlyActionBudget <= 120);
-  assert.ok(X_HUMANIZATION.dailyActionBudget <= 400);
+  assert.equal('hourlyActionBudget' in X_HUMANIZATION, false);
+  assert.equal('dailyActionBudget' in X_HUMANIZATION, false);
   const delay = nextActionDelayMs(1_000, 0, { sensitiveHour: false });
   assert.ok(delay >= 0);
   assert.ok(delay <= X_HUMANIZATION.minActionGapMs + X_HUMANIZATION.actionJitterMs + 12_000);

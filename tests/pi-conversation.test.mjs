@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createForkedPiConversation, ensurePiConversationLayout, readPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
+import { createForkedPiConversation, ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
 
 test('Pi conversation snapshot round-trips session identity and messages', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-'));
@@ -91,6 +91,30 @@ test('Pi conversation cold read preserves a submitted turn when Pi never commits
     assert.equal(reopened.messages[0].text, '刚提交的问题');
     assert.equal(reopened.messages[1].text, '生成被中断。');
     assert.equal(reopened.messages[1].status, 'stopped');
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Pi conversation archive hides without rewriting files and restores', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-archive-'));
+  try {
+    const first = await readPiConversation(root);
+    const second = await startNewPiConversation(root);
+    const conversationPath = path.join(root, 'pi-agent', 'conversations', `${second.id}.json`);
+    const beforeConversation = await readFile(conversationPath, 'utf8');
+    const beforeSession = await readFile(second.sessionFile, 'utf8');
+    const selected = await setPiConversationArchived(root, second.id, true);
+    assert.equal(selected.id, first.id);
+    const archived = await listPiConversations(root);
+    assert.equal(archived.find((item) => item.id === second.id)?.archivedAt !== null, true);
+    assert.equal(archived.find((item) => item.id === first.id)?.active, true);
+    assert.equal(await readFile(conversationPath, 'utf8'), beforeConversation);
+    assert.equal(await readFile(second.sessionFile, 'utf8'), beforeSession);
+    await assert.rejects(() => switchPiConversation(root, second.id), /恢复已归档会话/);
+    await setPiConversationArchived(root, second.id, false);
+    assert.equal((await listPiConversations(root)).find((item) => item.id === second.id)?.archivedAt, null);
+    assert.equal((await switchPiConversation(root, second.id)).id, second.id);
   } finally {
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

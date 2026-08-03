@@ -96,22 +96,67 @@
   max-height: min(42vh, 320px);
   overflow: auto;
 }
-.pi-session-list > button {
+.pi-session-row {
+  position: relative;
   display: grid;
-  gap: 2px;
-  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
   border: 1px solid transparent;
   border-radius: 12px;
   background: var(--surface-raised);
+}
+.pi-session-row > button:first-child {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px 0 0 12px;
+  background: transparent;
   color: inherit;
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
 }
-.pi-session-list > button:hover { border-color: var(--border); }
-.pi-session-list > button.active {
+.pi-session-row:hover { border-color: var(--border); }
+.pi-session-row.active {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+}
+.pi-session-more {
+  width: 34px;
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pi-session-more:hover { background: var(--surface-hover); color: var(--ink); }
+.pi-session-actions {
+  position: absolute;
+  z-index: 2;
+  top: 34px;
+  right: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  padding: 4px;
+  box-shadow: 0 8px 20px color-mix(in srgb, #000 28%, transparent);
+}
+.pi-session-actions button,
+.pi-session-archived-link {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.pi-session-actions button { padding: 6px 10px; white-space: nowrap; }
+.pi-session-archived-link {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding: 8px 4px 2px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .pi-session-list strong {
   overflow: hidden;

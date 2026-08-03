@@ -32,6 +32,7 @@ export type PiConversationSummary = {
   createdAt: string;
   updatedAt: string;
   active: boolean;
+  archivedAt: string | null;
 };
 
 type PiConversationIndex = {
@@ -42,6 +43,7 @@ type PiConversationIndex = {
     preview: string;
     createdAt: string;
     updatedAt: string;
+    archivedAt: string | null;
   }>;
 };
 
@@ -152,12 +154,14 @@ async function readIndex(dataRootPath: string): Promise<PiConversationIndex> {
           title: item.title || '新会话',
           preview: typeof item.preview === 'string' ? item.preview : '暂无消息',
           createdAt: typeof item.createdAt === 'string' ? item.createdAt : item.updatedAt,
-          updatedAt: item.updatedAt
+          updatedAt: item.updatedAt,
+          archivedAt: typeof item.archivedAt === 'string' ? item.archivedAt : null
         }))
       : [];
     const activeId = typeof raw.activeId === 'string' ? raw.activeId : null;
     return {
-      activeId: activeId && conversations.some((item) => item.id === activeId) ? activeId : (conversations[0]?.id ?? null),
+      activeId: activeId && conversations.some((item) => item.id === activeId && !item.archivedAt)
+        ? activeId : (conversations.find((item) => !item.archivedAt)?.id ?? null),
       conversations
     };
   } catch {
@@ -227,12 +231,14 @@ async function writeConversationFile(dataRootPath: string, snapshot: PiConversat
 
 async function upsertIndexEntry(dataRootPath: string, snapshot: PiConversationSnapshot, makeActive = true): Promise<void> {
   const index = await readIndex(dataRootPath);
+  const current = index.conversations.find((item) => item.id === snapshot.id);
   const entry = {
     id: snapshot.id,
     title: snapshot.title,
     preview: previewFromMessages(snapshot.messages),
     createdAt: snapshot.createdAt,
-    updatedAt: snapshot.updatedAt
+    updatedAt: snapshot.updatedAt,
+    archivedAt: current?.archivedAt ?? null
   };
   const others = index.conversations.filter((item) => item.id !== snapshot.id);
   const conversations = [entry, ...others].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -289,8 +295,9 @@ async function ensureActiveConversation(dataRootPath: string): Promise<PiConvers
     const existing = await readConversationFile(dataRootPath, index.activeId);
     if (existing) return existing;
   }
-  if (index.conversations[0]) {
-    const existing = await readConversationFile(dataRootPath, index.conversations[0].id);
+  const firstVisible = index.conversations.find((item) => !item.archivedAt);
+  if (firstVisible) {
+    const existing = await readConversationFile(dataRootPath, firstVisible.id);
     if (existing) {
       await writeIndex(dataRootPath, { ...index, activeId: existing.id });
       return existing;
@@ -419,12 +426,28 @@ export async function startNewPiConversation(dataRootPath: string): Promise<PiCo
 
 export async function switchPiConversation(dataRootPath: string, conversationId: string): Promise<PiConversationSnapshot> {
   await ensurePiConversationLayout(dataRootPath);
+  const index = await readIndex(dataRootPath);
+  if (index.conversations.find((item) => item.id === conversationId)?.archivedAt) throw new Error('请先恢复已归档会话。');
   const target = await readConversationFile(dataRootPath, conversationId);
   if (!target) throw new Error('会话不存在。');
-  const index = await readIndex(dataRootPath);
   await writeIndex(dataRootPath, { ...index, activeId: target.id });
   // Refresh legacy active pointer.
   await writeConversationFile(dataRootPath, target);
   await upsertIndexEntry(dataRootPath, target, true);
   return target;
+}
+
+export async function setPiConversationArchived(dataRootPath: string, conversationId: string, archived: boolean): Promise<PiConversationSnapshot> {
+  await ensurePiConversationLayout(dataRootPath);
+  const index = await readIndex(dataRootPath);
+  const target = index.conversations.find((item) => item.id === conversationId);
+  if (!target) throw new Error('会话不存在。');
+  const archivedAt = archived ? (target.archivedAt ?? nowIso()) : null;
+  const conversations = index.conversations.map((item) => item.id === conversationId ? { ...item, archivedAt } : item);
+  const activeId = archived && index.activeId === conversationId
+    ? (conversations.find((item) => !item.archivedAt && item.id !== conversationId)?.id ?? null)
+    : index.activeId;
+  await writeIndex(dataRootPath, { activeId, conversations });
+  if (activeId) return switchPiConversation(dataRootPath, activeId);
+  return startNewPiConversation(dataRootPath);
 }

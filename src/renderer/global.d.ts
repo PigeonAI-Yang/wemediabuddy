@@ -252,7 +252,12 @@ declare global {
         messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
         updatedAt: string;
       }>;
-      listPiConversations(): Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean }>>;
+      listPiConversations(): Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean; archivedAt: string | null }>>;
+      archivePiConversation(conversationId: string, archived: boolean): Promise<{
+        id: string; title: string; sessionFile: string; sessionId: string | null; createdAt: string;
+        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+        updatedAt: string;
+      }>;
       switchPiConversation(conversationId: string): Promise<{
         id: string;
         title: string;

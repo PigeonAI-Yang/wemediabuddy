@@ -4,7 +4,7 @@ import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
 import { armXListOperation, beginXListOperation, bindXList, finishXListOperation, getXListOperation, prepareXListOperation, recordXListConfirmationFailure, recoverOrphanedXListOperations, setXListBindingEnabled } from '../src/main/x-lists.ts';
-import { acceptXListOperation, addXListMembersWithReplay, beginDirectXListMemberAdd, confirmAndRunXListOperation } from '../src/main/x-list-execution.ts';
+import { acceptXListOperation, addXListMembersWithReplay, beginDirectXListMemberAdd, confirmAndRunXListOperation, removeXListMembersWithReplay } from '../src/main/x-list-execution.ts';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-x-lists-'));
 let mcp;
@@ -70,6 +70,11 @@ try {
   const terminal = finishXListOperation(db, terminalPrepared.data.operation.id, { state: 'partial', phase: 'partial_member_readbacks' });
   const replay = await addXListMembersWithReplay(db, { requestId: 'x-list-terminal-replay', accountKey: '@Owner', listId: '1234567890', handles: ['@Alice'] }, async () => { throw new Error('terminal replay touched browser preflight'); });
   if (!replay.ok || !replay.data.replayed || replay.data.attemptedNow || replay.data.id !== terminal.id) throw new Error('terminal member-add replay was not explicit');
+  const removePrepared = prepareXListOperation(db, { requestId: 'x-list-remove-terminal-replay', accountKey: '@Owner', kind: 'members_remove', listId: '1234567890', handles: ['@Alice'] });
+  if (!removePrepared.ok) throw new Error('terminal remove replay fixture was not prepared');
+  const removeTerminal = finishXListOperation(db, removePrepared.data.operation.id, { state: 'succeeded', phase: 'completed' });
+  const removeReplay = await removeXListMembersWithReplay(db, { requestId: 'x-list-remove-terminal-replay', accountKey: '@Owner', listId: '1234567890', handles: ['@Alice'] }, async () => { throw new Error('terminal remove replay touched browser preflight'); });
+  if (!removeReplay.ok || !removeReplay.data.replayed || removeReplay.data.attemptedNow || removeReplay.data.id !== removeTerminal.id || removeReplay.data.kind !== 'members_remove') throw new Error('terminal member-remove replay was not explicit');
   const directPrepared = prepareXListOperation(db, { requestId: 'x-list-direct-one-snapshot', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
   const directArmed = directPrepared.ok && armXListOperation(db, { operationId: directPrepared.data.operation.id, expectedRevision: directPrepared.data.operation.revision, snapshot: { ...snapshot, list: { ...snapshot.list, name: 'List 1234567890', memberCount: null }, members: [{ handle: '@Alice', present: false }] } });
   if (!directArmed || !directArmed.ok) throw new Error('direct member-add fixture did not arm');
@@ -82,11 +87,14 @@ try {
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
-  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_add_x_list_members') || !tools.has('wmb_collect_x_list_timeline') || tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
+  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_add_x_list_members') || !tools.has('wmb_remove_x_list_members') || !tools.has('wmb_collect_x_list_timeline') || tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
   const mcpSource = await readFile(new URL('../src/main/mcp.ts', import.meta.url), 'utf8');
-  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.members_add") || !mcpSource.includes('return await addXListMembersWithReplay') || !mcpSource.includes("x_lists.collect_timeline") || !mcpSource.includes('return await collectBoundXListTimeline') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
+  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.members_add") || !mcpSource.includes('return await addXListMembersWithReplay') || !mcpSource.includes("x_lists.members_remove") || !mcpSource.includes('return await removeXListMembersWithReplay') || !mcpSource.includes("x_lists.collect_timeline") || !mcpSource.includes('return await collectBoundXListTimeline') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
   const addTool = tools.get('wmb_add_x_list_members');
   if (!addTool.description.includes('明确 SOP') || !addTool.description.includes('禁止读源码猜用法') || !addTool.parameters.properties.requestId.description || !addTool.parameters.properties.handles.items.description) throw new Error('small-model member-add contract is incomplete');
+  const removeTool = tools.get('wmb_remove_x_list_members');
+  if (!removeTool.description.includes('明确 SOP') || !removeTool.description.includes('禁止读源码猜用法') || !removeTool.parameters.properties.requestId.description || !removeTool.parameters.properties.handles.items.description) throw new Error('small-model member-remove contract is incomplete');
+  if (tools.get('wmb_prepare_x_list_operation').parameters.properties.kind.enum.includes('members_remove')) throw new Error('member removal still exposed through the obsolete prepare path');
 } finally {
   await mcp?.close();
   await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

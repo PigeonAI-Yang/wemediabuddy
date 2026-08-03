@@ -77,3 +77,14 @@ test('Pi streaming follows only while the reader remains near the bottom', async
   assert.match(css, /button\.pi-jump-latest:not\(:disabled\):not\(\[aria-disabled="true"\]\):active \{ transform: translateX\(-50%\) translateY\(1px\) scale\(0\.98\); \}/);
   assert.match(transcript, />回到最新<\/button>/);
 });
+
+test('Pi conversation archive stays in the session menu and cannot interrupt an active turn', async () => {
+  const header = await readFile(new URL('../src/renderer/pi-dock-header.tsx', import.meta.url), 'utf8');
+  const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
+  assert.match(header, /已归档会话/);
+  assert.match(header, /归档会话/);
+  assert.match(header, /恢复会话/);
+  assert.match(header, /className="pi-session-more"/);
+  assert.match(main, /ipcMain\.handle\('pi:conversation-archive'/);
+  assert.match(main, /archived && pi\?\.isActive/);
+});

@@ -73,5 +73,6 @@ test('Pi system prompts keep detailed operating playbooks in the shared Skill', 
   assert.equal(prompts.every((prompt) => prompt.includes('PI_AUTHORITY_SYSTEM_PROMPT')), true);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /禁止直接写文件或数据库/);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /禁止最终发布/);
-  assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /只能由用户在 WMB UI 完成/);
+  assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /只有工具或 Skill 明确要求 UI 确认/);
+  assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /已授权直接执行的动作不得追加确认/);
 });

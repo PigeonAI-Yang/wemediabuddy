@@ -23,7 +23,7 @@ That feels unlike a browser, and forces extra live X traffic.
 3. Asset library (`source_items`) stays explicit collect-only.
 4. Long-term use cannot accumulate unbounded cache rows or payload bytes.
 5. Failures never overwrite a good snapshot.
-6. Live X refresh stays rare and budgeted (humanization path).
+6. Live X refresh stays paced through the humanization path.
 
 ## Non-goals
 
@@ -45,7 +45,7 @@ Open List timeline
 | --- | --- | --- | --- |
 | L1 | Fast reopen / fewer X hits | Hard caps + TTL | Slightly slower UI |
 | L2 | Traceable discovery assets | Product cleanup rules | Lose collected evidence |
-| L3 | Fresh page read | Not stored directly | Uses action budget |
+| L3 | Fresh page read | Not stored directly | Uses paced browser access |
 
 ## Schema
 
@@ -182,7 +182,7 @@ No multi-list prefetch. No homepage background timeline storm.
 - L1 hit => zero X request
 - Live refresh uses existing quiet browser + humanization guard/lease
 - Default: no automatic multi-list timeline revalidation
-- Optional future auto-refresh must reuse hourly/daily budgets and stay off by default
+- Optional future auto-refresh must reuse the existing paced browser path and stay off by default
 
 ## Failure and edge cases
 

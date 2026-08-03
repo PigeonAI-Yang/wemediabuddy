@@ -51,7 +51,8 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
   4. 调用一次 `wmb_add_x_list_members({ requestId, accountKey, listId, handles })`。用户的明确添加指令就是授权，不要求第二次 UI 确认。
   5. 返回 `replayed=true, attemptedNow=false` 时明确说“未重新执行”，引用原 `finishedAt`；只有 `attemptedNow=true` 才能说本次进行了尝试。最后按 operation ID 及每个 handle 的 `succeeded / needs_user / failed / unknown` 逐项汇报。
   6. 继续 `partial / needs_user / failed` 时重新从第 1 步开始，必须重读当前成员、只提交仍未存在的 handle，并使用新的业务 `requestId`。禁止复用终态 ID、盲目重交完整名单或把历史回放当成续跑。
-- 创建、修改、移除成员或删除仍只用 `wmb_prepare_x_list_operation` 准备，并等待应用级操作托盘确认；不要把添加成员也送入这条确认路径。
+- 移除成员使用同样严格的直接执行顺序：先读 index 取得准确账号/List ID，再读 members，只保留当前确实存在且用户明确要求移除的唯一精确 handle，为新动作生成新 `requestId`，调用一次 `wmb_remove_x_list_members({ requestId, accountKey, listId, handles })`。用户的明确移除指令就是授权，不要求第二次 UI 确认；replay、逐项汇报和部分结果续跑规则与添加完全相同。工具返回 `needs_user` 只表示浏览器登录、挑战或平台限流等人工接管条件，不等于存在一个待 UI 确认的成员操作；不得让用户去 UI 重复确认。
+- 创建、修改或删除 List 仍只用 `wmb_prepare_x_list_operation` 准备，并等待应用级操作托盘确认；成员添加/移除都不得送入准备路径。
 - 用户因找不到 UI、按钮未出现或确认未完成而说“重新来一次”时，先回读原 operation；只要精确 diff 未变且仍为 `prepared` / `awaiting_confirmation`，就继续引导同一 operation，禁止换 `requestId` 制造重复提议。只有用户明确改变账号、List 或成员 diff，才是新的业务动作。
 - 状态解释必须准确：`prepared` 是 WMB 正在自动读取确认快照，`awaiting_confirmation` 是应用级操作托盘等待用户一次确认且平台写入仍为零，`running` 表示确认已持久化并交给后台浏览器执行器；结束后按每项真实状态读回。不得把 `awaiting_confirmation` 说成已经执行，也不得把 WMB 执行动态说成 Pi 正在回复。
 - 采集已启用绑定使用 `wmb_collect_x_list_timeline`，不得采集任意未绑定 List。
@@ -102,7 +103,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 渠道：`wmb_get_intelligence_channels`、`wmb_list_intelligence_channel_receipts`、`wmb_resolve_intelligence_website`、`wmb_trial_intelligence_website`、`wmb_resolve_intelligence_x_list`、`wmb_prepare_intelligence_channel_changes`。
 
-X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_add_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
+X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
 资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。
 

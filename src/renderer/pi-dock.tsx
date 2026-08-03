@@ -409,6 +409,15 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     setSessionMenuOpen(false);
     await refreshSessions();
   };
+  const archiveSession = async (conversationId: string, archived: boolean) => { if (busy) { showToast('Pi 正在回复，完成或停止后再归档'); return; }
+    try {
+      conversationTouched.current = true; const selected = await window.wmb.archivePiConversation(conversationId, archived);
+      if (archived && conversationId === activeSessionId) { setMessages(selected.messages ?? []); setNativeQueue({ steering: [], followUp: [] }); setActiveSessionId(selected.id || null);
+        setPhase('idle'); setStatusText(configured ? '已切换会话' : '等待配置');
+      }
+      await refreshSessions(); showToast(archived ? '会话已归档' : '会话已恢复');
+    } catch (error) { showToast(error instanceof Error ? error.message : (archived ? '归档失败' : '恢复失败')); }
+  };
   const copyMessage = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -452,7 +461,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         activeSessionId={activeSessionId} activeTitle={activeTitle} phase={phase} statusText={statusText}
         contextChip={contextChip} toast={toast}
         onToggleSessions={() => { setSessionMenuOpen((open) => !open); void refreshSessions(); }}
-        onNewConversation={() => { void newConversation(); }} onOpenSession={(id) => { void openSession(id); }}
+        onNewConversation={() => { void newConversation(); }} onOpenSession={(id) => { void openSession(id); }} onArchiveSession={(id, archived) => { void archiveSession(id, archived); }} busy={busy}
       />
       <PiDockTranscript
         messages={messages}

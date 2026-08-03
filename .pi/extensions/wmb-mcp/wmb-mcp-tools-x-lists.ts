@@ -52,11 +52,11 @@ const getOperation: ToolDefinition = {
 
 const prepareOperation: ToolDefinition = {
   name: 'wmb_prepare_x_list_operation', label: '准备 X List 操作',
-  description: '创建 X List 操作提议（create/update/delete/members_add/members_remove）。只准备，最终确认只能由 WMB UI 完成。',
+  description: '创建 X List 操作提议（create/update/delete）。只准备，最终确认只能由 WMB UI 完成；成员添加/移除必须使用各自的直接工具。',
   parameters: {
     type: 'object',
     properties: {
-      requestId: { type: 'string' }, accountKey: { type: 'string' }, kind: { type: 'string', enum: ['create', 'update', 'delete', 'members_add', 'members_remove'] },
+      requestId: { type: 'string' }, accountKey: { type: 'string' }, kind: { type: 'string', enum: ['create', 'update', 'delete'] },
       listId: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, isPrivate: { type: 'boolean' }, handles: { type: 'array', items: { type: 'string' } }
     },
     required: ['requestId', 'accountKey', 'kind'], additionalProperties: false
@@ -87,6 +87,22 @@ const addMembers: ToolDefinition = {
       request_id: String(params.requestId ?? ''), account_key: String(params.accountKey ?? ''), list_id: String(params.listId ?? ''),
       handles: Array.isArray(params.handles) ? params.handles.map(String) : []
     }));
+  }
+};
+
+const removeMembers: ToolDefinition = {
+  name: 'wmb_remove_x_list_members', label: '移除 X List 成员',
+  description: '明确 SOP：①先用 wmb_read_x_list_index 取得 accountKey/listId；②用 wmb_read_x_list_members 确认目标当前存在；③新业务动作生成新 requestId；④handles 只传唯一精确 @handle；⑤直接执行，无第二次 UI 确认；⑥replayed=true 且 attemptedNow=false 只回放旧结果，attemptedNow=true 才是本次尝试，按逐项状态汇报。禁止读源码猜用法。',
+  parameters: {
+    type: 'object', properties: {
+      requestId: { type: 'string', description: '本次业务动作唯一 ID；新移除或部分结果续跑必须用新值，仅同一次未取得终态响应的传输重试可复用。' },
+      accountKey: { type: 'string', description: 'wmb_read_x_list_index 返回的当前账号精确 @handle。' },
+      listId: { type: 'string', description: 'wmb_read_x_list_index 返回的目标 List 稳定数字 ID，不传名称或 URL。' },
+      handles: { type: 'array', description: '本次仍需移除且当前真实存在的账号；续跑前先重读 members。', items: { type: 'string', description: '必须是唯一精确 @handle，以 @ 开头；禁止显示名、关键词或模糊候选。' }, minItems: 1, maxItems: 100 }
+    }, required: ['requestId', 'accountKey', 'listId', 'handles'], additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('x_lists.members_remove', { request_id: String(params.requestId ?? ''), account_key: String(params.accountKey ?? ''), list_id: String(params.listId ?? ''), handles: Array.isArray(params.handles) ? params.handles.map(String) : [] }));
   }
 };
 
@@ -150,4 +166,4 @@ const stopObservation: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('x_lists.observation_stop', { session_id: String(params.sessionId ?? '') })); }
 };
 
-export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, addMembers, collectTimeline, listMetricSnapshots, getPostTrend, startObservation, getObservation, stopObservation];
+export const xListTools = [readIndex, readDetail, readMembers, readTimeline, listBindings, getOperation, prepareOperation, addMembers, removeMembers, collectTimeline, listMetricSnapshots, getPostTrend, startObservation, getObservation, stopObservation];
