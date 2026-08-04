@@ -1,27 +1,27 @@
 {
-  "active_loop": "wmb-4106-x-list-social-structure-cache",
+  "active_loop": "wmb-4400-x-refresh-preserve-cache",
   "status": "complete",
-  "symptom": "Cached X List cards no longer show repost and quote relationships.",
+  "symptom": "Manual X List refresh can clear visible cached posts or shrink a more complete cache to the first live page.",
   "observation_packet": {
     "url": "packaged WeMediaBuddy Discover X Lists",
     "viewport": "1600x960",
-    "user_action": "open Discover X Lists after restart",
-    "expected": "repost label and nested quote card survive cache persistence and remount",
-    "actual": "packaged UI renders 3 repost labels and 12 quote cards; SQLite retains social kinds and nested authors after write/read",
-    "screenshot": ".ai/wmb-4106-after.png",
+    "user_action": "click 刷新动态 on 英国资讯",
+    "expected": "refresh updates or retains the 40 cached posts without blanking the timeline",
+    "actual": "UI showed no timeline while cache IPC still returned 40; a later successful refresh displayed 20 and shrank SQLite from 40 to 20",
+    "screenshot": ".ai/wmb-x-refresh-empty-before.png",
     "console": "no renderer error",
-    "network_ws": "not applicable",
-    "dom_selector": ".discover-page XListsView",
-    "computed_style_layout": "x-social-context and x-quote-card visible from real post data",
-    "state_store_snapshot": "cache readback retains repost/quote kinds, reposter handles and quoted authors"
+    "network_ws": "first reported live response unavailable; repeat real refresh returned one 20-post page",
+    "dom_selector": "XListsView timeline empty state and 刷新动态 button",
+    "computed_style_layout": "not a CSS issue; cards were absent from Renderer state",
+    "state_store_snapshot": "SQLite/cache IPC had 40 posts while DOM had zero; repeat refresh persisted 20"
   },
   "hypotheses": [{
-    "hypothesis": "timeline cache normalization omits postKind, repostedBy and quotedPost",
-    "would_disprove": "normalizePayload copies those fields into the persisted payload",
-    "result": "confirmed and repaired in normalizePayload"
+    "hypothesis": "Main protects only empty DB writes while Renderer replaces visible posts with empty/partial live results",
+    "would_disprove": "Main returns a resolved retained/merged dataset and Renderer renders that result",
+    "result": "confirmed in ipc-x-lists, writeXListTimelineCacheIfImproved and applyLiveTimeline"
   }],
-  "breakpoint": null,
-  "owner_check": null,
+  "breakpoint": "Initial refresh IPC now returns the resolved last-good dataset instead of raw live posts.",
+  "owner_check": "Cold packaged restart showed 20 cached cards; the same refresh button retained 20 cards and persisted 20.",
   "attempts": 1,
-  "last_gate": "real UI 3 repost labels and 12 quote cards; cache readback retains kinds and nested authors; 12/12 focused; typecheck; package"
+  "last_gate": "4/4 focused tests, typecheck, Harness, package and packaged cold-restart/refresh readback passed"
 }

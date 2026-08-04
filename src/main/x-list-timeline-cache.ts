@@ -204,7 +204,10 @@ export function writeXListTimelineCacheIfImproved(
     // Do not replace a good snapshot with an empty live miss.
     return existing;
   }
-  return writeXListTimelineCache(database, input);
+  if (!existing?.payload.posts.length) return writeXListTimelineCache(database, input);
+  const seen = new Set(input.posts.map((post) => post.url.replace(/[?#].*$/, '')));
+  const posts = [...input.posts, ...existing.payload.posts.filter((post) => !seen.has(post.url.replace(/[?#].*$/, '')))];
+  return writeXListTimelineCache(database, { ...input, posts, detail: input.detail ?? existing.payload.detail });
 }
 
 export function clearXListTimelineCache(database: DatabaseSync, accountKey?: string): { deleted: number } {

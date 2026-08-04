@@ -61,6 +61,12 @@ function normalizeMetrics(value?: TimelinePost['metrics'] | null): NonNullable<T
     views: value?.views ?? null
   };
 }
+function refreshTimelineNote(result: Awaited<ReturnType<typeof window.wmb.readXListTimeline>>): string {
+  const liveCount = result.livePostCount ?? result.posts.length;
+  if (result.refreshDisposition === 'retained_cache') return `本次刷新未读到新动态，已保留缓存 ${result.posts.length} 条。`;
+  if (result.refreshDisposition === 'merged_cache') return `本次读取 ${liveCount} 条，已与缓存合并显示 ${result.posts.length} 条。`;
+  return result.posts.length ? `刚刚读取 ${liveCount} 条当前动态，并写入浏览缓存。` : '这个 List 当前没有可读动态（可能为空、失效或权限不足）。';
+}
 function formatMetric(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '';
   const abs = Math.abs(value);
@@ -655,7 +661,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
           const result = await window.wmb.readXListTimeline({ listId, limit: LIVE_PAGE });
           if (!stillCurrent()) return;
           applyLiveTimeline(result, false);
-          setNote(result.posts.length ? `刚刚读取 ${result.posts.length} 条当前动态，并写入浏览缓存。` : `这个 List 当前没有可读动态（可能为空、失效或权限不足）。`);
+          setNote(refreshTimelineNote(result));
         } catch (error) {
           if (!stillCurrent()) return;
           const message = error instanceof Error ? error.message : String(error);
@@ -719,7 +725,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       const result = await window.wmb.readXListTimeline({ listId, limit: LIVE_PAGE });
       if (!stillCurrent()) return;
       applyLiveTimeline(result, false);
-      setNote(result.posts.length ? `刚刚读取 ${result.posts.length} 条当前动态，并写入浏览缓存。` : `这个 List 当前没有可读动态（可能为空、失效或权限不足）。`);
+      setNote(refreshTimelineNote(result));
     } catch (error) {
       if (!stillCurrent()) return;
       const message = error instanceof Error ? error.message : String(error);

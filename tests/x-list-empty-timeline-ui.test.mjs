@@ -7,4 +7,7 @@ test('an empty initial X List page is retryable but never paginated', async () =
   assert.match(source, /setPostsHasMore\(mapped\.length > 0 && Boolean\(result\.hasMore\)\)/);
   assert.match(source, /posts\.length === 0[\s\S]*?当前没有可读动态[\s\S]*?重新读取/);
   assert.match(source, /postsHasMore && <div className="x-timeline-more"/);
+  assert.match(source, /refreshTimelineNote\(result\)/);
+  assert.match(source, /本次刷新未读到新动态，已保留缓存/);
+  assert.match(source, /已与缓存合并显示/);
 });

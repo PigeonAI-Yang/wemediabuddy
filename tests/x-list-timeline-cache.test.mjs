@@ -50,6 +50,12 @@ test('timeline browse cache roundtrip and failure does not clobber good snapshot
     });
     assert.equal(kept?.postsCount, 3);
     assert.equal(readXListTimelineCache(database, '@A', '1', { touch: false })?.postsCount, 3);
+    const merged = writeXListTimelineCacheIfImproved(database, {
+      accountKey: '@A', listId: '1', source: 'live', fetchedAt: isoMinutesAgo(1),
+      posts: [...posts(1, 'new'), ...posts(2)]
+    });
+    assert.equal(merged?.postsCount, 4);
+    assert.deepEqual(merged?.payload.posts.map((post) => post.url.split('/').at(-1)), ['new0', 'p0', 'p1', 'p2']);
     database.close();
   } finally {
     await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

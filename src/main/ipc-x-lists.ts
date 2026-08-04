@@ -71,7 +71,7 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
         }
         return out;
       })();
-      writeXListTimelineCacheIfImproved(database, {
+      const saved = writeXListTimelineCacheIfImproved(database, {
         accountKey: value.accountKey,
         listId: input.listId,
         posts: mergedPosts,
@@ -79,14 +79,22 @@ export function registerXListIpc({ loadSelectedDataRoot: loadRoot, wakeObservati
         source: 'live',
         fetchedAt: value.detail.observation?.capturedAt
       });
+      const resolvedPosts = saved?.payload.posts ?? mergedPosts;
       seedListTimelineMemory({
         workspaceId: context.workspaceId,
         browserId: context.browserId,
         listId: input.listId,
         accountKey: value.accountKey,
         detail: { name: value.detail.name, canonicalUrl: value.detail.canonicalUrl },
-        posts: mergedPosts
+        posts: resolvedPosts
       });
+      if (!continuing) return {
+        ...value,
+        posts: resolvedPosts,
+        livePostCount: value.posts.length,
+        refreshDisposition: value.posts.length === 0 && resolvedPosts.length > 0 ? 'retained_cache'
+          : resolvedPosts.length > value.posts.length ? 'merged_cache' : 'updated'
+      };
     } finally { database.close(); }
     return value;
   });
