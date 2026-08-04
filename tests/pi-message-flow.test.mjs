@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { messagesFromPiEntries } from '../src/main/pi-transcript-projection.ts';
 import { piToolSummary } from '../src/shared/pi-message.ts';
-import { coalescePiMessages, isPiConversationNearBottom, piThinkingSummary } from '../src/renderer/pi-dock-utils.ts';
+import { coalescePiMessages, finishPiTool, isPiConversationNearBottom, piThinkingSummary, streamingToolSegment } from '../src/renderer/pi-dock-utils.ts';
 
 test('Pi transcript preserves visible order and keeps tool details behind one summary', () => {
   const messages = messagesFromPiEntries([
@@ -76,6 +76,20 @@ test('Pi streaming follows only while the reader remains near the bottom', async
   const css = await readFile(new URL('../src/renderer/styles-pi.css', import.meta.url), 'utf8');
   assert.match(css, /button\.pi-jump-latest:not\(:disabled\):not\(\[aria-disabled="true"\]\):active \{ transform: translateX\(-50%\) translateY\(1px\) scale\(0\.98\); \}/);
   assert.match(transcript, />回到最新<\/button>/);
+});
+
+test('only the unfinished live tool receives the WMB creature activity state', async () => {
+  const active = streamingToolSegment('wmb_get_workbench', 'call-live');
+  assert.equal('output' in active, false);
+  const [finished] = finishPiTool([{ role: 'assistant', text: '', status: 'streaming', segments: [active] }], 'call-live', { ok: true });
+  assert.equal('output' in finished.segments[0], true);
+  const transcript = await readFile(new URL('../src/renderer/pi-dock-transcript.tsx', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/renderer/styles-pi.css', import.meta.url), 'utf8');
+  assert.match(transcript, /const running = streaming && !\('output' in segment\)/);
+  assert.match(transcript, /WmbCreatureMark state=\{running \? 'working' : settling \? 'settling' : 'idle'\}/);
+  const foundation = await readFile(new URL('../src/renderer/styles-foundation.css', import.meta.url), 'utf8');
+  assert.match(foundation, /wmb-creature-look 2\.8s steps\(12,end\) infinite/);
+  assert.match(foundation, /wmb-creature-settle-blink \.4s ease-out both/);
 });
 
 test('Pi conversation archive stays in the session menu and cannot interrupt an active turn', async () => {

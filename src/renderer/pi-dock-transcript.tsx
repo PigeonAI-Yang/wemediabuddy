@@ -4,6 +4,7 @@ import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
 import { coalescePiMessages, isPiConversationNearBottom, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
+import { WmbCreatureMark } from './wmb-brand-mark';
 
 export type PiDockMessage = PiChatMessage;
 
@@ -38,6 +39,27 @@ function segmentText(segment: PiMessageSegment): string {
   return segment.kind === 'tool' ? segment.text : segment.text;
 }
 
+function PiToolLine({ segment, streaming }: { segment: Extract<PiMessageSegment, { kind: 'tool' }>; streaming: boolean }): React.JSX.Element {
+  const running = streaming && !('output' in segment);
+  const wasRunning = useRef(running);
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    const completed = wasRunning.current && !running;
+    wasRunning.current = running;
+    if (!completed) return;
+    setSettling(true);
+    const timer = window.setTimeout(() => setSettling(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [running]);
+  return <details className={`pi-tool-line${running ? ' running' : settling ? ' settling' : ''}${segment.isError ? ' failed' : ''}`}>
+    <summary aria-busy={running || undefined}><WmbCreatureMark state={running ? 'working' : settling ? 'settling' : 'idle'}/><span className="pi-tool-label">{segment.text}</span></summary>
+    {(segment.input || segment.output) && <div className="pi-tool-detail">
+      {segment.input && <><b>输入</b><pre>{segment.input}</pre></>}
+      {segment.output && <><b>{segment.isError ? '错误' : '输出'}</b><pre>{segment.output}</pre></>}
+    </div>}
+  </details>;
+}
+
 function PiAssistantSegments({ segments, streaming }: { segments: PiMessageSegment[]; streaming: boolean }): React.JSX.Element {
   const liveThinkingIndex = streaming ? segments.map((segment) => segment.kind).lastIndexOf('thinking') : -1;
   return <>
@@ -49,13 +71,7 @@ function PiAssistantSegments({ segments, streaming }: { segments: PiMessageSegme
             <div className="pi-thinking-detail pi-message-segment thinking" dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />
           </details>
       : segment.kind === 'tool'
-        ? <details className={`pi-tool-line${segment.isError ? ' failed' : ''}`} key={`${segment.toolCallId ?? segment.text}-${index}`}>
-          <summary>{segment.text}</summary>
-          {(segment.input || segment.output) && <div className="pi-tool-detail">
-            {segment.input && <><b>输入</b><pre>{segment.input}</pre></>}
-            {segment.output && <><b>{segment.isError ? '错误' : '输出'}</b><pre>{segment.output}</pre></>}
-          </div>}
-        </details>
+        ? <PiToolLine segment={segment} streaming={streaming} key={`${segment.toolCallId ?? segment.text}-${index}`}/>
         : <div className="pi-message-segment text" key={`text-${index}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(segment.text) }} />)}
   </>;
 }

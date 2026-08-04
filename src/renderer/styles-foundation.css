@@ -218,6 +218,24 @@ h1, h2, h3, p { text-wrap: pretty; }
   font-weight: 700;
   letter-spacing: .01em;
 }
+.wmb-creature-mark { display: inline-grid; width: 20px; height: 20px; place-items: center; color: var(--ink-soft); }
+.wmb-creature-mark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.wmb-creature-white,.wmb-creature-pupil { fill: currentColor; }
+.wmb-creature-purple { fill: var(--accent); }
+.wmb-creature-eye path { fill: var(--surface-raised); stroke: currentColor; stroke-linejoin: round; stroke-width: 3.4; }
+.wmb-creature-mark.is-working .wmb-creature-body { transform-box: fill-box; transform-origin: center; animation: wmb-creature-body 2.8s steps(12,end) infinite; }
+.wmb-creature-mark.is-working .wmb-creature-purple { transform-box: fill-box; transform-origin: 50% 100%; animation: wmb-creature-wing 2.8s steps(12,end) infinite; }
+.wmb-creature-mark.is-working .wmb-creature-eye { transform-box: fill-box; transform-origin: center; animation: wmb-creature-blink 4.9s steps(1,end) infinite; }
+.wmb-creature-mark.is-working .wmb-creature-pupil { animation: wmb-creature-look 2.8s steps(12,end) infinite; }
+.wmb-creature-mark.is-settling .wmb-creature-body { transform-box: fill-box; transform-origin: center; animation: wmb-creature-settle .4s ease-out both; }
+.wmb-creature-mark.is-settling .wmb-creature-eye { transform-box: fill-box; transform-origin: center; animation: wmb-creature-settle-blink .4s ease-out both; }
+@keyframes wmb-creature-body { 0%,12%,58%,100%{transform:none} 20%,30%{transform:translateX(-1px) rotate(-2deg) scaleX(1.04) scaleY(.97)} 40%,50%{transform:translateX(1px) rotate(2deg) scaleX(1.04) scaleY(.97)} 72%{transform:translateX(-1.5px) rotate(-3deg)} 76%{transform:translateX(1.5px) rotate(3deg)} 82%{transform:none} }
+@keyframes wmb-creature-wing { 0%,12%,58%,100%{transform:none} 20%,30%{transform:scaleY(.9)} 40%,50%{transform:scaleY(1.08)} 72%{transform:scaleY(.86)} 76%{transform:scaleY(1.12)} 82%{transform:none} }
+@keyframes wmb-creature-look { 0%,12%,58%,100%{transform:none} 20%,30%{transform:translateX(-2.3px)} 40%,50%{transform:translateX(2.3px)} 72%{transform:translateX(-2.8px)} 76%{transform:translateX(2.8px)} 82%{transform:none} }
+@keyframes wmb-creature-blink { 0%,66%,70%,92%,96%,100%{transform:scaleY(1)} 68%,94%{transform:scaleY(.12)} }
+@keyframes wmb-creature-settle { from{transform:translateX(1px) rotate(2deg) scale(.96)} to{transform:none} }
+@keyframes wmb-creature-settle-blink { 0%,100%{transform:scaleY(1)} 48%{transform:scaleY(.08)} }
+@media (prefers-reduced-motion: reduce) { .wmb-creature-mark.is-working .wmb-creature-body,.wmb-creature-mark.is-working .wmb-creature-purple,.wmb-creature-mark.is-working .wmb-creature-eye,.wmb-creature-mark.is-working .wmb-creature-pupil,.wmb-creature-mark.is-settling .wmb-creature-body,.wmb-creature-mark.is-settling .wmb-creature-eye { animation: none; } }
 .titlebar-actions {
   -webkit-app-region: no-drag;
   display: flex;

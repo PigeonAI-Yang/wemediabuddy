@@ -1,27 +1,27 @@
 {
-  "active_loop": "wmb-4400-x-refresh-preserve-cache",
+  "active_loop": "wmb-4500-pi-tool-activity",
   "status": "complete",
-  "symptom": "Manual X List refresh can clear visible cached posts or shrink a more complete cache to the first live page.",
+  "symptom": "An active Pi tool row looks identical to a completed static row, so the user cannot tell whether it is working or stuck without opening details.",
   "observation_packet": {
-    "url": "packaged WeMediaBuddy Discover X Lists",
+    "url": "packaged WeMediaBuddy Pi dock",
     "viewport": "1600x960",
-    "user_action": "click 刷新动态 on 英国资讯",
-    "expected": "refresh updates or retains the 40 cached posts without blanking the timeline",
-    "actual": "UI showed no timeline while cache IPC still returned 40; a later successful refresh displayed 20 and shrank SQLite from 40 to 20",
-    "screenshot": ".ai/wmb-x-refresh-empty-before.png",
+    "user_action": "ask Pi to perform work and watch the visible tool summary",
+    "expected": "the currently executing tool has an obvious lightweight motion cue that stops on completion",
+    "actual": "the visible tool summary is static and visually identical before and after its result",
+    "screenshot": "J:/Users/yangda01/Temp/codex-clipboard-ac5bddb1-604b-4e1d-a833-8313dfd1f755.png",
     "console": "no renderer error",
-    "network_ws": "first reported live response unavailable; repeat real refresh returned one 20-post page",
-    "dom_selector": "XListsView timeline empty state and 刷新动态 button",
-    "computed_style_layout": "not a CSS issue; cards were absent from Renderer state",
-    "state_store_snapshot": "SQLite/cache IPC had 40 posts while DOM had zero; repeat refresh persisted 20"
+    "network_ws": "Pi emits tool_execution_start and tool_execution_end through the existing renderer event stream",
+    "dom_selector": ".pi-tool-line > summary",
+    "computed_style_layout": "animation-name is none; class is always pi-tool-line",
+    "state_store_snapshot": "tool start appends a tool segment without output; tool result adds the output property while the assistant turn remains streaming"
   },
   "hypotheses": [{
-    "hypothesis": "Main protects only empty DB writes while Renderer replaces visible posts with empty/partial live results",
-    "would_disprove": "Main returns a resolved retained/merged dataset and Renderer renders that result",
-    "result": "confirmed in ipc-x-lists, writeXListTimelineCacheIfImproved and applyLiveTimeline"
+    "hypothesis": "The transcript has enough truthful state but never projects it into an active tool class",
+    "would_disprove": "an unfinished tool already receives a distinct class or active animation",
+    "result": "confirmed: PiAssistantSegments ignores streaming/output state for tool rows"
   }],
-  "breakpoint": "Initial refresh IPC now returns the resolved last-good dataset instead of raw live posts.",
-  "owner_check": "Cold packaged restart showed 20 cached cards; the same refresh button retained 20 cards and persisted 20.",
+  "breakpoint": "Resolved by projecting unfinished/result state into the shared WmbCreatureMark working/settling/idle states.",
+  "owner_check": "Packaged live tool showed animated W body/pupil without opening details, settled on the real result, and remained static afterward.",
   "attempts": 1,
-  "last_gate": "4/4 focused tests, typecheck, Harness, package and packaged cold-restart/refresh readback passed"
+  "last_gate": "8/8 focused tests, typecheck, Harness, package and live packaged working/settling/idle DOM readback passed"
 }

@@ -1,7 +1,7 @@
-project-purpose: X List manual refresh updates discovery content without destroying a more complete last-good cache or making existing cards disappear.
-target-surface: Packaged Discover X timeline `刷新动态` path for the selected UK List.
-runtime-chain: refresh click -> preload IPC -> live X reader -> Main cache resolution -> renderer state -> timeline DOM.
-completion-authority: an empty live result retains cached cards with truthful copy; a partial page merges without shrinking cache; a real refresh still renders cards and restart reads the same resolved cache.
-focused-gate: deterministic 40-cache empty/20-partial regression plus packaged same-button before/after DOM and SQLite readback.
-budgets: one Main cache-policy repair, one Renderer copy update, one focused test, one package/live verification.
-stop-conditions: live result cannot be distinguished from parse failure, account/List identity changes, or two same-path runtime gates fail for different causes.
+project-purpose: Pi tool summaries tell the user both what is running and whether work is still progressing without opening raw details.
+target-surface: Current tool row inside the packaged Pi transcript.
+runtime-chain: Pi tool start/result events -> streaming message segments -> transcript running-state projection -> logo activity DOM/CSS.
+completion-authority: only an unfinished tool in the streaming turn animates; tool result, error, stop and turn completion remove the activity state while details remain expandable.
+focused-gate: deterministic start/result projection test plus packaged live Pi tool call animation and completion readback.
+budgets: one transcript render change, one CSS change, one focused regression, one packaged live verification.
+stop-conditions: tool completion cannot be inferred truthfully from existing events, animation obscures the summary, or live tool execution cannot be observed.
