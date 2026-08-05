@@ -24,6 +24,12 @@ test('Pi operator Skill documents exactly the registered WMB tools and hard boun
   assert.match(skill, /写入后必须按返回 ID 精确回读/);
   assert.match(skill, /数据库、并发取消或内部错误不是登录失效/);
   assert.match(skill, /只操作当前 MCP URL 绑定的工作空间/);
+  assert.match(skill, /browserProfileId \/ bindingRevision \/ state \/ expectedAccountSnapshots/);
+  assert.match(skill, /registry default.*绝不是运行时 fallback/);
+  assert.match(skill, /创建、改绑或迁移旧登录态也只能由 Owner 在 Settings/);
+  assert.match(skill, /不存在 browser profile 创建、改绑、验证或迁移工具/);
+  assert.match(skill, /ACCOUNT_MISMATCH.*业务写入必须为零/);
+  assert.match(skill, /X 是实时 X Lists 的前置验证账号/);
   assert.match(skill, /不要另起一次选题或提议重复保存方案/);
   assert.match(skill, /设置 → Pi Skills/);
   assert.match(skill, /不得直接修改安装目录、data-root 副本/);

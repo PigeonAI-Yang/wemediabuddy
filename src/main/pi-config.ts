@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { modelLimits, modelOption, requireModelLimits, type PiModelOption } from './pi-model.ts';
 
 const configKey = 'pi-api-config';
 const { app, safeStorage } = electron;
@@ -14,6 +15,8 @@ type StoredProfile = {
   model: string;
   api?: PiApiType;
   thinking?: PiThinkingLevel;
+  contextWindow?: number;
+  maxTokens?: number;
   encryptedApiKey: string;
 };
 type StoredState = { activeId: string | null; profiles: StoredProfile[] };
@@ -27,6 +30,8 @@ export type PiConfigProfile = {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  contextWindow?: number;
+  maxTokens?: number;
   configured: boolean;
   active: boolean;
 };
@@ -57,6 +62,7 @@ export function readPiConfig(configPath = defaultConfigPath()): PiConfig {
       model: profile.model,
       api: requirePiApiType(profile.api),
       thinking: profile.thinking,
+      ...modelLimits(profile.model, profile),
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
     })),
@@ -73,6 +79,8 @@ export function savePiConfig(input: {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  contextWindow?: number | null;
+  maxTokens?: number | null;
   apiKey?: string;
 }, configPath = defaultConfigPath()): PiConfig {
   const api = requirePiApiType(input.api);
@@ -86,6 +94,10 @@ export function savePiConfig(input: {
   const state = readStored(configPath);
   const id = input.id ?? randomUUID();
   const current = state.profiles.find((profile) => profile.id === id);
+  const limits = requireModelLimits({
+    contextWindow: input.contextWindow === null ? undefined : input.contextWindow ?? (current?.model === model ? current.contextWindow : undefined),
+    maxTokens: input.maxTokens === null ? undefined : input.maxTokens ?? (current?.model === model ? current.maxTokens : undefined)
+  });
   const encryptedApiKey = input.apiKey?.trim()
     ? safeStorage.encryptString(input.apiKey.trim()).toString('base64')
     : current?.encryptedApiKey;
@@ -98,6 +110,7 @@ export function savePiConfig(input: {
     model,
     api,
     thinking: input.thinking,
+    ...limits,
     encryptedApiKey
   };
   writeStored(configPath, {
@@ -130,7 +143,7 @@ export async function listPiModels(input: {
   baseUrl: string;
   api: PiApiType;
   apiKey?: string;
-}, configPath = defaultConfigPath()): Promise<string[]> {
+}, configPath = defaultConfigPath()): Promise<PiModelOption[]> {
   requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
@@ -144,16 +157,17 @@ export async function listPiModels(input: {
     signal: AbortSignal.timeout(15_000)
   });
   if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
-  const body = await response.json() as { data?: Array<{ id?: unknown }> };
-  const models = [...new Set((body.data ?? [])
-    .map((item) => typeof item.id === 'string' ? item.id.trim() : '')
-    .filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b));
+  const body = await response.json() as { data?: Array<Record<string, unknown>> };
+  const models = [...new Map((body.data ?? [])
+    .map(modelOption)
+    .filter((item): item is PiModelOption => Boolean(item))
+    .map((item) => [item.id, item])).values()]
+    .sort((a, b) => a.id.localeCompare(b.id));
   if (!models.length) throw new Error('接口没有返回可用模型。');
   return models;
 }
 
-export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; apiKey: string } {
+export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; contextWindow?: number; maxTokens?: number; apiKey: string } {
   const state = readStored(configPath);
   const active = state.profiles.find((profile) => profile.id === state.activeId);
   if (!active) throw new Error('请先在设置中配置 Pi API。');
@@ -162,6 +176,7 @@ export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: st
     model: active.model,
     api: requirePiApiType(active.api),
     thinking: active.thinking,
+    ...modelLimits(active.model, active),
     apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
   };
 }

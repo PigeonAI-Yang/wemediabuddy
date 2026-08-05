@@ -4,16 +4,19 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createWebsiteSource, recordSourceScanReceipt, setWebsiteSourceEnabled } from '../src/main/intelligence-channels.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { bindXList, setXListBindingEnabled } from '../src/main/x-lists.ts';
 import { collectBoundXListTimeline } from '../src/main/x-list-execution.ts';
 import { insertWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intelligence.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 
 async function makeRoot(prefix = 'wmb-daily-channels-') {
   const root = await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -165,21 +168,23 @@ test('all blocked sources persist needs_user before any injected lane runner sta
   }
 });
 
-test('an orchestration exception with no durable receipt fails instead of claiming success', async () => {
+test('a thrown orchestration scan records an accurate durable failure instead of claiming success', async () => {
   const current = await makeRoot('wmb-daily-failed-');
   try {
     const source = website(current.database, 'throw');
     const run = await startDailyChannelRun(current.database, {
       businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
     }, {
-      scanWebsite: async (database) => {
-        database.prepare('DELETE FROM website_sources WHERE id=?').run(source.id);
+      scanWebsite: async () => {
         throw new Error('scanner aborted before receipt');
       }
     });
     assert.equal(run.shouldRunJudgment, false);
     assert.equal(run.task.status, 'failed');
-    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count, 0);
+    const receipt = current.database.prepare('SELECT status, error_code AS errorCode, error_message AS errorMessage FROM source_scan_receipts WHERE task_id=? AND source_id=?').get(run.task.id, source.id);
+    assert.equal(receipt.status, 'failed');
+    assert.equal(receipt.errorCode, 'CHANNEL_SCAN_FAILED');
+    assert.equal(receipt.errorMessage, 'scanner aborted before receipt');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });
@@ -398,7 +403,7 @@ test('a duplicate start observes a preflight task without scanning the same sour
 
 test('plans.save MCP accepts an empty current plan and persists its readback', async () => {
   const current = await makeRoot('wmb-daily-mcp-empty-');
-  let mcp;
+  let mcp, runtime;
   try {
     insertWorkspaceProfile(current.database, {
       profileId: 'profile.test.mcp', revision: 1, officialTemplateId: null, officialTemplateVersion: null,
@@ -407,10 +412,17 @@ test('plans.save MCP accepts an empty current plan and persists its readback', a
       creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x']
     });
     current.database.close();
-    mcp = await startMcp(current.root);
+    runtime = ActiveWorkspaceRuntime.open(current.root, { openDatabase: migrateDatabase, createEpoch: () => 'daily-empty-plan-runtime' });
+    const task = (await dispatchStartAgentTask(runtime, { intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'empty-plan-task' })).task;
+    const grant = await dispatchIssueTaskGrant(runtime, {
+      requestId: 'empty-plan-grant', taskId: task.id, ownerGoal: '保存空的当前方案', allowedCommands: ['plans.save'],
+      workers: [{ type: 'external_agent', id: 'mcp' }], expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(grant.ok, true);
+    mcp = await startMcp(current.root, runtime.gate, undefined, runtime);
     const initialized = await mcpRequest(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'daily-channel-test', version: '1' } });
     const response = await mcpRequest(mcp.url, 'tools/call', {
-      name: 'plans.save', arguments: { request_id: 'empty-plan', plan_date: '2026-08-03', summary: '今天没有可执行机会', items: [] }
+      name: 'plans.save', arguments: { request_id: 'empty-plan', task_id: task.id, grant_id: grant.data.id, plan_date: '2026-08-03', summary: '今天没有可执行机会', items: [] }
     }, initialized.sessionId);
     const payload = JSON.parse(response.data.content[0].text);
     assert.equal(payload.ok, true);
@@ -421,6 +433,7 @@ test('plans.save MCP accepts an empty current plan and persists its readback', a
     } finally { readback.close(); }
   } finally {
     await mcp?.close();
+    await runtime?.stop({ drain: false });
     await rm(current.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });

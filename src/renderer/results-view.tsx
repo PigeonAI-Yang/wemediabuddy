@@ -180,9 +180,14 @@ export function ResultsView({ publications, planDate, enabledPlatforms }: {
 
   const platforms = Object.keys(platformNames).filter((key) => posts.some((p) => p.platform === key));
   const formats = Object.entries(formatNames).filter(([key]) => posts.some((p) => p.format === key));
+  const reviewedCount = visible.filter((p) => p.reviewed).length;
+  // 页面级行动句：先回答「结果说明什么、什么需要我做」。
+  const resultsActionLine = pending.length
+    ? `本周期 ${visible.length} 条已发布，${reviewedCount} 条已复盘；${pending.length} 条发布超过 72h 待复盘，见底部待复盘队列。`
+    : `本周期 ${visible.length} 条已发布，${reviewedCount} 条已复盘，没有遗留待复盘。`;
   const stats = [
     [String(visible.length), '本周期发布'],
-    [String(visible.filter((p) => p.reviewed).length), '已复盘'],
+    [String(reviewedCount), '已复盘'],
     [String(findingCount), '方法库结论'],
     [String(new Set(backlinks.map((b) => b.planItemId)).size), '结论被方案引用'],
     [String(pending.length), '待复盘']
@@ -191,6 +196,7 @@ export function ResultsView({ publications, planDate, enabledPlatforms }: {
     {statusText && <p className="task-status" data-running={busy ? 'true' : 'false'}>{statusText}</p>}
     {!posts.length && <section className="empty-state"><h2>还没有可复盘内容</h2><p>取得真实发布地址后，这里会形成组合形态与复盘。</p></section>}
     {posts.length > 0 && <>
+      <p className="rl-action-line">{resultsActionLine}</p>
       <div className="rl-stats">{stats.map(([v, label], i) => <div className="rl-stat" key={label}>
         <b className="num" style={i === 4 && Number(v) > 0 ? { color: 'var(--amber)' } : i === 3 ? { color: 'var(--accent-soft)' } : undefined}>{v}</b><span>{label}</span>
       </div>)}</div>
@@ -203,7 +209,7 @@ export function ResultsView({ publications, planDate, enabledPlatforms }: {
           {formats.map(([key, label]) => <button key={key} className={`chip${fmt === key ? ' on' : ''}`} onClick={() => { setFmt(key); setSelectedId(null); }}>{label}</button>)}</div>
       </div>
       <HeroPanel
-        total={visible.length} reviewed={visible.filter((p) => p.reviewed).length} pending={pending.length}
+        total={visible.length} reviewed={reviewedCount} pending={pending.length}
         best={best} medianV24={medianV24}
         topPattern={patterns.filter((p) => p.ratio !== null).sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0))[0] ?? null}
         topActions={{ keep: actionColumns.keep[0]?.txt, stop: actionColumns.stop[0]?.txt, change: actionColumns.change[0]?.txt }}

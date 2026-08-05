@@ -2,6 +2,48 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-4800 Workspace-scoped human-AI collaboration architecture
+
+Scope: approved product/architecture contracts for workspace-isolated self-media operations, task-authorized AI autonomy, one authoritative business-command boundary, and explicit installation/workspace/runtime ownership. This milestone changes documents and freezes a migration chain only; it does not start implementation or weaken existing publication confirmation and evidence requirements.
+
+Order:
+
+1. `WMB-4800` — reconcile PRD, SPEC, technical architecture and the stale architecture guide; add the approved target-architecture document and dependency-ordered implementation tasks.
+2. `WMB-4801` — seal current write/runtime/profile routes, legacy read compatibility and the real AI/UK fixtures used by EVAL-029.
+3. `WMB-4802` — land BrowserProfile registry/default inheritance, explicit legacy-profile migration and root binding/account snapshots.
+4. `WMB-4803` — establish the single ActiveWorkspaceRuntime owner, runtime epoch, bounded leases and switch/quit drain.
+5. `WMB-4804` — land CommandEnvelopeV1, dispatcher, atomic receipts/replay/audit and one representative migrated mutation.
+6. `WMB-4805` — land task grants and prove Pi/external-Agent continuation with persisted business facts.
+7. `WMB-4806` — land precise-execution grants and UI-only issuance/revoke gates with stale zero-write behavior.
+8. `WMB-4807` — route remaining UI/MCP/scheduler business writes through the dispatcher and remove migrated direct write paths.
+9. `WMB-4808` — migrate browser side effects/publication reconciliation and retire implicit conversational/direct-tool authorization.
+10. `WMB-4809` — complete legacy read compatibility, operator Skill synchronization and packaged EVAL-029 across real AI/UK roots.
+11. `WMB-4812` — close the remaining current-package EVAL-029 coverage explicitly left by WMB-4809: real Pi model continuation under worker lease, packaged precise-grant negative matrix, and packaged immutable publication-snapshot/browser reconciliation.
+
+Gate for WMB-4800: REQ-027, AC-023, CAP-025, EVAL-029 and `docs/architecture/workspace-ai-collaboration-architecture.md` agree on the same product center, scope boundaries, authority, runtime ownership and migration gates; while planning, WMB-4800 is the only `doing` task; on completion WMB-4801 is the next `todo`. No production code, schema, packaged Skill or runtime artifact changes in WMB-4800.
+
+Gate for M-4800 completion: no `focusedCoverageRequired` remains and architecture §8 is proven in the current Windows package.
+
+## M-4700 Daily intelligence run isolation
+
+Scope: existing CAP-014/CAP-020 daily-intelligence execution only; no validation, source-selection or plan-authority change.
+
+Order:
+
+1. `WMB-4700` — resolve the Beijing business date at click time, bind each daily task to its own Pi session, and return a durably saved partial task without emitting a Pi runtime failure.
+
+Gate: an overnight-open Today view starts the current Beijing date; two tasks on one date cannot share a Pi transcript; a failed judgment with trustworthy receipts returns `partial`; current-task `plans.save` and real-source validation remain mandatory.
+
+## M-4600 Pi delegated vision
+
+Scope: CAP-014 delegated image understanding for a text-only primary model; reuse the pinned upstream Pi extension and the active OpenAI-compatible preset without adding an Agent framework or changing WMB business authority.
+
+Order:
+
+1. `WMB-4600` — package `pi-vision-tool`, register the explicit MiMo vision model alongside the active primary model, load the extension in RPC mode, and prove real text-only and image turns in the Windows package.
+
+Gate: EVAL-028 passes; the primary remains DeepSeek V4 Flash, only an explicit image request invokes MiMo, the observation returns through a visible tool result, and failures do not fallback, mutate WMB business state or fabricate image content.
+
 ## M-4300 Pi conversation archive
 
 Scope: the existing root-local Pi conversation index and header menu only; no deletion, Settings page or transcript rewrite.

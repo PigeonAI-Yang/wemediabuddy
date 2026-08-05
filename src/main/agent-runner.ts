@@ -3,28 +3,50 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { refreshWorkCarry } from './ferment.ts';
 import { listWatchingSources } from './knowledge.ts';
 import {
   agentRequestId,
   cancelAgentTask,
-  completeAgentTask,
-  failAgentTask,
-  finishDailyIntelligenceFromReceipts,
+  dailyAgentSessionId,
   getAgentTask,
-  partialAgentTask,
-  reportAgentTaskProgress,
-  startAgentTask,
-  updateAgentTaskPhase,
   type AgentTask
 } from './agent-tasks.ts';
+import {
+  dispatchCancelAgentTask,
+  dispatchCompleteAgentTask,
+  dispatchFailAgentTask,
+  dispatchFinishDailyIntelligence,
+  dispatchPartialAgentTask,
+  dispatchReportAgentTaskProgress,
+  dispatchStartAgentTask,
+  dispatchUpdateAgentTaskPhase,
+  type AgentTaskCommandContext,
+  type AgentTaskMutationDependency
+} from './agent-task-commands.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
+import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { listXPostTrends } from './x-post-metrics.ts';
 
+function schedulerActor(lane: string) {
+  return { type: 'scheduler' as const, id: lane, label: lane };
+}
+
+function taskCommandContext(lane: string, requestId: string, taskId?: string, workerLeaseId?: string, causation?: Readonly<Record<string, unknown>>): AgentTaskCommandContext {
+  return { actor: schedulerActor(lane), requestId, taskId, workerLeaseId, causation };
+}
+
+function mutationDependency(input: { activeRuntime?: ActiveWorkspaceRuntime; dataRootPath: string }): { dependency: AgentTaskMutationDependency; database: DatabaseSync; close: () => void } {
+  if (input.activeRuntime) return { dependency: input.activeRuntime, database: input.activeRuntime.database, close: () => {} };
+  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  return { dependency: database, database, close: () => database.close() };
+}
 const activeDailyRuntimes = new Map<string, PiRpcSupervisor>();
 export async function abortDailyIntelligence(taskId: string): Promise<boolean> {
   const runtime = activeDailyRuntimes.get(taskId);
@@ -113,168 +135,121 @@ export async function startDailyIntelligence(input: {
   mcpUrl: string;
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
+  onRuntime?: (runtime: PiRpcSupervisor) => void;
+  workerLeaseId?: string;
+  activeRuntime?: ActiveWorkspaceRuntime;
 }): Promise<DailyIntelligenceRun> {
-  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  const { dependency, database, close } = mutationDependency(input);
+  const lane = 'daily-intelligence';
+  const startRequestId = `daily_intelligence:${input.businessDate}:start`;
   try {
-    const contextRefs = { planDate: input.businessDate }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
-    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
-    const conversation = await readPiConversation(input.dataRootPath);
-    const started = startAgentTask(database, {
-      intent: 'daily_intelligence',
-      businessDate: input.businessDate,
-      contextRefs,
-      // Keep dock chat session separate; daily wire must not inherit image-bearing chat history.
-      piSessionId: `daily-${input.businessDate}`
-    });
-    if (!started.ok) throw new Error(started.error.message);
-    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(started.data.phase)) return { task: started.data, reused: true };
+    const contextRefs = { planDate: input.businessDate };
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    if (prerequisite.waiting) return prerequisite.waiting;
+    const config = prerequisite.config;
+    const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const task = started.task;
+    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
+    const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, task.phase, { piSessionId }, taskCommandContext(lane, `${task.id}:phase:session:${piSessionId}`, task.id, input.workerLeaseId, { requestId: startRequestId }));
 
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await prepareSkillDir(layout.agentDir);
-    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
-      providers: {
-        'wmb-api': {
-          baseUrl: config.baseUrl,
-          api: config.api,
-          apiKey: '$WMB_PI_API_KEY',
-          models: [{
-            id: config.model,
-            name: config.model,
-            reasoning: true,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 272000,
-            maxTokens: 16000
-          }]
-        }
-      }
-    }), 'utf8');
+    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
-
-    reportAgentTaskProgress(database, started.data.id, {
-      phase: started.data.phase === 'resume_pending' ? 'resuming' : 'judging_opportunities',
-      message: started.data.phase === 'resume_pending' ? '已从持久检查点恢复任务。' : '正在根据已扫描来源判断内容机会。'
-    });
+    await dispatchReportAgentTaskProgress(dependency, task.id, {
+      phase: task.phase === 'resume_pending' ? 'resuming' : 'judging_opportunities',
+      message: task.phase === 'resume_pending' ? '已从持久检查点恢复任务。' : '正在根据已扫描来源判断内容机会。'
+    }, taskCommandContext(lane, `${task.id}:progress:judging`, task.id, input.workerLeaseId, { requestId: startRequestId }));
 
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-daily-'));
-    const cliPath = await piCliPath(input.dataRootPath);
-    const dailySessionFile = path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`);
+    const dailySessionFile = path.join(layout.agentDir, 'sessions', `${piSessionId}.jsonl`);
     await mkdir(path.dirname(dailySessionFile), { recursive: true });
     const runtimeArgs = [
-      cliPath,
-      '--mode', 'rpc',
-      '--session', dailySessionFile,
-      '--skill', path.join(layout.agentDir, 'skills', 'wemedia-intelligence-engine'),
-      '-e', extensionPath,
-      '--provider', 'wmb-api',
-      '--model', config.model,
-      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+      await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', dailySessionFile,
+      '--skill', path.join(layout.agentDir, 'skills', 'wemedia-intelligence-engine'), '-e', extensionPath,
+      '--provider', 'wmb-api', '--model', config.model,
+      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前 taskId=${task.id}；当前 Pi workerLeaseId=${input.workerLeaseId ?? 'unavailable'}。写业务事实必须使用这两个值和 Owner 已签发的精确 task grant。`
     ];
-    const runtimeEnv = {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      PI_CODING_AGENT_DIR: layout.agentDir,
-      WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl,
-      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
+    const runtimeEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' };
+    const makeRuntime = () => {
+      const runtime = new PiRpcSupervisor(process.execPath, runtimeArgs, runtimeEnv, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+      input.onRuntime?.(runtime);
+      return runtime;
     };
-    const makeRuntime = () => new PiRpcSupervisor(process.execPath, runtimeArgs, runtimeEnv, (event) => {
-      input.onEvent?.(event as Record<string, unknown>);
-    }, workDir);
+    const cancelIfRequested = async (current: AgentTask | null | undefined) => {
+      if (current?.status !== 'running' || current.controlAction !== 'cancel') return null;
+      return dispatchCancelAgentTask(dependency, current.id, taskCommandContext(lane, `${current.id}:cancel:requested`, current.id, input.workerLeaseId));
+    };
 
     try {
       const heartbeat = setInterval(() => {
-        const current = getAgentTask(database, started.data.id);
-        if (current?.status === 'running') {
-          const updated = reportAgentTaskProgress(database, current.id, {});
-          if (updated.ok) input.onEvent?.({ type: 'agent_task', task: updated.data });
-        }
+        const current = getAgentTask(database, task.id);
+        if (current?.status === 'running') void dispatchReportAgentTaskProgress(dependency, current.id, {}, taskCommandContext(lane, `${current.id}:progress:heartbeat:${current.updatedAt}`, current.id, input.workerLeaseId))
+          .then((updated) => input.onEvent?.({ type: 'agent_task', task: updated })).catch(() => {});
       }, 15_000);
       try {
-        const beforePlan = getAgentTask(database, started.data.id);
-        if (beforePlan?.status !== 'running') return { task: beforePlan!, reused: started.reused === true };
-        const cancelledBeforePlan = cancelDailyIntelligenceIfRequested(database, beforePlan);
-        if (cancelledBeforePlan) return { task: cancelledBeforePlan, reused: started.reused === true };
+        const beforePlan = getAgentTask(database, task.id);
+        if (beforePlan?.status !== 'running') return { task: beforePlan!, reused: started.reused };
+        const cancelledBeforePlan = await cancelIfRequested(beforePlan);
+        if (cancelledBeforePlan) return { task: cancelledBeforePlan, reused: started.reused };
         if (beforePlan.controlAction === 'save_partial') {
-          const partial = partialAgentTask(database, beforePlan.id);
-          if (!partial.ok) throw new Error(partial.error.message);
-          return { task: partial.data, reused: started.reused === true };
+          const partial = await dispatchPartialAgentTask(dependency, beforePlan.id, taskCommandContext(lane, `${beforePlan.id}:partial:requested`, beforePlan.id, input.workerLeaseId));
+          return { task: partial, reused: started.reused };
         }
-        reportAgentTaskProgress(database, beforePlan.id, { phase: 'synthesizing', message: '共享来源扫描结束，正在整理内容机会。' });
+        await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { phase: 'synthesizing', message: '共享来源扫描结束，正在整理内容机会。' }, taskCommandContext(lane, `${beforePlan.id}:progress:synthesizing`, beforePlan.id, input.workerLeaseId));
         const synthesis = makeRuntime();
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
           await synthesis.start();
           await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 6 * 60_000 });
         } catch (error) {
-          // Shared channel scans already persisted sources and receipts. Don't discard the day
-          // just because final synthesis provider call failed (e.g. model modality mismatch).
           const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
-          const cancelled = cancelDailyIntelligenceIfRequested(database, latest);
-          if (cancelled) return { task: cancelled, reused: started.reused === true };
+          const cancelled = await cancelIfRequested(latest);
+          if (cancelled) return { task: cancelled, reused: started.reused };
           const message = error instanceof Error ? error.message : String(error);
-          reportAgentTaskProgress(database, latest.id, {
-            phase: 'synthesis_failed',
-            message: `综合整理失败，保留已扫描结果：${message.slice(0, 180)}`,
-            level: 'warning'
-          });
-          const partial = finishDailyIntelligenceFromReceipts(database, latest.id, {
-            forcePartial: true,
-            errorCode: 'DAILY_INTELLIGENCE_FAILED',
-            errorMessage: message
-          });
-          if (partial.ok) return { task: partial.data, reused: started.reused === true };
-          throw error;
+          await dispatchReportAgentTaskProgress(dependency, latest.id, { phase: 'synthesis_failed', message: `综合整理失败，保留已扫描结果：${message.slice(0, 180)}`, level: 'warning' }, taskCommandContext(lane, `${latest.id}:progress:synthesis-failed`, latest.id, input.workerLeaseId));
+          const partial = await dispatchFinishDailyIntelligence(dependency, latest.id, { forcePartial: true, errorCode: 'DAILY_INTELLIGENCE_FAILED', errorMessage: message }, taskCommandContext(lane, `${latest.id}:finish:synthesis-failed`, latest.id, input.workerLeaseId));
+          return { task: partial, reused: started.reused };
         } finally {
           activeDailyRuntimes.delete(beforePlan.id);
           await synthesis.stop().catch(() => {});
         }
-      } finally {
-        clearInterval(heartbeat);
-      }
-      const afterRun = getAgentTask(database, started.data.id);
-      const cancelledAfterRun = cancelDailyIntelligenceIfRequested(database, afterRun);
-      if (cancelledAfterRun) return { task: cancelledAfterRun, reused: started.reused === true };
+      } finally { clearInterval(heartbeat); }
+
+      const afterRun = getAgentTask(database, task.id);
+      const cancelledAfterRun = await cancelIfRequested(afterRun);
+      if (cancelledAfterRun) return { task: cancelledAfterRun, reused: started.reused };
       if (afterRun?.controlAction === 'save_partial') {
-        const partial = finishDailyIntelligenceFromReceipts(database, started.data.id, { forcePartial: true });
-        if (!partial.ok) throw new Error(partial.error.message);
-        return { task: partial.data, reused: started.reused === true };
+        const partial = await dispatchFinishDailyIntelligence(dependency, task.id, { forcePartial: true }, taskCommandContext(lane, `${task.id}:finish:save-partial`, task.id, input.workerLeaseId));
+        return { task: partial, reused: started.reused };
       }
-      if (afterRun?.status === 'cancelled') return { task: afterRun, reused: started.reused === true };
-      updateAgentTaskPhase(database, started.data.id, 'validating');
-      const completed = completeAgentTask(database, started.data.id);
-      if (!completed.ok) {
-        // Prefer keeping a useful day over hard-failing on residual validation edge cases.
-        reportAgentTaskProgress(database, started.data.id, {
-          phase: 'validating',
-          message: `完成校验未完全通过，尝试保留结果：${completed.error.message}`,
-          level: 'warning'
-        });
-        const partial = finishDailyIntelligenceFromReceipts(database, started.data.id, {
-          forcePartial: true,
-          errorCode: completed.error.code,
-          errorMessage: completed.error.message
-        });
-        if (partial.ok) return { task: partial.data, reused: started.reused === true };
-        failAgentTask(database, started.data.id, completed.error.code, completed.error.message);
-        throw new Error(completed.error.message);
+      if (afterRun?.status === 'cancelled') return { task: afterRun, reused: started.reused };
+      await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
+      try {
+        const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
+        return { task: completed, reused: started.reused };
+      } catch (error) {
+        const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : 'VALIDATION_ERROR';
+        const message = error instanceof Error ? error.message : String(error);
+        await dispatchReportAgentTaskProgress(dependency, task.id, { phase: 'validating', message: `完成校验未完全通过，尝试保留结果：${message}`, level: 'warning' }, taskCommandContext(lane, `${task.id}:progress:validation-failed`, task.id, input.workerLeaseId));
+        const partial = await dispatchFinishDailyIntelligence(dependency, task.id, { forcePartial: true, errorCode: code, errorMessage: message }, taskCommandContext(lane, `${task.id}:finish:validation-failed`, task.id, input.workerLeaseId));
+        return { task: partial, reused: started.reused };
       }
-      return { task: completed.data, reused: started.reused === true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const current = getAgentTask(database, started.data.id);
-      const cancelled = cancelDailyIntelligenceIfRequested(database, current);
-      if (cancelled) return { task: cancelled, reused: started.reused === true };
-      if (current?.status === 'running') finishDailyIntelligenceFromReceipts(database, started.data.id, {
-        forcePartial: true,
-        errorCode: 'DAILY_INTELLIGENCE_FAILED',
-        errorMessage: message
-      });
+      const current = getAgentTask(database, task.id);
+      const cancelled = await cancelIfRequested(current);
+      if (cancelled) return { task: cancelled, reused: started.reused };
+      if (current?.status === 'running') {
+        const partial = await dispatchFinishDailyIntelligence(dependency, task.id, { forcePartial: true, errorCode: 'DAILY_INTELLIGENCE_FAILED', errorMessage: message }, taskCommandContext(lane, `${task.id}:finish:failed`, task.id, input.workerLeaseId));
+        return { task: partial, reused: started.reused };
+      }
       throw error;
     } finally {
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }
-  } finally { database.close(); }
+  } finally { close(); }
 }
 
 function draftPrompt(task: AgentTask, projectId: string, requestId: string): string {
@@ -295,91 +270,50 @@ function draftPrompt(task: AgentTask, projectId: string, requestId: string): str
 }
 
 export async function startStudioDraft(input: {
-  dataRootPath: string; businessDate: string; piConfigPath?: string;
-  projectId: string;
-  mcpUrl: string;
-  xhsMcpUrl?: string | null;
-  onEvent?: (event: Record<string, unknown>) => void;
+  dataRootPath: string; businessDate: string; piConfigPath?: string; projectId: string; mcpUrl: string;
+  xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
+  workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
 }): Promise<DailyIntelligenceRun> {
-  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  const { dependency, database, close } = mutationDependency(input);
+  const lane = 'studio-draft';
+  const startRequestId = `studio_draft:${input.businessDate}:${input.projectId}:start`;
   try {
-    const contextRefs = { projectId: input.projectId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
-    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
+    const contextRefs = { projectId: input.projectId };
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    if (prerequisite.waiting) return prerequisite.waiting;
+    const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
-    const started = startAgentTask(database, {
-      intent: 'studio_draft',
-      businessDate: input.businessDate,
-      contextRefs,
-      piSessionId: conversation.sessionId
-    });
-    if (!started.ok) throw new Error(started.error.message);
-    if (started.reused) return { task: started.data, reused: true };
-
+    const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    if (started.reused) return { task: started.task, reused: true };
+    const task = started.task;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
-    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
-      providers: {
-        'wmb-api': {
-          baseUrl: config.baseUrl,
-          api: config.api,
-          apiKey: '$WMB_PI_API_KEY',
-          models: [{
-            id: config.model,
-            name: config.model,
-            reasoning: true,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 272000,
-            maxTokens: 16000
-          }]
-        }
-      }
-    }), 'utf8');
+    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
-    const requestId = agentRequestId(started.data.id, 'core_version');
-    updateAgentTaskPhase(database, started.data.id, 'running_pi', { piSessionId: conversation.sessionId });
-
+    const requestId = agentRequestId(task.id, 'core_version');
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const runtime = new PiRpcSupervisor(process.execPath, [
-      await piCliPath(input.dataRootPath),
-      '--mode', 'rpc',
-      '--session', layout.sessionFile,
-      '-e', extensionPath,
-      '--provider', 'wmb-api',
-      '--model', config.model,
-      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
-    ], {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      PI_CODING_AGENT_DIR: layout.agentDir,
-      WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl,
-      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
-    }, (event) => {
-      input.onEvent?.(event as Record<string, unknown>);
-    }, workDir);
-
+      await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', layout.sessionFile, '-e', extensionPath,
+      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+    ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
+    (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+    input.onRuntime?.(runtime);
     try {
       await runtime.start();
-      await runtime.promptUntilSettled(draftPrompt(started.data, input.projectId, requestId), { timeoutMs: 300000 });
-      updateAgentTaskPhase(database, started.data.id, 'validating');
-      const completed = completeAgentTask(database, started.data.id);
-      if (!completed.ok) {
-        failAgentTask(database, started.data.id, completed.error.code, completed.error.message);
-        throw new Error(completed.error.message);
-      }
-      return { task: completed.data, reused: false };
+      await runtime.promptUntilSettled(draftPrompt(task, input.projectId, requestId), { timeoutMs: 300000 });
+      await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
+      const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
+      return { task: completed, reused: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') failAgentTask(database, started.data.id, 'STUDIO_DRAFT_FAILED', message);
+      const current = getAgentTask(database, task.id);
+      if (current?.status === 'running') await dispatchFailAgentTask(dependency, task.id, 'STUDIO_DRAFT_FAILED', message, taskCommandContext(lane, `${task.id}:fail`, task.id, input.workerLeaseId));
       throw error;
     } finally {
       await runtime.stop().catch(() => {});
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }
-  } finally {
-    database.close();
-  }
+  } finally { close(); }
 }
 
 function reviewPrompt(task: AgentTask, publicationId: string, requestId: string): string {
@@ -402,91 +336,50 @@ function reviewPrompt(task: AgentTask, publicationId: string, requestId: string)
 }
 
 export async function startResultsReview(input: {
-  dataRootPath: string; businessDate: string; piConfigPath?: string;
-  publicationId: string;
-  mcpUrl: string;
-  xhsMcpUrl?: string | null;
-  onEvent?: (event: Record<string, unknown>) => void;
+  dataRootPath: string; businessDate: string; piConfigPath?: string; publicationId: string; mcpUrl: string;
+  xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
+  workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
 }): Promise<DailyIntelligenceRun> {
-  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  const { dependency, database, close } = mutationDependency(input);
+  const lane = 'results-review';
+  const startRequestId = `results_review:${input.businessDate}:${input.publicationId}:start`;
   try {
-    const contextRefs = { publicationId: input.publicationId }; const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
-    if (prerequisite.waiting) return prerequisite.waiting; const config = prerequisite.config;
+    const contextRefs = { publicationId: input.publicationId };
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    if (prerequisite.waiting) return prerequisite.waiting;
+    const config = prerequisite.config;
     const conversation = await readPiConversation(input.dataRootPath);
-    const started = startAgentTask(database, {
-      intent: 'results_review',
-      businessDate: input.businessDate,
-      contextRefs,
-      piSessionId: conversation.sessionId
-    });
-    if (!started.ok) throw new Error(started.error.message);
-    if (started.reused) return { task: started.data, reused: true };
-
+    const started = await dispatchStartAgentTask(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    if (started.reused) return { task: started.task, reused: true };
+    const task = started.task;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
-    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({
-      providers: {
-        'wmb-api': {
-          baseUrl: config.baseUrl,
-          api: config.api,
-          apiKey: '$WMB_PI_API_KEY',
-          models: [{
-            id: config.model,
-            name: config.model,
-            reasoning: true,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 272000,
-            maxTokens: 16000
-          }]
-        }
-      }
-    }), 'utf8');
+    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
-    const requestId = agentRequestId(started.data.id, 'review');
-    updateAgentTaskPhase(database, started.data.id, 'running_pi', { piSessionId: conversation.sessionId });
-
+    const requestId = agentRequestId(task.id, 'review');
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-review-'));
     const runtime = new PiRpcSupervisor(process.execPath, [
-      await piCliPath(input.dataRootPath),
-      '--mode', 'rpc',
-      '--session', layout.sessionFile,
-      '-e', extensionPath,
-      '--provider', 'wmb-api',
-      '--model', config.model,
-      '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
-    ], {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      PI_CODING_AGENT_DIR: layout.agentDir,
-      WMB_PI_API_KEY: config.apiKey,
-      WMB_MCP_URL: input.mcpUrl,
-      WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
-    }, (event) => {
-      input.onEvent?.(event as Record<string, unknown>);
-    }, workDir);
-
+      await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', layout.sessionFile, '-e', extensionPath,
+      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+    ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
+    (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+    input.onRuntime?.(runtime);
     try {
       await runtime.start();
-      await runtime.promptUntilSettled(reviewPrompt(started.data, input.publicationId, requestId), { timeoutMs: 300000 });
-      updateAgentTaskPhase(database, started.data.id, 'validating');
-      const completed = completeAgentTask(database, started.data.id);
-      if (!completed.ok) {
-        failAgentTask(database, started.data.id, completed.error.code, completed.error.message);
-        throw new Error(completed.error.message);
-      }
-      return { task: completed.data, reused: false };
+      await runtime.promptUntilSettled(reviewPrompt(task, input.publicationId, requestId), { timeoutMs: 300000 });
+      await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
+      const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
+      return { task: completed, reused: false };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') failAgentTask(database, started.data.id, 'RESULTS_REVIEW_FAILED', message);
+      const current = getAgentTask(database, task.id);
+      if (current?.status === 'running') await dispatchFailAgentTask(dependency, task.id, 'RESULTS_REVIEW_FAILED', message, taskCommandContext(lane, `${task.id}:fail`, task.id, input.workerLeaseId));
       throw error;
     } finally {
       await runtime.stop().catch(() => {});
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }
-  } finally {
-    database.close();
-  }
+  } finally { close(); }
 }
 import { preparePiExtension } from './pi-extension.ts';
 import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';

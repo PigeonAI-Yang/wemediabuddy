@@ -74,7 +74,7 @@ function App(): React.JSX.Element {
   const planDate = useMemo(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()), []);
   const todaySigRef = useRef('');
   const publicationsSigRef = useRef('');
-  const refreshSettings = useCallback(() => void window.wmb.getSettings().then((value) => { setSettings(value); setBrowserChoice(value?.selectedBrowser?.id ?? value?.browserOptions[0]?.id ?? ''); }), []);
+  const refreshSettings = useCallback(() => void window.wmb.getSettings().then((value) => { setSettings(value); setBrowserChoice(value?.boundBrowserProfile?.id ?? ''); }), []);
   const refreshToday = useCallback(() => void window.wmb.getToday(planDate).then((value) => {
     const nextSig = JSON.stringify(value ?? null);
     if (nextSig === todaySigRef.current) return;
@@ -317,7 +317,7 @@ function App(): React.JSX.Element {
   }, [view, todaySelectedItems, todaySelectedSources, today?.fermenting, xListContext, rankingContext, libraryTopicContext, pageFocus, canvasContext, studioContext, publishSelected, publications]);
   return <main className={`app-shell${piDockCollapsed ? ' pi-collapsed' : ' pi-open'}${view === 'settings' ? ' settings-mode' : ''}${view === 'studio' ? ' studio-mode' : ''}${view === 'topic' ? ' topic-mode' : ''}`} style={{ '--pi-open-width': `${piDockWidth}px` } as React.CSSProperties}>
     <header className="topbar">
-      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName} · r{settings.workspace.profile.revision}</small>}</div>
+      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName}</small>}</div>
       {view === 'settings' && <span className="topbar-page-title">设置</span>}
       {view === 'studio' && <div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div>}
       <div className="titlebar-actions">
@@ -343,7 +343,7 @@ function App(): React.JSX.Element {
       {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
 
       {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
-      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => void window.wmb.startBrowser({ mode: 'visible' }).then(refreshSettings)} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
+      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => navigate('settings')} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
       {view === 'results' && <ResultsView publications={publications} refresh={refreshPublications} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
       {view === 'settings' && <SettingsView dataRoot={dataRoot} settings={settings} browserChoice={browserChoice} setBrowserChoice={setBrowserChoice} refresh={refreshSettings} theme={theme} setTheme={setTheme} back={() => navigate('today')}/>}
     </section>
@@ -352,7 +352,7 @@ function App(): React.JSX.Element {
       <div className="status-bar-left">
         <span className="status-item" data-phase={piPhase}><span className="status-dot"/>{piStatusText}</span>
         {settings?.workspace && <span className="status-item" title={settings.workspace.dataRoot.path}><span className="status-dot ok"/>{settings.workspace.displayName} · {settings.workspace.profile.profileId}</span>}
-        <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'MCP 已连接' : 'MCP 未连接'}</span>
+        <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'AI 接入已就绪' : 'AI 接入未启动'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
         {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}
         <XListOperationTray/>

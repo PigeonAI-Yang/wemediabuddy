@@ -8,14 +8,26 @@ Current scope is defined by `PRD.md` and `SPEC.md`. X, Xiaohongshu, and WeChat O
 
 ## Required reading
 
-Before any change, read:
+Default flow:
+
+1. Select one `todo` task from `TASKS.md`.
+2. Run `node scripts/task-context.mjs <WMB-id>` and use its machine-extracted output as the task context: the ledger header contract, the target task row, its dependency rows, the referenced `CAP-*` SPEC sections, and the matching REQ/AC PRD index lines. The excerpts are byte-exact extracts and can be trusted as source text.
+
+Read the full documents only when:
+
+- the change modifies harness rules themselves (`AGENTS.md`, `docs/ai-harness.md`, `docs/development-workflow.md`, `docs/verification.md`, `scripts/check.ps1`, `scripts/check-ledger.mjs`);
+- `task-context.mjs` output is insufficient for the change;
+- the change is an architecture change spanning multiple `CAP-*`.
+
+Document map (one-line responsibility each; read on demand):
 
 1. `PRD.md` — product intent and boundaries.
 2. `SPEC.md` — normative behavior and acceptance.
 3. `PLAN.md` — implementation order and gates.
 4. `TASKS.md` — current task, ownership, evidence, and progress.
 5. `TECHNICAL_DESIGN.md` — approved stack and architecture.
-6. `docs/development-workflow.md` and `docs/verification.md`.
+6. `docs/development-workflow.md` — editing workflow and desktop dev server isolation.
+7. `docs/verification.md` — executable and manual gates.
 
 For browser/platform work, also read the matching platform contract in `SPEC.md`.
 
@@ -23,7 +35,7 @@ For any change to user workflows, IPC/MCP/Pi tools, confirmation boundaries, tas
 
 ## Work protocol
 
-1. Select one `todo` task from `TASKS.md`; move only that task to `doing`.
+1. Select one `todo` task from `TASKS.md`; move only that task to `doing`. At most one `doing` per Owner (Owner column; empty means `main`); parallel work uses different Owners.
 2. Read every referenced requirement and the real call path before editing.
 3. For a bug, first create and run a minimal falsifiable reproduction; do not patch before the root cause is confirmed.
 4. Make the smallest implementation that satisfies the referenced SPEC IDs.
@@ -74,6 +86,8 @@ The lightweight harness entrypoint is:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
+
+Push-time enforcement: the pre-push git hook (`scripts/git-hooks/pre-push`) runs this lightweight check on every push; install it once per clone with `powershell -ExecutionPolicy Bypass -File scripts/install-hooks.ps1`.
 
 The release/final-acceptance entrypoint is explicit and must not be used as the default development loop:
 

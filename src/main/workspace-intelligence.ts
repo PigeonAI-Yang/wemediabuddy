@@ -3,7 +3,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { agentRequestId, completeAgentTask, finishDailyIntelligenceFromReceipts, getAgentTask, reportAgentTaskProgress, startAgentTask, updateAgentTaskPhase } from './agent-tasks.ts';
+import type { DatabaseSync } from 'node:sqlite';
+import { agentRequestId, dailyAgentSessionId, getAgentTask } from './agent-tasks.ts';
+import {
+  dispatchCompleteAgentTask,
+  dispatchFinishDailyIntelligence,
+  dispatchReportAgentTaskProgress,
+  dispatchStartAgentTask,
+  dispatchUpdateAgentTaskPhase,
+  type AgentTaskMutationDependency
+} from './agent-task-commands.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runner.ts';
 import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
@@ -12,9 +21,11 @@ import { preparePiExtension } from './pi-extension.ts';
 import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
+import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { requireWorkspaceProfile, type WorkspaceProfileV1 } from './workspace-profiles.ts';
 import type { IntelligenceModule } from './intelligence-channels.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 type IntelligenceInput = {
   dataRootPath: string; piConfigPath?: string;
@@ -22,12 +33,26 @@ type IntelligenceInput = {
   mcpUrl: string;
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
+  onRuntime?: (runtime: PiRpcSupervisor) => void;
+  workerLeaseId?: string;
+  onTaskReady?: (taskId: string) => void;
   modules?: IntelligenceModule[];
+  activeRuntime?: ActiveWorkspaceRuntime;
 };
 
-export function readWorkspaceIntelligenceProfile(dataRootPath: string): WorkspaceProfileV1 {
+export function readWorkspaceIntelligenceProfile(dataRootPath: string, activeRuntime?: ActiveWorkspaceRuntime): WorkspaceProfileV1 {
+  if (activeRuntime) return requireWorkspaceProfile(activeRuntime.database);
   const database = migrateDatabase(path.join(dataRootPath, 'wmb.db'));
   try { return requireWorkspaceProfile(database); } finally { database.close(); }
+}
+function schedulerContext(lane: string, requestId: string, taskId?: string, workerLeaseId?: string) {
+  return { actor: { type: 'scheduler' as const, id: lane, label: lane }, requestId, taskId, workerLeaseId };
+}
+
+function workspaceDependency(input: IntelligenceInput): { dependency: AgentTaskMutationDependency; database: DatabaseSync; close: () => void } {
+  if (input.activeRuntime) return { dependency: input.activeRuntime, database: input.activeRuntime.database, close: () => {} };
+  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  return { dependency: database, database, close: () => database.close() };
 }
 
 export async function startWorkspaceDailyIntelligence(
@@ -38,91 +63,88 @@ export async function startWorkspaceDailyIntelligence(
     game?: (input: IntelligenceInput, profile: WorkspaceProfileV1) => Promise<DailyIntelligenceRun>;
   } = {}
 ): Promise<DailyIntelligenceRun> {
-  const profile = readWorkspaceIntelligenceProfile(input.dataRootPath);
+  const profile = readWorkspaceIntelligenceProfile(input.dataRootPath, input.activeRuntime);
   const hasInjected = profile.intelligencePackId === 'wemedia-intelligence-engine' ? Boolean(runners.ai)
     : profile.intelligencePackId === 'uk-life-content-radar' ? Boolean(runners.uk) : Boolean(runners.game);
-  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  const { dependency, database, close } = workspaceDependency(input);
   try {
     const workspace = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
     if (!workspace?.value) throw new Error('WORKSPACE_ID_REQUIRED');
     const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
     if (!hasInjected) {
-      const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
+      const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
       if (prerequisite.waiting) return prerequisite.waiting;
     }
-    const channels = await startDailyChannelRun(database, {
-      businessDate: input.businessDate, workspaceId: workspace.value, profileRevision: profile.revision, modules: input.modules
+    const channels = await startDailyChannelRun(dependency, {
+      businessDate: input.businessDate, workspaceId: workspace.value, profileRevision: profile.revision, modules: input.modules,
+      workerLeaseId: input.workerLeaseId
     } satisfies DailyChannelInput);
+    input.onTaskReady?.(channels.task.id);
     if (!channels.shouldRunJudgment) return { task: channels.task, reused: channels.reused };
-  } finally { database.close(); }
+  } finally { close(); }
   if (profile.intelligencePackId === 'wemedia-intelligence-engine') return runners.ai ? runners.ai(input) : startDailyIntelligence(input);
   if (profile.intelligencePackId === 'uk-life-content-radar') return runners.uk ? runners.uk(input, profile) : startLaneDailyIntelligence(input, profile);
   return runners.game ? runners.game(input, profile) : startLaneDailyIntelligence(input, profile);
 }
 
 async function startLaneDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
-  const database = migrateDatabase(path.join(input.dataRootPath, 'wmb.db'));
+  const { dependency, database, close } = workspaceDependency(input);
+  const lane = profile.intelligencePackId;
+  const startRequestId = `daily_intelligence:${input.businessDate}:${profile.profileId}:${profile.revision}:start`;
   try {
     const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
-    const prerequisite = resolveAgentPiPrerequisite(database, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piSessionId: `daily-${input.businessDate}`, piConfigPath: input.piConfigPath });
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting;
     const config = prerequisite.config;
-    const started = startAgentTask(database, {
-      intent: 'daily_intelligence', businessDate: input.businessDate,
-      contextRefs,
-      piSessionId: `daily-${input.businessDate}`
-    });
-    if (!started.ok) throw new Error(started.error.message);
-    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(started.data.phase)) return { task: started.data, reused: true };
+    const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, schedulerContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const task = started.task;
+    if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
+    const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, task.phase, { piSessionId }, schedulerContext(lane, `${task.id}:phase:session:${piSessionId}`, task.id, input.workerLeaseId));
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const skillRoot = workspaceSkillSourcePath(profile.intelligencePackId);
     const installedSkill = path.join(layout.agentDir, 'skills', profile.intelligencePackId);
     await mkdir(path.dirname(installedSkill), { recursive: true });
     await cp(skillRoot, installedSkill, { recursive: true, force: true });
-    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify({ providers: { 'wmb-api': {
-      baseUrl: config.baseUrl, api: config.api, apiKey: '$WMB_PI_API_KEY',
-      models: [{ id: config.model, name: config.model, reasoning: true, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 272000, maxTokens: 16000 }]
-    } } }), 'utf8');
+    await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
     const workDir = await mkdtemp(path.join(os.tmpdir(), `wmb-${profile.intelligencePackId}-daily-`));
     const runtime = new PiRpcSupervisor(process.execPath, [
       piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
-      '--session', path.join(layout.agentDir, 'sessions', `daily-${input.businessDate}.jsonl`),
+      '--session', path.join(layout.agentDir, 'sessions', `${piSessionId}.jsonl`),
       '--skill', installedSkill, '-e', extensionPath, '--provider', 'wmb-api', '--model', config.model,
-      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前工作空间是${profile.displayName}；赛道判断只使用 ${profile.intelligencePackId}。`
-    ], {
-      ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir,
-      WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
-    }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前工作空间是${profile.displayName}；赛道判断只使用 ${profile.intelligencePackId}。当前 taskId=${task.id}；当前 Pi workerLeaseId=${input.workerLeaseId ?? 'unavailable'}。写业务事实必须使用这两个值和 Owner 已签发的精确 task grant。`
+    ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
+    (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
+    input.onRuntime?.(runtime);
     const heartbeat = setInterval(() => {
-      const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') reportAgentTaskProgress(database, current.id, {});
+      const current = getAgentTask(database, task.id);
+      if (current?.status === 'running') void dispatchReportAgentTaskProgress(dependency, current.id, {}, schedulerContext(lane, `${current.id}:progress:heartbeat:${current.updatedAt}`, current.id, input.workerLeaseId)).catch(() => {});
     }, 15_000);
     try {
-      reportAgentTaskProgress(database, started.data.id, {
-        phase: 'judging_opportunities',
-        message: '渠道扫描已完成，正在判断内容机会并生成今日运营方案。'
-      });
+      await dispatchReportAgentTaskProgress(dependency, task.id, { phase: 'judging_opportunities', message: '渠道扫描已完成，正在判断内容机会并生成今日运营方案。' }, schedulerContext(lane, `${task.id}:progress:judging`, task.id, input.workerLeaseId));
       await runtime.start();
-      await runtime.promptUntilSettled(lanePrompt(profile, started.data.id, input.businessDate), { timeoutMs: 10 * 60_000 });
-      updateAgentTaskPhase(database, started.data.id, 'validating');
-      const completed = completeAgentTask(database, started.data.id);
-      if (!completed.ok) throw new Error(completed.error.message);
-      return { task: completed.data, reused: false };
+      await runtime.promptUntilSettled(lanePrompt(profile, task.id, input.businessDate), { timeoutMs: 10 * 60_000 });
+      await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, schedulerContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
+      const completed = await dispatchCompleteAgentTask(dependency, task.id, schedulerContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
+      return { task: completed, reused: false };
     } catch (error) {
-      const current = getAgentTask(database, started.data.id);
-      if (current?.status === 'running') finishDailyIntelligenceFromReceipts(database, current.id, {
-        forcePartial: true,
-        errorCode: profile.intelligencePackId === 'game-news-radar' ? 'GAME_INTELLIGENCE_FAILED' : 'UK_INTELLIGENCE_FAILED',
-        errorMessage: error instanceof Error ? error.message : String(error)
-      });
+      const current = getAgentTask(database, task.id);
+      if (current?.status === 'running') {
+        const partial = await dispatchFinishDailyIntelligence(dependency, current.id, {
+          forcePartial: true,
+          errorCode: profile.intelligencePackId === 'game-news-radar' ? 'GAME_INTELLIGENCE_FAILED' : 'UK_INTELLIGENCE_FAILED',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        }, schedulerContext(lane, `${current.id}:finish:failed`, current.id, input.workerLeaseId));
+        return { task: partial, reused: started.reused };
+      }
       throw error;
     } finally {
       clearInterval(heartbeat);
       await runtime.stop().catch(() => {});
       await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
     }
-  } finally { database.close(); }
+  } finally { close(); }
 }
 
 function lanePrompt(profile: WorkspaceProfileV1, taskId: string, businessDate: string): string {

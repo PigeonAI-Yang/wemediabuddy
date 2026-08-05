@@ -54,7 +54,7 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
   title?: string;
   summary?: string | null;
   author?: string | null;
-}) {
+}, broadcast = true) {
   if (input.verificationStatus && !verification.has(input.verificationStatus)) throw new Error('INVALID_VERIFICATION_STATUS');
   if (input.managementStatus && !management.has(input.managementStatus)) throw new Error('INVALID_MANAGEMENT_STATUS');
   const title = input.title?.trim();
@@ -82,15 +82,15 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
       next,
       input.id
     );
-  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
+  if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
   return { id: input.id, revision: next };
 }
 
-export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }) {
+export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }, transaction = true, broadcast = true) {
   const current = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.id) as { id: string; revision: number } | undefined;
   if (!current) throw new Error('SOURCE_NOT_FOUND');
   if (current.revision !== input.expectedRevision) throw new Error('REVISION_CONFLICT');
-  database.exec('BEGIN');
+  if (transaction) database.exec('BEGIN');
   try {
     database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(input.id);
     database.prepare('DELETE FROM content_project_sources WHERE source_id=?').run(input.id);
@@ -102,12 +102,12 @@ export function deleteKnowledgeSource(database: DatabaseSync, input: { id: strin
     }
     const result = database.prepare('DELETE FROM source_items WHERE id=?').run(input.id);
     if (!result.changes) throw new Error('SOURCE_NOT_FOUND');
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
-  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+  if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
   return { id: input.id, deleted: true as const };
 }
 
@@ -130,7 +130,7 @@ export function listWatchingSources(database: DatabaseSync, limit = 30) {
   `).all(safeLimit);
 }
 
-export function markSourcesWatching(database: DatabaseSync, sourceIds: string[]): { updated: number; ids: string[] } {
+export function markSourcesWatching(database: DatabaseSync, sourceIds: string[], broadcast = true): { updated: number; ids: string[] } {
   const unique = [...new Set(sourceIds.filter(Boolean))];
   if (!unique.length) return { updated: 0, ids: [] };
   const now = new Date().toISOString();
@@ -151,7 +151,7 @@ export function markSourcesWatching(database: DatabaseSync, sourceIds: string[])
     updated += 1;
     ids.push(id);
   }
-  if (updated > 0) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
+  if (updated > 0 && broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
   return { updated, ids };
 }
 
@@ -180,10 +180,10 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
 export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Array<{
   sourceId: string; topic: { canonicalKey?: string; title: string; kind?: 'theme' | 'event'; summary?: string };
   relation?: TopicRelation; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus;
-}> }) {
+}> }, transaction = true) {
   if (!input.items.length) throw new Error('KNOWLEDGE_ITEMS_REQUIRED');
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const results = input.items.map((item) => {
       const source = database.prepare('SELECT revision FROM source_items WHERE id=?').get(item.sourceId) as { revision: number } | undefined;
@@ -194,13 +194,13 @@ export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Arr
         .run(topic.id, item.sourceId, item.relation ?? 'primary', now, now);
       if (item.verificationStatus || item.managementStatus) {
         updateKnowledgeSource(database, { id: item.sourceId, expectedRevision: source.revision,
-          verificationStatus: item.verificationStatus, managementStatus: item.managementStatus });
+          verificationStatus: item.verificationStatus, managementStatus: item.managementStatus }, transaction);
       }
       return { sourceId: item.sourceId, topicId: topic.id };
     });
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     return results;
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
+  } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
 }
 
 export function listKnowledgeTopics(database: DatabaseSync, input: { query?: string; status?: TopicStatus; limit?: number; offset?: number } = {}) {

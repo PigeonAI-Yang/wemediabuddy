@@ -1,8 +1,9 @@
-import type { BrowserContext, Page } from 'playwright-core';
-import { app } from 'electron';
+import type { BrowserContext, Locator, Page } from 'playwright-core';
+import type * as PlaywrightCore from 'playwright-core';
+import type { App } from 'electron';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { validateWechatArticleUrl } from './wechat-url';
+import { validateWechatArticleUrl } from './wechat-url.ts';
 
 export type WechatIdentity = { platform: 'wechat'; accountKey: string; displayName: string; loginState: 'authenticated'; evidenceUrl: string };
 
@@ -56,12 +57,17 @@ async function homePage(context: BrowserContext): Promise<Page> {
   return page;
 }
 
-async function editorBody(editor: import('playwright-core').Locator): Promise<string> {
+async function editorBody(editor: Locator): Promise<string> {
   return editor.evaluate((element) => Array.from(element.children).map((child) => child.textContent ?? '').join('\n'));
 }
 
 async function connect(cdpUrl: string) {
   const load = createRequire(__filename);
-  const { chromium } = load(app.isPackaged ? path.join(process.resourcesPath, 'playwright-core') : 'playwright-core') as typeof import('playwright-core');
+  const isPackaged = process.versions.electron
+    ? (load('electron') as { app: App }).app.isPackaged
+    : false;
+  const { chromium } = load(isPackaged
+    ? path.join(process.resourcesPath, 'playwright-core')
+    : 'playwright-core') as typeof PlaywrightCore;
   return chromium.connectOverCDP(cdpUrl);
 }

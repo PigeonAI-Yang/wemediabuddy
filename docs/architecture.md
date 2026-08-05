@@ -11,17 +11,13 @@ Project facts from `TECHNICAL_DESIGN.md`:
 - Electron main process for business commands;
 - Node.js `node:sqlite`;
 - Playwright over CDP;
-- independent Chrome/Chromium profile;
+- installation-owned BrowserProfile registry with an explicit root binding;
 - official MCP TypeScript SDK over loopback Streamable HTTP;
 - Electron Forge packaging.
 
-## Entry points
+## Entry points and directory map
 
-No application manifest or source entrypoint exists yet. `PLAN.md` and `TASKS.md` define the scaffold task that will establish them.
-
-## Planned directory map
-
-This is a recommendation until the scaffold task creates it:
+The application is implemented. Authoritative entry points are `src/main/index.ts`, `src/preload/preload.ts` and `src/renderer/index.tsx`; packaging is defined by Electron Forge and Vite configuration in the repository root.
 
 ```text
 src/
@@ -37,30 +33,31 @@ tests/
 scripts/
 ```
 
-Do not add more top-level architecture unless a SPEC requirement needs it.
+This is an Electron modular monolith. Do not add another service, database or top-level architecture unless a current SPEC requirement proves it necessary.
 
 ## Request flow
 
 ```text
 React UI ── IPC ──┐
-                  ├─ Business commands ── SQLite / files / jobs / browser
+Built-in Pi ─ MCP ┼─ Command dispatcher ─ Domain commands ─ SQLite / files / jobs / browser
 External Agent ─ MCP ┘
 ```
 
-IPC and MCP are transport adapters. They call the same business commands and do not access SQLite or CDP directly.
+IPC, Pi MCP, external MCP, scheduler and browser adapters are transport/execution adapters. Target behavior requires all mutations to use `CommandEnvelopeV1` through one active-root dispatcher; they do not write SQLite directly. The approved migration design is `docs/architecture/workspace-ai-collaboration-architecture.md`. `TECHNICAL_DESIGN.md` and SPEC CAP-025 remain normative if this short context diverges.
 
 ## Integration boundaries
 
 - Renderer ↔ main: narrow `contextBridge` API.
 - Agent ↔ WMB: loopback Streamable HTTP MCP.
-- WMB ↔ platforms: visible dedicated Chrome controlled through Playwright CDP.
+- WMB ↔ platforms: visible Chrome/Chromium from the active root's explicit BrowserProfile binding, controlled through Playwright CDP.
 - Database ↔ assets: SQLite stores relative paths and metadata; files remain under the configured data root.
 
-## Known unknowns
+## Current migration boundary
 
-- Exact installed Chrome path and version on target machines.
-- Exact live DOM and creator-metric labels for the user's X, Xiaohongshu, and WeChat accounts.
-- Package manager and exact package versions until scaffold.
+- `InstallationContext` owns executables, pinned runtime/model presets, shared Skills and BrowserProfile registry/default.
+- The active data root owns business facts, tasks/sessions, grants, account snapshots, bindings and receipts.
+- `ActiveWorkspaceRuntime` is the only live-root owner; bounded Pi workers are leases, not additional authorities.
+- Owner UI actions issue product-defined grants; chat/session text is neither grant nor business truth.
+- Final platform publication remains a manual user action.
 
-These are implementation-time observations, not permission to weaken SPEC behavior.
-
+Current code is being migrated under WMB-4801–WMB-4809. Existing direct routes are historical implementation facts, not permission to weaken CAP-025 or add another compatibility write path.

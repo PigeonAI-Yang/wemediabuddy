@@ -20,6 +20,6 @@ test('List display selection is independent, root-storable UI state', async () =
   assert.match(mountCache, /getCachedXListIndex/);
   assert.doesNotMatch(mountCache, /readXListIndex/);
   const cachedIndexHandler = ipc.slice(ipc.indexOf("ipcMain.handle('x-lists:get-cached-index'"), ipc.indexOf("ipcMain.handle('x-lists:read-index'"));
-  assert.match(cachedIndexHandler, /readXListIndexCache/);
+  assert.match(cachedIndexHandler, /readXListIndexFromRuntime\(requiredRuntime\(getActiveRuntime\)\)/);
   assert.doesNotMatch(cachedIndexHandler, /currentXListContext/);
 });

@@ -2,9 +2,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openDataRoot, validateDataRoot, type DataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
-import { recoverInterruptedPublications } from './publishing.ts';
-import { recoverRunningMetricJobs, scheduleJobsForPublishedPublications } from './metrics.ts';
-import { recoverInterruptedAgentTasks } from './agent-tasks.ts';
 import {
   beginWorkspaceSwitch,
   createOfficialWorkspace,
@@ -19,6 +16,7 @@ import {
 
 export function createDataRootSelection(input: {
   userDataPath: () => string;
+  defaultBrowserProfileId: () => string;
   chooseDirectory: () => Promise<string | null>;
   refreshRuntime: (dataRoot: DataRoot) => Promise<void>;
   canSwitch: (dataRoot: DataRoot) => Promise<void>;
@@ -27,18 +25,11 @@ export function createDataRootSelection(input: {
   stopRuntime: () => Promise<void>;
   relaunch: () => void;
 }) {
-  let recoveredAgentTasks = false;
   let switching = false;
   const dataRootConfigPath = () => path.join(input.userDataPath(), 'data-root.json');
   const registryPath = () => path.join(input.userDataPath(), 'workspace-registry.json');
-  function migrate(dataRoot: DataRoot, options: { recoverAgentTasks?: boolean } = {}): DataRoot {
+  function migrate(dataRoot: DataRoot): DataRoot {
     const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    recoverInterruptedPublications(database);
-    if (options.recoverAgentTasks) {
-      recoverInterruptedAgentTasks(database);
-      recoverRunningMetricJobs(database);
-      scheduleJobsForPublishedPublications(database);
-    }
     database.close();
     return dataRoot;
   }
@@ -57,9 +48,7 @@ export function createDataRootSelection(input: {
       if (registry.switchJournal) return recoverWorkspaceSwitch(registry);
       const active = registry.workspaces.find((workspace) => workspace.id === registry.activeWorkspaceId);
       const rootPath = active?.rootPath ?? (JSON.parse(await readFile(dataRootConfigPath(), 'utf8')) as { path: string }).path;
-      const shouldRecover = !recoveredAgentTasks;
-      recoveredAgentTasks = true;
-      const dataRoot = migrate(await validateDataRoot(rootPath), { recoverAgentTasks: shouldRecover });
+      const dataRoot = migrate(await validateDataRoot(rootPath));
       await enrollAiWorkspace({ registryPath: registryPath(), rootPath: dataRoot.path });
       return dataRoot;
     } catch { return null; }
@@ -73,7 +62,7 @@ export function createDataRootSelection(input: {
       const dataRoot = validateWorkspaceStartup(await validateDataRoot(previous.rootPath));
       await rollbackWorkspaceSwitch(registryPath());
       await writeFile(dataRootConfigPath(), JSON.stringify({ path: dataRoot.path }), 'utf8');
-      return migrate(dataRoot, { recoverAgentTasks: true });
+      return migrate(dataRoot);
     };
     if (journal.state === 'attempting') return restorePrevious();
     await markWorkspaceSwitchAttempting(registryPath());
@@ -87,7 +76,7 @@ export function createDataRootSelection(input: {
     } catch {
       return restorePrevious();
     }
-    return migrate(targetDataRoot, { recoverAgentTasks: true });
+    return migrate(targetDataRoot);
   }
   async function chooseDataRoot(): Promise<DataRoot | null> {
     const selectedPath = await input.chooseDirectory();
@@ -96,7 +85,7 @@ export function createDataRootSelection(input: {
     const dataRoot = registry.workspaces.length === 0
       ? migrate(await openDataRoot(selectedPath))
       : await validateDataRoot(selectedPath);
-    if (registry.workspaces.length === 0) await enrollAiWorkspace({ registryPath: registryPath(), rootPath: dataRoot.path });
+    if (registry.workspaces.length === 0) await enrollAiWorkspace({ registryPath: registryPath(), rootPath: dataRoot.path, defaultProfileId: input.defaultBrowserProfileId() });
     else {
       const workspaceId = await readRootWorkspaceId(dataRoot.path);
       if (!workspaceId) throw new Error('所选目录不是已登记工作空间。');
@@ -146,14 +135,14 @@ export function createDataRootSelection(input: {
       input.relaunch();
       return result;
     } catch (error) {
-      // ponytail: after a committed profile revision, a closed mutation gate is safer than an old runtime serving it.
-      if (!committed) input.openMutationGate();
+      if (committed) await input.refreshRuntime(current);
+      else input.openMutationGate();
       throw error;
     }
   }
   async function createUkWorkspace() {
     const rootPath = await input.chooseDirectory();
-    return rootPath ? createOfficialWorkspace({ registryPath: registryPath(), rootPath, templateId: 'official.uk' }) : null;
+    return rootPath ? createOfficialWorkspace({ registryPath: registryPath(), rootPath, templateId: 'official.uk', defaultProfileId: input.defaultBrowserProfileId() }) : null;
   }
   return { loadSelectedDataRoot, chooseDataRoot, migrate, switchWorkspace, relaunchCurrentWorkspace, createUkWorkspace, listWorkspaces: () => readWorkspaceRegistry(registryPath()) };
 }

@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import type { WorkspaceProfileV1 } from './workspace-profiles.ts';
 
-export const PI_AUTHORITY_SYSTEM_PROMPT = '你是 WeMediaBuddy 内置 Pi。业务读写只能通过 wmb_* MCP 工具完成；禁止直接写文件或数据库；禁止最终发布；只有工具或 Skill 明确要求 UI 确认的动作才交给用户，已授权直接执行的动作不得追加确认。按已加载 Skills 操作，回答简洁中文。';
+type PiSkillInstallResult = { path: string; revision: string };
+
+const piSkillInstallQueues = new Map<string, Promise<PiSkillInstallResult>>();
+export const PI_AUTHORITY_SYSTEM_PROMPT = '你是 WeMediaBuddy 内置 Pi。业务读写只能通过 wmb_* 工具完成；禁止直接写文件或数据库；禁止最终发布；只有工具或 Skill 明确要求 UI 确认的动作才交给用户，已授权直接执行的动作不得追加确认。需要写资料时只调用 wmb_save_source（底层命令 sources.upsert_batch），并携带当前 taskId、Owner grantId 和 WMB 注入的 workerLeaseId；缺少任一项就停止并说明。按已加载 Skills 操作，回答简洁中文。';
 
 export function operatorSkillSourcePath(): string {
   return skillSourcePath('wemedia-buddy-operator');
@@ -47,7 +50,20 @@ export async function installPiWorkspaceLaneSkill(dataRootPath: string, agentDir
   }
 }
 
-export async function installPiSkill(agentDir: string, name: string, sourceRoot: string, metadata: Record<string, unknown> = {}): Promise<{ path: string; revision: string }> {
+export function installPiSkill(agentDir: string, name: string, sourceRoot: string, metadata: Record<string, unknown> = {}): Promise<PiSkillInstallResult> {
+  const queueKey = path.resolve(agentDir, 'skills', name);
+  const previous = piSkillInstallQueues.get(queueKey);
+  let installation!: Promise<PiSkillInstallResult>;
+  installation = (previous ? previous.catch(() => undefined) : Promise.resolve())
+    .then(() => installPiSkillOnce(agentDir, name, sourceRoot, metadata))
+    .finally(() => {
+      if (piSkillInstallQueues.get(queueKey) === installation) piSkillInstallQueues.delete(queueKey);
+    });
+  piSkillInstallQueues.set(queueKey, installation);
+  return installation;
+}
+
+async function installPiSkillOnce(agentDir: string, name: string, sourceRoot: string, metadata: Record<string, unknown>): Promise<PiSkillInstallResult> {
   const revision = await operatorSkillRevision(sourceRoot);
   const skillsRoot = path.join(agentDir, 'skills');
   const target = path.join(skillsRoot, name);

@@ -83,6 +83,7 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   const saveToLibrary = async (item: RankingContextItem) => {
     const key = `${item.boardId}:${item.name}`;
     const result = await window.wmb.saveDiscoveredSource({
+      requestId: crypto.randomUUID(),
       title: item.name,
       originalUrl: item.url,
       summary: item.description || undefined,

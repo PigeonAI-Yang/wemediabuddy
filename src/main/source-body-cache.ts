@@ -53,7 +53,7 @@ export function listSourceBodyCaches(database: DatabaseSync, sourceIds: string[]
 
 export async function fetchAndCacheSourceBody(
   database: DatabaseSync,
-  input: { sourceId: string; force?: boolean; maxChars?: number; fetchImpl?: typeof fetch; now?: Date }
+  input: { sourceId: string; force?: boolean; maxChars?: number; fetchImpl?: typeof fetch; now?: Date; persist?: boolean }
 ): Promise<SourceBodyCacheRecord> {
   const source = getSource(database, input.sourceId);
   if (!source) throw new Error('资料不存在。');
@@ -81,12 +81,13 @@ export async function fetchAndCacheSourceBody(
 
   const maxChars = Math.max(500, Math.min(input.maxChars ?? DEFAULT_MAX_CHARS, 100_000));
   const fetchImpl = input.fetchImpl ?? globalThis.fetch;
+  const finish = (record: SourceBodyCacheRecord) => input.persist === false ? record : writeSourceBodyCache(database, record);
 
   try {
     const response = await fetchWithTimeout(fetchImpl, url, FETCH_TIMEOUT_MS);
     const contentType = response.headers.get('content-type');
     if (!response.ok) {
-      return writeCache(database, {
+      return finish({
         sourceId: input.sourceId,
         url,
         status: 'failed',
@@ -102,7 +103,7 @@ export async function fetchAndCacheSourceBody(
     const raw = await response.text();
     const extracted = extractReadableText(raw, contentType, maxChars).trim();
     if (!extracted) {
-      return writeCache(database, {
+      return finish({
         sourceId: input.sourceId,
         url,
         status: 'empty',
@@ -115,7 +116,7 @@ export async function fetchAndCacheSourceBody(
       });
     }
 
-    return writeCache(database, {
+    return finish({
       sourceId: input.sourceId,
       url,
       status: 'ready',
@@ -127,7 +128,7 @@ export async function fetchAndCacheSourceBody(
       updatedAt: now
     });
   } catch (error) {
-    return writeCache(database, {
+    return finish({
       sourceId: input.sourceId,
       url,
       status: 'failed',
@@ -141,7 +142,7 @@ export async function fetchAndCacheSourceBody(
   }
 }
 
-function writeCache(database: DatabaseSync, record: SourceBodyCacheRecord): SourceBodyCacheRecord {
+export function writeSourceBodyCache(database: DatabaseSync, record: SourceBodyCacheRecord): SourceBodyCacheRecord {
   database.prepare(`INSERT INTO source_body_cache (
       source_id, url, status, content_type, extracted_text, extracted_chars, error_message, fetched_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

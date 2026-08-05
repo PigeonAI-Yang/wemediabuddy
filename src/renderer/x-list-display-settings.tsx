@@ -9,7 +9,8 @@ type Operation = Awaited<ReturnType<typeof window.wmb.listXListOperations>>[numb
 type ComposerInput = Parameters<typeof window.wmb.prepareXListOperation>[0];
 
 const stateLabels: Record<Operation['state'], string> = {
-  prepared: '待读取快照', awaiting_confirmation: '等待确认', running: '执行中', succeeded: '已完成',
+  prepared: '待读取快照', awaiting_confirmation: '等待确认', execution_granted: '已确认，等待浏览器',
+  browser_leased: '浏览器已接管，等待执行', running: '执行中', succeeded: '已完成',
   partial: '已停止', needs_user: '需要接管', unknown: '结果未知', failed: '失败'
 };
 
@@ -98,7 +99,7 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
         {selected && <button type="button" className="secondary-button" disabled={loading} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出今日情报' : '接入今日情报'}</button>}
       </div>
       <XListComposer accountKey={index.accountKey} selected={selected} disabled={loading} onPrepare={prepare}/>
-      {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabels[operation.state]} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
+      {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabel(operation)} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
     </section>}
   </>;
 }
@@ -125,6 +126,11 @@ function XListComposer({ accountKey, selected, disabled, onPrepare }: { accountK
     <button className="x-list-primary" disabled={disabled || (kind !== 'create' && !selected) || (kind === 'create' && !name.trim())} onClick={submit}>读取快照并准备确认</button>
   </section>;
 }
+function stateLabel(operation: Operation): string {
+  if (operation.state === 'prepared' && operation.phase === 'awaiting_confirmation') return '等待确认';
+  return stateLabels[operation.state];
+}
+
 
 function operationLabel(operation: Operation): string {
   const labels: Record<Operation['kind'], string> = { create: '新建 List', update: '编辑 List', delete: '删除 List', members_add: '添加成员', members_remove: '移除成员' };

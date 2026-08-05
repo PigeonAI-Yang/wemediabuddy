@@ -85,6 +85,7 @@ function selection(userData, overrides = {}) {
   const gate = new WorkspaceRuntimeGate();
   return createDataRootSelection({
     userDataPath: () => userData,
+    defaultBrowserProfileId: overrides.defaultBrowserProfileId ?? (() => '11111111-1111-4111-8111-111111111111'),
     chooseDirectory: overrides.chooseDirectory ?? (async () => null),
     refreshRuntime: overrides.refreshRuntime ?? (async () => {}),
     canSwitch: overrides.canSwitch ?? (async () => {}),

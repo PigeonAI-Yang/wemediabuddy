@@ -1,0 +1,155 @@
+{
+  "ok": true,
+  "schema": "wmb.eval-029-package-readback.v1",
+  "scope": "packaged Windows EVAL-029 acceptance with explicit focused-test boundaries",
+  "executable": "j:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\WeMediaBuddy.exe",
+  "receiptPath": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-4809-package-readback.json",
+  "roots": {
+    "ai": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-zLQ1v4\\parent\\ai-root",
+    "uk": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-zLQ1v4\\parent\\uk-root"
+  },
+  "workspaces": {
+    "ai": "eval029.workspace.ai",
+    "uk": "eval029.workspace.uk",
+    "switchedByOwnerIpc": true
+  },
+  "defaultProfile": {
+    "id": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+    "sharedAtStartup": true,
+    "initialAiBinding": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+    "initialUkBinding": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c"
+  },
+  "expectedAccounts": {
+    "ai": {
+      "x": {
+        "platform": "x",
+        "accountKey": "@eval029_ai_expected",
+        "displayName": "EVAL-029 AI expected account",
+        "loginState": "authenticated",
+        "evidenceUrl": "https://example.com/eval-029/ai/expected-account",
+        "accountRevision": 1,
+        "browserProfileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+        "browserBindingRevision": 1,
+        "verifiedAt": "2026-08-05T09:29:00.000Z"
+      }
+    },
+    "uk": {
+      "x": {
+        "platform": "x",
+        "accountKey": "@eval029_uk_expected",
+        "displayName": "EVAL-029 UK expected account",
+        "loginState": "authenticated",
+        "evidenceUrl": "https://example.com/eval-029/uk/expected-account",
+        "accountRevision": 1,
+        "browserProfileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+        "browserBindingRevision": 1,
+        "verifiedAt": "2026-08-05T09:29:00.000Z"
+      }
+    },
+    "distinct": true,
+    "ukUnchangedAcrossAiProfileRelaunch": true
+  },
+  "taskGrant": {
+    "requestId": "eval029.package.owner-grant",
+    "id": "e733a315-b5a1-49cf-9505-54898233fa98",
+    "taskId": "d184bb8e-4b07-4687-9310-02797fde34b8",
+    "allowedCommands": [
+      "sources.upsert_batch"
+    ],
+    "workers": [
+      {
+        "type": "pi",
+        "id": "pi"
+      },
+      {
+        "type": "external_agent",
+        "id": "mcp"
+      }
+    ],
+    "mcpGetReadback": "e733a315-b5a1-49cf-9505-54898233fa98",
+    "mcpListReadback": [
+      "e733a315-b5a1-49cf-9505-54898233fa98"
+    ]
+  },
+  "mcpReplayConflict": {
+    "requestId": "eval029.package.external-source",
+    "sourceId": "48f7f07f-8892-4ef3-a1e9-f0b4106eef55",
+    "firstReceiptId": "d3336058-ab95-4a33-b85b-41ebba932480",
+    "replayByteEquivalent": true,
+    "conflictCode": "REQUEST_REPLAY_CONFLICT",
+    "ukSourceVisible": false,
+    "ukReceiptCount": 0,
+    "aiReceiptCount": 1
+  },
+  "piContinuation": {
+    "modelExecuted": false,
+    "evidence": "Pi alias availability is covered by tests/pi-extension.test.mjs; this package run does not claim a model invocation or Pi write."
+  },
+  "ownerProfileRelaunch": {
+    "command": "createBrowserProfile",
+    "cdpPort": 56126,
+    "before": {
+      "profileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+      "bindingRevision": 1,
+      "runtimeEpoch": "1f057f43-feb4-4f25-ba3b-d6ee85ec5988",
+      "mcpUrl": "http://127.0.0.1:56131/mcp",
+      "registryRevision": 1
+    },
+    "after": {
+      "profileId": "47f69090-cbf2-4e2b-892b-55b781f9bfe7",
+      "bindingRevision": 2,
+      "runtimeEpoch": "a031cebc-bbc4-41ae-8c90-47b05e82fe11",
+      "mcpUrl": "http://127.0.0.1:51143/mcp"
+    },
+    "oldMcpRejected": true
+  },
+  "workspaceSwitch": {
+    "command": "window.wmb.switchWorkspace",
+    "from": {
+      "workspaceId": "eval029.workspace.ai",
+      "runtimeEpoch": "a031cebc-bbc4-41ae-8c90-47b05e82fe11",
+      "mcpUrl": "http://127.0.0.1:51143/mcp"
+    },
+    "to": {
+      "workspaceId": "eval029.workspace.uk",
+      "runtimeEpoch": "3887123f-f8cc-4eb9-b829-5e15f5c356cb",
+      "mcpUrl": "http://127.0.0.1:51167/mcp"
+    },
+    "oldMcpRejected": true
+  },
+  "legacyBytePreservation": {
+    "pointerSha256": "7b66f2a35997ced3a4b69117fa6098888ca259f6aa38dcb2f98c082e47f6b4d1",
+    "sessionSha256": "e59bee4a223eed58841d8806213708ab8ba4ed5869a1454ea452284c797f9dc7",
+    "browserSentinelSha256": "c2d8c64ee9d7cbe57f975da864435859380791d9f31f0f0e08137a9bc0dce70a",
+    "browserConfig": "{\"accountKey\":\"@eval029_shared_account_label\",\"profile\":\"legacy-root-local\",\"readOnlyExpectation\":true}",
+    "canonicalConversationId": "eval029.ai.legacy-conversation",
+    "canonicalSessionReadbackMatchesLegacyBytes": true,
+    "unchangedAfterNewConversationAndRelaunch": true
+  },
+  "operatorSkill": {
+    "installed": true,
+    "piAliases": [
+      "wmb_get_task_grant",
+      "wmb_list_task_grants"
+    ],
+    "rawMcpNamesAreUnderlyingMappingsOnly": true
+  },
+  "inactiveRootDigest": {
+    "root": "ai",
+    "observedMs": 2500,
+    "before": "18de2401402a8e3d12946113a3f17a781347542abbd6ff5b23e280b6117b56eb",
+    "after": "18de2401402a8e3d12946113a3f17a781347542abbd6ff5b23e280b6117b56eb",
+    "unchanged": true
+  },
+  "manualFinalPublicationBoundary": "Final platform publication remains an explicit human action; no package step publishes content.",
+  "focusedCoverageRequired": [
+    "Pi worker lease",
+    "precise grant negative matrix",
+    "publication snapshot reconciliation"
+  ],
+  "quit": {
+    "windowCloseRequested": true,
+    "cdpRejected": true,
+    "finalMcpRejected": true
+  }
+}

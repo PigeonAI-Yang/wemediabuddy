@@ -9,7 +9,7 @@ type RpcMessage = {
   error?: unknown;
   data?: unknown;
   message?: unknown;
-  assistantMessageEvent?: { type?: string; delta?: string; contentIndex?: number };
+  assistantMessageEvent?: { type?: string; delta?: string; contentIndex?: number; partial?: unknown };
   [key: string]: unknown;
 };
 
@@ -72,6 +72,16 @@ function assistantThinkingFromMessage(message: unknown): string {
     .join('\n\n');
 }
 
+function assistantBlockFromMessage(message: unknown, contentIndex: number | undefined, kind: 'text' | 'thinking'): string {
+  if (!message || typeof message !== 'object' || !Number.isInteger(contentIndex)) return '';
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  const block = content[contentIndex!];
+  if (!block || typeof block !== 'object' || (block as { type?: unknown }).type !== kind) return '';
+  const value = (block as { text?: unknown; thinking?: unknown })[kind];
+  return typeof value === 'string' ? value : '';
+}
+
 function assistantErrorFromMessage(message: unknown): string {
   if (!message || typeof message !== 'object') return '';
   const record = message as {
@@ -91,7 +101,7 @@ function assistantErrorFromMessage(message: unknown): string {
   return '';
 }
 
-function humanizePiProviderError(raw: string): string {
+export function humanizePiProviderError(raw: string): string {
   const text = raw.replace(/^\d{3}:\s*/, '').trim();
   // OpenCode Go China-hosted model opt-in.
   if (/RegionError/i.test(text) || /only available hosted in China and requires explicit opt in/i.test(text)) {
@@ -103,6 +113,10 @@ function humanizePiProviderError(raw: string): string {
   }
   if (/rate limit|too many requests/i.test(text)) {
     return 'Pi 接口触发限流，请稍后再试。';
+  }
+  const bodylessServerError = text.match(/^(5\d\d) status code \(no body\)$/i);
+  if (bodylessServerError) {
+    return `Pi 模型服务暂时异常（HTTP ${bodylessServerError[1]}，服务端未返回详情）。已完成的工具结果已保留，可稍后重试回答。`;
   }
   // Keep provider detail, but avoid dumping giant JSON blobs in the dock.
   return text.length > 420 ? `${text.slice(0, 420)}…` : text;
@@ -119,6 +133,7 @@ export class PiRpcSupervisor {
   private intentionalStop = false;
   private streamedText = '';
   private streamedThinking = '';
+  private assistantEpoch = 0;
   private streamedError = '';
   private onDelta: ((text: string) => void) | null = null;
   private onStreaming: (() => void) | null = null;
@@ -325,6 +340,7 @@ export class PiRpcSupervisor {
       if (message.type === 'message_start') {
         const started = message.message as { role?: unknown } | undefined;
         if (started?.role === 'assistant') {
+          this.assistantEpoch += 1;
           this.streamedText = '';
           this.streamedThinking = '';
           this.streamedError = '';
@@ -333,12 +349,16 @@ export class PiRpcSupervisor {
       if (message.type === 'message_update') {
         const deltaEvent = message.assistantMessageEvent;
         if (deltaEvent?.type === 'thinking_delta' && typeof deltaEvent.delta === 'string' && deltaEvent.delta) {
-          this.streamedThinking += deltaEvent.delta;
-          this.onEvent({ type: 'wmb_thinking_delta', text: this.streamedThinking });
+          const partial = deltaEvent.partial ?? message.message;
+          const full = assistantThinkingFromMessage(partial);
+          this.streamedThinking = full || this.streamedThinking + deltaEvent.delta;
+          this.onEvent({ type: 'wmb_thinking_delta', text: assistantBlockFromMessage(partial, deltaEvent.contentIndex, 'thinking') || this.streamedThinking, streamKey: `${this.assistantEpoch}:${deltaEvent.contentIndex ?? 0}:thinking` });
         } else if (deltaEvent?.type === 'text_delta' && typeof deltaEvent.delta === 'string' && deltaEvent.delta) {
-          this.streamedText += deltaEvent.delta;
+          const partial = deltaEvent.partial ?? message.message;
+          const full = assistantTextFromMessage(partial);
+          this.streamedText = full || this.streamedText + deltaEvent.delta;
           this.onDelta?.(this.streamedText);
-          this.onEvent({ type: 'wmb_text_delta', text: this.streamedText });
+          this.onEvent({ type: 'wmb_text_delta', text: assistantBlockFromMessage(partial, deltaEvent.contentIndex, 'text') || this.streamedText, streamKey: `${this.assistantEpoch}:${deltaEvent.contentIndex ?? 0}:text` });
         } else {
           const partialThinking = assistantThinkingFromMessage(message.message);
           if (partialThinking && partialThinking !== this.streamedThinking) {

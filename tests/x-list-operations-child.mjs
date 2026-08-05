@@ -1,10 +1,13 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
-import { armXListOperation, beginXListOperation, bindXList, finishXListOperation, getXListOperation, prepareXListOperation, recordXListConfirmationFailure, recoverOrphanedXListOperations, setXListBindingEnabled } from '../src/main/x-lists.ts';
-import { acceptXListOperation, addXListMembersWithReplay, beginDirectXListMemberAdd, confirmAndRunXListOperation, removeXListMembersWithReplay } from '../src/main/x-list-execution.ts';
+import {
+  armXListOperation, beginXListOperation, bindXList, getXListOperation, grantXListOperation,
+  leaseXListOperation, prepareXListOperation, recordXListOperationIntent, recoverOrphanedXListOperations,
+  setXListBindingEnabled, xListPayloadFingerprint, xListSnapshotFingerprint
+} from '../src/main/x-lists.ts';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-x-lists-'));
 let mcp;
@@ -30,33 +33,37 @@ try {
   const wrongOwner = armXListOperation(db, { operationId: prepared.data.operation.id, expectedRevision: prepared.data.operation.revision, snapshot: { ...snapshot, list: { ...snapshot.list, ownerHandle: '@Other' } } });
   if (wrongOwner.ok || wrongOwner.error.code !== 'BROWSER_NEEDS_USER') throw new Error('non-owned List was armed');
   const armed = armXListOperation(db, { operationId: prepared.data.operation.id, expectedRevision: prepared.data.operation.revision, snapshot });
-  if (!armed.ok || armed.data.state !== 'awaiting_confirmation' || !armed.data.confirmationFingerprint) throw new Error('UI arm did not freeze snapshot');
-  const stale = beginXListOperation(db, {
+  if (!armed.ok || armed.data.state !== 'prepared' || armed.data.phase !== 'awaiting_confirmation' || !armed.data.confirmationFingerprint) throw new Error('UI arm did not freeze snapshot in prepared state');
+  const broadened = grantXListOperation(db, {
     operationId: armed.data.id, expectedRevision: armed.data.revision,
-    currentSnapshot: { ...snapshot, list: { ...snapshot.list, description: '已变化' } }
+    authority: executionAuthority(armed.data, 'grant-broadened', { snapshotFingerprint: xListSnapshotFingerprint({ ...snapshot, list: { ...snapshot.list, description: '已变化' } }) })
   });
-  const staleRecord = getXListOperation(db, armed.data.id);
-  if (stale.ok || stale.error.code !== 'CONFIRMATION_STALE' || staleRecord?.state !== 'prepared') throw new Error('stale snapshot was accepted');
+  if (broadened.ok || broadened.error.code !== 'EXECUTION_GRANT_SCOPE_MISMATCH') throw new Error('broadened grant was accepted');
 
-  const retryPrepared = prepareXListOperation(db, { requestId: 'x-list-members-confirm-retry', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
-  const retryArmed = retryPrepared.ok && armXListOperation(db, { operationId: retryPrepared.data.operation.id, expectedRevision: retryPrepared.data.operation.revision, snapshot: { ...snapshot, members: [{ handle: '@Alice', present: false }] } });
-  if (!retryArmed || !retryArmed.ok) throw new Error('retry fixture did not arm');
-  const blocked = recordXListConfirmationFailure(db, { operationId: retryArmed.data.id, expectedRevision: retryArmed.data.revision, code: 'BROWSER_NEEDS_USER', message: '旧请求已取消' });
-  if (blocked?.state !== 'awaiting_confirmation' || blocked.phase !== 'confirmation_blocked' || blocked.errorMessage !== '旧请求已取消') throw new Error('confirmation failure was not persisted');
-  const retried = beginXListOperation(db, { operationId: blocked.id, expectedRevision: blocked.revision, currentSnapshot: { ...snapshot, members: [{ handle: '@Alice', present: false }] } });
-  if (!retried.ok || retried.data.state !== 'running' || retried.data.errorMessage) throw new Error('confirmation retry did not clear the persisted failure');
+  seedExecutionGrant(db, 'grant-exact');
+  const granted = grantXListOperation(db, {
+    operationId: armed.data.id, expectedRevision: armed.data.revision,
+    authority: executionAuthority(armed.data, 'grant-exact')
+  });
+  if (!granted.ok || granted.data.state !== 'execution_granted' || granted.data.executionGrantId !== 'grant-exact' || granted.data.startedAt) throw new Error('exact grant was not committed first');
+  const leased = leaseXListOperation(db, { operationId: granted.data.id, expectedRevision: granted.data.revision, executionGrantId: 'grant-exact' });
+  if (!leased.ok || leased.data.state !== 'browser_leased') throw new Error('browser lease was not committed after grant');
+  const running = beginXListOperation(db, { operationId: leased.data.id, expectedRevision: leased.data.revision, executionGrantId: 'grant-exact' });
+  if (!running.ok || running.data.state !== 'running' || running.data.phase !== 'executing' || !running.data.startedAt) throw new Error('executing state was not committed after browser lease');
+  recordXListOperationIntent(db, running.data.id, 'member_add', '@Alice');
+  if (recoverOrphanedXListOperations(db, new Set()) !== 1 || getXListOperation(db, running.data.id)?.state !== 'unknown') throw new Error('post-intent crash was resumable or not marked unknown');
 
-  const queuedPrepared = prepareXListOperation(db, { requestId: 'x-list-members-background', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
-  const queuedArmed = queuedPrepared.ok && armXListOperation(db, { operationId: queuedPrepared.data.operation.id, expectedRevision: queuedPrepared.data.operation.revision, snapshot: { ...snapshot, members: [{ handle: '@Alice', present: false }] } });
-  if (!queuedArmed || !queuedArmed.ok) throw new Error('background fixture did not arm');
-  const accepted = acceptXListOperation(db, { operationId: queuedArmed.data.id, expectedRevision: queuedArmed.data.revision });
-  if (!accepted.ok || accepted.data.state !== 'running' || !accepted.data.confirmedAt || !accepted.data.startedAt) throw new Error('one UI confirmation was not persisted before browser execution');
-  if (recoverOrphanedXListOperations(db, new Set([retried.data.id])) !== 1 || getXListOperation(db, accepted.data.id)?.state !== 'needs_user') throw new Error('orphaned background operation still pretended to run');
+  const recoveryPrepared = prepareXListOperation(db, { requestId: 'x-list-recovery-before-action', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
+  const recoveryArmed = recoveryPrepared.ok && armXListOperation(db, { operationId: recoveryPrepared.data.operation.id, expectedRevision: recoveryPrepared.data.operation.revision, snapshot: { ...snapshot, members: [{ handle: '@Alice', present: false }] } });
+  seedExecutionGrant(db, 'grant-recovery');
+  const recoveryGranted = recoveryArmed && recoveryArmed.ok && grantXListOperation(db, { operationId: recoveryArmed.data.id, expectedRevision: recoveryArmed.data.revision, authority: executionAuthority(recoveryArmed.data, 'grant-recovery') });
+  if (!recoveryGranted || !recoveryGranted.ok) throw new Error('pre-action recovery fixture failed');
+  if (recoverOrphanedXListOperations(db, new Set()) !== 1 || getXListOperation(db, recoveryGranted.data.id)?.state !== 'needs_user') throw new Error('pre-action crash was resumed');
 
-  const deletion = prepareXListOperation(db, { requestId: 'x-list-delete-1', accountKey: '@Owner', kind: 'delete', listId: '1234567890' });
-  const deleteArmed = deletion.ok && armXListOperation(db, { operationId: deletion.data.operation.id, expectedRevision: deletion.data.operation.revision, snapshot: { ...snapshot, members: undefined } });
-  const deleteDenied = deleteArmed && deleteArmed.ok && await confirmAndRunXListOperation(db, { id: 'edge:pyaireader-default', cdpUrl: 'http://127.0.0.1:9334' }, { operationId: deleteArmed.data.id, expectedRevision: deleteArmed.data.revision, typedListName: '错误名称' });
-  if (!deleteDenied || deleteDenied.ok || deleteDenied.error.code !== 'VALIDATION_ERROR') throw new Error('delete name confirmation was bypassed');
+  const legacyPrepared = prepareXListOperation(db, { requestId: 'x-list-legacy-awaiting', accountKey: '@Owner', kind: 'delete', listId: '1234567890' });
+  if (!legacyPrepared.ok) throw new Error('legacy fixture failed');
+  db.prepare("UPDATE x_list_operations SET state='awaiting_confirmation', phase='awaiting_confirmation' WHERE id=?").run(legacyPrepared.data.operation.id);
+  if (getXListOperation(db, legacyPrepared.data.operation.id)?.state !== 'awaiting_confirmation') throw new Error('legacy awaiting_confirmation row became unreadable');
 
   const binding = bindXList(db, {
     accountKey: '@Owner', list: { listId: '2222222222', canonicalUrl: 'https://x.com/i/lists/2222222222', ownerHandle: '@Author', name: 'AI资讯', kind: 'following' }, observation: { source: 'test' }
@@ -65,21 +72,9 @@ try {
   const disabled = setXListBindingEnabled(db, { accountKey: binding.data.accountKey, listId: binding.data.listId, expectedRevision: binding.data.revision, enabled: false });
   const feedCount = db.prepare('SELECT COUNT(*) AS count FROM source_feeds').get().count;
   if (!disabled.ok || disabled.data.enabled || feedCount !== 1) throw new Error('unbind deleted the source feed');
-  const terminalPrepared = prepareXListOperation(db, { requestId: 'x-list-terminal-replay', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
-  if (!terminalPrepared.ok) throw new Error('terminal replay fixture was not prepared');
-  const terminal = finishXListOperation(db, terminalPrepared.data.operation.id, { state: 'partial', phase: 'partial_member_readbacks' });
-  const replay = await addXListMembersWithReplay(db, { requestId: 'x-list-terminal-replay', accountKey: '@Owner', listId: '1234567890', handles: ['@Alice'] }, async () => { throw new Error('terminal replay touched browser preflight'); });
-  if (!replay.ok || !replay.data.replayed || replay.data.attemptedNow || replay.data.id !== terminal.id) throw new Error('terminal member-add replay was not explicit');
-  const removePrepared = prepareXListOperation(db, { requestId: 'x-list-remove-terminal-replay', accountKey: '@Owner', kind: 'members_remove', listId: '1234567890', handles: ['@Alice'] });
-  if (!removePrepared.ok) throw new Error('terminal remove replay fixture was not prepared');
-  const removeTerminal = finishXListOperation(db, removePrepared.data.operation.id, { state: 'succeeded', phase: 'completed' });
-  const removeReplay = await removeXListMembersWithReplay(db, { requestId: 'x-list-remove-terminal-replay', accountKey: '@Owner', listId: '1234567890', handles: ['@Alice'] }, async () => { throw new Error('terminal remove replay touched browser preflight'); });
-  if (!removeReplay.ok || !removeReplay.data.replayed || removeReplay.data.attemptedNow || removeReplay.data.id !== removeTerminal.id || removeReplay.data.kind !== 'members_remove') throw new Error('terminal member-remove replay was not explicit');
-  const directPrepared = prepareXListOperation(db, { requestId: 'x-list-direct-one-snapshot', accountKey: '@Owner', kind: 'members_add', listId: '1234567890', handles: ['@Alice'] });
-  const directArmed = directPrepared.ok && armXListOperation(db, { operationId: directPrepared.data.operation.id, expectedRevision: directPrepared.data.operation.revision, snapshot: { ...snapshot, list: { ...snapshot.list, name: 'List 1234567890', memberCount: null }, members: [{ handle: '@Alice', present: false }] } });
-  if (!directArmed || !directArmed.ok) throw new Error('direct member-add fixture did not arm');
-  const directStarted = beginDirectXListMemberAdd(db, directArmed.data);
-  if (!directStarted.ok || directStarted.data.state !== 'running') throw new Error('direct member-add recaptured its progressively rendered snapshot');
+  const accountIndex = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='x_list_operations_account_updated'").get();
+  const itemIndex = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='x_list_operation_items_operation'").get();
+  if (!accountIndex || !itemIndex) throw new Error('v44 did not preserve X List operation indexes');
   db.close();
 
   mcp = await startMcp(directory);
@@ -87,14 +82,43 @@ try {
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
-  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_add_x_list_members') || !tools.has('wmb_remove_x_list_members') || !tools.has('wmb_collect_x_list_timeline') || tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
-  const mcpSource = await readFile(new URL('../src/main/mcp.ts', import.meta.url), 'utf8');
-  if (mcpSource.includes("x_lists.confirm") || mcpSource.includes('confirmAndRunXListOperation') || !mcpSource.includes("x_lists.members_add") || !mcpSource.includes('return await addXListMembersWithReplay') || !mcpSource.includes("x_lists.members_remove") || !mcpSource.includes('return await removeXListMembersWithReplay') || !mcpSource.includes("x_lists.collect_timeline") || !mcpSource.includes('return await collectBoundXListTimeline') || !mcpSource.includes("x_lists.read_index") || !mcpSource.includes("x_lists.read_detail") || !mcpSource.includes("x_lists.read_members") || !mcpSource.includes("x_lists.read_timeline")) throw new Error('MCP List tool boundary mismatch');
-  const addTool = tools.get('wmb_add_x_list_members');
-  if (!addTool.description.includes('明确 SOP') || !addTool.description.includes('禁止读源码猜用法') || !addTool.parameters.properties.requestId.description || !addTool.parameters.properties.handles.items.description) throw new Error('small-model member-add contract is incomplete');
-  const removeTool = tools.get('wmb_remove_x_list_members');
-  if (!removeTool.description.includes('明确 SOP') || !removeTool.description.includes('禁止读源码猜用法') || !removeTool.parameters.properties.requestId.description || !removeTool.parameters.properties.handles.items.description) throw new Error('small-model member-remove contract is incomplete');
-  if (tools.get('wmb_prepare_x_list_operation').parameters.properties.kind.enum.includes('members_remove')) throw new Error('member removal still exposed through the obsolete prepare path');
+  if (!tools.has('wmb_prepare_x_list_operation') || !tools.has('wmb_create_x_list') || !tools.has('wmb_add_x_list_members') || !tools.has('wmb_remove_x_list_members') || !tools.has('wmb_collect_x_list_timeline') || tools.has('wmb_confirm_x_list_operation') || !tools.has('wmb_read_x_list_index') || !tools.has('wmb_read_x_list_detail') || !tools.has('wmb_read_x_list_members') || !tools.has('wmb_read_x_list_timeline')) throw new Error('Pi List tool boundary mismatch');
+  for (const name of ['wmb_prepare_x_list_operation', 'wmb_create_x_list', 'wmb_add_x_list_members', 'wmb_remove_x_list_members']) {
+    const tool = tools.get(name);
+    if (!tool.description.includes('准备') || !tool.description.includes('Owner') || !tool.description.includes('UI')) throw new Error(`${name} did not expose Owner-confirmed prepare semantics`);
+    for (const authority of ['taskId', 'grantId', 'workerLeaseId']) {
+      if (!tool.parameters.required.includes(authority)) throw new Error(`${name} did not require ${authority}`);
+    }
+  }
+  const kinds = tools.get('wmb_prepare_x_list_operation').parameters.properties.kind.enum;
+  for (const kind of ['create', 'update', 'delete', 'members_add', 'members_remove']) {
+    if (!kinds.includes(kind)) throw new Error(`prepare tool omitted ${kind}`);
+  }
+
+function seedExecutionGrant(database, id) {
+  const now = new Date().toISOString();
+  database.prepare(`INSERT INTO execution_grants
+    (id, workspace_id, runtime_epoch, task_id, task_grant_id, command, input_hash, bound_identity_json,
+     target_actor_type, target_actor_id, browser_profile_id, binding_revision, expected_account, allowed_transition,
+     required_readback_json, status, issued_at, expires_at, revision)
+    VALUES (?, 'test-workspace', 'test-epoch', NULL, NULL, 'x_lists.operation_execute', ?, '{}',
+      'owner_ui', 'renderer', 'profile-x', 1, '@Owner', 'prepared->execution_granted', '{}', 'consumed', ?, ?, 2)`)
+    .run(id, `hash-${id}`, now, new Date(Date.now() + 60_000).toISOString());
+}
+
+function executionAuthority(operation, executionGrantId, overrides = {}) {
+  return {
+    executionGrantId,
+    browserProfileId: 'profile-x',
+    browserBindingRevision: 1,
+    expectedAccount: operation.accountKey,
+    operationInputHash: operation.inputHash,
+    confirmationFingerprint: operation.confirmationFingerprint,
+    snapshotFingerprint: xListSnapshotFingerprint(operation.snapshot),
+    payloadFingerprint: xListPayloadFingerprint(operation.payload),
+    ...overrides
+  };
+}
 } finally {
   await mcp?.close();
   await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

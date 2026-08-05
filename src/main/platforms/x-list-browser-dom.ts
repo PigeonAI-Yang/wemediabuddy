@@ -129,8 +129,8 @@ export async function readListCells(session: XListSession): Promise<XListRef[]> 
 export const createListSelectors = ['a[href="/i/lists/create"]', 'a[href$="/i/lists/create"]', 'button:has-text("New")', 'button:has-text("新建")', 'button[aria-label*="Create"]', 'button[aria-label*="创建"]'];
 export const listNameSelectors = ['input[name="name"]', 'input[aria-label*="List name"]', 'input[aria-label*="列表名称"]', 'input[placeholder*="List name"]', 'input[placeholder*="列表名称"]'];
 export const listDescriptionSelectors = ['textarea[name="description"]', 'textarea[aria-label*="Description"]', 'textarea[aria-label*="描述"]', 'textarea'];
-export const privateListSelectors = ['label:has-text("Make private")', 'label:has-text("设为私密")', '[role="switch"][aria-label*="private"]', '[role="switch"][aria-label*="私密"]'];
-export const confirmCreateSelectors = ['button:has-text("Create")', 'button:has-text("创建")'];
+export const privateListSelectors = ['input[type="checkbox"]', 'label:has-text("Make private")', 'label:has-text("设为私密")', '[role="switch"][aria-label*="private"]', '[role="switch"][aria-label*="私密"]'];
+export const confirmCreateSelectors = ['button:has-text("Next")', 'button:has-text("下一步")', 'button:has-text("Create")', 'button:has-text("创建")'];
 export const listMoreSelectors = ['button[aria-label="More"]', 'button[aria-label="更多"]', 'button[data-testid="caret"]'];
 export const editListSelectors = ['[role="menuitem"]:has-text("Edit List")', '[role="menuitem"]:has-text("编辑列表")', 'a:has-text("Edit List")', 'a:has-text("编辑列表")', 'a[href$="/info"]'];
 export const confirmSaveSelectors = ['button:has-text("Save")', 'button:has-text("保存")'];
@@ -139,6 +139,12 @@ export const confirmDeleteSelectors = ['[role="dialog"] button:has-text("Delete"
 const addMemberSelectors = ['button:has-text("Add members")', 'button:has-text("Add member")', 'button:has-text("添加成员")'];
 const memberSearchSelectors = ['[role="dialog"] input[data-testid="SearchBox_Search_Input"]', '[role="dialog"] input[placeholder*="Search"]', '[role="dialog"] input[placeholder*="搜索"]'];
 const removeMemberSelectors = ['[role="menuitem"]:has-text("Remove")', '[role="menuitem"]:has-text("移除")', 'button:has-text("Remove")', 'button:has-text("移除")'];
+
+export function listDescriptionFromHeaderLines(name: string | null, lines: string[]): string {
+  const nameIndex = name ? lines.indexOf(name) : -1;
+  const afterName = nameIndex >= 0 ? lines.slice(nameIndex + 1) : [];
+  return afterName.length >= 2 && !afterName[1]!.startsWith('@') ? afterName[0]! : '';
+}
 
 export async function detailFromCurrentPage(session: XListSession, listId: string): Promise<XListDetail> {
   const text = await session.visibleText();
@@ -156,6 +162,11 @@ export async function detailFromCurrentPage(session: XListSession, listId: strin
     }
     return null;
   }).catch(() => null);
+  const headerLines = await session.page.locator('main div[dir="ltr"]').evaluateAll((nodes) => nodes
+    .filter((node) => (node as HTMLElement).offsetWidth > 0)
+    .map((node) => (node.textContent ?? '').trim()).filter(Boolean)).catch(() => [] as string[]);
+  const description = listDescriptionFromHeaderLines(nameCandidate, headerLines);
+  const isPrivate = await session.page.locator('main svg[aria-label="Private List"], main svg[aria-label="私密列表"]').first().isVisible().catch(() => false);
   return {
     listId,
     canonicalUrl: xListUrl(listId),
@@ -163,8 +174,8 @@ export async function detailFromCurrentPage(session: XListSession, listId: strin
     ownerHandle: ownerFromLink || firstHandle(text),
     // List detail pages opened from the operator's management page are owned; avoid "成员" text flipping kind.
     kind: 'owned',
-    description: '',
-    isPrivate: /(private|私密)/i.test(text),
+    description,
+    isPrivate,
     memberCount,
     observation: observe(session.page.url(), text)
   };

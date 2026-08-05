@@ -1,0 +1,44 @@
+.today-scout-stage {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.today-scout-mark {
+  position: absolute;
+  left: 8%;
+  bottom: -68px;
+  width: 184px;
+  height: 126px;
+  color: var(--ink);
+  opacity: 0;
+  will-change: left, transform, opacity;
+  animation: today-scout-stage 8.4s cubic-bezier(.25,1,.5,1) infinite;
+}
+.today-command[data-mode="running"] .today-command-run,
+.today-command[data-mode="running"] .today-command-actions {
+  position: relative;
+  z-index: 1;
+}
+@keyframes today-scout-stage {
+  0%,7% { left:var(--today-scout-left-x,12%); opacity:0; transform:translate(-50%,115%); }
+  12% { left:var(--today-scout-left-x,12%); opacity:1; transform:translate(-50%,62%); }
+  20%,34% { left:var(--today-scout-left-x,12%); opacity:1; transform:translate(-50%,-10%); }
+  42% { left:var(--today-scout-left-x,12%); opacity:1; transform:translate(-50%,70%); }
+  48% { left:var(--today-scout-left-x,12%); opacity:0; transform:translate(-50%,115%); }
+  55% { left:var(--today-scout-right-x,48%); opacity:0; transform:translate(-50%,115%); }
+  60% { left:var(--today-scout-right-x,48%); opacity:1; transform:translate(-50%,62%); }
+  68%,82% { left:var(--today-scout-right-x,48%); opacity:1; transform:translate(-50%,-10%); }
+  90% { left:var(--today-scout-right-x,48%); opacity:1; transform:translate(-50%,70%); }
+  96% { left:var(--today-scout-right-x,48%); opacity:0; transform:translate(-50%,115%); }
+  100% { left:var(--today-scout-left-x,12%); opacity:0; transform:translate(-50%,115%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-scout-mark {
+    left: var(--today-scout-right-x,48%);
+    opacity: 1;
+    transform: translate(-50%,35%);
+    animation: none;
+  }
+}

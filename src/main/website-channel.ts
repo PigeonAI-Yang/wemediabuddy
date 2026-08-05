@@ -32,10 +32,8 @@ export type WebsiteScanResult = {
   sourceIds: string[];
 };
 
-type WebsitePage = {
-  body: string | null;
-  trialRead: WebsiteTrialRead;
-};
+export type WebsiteSourceScanRead = { original: WebsiteSource; checkedAt: string; page: { body: string | null; trialRead: WebsiteTrialRead } };
+type WebsitePage = WebsiteSourceScanRead['page'];
 
 type WebsiteChannelError = Error & { code: string };
 
@@ -119,40 +117,34 @@ export function confirmWebsiteSource(database: DatabaseSync, input: {
   });
 }
 
-export async function scanWebsiteSource(database: DatabaseSync, input: {
-  taskId: string;
-  workspaceId: string;
-  sourceId: string;
-  fetchImpl?: typeof fetch;
-}): Promise<WebsiteScanResult> {
+export type ScanWebsiteSourceInput = { taskId: string; workspaceId: string; sourceId: string; fetchImpl?: typeof fetch };
+
+export async function readWebsiteSourceScan(database: DatabaseSync, input: ScanWebsiteSourceInput): Promise<WebsiteSourceScanRead> {
   assertWorkspace(database, input.workspaceId);
   const original = getWebsiteSource(database, input.sourceId);
   if (!original) throw websiteError('WEBSITE_SOURCE_NOT_FOUND', '官网来源不存在。');
   if (!original.enabled) throw websiteError('WEBSITE_SOURCE_DISABLED', '官网来源已停用。');
-
   const checkedAt = new Date().toISOString();
   const page = await readWebsitePage(original.trialRead.requestedUrl ?? original.canonicalUrl, input.fetchImpl ?? globalThis.fetch);
-  const current = assertUnchangedEnabledSource(database, original);
+  return { original, checkedAt, page };
+}
+
+export function persistWebsiteSourceScan(database: DatabaseSync, input: ScanWebsiteSourceInput, read: WebsiteSourceScanRead): WebsiteScanResult {
+  assertWorkspace(database, input.workspaceId);
+  if (read.original.id !== input.sourceId) throw websiteError('WEBSITE_SOURCE_STALE', '官网来源身份已变化。');
+  const current = assertUnchangedEnabledSource(database, read.original);
+  const { checkedAt, page } = read;
   if (!page.trialRead.readable) {
     const needsUser = page.trialRead.errorCode === 'WEBSITE_NEEDS_USER';
     const source = updateWebsiteSourceResolution(database, {
-      id: current.id,
-      resolutionStatus: needsUser ? 'needs_user' : 'failed',
-      trialRead: page.trialRead,
-      errorCode: page.trialRead.errorCode ?? 'WEBSITE_TRIAL_FAILED',
-      errorMessage: page.trialRead.errorMessage ?? '网站试读失败。',
+      id: current.id, resolutionStatus: needsUser ? 'needs_user' : 'failed', trialRead: page.trialRead,
+      errorCode: page.trialRead.errorCode ?? 'WEBSITE_TRIAL_FAILED', errorMessage: page.trialRead.errorMessage ?? '网站试读失败。',
       expectedRevision: current.revision
     });
     const receipt = recordSourceScanReceipt(database, {
-      taskId: input.taskId,
-      workspaceId: input.workspaceId,
-      module: 'official_web',
-      sourceId: source.id,
-      sourceFeedId: source.sourceFeedId,
-      checkedAt,
-      status: needsUser ? 'needs_user' : 'failed',
-      errorCode: source.lastErrorCode,
-      errorMessage: source.lastErrorMessage
+      taskId: input.taskId, workspaceId: input.workspaceId, module: 'official_web', sourceId: source.id,
+      sourceFeedId: source.sourceFeedId, checkedAt, status: needsUser ? 'needs_user' : 'failed',
+      errorCode: source.lastErrorCode, errorMessage: source.lastErrorMessage
     });
     return { source, receipt, sourceIds: [] };
   }
@@ -208,6 +200,10 @@ export async function scanWebsiteSource(database: DatabaseSync, input: {
   } catch (error) {
     return recordScanFailure(database, input, current, checkedAt, page.trialRead, error, items.length, sourceIds);
   }
+}
+
+export async function scanWebsiteSource(database: DatabaseSync, input: ScanWebsiteSourceInput): Promise<WebsiteScanResult> {
+  return persistWebsiteSourceScan(database, input, await readWebsiteSourceScan(database, input));
 }
 
 function directCandidateUrl(inputText: string): string | null {

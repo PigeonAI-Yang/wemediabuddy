@@ -1,6 +1,34 @@
-import type { ContentProjectDetail } from '../main/content';
+import type { ContentProjectDetail, ContentProjectStatus, ContentProjectStatusSummary, ContentProjectSummary } from '../main/content';
 import { PlatformMark } from './platform-mark';
 import { formatTime, platformNames, statuses } from './studio-view-helpers';
+
+export function StudioLibraryHeader({ summary, projects, hasMore, status, archived, setStatus, setArchived, onCreate }: {
+  summary: ContentProjectStatusSummary | null; projects: ContentProjectSummary[]; hasMore: boolean;
+  status?: ContentProjectStatus; archived: boolean; setStatus: (value?: ContentProjectStatus) => void;
+  setArchived: (value: boolean) => void; onCreate: () => void;
+}): React.JSX.Element {
+  const actionLine = (() => {
+    if (!summary) return '管理长期选题、稿件版本和平台内容。';
+    if (summary.total === 0) return summary.archived > 0
+      ? `进行中的项目已清空，${summary.archived} 个已归档项目可以恢复。`
+      : '还没有创作项目，从「新建创作项目」开始。';
+    const attention = [
+      summary.byStatus.review ? `${summary.byStatus.review} 个待审` : '',
+      summary.byStatus.ready ? `${summary.byStatus.ready} 个待发布` : '',
+      summary.byStatus.drafting ? `${summary.byStatus.drafting} 个创作中` : ''
+    ].filter(Boolean);
+    const activity = summary.updatedWithin7Days ? `本周更新 ${summary.updatedWithin7Days} 个` : '';
+    return [[attention.length ? attention.join(' · ') : `${summary.total} 个项目`, activity].filter(Boolean).join('，'), '。'].join('');
+  })();
+  return <><header className="studio-library-heading">
+    <div><h1>创作项目</h1><p>{actionLine}</p></div>
+    <button className="primary-button" onClick={onCreate}>新建创作项目</button>
+  </header><nav className="studio-library-summary" aria-label="项目状态">
+    <button className={!status && !archived ? 'active' : ''} onClick={() => { setStatus(undefined); setArchived(false); }}><strong>{summary ? summary.total : `${projects.length}${hasMore ? '+' : ''}`}</strong><span>全部项目</span></button>
+    {statuses.filter((item) => item.value !== 'idea').map((item) => <button key={item.value} className={status === item.value && !archived ? 'active' : ''} onClick={() => { setStatus(item.value); setArchived(false); }}><strong>{summary ? summary.byStatus[item.value] : `${projects.filter((project) => project.status === item.value).length}${hasMore ? '+' : ''}`}</strong><span>{item.label}</span></button>)}
+    <button className={archived ? 'active' : ''} onClick={() => { setStatus(undefined); setArchived(true); }}><strong>{summary ? summary.archived : archived ? projects.length : '—'}</strong><span>已归档</span></button>
+  </nav></>;
+}
 
 export function StudioEditorTop({ selected, dirty, latestCreatedAt, onBack, toggleContext, preview, setPreview, viewedVersion, editorMode, setEditorMode, busy, save }: {
   selected: ContentProjectDetail | null; dirty: boolean; latestCreatedAt?: string; onBack: () => void; toggleContext: () => void;
@@ -33,10 +61,36 @@ export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdow
   insertMarkdown: (value: string) => void; insertImageFile: (file?: File) => Promise<void>; toggleFind: () => void;
 }): React.JSX.Element {
   return <div className="studio-formatbar" role="toolbar" aria-label="正文格式" onMouseDown={(event) => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); }}>
-    <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}><option value="p">正文</option><option value="h2">二级标题</option><option value="h3">三级标题</option><option value="blockquote">引用</option></select>
-    <span className="studio-divider"/><button type="button" title="粗体" onClick={() => execRich('bold')}><strong>B</strong></button><button type="button" title="斜体" onClick={() => execRich('italic')}><em>I</em></button><button type="button" title="删除线" onClick={() => formatSelection('~~')}>S</button><button type="button" title="行内代码" onClick={() => formatSelection('`')}>{'<>'}</button>
-    <span className="studio-divider"/><button type="button" onClick={() => execRich('insertUnorderedList')}>• 列表</button><button type="button" onClick={() => execRich('insertOrderedList')}>1. 列表</button><button type="button" onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button><button type="button" onClick={() => insertMarkdown('\n```\n代码\n```\n')}>代码块</button><button type="button" onClick={() => insertMarkdown('\n| 列1 | 列2 |\n| --- | --- |\n| A | B |\n')}>表格</button><button type="button" onClick={() => insertMarkdown('\n---\n')}>分割线</button><button type="button" disabled={busy} onClick={() => void insertImageFile()}>图片</button><button type="button" onClick={() => execRich('removeFormat')}>清除</button>
-    <span className="studio-divider"/><button type="button" onClick={() => execRich('undo')}>↶</button><button type="button" onClick={() => execRich('redo')}>↷</button><button type="button" onClick={toggleFind}>查找替换</button>
+    <span className="studio-formatbar-group" role="group" aria-label="段落">
+      <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}><option value="p">正文</option><option value="h2">二级标题</option><option value="h3">三级标题</option><option value="blockquote">引用</option></select>
+    </span>
+    <span className="studio-divider"/>
+    <span className="studio-formatbar-group" role="group" aria-label="行内格式">
+      <button type="button" title="粗体" aria-label="粗体" onClick={() => execRich('bold')}><strong>B</strong></button>
+      <button type="button" title="斜体" aria-label="斜体" onClick={() => execRich('italic')}><em>I</em></button>
+      <button type="button" title="删除线" aria-label="删除线" onClick={() => formatSelection('~~')}>S</button>
+      <button type="button" title="行内代码" aria-label="行内代码" onClick={() => formatSelection('`')}>{'<>'}</button>
+    </span>
+    <span className="studio-divider"/>
+    <span className="studio-formatbar-group" role="group" aria-label="列表">
+      <button type="button" title="无序列表" onClick={() => execRich('insertUnorderedList')}>• 列表</button>
+      <button type="button" title="有序列表" onClick={() => execRich('insertOrderedList')}>1. 列表</button>
+    </span>
+    <span className="studio-divider"/>
+    <span className="studio-formatbar-group" role="group" aria-label="插入">
+      <button type="button" title="插入链接" onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button>
+      <button type="button" title="插入代码块" onClick={() => insertMarkdown('\n```\n代码\n```\n')}>代码块</button>
+      <button type="button" title="插入表格" onClick={() => insertMarkdown('\n| 列1 | 列2 |\n| --- | --- |\n| A | B |\n')}>表格</button>
+      <button type="button" title="插入分割线" onClick={() => insertMarkdown('\n---\n')}>分割线</button>
+      <button type="button" title="插入图片" disabled={busy} onClick={() => void insertImageFile()}>图片</button>
+    </span>
+    <span className="studio-divider"/>
+    <span className="studio-formatbar-group" role="group" aria-label="编辑">
+      <button type="button" title="清除格式" onClick={() => execRich('removeFormat')}>清除</button>
+      <button type="button" title="撤销" aria-label="撤销" onClick={() => execRich('undo')}>↶</button>
+      <button type="button" title="重做" aria-label="重做" onClick={() => execRich('redo')}>↷</button>
+      <button type="button" title="查找替换" onClick={toggleFind}>查找替换</button>
+    </span>
   </div>;
 }
 

@@ -1,8 +1,8 @@
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import type { DataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
-import { ensurePyaireaderXBrowser } from './browser.ts';
-import { readBrowserConfig } from './browser-config.ts';
+import { startVerifiedBoundBrowser } from './bound-browser.ts';
 import { readXListIndex } from './platforms/x-list-browser.ts';
 import type { XListBrowserConfig } from './platforms/x-list-primitives.ts';
 
@@ -28,9 +28,7 @@ export async function currentXListContextForRoot(root: DataRoot): Promise<Curren
   return { root, workspaceId: workspaceId!, browserId: config!.id, accountKey: index.accountKey, config: { ...config!, workspaceId, accountKey: index.accountKey }, index };
 }
 
-export async function selectedXListBrowser(_database: ReturnType<typeof migrateDatabase>): Promise<XListBrowserConfig> {
-  const config = readBrowserConfig();
-  if (!config) throw new Error('请先在设置中启用 WMB 共享的 X 登录态。');
-  const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
-  return { id: config.id, cdpUrl: runtime.cdpUrl };
+export async function selectedXListBrowser(database: DatabaseSync): Promise<XListBrowserConfig> {
+  const resolved = await startVerifiedBoundBrowser(database, 'x', { mode: 'quiet' });
+  return { id: resolved.profile.id, cdpUrl: resolved.runtime.cdpUrl };
 }

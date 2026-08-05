@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "wmb.unified-write-routing-evidence.v1",
+  "taskId": "WMB-4807",
+  "specIds": ["CAP-002", "CAP-003", "CAP-004", "CAP-005", "CAP-011", "CAP-012", "CAP-025", "AC-023"],
+  "status": "pass",
+  "terminals": [
+    "src/main/business-command.ts:59",
+    "src/main/source-commands.ts:38",
+    "src/main/intelligence-channel-command.ts:89",
+    "src/main/x-list-command.ts:98"
+  ],
+  "routeFamilies": {
+    "agentTasks": [
+      "agent_tasks.start", "agent_tasks.update_phase", "agent_tasks.report_progress", "agent_tasks.request_control",
+      "agent_tasks.cancel", "agent_tasks.fail", "agent_tasks.needs_user", "agent_tasks.partial",
+      "agent_tasks.finish_daily", "agent_tasks.complete", "agent_tasks.recover_interrupted"
+    ],
+    "sourcesAndRankings": [
+      "sources.upsert_batch", "knowledge:update-source", "knowledge:delete-source", "knowledge:mark-watching",
+      "sources:fetch-body", "rankings:github-ai"
+    ],
+    "plansContentAndStudio": [
+      "plans.save", "content.create", "content.save_version", "studio:update-project", "studio:delete-project",
+      "studio:copy-version", "studio:import-image"
+    ],
+    "knowledge": [
+      "knowledge.domain_create", "knowledge.domain_update", "knowledge-canvas:create", "knowledge-canvas:update",
+      "knowledge-canvas:add-node", "knowledge-canvas:move-nodes", "knowledge-canvas:remove-node",
+      "knowledge-canvas:create-relation", "knowledge-canvas:update-relation", "knowledge.suggestion_create",
+      "knowledge.suggestion_decide", "knowledge.creative_brief_create", "knowledge.creative_brief_update",
+      "knowledge.creative_brief_create_project", "knowledge.record_batch"
+    ],
+    "reviewsAndMetrics": [
+      "reviews.save", "metrics.publication.schedule", "metrics.job.recover", "metrics.job.claim",
+      "metrics.job.complete", "metrics.job.fail", "metrics.publication.snapshot.save", "metrics.account.snapshot.save"
+    ],
+    "intelligenceChannels": [
+      "intelligence_channels.scan", "intelligence_channels.website_scan", "intelligence_channels.scan_failed",
+      "intelligence_channels.x_scan_failed", "intelligence_channels.x_scan_commit", "intelligence_channels.proposal_apply"
+    ],
+    "xLists": [
+      "x_lists.index_cache_persist", "x_lists.timeline_cache_persist", "x_lists.timeline_cache_read",
+      "x_lists.timeline_cache_clear", "x_lists.post_cache_read", "x_lists.post_cache_persist",
+      "x_lists.operation_prepare", "x_lists.operation_arm", "x_lists.operation_stop", "x_lists.operation_recover",
+      "x_lists.operation_execute", "x_lists.binding_bind", "x_lists.binding_set_enabled", "x_lists.timeline_collect",
+      "x_lists.observation_start", "x_lists.observation_stop"
+    ],
+    "xObservation": [
+      "x_observation.schedule", "x_observation.jobs_recover", "x_observation.job_claim",
+      "x_observation.job_finish", "x_observation.capture_commit"
+    ]
+  },
+  "writeGuard": {
+    "policy": "Runtime write guard denies direct active-root SQLite DML, DDL, and transaction escape outside CommandDispatcher ownership.",
+    "bypassResult": "denied"
+  },
+  "deferredToWmb4808": [
+    "Browser and publication side effects in src/main/ipc-publishing-results.ts",
+    "Pre-runtime publication recovery in src/main/data-root-selection.ts"
+  ],
+  "verification": [
+    {
+      "command": "node --test tests/write-guard.test.mjs",
+      "result": "pass",
+      "tests": 1,
+      "failed": 0
+    },
+    {
+      "command": "13-file focused regression",
+      "result": "pass",
+      "tests": 37,
+      "failed": 0
+    },
+    {
+      "command": "npm test",
+      "result": "pass",
+      "tests": 251,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "result": "pass",
+      "note": "Prior verification receipt."
+    }
+  ],
+  "independentReview": {
+    "reviewer": "Wmb4807McpCore",
+    "result": "PASS",
+    "conclusion": "Read-only MCP/UI/scheduler source review found no in-scope blocker; representative canonical business routes reach dispatchBusinessCommand/dispatchCommand, TaskGrant IDs align, and the runtime write guard blocks bypass. Browser/publication side effects remain an explicit WMB-4808 follow-up."
+  },
+  "piOperatorSkillImpact": {
+    "decision": "updated",
+    "note": "The operator contract now requires runtime-bound request/task/grant/receipt authority and exactly prohibits direct SQLite or data-root file writes; no new tool surface was added."
+  }
+}

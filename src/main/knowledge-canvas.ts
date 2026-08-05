@@ -93,9 +93,9 @@ export function addKnowledgeCanvasNode(database: DatabaseSync, input: {
   return (getKnowledgeCanvas(database, input.canvasId) as any).nodes.find((node: any) => node.id === id);
 }
 
-export function moveKnowledgeCanvasNodes(database: DatabaseSync, input: { canvasId: string; nodes: Array<{ id: string; x: number; y: number; expectedRevision: number }> }) {
+export function moveKnowledgeCanvasNodes(database: DatabaseSync, input: { canvasId: string; nodes: Array<{ id: string; x: number; y: number; expectedRevision: number }> }, transaction = true) {
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     for (const item of input.nodes) {
       const row = database.prepare('SELECT revision FROM knowledge_canvas_nodes WHERE id=? AND canvas_id=?').get(item.id,input.canvasId) as { revision: number } | undefined;
@@ -103,8 +103,8 @@ export function moveKnowledgeCanvasNodes(database: DatabaseSync, input: { canvas
       assertRevision(row.revision,item.expectedRevision);
       database.prepare('UPDATE knowledge_canvas_nodes SET x=?,y=?,updated_at=?,revision=revision+1 WHERE id=?').run(item.x,item.y,now,item.id);
     }
-    database.exec('COMMIT');
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
+    if (transaction) database.exec('COMMIT');
+  } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
   return getKnowledgeCanvas(database,input.canvasId);
 }
 
@@ -185,48 +185,33 @@ function validateKnowledgeSuggestion(database:DatabaseSync,input:{canvasId:strin
   return {fromNodeId:payload.fromNodeId,toNodeId:payload.toNodeId,relationType:payload.relationType,label:payload.label?.trim()||undefined};
 }
 
-export function createKnowledgeSuggestionIdempotent(database:DatabaseSync,input:{requestId:string;canvasId:string;kind:'node'|'relation';payload:any}){
-  const tool='knowledge.suggestion_create';
-  const prior=database.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,input.requestId) as {resultJson:string}|undefined;
-  if(prior)return {...JSON.parse(prior.resultJson),replayed:true};
+export function createKnowledgeSuggestion(database:DatabaseSync,input:{requestId:string;canvasId:string;kind:'node'|'relation';payload:any}){
   const payload=validateKnowledgeSuggestion(database,input),id=randomUUID(),now=new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try{
-    database.prepare(`INSERT INTO knowledge_suggestions(id,request_id,canvas_id,kind,payload_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`)
-      .run(id,input.requestId,input.canvasId,input.kind,JSON.stringify(payload),now,now);
-    const data={id,canvasId:input.canvasId,kind:input.kind,payload,state:'suggested',createdAt:now,revision:1};
-    const result={ok:true,data,error:null};
-    database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,input.requestId,JSON.stringify(result),now);
-    database.exec('COMMIT');return {...result,replayed:false};
-  }catch(error){database.exec('ROLLBACK');throw error;}
+  database.prepare(`INSERT INTO knowledge_suggestions(id,request_id,canvas_id,kind,payload_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`)
+    .run(id,input.requestId,input.canvasId,input.kind,JSON.stringify(payload),now,now);
+  return {id,canvasId:input.canvasId,kind:input.kind,payload,state:'suggested',createdAt:now,revision:1};
 }
 
-export function decideKnowledgeSuggestionIdempotent(database:DatabaseSync,input:{requestId:string;id:string;expectedRevision:number;decision:'confirm'|'reject'}){
-  const tool='knowledge.suggestion_decide';
-  const prior=database.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,input.requestId) as {resultJson:string}|undefined;
-  if(prior)return {...JSON.parse(prior.resultJson),replayed:true};
+
+export function decideKnowledgeSuggestion(database:DatabaseSync,input:{id:string;expectedRevision:number;decision:'confirm'|'reject'}){
   const row=database.prepare(`SELECT id,canvas_id AS canvasId,kind,payload_json AS payloadJson,state,revision FROM knowledge_suggestions WHERE id=?`).get(input.id) as any;
   if(!row)throw new Error('SUGGESTION_NOT_FOUND');
   assertRevision(row.revision,input.expectedRevision);
   if(row.state!=='suggested')throw new Error('SUGGESTION_ALREADY_DECIDED');
   const payload=JSON.parse(row.payloadJson),now=new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try{
-    let created=null;
-    if(input.decision==='confirm'){
-      if(row.kind==='node'){
-        const node=addKnowledgeCanvasNode(database,{canvasId:row.canvasId,...payload});
-        const relations=(payload.returnFromNodeIds??[]).map((fromNodeId:string)=>createKnowledgeRelation(database,{canvasId:row.canvasId,fromNodeId,toNodeId:node.id,relationType:payload.returnRelationType}));
-        created=relations.length?{node,relations}:node;
-      }else created=createKnowledgeRelation(database,{canvasId:row.canvasId,...payload});
-    }
-    const state=input.decision==='confirm'?'confirmed':'rejected';
-    database.prepare(`UPDATE knowledge_suggestions SET state=?,decided_at=?,updated_at=?,revision=revision+1 WHERE id=?`).run(state,now,now,row.id);
-    const result={ok:true,data:{id:row.id,state,revision:row.revision+1,created},error:null};
-    database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,input.requestId,JSON.stringify(result),now);
-    database.exec('COMMIT');return {...result,replayed:false};
-  }catch(error){database.exec('ROLLBACK');throw error;}
+  let created=null;
+  if(input.decision==='confirm'){
+    if(row.kind==='node'){
+      const node=addKnowledgeCanvasNode(database,{canvasId:row.canvasId,...payload});
+      const relations=(payload.returnFromNodeIds??[]).map((fromNodeId:string)=>createKnowledgeRelation(database,{canvasId:row.canvasId,fromNodeId,toNodeId:node.id,relationType:payload.returnRelationType}));
+      created=relations.length?{node,relations}:node;
+    }else created=createKnowledgeRelation(database,{canvasId:row.canvasId,...payload});
+  }
+  const state=input.decision==='confirm'?'confirmed':'rejected';
+  database.prepare(`UPDATE knowledge_suggestions SET state=?,decided_at=?,updated_at=?,revision=revision+1 WHERE id=?`).run(state,now,now,row.id);
+  return {id:row.id,state,revision:row.revision+1,created};
 }
+
 
 export const KNOWLEDGE_PACKAGE_CHARACTER_LIMIT=30000;
 
@@ -413,45 +398,31 @@ function validateCreativeBriefFields(input:{title:string;coreJudgment:string;why
   return {title,coreJudgment,whyNow,structure,evidenceNodeIds};
 }
 
-export function createCreativeBriefIdempotent(database:DatabaseSync,input:{
-  requestId:string;canvasId:string;nodeIds:string[];selectionMode:'current_page'|'selected';title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[];
+export function createCreativeBrief(database:DatabaseSync,input:{
+  canvasId:string;nodeIds:string[];selectionMode:'current_page'|'selected';title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[];
 }){
-  const tool='knowledge.creative_brief_create';
-  const prior=database.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,input.requestId) as {resultJson:string}|undefined;
-  if(prior)return {...JSON.parse(prior.resultJson),replayed:true};
   const context=previewKnowledgeContextPackage(database,{canvasId:input.canvasId,nodeIds:input.nodeIds});
   if(context.overLimit)throw new Error('CONTEXT_TOO_LARGE');
   const contextNodeIds=context.items.map((item:any)=>item.nodeId).sort();
   const value=validateCreativeBriefFields(input,new Set(contextNodeIds)),id=randomUUID(),now=new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try{
-    database.prepare(`INSERT INTO creative_briefs(id,canvas_id,selection_mode,context_node_ids_json,title,core_judgment,why_now,structure_json,evidence_node_ids_json,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id,input.canvasId,input.selectionMode,JSON.stringify(contextNodeIds),value.title,value.coreJudgment,value.whyNow,JSON.stringify(value.structure),JSON.stringify(value.evidenceNodeIds),now,now);
-    const data=getCreativeBrief(database,id),result={ok:true,data,error:null};
-    database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,input.requestId,JSON.stringify(result),now);
-    database.exec('COMMIT');return {...result,replayed:false};
-  }catch(error){database.exec('ROLLBACK');throw error;}
+  database.prepare(`INSERT INTO creative_briefs(id,canvas_id,selection_mode,context_node_ids_json,title,core_judgment,why_now,structure_json,evidence_node_ids_json,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id,input.canvasId,input.selectionMode,JSON.stringify(contextNodeIds),value.title,value.coreJudgment,value.whyNow,JSON.stringify(value.structure),JSON.stringify(value.evidenceNodeIds),now,now);
+  return getCreativeBrief(database,id);
 }
 
-export function updateCreativeBriefIdempotent(database:DatabaseSync,input:{
-  requestId:string;id:string;expectedRevision:number;title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[];status?:'draft'|'confirmed';
+
+export function updateCreativeBrief(database:DatabaseSync,input:{
+  id:string;expectedRevision:number;title:string;coreJudgment:string;whyNow:string;structure:string[];evidenceNodeIds:string[];status?:'draft'|'confirmed';
 }){
-  const tool='knowledge.creative_brief_update';
-  const prior=database.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,input.requestId) as {resultJson:string}|undefined;
-  if(prior)return {...JSON.parse(prior.resultJson),replayed:true};
   const current=database.prepare('SELECT context_node_ids_json AS contextNodeIdsJson,revision FROM creative_briefs WHERE id=?').get(input.id) as any;
   if(!current)throw new Error('BRIEF_NOT_FOUND');
   assertRevision(current.revision,input.expectedRevision);
   const value=validateCreativeBriefFields(input,new Set(JSON.parse(current.contextNodeIdsJson))),now=new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try{
-    database.prepare(`UPDATE creative_briefs SET title=?,core_judgment=?,why_now=?,structure_json=?,evidence_node_ids_json=?,status=?,updated_at=?,revision=revision+1 WHERE id=?`)
-      .run(value.title,value.coreJudgment,value.whyNow,JSON.stringify(value.structure),JSON.stringify(value.evidenceNodeIds),input.status??'draft',now,input.id);
-    const data=getCreativeBrief(database,input.id),result={ok:true,data,error:null};
-    database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,input.requestId,JSON.stringify(result),now);
-    database.exec('COMMIT');return {...result,replayed:false};
-  }catch(error){database.exec('ROLLBACK');throw error;}
+  database.prepare(`UPDATE creative_briefs SET title=?,core_judgment=?,why_now=?,structure_json=?,evidence_node_ids_json=?,status=?,updated_at=?,revision=revision+1 WHERE id=?`)
+    .run(value.title,value.coreJudgment,value.whyNow,JSON.stringify(value.structure),JSON.stringify(value.evidenceNodeIds),input.status??'draft',now,input.id);
+  return getCreativeBrief(database,input.id);
 }
+
 
 export function getCreativeBriefLineage(database:DatabaseSync,briefId:string){
   const brief=getCreativeBrief(database,briefId);
@@ -471,28 +442,20 @@ export function getCreativeBriefLineage(database:DatabaseSync,briefId:string){
   return {brief,link:link??null,project,publications,metrics,reviews,findings};
 }
 
-export function createContentProjectFromBriefIdempotent(database:DatabaseSync,input:{requestId:string;briefId:string;expectedRevision:number}){
-  const tool='knowledge.creative_brief_create_project';
-  const prior=database.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,input.requestId) as {resultJson:string}|undefined;
-  if(prior)return {...JSON.parse(prior.resultJson),replayed:true};
+export function createContentProjectFromBrief(database:DatabaseSync,input:{briefId:string;expectedRevision:number}){
   const brief=getCreativeBrief(database,input.briefId);
   if(!brief)throw new Error('BRIEF_NOT_FOUND');
   assertRevision(brief.revision,input.expectedRevision);
   if(brief.status!=='confirmed')throw new Error('BRIEF_NOT_CONFIRMED');
   const existing=database.prepare('SELECT project_id AS projectId FROM creative_brief_projects WHERE brief_id=?').get(input.briefId) as {projectId:string}|undefined;
-  if(existing)return {ok:true,data:getCreativeBriefLineage(database,input.briefId),error:null,replayed:true};
+  if(existing)return getCreativeBriefLineage(database,input.briefId);
   const nodeIds=brief.contextNodeIds as string[],placeholders=nodeIds.map(()=>'?').join(',');
   const refs=nodeIds.length?database.prepare(`SELECT object_type AS objectType,object_id AS objectId FROM knowledge_canvas_nodes WHERE id IN (${placeholders})`).all(...nodeIds) as any[]:[];
   const sourceIds=refs.filter(item=>item.objectType==='source'&&item.objectId).map(item=>item.objectId);
   const topicId=refs.find(item=>item.objectType==='topic'&&item.objectId)?.objectId;
   const body=`# ${brief.title}\n\n${brief.coreJudgment}\n\n## 为什么现在\n\n${brief.whyNow}\n\n## 内容结构\n\n${brief.structure.map((item:string,index:number)=>`${index+1}. ${item}`).join('\n')}`;
   const now=new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try{
-    const project=createContentProjectWithVersion(database,{title:brief.title,body,sourceIds,topicId},false);
-    database.prepare('INSERT INTO creative_brief_projects(brief_id,project_id,created_at) VALUES(?,?,?)').run(brief.id,project.id,now);
-    const data=getCreativeBriefLineage(database,brief.id),result={ok:true,data,error:null};
-    database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,input.requestId,JSON.stringify(result),now);
-    database.exec('COMMIT');return {...result,replayed:false};
-  }catch(error){database.exec('ROLLBACK');throw error;}
+  const project=createContentProjectWithVersion(database,{title:brief.title,body,sourceIds,topicId},false);
+  database.prepare('INSERT INTO creative_brief_projects(brief_id,project_id,created_at) VALUES(?,?,?)').run(brief.id,project.id,now);
+  return getCreativeBriefLineage(database,brief.id);
 }

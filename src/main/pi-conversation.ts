@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installPiOperatorSkill, installPiWorkspaceLaneSkill } from './pi-operator-skill.ts';
 import type { PiMessageSegment } from '../shared/pi-message.ts';
@@ -217,15 +218,6 @@ async function writeConversationFile(dataRootPath: string, snapshot: PiConversat
     messages: snapshot.messages.map((message) => normalizeMessage(message, snapshot.updatedAt))
   };
   await writeFile(conversationFilePath(dataRootPath, normalized.id), JSON.stringify(normalized, null, 2), 'utf8');
-  // Keep legacy active pointer for older readers / diagnostics.
-  await writeFile(legacyConversationPath(dataRootPath), JSON.stringify({
-    id: normalized.id,
-    title: normalized.title,
-    sessionFile: normalized.sessionFile,
-    sessionId: normalized.sessionId,
-    messages: normalized.messages,
-    updatedAt: normalized.updatedAt
-  }, null, 2), 'utf8');
   return normalized;
 }
 
@@ -267,8 +259,13 @@ async function migrateLegacyConversation(dataRootPath: string): Promise<PiConver
     const id = typeof raw.id === 'string' && raw.id ? raw.id : randomUUID();
     const legacySession = typeof raw.sessionFile === 'string' ? raw.sessionFile : sessionFilePath(dataRootPath);
     const targetSession = sessionFilePath(dataRootPath, id);
-    if (legacySession !== targetSession && await pathExists(legacySession)) {
-      try { await rename(legacySession, targetSession); } catch { /* keep target if rename fails */ }
+    if (legacySession !== targetSession && await pathExists(legacySession) && !(await pathExists(targetSession))) {
+      await mkdir(path.dirname(targetSession), { recursive: true });
+      try {
+        await copyFile(legacySession, targetSession, fsConstants.COPYFILE_EXCL);
+      } catch (error) {
+        if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'EEXIST') throw error;
+      }
     }
     if (!(await pathExists(targetSession))) await writeFile(targetSession, '', 'utf8');
     const snapshot: PiConversationSnapshot = {
@@ -431,8 +428,6 @@ export async function switchPiConversation(dataRootPath: string, conversationId:
   const target = await readConversationFile(dataRootPath, conversationId);
   if (!target) throw new Error('会话不存在。');
   await writeIndex(dataRootPath, { ...index, activeId: target.id });
-  // Refresh legacy active pointer.
-  await writeConversationFile(dataRootPath, target);
   await upsertIndexEntry(dataRootPath, target, true);
   return target;
 }

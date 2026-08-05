@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "wmb.browser-publication-evidence.v1",
+  "taskId": "WMB-4808",
+  "specIds": ["CAP-006", "CAP-007", "CAP-008", "CAP-009", "CAP-010", "CAP-017", "CAP-025", "AC-023", "EVAL-029"],
+  "status": "pass",
+  "delivered": {
+    "xListBrowserOperations": "Precise execution grants bind immutable operation input, workspace/runtime, profile binding, expected account, object revisions, allowed transition, and required readback; each external step follows a committed operation state and uncertain outcomes do not retry.",
+    "publication": "Immutable publication snapshots bind content/assets/account/profile/revisions/input hash; editor preparation requires an exact one-use grant and records committed browser operation states separately from publication state.",
+    "reconciliation": "Restart recovery preserves succeeded operations and moves interrupted execution to truthful needs_user/unknown outcomes without a second platform action.",
+    "finalPublication": "No WMB route clicks a platform final-publish control; publication remains a manual user action with stable readback.",
+    "browserIdentity": "Editor execution rejects mismatched profile ID, binding profile/revision, or account before browser ownership or adapter invocation.",
+    "runtimeLease": "Publication/account/due metric browser calls run through ActiveWorkspaceRuntime.runExternalBrowserWork using the lease returned by setBrowser."
+  },
+  "evidencePaths": [
+    "src/main/publication-operations.ts",
+    "src/main/publication-commands.ts",
+    "src/main/ipc-publishing-results.ts",
+    "src/main/x-list-execution.ts",
+    "tests/publishing-orchestration-child.mjs",
+    "skills/wemedia-buddy-operator/SKILL.md"
+  ],
+  "verification": [
+    {
+      "command": "node --test tests/publishing.test.mjs tests/metrics-jobs.test.mjs tests/account-metrics.test.mjs tests/x-metrics.test.mjs",
+      "result": "pass",
+      "tests": 11,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "result": "pass",
+      "diagnostics": 0
+    },
+    {
+      "command": "npm test",
+      "result": "pass",
+      "tests": 252,
+      "failed": 0,
+      "note": "Full shared-business suite receipt before the final two reviewer fixes; the final changed paths are covered by the focused 11-test receipt and typecheck above."
+    },
+    {
+      "command": "node --test tests/pi-operator-skill.test.mjs tests/pi-operator-install.test.mjs",
+      "result": "pass",
+      "tests": 5,
+      "failed": 0
+    }
+  ],
+  "independentReview": {
+    "reviewer": "ReviewWmb4808FixesFallback",
+    "result": "PASS",
+    "conclusion": "Exact immutable-snapshot profile, binding and account checks precede editor execution; browser metric work owns the runtime lease; replay, grant, operation/reconciliation and manual-final-publication invariants remain intact."
+  },
+  "piOperatorSkillImpact": {
+    "decision": "updated",
+    "note": "The operator playbook now documents exact browser/profile/account grant boundaries, immutable publication snapshots, truthful operation recovery, and manual final publication; named tools and install/refresh tests passed."
+  }
+}

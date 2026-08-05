@@ -1,271 +1,196 @@
+import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
-import type { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
-import type { DataRoot } from './data-root';
-import { migrateDatabase } from './db/migrations';
-import { startBrowser, type BrowserRuntime } from './browser';
-import { readBrowserConfig } from './browser-config';
-import { createPublication, getPublicationDetail, listPublicationDetails, preparePublication, reconcileAsNotPublished, transitionPublication } from './publishing';
-import { saveAccount, verifyAccount } from './accounts';
-import { collectXAccountMetrics, collectXMetrics, identifyXAccount, prepareXImage, prepareXText, prepareXVideo } from './platforms/x';
-import { identifyWechatAccount, prepareWechatArticle, readBackWechatArticle } from './platforms/wechat';
-import { claimDueMetricJobs, completeMetricJob, failMetricJob, listAccountMetricSnapshots, listMetricJobs, listPublicationMetricSnapshots, processDueMetricJobs, saveAccountMetricSnapshot, savePublicationMetricSnapshot, schedulePublicationMetricJobs } from './metrics';
-import { getReview, listReviewBacklinks, listReviews, saveReview } from './reviews';
-import { assertPublishingPlatforms } from './workspace-profiles';
+import type { BrowserRuntime } from './browser';
+import { startVerifiedBoundBrowser, type BoundBrowserPlatform } from './bound-browser.ts';
+import { getPublicationDetail, listPublicationDetails } from './publishing';
+import { collectXAccountMetrics, collectXMetrics } from './platforms/x';
+import { listAccountMetricSnapshots, listMetricJobs, listPublicationMetricSnapshots } from './metrics';
+import { dispatchClaimDueMetricJobs, dispatchCompleteMetricJob, dispatchFailMetricJob, dispatchSaveAccountMetricSnapshot, dispatchSavePublicationMetricSnapshot, dispatchSchedulePublicationMetricJobs, processDueMetricJobs } from './metric-commands.ts';
+import { dispatchSaveReview, getReview, listReviewBacklinks, listReviews, type SaveReviewInput } from './reviews';
+import { requireReceiptData, receiptAsCommandResult } from './business-command.ts';
+import type { ActiveWorkspaceRuntime, WorkspaceRuntimeLease } from './workspace-runtime.ts';
+import { dispatchCreatePublicationSnapshot, dispatchManualWechatReadback, dispatchPreparePublicationEditor, dispatchReconcilePublication, readPublicationOperationContext } from './publication-commands.ts';
+import { getPublicationBrowserOperation } from './publication-operations.ts';
 
 type Dependencies = {
-  loadSelectedDataRoot: () => Promise<DataRoot | null>;
-  getBrowser: () => BrowserRuntime | null;
-  setBrowser: (runtime: BrowserRuntime) => void;
+  setBrowser: (runtime: BrowserRuntime) => WorkspaceRuntimeLease;
+  getActiveRuntime: () => ActiveWorkspaceRuntime | null;
 };
 
-export function registerPublishingResultsIpc({ loadSelectedDataRoot, getBrowser, setBrowser }: Dependencies): void {
-  const ensureBrowser = async (database: DatabaseSync): Promise<BrowserRuntime> => {
-    const current = getBrowser();
-    if (current) return current;
-    const config = readBrowserConfig();
-    if (!config) throw new Error('请先在设置中选择浏览器 profile。');
-    const runtime = await startBrowser(config, { mode: 'quiet' });
-    setBrowser(runtime);
+export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: Dependencies): void {
+  const requireRuntime = (expected?: ActiveWorkspaceRuntime): ActiveWorkspaceRuntime => {
+    const runtime = getActiveRuntime();
+    if (!runtime?.isActive || (expected && runtime !== expected)) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_STALE' });
     return runtime;
   };
+  const ensureRuntimeBrowser = async (runtime: ActiveWorkspaceRuntime, platform: BoundBrowserPlatform): Promise<{ browser: BrowserRuntime; lease: WorkspaceRuntimeLease }> => {
+    requireRuntime(runtime);
+    const resolved = await startVerifiedBoundBrowser(runtime.database, platform, { mode: 'quiet' });
+    requireRuntime(runtime);
+    return { browser: resolved.runtime, lease: setBrowser(resolved.runtime) };
+  };
 
-  ipcMain.handle('publish:list', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listPublicationDetails(database); } finally { database.close(); }
+  ipcMain.handle('metrics:collect-x', async (_event, publicationId: string, requestId?: string) => {
+    const runtime = requireRuntime();
+    const publication = getPublicationDetail(runtime.database, publicationId)?.publication;
+    if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl || !publication.publishedAt) {
+      throw new Error('只有已发布的 X 内容可以采集指标。');
+    }
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    requireRuntime(runtime);
+    requireReceiptData(await dispatchSchedulePublicationMetricJobs(runtime, requestId ? `${requestId}:schedule` : randomUUID(), {
+      publicationId: publication.id,
+      publishedAt: publication.publishedAt,
+      sourceUrl: publication.externalUrl,
+      platform: publication.platform,
+      expectedRevision: publication.revision
+    }));
+    requireRuntime(runtime);
+    const capture = await runtime.runExternalBrowserWork(lease, () => collectXMetrics(browser.cdpUrl, publication.externalUrl!));
+    requireRuntime(runtime);
+    const current = getPublicationDetail(runtime.database, publicationId)?.publication;
+    if (!current || current.revision !== publication.revision || current.externalUrl !== publication.externalUrl || current.status !== 'published') {
+      throw Object.assign(new Error('发布记录已变化，请重新采集。'), { code: 'REVISION_CONFLICT' });
+    }
+    const now = capture.capturedAt || new Date().toISOString();
+    const due = await dispatchClaimDueMetricJobs(runtime, now, 20, publication.id);
+    requireRuntime(runtime);
+    const snapshots = [];
+    for (const job of due) {
+      const completed = await dispatchCompleteMetricJob(runtime, job, capture);
+      requireRuntime(runtime);
+      if (completed.ok && completed.data) snapshots.push(completed.data);
+      else {
+        await dispatchFailMetricJob(runtime, job, completed.error?.message ?? '指标快照保存失败。');
+        requireRuntime(runtime);
+      }
+    }
+    const manual = await dispatchSavePublicationMetricSnapshot(runtime, requestId ? `${requestId}:snapshot` : randomUUID(), {
+      publicationId: publication.id,
+      scheduledFor: now,
+      sourceUrl: capture.sourceUrl,
+      capturedAt: capture.capturedAt,
+      expectedRevision: current.revision,
+      expectedSourceUrl: current.externalUrl,
+      normalized: capture.normalized,
+      raw: capture.raw
+    });
+    requireRuntime(runtime);
+    return { ...capture, snapshot: requireReceiptData(manual), dueSnapshots: snapshots };
   });
-  ipcMain.handle('metrics:collect-x', async (_event, publicationId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const publication = getPublicationDetail(database, publicationId)?.publication;
-      if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl || !publication.publishedAt) {
-        throw new Error('只有已发布的 X 内容可以采集指标。');
-      }
-      schedulePublicationMetricJobs(database, {
-        publicationId: publication.id,
-        publishedAt: publication.publishedAt,
-        sourceUrl: publication.externalUrl,
-        platform: publication.platform
-      });
-      const browser = await ensureBrowser(database);
-      const capture = await collectXMetrics(browser.cdpUrl, publication.externalUrl);
-      const now = capture.capturedAt || new Date().toISOString();
-      const due = claimDueMetricJobs(database, now);
-      const snapshots = [];
-      for (const job of due) {
-        const payload = job.payload as { publicationId?: string; scheduledFor?: string; sourceUrl?: string };
-        if (payload.publicationId !== publication.id) continue;
-        const saved = completeMetricJob(database, {
-          jobId: job.id,
-          publicationId: publication.id,
-          scheduledFor: String(payload.scheduledFor || job.dueAt),
-          sourceUrl: capture.sourceUrl,
-          capturedAt: capture.capturedAt,
-          normalized: capture.normalized,
-          raw: capture.raw
-        });
-        if (saved.ok) snapshots.push(saved.data);
-        else failMetricJob(database, job.id, saved.error.message);
-      }
-      const manual = savePublicationMetricSnapshot(database, {
-        publicationId: publication.id,
-        scheduledFor: now,
-        sourceUrl: capture.sourceUrl,
-        capturedAt: capture.capturedAt,
-        normalized: capture.normalized,
-        raw: capture.raw
-      });
-      if (!manual.ok) throw new Error(manual.error.message);
-      return { ...capture, snapshot: manual.data, dueSnapshots: snapshots };
-    } finally { database.close(); }
-  });
-  ipcMain.handle('metrics:schedule', async (_event, publicationId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const publication = getPublicationDetail(database, publicationId)?.publication;
-      if (!publication?.externalUrl || !publication.publishedAt || publication.status !== 'published') {
-        throw new Error('只有已发布且有 URL 的内容可以创建指标任务。');
-      }
-      return schedulePublicationMetricJobs(database, {
-        publicationId: publication.id,
-        publishedAt: publication.publishedAt,
-        sourceUrl: publication.externalUrl,
-        platform: publication.platform
-      });
-    } finally { database.close(); }
+  ipcMain.handle('metrics:schedule', async (_event, publicationId: string, requestId?: string) => {
+    const runtime = requireRuntime();
+    const publication = getPublicationDetail(runtime.database, publicationId)?.publication;
+    if (!publication?.externalUrl || !publication.publishedAt || publication.status !== 'published') {
+      throw new Error('只有已发布且有 URL 的内容可以创建指标任务。');
+    }
+    return receiptAsCommandResult(await dispatchSchedulePublicationMetricJobs(runtime, requestId ?? randomUUID(), {
+      publicationId: publication.id,
+      publishedAt: publication.publishedAt,
+      sourceUrl: publication.externalUrl,
+      platform: publication.platform,
+      expectedRevision: publication.revision
+    }));
   });
   ipcMain.handle('metrics:list-jobs', async (_event, publicationId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listMetricJobs(database, publicationId); } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? listMetricJobs(runtime.database, publicationId) : [];
   });
   ipcMain.handle('metrics:list-snapshots', async (_event, publicationId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listPublicationMetricSnapshots(database, publicationId); } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? listPublicationMetricSnapshots(runtime.database, publicationId) : [];
   });
   ipcMain.handle('metrics:process-due', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      return await processDueMetricJobs(database, async (platform, sourceUrl) => {
-        if (platform !== 'x') throw new Error(`暂不支持平台指标采集：${platform}`);
-        const browser = await ensureBrowser(database);
-        return collectXMetrics(browser.cdpUrl, sourceUrl);
-      });
-    } finally { database.close(); }
+    const runtime = requireRuntime();
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    requireRuntime(runtime);
+    return runtime.runExternalBrowserWork(lease, () => processDueMetricJobs(runtime, async (platform, sourceUrl) => {
+      requireRuntime(runtime);
+      if (platform !== 'x') throw new Error(`暂不支持平台指标采集：${platform}`);
+      const capture = await collectXMetrics(browser.cdpUrl, sourceUrl);
+      requireRuntime(runtime);
+      return capture;
+    }));
   });
-  ipcMain.handle('metrics:collect-account-x', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const account = database.prepare(`SELECT id, account_key AS accountKey FROM platform_accounts WHERE platform = 'x'`).get() as { id: string; accountKey: string } | undefined;
-      if (!account) throw new Error('请先识别并保存 X 账号。');
-      const browser = await ensureBrowser(database);
-      const capture = await collectXAccountMetrics(browser.cdpUrl, account.accountKey);
-      return saveAccountMetricSnapshot(database, {
-        accountId: account.id,
-        platform: 'x',
-        sourceUrl: capture.sourceUrl,
-        capturedAt: capture.capturedAt,
-        normalized: capture.normalized,
-        raw: capture.raw
-      });
-    } finally { database.close(); }
+  ipcMain.handle('metrics:collect-account-x', async (_event, requestId?: string) => {
+    const runtime = requireRuntime();
+    const account = runtime.database.prepare(`SELECT id, account_key AS accountKey, revision FROM platform_accounts WHERE platform = 'x'`)
+      .get() as { id: string; accountKey: string; revision: number } | undefined;
+    if (!account) throw new Error('请先识别并保存 X 账号。');
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    requireRuntime(runtime);
+    const capture = await runtime.runExternalBrowserWork(lease, () => collectXAccountMetrics(browser.cdpUrl, account.accountKey));
+    requireRuntime(runtime);
+    const current = runtime.database.prepare('SELECT account_key AS accountKey, revision FROM platform_accounts WHERE id = ?')
+      .get(account.id) as { accountKey: string; revision: number } | undefined;
+    if (!current || current.revision !== account.revision || current.accountKey !== account.accountKey) {
+      throw Object.assign(new Error('X 账号已变化，请重新采集。'), { code: 'REVISION_CONFLICT' });
+    }
+    return receiptAsCommandResult(await dispatchSaveAccountMetricSnapshot(runtime, requestId ?? randomUUID(), {
+      accountId: account.id,
+      platform: 'x',
+      sourceUrl: capture.sourceUrl,
+      capturedAt: capture.capturedAt,
+      expectedRevision: current.revision,
+      expectedAccountKey: current.accountKey,
+      normalized: capture.normalized,
+      raw: capture.raw
+    }));
   });
   ipcMain.handle('metrics:list-account-snapshots', async (_event, accountId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listAccountMetricSnapshots(database, accountId); } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? listAccountMetricSnapshots(runtime.database, accountId) : [];
   });
   ipcMain.handle('reviews:list', async (_event, publicationId?: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return listReviews(database, publicationId); } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? listReviews(runtime.database, publicationId) : [];
   });
   ipcMain.handle('reviews:get', async (_event, id: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return null;
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return getReview(database, id); } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? getReview(runtime.database, id) : null;
   });
-  ipcMain.handle('reviews:save', async (_event, input: {
-    id?: string;
-    publicationId: string;
-    metricSnapshotIds: string[];
-    keep?: string[];
-    stop?: string[];
-    change?: string[];
-    summary?: string;
-    status?: 'draft' | 'final';
-    expectedRevision?: number;
-    findings?: Array<{ id?: string; title: string; body: string }>;
-  }) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return saveReview(database, input); } finally { database.close(); }
+  ipcMain.handle('reviews:save', async (_event, input: SaveReviewInput & { requestId?: string }) => {
+    const runtime = requireRuntime();
+    const { requestId, ...reviewInput } = input;
+    return receiptAsCommandResult(await dispatchSaveReview(runtime, requestId ?? randomUUID(), reviewInput));
   });
   ipcMain.handle('reviews:backlinks', async (_event, input?: { reviewIds?: string[]; findingIds?: string[] }) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) return [];
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      return listReviewBacklinks(database, input?.reviewIds ?? [], input?.findingIds ?? []);
-    } finally { database.close(); }
+    const runtime = getActiveRuntime();
+    return runtime?.isActive ? listReviewBacklinks(runtime.database, input?.reviewIds ?? [], input?.findingIds ?? []) : [];
   });
-  ipcMain.handle('publish:prepare-x', async (_event, platformVersionId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const configDatabase = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    let browser: BrowserRuntime;
-    try { assertPublishingPlatforms(configDatabase, ['x']); browser = await ensureBrowser(configDatabase); }
-    finally { configDatabase.close(); }
-    const identity = await identifyXAccount(browser.cdpUrl);
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const existing = database.prepare("SELECT id FROM platform_accounts WHERE platform = 'x'").get() as { id: string } | undefined;
-      if (existing) {
-        const verified = verifyAccount(database, identity);
-        if (!verified.ok) return verified;
-      }
-      const account = existing ?? saveAccount(database, identity);
-      const version = database.prepare("SELECT body, format, asset_ids_json AS assets FROM platform_versions WHERE id = ? AND platform = 'x'").get(platformVersionId) as { body: string; format: string; assets: string } | undefined;
-      const assetIds = version ? JSON.parse(version.assets) as string[] : [];
-      if (!version || !((version.format === 'text' && !assetIds.length) || (['image', 'video'].includes(version.format) && assetIds.length === 1))) throw new Error('X 版本必须是纯文字、正文加一张图片或正文加一个视频。');
-      const reusable = database.prepare(`SELECT id FROM publications
-        WHERE platform_version_id = ? AND account_id = ? AND status IN ('draft', 'failed', 'needs_user')
-        ORDER BY updated_at DESC LIMIT 1`).get(platformVersionId, account.id) as { id: string } | undefined;
-      const created = reusable ? { ok: true as const, data: getPublicationDetail(database, reusable.id)!.publication, error: null } : createPublication(database, { platformVersionId, accountId: account.id });
-      if (!created.ok) return created;
-      const asset = assetIds.length ? database.prepare('SELECT id, relative_path AS relativePath, mime_type AS mimeType FROM assets WHERE id = ?').get(assetIds[0]) as { id: string; relativePath: string; mimeType: string } | undefined : undefined;
-      if (assetIds.length && !asset) throw new Error('绑定图片不存在。');
-      const readback = asset
-        ? version.format === 'video'
-          ? await prepareXVideo(browser.cdpUrl, version.body, path.join(dataRoot.path, asset.relativePath), asset.id)
-          : await prepareXImage(browser.cdpUrl, version.body, path.join(dataRoot.path, asset.relativePath), asset.id)
-        : await prepareXText(browser.cdpUrl, version.body);
-      return preparePublication(database, { publicationId: created.data.id, expectedRevision: created.data.revision, editorTitle: null, editorBody: readback.body, editorAssetIds: readback.assetIds, editorEvidenceUrl: readback.evidenceUrl });
-    } finally { database.close(); }
+  ipcMain.handle('publish:list', async () => {
+    const runtime = getActiveRuntime();
+    if (!runtime?.isActive) return [];
+    return listPublicationDetails(runtime.database).map((detail) => {
+      try {
+        const context = readPublicationOperationContext(runtime, detail.publication.id);
+        return { ...detail, snapshot: context.snapshot, operation: context.operation };
+      } catch { return detail; }
+    });
   });
-  ipcMain.handle('publish:prepare-wechat-article', async (_event, platformVersionId: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      assertPublishingPlatforms(database, ['wechat']);
-      const browser = await ensureBrowser(database);
-      const identity = await identifyWechatAccount(browser.cdpUrl);
-      const existing = database.prepare("SELECT id FROM platform_accounts WHERE platform = 'wechat'").get() as { id: string } | undefined;
-      if (existing) {
-        const verified = verifyAccount(database, identity);
-        if (!verified.ok) return verified;
-      }
-      const account = existing ?? saveAccount(database, identity);
-      const version = database.prepare("SELECT title, body, format, asset_ids_json AS assets FROM platform_versions WHERE id = ? AND platform = 'wechat'").get(platformVersionId) as { title: string | null; body: string; format: string; assets: string } | undefined;
-      if (!version?.title || !version.body.trim() || version.format !== 'article') throw new Error('微信公众号版本必须包含非空标题和正文。');
-      const reusable = database.prepare(`SELECT id FROM publications
-        WHERE platform_version_id = ? AND account_id = ? AND status IN ('draft', 'failed', 'needs_user')
-        ORDER BY updated_at DESC LIMIT 1`).get(platformVersionId, account.id) as { id: string } | undefined;
-      const created = reusable ? { ok: true as const, data: getPublicationDetail(database, reusable.id)!.publication, error: null } : createPublication(database, { platformVersionId, accountId: account.id });
-      if (!created.ok) return created;
-      const readback = await prepareWechatArticle(browser.cdpUrl, version.title, version.body);
-      return preparePublication(database, { publicationId: created.data.id, expectedRevision: created.data.revision, editorTitle: readback.title, editorBody: readback.body, editorAssetIds: readback.assetIds, editorEvidenceUrl: readback.evidenceUrl });
-    } finally { database.close(); }
+  ipcMain.handle('publish:snapshot-create', async (_event, input: { platformVersionId: string; requestId?: string }) => {
+    const runtime = requireRuntime();
+    return receiptAsCommandResult(await dispatchCreatePublicationSnapshot(runtime, input));
+  });
+  ipcMain.handle('publish:editor-prepare', async (_event, input: { publicationId: string; expectedRevision: number; requestId?: string }) => {
+    const runtime = requireRuntime();
+    return receiptAsCommandResult(await dispatchPreparePublicationEditor(runtime, input, setBrowser));
+  });
+  ipcMain.handle('publish:snapshot-get', (_event, publicationId: string) => {
+    const runtime = requireRuntime();
+    try { return readPublicationOperationContext(runtime, publicationId).snapshot; } catch { return null; }
+  });
+  ipcMain.handle('publish:operation-get', (_event, operationId: string) => {
+    const runtime = requireRuntime();
+    return getPublicationBrowserOperation(runtime.database, operationId) ?? null;
   });
   ipcMain.handle('publish:readback-wechat', async (_event, publicationId: string, expectedRevision: number, articleUrl: string) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try {
-      const detail = getPublicationDetail(database, publicationId);
-      if (!detail || detail.publication.platform !== 'wechat' || !detail.payload?.title) throw new Error('微信公众号发布记录或标题不存在。');
-      const browser = await ensureBrowser(database);
-      const readback = await readBackWechatArticle(browser.cdpUrl, articleUrl, detail.payload.title);
-      return transitionPublication(database, publicationId, 'published', {
-        expectedRevision,
-        externalUrl: readback.externalUrl,
-        externalId: readback.externalId,
-        reason: 'manual publication URL readback matched'
-      });
-    } finally { database.close(); }
+    const runtime = requireRuntime();
+    const { browser } = await ensureRuntimeBrowser(runtime, 'wechat');
+    return receiptAsCommandResult(await dispatchManualWechatReadback(runtime, { publicationId, expectedRevision, articleUrl }, browser));
   });
   ipcMain.handle('publish:reconcile-not-published', async (_event, publicationId: string, expectedRevision: number) => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const database = migrateDatabase(path.join(dataRoot.path, 'wmb.db'));
-    try { return reconcileAsNotPublished(database, { publicationId, expectedRevision, evidence: { actor: 'ui', decision: 'not_published' } }); } finally { database.close(); }
+    const runtime = requireRuntime();
+    return receiptAsCommandResult(await dispatchReconcilePublication(runtime, { publicationId, expectedRevision }));
   });
 }

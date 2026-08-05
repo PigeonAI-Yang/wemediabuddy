@@ -7,19 +7,18 @@ const modulesRoot = path.join(workspace, 'node_modules');
 const output = path.join(workspace, '.pi-runtime', 'node_modules');
 const marker = path.join(workspace, '.pi-runtime', '.package-lock.sha256');
 const lockHash = createHash('sha256').update(await readFile(path.join(workspace, 'package-lock.json'))).digest('hex');
-const pending = [path.join(modulesRoot, '@earendil-works', 'pi-coding-agent')];
+const pending = [
+  path.join(modulesRoot, '@earendil-works', 'pi-coding-agent'),
+  path.join(modulesRoot, 'pi-vision-tool')
+];
 const copied = new Set();
 
 try {
-  if ((await readFile(marker, 'utf8')) === lockHash) {
-    console.log('Reused unchanged Pi runtime.');
-    process.exit(0);
-  }
-} catch {}
-try {
   const bundled = JSON.parse(await readFile(path.join(output, '@earendil-works', 'pi-coding-agent', 'package.json'), 'utf8'));
   const installed = JSON.parse(await readFile(path.join(modulesRoot, '@earendil-works', 'pi-coding-agent', 'package.json'), 'utf8'));
-  if (bundled.version === installed.version) {
+  const bundledVision = JSON.parse(await readFile(path.join(output, 'pi-vision-tool', 'package.json'), 'utf8'));
+  const installedVision = JSON.parse(await readFile(path.join(modulesRoot, 'pi-vision-tool', 'package.json'), 'utf8'));
+  if (bundled.version === installed.version && bundledVision.version === installedVision.version) {
     await writeFile(marker, lockHash, 'utf8');
     console.log('Adopted existing Pi runtime.');
     process.exit(0);

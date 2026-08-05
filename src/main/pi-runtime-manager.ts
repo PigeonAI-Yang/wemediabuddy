@@ -55,6 +55,10 @@ export function piCliFromRuntimeRoot(runtimeRoot: string): string {
   return path.join(runtimeRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
 }
 
+export function piVisionExtensionFromRuntimeRoot(runtimeRoot: string): string {
+  return path.join(runtimeRoot, 'node_modules', 'pi-vision-tool', 'extensions', 'vision-tool.ts');
+}
+
 export async function readRuntimeVersion(runtimeRoot: string): Promise<string | null> {
   try {
     const manifest = JSON.parse(await readFile(path.join(runtimeRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'package.json'), 'utf8')) as { version?: string };

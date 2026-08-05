@@ -28,15 +28,13 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const busy = phase === 'starting' || phase === 'running';
   const [modelLabel, setModelLabel] = useState('默认模型');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelOptions, setModelOptions] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>([]);
   const [modelMenuBusy, setModelMenuBusy] = useState(false);
   const [modelChoice, setModelChoice] = useState('');
   const [thinkingChoice, setThinkingChoice] = useState<'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>('auto');
   const [activePiProfile, setActivePiProfile] = useState<{
-    id: string; name: string; baseUrl: string; model: string;
-    api: 'openai-responses' | 'openai-completions';
-    thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-    configured: boolean; active: boolean;
+    id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions';
+    thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number; maxTokens?: number; configured: boolean; active: boolean;
   } | null>(null);
   const [toast, setToast] = useState('');
   const refreshSessions = async () => {
@@ -48,7 +46,6 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       setSessions([]);
     }
   };
-
   useEffect(() => {
     void window.wmb.getPiConversation().then((conversation) => {
       if (conversationTouched.current) return;
@@ -81,7 +78,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   useEffect(() => window.wmb.onPiEvent((event) => {
     if (event.scope !== 'dock') return;
     if (event.type === 'starting') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
-    if (event.type === 'running') { setPhase('running'); setStatusText('正在思考'); return; }
+    if (event.type === 'running') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
     if (event.type === 'tool') {
       setPhase('running'); setStatusText(piToolActivity(event.toolName));
       setMessages((items) => appendPiStream(items, streamingToolSegment(event.toolName, event.toolCallId, event.toolArgs)));
@@ -101,13 +98,13 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'thinking') {
-      setPhase('running'); setStatusText('正在思考');
-      setMessages((items) => appendPiStream(items, { kind: 'thinking', text: event.text ?? '' }, { thinking: event.text ?? '' }));
+      setPhase('running'); setStatusText('正在输出');
+      setMessages((items) => appendPiStream(items, { kind: 'thinking', text: event.text ?? '', streamKey: event.streamKey }, { thinking: event.text ?? '' }));
       return;
     }
     if (event.type === 'delta') {
       setPhase('running'); setStatusText('正在回复');
-      setMessages((items) => appendPiStream(items, { kind: 'text', text: event.text ?? '' }, { text: event.text ?? '' }));
+      setMessages((items) => appendPiStream(items, { kind: 'text', text: event.text ?? '', streamKey: event.streamKey }, { text: event.text ?? '' }));
       return;
     }
     if (event.type === 'stopped') {
@@ -168,7 +165,6 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       }
     }).catch(() => {});
   }, []);
-
   const openModelMenu = async () => {
     if (modelMenuOpen) { setModelMenuOpen(false); return; }
     setModelMenuOpen(true);
@@ -190,6 +186,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
 
   const applyModelChoice = async () => {
     if (!activePiProfile || !modelChoice) return;
+    const modelMetadata = modelOptions.find((item) => item.id === modelChoice);
     setModelMenuBusy(true);
     try {
       await window.wmb.savePiConfig({
@@ -198,7 +195,9 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         baseUrl: activePiProfile.baseUrl,
         model: modelChoice,
         api: activePiProfile.api,
-        thinking: thinkingChoice === 'auto' ? undefined : thinkingChoice
+        thinking: thinkingChoice === 'auto' ? undefined : thinkingChoice,
+        contextWindow: modelMetadata?.contextWindow ?? null,
+        maxTokens: modelMetadata?.maxTokens ?? null
       });
       setModelLabel(modelChoice);
       setActivePiProfile({ ...activePiProfile, model: modelChoice, thinking: thinkingChoice === 'auto' ? undefined : thinkingChoice });
@@ -469,6 +468,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         busy={busy || Boolean(forkAction)}
         pendingAction={forkAction}
         configured={configured}
+        connecting={phase === 'starting'}
         statusText={statusText}
         conversationRef={conversationRef}
         onCopy={(text) => void copyMessage(text)}
@@ -488,7 +488,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         modelMenuOpen={modelMenuOpen}
         modelMenuBusy={modelMenuBusy}
         modelChoice={modelChoice}
-        modelOptions={modelOptions}
+        modelOptions={modelOptions.map((item) => item.id)}
         onModelChoice={setModelChoice}
         onThinkingChoice={setThinkingChoice}
         onOpenModelMenu={() => { void openModelMenu(); }}

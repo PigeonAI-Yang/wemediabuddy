@@ -182,5 +182,248 @@ export const lateMigrations = [
       CREATE INDEX x_post_metric_snapshots_source_captured ON x_post_metric_snapshots(source_item_id, captured_at);
       CREATE INDEX x_post_metric_snapshots_binding_captured ON x_post_metric_snapshots(binding_id, captured_at);
     `
+  },
+  {
+    version: 39,
+    sql: `
+      CREATE TABLE workspace_browser_bindings (
+        id TEXT PRIMARY KEY CHECK (id = 'effective'),
+        profile_id TEXT,
+        binding_revision INTEGER NOT NULL CHECK (binding_revision >= 1),
+        state TEXT NOT NULL CHECK (state IN ('unverified', 'verified', 'needs_user')),
+        expected_account_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      ALTER TABLE platform_accounts ADD COLUMN browser_profile_id TEXT;
+      ALTER TABLE platform_accounts ADD COLUMN browser_binding_revision INTEGER;
+      ALTER TABLE platform_accounts ADD COLUMN verified_at TEXT;
+    `
+  },
+  {
+    version: 40,
+    sql: `
+      CREATE TABLE command_receipts (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        command TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        actor_type TEXT NOT NULL CHECK (actor_type IN ('owner_ui', 'pi', 'external_agent', 'scheduler', 'browser_adapter')),
+        actor_id TEXT NOT NULL,
+        task_id TEXT,
+        worker_lease_id TEXT,
+        grant_id TEXT,
+        envelope_json TEXT NOT NULL,
+        receipt_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('ok', 'error')),
+        result_json TEXT,
+        error_json TEXT,
+        readback_json TEXT,
+        before_revision INTEGER,
+        after_revision INTEGER,
+        side_effect_state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (workspace_id, request_id)
+      );
+      CREATE INDEX command_receipts_command_created ON command_receipts(command, created_at DESC);
+      CREATE INDEX command_receipts_task_created ON command_receipts(task_id, created_at DESC);
+    `
+  },
+  {
+    version: 41,
+    sql: `
+      CREATE TABLE task_grants (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        task_id TEXT NOT NULL REFERENCES agent_tasks(id),
+        owner_goal TEXT NOT NULL,
+        allowed_commands_json TEXT NOT NULL,
+        workers_json TEXT NOT NULL,
+        relevant_context_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revision INTEGER NOT NULL,
+        UNIQUE (workspace_id, id)
+      );
+      CREATE INDEX task_grants_task_status ON task_grants(task_id, status, expires_at);
+      CREATE INDEX task_grants_runtime_status ON task_grants(runtime_epoch, status, expires_at);
+    `
+  },
+  {
+    version: 42,
+    sql: `
+      CREATE TABLE execution_grants (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        task_id TEXT REFERENCES agent_tasks(id),
+        task_grant_id TEXT REFERENCES task_grants(id),
+        command TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        bound_identity_json TEXT NOT NULL,
+        target_actor_type TEXT NOT NULL CHECK (target_actor_type IN ('owner_ui', 'pi', 'external_agent', 'scheduler', 'browser_adapter')),
+        target_actor_id TEXT NOT NULL,
+        browser_profile_id TEXT,
+        binding_revision INTEGER,
+        expected_account TEXT,
+        allowed_transition TEXT NOT NULL,
+        required_readback_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'consumed', 'revoked')),
+        issued_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT,
+        revoked_at TEXT,
+        revision INTEGER NOT NULL,
+        CHECK ((task_id IS NULL) = (task_grant_id IS NULL)),
+        UNIQUE (workspace_id, id)
+      );
+      CREATE INDEX execution_grants_task_status ON execution_grants(task_id, status, expires_at);
+      CREATE INDEX execution_grants_runtime_status ON execution_grants(runtime_epoch, status, expires_at);
+      ALTER TABLE command_receipts ADD COLUMN execution_grant_id TEXT;
+      ALTER TABLE x_list_operations ADD COLUMN task_id TEXT;
+      ALTER TABLE x_list_operations ADD COLUMN task_grant_id TEXT;
+      ALTER TABLE x_list_operations ADD COLUMN prepared_actor_type TEXT;
+      ALTER TABLE x_list_operations ADD COLUMN prepared_actor_id TEXT;
+    `
+  },
+  {
+    version: 43,
+    sql: `
+      CREATE TABLE publication_snapshots (
+        id TEXT PRIMARY KEY,
+        publication_id TEXT NOT NULL UNIQUE REFERENCES publications(id),
+        workspace_id TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        platform_version_id TEXT NOT NULL REFERENCES platform_versions(id),
+        platform_version_revision INTEGER NOT NULL CHECK (platform_version_revision >= 1),
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat')),
+        account_id TEXT NOT NULL REFERENCES platform_accounts(id),
+        account_key TEXT NOT NULL,
+        account_revision INTEGER NOT NULL CHECK (account_revision >= 1),
+        browser_binding_id TEXT NOT NULL CHECK (browser_binding_id = 'effective') REFERENCES workspace_browser_bindings(id),
+        browser_profile_id TEXT NOT NULL,
+        browser_binding_revision INTEGER NOT NULL CHECK (browser_binding_revision >= 1),
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+        assets_json TEXT NOT NULL,
+        assets_hash TEXT NOT NULL CHECK (length(assets_hash) = 64),
+        input_hash TEXT NOT NULL CHECK (length(input_hash) = 64),
+        causation_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX publication_snapshots_input_hash ON publication_snapshots(input_hash);
+      CREATE INDEX publication_snapshots_workspace_created ON publication_snapshots(workspace_id, created_at DESC);
+      CREATE INDEX publication_snapshots_frozen_identity ON publication_snapshots(platform_version_id, account_id, browser_profile_id, browser_binding_revision);
+      CREATE TRIGGER publication_snapshots_immutable_update
+        BEFORE UPDATE ON publication_snapshots
+        BEGIN
+          SELECT RAISE(ABORT, 'PUBLICATION_SNAPSHOT_IMMUTABLE');
+        END;
+      CREATE TRIGGER publication_snapshots_immutable_delete
+        BEFORE DELETE ON publication_snapshots
+        BEGIN
+          SELECT RAISE(ABORT, 'PUBLICATION_SNAPSHOT_IMMUTABLE');
+        END;
+
+      CREATE TABLE publication_browser_operations (
+        id TEXT PRIMARY KEY,
+        publication_id TEXT NOT NULL UNIQUE REFERENCES publications(id),
+        snapshot_id TEXT NOT NULL UNIQUE REFERENCES publication_snapshots(id),
+        state TEXT NOT NULL CHECK (state IN ('prepared', 'execution_granted', 'browser_leased', 'executing', 'readback_pending', 'succeeded', 'needs_user', 'unknown', 'failed')),
+        phase TEXT NOT NULL,
+        execution_grant_id TEXT REFERENCES execution_grants(id),
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        readback_json TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        revision INTEGER NOT NULL CHECK (revision >= 1),
+        CHECK (state IN ('prepared', 'needs_user', 'failed') OR execution_grant_id IS NOT NULL)
+      );
+      CREATE INDEX publication_browser_operations_state_updated ON publication_browser_operations(state, updated_at, id);
+      CREATE INDEX publication_browser_operations_grant ON publication_browser_operations(execution_grant_id);
+    `
+  },
+  {
+    version: 44,
+    sql: `
+      ALTER TABLE x_list_operation_items RENAME TO x_list_operation_items_v43;
+      ALTER TABLE x_list_operations RENAME TO x_list_operations_v43;
+
+      CREATE TABLE x_list_operations (
+        id TEXT PRIMARY KEY,
+        request_id TEXT NOT NULL UNIQUE,
+        input_hash TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('create', 'update', 'delete', 'members_add', 'members_remove')),
+        account_key TEXT NOT NULL,
+        list_id TEXT,
+        canonical_url TEXT,
+        owner_handle TEXT,
+        snapshot_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('prepared', 'awaiting_confirmation', 'execution_granted', 'browser_leased', 'running', 'succeeded', 'partial', 'needs_user', 'unknown', 'failed')),
+        phase TEXT NOT NULL,
+        stop_requested INTEGER NOT NULL DEFAULT 0 CHECK (stop_requested IN (0, 1)),
+        confirmation_fingerprint TEXT,
+        confirmed_at TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        task_id TEXT,
+        task_grant_id TEXT,
+        prepared_actor_type TEXT,
+        prepared_actor_id TEXT,
+        execution_grant_id TEXT REFERENCES execution_grants(id)
+      );
+      INSERT INTO x_list_operations (
+        id, request_id, input_hash, kind, account_key, list_id, canonical_url, owner_handle, snapshot_json, payload_json,
+        state, phase, stop_requested, confirmation_fingerprint, confirmed_at, started_at, finished_at, evidence_json,
+        error_code, error_message, created_at, updated_at, revision, task_id, task_grant_id, prepared_actor_type, prepared_actor_id,
+        execution_grant_id
+      )
+      SELECT
+        id, request_id, input_hash, kind, account_key, list_id, canonical_url, owner_handle, snapshot_json, payload_json,
+        state, phase, stop_requested, confirmation_fingerprint, confirmed_at, started_at, finished_at, evidence_json,
+        error_code, error_message, created_at, updated_at, revision, task_id, task_grant_id, prepared_actor_type, prepared_actor_id,
+        NULL
+      FROM x_list_operations_v43;
+
+      CREATE TABLE x_list_operation_items (
+        id TEXT PRIMARY KEY,
+        operation_id TEXT NOT NULL REFERENCES x_list_operations(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        handle TEXT NOT NULL,
+        desired_state TEXT NOT NULL CHECK (desired_state IN ('present', 'absent')),
+        state TEXT NOT NULL CHECK (state IN ('pending', 'already_present', 'already_absent', 'succeeded', 'needs_user', 'unknown', 'failed', 'skipped')),
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT NOT NULL,
+        UNIQUE (operation_id, sort_order),
+        UNIQUE (operation_id, handle)
+      );
+      INSERT INTO x_list_operation_items
+        (id, operation_id, sort_order, handle, desired_state, state, evidence_json, updated_at)
+      SELECT id, operation_id, sort_order, handle, desired_state, state, evidence_json, updated_at
+      FROM x_list_operation_items_v43;
+
+      DROP TABLE x_list_operation_items_v43;
+      DROP TABLE x_list_operations_v43;
+      CREATE INDEX x_list_operations_account_updated ON x_list_operations(account_key, updated_at DESC);
+      CREATE INDEX x_list_operation_items_operation ON x_list_operation_items(operation_id, sort_order);
+    `
   }
 ] as const;

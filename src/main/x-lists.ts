@@ -7,9 +7,9 @@ import { xListUrl } from './platforms/x-list-primitives.ts';
 
 export const xListOperationKinds = ['create', 'update', 'delete', 'members_add', 'members_remove'] as const;
 export type XListOperationKind = typeof xListOperationKinds[number];
-export type XListOperationState = 'prepared' | 'awaiting_confirmation' | 'running' | 'succeeded' | 'partial' | 'needs_user' | 'unknown' | 'failed';
+export type XListOperationState = 'prepared' | 'awaiting_confirmation' | 'execution_granted' | 'browser_leased' | 'running' | 'succeeded' | 'partial' | 'needs_user' | 'unknown' | 'failed';
 export type XListBindingKind = 'owned' | 'following' | 'member';
-type XListOperationItemState = 'pending' | 'already_present' | 'already_absent' | 'succeeded' | 'needs_user' | 'unknown' | 'failed' | 'skipped';
+export type XListOperationItemState = 'pending' | 'already_present' | 'already_absent' | 'succeeded' | 'needs_user' | 'unknown' | 'failed' | 'skipped';
 
 export type XListOperationPayload =
   | { name: string; description?: string; isPrivate: boolean }
@@ -32,9 +32,22 @@ export type XListOperationItem = {
   evidence: Record<string, unknown>; updatedAt: string;
 };
 
+export type XListPreparedActor = Readonly<{ type: 'owner_ui' | 'pi' | 'external_agent'; id: string }>;
+export type XListExecutionAuthority = Readonly<{
+  executionGrantId: string;
+  browserProfileId: string;
+  browserBindingRevision: number;
+  expectedAccount: string;
+  operationInputHash: string;
+  confirmationFingerprint: string;
+  snapshotFingerprint: string;
+  payloadFingerprint: string;
+}>;
+
 export type XListOperation = {
   id: string; requestId: string; inputHash: string; kind: XListOperationKind; accountKey: string; listId: string | null;
   canonicalUrl: string | null; ownerHandle: string | null; snapshot: XListSnapshot; payload: XListOperationPayload;
+  taskId: string | null; taskGrantId: string | null; preparedActor: XListPreparedActor; executionGrantId: string | null;
   state: XListOperationState; phase: string; stopRequested: boolean; confirmationFingerprint: string | null;
   confirmedAt: string | null; startedAt: string | null; finishedAt: string | null; evidence: Record<string, unknown>;
   errorCode: string | null; errorMessage: string | null; createdAt: string; updatedAt: string; revision: number;
@@ -50,6 +63,7 @@ export type XListBinding = {
 export type PrepareXListOperationInput = {
   requestId: string; accountKey: string; kind: XListOperationKind; listId?: string;
   name?: string; description?: string; isPrivate?: boolean; handles?: string[];
+  taskId?: string; taskGrantId?: string; preparedActor?: XListPreparedActor; transaction?: boolean;
 };
 
 export function prepareXListOperation(database: DatabaseSync, input: PrepareXListOperationInput): CommandResult<{ operation: XListOperation; replayed: boolean }> {
@@ -61,14 +75,16 @@ export function prepareXListOperation(database: DatabaseSync, input: PrepareXLis
       return success({ operation: getXListOperation(database, prior.id)!, replayed: true });
     }
     const id = randomUUID(); const now = new Date().toISOString();
-    database.exec('BEGIN IMMEDIATE');
+    if (!input.transaction) database.exec('BEGIN IMMEDIATE');
     try {
       database.prepare(`INSERT INTO x_list_operations
         (id, request_id, input_hash, kind, account_key, list_id, canonical_url, owner_handle, snapshot_json, payload_json,
+         task_id, task_grant_id, prepared_actor_type, prepared_actor_id,
          state, phase, stop_requested, confirmation_fingerprint, evidence_json, created_at, updated_at, revision)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'prepared', 'prepared', 0, NULL, ?, ?, ?, 1)`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'prepared', 'prepared', 0, NULL, ?, ?, ?, 1)`)
         .run(id, normalized.requestId, normalized.inputHash, normalized.kind, normalized.accountKey, normalized.listId,
           normalized.canonicalUrl, JSON.stringify({ accountKey: normalized.accountKey }), JSON.stringify(normalized.payload),
+          normalized.taskId, normalized.taskGrantId, normalized.preparedActor.type, normalized.preparedActor.id,
           JSON.stringify({ requestedAt: now }), now, now);
       if ('handles' in normalized.payload) {
         const desiredState = normalized.payload.desiredState;
@@ -79,9 +95,9 @@ export function prepareXListOperation(database: DatabaseSync, input: PrepareXLis
             .run(randomUUID(), id, sortOrder, handle, desiredState, now);
         }
       }
-      database.exec('COMMIT');
+      if (!input.transaction) database.exec('COMMIT');
       return success({ operation: getXListOperation(database, id)!, replayed: false });
-    } catch (error) { database.exec('ROLLBACK'); throw error; }
+    } catch (error) { if (!input.transaction) database.exec('ROLLBACK'); throw error; }
   } catch (error) {
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
   }
@@ -96,35 +112,46 @@ export function armXListOperation(database: DatabaseSync, input: { operationId: 
   if (invalid) return failure('BROWSER_NEEDS_USER', invalid);
   const now = new Date().toISOString();
   const fingerprint = xListSnapshotFingerprint(input.snapshot);
-  database.prepare(`UPDATE x_list_operations SET list_id=?, canonical_url=?, owner_handle=?, snapshot_json=?, state='awaiting_confirmation',
+  database.prepare(`UPDATE x_list_operations SET list_id=?, canonical_url=?, owner_handle=?, snapshot_json=?, state='prepared',
     phase='awaiting_confirmation', confirmation_fingerprint=?, error_code=NULL, error_message=NULL, updated_at=?, revision=revision+1 WHERE id=?`)
     .run(input.snapshot.list?.listId ?? null, input.snapshot.list?.canonicalUrl ?? null, input.snapshot.list?.ownerHandle ?? null,
       JSON.stringify(input.snapshot), fingerprint, now, operation.id);
   return success(getXListOperation(database, operation.id)!);
 }
 
-export function beginXListOperation(database: DatabaseSync, input: { operationId: string; expectedRevision: number; currentSnapshot: XListSnapshot }): CommandResult<XListOperation> {
+export function grantXListOperation(database: DatabaseSync, input: {
+  operationId: string; expectedRevision: number; authority: XListExecutionAuthority;
+}): CommandResult<XListOperation> {
   const operation = getXListOperation(database, input.operationId);
   if (!operation) return failure('NOT_FOUND', 'List 操作不存在。');
   if (operation.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 操作已变化，请重新加载。', { current: operation });
-  if (operation.state !== 'awaiting_confirmation') return failure('CONFIRMATION_REQUIRED', 'List 操作尚未等待 UI 最终确认。');
-  if (operation.confirmationFingerprint !== xListSnapshotFingerprint(input.currentSnapshot)) {
-    const now = new Date().toISOString();
-    database.prepare(`UPDATE x_list_operations SET state='prepared', phase='confirmation_stale', confirmation_fingerprint=NULL,
-      evidence_json=?, error_code='CONFIRMATION_STALE', error_message=?, updated_at=?, revision=revision+1 WHERE id=?`)
-      .run(JSON.stringify({ ...operation.evidence, currentSnapshot: input.currentSnapshot }), '账号、List 或冻结变更集已变化，确认失效。', now, operation.id);
-    return failure('CONFIRMATION_STALE', '账号、List 或冻结变更集已变化，确认失效。');
-  }
+  if (operation.state !== 'prepared' || operation.phase !== 'awaiting_confirmation') return failure('CONFIRMATION_REQUIRED', 'List 操作尚未等待 UI 最终确认。');
+  if (!xListExecutionAuthorityMatches(operation, input.authority)) return failure('EXECUTION_GRANT_SCOPE_MISMATCH', '精确执行授权与冻结的 List 操作不一致。');
   const now = new Date().toISOString();
-  database.prepare(`UPDATE x_list_operations SET state='running', phase='running', confirmed_at=?, started_at=?, error_code=NULL, error_message=NULL, updated_at=?, revision=revision+1 WHERE id=?`)
-    .run(now, now, now, operation.id);
+  database.prepare(`UPDATE x_list_operations SET state='execution_granted', phase='execution_granted', execution_grant_id=?,
+    confirmed_at=?, evidence_json=?, error_code=NULL, error_message=NULL, updated_at=?, revision=revision+1
+    WHERE id=? AND revision=? AND state='prepared' AND phase='awaiting_confirmation'`)
+    .run(input.authority.executionGrantId, now, JSON.stringify({ ...operation.evidence, executionAuthority: input.authority }), now,
+      operation.id, operation.revision);
   return success(getXListOperation(database, operation.id)!);
+}
+
+export function leaseXListOperation(database: DatabaseSync, input: { operationId: string; expectedRevision: number; executionGrantId: string }): CommandResult<XListOperation> {
+  return transitionExecutionState(database, input, 'execution_granted', 'browser_leased', 'browser_leased');
+}
+
+export function beginXListOperation(database: DatabaseSync, input: { operationId: string; expectedRevision: number; executionGrantId: string }): CommandResult<XListOperation> {
+  const transitioned = transitionExecutionState(database, input, 'browser_leased', 'running', 'executing');
+  if (!transitioned.ok) return transitioned;
+  const now = new Date().toISOString();
+  database.prepare('UPDATE x_list_operations SET started_at=?, updated_at=? WHERE id=?').run(now, now, input.operationId);
+  return success(getXListOperation(database, input.operationId)!);
 }
 
 export function recordXListConfirmationFailure(database: DatabaseSync, input: { operationId: string; expectedRevision: number; code: string; message: string }): XListOperation | null {
   const now = new Date().toISOString();
   database.prepare(`UPDATE x_list_operations SET phase='confirmation_blocked', error_code=?, error_message=?, updated_at=?, revision=revision+1
-    WHERE id=? AND revision=? AND state='awaiting_confirmation'`)
+    WHERE id=? AND revision=? AND state='prepared' AND phase IN ('awaiting_confirmation', 'confirmation_blocked')`)
     .run(input.code, input.message, now, input.operationId, input.expectedRevision);
   return getXListOperation(database, input.operationId);
 }
@@ -133,7 +160,7 @@ export function requestXListOperationStop(database: DatabaseSync, input: { opera
   const operation = getXListOperation(database, input.operationId);
   if (!operation) return failure('NOT_FOUND', 'List 操作不存在。');
   if (operation.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 操作已变化，请重新加载。', { current: operation });
-  if (operation.state !== 'running') return failure('INVALID_STATE', '只有运行中的批量操作可以停止。');
+  if (operation.state !== 'running') return failure('INVALID_STATE', '只有执行中的批量操作可以停止。');
   const now = new Date().toISOString();
   database.prepare("UPDATE x_list_operations SET stop_requested=1, phase='stop_requested', updated_at=?, revision=revision+1 WHERE id=?").run(now, operation.id);
   return success(getXListOperation(database, operation.id)!);
@@ -144,12 +171,13 @@ export function isXListOperationStopRequested(database: DatabaseSync, operationI
   return row?.stopRequested === 1;
 }
 
-export function recordXListOperationIntent(database: DatabaseSync, operationId: string, action: string, handle?: string): void {
+export function recordXListOperationIntent(database: DatabaseSync, operationId: string, action: string, handle?: string): XListOperation {
   const operation = getXListOperation(database, operationId);
-  if (!operation || operation.state !== 'running') return;
+  if (!operation || operation.state !== 'running' || !operation.executionGrantId) throw new Error('List 操作没有可执行的精确授权状态。');
   const now = new Date().toISOString();
-  database.prepare("UPDATE x_list_operations SET phase=?, evidence_json=?, updated_at=?, revision=revision+1 WHERE id=?")
-    .run(`intent_recorded:${action}`, JSON.stringify({ ...operation.evidence, intent: { action, handle: handle ?? null, recordedAt: now } }), now, operationId);
+  database.prepare("UPDATE x_list_operations SET phase=?, evidence_json=?, updated_at=?, revision=revision+1 WHERE id=? AND revision=? AND state='running'")
+    .run(`intent_recorded:${action}`, JSON.stringify({ ...operation.evidence, intent: { action, handle: handle ?? null, recordedAt: now } }), now, operationId, operation.revision);
+  return getXListOperation(database, operationId)!;
 }
 
 export function finishXListOperation(database: DatabaseSync, operationId: string, input: {
@@ -166,16 +194,17 @@ export function finishXListOperation(database: DatabaseSync, operationId: string
 }
 
 export function recoverOrphanedXListOperations(database: DatabaseSync, activeIds: ReadonlySet<string>): number {
-  const running = listXListOperations(database, { limit: 100 }).filter((operation) => operation.state === 'running' && !activeIds.has(operation.id));
-  for (const operation of running) {
-    const uncertain = operation.phase.startsWith('intent_recorded:');
+  const interrupted = listXListOperations(database, { limit: 100 }).filter((operation) =>
+    ['execution_granted', 'browser_leased', 'running'].includes(operation.state) && !activeIds.has(operation.id));
+  for (const operation of interrupted) {
+    const uncertain = operation.state === 'running' && operation.phase.startsWith('intent_recorded:');
     database.prepare("UPDATE x_list_operation_items SET state=?, updated_at=? WHERE operation_id=? AND state='pending'")
       .run(uncertain ? 'unknown' : 'needs_user', new Date().toISOString(), operation.id);
     finishXListOperation(database, operation.id, uncertain
       ? { state: 'unknown', phase: 'interrupted_after_intent', errorCode: 'X_LIST_UNKNOWN', errorMessage: '应用在平台动作后中断，实际结果需要人工核对。' }
-      : { state: 'needs_user', phase: 'interrupted_before_action', errorCode: 'INTERRUPTED', errorMessage: '后台操作在平台动作前中断，请重新准备。' });
+      : { state: 'needs_user', phase: 'interrupted_before_action', errorCode: 'INTERRUPTED', errorMessage: '浏览器操作中断且不会自动恢复，请重新准备。' });
   }
-  return running.length;
+  return interrupted.length;
 }
 
 export function updateXListOperationItem(database: DatabaseSync, input: { operationId: string; handle: string; state: XListOperationItemState; evidence?: Record<string, unknown> }): void {
@@ -283,11 +312,17 @@ export function xListSnapshotFingerprint(snapshot: XListSnapshot): string {
   })).digest('hex');
 }
 
-function normalizeOperationInput(input: PrepareXListOperationInput): { requestId: string; inputHash: string; accountKey: string; kind: XListOperationKind; listId: string | null; canonicalUrl: string | null; payload: XListOperationPayload } {
+function normalizeOperationInput(input: PrepareXListOperationInput): { requestId: string; inputHash: string; accountKey: string; kind: XListOperationKind; listId: string | null; canonicalUrl: string | null; payload: XListOperationPayload; taskId: string | null; taskGrantId: string | null; preparedActor: XListPreparedActor } {
   const requestId = input.requestId.trim(); if (!requestId) throw new Error('request_id 不能为空。');
   if (!xListOperationKinds.includes(input.kind)) throw new Error('不支持的 List 操作。');
   const accountKey = normalizeHandle(input.accountKey, '账号');
   const listId = input.kind === 'create' ? null : requireListId(input.listId ?? '');
+  const taskId = input.taskId?.trim() || null;
+  const taskGrantId = input.taskGrantId?.trim() || null;
+  if (Boolean(taskId) !== Boolean(taskGrantId)) throw new Error('task_id 与 task_grant_id 必须同时提供。');
+  const preparedActor = input.preparedActor ?? { type: 'owner_ui' as const, id: 'renderer' };
+  if (!preparedActor.id.trim()) throw new Error('准备者身份不能为空。');
+  if ((preparedActor.type === 'pi' || preparedActor.type === 'external_agent') && !taskId) throw new Error('Agent 准备操作必须绑定 task grant。');
   let payload: XListOperationPayload;
   if (input.kind === 'create') {
     const name = (input.name ?? '').trim(); if (!name) throw new Error('List 名称不能为空。');
@@ -304,7 +339,8 @@ function normalizeOperationInput(input: PrepareXListOperationInput): { requestId
     payload = {};
   }
   const canonicalUrl = listId ? xListUrl(listId) : null;
-  return { requestId, inputHash: createHash('sha256').update(JSON.stringify({ accountKey, kind: input.kind, listId, payload })).digest('hex'), accountKey, kind: input.kind, listId, canonicalUrl, payload };
+  const authority = { taskId, taskGrantId, preparedActor: { type: preparedActor.type, id: preparedActor.id.trim() } };
+  return { requestId, inputHash: createHash('sha256').update(JSON.stringify({ accountKey, kind: input.kind, listId, payload, ...authority })).digest('hex'), accountKey, kind: input.kind, listId, canonicalUrl, payload, ...authority };
 }
 
 function validateSnapshotForOperation(operation: XListOperation, snapshot: XListSnapshot): string | null {
@@ -339,16 +375,17 @@ function requireListId(value: string): string {
 
 function sameHandle(left: string, right: string): boolean { return left.toLowerCase() === right.toLowerCase(); }
 
-type OperationRow = Omit<XListOperation, 'snapshot' | 'payload' | 'stopRequested' | 'evidence' | 'items'> & {
-  snapshot: string; payload: string; stopRequested: number; evidence: string;
+type OperationRow = Omit<XListOperation, 'snapshot' | 'payload' | 'stopRequested' | 'evidence' | 'items' | 'preparedActor'> & {
+  snapshot: string; payload: string; stopRequested: number; evidence: string; preparedActorType: XListPreparedActor['type']; preparedActorId: string;
 };
 type BindingRow = Omit<XListBinding, 'lastObservation' | 'enabled'> & { lastObservation: string; enabled: number };
 
 const operationSelect = `SELECT id, request_id AS requestId, input_hash AS inputHash, kind, account_key AS accountKey, list_id AS listId,
-  canonical_url AS canonicalUrl, owner_handle AS ownerHandle, snapshot_json AS snapshot, payload_json AS payload, state, phase,
-  stop_requested AS stopRequested, confirmation_fingerprint AS confirmationFingerprint, confirmed_at AS confirmedAt, started_at AS startedAt,
-  finished_at AS finishedAt, evidence_json AS evidence, error_code AS errorCode, error_message AS errorMessage, created_at AS createdAt,
-  updated_at AS updatedAt, revision FROM x_list_operations`;
+  canonical_url AS canonicalUrl, owner_handle AS ownerHandle, snapshot_json AS snapshot, payload_json AS payload,
+  task_id AS taskId, task_grant_id AS taskGrantId, COALESCE(prepared_actor_type, 'owner_ui') AS preparedActorType, COALESCE(prepared_actor_id, 'renderer') AS preparedActorId,
+  execution_grant_id AS executionGrantId, state, phase, stop_requested AS stopRequested, confirmation_fingerprint AS confirmationFingerprint,
+  confirmed_at AS confirmedAt, started_at AS startedAt, finished_at AS finishedAt, evidence_json AS evidence, error_code AS errorCode,
+  error_message AS errorMessage, created_at AS createdAt, updated_at AS updatedAt, revision FROM x_list_operations`;
 const bindingSelect = `SELECT id, account_key AS accountKey, list_id AS listId, canonical_url AS canonicalUrl, owner_handle AS ownerHandle,
   name, list_kind AS kind, source_feed_id AS sourceFeedId, enabled, last_observed_at AS lastObservedAt,
   last_observation_json AS lastObservation, created_at AS createdAt, updated_at AS updatedAt, revision FROM x_list_bindings`;
@@ -356,11 +393,49 @@ const bindingSelect = `SELECT id, account_key AS accountKey, list_id AS listId, 
 function parseOperation(database: DatabaseSync, row: OperationRow): XListOperation {
   const items = database.prepare(`SELECT id, sort_order AS sortOrder, handle, desired_state AS desiredState, state, evidence_json AS evidence,
     updated_at AS updatedAt FROM x_list_operation_items WHERE operation_id=? ORDER BY sort_order`).all(row.id) as Array<Omit<XListOperationItem, 'evidence'> & { evidence: string }>;
-  return { ...row, snapshot: JSON.parse(row.snapshot) as XListSnapshot, payload: JSON.parse(row.payload) as XListOperationPayload,
+  const { preparedActorType, preparedActorId, ...rest } = row;
+  return { ...rest, preparedActor: { type: preparedActorType, id: preparedActorId }, snapshot: JSON.parse(row.snapshot) as XListSnapshot, payload: JSON.parse(row.payload) as XListOperationPayload,
     stopRequested: row.stopRequested === 1, evidence: JSON.parse(row.evidence) as Record<string, unknown>,
     items: items.map((item) => ({ ...item, evidence: JSON.parse(item.evidence) as Record<string, unknown> })) };
 }
 
+function transitionExecutionState(database: DatabaseSync, input: { operationId: string; expectedRevision: number; executionGrantId: string },
+  from: XListOperationState, to: XListOperationState, phase: string): CommandResult<XListOperation> {
+  const operation = getXListOperation(database, input.operationId);
+  if (!operation) return failure('NOT_FOUND', 'List 操作不存在。');
+  if (operation.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', 'List 操作已变化，请重新加载。', { current: operation });
+  if (operation.state !== from || operation.executionGrantId !== input.executionGrantId) return failure('EXECUTION_GRANT_SCOPE_MISMATCH', 'List 操作状态或精确执行授权不匹配。');
+  const now = new Date().toISOString();
+  const changed = database.prepare(`UPDATE x_list_operations SET state=?, phase=?, updated_at=?, revision=revision+1
+    WHERE id=? AND revision=? AND state=? AND execution_grant_id=?`)
+    .run(to, phase, now, operation.id, operation.revision, from, input.executionGrantId);
+  if (changed.changes !== 1) return failure('REVISION_CONFLICT', 'List 操作状态转换发生并发冲突。');
+  return success(getXListOperation(database, operation.id)!);
+}
+
+export function xListPayloadFingerprint(payload: XListOperationPayload): string {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+export function xListExecutionAuthorityMatches(operation: XListOperation, authority: XListExecutionAuthority): boolean {
+  return authority.executionGrantId.length > 0
+    && sameHandle(operation.accountKey, authority.expectedAccount)
+    && operation.inputHash === authority.operationInputHash
+    && operation.confirmationFingerprint === authority.confirmationFingerprint
+    && xListSnapshotFingerprint(operation.snapshot) === authority.snapshotFingerprint
+    && xListPayloadFingerprint(operation.payload) === authority.payloadFingerprint;
+}
+
+export function readXListExecutionAuthority(operation: XListOperation): XListExecutionAuthority | null {
+  const candidate = operation.evidence.executionAuthority;
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const authority = candidate as Partial<XListExecutionAuthority>;
+  return typeof authority.executionGrantId === 'string' && typeof authority.browserProfileId === 'string'
+    && typeof authority.browserBindingRevision === 'number' && typeof authority.expectedAccount === 'string'
+    && typeof authority.operationInputHash === 'string' && typeof authority.confirmationFingerprint === 'string'
+    && typeof authority.snapshotFingerprint === 'string' && typeof authority.payloadFingerprint === 'string'
+    ? authority as XListExecutionAuthority : null;
+}
 function parseBinding(row: BindingRow): XListBinding {
   return { ...row, enabled: row.enabled === 1, lastObservation: JSON.parse(row.lastObservation) as Record<string, unknown> };
 }

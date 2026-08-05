@@ -2,6 +2,7 @@ import type { ContentProjectDetail } from '../main/content';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import type { XListBinding, XListOperation, XListOperationKind } from '../main/x-lists';
 import type { CommandResult } from '../main/result';
+import type { CommandReceiptV1 } from '../main/command-dispatcher';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from '../main/workspace-proposals';
 import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt, WebsiteTrialRead } from '../main/intelligence-channels';
 import type { WebsiteCandidate } from '../main/website-channel';
@@ -11,6 +12,13 @@ import type { XPostMetricSnapshot, XPostTrend } from '../main/x-post-metrics';
 import type { XObservationSession } from '../main/x-observation-jobs';
 import type { PiSkillInput, PiSkillSummary } from '../main/pi-skill-library';
 import type { PiCommand } from '../main/pi-commands';
+import type { BrowserProfile } from '../main/browser-config';
+import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding';
+import type { OwnerBrowserState } from '../main/browser-profile-owner';
+import type { PublicationBrowserOperationV1 as PublicationBrowserOperation, PublicationSnapshotV1 as PublicationSnapshot } from '../main/publication-operations';
+import type { WmbSettingsSnapshot } from './wmb-settings-types';
+
+type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 type XListCommand<T> = CommandResult<T>;
 
@@ -25,31 +33,7 @@ declare global {
       listWorkspaceProposals(): Promise<Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding; selectedRootPath: string | null }>>;
       selectWorkspaceProposalRoot(binding: WorkspaceProposalBinding): Promise<{ proposalId: string; rootPath: string } | null>;
       confirmWorkspaceProposal(binding: WorkspaceProposalBinding): Promise<unknown>;
-      getSettings(): Promise<{
-        paths: Record<string, string>;
-        usage: Record<string, number>;
-        counts: Record<string, number>;
-        health: Record<string, unknown>;
-        mcp: { status: string; url: string | null };
-        browser: { status: string; pid?: number; cdpUrl?: string; profilePath?: string; mode?: 'quiet' | 'visible' | 'headless' };
-        browserOptions: Array<{ id: string; label: string; executablePath: string; userDataDir: string; profileDirectory: string }>;
-        selectedBrowser: { id: string; label: string; executablePath: string; userDataDir: string; profileDirectory: string } | null;
-        pi: {
-          activeId: string | null;
-          profiles: Array<{ id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; configured: boolean; active: boolean }>;
-          baseUrl: string;
-          model: string;
-          configured: boolean;
-        };
-        piRuntime: { version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null };
-        workspace: {
-          id: string; displayName: string; rootPath: string;
-          dataRoot: { workspaceId: string; path: string };
-          profile: { profileId: string; revision: number; intelligencePackId: string; creationPackId: string; platforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
-          intelligenceChannels: IntelligenceChannelsSummary;
-          capabilities: { xLists: true; aiIntelligence: boolean; fixedAiLists: boolean; rankings: boolean; sourceWire: boolean; publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
-        };
-      } | null>;
+      getSettings(): Promise<WmbSettingsSnapshot | null>;
       openLogs(): Promise<void>;
       openExternal(url: string): Promise<void>;
       getGitHubRankings(refresh?: boolean): Promise<{
@@ -73,7 +57,7 @@ declare global {
       scanIntelligenceChannel(input: { module: IntelligenceModule; sourceId: string; expectedRevision: number }): Promise<unknown>;
       prepareIntelligenceChannelProposal(input: ChannelProposalInput): Promise<IntelligenceChannelProposal>;
       listIntelligenceChannelProposals(): Promise<Array<{ proposal: IntelligenceChannelProposal; binding: IntelligenceChannelProposalBinding }>>;
-      confirmIntelligenceChannelProposal(binding: IntelligenceChannelProposalBinding): Promise<{ applied: number }>;
+      confirmIntelligenceChannelProposal(binding: IntelligenceChannelProposalBinding): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: { applied: number } | null; error: { code: string; message: string } | null; executionGrantId?: string }>;
       readXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } }>;
       getCachedXListIndex(): Promise<{ accountKey: string; lists: Array<{ listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown' }>; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } | null>;
       readXListDetail(listId: string): Promise<{ accountKey: string; detail: { listId: string; canonicalUrl: string; name: string; ownerHandle: string | null; kind: 'owned' | 'following' | 'member' | 'unknown'; description: string; isPrivate: boolean; memberCount: number | null; observation: { capturedAt: string; pageUrl: string; fingerprint: string; visibleText: string } } }>;
@@ -95,7 +79,7 @@ declare global {
       getXListOperation(operationId: string): Promise<XListOperation | null>;
       prepareXListOperation(input: { requestId: string; accountKey: string; kind: XListOperationKind; listId?: string; name?: string; description?: string; isPrivate?: boolean; handles?: string[] }): Promise<XListCommand<{ operation: XListOperation; replayed: boolean }>>;
       armXListOperation(input: { operationId: string; expectedRevision: number }): Promise<XListCommand<XListOperation>>;
-      confirmXListOperation(input: { operationId: string; expectedRevision: number; typedListName?: string }): Promise<XListCommand<XListOperation>>;
+      confirmXListOperation(input: { operationId: string; expectedRevision: number; typedListName?: string }): Promise<CommandReceiptV1<XListOperation>>;
       stopXListOperation(input: { operationId: string; expectedRevision: number }): Promise<XListCommand<XListOperation>>;
       bindXList(input: { listId: string; expectedRevision?: number }): Promise<XListCommand<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
       setXListBindingEnabled(input: { accountKey: string; listId: string; expectedRevision: number; enabled: boolean }): Promise<XListCommand<{ id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }>>;
@@ -206,11 +190,16 @@ declare global {
       getPiRuntime(): Promise<{ version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null }>;
       updatePiRuntime(sourceRuntimeRoot: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       rollbackPiRuntime(): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      configureBrowser(id: string): Promise<{ id: string }>;
-      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; apiKey?: string }): Promise<unknown>;
+      listBrowserProfiles(): Promise<OwnerBrowserState>;
+      getWorkspaceBrowserBinding(): Promise<OwnerBrowserState>;
+      createBrowserProfile(input: OwnerBrowserCommand & { label?: string }): Promise<unknown>;
+      rebindBrowserProfile(input: OwnerBrowserCommand & { profileId: string }): Promise<unknown>;
+      verifyBrowserAccount(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
+      migrateLegacyBrowserProfile(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
+      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
-      listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<string[]>;
+      listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>;
       listPiSkills(): Promise<PiSkillSummary[]>;
       savePiSkill(input: PiSkillInput): Promise<PiSkillSummary>;
       deletePiSkill(name: string): Promise<{ name: string }>;
@@ -276,12 +265,17 @@ declare global {
         messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
         updatedAt: string;
       }>;
-      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void): () => void;
+      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void): () => void;
       onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => void): () => void;
       startAgentTask(input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
       updateAgentTaskPhase(input: { id: string; phase: string; piSessionId?: string | null }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      issueTaskGrant(input: { requestId?: string; taskId: string; ownerGoal: string; allowedCommands: string[]; workers: Array<{ type: 'pi' | 'external_agent'; id: string }>; relevantContext?: Record<string, unknown>; expiresAt: string }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      revokeTaskGrant(input: { requestId?: string; grantId: string; expectedRevision: number }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      getTaskGrant(grantId: string): Promise<unknown>;
+      listTaskGrants(taskId: string): Promise<unknown[]>;
+      issueExecutionGrant(input: { requestId?: string; taskId?: string; taskGrantId?: string; command: 'intelligence_channels.proposal_apply' | 'x_lists.operation_execute' | 'publication.editor_prepare_execute'; inputHash: string; boundIdentity: Record<string, unknown>; targetActor: { type: 'owner_ui'; id: 'renderer' }; browserProfileId?: string; bindingRevision?: number; expectedAccount?: string; allowedTransition: string; requiredReadback: Record<string, unknown>; expiresAt: string }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       completeAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       failAgentTask(input: { id: string; errorCode: string; errorMessage: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       cancelAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
@@ -289,7 +283,6 @@ declare global {
       startDailyIntelligence(input: { businessDate: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
-      startBrowser(input?: { mode?: 'quiet' | 'visible' | 'headless' }): Promise<{ pid: number; cdpUrl: string; profilePath: string; mode: 'quiet' | 'visible' | 'headless' }>;
       getToday(planDate: string): Promise<{
         sources: TodaySource[];
         sourcesTotal: number;
@@ -375,6 +368,12 @@ declare global {
         }>;
         limit: number; offset: number; hasMore: boolean;
       } | null>;
+      getStudioSummary(): Promise<{
+        total: number;
+        byStatus: Record<'idea' | 'drafting' | 'review' | 'ready' | 'completed', number>;
+        archived: number;
+        updatedWithin7Days: number;
+      } | null>;
       getStudioProject(projectId: string): Promise<ContentProjectDetail | null>;
       createStudioProject(input: { title: string; body: string }): Promise<ContentProjectDetail>;
       updateStudioProject(input: {
@@ -384,7 +383,7 @@ declare global {
         archived?: boolean;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string; details?: { current?: ContentProjectDetail } } | null }>;
       deleteStudioProject(input: { projectId: string; expectedRevision: number }): Promise<{ ok: boolean; data?: { id: string }; error: { code: string; message: string } | null }>;
-      saveDiscoveredSource(input: { title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }): Promise<{ ok: boolean; data?: { id: string; created: boolean }; error: { code: string; message: string } | null }>;
+      saveDiscoveredSource(input: { requestId: string; title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }): Promise<{ version: 'CommandReceiptV1'; receiptId: string; ok: boolean; data: { items: Array<{ id: string; created: boolean; revision: number }> } | null; error: { code: string; message: string } | null }>;
       copyStudioVersionToProject(input: {
         sourceProjectId: string; contentVersionId: string; title: string;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
@@ -426,9 +425,15 @@ declare global {
           projectId: string;
           format: string | null;
         };
-        payload: { title: string | null; body: string; assets: Array<{ id: string; sha256: string; relativePath: string; mimeType: string }> } | null;
+        payload: { title: string | null; body: string; assets: Array<{ id: string; sha256: string; relativePath: string; mimeType: string }>; editorEvidenceUrl?: string } | null;
+        snapshot?: PublicationSnapshot;
+        operation?: PublicationBrowserOperation;
         attempts: Array<Record<string, unknown>>; events: Array<Record<string, unknown>>; reconciliations: Array<Record<string, unknown>>;
       }>>;
+      createPublicationSnapshot(platformVersionId: string, requestId?: string): Promise<CommandResult<unknown>>;
+      authorizePublicationEditor(input: { publicationId: string; expectedRevision: number; requestId?: string }): Promise<CommandResult<unknown>>;
+      getPublicationSnapshot(publicationId: string): Promise<PublicationSnapshot | null>;
+      getPublicationBrowserOperation(operationId: string): Promise<PublicationBrowserOperation | null>;
       collectXMetrics(publicationId: string): Promise<{ sourceUrl: string; capturedAt: string; normalized: Record<string, { status: string; value?: number; rawLabel?: string }>; raw: Record<string, { status: string; value?: number; rawLabel?: string }> }>;
       schedulePublicationMetrics(publicationId: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       listMetricJobs(publicationId?: string): Promise<Array<Record<string, unknown>>>;

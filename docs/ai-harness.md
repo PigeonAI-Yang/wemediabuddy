@@ -23,6 +23,9 @@ PRD.md
 - `docs/verification.md`: executable and manual gates.
 - `docs/pi-operation-skill-maintenance.md`: impact matrix and synchronization contract for the installation-wide Pi operation Skill.
 - `.ai/evals/README.md`: feature and regression evidence format.
+- `TASKS.archive.md`: archived `done` rows; validated together with `TASKS.md` as one union by `scripts/check-ledger.mjs`.
+- `scripts/task-context.mjs`: machine-extracted minimal task context (`node scripts/task-context.mjs <WMB-id>`).
+- `scripts/tasks-archive.mjs`: moves eligible `done` rows from `TASKS.md` into `TASKS.archive.md` (append-only, idempotent).
 
 ## Traceability
 
@@ -33,7 +36,11 @@ A task cannot be `Done` without:
 - changed-file evidence;
 - command results;
 - required live/manual receipts;
-- no unresolved acceptance item for its referenced capability.
+- no unresolved acceptance item for its referenced capability;
+- (WMB-4810 and later) at least one existing repository-relative evidence path (for example `.ai/wmb-4810-xxx.json`, `tests/foo.test.mjs`);
+- (WMB-4810 and later) a `Pi operator Skill impact: (updated|no change) — <non-empty note>` line;
+- (WMB-4810 and later) an `Independent review: <name> — <non-empty conclusion>` or `Independent review: not required — (docs-only|test-only|evidence-only|copy-only)` line;
+- (WMB-4810 and later) Evidence cell total at most 700 characters; narrative detail goes in `.ai/wmb-XXXX-evidence.md` (XXXX = numeric task part).
 
 ## Rule source standard
 
@@ -56,3 +63,4 @@ If a rule can prevent data loss, duplicate publication, stale overwrites, or fal
 - A repeated failure adds the smallest regression check and a short lesson to the relevant harness document.
 - A change to user workflows, Pi/MCP tools, confirmation/state boundaries, workspace identity or Skill packaging follows `docs/pi-operation-skill-maintenance.md` and records its Skill impact decision in the same task receipt.
 - Task progress changes only in `TASKS.md`; do not create parallel todo lists.
+- A harness rule change updates the machine enforcement (`scripts/check.ps1` / `scripts/check-ledger.mjs`) in the same change; changing prose alone is not allowed.

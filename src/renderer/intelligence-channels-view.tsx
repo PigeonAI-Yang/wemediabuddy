@@ -149,8 +149,9 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
   const confirmProposal = async (entry: ChannelProposal) => {
     setBusy('正在确认来源变更…'); setNote('');
     try {
-      const result = await window.wmb.confirmIntelligenceChannelProposal(entry.binding);
-      setNote(`已确认 ${result.applied} 项来源变更。`); await load();
+      const receipt = await window.wmb.confirmIntelligenceChannelProposal(entry.binding);
+      if (!receipt.ok || !receipt.data) throw new Error(receipt.error?.message ?? '来源变更确认失败。');
+      setNote(`已确认 ${receipt.data.applied} 项来源变更。`); await load();
     } catch (error) { setNote(messageOf(error)); await load(); }
     finally { setBusy(''); }
   };
@@ -194,7 +195,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
       </section>
     </div>
     {proposals.length > 0 && <section className="channel-proposal-list" aria-labelledby="channel-proposal-title">
-      <header><div><h2 id="channel-proposal-title">待确认的来源变更</h2><p>这是 Pi 或外部 Agent 准备的精确清单。确认前会重新核验当前工作空间、配方、来源和 X 账号。</p></div></header>
+      <header><div><h2 id="channel-proposal-title">待确认的来源变更</h2><p>这是 Pi 或协作助手准备的精确清单。确认前会重新核验当前工作空间、配方、来源和 X 账号。</p></div></header>
       {proposals.map((entry) => <article key={entry.proposal.id} className="channel-proposal">
         <ol>{entry.proposal.displayedDiff.map((item, index) => <li key={`${item.module}:${item.stableIdentity}`}><strong>{index + 1}. {item.display.title}</strong>{item.display.details.map((detail) => <small key={detail}>{detail}</small>)}</li>)}</ol>
         <button className="primary-button" onClick={() => void confirmProposal(entry)} disabled={Boolean(busy)}>确认这 {entry.proposal.displayedDiff.length} 项变更</button>

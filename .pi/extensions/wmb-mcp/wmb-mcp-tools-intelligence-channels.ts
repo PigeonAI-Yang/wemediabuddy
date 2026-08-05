@@ -42,6 +42,7 @@ const trialWebsite: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('intelligence_channels.trial_website', { url: String(params.url ?? '') })); }
 };
 
+
 const resolveXList: ToolDefinition = {
   name: 'wmb_resolve_intelligence_x_list', label: '解析 X List 候选', description: '只读当前工作空间账号实际可访问的 X List；同名候选全部返回。',
   parameters: { type: 'object', properties: { inputText: { type: 'string' } }, required: ['inputText'], additionalProperties: false },

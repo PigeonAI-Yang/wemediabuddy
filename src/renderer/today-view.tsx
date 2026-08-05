@@ -8,11 +8,14 @@ import { formatNames, platformNames } from './app-types';
 import { dailyPreflightMessage } from './intelligence-channel-ui';
 import {
   BODY_EXCERPT_CHARS, MAX_SELECTED_SOURCES, Opportunity, SourceList,
-  bodyToSelectedFields, domainOf, formatSourcePublishedAt, isHeartbeatSource, latestSourceTime,
+  bodyToSelectedFields, domainOf, formatSourcePublishedAt, formatTodayActionLine, isHeartbeatSource, latestSourceTime,
   phaseLabels, priorityGrade, priorityLabel, sortFeedSources,
   type SelectedTodaySource
 } from './today-view-parts';
 import { FermentingRail, TodaySourceDetail } from './today-view-panels';
+import { useTodayRunningTransition } from './today-running-transition';
+import { TodayScoutCreature } from './today-scout-creature';
+import { TaskGrantControl } from './task-grant-control';
 
 export function TodayView({ today, refresh, openStudio, openLibrary, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
@@ -26,7 +29,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
 }): React.JSX.Element {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [taskStatus, setTaskStatus] = useState<string>('');
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useTodayRunningTransition();
   const [task, setTask] = useState<any>(null);
   const [, tick] = useState(0);
   const sources = today?.sources ?? [];
@@ -39,6 +42,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   const pendingActions = today?.pendingActions ?? [];
   const pendingCount = pendingActions.length;
   const sssCount = items.filter((item) => priorityGrade(item.priority) === 'SSS').length;
+  const fermentingCount = fermenting.items?.length ?? 0;
+  const todayActionLine = formatTodayActionLine(pendingCount, items.length, sssCount, fermentingCount);
   const [studioActive, setStudioActive] = useState<number | null>(null);
   const [detailSource, setDetailSource] = useState<TodaySource | null>(null);
   const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
@@ -121,9 +126,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
   }, [primary?.id, items.length, sources.length, pendingActions.length, task?.status, sources.map((item) => item.id).join('|')]);
   useEffect(() => {
     let active = true;
-    void window.wmb.listStudioProjects({ limit: 50 }).then((result) => {
-      if (!active || !result) return;
-      setStudioActive(result.items.filter((item) => item.status !== 'completed' && !item.archivedAt).length);
+    void window.wmb.getStudioSummary().then((summary) => {
+      if (!active || !summary) return;
+      setStudioActive(summary.total - summary.byStatus.completed);
     }).catch(() => {});
     return () => { active = false; };
   }, [displayPlan?.id]);
@@ -166,12 +171,12 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
         return prevSig === nextSig ? prev : value;
       });
       if (!value) {
-        setRunning((prev) => (prev ? false : prev));
+        setRunning(false);
         return;
       }
       const typed = value as { status?: string; phase?: string; errorMessage?: string | null };
       const nextRunning = typed.status === 'running';
-      setRunning((prev) => (prev === nextRunning ? prev : nextRunning));
+      setRunning(nextRunning);
       let nextStatus = '';
       if (typed.status === 'running') nextStatus = typed.phase === 'starting' ? '今日情报正在启动…' : '今日情报正在运行';
       else if (typed.status === 'failed') nextStatus = typed.errorMessage || '今日情报失败';
@@ -260,7 +265,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
     setRunning(true);
     setTaskStatus('今日情报正在启动…');
     try {
-      const result = await window.wmb.startDailyIntelligence({ businessDate: planDate }) as {
+      const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+      const result = await window.wmb.startDailyIntelligence({ businessDate }) as {
         ok: boolean;
         data?: { task?: { status?: string; phase?: string; errorMessage?: string | null; resultRefs?: { opportunityCount?: number } }; reused?: boolean };
         error?: { message?: string } | null;
@@ -329,8 +335,10 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
         aria-live={running ? 'polite' : undefined}
         aria-label={running ? '今日情报运行中' : '今日概览'}
       >
+        <div className="today-command-state" data-mode={running ? 'running' : 'idle'}>
         {running ? (
           <>
+            <TodayScoutCreature />
             <div className="today-command-run">
               <div className="today-command-run-head">
                 <div className="today-command-run-title">
@@ -367,11 +375,13 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
             <div className="today-command-actions">
               <button className="secondary-button" onClick={() => setSourcesOpen(true)}>查看资料</button>
               <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' }); }}>保存并停止</button>
+          {task?.id && task.status === 'running' ? <TaskGrantControl taskId={task.id} planDate={planDate} /> : null}
               <button className="secondary-button" disabled={!task?.id} onClick={() => { if (!task?.id) return; void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' }); }}>取消任务</button>
             </div>
           </>
         ) : (
           <>
+            <p className="today-command-line">{todayActionLine}</p>
             <div className="today-command-stats" aria-label="今日指标">
               <div className="today-command-stat">
                 <span className="stat-label">{today?.sourcesDate === planDate ? '今日新资料' : '最近资料'}</span>
@@ -398,6 +408,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, selectedIte
             </div>
           </>
         )}
+        </div>
       </section>
       <div className="today-grid">
         <div className="today-opps" ref={oppsRef}>

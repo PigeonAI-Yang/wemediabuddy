@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createForkedPiConversation, ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
@@ -115,6 +115,102 @@ test('Pi conversation archive hides without rewriting files and restores', async
     await setPiConversationArchived(root, second.id, false);
     assert.equal((await listPiConversations(root)).find((item) => item.id === second.id)?.archivedAt, null);
     assert.equal((await switchPiConversation(root, second.id)).id, second.id);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('legacy conversation pointer remains byte-identical through migration and canonical operations', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-legacy-pointer-'));
+  try {
+    const agentRoot = path.join(root, 'pi-agent');
+    await mkdir(agentRoot, { recursive: true });
+    const legacySession = path.join(agentRoot, 'session.jsonl');
+    const legacySessionBytes = '{"type":"session","version":3,"id":"legacy-session","timestamp":"2026-08-06T00:00:00.000Z"}\n{"type":"message","id":"legacy-user","parentId":null,"timestamp":"2026-08-06T00:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"旧消息"}]}}\n';
+    await writeFile(legacySession, legacySessionBytes, 'utf8');
+    const legacyPointer = JSON.stringify({
+      id: 'legacy-conversation',
+      title: '旧会话',
+      sessionFile: legacySession,
+      sessionId: 'legacy-session',
+      messages: [{ role: 'user', text: '旧消息' }],
+      updatedAt: '2026-08-06T00:00:00.000Z'
+    }, null, 2);
+    const pointerPath = path.join(agentRoot, 'conversation.json');
+    await writeFile(pointerPath, legacyPointer, 'utf8');
+
+    const migrated = await readPiConversation(root);
+    assert.equal(migrated.id, 'legacy-conversation');
+    assert.equal(await readFile(pointerPath, 'utf8'), legacyPointer);
+    assert.equal(await readFile(legacySession, 'utf8'), legacySessionBytes);
+    assert.notEqual(path.resolve(migrated.sessionFile), path.resolve(legacySession));
+    assert.equal(await readFile(migrated.sessionFile, 'utf8'), legacySessionBytes);
+    await writePiConversation(root, {
+      id: migrated.id,
+      sessionFile: migrated.sessionFile,
+      messages: [{ role: 'user', text: '更新后的消息' }]
+    });
+    const created = await startNewPiConversation(root);
+    await switchPiConversation(root, migrated.id);
+    assert.equal((await readPiConversation(root)).id, migrated.id);
+    assert.notEqual(created.id, migrated.id);
+    assert.equal(await readFile(pointerPath, 'utf8'), legacyPointer);
+    assert.equal(await readFile(legacySession, 'utf8'), legacySessionBytes);
+    assert.equal(await readFile(migrated.sessionFile, 'utf8'), legacySessionBytes);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+test('legacy migration never overwrites an existing canonical session target', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-legacy-no-clobber-'));
+  try {
+    const agentRoot = path.join(root, 'pi-agent');
+    const sessionsRoot = path.join(agentRoot, 'sessions');
+    await mkdir(sessionsRoot, { recursive: true });
+    const legacySession = path.join(agentRoot, 'session.jsonl');
+    const canonicalSession = path.join(sessionsRoot, 'legacy-existing.jsonl');
+    const legacyBytes = '{"type":"session","version":3,"id":"legacy-source"}\n';
+    const canonicalBytes = '{"type":"session","version":3,"id":"canonical-existing"}\n';
+    await writeFile(legacySession, legacyBytes, 'utf8');
+    await writeFile(canonicalSession, canonicalBytes, 'utf8');
+    const pointer = JSON.stringify({
+      id: 'legacy-existing',
+      title: '已存在 canonical target',
+      sessionFile: legacySession,
+      sessionId: 'legacy-source',
+      messages: [{ role: 'user', text: '保留 pointer 结构' }],
+      updatedAt: '2026-08-06T00:00:00.000Z'
+    }, null, 2);
+    const pointerPath = path.join(agentRoot, 'conversation.json');
+    await writeFile(pointerPath, pointer, 'utf8');
+
+    const migrated = await readPiConversation(root);
+    assert.equal(migrated.id, 'legacy-existing');
+    assert.equal(migrated.sessionFile, canonicalSession);
+    assert.equal(await readFile(pointerPath, 'utf8'), pointer);
+    assert.equal(await readFile(legacySession, 'utf8'), legacyBytes);
+    assert.equal(await readFile(canonicalSession, 'utf8'), canonicalBytes);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+
+test('fresh canonical conversation roots never create a legacy pointer', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-canonical-only-'));
+  try {
+    const first = await startNewPiConversation(root);
+    const written = await writePiConversation(root, {
+      id: first.id,
+      sessionFile: first.sessionFile,
+      messages: [{ role: 'user', text: '首条消息' }]
+    });
+    const second = await startNewPiConversation(root);
+    await switchPiConversation(root, written.id);
+    assert.equal((await readPiConversation(root)).id, written.id);
+    await assert.rejects(() => readFile(path.join(root, 'pi-agent', 'conversation.json'), 'utf8'), { code: 'ENOENT' });
+    assert.equal(await readFile(path.join(root, 'pi-agent', 'conversations', `${written.id}.json`), 'utf8').then(Boolean), true);
+    assert.equal(await readFile(path.join(root, 'pi-agent', 'conversations', `${second.id}.json`), 'utf8').then(Boolean), true);
   } finally {
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

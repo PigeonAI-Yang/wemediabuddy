@@ -1,18 +1,23 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createContentProjectWithVersion, getStudio, saveCoreVersion } from '../src/main/content.ts';
 import { startMcp } from '../src/main/mcp.ts';
 import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-content-project-create-'));
-let mcp;
+let mcp, runtime;
 try {
   const db = migrateDatabase(path.join(directory, 'wmb.db'));
   ensureOfficialWorkspaceProfile(db, 'official.ai');
+  const workspaceNow = new Date().toISOString();
+  db.prepare("INSERT INTO app_meta(key,value,created_at,updated_at,revision) VALUES('workspace_id','workspace-content-create',?,?,1)").run(workspaceNow, workspaceNow);
   const existing = createContentProjectWithVersion(db, { title: '原 MCP 项目', body: '原正文' });
   const source = upsertSource(db, { originalUrl: 'https://example.com/game-news', title: '游戏资讯官方资料', summary: '官方摘要' });
   const topic = createTopic(db, '游戏资讯事件');
@@ -21,7 +26,14 @@ try {
   const before = db.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get(existing.id).count;
   db.close();
 
-  mcp = await startMcp(directory);
+  runtime = ActiveWorkspaceRuntime.open(directory, { openDatabase: migrateDatabase, createEpoch: () => 'content-create-runtime' });
+  const task = (await dispatchStartAgentTask(runtime, { intent: 'studio_draft', businessDate: '2026-08-02', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'content-create-task' })).task;
+  const grant = await dispatchIssueTaskGrant(runtime, {
+    requestId: 'content-create-grant', taskId: task.id, ownerGoal: '创建测试内容项目', allowedCommands: ['content.create'],
+    workers: [{ type: 'external_agent', id: 'mcp' }], expiresAt: new Date(Date.now() + 60_000).toISOString()
+  });
+  if (!grant.ok) throw new Error(grant.error.message);
+  mcp = await startMcp(directory, runtime.gate, undefined, runtime);
   process.env.WMB_MCP_URL = mcp.url;
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
@@ -32,6 +44,8 @@ try {
   });
   const saved = await tools.get('wmb_create_content_project').execute('create', {
     requestId: 'wmb-1101-skill-draft',
+    taskId: task.id,
+    grantId: grant.data.id,
     title: 'Skill 新稿',
     body: '独立正文',
     planItemId
@@ -85,6 +99,7 @@ try {
   readDb.close();
 } finally {
   await mcp?.close();
+  await runtime?.stop({ drain: false });
   await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch((error) => {
     if (error.code !== 'EBUSY') throw error;
   });

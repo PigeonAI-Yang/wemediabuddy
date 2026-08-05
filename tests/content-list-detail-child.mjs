@@ -5,6 +5,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import {
   createContentProjectWithVersion,
   getContentProject,
+  getContentProjectStatusSummary,
   listContentProjects,
   saveCoreVersion,
   savePlatformVersion
@@ -49,6 +50,13 @@ try {
   if (page.items.length !== 50 || page.limit !== 50 || !page.hasMore) throw new Error('bounded page mismatch');
   if (JSON.stringify(page).includes('第二版正文')) throw new Error('list leaked historical body');
   if (page.items.some((item) => item.status !== 'drafting' || item.archivedAt !== null)) throw new Error('active/default lifecycle mismatch');
+
+  const statusSummary = getContentProjectStatusSummary(db);
+  if (statusSummary.total !== 54 || statusSummary.byStatus.drafting !== 54
+    || statusSummary.byStatus.ready !== 0 || statusSummary.archived !== 1
+    || statusSummary.updatedWithin7Days !== 52) {
+    throw new Error(`project status summary mismatch: ${JSON.stringify(statusSummary)}`);
+  }
 
   const searched = listContentProjects(db, { query: 'needle-55', archived: false, limit: 10 });
   if (searched.items.length !== 1 || searched.items[0].id !== latest || searched.items[0].versionCount !== 2 || searched.items[0].platforms.x !== 1) {

@@ -2,12 +2,14 @@ export const pyaireaderXProfileId = 'edge:pyaireader-default';
 export const pyaireaderXEndpoint = 'http://127.0.0.1:9334';
 export const pyaireaderWorkspaceProfilePrefix = 'edge:pyaireader-workspace-';
 export const wmbInstallationXProfileId = 'edge:wmb-installation';
+const opaqueBrowserProfileId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type XListBrowserConfig = { id: string; cdpUrl?: string; workspaceId?: string; accountKey?: string };
 
 export function isPyaireaderXProfile(config: XListBrowserConfig): boolean {
   if (config.id === wmbInstallationXProfileId) return !config.cdpUrl || isLocalEndpoint(config.cdpUrl);
   if (config.id === pyaireaderXProfileId) return normalizeEndpoint(config.cdpUrl) === pyaireaderXEndpoint;
+  if (opaqueBrowserProfileId.test(config.id)) return !config.cdpUrl || isLocalEndpoint(config.cdpUrl);
   if (!config.id.startsWith(pyaireaderWorkspaceProfilePrefix)) return false;
   if (!config.cdpUrl) return true;
   return isLocalEndpoint(config.cdpUrl);

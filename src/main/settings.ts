@@ -4,20 +4,21 @@ import { DatabaseSync } from 'node:sqlite';
 import { getPiRuntimeInfo, type PiRuntimeInfo } from './pi-runtime-manager.ts';
 
 export type SettingsSnapshot = {
-  paths: Record<'dataRoot' | 'database' | 'assets' | 'browserProfile' | 'logs' | 'exports', string>;
-  usage: Record<'database' | 'assets' | 'browserProfile' | 'logs' | 'exports', number>;
+  paths: Record<'dataRoot' | 'database' | 'assets' | 'boundBrowserProfile' | 'legacyBrowserProfile' | 'logs' | 'exports', string>;
+  usage: Record<'database' | 'assets' | 'boundBrowserProfile' | 'legacyBrowserProfile' | 'logs' | 'exports', number>;
   counts: { migrations: number; appMeta: number };
   mcp: { status: 'not_started' | 'ready'; url: string | null };
   health: { database: 'ready'; mcp: 'not_started' | 'ready'; browser: 'not_started' | 'ready'; jobs: 'not_started'; platforms: Record<'x' | 'xiaohongshu' | 'wechat', 'unknown'> };
   piRuntime: PiRuntimeInfo;
 };
 
-export async function readSettings(rootPath: string, options?: { mcpStatus?: 'not_started' | 'ready'; mcpUrl?: string | null; browserStatus?: 'not_started' | 'ready'; browserProfilePath?: string }): Promise<SettingsSnapshot> {
+export async function readSettings(rootPath: string, options?: { mcpStatus?: 'not_started' | 'ready'; mcpUrl?: string | null; browserStatus?: 'not_started' | 'ready'; boundBrowserProfilePath?: string }): Promise<SettingsSnapshot> {
   const paths = {
     dataRoot: rootPath,
     database: path.join(rootPath, 'wmb.db'),
     assets: path.join(rootPath, 'assets'),
-    browserProfile: options?.browserProfilePath ?? path.join(rootPath, 'browser-profile'),
+    boundBrowserProfile: options?.boundBrowserProfilePath ?? '',
+    legacyBrowserProfile: path.join(rootPath, 'browser-profile'),
     logs: path.join(rootPath, 'logs'),
     exports: path.join(rootPath, 'exports')
   };
@@ -33,7 +34,8 @@ export async function readSettings(rootPath: string, options?: { mcpStatus?: 'no
     usage: {
       database: (await stat(paths.database)).size,
       assets: await directorySize(paths.assets),
-      browserProfile: await directorySize(paths.browserProfile),
+      boundBrowserProfile: paths.boundBrowserProfile ? await directorySize(paths.boundBrowserProfile) : 0,
+      legacyBrowserProfile: await directorySize(paths.legacyBrowserProfile),
       logs: await directorySize(paths.logs),
       exports: await directorySize(paths.exports)
     },
@@ -45,11 +47,32 @@ export async function readSettings(rootPath: string, options?: { mcpStatus?: 'no
 }
 
 async function directorySize(directory: string): Promise<number> {
+  let pending = [directory];
   let bytes = 0;
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) bytes += await directorySize(entryPath);
-    else if (entry.isFile()) bytes += (await stat(entryPath)).size;
+  let firstBatch = true;
+  while (pending.length > 0) {
+    const directories = pending.splice(0, 16);
+    const batches = await Promise.all(directories.map(async (current) => {
+      try {
+        return await readdir(current, { withFileTypes: true });
+      } catch (error) {
+        if (firstBatch && current === directory && (error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+      }
+    }));
+    firstBatch = false;
+    const files: string[] = [];
+    for (let index = 0; index < directories.length; index += 1) {
+      for (const entry of batches[index]) {
+        const entryPath = path.join(directories[index], entry.name);
+        if (entry.isDirectory()) pending.push(entryPath);
+        else if (entry.isFile()) files.push(entryPath);
+      }
+    }
+    for (let offset = 0; offset < files.length; offset += 16) {
+      const sizes = await Promise.all(files.slice(offset, offset + 16).map(async (file) => (await stat(file)).size));
+      bytes += sizes.reduce((sum, size) => sum + size, 0);
+    }
   }
   return bytes;
 }

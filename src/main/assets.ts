@@ -43,6 +43,43 @@ export function guessImageMime(filePath: string, fallback = 'application/octet-s
   return IMAGE_MIME[path.extname(filePath).toLowerCase()] ?? fallback;
 }
 
+export type StagedAsset = {
+  id: string; relativePath: string; mimeType: string; byteCount: number; sha256: string; origin: string;
+  width: number | null; height: number | null; durationMs: number | null;
+};
+
+export async function stageAssetBytes(dataRoot: string, input: {
+  bytes: Buffer; fileName?: string; mimeType?: string; origin: string;
+  width?: number | null; height?: number | null; durationMs?: number | null;
+}): Promise<StagedAsset> {
+  const extension = path.extname(input.fileName || '').toLowerCase()
+    || (input.mimeType === 'image/png' ? '.png' : input.mimeType === 'image/jpeg' ? '.jpg'
+      : input.mimeType === 'image/webp' ? '.webp' : input.mimeType === 'image/gif' ? '.gif' : '.bin');
+  const mimeType = input.mimeType || guessImageMime(extension, 'application/octet-stream');
+  const sha256 = createHash('sha256').update(input.bytes).digest('hex');
+  const relativePath = path.posix.join('assets', `${sha256}${extension}`);
+  const destination = path.join(dataRoot, ...relativePath.split('/'));
+  await mkdir(path.dirname(destination), { recursive: true });
+  try {
+    await writeFile(destination, input.bytes, { flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  return { id: randomUUID(), relativePath, mimeType, byteCount: input.bytes.byteLength, sha256, origin: input.origin,
+    width: input.width ?? null, height: input.height ?? null, durationMs: input.durationMs ?? null };
+}
+
+export function registerStagedAsset(database: DatabaseSync, staged: StagedAsset) {
+  const existing = database.prepare('SELECT id, relative_path AS relativePath, mime_type AS mimeType FROM assets WHERE sha256 = ?')
+    .get(staged.sha256) as { id: string; relativePath: string; mimeType: string } | undefined;
+  if (existing) return { ...existing, reused: true, sha256: staged.sha256 };
+  const now = new Date().toISOString();
+  database.prepare(`INSERT INTO assets (id, relative_path, mime_type, byte_count, sha256, origin, width, height, duration_ms, created_at, updated_at, revision)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(staged.id, staged.relativePath, staged.mimeType, staged.byteCount,
+    staged.sha256, staged.origin, staged.width, staged.height, staged.durationMs, now, now);
+  return { id: staged.id, relativePath: staged.relativePath, reused: false, mimeType: staged.mimeType, sha256: staged.sha256 };
+}
+
 async function persistAssetBytes(
   database: DatabaseSync,
   dataRoot: string,

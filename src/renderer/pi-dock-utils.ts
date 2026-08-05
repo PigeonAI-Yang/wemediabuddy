@@ -20,7 +20,11 @@ export function piThinkingSummary(text: string): string {
 export function updatePiMessageSegment(message: PiChatMessage, segment: PiMessageSegment): PiChatMessage {
   const segments = [...(message.segments ?? [])];
   const last = segments[segments.length - 1];
-  if (segment.kind !== 'tool' && last?.kind === segment.kind && segment.text.startsWith(last.text)) segments[segments.length - 1] = segment;
+  const streamIndex = segment.kind !== 'tool' && segment.streamKey
+    ? segments.findIndex((item) => item.kind !== 'tool' && item.streamKey === segment.streamKey)
+    : -1;
+  if (streamIndex >= 0) segments[streamIndex] = segment;
+  else if (segment.kind !== 'tool' && last?.kind === segment.kind && segment.text.startsWith(last.text)) segments[segments.length - 1] = segment;
   else if (segment.kind === 'tool' && last?.kind === 'tool' && segment.toolCallId && last.toolCallId === segment.toolCallId) segments[segments.length - 1] = { ...last, ...segment };
   else segments.push(segment);
   return { ...message, segments };
@@ -96,4 +100,8 @@ export function piErrorMessage(error: unknown): string {
 
 export function isPiConversationNearBottom(scrollTop: number, scrollHeight: number, clientHeight: number): boolean {
   return scrollHeight - clientHeight - scrollTop <= 48;
+}
+
+export function nextPiConversationFollowing(current: boolean, userScrollIntent: boolean, nearBottom: boolean): boolean {
+  return nearBottom || (!userScrollIntent && current);
 }

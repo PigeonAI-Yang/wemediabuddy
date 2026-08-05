@@ -25,10 +25,10 @@ export function XListOperationTray(): React.JSX.Element | null {
     return () => window.clearInterval(timer);
   }, [refresh]);
   useEffect(() => {
-    if (operation?.state === 'awaiting_confirmation' && operation.kind !== 'members_add') setOpen(true);
-  }, [operation?.id, operation?.state]);
+    if (isAwaitingConfirmation(operation)) setOpen(true);
+  }, [operation?.id, operation?.state, operation?.phase]);
   useEffect(() => {
-    if (operation?.state !== 'prepared' || operation.kind === 'members_add') return;
+    if (operation?.state !== 'prepared' || operation.phase === 'awaiting_confirmation') return;
     const key = `${operation.id}:${operation.revision}`;
     if (arming.current === key) return;
     arming.current = key; setBusy(true); setNote('正在核对账号、List 和精确变更…');
@@ -36,18 +36,18 @@ export function XListOperationTray(): React.JSX.Element | null {
       if (result.ok) { setOperation(result.data); setNote('核对完成，等待一次确认。'); }
       else setNote(result.error.message);
     }).catch((error) => setNote(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false));
-  }, [operation?.id, operation?.revision, operation?.state]);
+  }, [operation?.id, operation?.revision, operation?.state, operation?.phase]);
 
   if (!operation) return null;
   const pending = operation.items.filter((item) => item.state === 'pending').length;
   const done = operation.items.length - pending;
-  const canConfirm = operation.kind !== 'members_add' && operation.state === 'awaiting_confirmation'
+  const canConfirm = isAwaitingConfirmation(operation)
     && (operation.kind !== 'delete' || typedName.trim() === operation.snapshot.list?.name);
   const confirm = async () => {
     setBusy(true); setNote('正在确认操作…');
     try {
       const result = await window.wmb.confirmXListOperation({ operationId: operation.id, expectedRevision: operation.revision, typedListName: typedName });
-      if (!result.ok) { setNote(result.error.message); await refresh(); return; }
+      if (!result.ok || !result.data) { setNote(result.error?.message ?? '确认失败。'); await refresh(); return; }
       setOperation(result.data); setNote('后台执行已开始。');
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
@@ -62,7 +62,9 @@ export function XListOperationTray(): React.JSX.Element | null {
     <header><div><small>WMB X List 操作</small><strong>{labels[operation.kind]}</strong></div><button aria-label="收起操作" onClick={() => setOpen(false)}>×</button></header>
     <p>{operation.accountKey} · {operation.snapshot.list?.name ?? operation.listId ?? '新 List'}</p>
     {(operation.kind === 'members_add' || operation.kind === 'members_remove') && <p className="x-list-operation-handles">{operation.items.map((item) => item.handle).join('、')}</p>}
-    {operation.kind === 'delete' && operation.state === 'awaiting_confirmation' && <label>输入“{operation.snapshot.list?.name}”确认删除<input value={typedName} onChange={(event) => setTypedName(event.target.value)}/></label>}
+    {operation.kind === 'delete' && isAwaitingConfirmation(operation) && <label>输入“{operation.snapshot.list?.name}”确认删除<input value={typedName} onChange={(event) => setTypedName(event.target.value)}/></label>}
+    {operation.state === 'execution_granted' && <p>确认已提交 · 正在等待浏览器接管</p>}
+    {operation.state === 'browser_leased' && <p>浏览器已接管 · 正在等待执行开始</p>}
     {operation.state === 'running' && <p>后台执行中 · 已处理 {done}/{operation.items.length}</p>}
     {terminal.has(operation.state) && <p>执行结束 · 成功或无需变更 {operation.items.filter((item) => ['succeeded', 'already_present', 'already_absent'].includes(item.state)).length} · 异常 {operation.items.filter((item) => ['failed', 'needs_user', 'unknown'].includes(item.state)).length}</p>}
     {operation.errorMessage && <p className="x-list-operation-error">{operation.errorMessage}</p>}
@@ -71,9 +73,16 @@ export function XListOperationTray(): React.JSX.Element | null {
   </section>}</>;
 }
 
+function isAwaitingConfirmation(operation: XListOperation | null): boolean {
+  return operation?.state === 'awaiting_confirmation'
+    || (operation?.state === 'prepared' && operation.phase === 'awaiting_confirmation');
+}
+
 function status(operation: XListOperation): string {
+  if (isAwaitingConfirmation(operation)) return '待确认';
   if (operation.state === 'prepared') return '准备中';
-  if (operation.state === 'awaiting_confirmation') return operation.kind === 'members_add' ? '等待 Pi 执行' : '待确认';
+  if (operation.state === 'execution_granted') return '已确认，等待浏览器';
+  if (operation.state === 'browser_leased') return '浏览器已接管，等待执行';
   if (operation.state === 'running') return '执行中';
   return ({ succeeded: '已完成', partial: '部分完成', needs_user: '需要接管', unknown: '结果未知', failed: '失败' } as Record<string, string>)[operation.state] ?? operation.state;
 }

@@ -1,5 +1,5 @@
 export type PiMessageSegment =
-  | { kind: 'thinking' | 'text'; text: string }
+  | { kind: 'thinking' | 'text'; text: string; streamKey?: string }
   | { kind: 'tool'; text: string; toolName: string; toolCallId?: string; input?: string; output?: string; isError?: boolean };
 
 function compact(value: unknown): string {

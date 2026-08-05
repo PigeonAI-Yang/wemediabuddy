@@ -25,7 +25,11 @@ export function createWindow(): void {
       preload: path.join(__dirname, 'preload.js')
     }
   });
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) void window.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    const rendererUrl = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    if (rendererUrl.hostname === 'localhost') rendererUrl.hostname = '127.0.0.1';
+    void window.loadURL(rendererUrl.toString());
+  }
   else void window.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
 }
 
@@ -42,8 +46,8 @@ setDataChangedPublisher((event: DataChangedEvent) => {
 });
 
 export function broadcastPiRuntimeProgress(event: Record<string, unknown>, scope: 'dock' | 'task' = 'task'): void {
-  if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? ''), scope });
-  if (event.type === 'wmb_thinking_delta') broadcastPiEvent({ type: 'thinking', text: String(event.text ?? ''), scope });
+  if (event.type === 'wmb_text_delta') broadcastPiEvent({ type: 'delta', text: String(event.text ?? ''), streamKey: String(event.streamKey ?? ''), scope });
+  if (event.type === 'wmb_thinking_delta') broadcastPiEvent({ type: 'thinking', text: String(event.text ?? ''), streamKey: String(event.streamKey ?? ''), scope });
   if (event.type === 'agent_start') broadcastPiEvent({ type: 'running', scope });
   if (event.type === 'tool_execution_start') broadcastPiEvent({ type: 'tool', toolName: String(event.toolName ?? ''), toolCallId: String(event.toolCallId ?? ''), toolArgs: event.args, scope });
   if (event.type === 'tool_execution_end') broadcastPiEvent({ type: 'tool-result', toolName: String(event.toolName ?? ''), toolCallId: String(event.toolCallId ?? ''), toolResult: event.result, isError: event.isError === true, scope });

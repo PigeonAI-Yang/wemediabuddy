@@ -45,6 +45,18 @@ export const phaseLabels: Record<string, string> = {
 export const MAX_SELECTED_SOURCES = 5;
 export const BODY_EXCERPT_CHARS = 4000;
 
+export function formatTodayActionLine(pendingCount: number, opportunityCount: number, sssCount: number, fermentingCount: number): string {
+  if (pendingCount > 0) return `${pendingCount} 项任务待你处理，完成后流程才能继续。`;
+  if (opportunityCount > 0) {
+    const parts = [`已根据入库资料整理出 ${opportunityCount} 个内容机会`];
+    if (sssCount) parts.push(`${sssCount} 个 SSS 级优先`);
+    if (fermentingCount) parts.push(`${fermentingCount} 条资料仍在发酵`);
+    return `${parts.join('，')}。`;
+  }
+  if (fermentingCount) return `${fermentingCount} 条资料仍在发酵，开始今日情报可补充新的内容机会。`;
+  return '开始今日情报，整理出今天值得讲的内容机会。';
+}
+
 export function isHeartbeatSource(source: TodaySource): boolean {
   const title = source.title || '';
   if (title.startsWith('[官宣巡检]')) return true;

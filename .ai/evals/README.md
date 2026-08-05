@@ -44,3 +44,7 @@ Evals prove a SPEC capability end to end. They do not replace task-level tests o
 
 An eval passes only when all required graders pass. Report partial or blocked results explicitly; do not average failures into a score.
 
+## Enforcement
+
+Machine execution: for every `CAP-xxx` in `SPEC.md`, if all tasks referencing it in `TASKS.md` are `done` and the largest task number among them is ≥ 4810, `.ai/evals/EVAL-CAP-xxx.md` must exist. Compare by the CAP number as lowercase 3 digits; file name uppercase (e.g. `EVAL-CAP-025.md`). `scripts/check.ps1` / `scripts/check-ledger.mjs` enforce this at waterline WMB-4810.
+

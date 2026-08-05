@@ -6,23 +6,23 @@
   color-scheme: dark;
 
   /* 「墨夜编辑台」设计令牌 — 以 prototype/ 批准稿为准 */
-  --app-bg: #0a0c11;
-  --topbar-bg: #0d1017;
-  --sidebar-bg: #0e111a;
-  --workspace-bg: #0a0d13;
-  --panel-bg: #10131b;
-  --surface: #12151f;
-  --surface-raised: #161a25;
-  --surface-hover: #1d2331;
-  --surface-selected: #1c2233;
-  --tag-bg: #1b2029;
-  --ink: #e9ebf3;
-  --ink-soft: #c6cbdb;
-  --muted: #a7adc0;
-  --muted-low: #6b7288;
-  --border: #2c3341;
-  --border-soft: #21262f;
-  --border-strong: #3a4252;
+  --app-bg: #0b0b0b;
+  --topbar-bg: #0f0f0f;
+  --sidebar-bg: #111111;
+  --workspace-bg: #0d0d0d;
+  --panel-bg: #131313;
+  --surface: #171717;
+  --surface-raised: #1c1c1c;
+  --surface-hover: #242424;
+  --surface-selected: #2a2a2a;
+  --tag-bg: #202020;
+  --ink: #f1f1f1;
+  --ink-soft: #d2d2d2;
+  --muted: #aaaaaa;
+  --muted-low: #767676;
+  --border: #363636;
+  --border-soft: #292929;
+  --border-strong: #484848;
   --line: rgb(255 255 255 / 6.5%);
   --line-strong: rgb(255 255 255 / 13%);
 
@@ -57,11 +57,11 @@
   --pf-xhs: #f04a5e;
   --pf-wx: #3fb575;
 
-  --canvas-bg: #0b0e15;
+  --canvas-bg: #0f0f0f;
   --mark-bg: #f2f4f7;
-  --mark-ink: #10141b;
-  --scroll-thumb: #4b5361;
-  --scroll-hover: #697382;
+  --mark-ink: #111111;
+  --scroll-thumb: #505050;
+  --scroll-hover: #707070;
   --overlay: rgb(0 0 0 / 55%);
   --topbar-height: 56px;
   --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
@@ -218,24 +218,53 @@ h1, h2, h3, p { text-wrap: pretty; }
   font-weight: 700;
   letter-spacing: .01em;
 }
-.wmb-creature-mark { display: inline-grid; width: 20px; height: 20px; place-items: center; color: var(--ink-soft); }
-.wmb-creature-mark svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.wmb-creature-white,.wmb-creature-pupil { fill: currentColor; }
+.wmb-creature-mark { position: relative; display: inline-grid; width: 20px; height: 20px; place-items: center; color: var(--ink-soft); }
+.wmb-creature-logo { position: relative; z-index: 1; display: block; width: 100%; height: 100%; overflow: visible; }
+.wmb-creature-white,.wmb-creature-pupil,.wmb-creature-upper-lid { fill: currentColor; }
+.wmb-creature-white { stroke: currentColor; stroke-linejoin: round; stroke-width: 3; }
 .wmb-creature-purple { fill: var(--accent); }
-.wmb-creature-eye path { fill: var(--surface-raised); stroke: currentColor; stroke-linejoin: round; stroke-width: 3.4; }
-.wmb-creature-mark.is-working .wmb-creature-body { transform-box: fill-box; transform-origin: center; animation: wmb-creature-body 2.8s steps(12,end) infinite; }
-.wmb-creature-mark.is-working .wmb-creature-purple { transform-box: fill-box; transform-origin: 50% 100%; animation: wmb-creature-wing 2.8s steps(12,end) infinite; }
-.wmb-creature-mark.is-working .wmb-creature-eye { transform-box: fill-box; transform-origin: center; animation: wmb-creature-blink 4.9s steps(1,end) infinite; }
-.wmb-creature-mark.is-working .wmb-creature-pupil { animation: wmb-creature-look 2.8s steps(12,end) infinite; }
-.wmb-creature-mark.is-settling .wmb-creature-body { transform-box: fill-box; transform-origin: center; animation: wmb-creature-settle .4s ease-out both; }
-.wmb-creature-mark.is-settling .wmb-creature-eye { transform-box: fill-box; transform-origin: center; animation: wmb-creature-settle-blink .4s ease-out both; }
-@keyframes wmb-creature-body { 0%,12%,58%,100%{transform:none} 20%,30%{transform:translateX(-1px) rotate(-2deg) scaleX(1.04) scaleY(.97)} 40%,50%{transform:translateX(1px) rotate(2deg) scaleX(1.04) scaleY(.97)} 72%{transform:translateX(-1.5px) rotate(-3deg)} 76%{transform:translateX(1.5px) rotate(3deg)} 82%{transform:none} }
-@keyframes wmb-creature-wing { 0%,12%,58%,100%{transform:none} 20%,30%{transform:scaleY(.9)} 40%,50%{transform:scaleY(1.08)} 72%{transform:scaleY(.86)} 76%{transform:scaleY(1.12)} 82%{transform:none} }
-@keyframes wmb-creature-look { 0%,12%,58%,100%{transform:none} 20%,30%{transform:translateX(-2.3px)} 40%,50%{transform:translateX(2.3px)} 72%{transform:translateX(-2.8px)} 76%{transform:translateX(2.8px)} 82%{transform:none} }
-@keyframes wmb-creature-blink { 0%,66%,70%,92%,96%,100%{transform:scaleY(1)} 68%,94%{transform:scaleY(.12)} }
+.wmb-creature-pupil-track { transform-box: fill-box; transform-origin: center; }
+.wmb-creature-upper-lid { transform: translateY(-174px); }
+.wmb-creature-connect-current { position: absolute; z-index: 2; left: 50%; top: 50%; display: none; width: 92px; height: 64px; overflow: visible; pointer-events: none; transform: translate(-50%,-50%); }
+.wmb-creature-connect-current path { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 5 7; opacity: 0; }
+.wmb-creature-work-fx { position: absolute; z-index: 2; inset: -2px -7px -4px; display: none; pointer-events: none; }
+.wmb-creature-work-fx .work-item { position: absolute; width: 7px; height: 5px; border: 1px solid var(--muted-low); border-radius: 2px; background: var(--surface-raised); opacity: .2; }
+.wmb-creature-work-fx .work-item::after { position: absolute; inset: 1px; background: var(--accent); content: ""; }
+.wmb-creature-work-fx .work-item.one { left: 0; top: 7px; animation: wmb-creature-task-left 2.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-work-fx .work-item.two { right: 0; top: 3px; animation: wmb-creature-task-right 2.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-work-fx .work-progress { position: absolute; right: 7px; bottom: 0; left: 7px; height: 2px; overflow: hidden; border-radius: 2px; background: var(--border); }
+.wmb-creature-work-fx .work-progress::after { display: block; width: 100%; height: 100%; background: var(--accent); content: ""; transform-origin: left; animation: wmb-creature-progress 2.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-connect > .wmb-creature-logo { transform-origin: center; animation: wmb-creature-connect 1.8s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-connect .wmb-creature-connect-current { display: block; }
+.wmb-creature-mark.is-connect .wmb-creature-pupil-track { animation: wmb-creature-connect-scan 1.8s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-connect .wmb-creature-connect-current path { animation: wmb-creature-connect-current 1.8s linear infinite; }
+.wmb-creature-mark.is-connect .wmb-creature-connect-current path + path { animation-delay: -.9s; }
+.wmb-creature-mark.is-working > .wmb-creature-logo { transform-origin: center; animation: wmb-creature-work 2.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-working .wmb-creature-pupil-track { animation: wmb-creature-work-eye 2.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-working .wmb-creature-upper-lid { animation: wmb-creature-blink 6.4s ease-in-out infinite; }
+.wmb-creature-mark.is-working .wmb-creature-work-fx { display: block; }
+.wmb-creature-mark.is-settling > .wmb-creature-logo { transform-origin: center; animation: wmb-creature-settle .4s ease-out both; }
+.wmb-creature-mark.is-settling .wmb-creature-upper-lid { animation: wmb-creature-settle-blink .4s ease-out both; }
+.wmb-creature-mark.is-sleep > .wmb-creature-logo { transform-origin: center; animation: wmb-creature-sleep 4.8s ease-in-out infinite; }
+.wmb-creature-mark.is-sleep .wmb-creature-pupil-track { animation: none; }
+.wmb-creature-mark.is-sleep .wmb-creature-upper-lid { animation: none; transform: translateY(118px); }
+.wmb-creature-mark.is-scout > .wmb-creature-logo { transform-origin: 50% 100%; animation: wmb-creature-scout 8.4s cubic-bezier(.25,1,.5,1) infinite; }
+.wmb-creature-mark.is-scout .wmb-creature-pupil-track { animation: wmb-creature-scout-eye 8.4s cubic-bezier(.25,1,.5,1) infinite; }
+@keyframes wmb-creature-work { 0%,12%,100%{transform:none} 25%,42%{transform:translate(-1.2px,-.3px) rotate(-4deg)} 55%,72%{transform:translate(1.2px,-.3px) rotate(4deg)} 84%{transform:translateY(.3px) scale(1.04,.94)} }
+@keyframes wmb-creature-work-eye { 0%,12%,100%{transform:translateX(0)} 25%,42%{transform:translateX(-54px)} 55%,72%{transform:translateX(62px)} }
+@keyframes wmb-creature-task-left { 0%,12%,100%{opacity:.2;transform:translateX(-2px)} 25%,42%{opacity:1;transform:none} 58%{opacity:.15;transform:translateX(3px)} }
+@keyframes wmb-creature-task-right { 0%,42%,100%{opacity:.2;transform:translateX(2px)} 55%,72%{opacity:1;transform:none} 86%{opacity:.15;transform:translateX(-3px)} }
+@keyframes wmb-creature-progress { 0%,12%{transform:scaleX(0)} 82%,100%{transform:scaleX(1)} }
+@keyframes wmb-creature-sleep { 0%,100%{transform:translateY(1px) scale(1.02,.88)} 50%{transform:translateY(.5px) scale(1.08,.95)} }
+@keyframes wmb-creature-blink { 0%,64%,70%,90%,96%,100%{transform:translateY(-174px)} 67%,93%{transform:translateY(172px)} }
 @keyframes wmb-creature-settle { from{transform:translateX(1px) rotate(2deg) scale(.96)} to{transform:none} }
-@keyframes wmb-creature-settle-blink { 0%,100%{transform:scaleY(1)} 48%{transform:scaleY(.08)} }
-@media (prefers-reduced-motion: reduce) { .wmb-creature-mark.is-working .wmb-creature-body,.wmb-creature-mark.is-working .wmb-creature-purple,.wmb-creature-mark.is-working .wmb-creature-eye,.wmb-creature-mark.is-working .wmb-creature-pupil,.wmb-creature-mark.is-settling .wmb-creature-body,.wmb-creature-mark.is-settling .wmb-creature-eye { animation: none; } }
+@keyframes wmb-creature-settle-blink { 0%,100%{transform:translateY(-174px)} 48%{transform:translateY(172px)} }
+@keyframes wmb-creature-connect { 0%,100%{filter:drop-shadow(0 0 0 transparent);transform:scale(.96)} 45%,55%{filter:drop-shadow(0 0 8px var(--accent));transform:scale(1.07)} }
+@keyframes wmb-creature-connect-scan { 0%,18%{transform:translateX(-55px)} 48%,68%{transform:translateX(64px)} 82%,100%{transform:translateX(8px)} }
+@keyframes wmb-creature-connect-current { 0%,18%{stroke-dashoffset:71;opacity:0} 28%,72%{opacity:1} 100%{stroke-dashoffset:-71;opacity:0} }
+@keyframes wmb-creature-scout { 0%,7%,48%,55%,96%,100%{transform:none} 12%{transform:translate(3px,4px) rotate(2deg) scale(1.06,.92)} 20%,34%{transform:translate(-25px,-18px) rotate(-8deg) scale(.86,1.32)} 42%{transform:translate(-7px,-3px) rotate(-2deg) scale(1.025,.98)} 60%{transform:translate(-3px,4px) rotate(-2deg) scale(1.06,.92)} 68%,82%{transform:translate(25px,-18px) rotate(8deg) scale(.86,1.32)} 90%{transform:translate(7px,-3px) rotate(2deg) scale(1.025,.98)} }
+@keyframes wmb-creature-scout-eye { 0%,5%,46%,53%,94%,100%{transform:translateX(0)} 10%,38%{transform:translateX(-92px)} 44%{transform:translateX(-20px)} 58%,86%{transform:translateX(92px)} 92%{transform:translateX(20px)} }
+@media (prefers-reduced-motion: reduce) { .wmb-creature-mark.is-connect > .wmb-creature-logo,.wmb-creature-mark.is-connect .wmb-creature-pupil-track,.wmb-creature-mark.is-connect .wmb-creature-connect-current path,.wmb-creature-mark.is-working > .wmb-creature-logo,.wmb-creature-mark.is-working .wmb-creature-pupil-track,.wmb-creature-mark.is-working .wmb-creature-upper-lid,.wmb-creature-mark.is-working .work-item,.wmb-creature-mark.is-working .work-progress::after,.wmb-creature-mark.is-settling > .wmb-creature-logo,.wmb-creature-mark.is-settling .wmb-creature-upper-lid,.wmb-creature-mark.is-sleep > .wmb-creature-logo,.wmb-creature-mark.is-scout > .wmb-creature-logo,.wmb-creature-mark.is-scout .wmb-creature-pupil-track { animation: none; } .wmb-creature-mark.is-sleep > .wmb-creature-logo { transform: translateY(1px) scaleY(.92); } .wmb-creature-mark.is-sleep .wmb-creature-upper-lid { transform: translateY(118px); } }
 .titlebar-actions {
   -webkit-app-region: no-drag;
   display: flex;

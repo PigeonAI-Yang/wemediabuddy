@@ -1,38 +1,40 @@
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import { createContentProjectWithVersion, getContentProject, listContentProjects, saveCoreVersion, savePlatformVersion } from './content.ts';
+import { getContentProject, listContentProjects } from './content.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { getToday } from './workbench.ts';
-import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
-import { getSource, searchSources, upsertSource, type SourceInput } from './sources.ts';
+import { getSource, searchSources } from './sources.ts';
 import { getWireHealthLedger } from './source-wire-health.ts';
 import { listAssets } from './assets.ts';
-import { listFinalReviewsAndFindings, listReviews, saveReview } from './reviews.ts';
+import { listFinalReviewsAndFindings, listReviews } from './reviews.ts';
 import { listPublicationMetricSnapshots } from './metrics.ts';
 import * as z from 'zod';
-import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
-import { createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, recordKnowledgeBatch, topicDossierCategories, updateKnowledgeDomain } from './knowledge.ts';
-import { createContentProjectFromBriefIdempotent, createCreativeBriefIdempotent, createKnowledgeSuggestionIdempotent, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage, updateCreativeBriefIdempotent } from './knowledge-canvas.ts';
-import { getXListOperation, listXListBindings, prepareXListOperation } from './x-lists.ts';
-import { addXListMembersWithReplay, collectBoundXListTimeline, removeXListMembersWithReplay } from './x-list-execution.ts';
-import { ensurePyaireaderXBrowser } from './browser.ts';
-import { readBrowserConfig } from './browser-config.ts';
+import { getAgentTask } from './agent-tasks.ts';
+import { getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, topicDossierCategories } from './knowledge.ts';
+import { getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage } from './knowledge-canvas.ts';
+import { getXListOperation, listXListBindings, prepareXListOperation, type PrepareXListOperationInput } from './x-lists.ts';
+import { collectBoundXListTimeline } from './x-list-execution.ts';
+import { selectedXListBrowser as resolveSelectedXListBrowser } from './x-list-context.ts';
 import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
-import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
-import { allowsAiOnlyRoutes, assertPublishingPlatforms } from './workspace-profiles.ts';
+import type { ActiveWorkspaceRuntime, WorkspaceRuntimeGate } from './workspace-runtime.ts';
+import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 import { registerIntelligenceChannelsMcp } from './intelligence-channel-mcp.ts';
 import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
-import { getXObservationSession, startXObservationSession, stopXObservationSession } from './x-observation-jobs.ts';
-
+import { getXObservationSession, persistXObservationSessionStart, readXObservationSessionStart, stopXObservationSession } from './x-observation-jobs.ts';
+import { registerSourceMutationMcp } from './mcp-source-commands.ts';
+import { registerTaskGrantMcp } from './mcp-task-grants.ts';
+import { assertTaskGrantForEnvelope } from './task-grants.ts';
+import { createCommandEnvelope } from './command-dispatcher.ts';
+import { registerExecutionGrantMcp } from './mcp-execution-grants.ts';
+import { registerBusinessMutationMcp } from './mcp-business-commands.ts';
+import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
 export type McpRuntime = { url: string; close: () => Promise<void> };
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
-
-function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp): McpServer {
+function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): McpServer {
   const server = new McpServer({ name: 'wemedia-buddy', version: '0.1.0' });
   const database = () => migrateDatabase(path.join(rootPath, 'wmb.db'));
   const profileDatabase = database();
@@ -41,6 +43,12 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
 
   if (application) registerWorkspaceApplicationMcp(server, rootPath, application);
   if (application?.channelProposals) registerIntelligenceChannelsMcp(server, rootPath, application);
+  if (runtime) {
+    registerSourceMutationMcp(server, runtime);
+    registerBusinessMutationMcp(server, runtime);
+  }
+  registerTaskGrantMcp(server, database, runtime);
+  registerExecutionGrantMcp(server, database, runtime);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -53,40 +61,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     inputSchema: { task_id: z.string() }
   }, async ({ task_id }) => {
     const db = database(); try { return text(getAgentTask(db, task_id)); } finally { db.close(); }
-  });
-  server.registerTool('agent_tasks.report_progress', {
-    description: '在每个来源开始、成功、失败或跳过后持久化进度和检查点。',
-    inputSchema: {
-      task_id: z.string(),
-      phase: z.string().optional(),
-      current_source: z.string().optional(),
-      planned: z.number().int().nonnegative().optional(),
-      processed: z.number().int().nonnegative().optional(),
-      failed: z.number().int().nonnegative().optional(),
-      verified: z.number().int().nonnegative().optional(),
-      saved: z.number().int().nonnegative().optional(),
-      opportunity_count: z.number().int().nonnegative().optional(),
-      checkpoint: z.record(z.string(), z.unknown()).optional(),
-      message: z.string().optional(),
-      level: z.enum(['info', 'warning']).optional(),
-      clear_control: z.boolean().optional()
-    }
-  }, async (input) => {
-    const db = database();
-    try {
-      const result = reportAgentTaskProgress(db, input.task_id, {
-        phase: input.phase,
-        progress: {
-          currentSource: input.current_source, planned: input.planned, processed: input.processed,
-          failed: input.failed, verified: input.verified, saved: input.saved, opportunityCount: input.opportunity_count
-        },
-        checkpoint: input.checkpoint,
-        message: input.message,
-        level: input.level
-      });
-      if (input.clear_control && result.ok) clearAgentTaskControl(db, input.task_id);
-      return text(result);
-    } finally { db.close(); }
   });
   server.registerTool('content.list', {
     description: '服务端搜索内容项目，只返回最多 50 条摘要，不返回历史正文。',
@@ -124,40 +98,13 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     try { return text(getWireHealthLedger(db, { businessDate: business_date })); }
     finally { db.close(); }
   });
-  server.registerTool('sources.upsert_batch', {
-    description: '新增或更新资料；同一 request_id 重放原始结果。',
-    inputSchema: { request_id: z.string(), items: z.array(z.object({
-      title: z.string(), feedId: z.string().optional(), originalUrl: z.string().optional(), author: z.string().optional(),
-      publishedAt: z.string().optional(), summary: z.string().optional(), categories: z.array(z.string()).optional(),
-      keywords: z.array(z.string()).optional(), valueJudgment: z.string().optional(), ipRelevance: z.string().optional(),
-      creationAngles: z.string().optional(), recommendedPlatforms: z.array(z.string()).optional(),
-      recommendedFormats: z.array(z.string()).optional(), timeliness: z.string().optional(), priority: z.number().optional(),
-      evidence: z.string().optional(), clientLabel: z.string().optional(), expectedRevision: z.number().int().optional()
-    })) }
-  }, async ({ request_id, items }) => {
-    const db = database();
-    try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool = ? AND request_id = ?').get('sources.upsert_batch', request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const result = items.map((item) => upsertSource(db, item as SourceInput));
-        const payload = { ok: true, data: result, error: null };
-        db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('sources.upsert_batch', request_id, JSON.stringify(payload), new Date().toISOString());
-        db.exec('COMMIT'); return text(payload);
-      } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } finally { db.close(); }
-  });
   const selectedXListBrowser = async () => {
     const db = database();
     try {
-      const config = readBrowserConfig();
       const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
-      if (!workspaceId || !config) {
-        throw Object.assign(new Error('请先在设置中启用 WMB 共享的 X 登录态。'), { code: 'BROWSER_NEEDS_USER' });
-      }
-      const runtime = await ensurePyaireaderXBrowser(config, { mode: 'quiet' });
-      return { id: config.id, cdpUrl: runtime.cdpUrl, workspaceId };
+      if (!workspaceId) throw Object.assign(new Error('当前工作空间身份缺失。'), { code: 'BROWSER_NEEDS_USER' });
+      const config = await resolveSelectedXListBrowser(db);
+      return { ...config, workspaceId };
     } finally { db.close(); }
   };
   const xListResult = async <T>(work: () => Promise<T>) => {
@@ -168,6 +115,28 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const config = await selectedXListBrowser();
     const index = await readXListIndex(config);
     return { config: { ...config, accountKey: index.accountKey }, accountKey: index.accountKey };
+  };
+  const prepareAgentXListOperation = async (input: PrepareXListOperationInput & { taskId: string; taskGrantId: string; workerLeaseId?: string }) => {
+    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
+    const actor = input.workerLeaseId
+      ? { type: 'pi' as const, id: 'pi', label: 'Pi worker' }
+      : { type: 'external_agent' as const, id: 'mcp', label: 'External Agent' };
+    const envelope = createCommandEnvelope({
+      workspaceId: runtime.identity.workspaceId,
+      runtimeEpoch: runtime.identity.runtimeEpoch,
+      command: 'x_lists.operation_execute',
+      requestId: input.requestId,
+      input,
+      boundIdentity: { accountKey: input.accountKey, kind: input.kind, listId: input.listId ?? null },
+      actor,
+      taskId: input.taskId,
+      workerLeaseId: input.workerLeaseId,
+      grantId: input.taskGrantId
+    });
+    return runtime.runAtomic(() => {
+      assertTaskGrantForEnvelope(runtime.database, envelope, new Date(), (leaseId, taskId) => runtime.isCurrentWorkerLease(leaseId, taskId));
+      return prepareXListOperation(runtime.database, { ...input, preparedActor: actor });
+    });
   };
   const accountMatches = (actual: string, expected: string) => actual.trim().toLowerCase() === expected.trim().toLowerCase();
   server.registerTool('x_lists.read_index', {
@@ -206,23 +175,37 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
         : operation;
     } finally { db.close(); }
   }));
-  server.registerTool('x_lists.prepare', {
-    description: '创建 X List 操作提议（create/update/delete）。只准备，最终确认只能在 WMB UI 完成；成员添加/移除必须使用各自的直接工具。',
-    inputSchema: { request_id: z.string(), account_key: z.string(), kind: z.enum(['create', 'update', 'delete']), list_id: z.string().optional(),
-      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional() }
-  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles }) => xListResult(async () => {
+  const agentXAuthoritySchema = {
+    task_id: z.string().min(1).describe('Owner签发且当前active的task grant所属任务。'),
+    grant_id: z.string().min(1).describe('允许x_lists.operation_execute的当前task grant。'),
+    worker_lease_id: z.string().min(1).optional().describe('Pi必须传当前worker lease；外部Agent省略。')
+  };
+  const prepareAgentX = async (input: PrepareXListOperationInput & { taskId: string; taskGrantId: string; workerLeaseId?: string }) => {
     const { accountKey } = await selectedXListAccount();
-    if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
-    const db = database(); try { return prepareXListOperation(db, { requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles }); } finally { db.close(); }
-  }));
+    if (!accountMatches(accountKey, input.accountKey)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
+    return prepareAgentXListOperation(input);
+  };
+  server.registerTool('x_lists.prepare', {
+    description: '准备精确 X List 操作。只写提议，不执行浏览器动作；Owner必须在 WMB UI 针对此冻结操作签发单用途授权并确认。',
+    inputSchema: { request_id: z.string(), account_key: z.string(), kind: z.enum(['create', 'update', 'delete', 'members_add', 'members_remove']), list_id: z.string().optional(),
+      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional(), ...agentXAuthoritySchema }
+  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
+    prepareAgentX({ requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
   server.registerTool('x_lists.members_add', {
-    description: '用户明确要求添加成员时直接调用且无需 UI 确认。步骤：先读 index 确认账号和稳定 list_id；续跑先读 members 并排除已存在账号；每个新业务动作使用新 request_id；handles 只传唯一精确 @handle。replayed=true/attemptedNow=false 是旧结果回放，禁止说刚执行；attemptedNow=true 才是本次尝试，最终按逐项状态汇报。禁止通过 bash/源码猜参数。',
-    inputSchema: { request_id: z.string().describe('本次业务动作的唯一 ID；新添加或部分结果续跑必须使用新值，仅同一次未取得终态响应的传输重试可复用。'), account_key: z.string().describe('wmb_read_x_list_index 返回的当前账号精确 @handle。'), list_id: z.string().describe('wmb_read_x_list_index 返回的目标 List 稳定数字 ID，不传名称或 URL。'), handles: z.array(z.string().describe('唯一精确 @handle，必须以 @ 开头；禁止显示名、关键词或模糊候选。')).min(1).max(100).describe('本次仍需加入的账号；续跑前先读 members，排除已存在成员。') }
-  }, async ({ request_id, account_key, list_id, handles }) => xListResult(async () => {
-    const db = database(); try { return await addXListMembersWithReplay(db, { requestId: request_id, accountKey: account_key, listId: list_id, handles }, async () => (await selectedXListAccount()).config); }
-    finally { db.close(); }
-  }));
-  server.registerTool('x_lists.members_remove', { description: '用户明确要求移除成员时直接调用且无需 UI 确认。先读 index 取得账号和稳定 list_id，再读 members，只提交当前确实存在的唯一精确 @handle；新业务动作使用新 request_id。replayed=true/attemptedNow=false 是旧结果回放，attemptedNow=true 才是本次尝试，最终按逐项状态汇报。禁止通过 bash/源码猜参数。', inputSchema: { request_id: z.string().describe('本次业务动作的唯一 ID；新移除或部分结果续跑必须使用新值，仅同一次未取得终态响应的传输重试可复用。'), account_key: z.string().describe('wmb_read_x_list_index 返回的当前账号精确 @handle。'), list_id: z.string().describe('wmb_read_x_list_index 返回的目标 List 稳定数字 ID，不传名称或 URL。'), handles: z.array(z.string().describe('唯一精确 @handle，必须以 @ 开头；禁止显示名、关键词或模糊候选。')).min(1).max(100).describe('本次仍需移除且当前真实存在的账号；续跑前先重读 members。') } }, async ({ request_id, account_key, list_id, handles }) => xListResult(async () => { const db = database(); try { return await removeXListMembersWithReplay(db, { requestId: request_id, accountKey: account_key, listId: list_id, handles }, async () => (await selectedXListAccount()).config); } finally { db.close(); } }));
+    description: '准备添加 X List 成员；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
+    inputSchema: { request_id: z.string(), account_key: z.string(), list_id: z.string(), handles: z.array(z.string()).min(1).max(100), ...agentXAuthoritySchema }
+  }, async ({ request_id, account_key, list_id, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
+    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'members_add', listId: list_id, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
+  server.registerTool('x_lists.create', {
+    description: '准备新建 X List；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
+    inputSchema: { request_id: z.string(), account_key: z.string(), name: z.string().min(1), description: z.string().optional(), is_private: z.boolean().optional(), ...agentXAuthoritySchema }
+  }, async ({ request_id, account_key, name, description, is_private, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
+    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'create', name, description, isPrivate: is_private, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
+  server.registerTool('x_lists.members_remove', {
+    description: '准备移除 X List 成员；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
+    inputSchema: { request_id: z.string(), account_key: z.string(), list_id: z.string(), handles: z.array(z.string()).min(1).max(100), ...agentXAuthoritySchema }
+  }, async ({ request_id, account_key, list_id, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
+    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'members_remove', listId: list_id, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
   server.registerTool('x_lists.collect_timeline', {
     description: '采集当前根已启用 List 的有限最新动态到现有资料库。只操作当前根绑定，不含确认。',
     inputSchema: { account_key: z.string(), list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
@@ -247,10 +230,23 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   });
   server.registerTool('x_lists.observation_start', {
     description: '显式开始当前根已启用 List 的有界趋势观察；只创建固定 15/60/180 分钟窗口。',
-    inputSchema: { request_id: z.string(), binding_ids: z.array(z.string()).min(1).max(50) }
-  }, async ({ request_id, binding_ids }) => xListResult(async () => {
+    inputSchema: { request_id: z.string(), task_id: z.string(), grant_id: z.string(), worker_lease_id: z.string().optional(), binding_ids: z.array(z.string()).min(1).max(50) }
+  }, async ({ request_id, task_id, grant_id, worker_lease_id, binding_ids }) => xListResult(async () => {
+    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
     const { config } = await selectedXListAccount();
-    const db = database(); try { return startXObservationSession(db, config, { requestId: request_id, bindingIds: binding_ids }); } finally { db.close(); }
+    const readResult = await readXObservationSessionStart(runtime.database, config, { requestId: request_id, bindingIds: binding_ids });
+    return dispatchBusinessCommand(runtime, {
+      command: 'x_lists.observation_start', requestId: request_id,
+      actor: { type: 'external_agent', id: 'mcp', label: 'External Agent' },
+      input: { bindingIds: binding_ids },
+      boundIdentity: { browserId: config.id, accountKey: config.accountKey ?? null, bindingIds: [...new Set(binding_ids)].sort() },
+      taskId: task_id, workerLeaseId: worker_lease_id, grantId: grant_id, entityType: 'x_observation_session',
+      execute: (database) => {
+        const read = requireCommandResultData(readResult);
+        const data = requireCommandResultData(persistXObservationSessionStart(database, config, read));
+        return { data, entityId: data.id, readback: data };
+      }
+    });
   }));
   server.registerTool('x_lists.observation_get', {
     description: '读取一个有界 X List 趋势观察 session 及固定窗口状态。',
@@ -260,10 +256,20 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   });
   server.registerTool('x_lists.observation_stop', {
     description: '停止一个有界 X List 趋势观察；当前迟到读取不得写入，剩余窗口不再运行。',
-    inputSchema: { session_id: z.string() }
-  }, async ({ session_id }) => {
-    const db = database(); try { return text(stopXObservationSession(db, session_id)); } finally { db.close(); }
-  });
+    inputSchema: { request_id: z.string(), task_id: z.string(), grant_id: z.string(), worker_lease_id: z.string().optional(), session_id: z.string() }
+  }, async ({ request_id, task_id, grant_id, worker_lease_id, session_id }) => xListResult(async () => {
+    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
+    return dispatchBusinessCommand(runtime, {
+      command: 'x_lists.observation_stop', requestId: request_id,
+      actor: { type: 'external_agent', id: 'mcp', label: 'External Agent' }, input: { sessionId: session_id },
+      boundIdentity: { sessionId: session_id }, taskId: task_id, workerLeaseId: worker_lease_id, grantId: grant_id,
+      entityType: 'x_observation_session',
+      execute: (database, normalized) => {
+        const data = stopXObservationSession(database, normalized.sessionId);
+        return { data, entityId: normalized.sessionId, readback: data };
+      }
+    });
+  }));
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',
     inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }
@@ -282,20 +288,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     description:'分页读取一个长期主题的资料、判断、受众需求、反证、内容、指标、复盘与方法结论。',
     inputSchema:{topic_id:z.string(),category:z.enum(topicDossierCategories).optional(),limit:z.number().int().min(1).max(100).optional(),offset:z.number().int().nonnegative().optional()}
   },async({topic_id,...input})=>{const db=database();try{return text(getKnowledgeTopicDossier(db,{topicId:topic_id,...input}));}finally{db.close();}});
-  server.registerTool('knowledge.domain_create',{
-    description:'原子创建长期领域和明确主题成员；同一 request_id 重放原结果。',
-    inputSchema:{request_id:z.string(),title:z.string(),description:z.string().optional(),status:z.enum(['active','watching','dormant']).optional(),topic_ids:z.array(z.string()).optional()}
-  },async({request_id,topic_ids,...input})=>{const db=database();try{
-    const tool='knowledge.domain_create',prior=db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,request_id) as {resultJson:string}|undefined;
-    if(prior)return text(JSON.parse(prior.resultJson));db.exec('BEGIN IMMEDIATE');try{const payload={ok:true,data:createKnowledgeDomain(db,{...input,topicIds:topic_ids},false),error:null};db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,request_id,JSON.stringify(payload),new Date().toISOString());db.exec('COMMIT');return text(payload);}catch(error){db.exec('ROLLBACK');throw error;}
-  }finally{db.close();}});
-  server.registerTool('knowledge.domain_update',{
-    description:'按 revision 原子更新或归档长期领域；同一 request_id 重放原结果。',
-    inputSchema:{request_id:z.string(),id:z.string(),expected_revision:z.number().int(),title:z.string().optional(),description:z.string().optional(),status:z.enum(['active','watching','dormant']).optional(),topic_ids:z.array(z.string()).optional(),archived:z.boolean().optional()}
-  },async({request_id,expected_revision,topic_ids,...input})=>{const db=database();try{
-    const tool='knowledge.domain_update',prior=db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get(tool,request_id) as {resultJson:string}|undefined;
-    if(prior)return text(JSON.parse(prior.resultJson));db.exec('BEGIN IMMEDIATE');try{const payload={ok:true,data:updateKnowledgeDomain(db,{...input,expectedRevision:expected_revision,topicIds:topic_ids},false),error:null};db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run(tool,request_id,JSON.stringify(payload),new Date().toISOString());db.exec('COMMIT');return text(payload);}catch(error){db.exec('ROLLBACK');throw error;}
-  }finally{db.close();}});
   server.registerTool('knowledge.canvas_get', {
     description: '读取一张持久知识画布的真实对象引用、布局和语义关系。',
     inputSchema: { canvas_id: z.string() }
@@ -316,15 +308,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     description:'在保存前生成 selected_only 精确清单、排除项与体积门槛。',
     inputSchema:{canvas_id:z.string(),node_ids:z.array(z.string()).min(1),excluded_node_ids:z.array(z.string()).optional(),excluded_relation_ids:z.array(z.string()).optional()}
   },async({canvas_id,node_ids,excluded_node_ids,excluded_relation_ids})=>{const db=database();try{return text(previewKnowledgeContextPackage(db,{canvasId:canvas_id,nodeIds:node_ids,excludedNodeIds:excluded_node_ids,excludedRelationIds:excluded_relation_ids}));}finally{db.close();}});
-  server.registerTool('knowledge.suggestion_create',{
-    description:'Pi 只创建待用户确认的画布节点或关系建议；同一 request_id 只产生一条建议，不直接写入正式知识。',
-    inputSchema:{
-      request_id:z.string(),canvas_id:z.string(),kind:z.enum(['node','relation']),
-      payload:z.record(z.string(),z.unknown())
-    }
-  },async({request_id,canvas_id,kind,payload})=>{const db=database();try{
-    return text(createKnowledgeSuggestionIdempotent(db,{requestId:request_id,canvasId:canvas_id,kind,payload}));
-  }finally{db.close();}});
   server.registerTool('knowledge.creative_brief_get',{
     description:'读取一个静态上下文包版本对应的可编辑创作简报。',
     inputSchema:{package_id:z.string()}
@@ -333,24 +316,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     description:'按画布和直接选择读取最近一份创作简报。',
     inputSchema:{canvas_id:z.string(),node_ids:z.array(z.string()).min(1)}
   },async({canvas_id,node_ids})=>{const db=database();try{return text(getCreativeBriefForContext(db,{canvasId:canvas_id,nodeIds:node_ids}));}finally{db.close();}});
-  server.registerTool('knowledge.creative_brief_create',{
-    description:'只用当前页或直接选择的画布节点创建一份可编辑简报；同一 request_id 重放同一结果。',
-    inputSchema:{request_id:z.string(),canvas_id:z.string(),node_ids:z.array(z.string()).min(1),selection_mode:z.enum(['current_page','selected']),title:z.string(),core_judgment:z.string(),why_now:z.string(),structure:z.array(z.string()).min(1),evidence_node_ids:z.array(z.string())}
-  },async({request_id,canvas_id,node_ids,selection_mode,core_judgment,why_now,evidence_node_ids,...input})=>{const db=database();try{
-    return text(createCreativeBriefIdempotent(db,{...input,requestId:request_id,canvasId:canvas_id,nodeIds:node_ids,selectionMode:selection_mode,coreJudgment:core_judgment,whyNow:why_now,evidenceNodeIds:evidence_node_ids}));
-  }finally{db.close();}});
-  server.registerTool('knowledge.creative_brief_update',{
-    description:'按 revision 更新已有创作简报；证据仍必须属于原静态包，同一 request_id 重放同一结果。',
-    inputSchema:{request_id:z.string(),id:z.string(),expected_revision:z.number().int(),title:z.string(),core_judgment:z.string(),why_now:z.string(),structure:z.array(z.string()).min(1),evidence_node_ids:z.array(z.string()),status:z.enum(['draft','confirmed']).optional()}
-  },async({request_id,expected_revision,core_judgment,why_now,evidence_node_ids,...input})=>{const db=database();try{
-    return text(updateCreativeBriefIdempotent(db,{...input,requestId:request_id,expectedRevision:expected_revision,coreJudgment:core_judgment,whyNow:why_now,evidenceNodeIds:evidence_node_ids}));
-  }finally{db.close();}});
-  server.registerTool('knowledge.creative_brief_create_project',{
-    description:'从已确认创作简报原子创建内容项目和首版正文，并直接关联所选真实资料；同一 request_id 重放原结果。',
-    inputSchema:{request_id:z.string(),brief_id:z.string(),expected_revision:z.number().int()}
-  },async({request_id,brief_id,expected_revision})=>{const db=database();try{
-    return text(createContentProjectFromBriefIdempotent(db,{requestId:request_id,briefId:brief_id,expectedRevision:expected_revision}));
-  }finally{db.close();}});
   server.registerTool('knowledge.creative_brief_lineage_get',{
     description:'从简报双向读取内容项目、发布、指标、复盘和方法结论。',
     inputSchema:{brief_id:z.string()}
@@ -359,64 +324,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     description:'从内容项目反向读取精确上下文包版本。',
     inputSchema:{project_id:z.string()}
   },async({project_id})=>{const db=database();try{return text(getContentProjectContextPackages(db,project_id));}finally{db.close();}});
-  server.registerTool('knowledge.record_batch', {
-    description: '把已入库资料归入稳定主题并更新核验/管理状态；同一 request_id 重放原结果。',
-    inputSchema: { request_id: z.string(), items: z.array(z.object({
-      sourceId: z.string(), topic: z.object({ canonicalKey: z.string().optional(), title: z.string(), kind: z.enum(['theme','event']).optional(), summary: z.string().optional() }),
-      relation: z.enum(['primary','supporting','background','contradicting']).optional(),
-      verificationStatus: z.enum(['pending','verified','disputed','rejected']).optional(),
-      managementStatus: z.enum(['active','watching','expired','archived']).optional()
-    })).min(1) }
-  }, async ({ request_id, items }) => {
-    const db = database();
-    try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('knowledge.record_batch', request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      const payload = { ok: true, data: recordKnowledgeBatch(db, { items }), error: null };
-      db.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('knowledge.record_batch', request_id, JSON.stringify(payload), new Date().toISOString());
-      return text(payload);
-    } finally { db.close(); }
-  });
-  server.registerTool('content.create', { description: '原子创建内容项目和首个核心版本。新主题必须使用此工具。', inputSchema: { request_id: z.string(), title: z.string(), body: z.string(), plan_item_id: z.string().optional(), source_ids: z.array(z.string()).optional() } }, async ({ request_id, title, body, plan_item_id, source_ids }) => {
-    const db = database(); try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.create', request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: createContentProjectWithVersion(db, { title, body, planItemId: plan_item_id, sourceIds: source_ids }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.create', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } finally { db.close(); }
-  });
-  server.registerTool('plans.save', { description: '保存完整当日运营方案。', inputSchema: {
-    request_id: z.string(), plan_date: z.string(), summary: z.string(), items: z.array(z.object({
-      title: z.string(), priority: z.number().int().min(0).max(7), whyNow: z.string(), timeliness: z.string(), targetAudience: z.string(),
-      angle: z.string(), pointOfView: z.string(), platforms: z.array(z.string()), formats: z.array(z.string()),
-      titleGuidance: z.string(), openingGuidance: z.string(), structureGuidance: z.string(), effortEstimate: z.string(),
-      sourceIds: z.array(z.string()).min(1), availableMaterials: z.array(z.string()).optional(),
-      missingMaterials: z.array(z.string()).optional(),
-      reviewIds: z.array(z.string()).optional(), methodFindingIds: z.array(z.string()).optional(), topicId: z.string().optional()
-    }))
-  } }, async ({ request_id, plan_date, summary, items }) => {
-    const db = database(); try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('plans.save', request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      assertPublishingPlatforms(db, items.flatMap((item) => item.platforms));
-      db.exec('BEGIN IMMEDIATE'); try { const payload = { ok: true, data: saveCurrentPlan(db, { planDate: plan_date, timezone: 'Asia/Shanghai', summary, items: items as PlanItemInput[] }, false), error: null }; db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('plans.save', request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload); } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } finally { db.close(); }
-  });
-  server.registerTool('content.save_version', { description: '保存核心或平台版本。', inputSchema: { request_id: z.string(), project_id: z.string(), body: z.string(), content_version_id: z.string().optional(), platform: z.enum(['x', 'xiaohongshu', 'wechat']).optional(), format: z.string().optional(), expected_revision: z.number().optional(), version_id: z.string().optional(), title: z.string().optional() } }, async (input) => {
-    const db = database(); try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('content.save_version', input.request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      if (input.platform) assertPublishingPlatforms(db, [input.platform]);
-      db.exec('BEGIN IMMEDIATE'); try {
-        const data = input.platform
-          ? savePlatformVersion(db, { projectId: input.project_id, contentVersionId: input.content_version_id!, platform: input.platform, format: input.format!, title: input.title, body: input.body, expectedRevision: input.expected_revision, id: input.version_id })
-          : typeof input.expected_revision === 'number'
-            ? saveCoreVersion(db, { projectId: input.project_id, body: input.body, expectedRevision: input.expected_revision }, false)
-            : { ok: false as const, data: null, error: { code: 'VALIDATION_ERROR', message: '核心版本写入必须提供 expected_revision。' } };
-        const payload = 'ok' in data ? data : { ok: true, data, error: null };
-        db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)').run('content.save_version', input.request_id, JSON.stringify(payload), new Date().toISOString()); db.exec('COMMIT'); return text(payload);
-      } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } finally { db.close(); }
-  });
   server.registerTool('metrics.get', {
     description: '读取发布指标快照。',
     inputSchema: { publication_id: z.string() }
@@ -435,52 +342,11 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       return text(listReviews(db, publication_id));
     } finally { db.close(); }
   });
-  server.registerTool('reviews.save', {
-    description: '保存或定稿复盘；最终复盘必须引用真实指标快照并包含 Keep/Stop/Change。',
-    inputSchema: {
-      request_id: z.string(),
-      publication_id: z.string(),
-      metric_snapshot_ids: z.array(z.string()).min(1),
-      keep: z.array(z.string()).optional(),
-      stop: z.array(z.string()).optional(),
-      change: z.array(z.string()).optional(),
-      summary: z.string().optional(),
-      status: z.enum(['draft', 'final']).optional(),
-      expected_revision: z.number().int().optional(),
-      id: z.string().optional(),
-      findings: z.array(z.object({ id: z.string().optional(), title: z.string(), body: z.string() })).optional()
-    }
-  }, async (input) => {
-    const db = database();
-    try {
-      const prior = db.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?')
-        .get('reviews.save', input.request_id) as { resultJson: string } | undefined;
-      if (prior) return text(JSON.parse(prior.resultJson));
-      const saved = saveReview(db, {
-        id: input.id,
-        publicationId: input.publication_id,
-        metricSnapshotIds: input.metric_snapshot_ids,
-        keep: input.keep,
-        stop: input.stop,
-        change: input.change,
-        summary: input.summary,
-        status: input.status,
-        expectedRevision: input.expected_revision,
-        findings: input.findings
-      });
-      const payload = saved.ok ? { ok: true, data: saved.data, error: null } : { ok: false, data: null, error: saved.error };
-      if (saved.ok) {
-        db.prepare('INSERT INTO mcp_request_results (tool, request_id, result_json, created_at) VALUES (?, ?, ?, ?)')
-          .run('reviews.save', input.request_id, JSON.stringify(payload), new Date().toISOString());
-      }
-      return text(payload);
-    } finally { db.close(); }
-  });
   return server;
 }
 
-export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp): Promise<McpRuntime> {
-  const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath, application)));
+export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): Promise<McpRuntime> {
+  const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath, application, runtime)));
   const http = createServer((request, response) => {
     if (request.url?.split('?')[0] !== '/mcp') { response.writeHead(404).end(); return; }
     void (gate ? gate.run(() => handler(request, response)) : handler(request, response)).catch((error: unknown) => {

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "wmb.precise-execution-grant-evidence.v1",
+  "taskId": "WMB-4806",
+  "specIds": ["CAP-006", "CAP-017", "CAP-020", "CAP-021", "CAP-025", "AC-023"],
+  "status": "pass",
+  "delivered": {
+    "migration": 42,
+    "grantType": "PreciseExecutionGrantV1",
+    "ownerOnlyCommands": ["execution_grants.issue", "execution_grants.revoke"],
+    "preciseCommands": ["intelligence_channels.proposal_apply", "x_lists.operation_execute"],
+    "atomicity": "Grant validation and active-to-consumed transition run inside the same CommandDispatcher BEGIN IMMEDIATE transaction as the domain handler; handler failure rolls both back before the error receipt is persisted separately.",
+    "frozenScope": [
+      "workspaceId", "runtimeEpoch", "taskId", "taskGrantId", "command", "inputHash",
+      "boundIdentity", "targetActor", "browserProfileId", "browserBindingRevision",
+      "expectedAccount", "allowedTransition", "requiredReadback", "expiresAt"
+    ],
+    "externalBoundary": "Renderer IPC/preload exposes issue/revoke/get/list. MCP exposes get/list only. Pi/operator tools expose proposal preparation and readback but no execution-grant issue/revoke or channel confirmation/direct website add.",
+    "migratedMutations": ["Owner website-channel proposal confirmation", "Owner X List operation confirmation"]
+  },
+  "verification": [
+    {
+      "command": "npm run typecheck && node --test tests/execution-grants.test.mjs tests/intelligence-channel-proposals.test.mjs tests/intelligence-channel-mcp.test.mjs",
+      "result": "pass",
+      "tests": 14,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck && node --test tests/execution-grants.test.mjs",
+      "result": "pass",
+      "tests": 6,
+      "failed": 0,
+      "note": "Includes frozen browser binding constraint mismatch rejection with zero synthetic domain writes."
+    },
+    {
+      "command": "node scripts/smoke-renderer.mjs",
+      "result": "pass",
+      "note": "After the user-approved temporary release of port 27391, the project renderer was started with vite.renderer.config.ts and smoke-renderer confirmed title WeMediaBuddy, #root, and the expected entry at http://127.0.0.1:27391/. The foreign wemotionbuddy Python service was then restored on the same port and its directory listing read back."
+    }
+  ],
+  "independentReview": {
+    "reviewer": "GPT slow completion",
+    "result": "ACCEPTABLE",
+    "conclusion": "No blocker. Atomic single consumption, reject-before-write ordering, rollback, Owner-only issue/revoke surfaces, and representative website/X migrations satisfy the WMB-4806 boundary.",
+    "failedAttempts": [
+      "Wmb4806Adversarial could not start because its agent runtime had no model selected.",
+      "Wmb4806CodexReview returned no review payload."
+    ]
+  },
+  "piOperatorSkillImpact": {
+    "decision": "updated",
+    "note": "Operator playbook now requires frozen proposals, Owner UI exact grants, executionGrantId readback, and no grant reuse; obsolete direct website-add and confirmation tools were removed from the exposed surface description."
+  }
+}

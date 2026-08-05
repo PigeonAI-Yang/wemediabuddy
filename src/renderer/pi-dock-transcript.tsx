@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
-import { coalescePiMessages, isPiConversationNearBottom, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
+import { coalescePiMessages, isPiConversationNearBottom, nextPiConversationFollowing, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
 import { WmbCreatureMark } from './wmb-brand-mark';
 
 export type PiDockMessage = PiChatMessage;
@@ -41,18 +41,9 @@ function segmentText(segment: PiMessageSegment): string {
 
 function PiToolLine({ segment, streaming }: { segment: Extract<PiMessageSegment, { kind: 'tool' }>; streaming: boolean }): React.JSX.Element {
   const running = streaming && !('output' in segment);
-  const wasRunning = useRef(running);
-  const [settling, setSettling] = useState(false);
-  useEffect(() => {
-    const completed = wasRunning.current && !running;
-    wasRunning.current = running;
-    if (!completed) return;
-    setSettling(true);
-    const timer = window.setTimeout(() => setSettling(false), 420);
-    return () => window.clearTimeout(timer);
-  }, [running]);
-  return <details className={`pi-tool-line${running ? ' running' : settling ? ' settling' : ''}${segment.isError ? ' failed' : ''}`}>
-    <summary aria-busy={running || undefined}><WmbCreatureMark state={running ? 'working' : settling ? 'settling' : 'idle'}/><span className="pi-tool-label">{segment.text}</span></summary>
+  const completed = 'output' in segment;
+  return <details className={`pi-tool-line${running ? ' running' : completed ? ' completed' : ''}${segment.isError ? ' failed' : ''}`}>
+    <summary aria-busy={running || undefined}><WmbCreatureMark state={running ? 'working' : completed ? 'sleep' : 'idle'}/><span className="pi-tool-label">{segment.text}</span></summary>
     {(segment.input || segment.output) && <div className="pi-tool-detail">
       {segment.input && <><b>输入</b><pre>{segment.input}</pre></>}
       {segment.output && <><b>{segment.isError ? '错误' : '输出'}</b><pre>{segment.output}</pre></>}
@@ -82,6 +73,7 @@ export function PiDockTranscript({
   busy,
   pendingAction,
   configured,
+  connecting,
   statusText,
   conversationRef,
   onCopy,
@@ -93,6 +85,7 @@ export function PiDockTranscript({
   busy: boolean;
   pendingAction: { entryId: string; retry: boolean } | null;
   configured: boolean;
+  connecting: boolean;
   statusText: string;
   conversationRef: RefObject<HTMLDivElement | null>;
   onCopy: (text: string) => void;
@@ -100,6 +93,7 @@ export function PiDockTranscript({
   onRetry: (entryId: string) => void;
 }): React.JSX.Element {
   const followingLatest = useRef(true);
+  const userScrollIntent = useRef(false);
   const jumpingLatest = useRef(false);
   const jumpFrame = useRef<number | null>(null);
   const hideLatestTimer = useRef<number | null>(null);
@@ -107,9 +101,13 @@ export function PiDockTranscript({
   const [latestLeaving, setLatestLeaving] = useState(false);
   let retryEntryId: string | undefined;
   const displayMessages = coalescePiMessages(messages);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = conversationRef.current;
-    if (node && followingLatest.current) node.scrollTop = node.scrollHeight;
+    if (node && followingLatest.current) {
+      node.scrollTop = node.scrollHeight;
+      userScrollIntent.current = false;
+      setShowLatest(false);
+    }
   }, [messages, queue, conversationRef]);
   useEffect(() => () => {
     if (jumpFrame.current !== null) cancelAnimationFrame(jumpFrame.current);
@@ -118,7 +116,9 @@ export function PiDockTranscript({
   const updateFollowing = () => {
     const node = conversationRef.current;
     if (!node || jumpingLatest.current) return;
-    followingLatest.current = isPiConversationNearBottom(node.scrollTop, node.scrollHeight, node.clientHeight);
+    const nearBottom = isPiConversationNearBottom(node.scrollTop, node.scrollHeight, node.clientHeight);
+    followingLatest.current = nextPiConversationFollowing(followingLatest.current, userScrollIntent.current, nearBottom);
+    if (nearBottom) userScrollIntent.current = false;
     setShowLatest(!followingLatest.current);
   };
   const jumpToLatest = () => {
@@ -136,6 +136,7 @@ export function PiDockTranscript({
       }
       if (!atBottom) node.scrollTop = node.scrollHeight;
       followingLatest.current = true;
+      userScrollIntent.current = false;
       setLatestLeaving(true);
       hideLatestTimer.current = window.setTimeout(() => {
         jumpingLatest.current = false;
@@ -145,11 +146,19 @@ export function PiDockTranscript({
     };
     jumpFrame.current = requestAnimationFrame(watch);
   };
-  return <div className="pi-conversation-shell"><div className="pi-conversation" ref={conversationRef} onScroll={updateFollowing}>
+  return <div className="pi-conversation-shell"><div className="pi-conversation" ref={conversationRef} onScroll={updateFollowing}
+    onWheel={(event) => { if (event.deltaY) userScrollIntent.current = true; }}
+    onTouchMove={() => { userScrollIntent.current = true; }}
+    onPointerDown={(event) => {
+      const node = event.currentTarget;
+      const scrollbarWidth = node.offsetWidth - node.clientWidth;
+      if (scrollbarWidth > 0 && event.clientX >= node.getBoundingClientRect().right - scrollbarWidth) userScrollIntent.current = true;
+    }}>
     {displayMessages.length ? displayMessages.map((message, index) => {
         if (message.role === 'user' && message.entryId) retryEntryId = message.entryId;
         const timeLabel = formatPiMessageTime(message.createdAt);
         const segments = piMessageSegments(message);
+        const activityOnly = message.role === 'assistant' && message.status === 'streaming' && !segments.length;
         const showActions = Boolean(segments.length) && message.status !== 'streaming';
         const retryId = retryEntryId;
         const forkPending = pendingAction?.entryId === message.entryId && pendingAction?.retry === false;
@@ -158,17 +167,16 @@ export function PiDockTranscript({
           <div className={`pi-bubble-wrap ${message.role}`} key={message.entryId ?? `${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`}>
             {message.role === 'assistant'
               ? <>
-                  {message.status === 'streaming' && !segments.length
-                    ? <div className="assistant pi-bubble streaming pi-activity" role="status" aria-live="polite">
-                        <span className="pi-activity-mark" aria-hidden="true"><i /></span>
-                        <span className="pi-activity-copy"><strong>{statusText}</strong><small>Pi 正在继续处理</small></span>
+                  {activityOnly
+                    ? <div className="pi-activity" role="status" aria-live="polite" aria-label={statusText}>
+                        <WmbCreatureMark state={connecting ? 'connect' : 'working'} className="pi-activity-mark"/>
                       </div>
                     : segments.length
                       ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} streaming={message.status === 'streaming'} /></div>
                       : null}
                 </>
               : <p className="user pi-bubble">{message.text}</p>}
-            <div className="pi-bubble-meta">
+            {!activityOnly && <div className="pi-bubble-meta">
               <time className="pi-bubble-time">{timeLabel || (message.status === 'streaming' ? '发送中' : '')}</time>
               <div className="pi-bubble-actions" aria-hidden={showActions ? undefined : true} style={showActions ? undefined : { visibility: 'hidden' }}>
                 <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy(segments.map(segmentText).join('\n\n'))}>
@@ -181,7 +189,7 @@ export function PiDockTranscript({
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
                 </button>}
               </div>
-            </div>
+            </div>}
           </div>
         );
     }) : <p className="pi-empty">{configured ? '现在可以直接和我对话。' : '请先在设置中填写 Pi API。'}</p>}
@@ -192,6 +200,5 @@ export function PiDockTranscript({
         {queue.followUp.map((message, index) => <li key={`follow-${index}-${message.slice(0, 12)}`} data-kind="follow"><span aria-hidden="true">↳</span><div><b>下一轮</b><p>{message}</p></div></li>)}
       </ol>
     </section>}
-    <div className="pi-conversation-end-spacer" aria-hidden="true" />
   </div>{showLatest && <button type="button" className={`pi-jump-latest${latestLeaving ? ' leaving' : ''}`} onClick={jumpToLatest}>回到最新</button>}</div>;
 }

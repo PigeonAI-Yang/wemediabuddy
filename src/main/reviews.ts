@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
 import { recordOperation } from './operations.ts';
+import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 export type ReviewStatus = 'draft' | 'final';
 
@@ -13,6 +15,19 @@ export type MethodFinding = {
   createdAt: string;
   updatedAt: string;
   revision: number;
+};
+
+export type SaveReviewInput = {
+  id?: string;
+  publicationId: string;
+  metricSnapshotIds: string[];
+  keep?: string[];
+  stop?: string[];
+  change?: string[];
+  summary?: string;
+  status?: ReviewStatus;
+  expectedRevision?: number;
+  findings?: Array<{ id?: string; title: string; body: string }>;
 };
 
 export type ReviewRecord = {
@@ -168,18 +183,8 @@ function validateSnapshotIds(database: DatabaseSync, publicationId: string, snap
 
 export function saveReview(
   database: DatabaseSync,
-  input: {
-    id?: string;
-    publicationId: string;
-    metricSnapshotIds: string[];
-    keep?: string[];
-    stop?: string[];
-    change?: string[];
-    summary?: string;
-    status?: ReviewStatus;
-    expectedRevision?: number;
-    findings?: Array<{ id?: string; title: string; body: string }>;
-  }
+  input: SaveReviewInput,
+  transaction = true
 ): CommandResult<ReviewRecord> {
   const publication = database.prepare(`SELECT id, status FROM publications WHERE id = ?`)
     .get(input.publicationId) as { id: string; status: string } | undefined;
@@ -220,7 +225,7 @@ export function saveReview(
   const revision = existing ? existing.revision + 1 : 1;
   const finalizedAt = status === 'final' ? now : null;
 
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     if (existing) {
       database.prepare(`UPDATE reviews SET
@@ -289,13 +294,13 @@ export function saveReview(
       }
     }
 
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 
-  recordOperation(database, {
+  if (transaction) recordOperation(database, {
     actorType: 'ui',
     command: status === 'final' ? 'reviews.finalize' : 'reviews.save',
     entityType: 'review',
@@ -306,4 +311,30 @@ export function saveReview(
   const saved = getReview(database, id);
   if (!saved) return failure('NOT_FOUND', '复盘保存后读取失败。');
   return success(saved);
+}
+
+export function dispatchSaveReview(runtime: ActiveWorkspaceRuntime, requestId: string, input: SaveReviewInput) {
+  return dispatchBusinessCommand(runtime, {
+    command: 'reviews.save',
+    requestId,
+    actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' },
+    input,
+    boundIdentity: {
+      publicationId: input.publicationId,
+      reviewId: input.id ?? null,
+      expectedRevision: input.expectedRevision ?? null
+    },
+    entityType: 'review',
+    execute: (database, normalizedInput) => {
+      const before = normalizedInput.id ? getReview(database, normalizedInput.id) : null;
+      const saved = requireCommandResultData(saveReview(database, normalizedInput, false));
+      return {
+        data: saved,
+        entityId: saved.id,
+        beforeRevision: before?.revision,
+        afterRevision: saved.revision,
+        readback: saved
+      };
+    }
+  });
 }

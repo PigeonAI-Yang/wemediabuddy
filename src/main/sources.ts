@@ -110,7 +110,7 @@ export function ensureRegistrySourceFeed(
   return { ...created, created: true };
 }
 
-export function upsertSource(database: DatabaseSync, input: SourceInput): { id: string; created: boolean; revision: number } {
+export function upsertSource(database: DatabaseSync, input: SourceInput, notify = true): { id: string; created: boolean; revision: number } {
   const canonicalUrl = input.originalUrl ? canonicalizeUrl(input.originalUrl) : null;
   const fingerprint = canonicalUrl ? null : fingerprintFor(input);
   const existing = database.prepare(`SELECT id, revision, feed_id AS feedId, original_url AS originalUrl, title, author,
@@ -170,7 +170,7 @@ export function upsertSource(database: DatabaseSync, input: SourceInput): { id: 
       verification_status=?, management_status=?, updated_at=?, revision=?
       WHERE id=?`)
       .run(...values, now, revision, existing.id);
-    broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+    if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
     return { id: existing.id, created: false, revision };
   }
 
@@ -182,7 +182,7 @@ export function upsertSource(database: DatabaseSync, input: SourceInput): { id: 
       verification_status, management_status, created_at, updated_at, revision
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, ...values.slice(0, 7), now, ...values.slice(7), now, now, 1);
-  broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+  if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
   return { id, created: true, revision: 1 };
 }
 

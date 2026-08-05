@@ -28,6 +28,8 @@ export type DailyReceiptAggregation = {
   missingReceiptCount: number;
 };
 
+export const dailyAgentSessionId = (businessDate: string, taskId: string): string => `daily-${businessDate}-${taskId}`;
+
 export type AgentTask = {
   id: string;
   intent: AgentIntent;
@@ -159,6 +161,7 @@ export function startAgentTask(
 
   const now = new Date().toISOString();
   const id = randomUUID();
+  const piSessionId = input.intent === 'daily_intelligence' ? dailyAgentSessionId(input.businessDate, id) : input.piSessionId ?? null;
   const profileContext = readTaskProfileContext(database);
   database.prepare(`INSERT INTO agent_tasks (
     id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
@@ -169,7 +172,7 @@ export function startAgentTask(
     id,
     input.intent,
     input.businessDate,
-    input.piSessionId ?? null,
+    piSessionId,
     JSON.stringify({ ...(input.contextRefs ?? {}), ...profileContext }),
     now,
     now,
@@ -323,8 +326,8 @@ export function partialAgentTask(database: DatabaseSync, id: string): CommandRes
   if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以部分完成。');
   if (task.intent === 'daily_intelligence') return finishDailyIntelligenceFromReceipts(database, id, { forcePartial: true });
   const today = getToday(database, task.businessDate);
-  const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results
-    WHERE tool='sources.upsert_batch' AND request_id LIKE ?`).all(`${id}:source:%`) as Array<{ resultJson: string }>;
+  const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results WHERE tool='sources.upsert_batch' AND request_id LIKE ?
+    UNION ALL SELECT result_json FROM command_receipts WHERE command='sources.upsert_batch' AND status='ok' AND request_id LIKE ?`).all(`${id}:source:%`, `${id}:source:%`) as Array<{ resultJson: string }>;
   const receiptText = receipts.map((row) => row.resultJson).join('\n');
   const ownedSources = (today.sources ?? []).filter((source) => receiptText.includes(source.id));
   // Wire path writes sources directly; accept today's sources as evidence too.

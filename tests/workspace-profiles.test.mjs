@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
 import { agentRequestId, completeAgentTask, getAgentTask } from '../src/main/agent-tasks.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
-import { discoverBrowserProfiles } from '../src/main/browser-config.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
+import { openBrowserProfileRegistry, readBrowserProfileRegistry } from '../src/main/browser-config.ts';
+import { readWorkspaceBrowserBinding } from '../src/main/workspace-browser-binding.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { createOfficialWorkspace, enrollAiWorkspace } from '../src/main/workspaces.ts';
@@ -19,12 +23,15 @@ import { createWebsiteSource } from '../src/main/intelligence-channels.ts';
 
 test('official AI and UK profiles isolate one linked text chain without AI-only routes', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-profiles-'));
+  let ukMcp, ukRuntime;
   try {
     const registryPath = path.join(parent, 'user-data', 'workspace-registry.json');
+    const browserConfigPath = path.join(parent, 'user-data', 'browser-config.json');
+    const browserRegistry = openBrowserProfileRegistry(browserConfigPath);
     const aiRoot = await openDataRoot(path.join(parent, 'ai'));
     migrateDatabase(path.join(aiRoot.path, 'wmb.db')).close();
-    await enrollAiWorkspace({ registryPath, rootPath: aiRoot.path });
-    const uk = await createOfficialWorkspace({ registryPath, rootPath: path.join(parent, 'uk'), templateId: 'official.uk' });
+    await enrollAiWorkspace({ registryPath, rootPath: aiRoot.path, defaultProfileId: browserRegistry.defaultProfileId });
+    const uk = await createOfficialWorkspace({ registryPath, rootPath: path.join(parent, 'uk'), templateId: 'official.uk', defaultProfileId: browserRegistry.defaultProfileId });
     const ukRoot = { path: uk.rootPath };
 
     const aiDb = migrateDatabase(path.join(aiRoot.path, 'wmb.db'));
@@ -60,34 +67,57 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(ukDb.prepare('SELECT COUNT(*) AS count FROM source_feeds WHERE registry_id IS NOT NULL').get().count, 0);
     } finally { aiDb.close(); ukDb.close(); }
 
-    const mcp = await startMcp(ukRoot.path, undefined, { listWorkspaces: async () => ({ activeWorkspaceId: uk.id, workspaces: [uk] }), proposals: new WorkspaceProposalStore(() => true) });
+    ukRuntime = ActiveWorkspaceRuntime.open(ukRoot.path, { openDatabase: migrateDatabase, createEpoch: () => 'runtime-epoch-uk' });
+    const mcpTask = (await dispatchStartAgentTask(ukRuntime, { intent: 'studio_draft', businessDate: '2026-08-02', contextRefs: { workspaceId: ukRuntime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'workspace-profile-mcp-task' })).task;
+    const mcpGrant = await dispatchIssueTaskGrant(ukRuntime, {
+      requestId: 'workspace-profile-mcp-grant', taskId: mcpTask.id, ownerGoal: '验证 UK 工作空间 MCP 边界',
+      allowedCommands: ['x_lists.operation_execute'], workers: [{ type: 'external_agent', id: 'mcp' }],
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(mcpGrant.ok, true);
+    ukMcp = await startMcp(ukRoot.path, ukRuntime.gate, { listWorkspaces: async () => ({ activeWorkspaceId: uk.id, workspaces: [uk] }), proposals: new WorkspaceProposalStore(() => true), runtimeEpoch: 'runtime-epoch-uk' }, ukRuntime);
     try {
-      const initialized = await mcpRequest(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wmb-profile-test', version: '1' } });
-      const listed = await mcpRequest(mcp.url, 'tools/list', {}, initialized.sessionId);
+      const initialized = await mcpRequest(ukMcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wmb-profile-test', version: '1' } });
+      const listed = await mcpRequest(ukMcp.url, 'tools/list', {}, initialized.sessionId);
       const names = new Set(listed.data.tools.map((tool) => tool.name));
       assert.deepEqual([...names].filter((name) => name.startsWith('x_lists.')).sort(), [
-        'x_lists.collect_timeline', 'x_lists.get_operation', 'x_lists.list_bindings',
-        'x_lists.observation_get', 'x_lists.observation_start', 'x_lists.observation_stop',
+        'x_lists.collect_timeline', 'x_lists.create', 'x_lists.get_operation', 'x_lists.list_bindings',
+        'x_lists.members_add', 'x_lists.members_remove', 'x_lists.observation_get', 'x_lists.observation_start', 'x_lists.observation_stop',
         'x_lists.post_metric_snapshots_list', 'x_lists.post_trend_get', 'x_lists.prepare',
         'x_lists.read_detail', 'x_lists.read_index', 'x_lists.read_members', 'x_lists.read_timeline'
       ]);
       assert.equal(names.has('x_lists.confirm'), false);
       assert.equal(names.has('sources.wire_health_get'), false);
-      const current = await mcpRequest(mcp.url, 'tools/call', { name: 'workspaces.get_current', arguments: {} }, initialized.sessionId);
+      assert.equal([...names].some((name) => /browser[-_.]?(?:profile|binding).*(?:create|rebind|verify|migrate)/i.test(name)), false);
+      const beforeUnknownDatabase = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+      const beforeUnknownBinding = beforeUnknownDatabase.prepare("SELECT * FROM workspace_browser_bindings WHERE id='effective'").get();
+      beforeUnknownDatabase.close();
+      const beforeUnknownRegistry = await readFile(browserConfigPath, 'utf8');
+      await assert.rejects(
+        () => mcpRequest(ukMcp.url, 'tools/call', { name: 'browser_profiles.create', arguments: {} }, initialized.sessionId),
+        /Tool browser_profiles\.create not found/
+      );
+      const afterUnknownDatabase = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+      assert.deepEqual(afterUnknownDatabase.prepare("SELECT * FROM workspace_browser_bindings WHERE id='effective'").get(), beforeUnknownBinding);
+      afterUnknownDatabase.close();
+      assert.equal(await readFile(browserConfigPath, 'utf8'), beforeUnknownRegistry);
+      const current = await mcpRequest(ukMcp.url, 'tools/call', { name: 'workspaces.get_current', arguments: {} }, initialized.sessionId);
       const snapshot = JSON.parse(current.data.content[0].text);
       assert.equal(snapshot.id, uk.id);
+      assert.equal(snapshot.runtimeEpoch, 'runtime-epoch-uk');
       assert.equal(snapshot.profile.intelligencePackId, 'uk-life-content-radar');
       assert.deepEqual(snapshot.capabilities, { xLists: true, aiIntelligence: false, fixedAiLists: false, rankings: false, sourceWire: false, publishingPlatforms: ['x', 'xiaohongshu'] });
-      const bindings = await mcpRequest(mcp.url, 'tools/call', { name: 'x_lists.list_bindings', arguments: {} }, initialized.sessionId);
+      const bindings = await mcpRequest(ukMcp.url, 'tools/call', { name: 'x_lists.list_bindings', arguments: {} }, initialized.sessionId);
       assert.deepEqual(JSON.parse(bindings.data.content[0].text), []);
-      const rejected = await mcpRequest(mcp.url, 'tools/call', { name: 'x_lists.prepare', arguments: { request_id: 'missing-login', account_key: '@wrong', kind: 'create', name: 'must-not-write' } }, initialized.sessionId);
+      const rejected = await mcpRequest(ukMcp.url, 'tools/call', { name: 'x_lists.prepare', arguments: { request_id: 'missing-login', task_id: mcpTask.id, grant_id: mcpGrant.data.id, account_key: '@wrong', kind: 'update', list_id: 'missing-list', name: 'must-not-write' } }, initialized.sessionId);
       const failure = JSON.parse(rejected.data.content[0].text);
       assert.equal(failure.error.code, 'BROWSER_NEEDS_USER');
       assert.equal(failure.error.details.state, 'needs_user');
       const check = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
       assert.equal(check.prepare('SELECT COUNT(*) AS count FROM x_list_operations').get().count, 0);
+      assert.equal(check.prepare('SELECT COUNT(*) AS count FROM x_list_bindings').get().count, 0);
       check.close();
-    } finally { await mcp.close(); }
+    } finally { await ukMcp.close(); ukMcp=undefined; await ukRuntime.stop({ drain: false }); ukRuntime=undefined; }
     const aiMcp = await startMcp(aiRoot.path);
     try {
       const initialized = await mcpRequest(aiMcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'wmb-ai-profile-test', version: '1' } });
@@ -97,12 +127,19 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(names.has('x_lists.read_index'), true);
       assert.equal(names.has('x_lists.confirm'), false);
     } finally { await aiMcp.close(); }
-    const configPath = path.join(aiRoot.path, 'installation', 'browser-config.json');
-    const aiBrowser = discoverBrowserProfiles(null, configPath)[0];
-    const ukBrowser = discoverBrowserProfiles(null, configPath)[0];
-    assert.equal(ukBrowser.userDataDir, path.join(aiRoot.path, 'installation', 'browser-profile'));
-    assert.equal(ukBrowser.userDataDir, aiBrowser.userDataDir);
-    assert.notEqual(ukBrowser.cdpUrl, 'http://127.0.0.1:9334');
+    const profiles = readBrowserProfileRegistry(browserConfigPath).profiles;
+    const sharedProfile = profiles.find((profile) => profile.id === browserRegistry.defaultProfileId);
+    assert.equal(sharedProfile.userDataDir, path.join(parent, 'user-data', 'browser-profiles', browserRegistry.defaultProfileId));
+    const aiBindingDb = migrateDatabase(path.join(aiRoot.path, 'wmb.db'));
+    const ukBindingDb = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
+    try {
+      const aiBinding = readWorkspaceBrowserBinding(aiBindingDb);
+      const ukBinding = readWorkspaceBrowserBinding(ukBindingDb);
+      assert.equal(aiBinding.profileId, sharedProfile.id);
+      assert.equal(ukBinding.profileId, sharedProfile.id);
+      assert.notEqual(aiBinding.createdAt, undefined);
+      assert.notEqual(ukBinding.createdAt, undefined);
+    } finally { aiBindingDb.close(); ukBindingDb.close(); }
 
     const channelDb = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
     const channelSource = createWebsiteSource(channelDb, {
@@ -137,7 +174,11 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
       assert.equal(result.task.status, 'succeeded');
     } finally { globalThis.fetch = originalFetch; }
     assert.deepEqual(calls, { ai: 0, uk: 1 });
-  } finally { await rm(parent, { recursive: true, force: true, maxRetries: 3 }); }
+  } finally {
+    await ukMcp?.close();
+    if (ukRuntime?.isActive) await ukRuntime.stop({ drain: false });
+    await rm(parent, { recursive: true, force: true, maxRetries: 3 });
+  }
 });
 
 async function mcpRequest(url, method, params, sessionId) {

@@ -1,8 +1,7 @@
-import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
-import { migrateDatabase } from './db/migrations.ts';
+import type { DatabaseSync } from 'node:sqlite';
 import { selectedXListBrowser } from './x-list-context.ts';
-import type { WorkspaceRuntimeGate } from './workspace-runtime.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import {
   nextXObservationDueAt,
   processDueXObservationJobs,
@@ -20,9 +19,10 @@ export class XObservationScheduler {
   private recoveredRoot: string | null = null;
 
   constructor(private readonly input: {
+    runtime: ActiveWorkspaceRuntime;
     loadSelectedDataRoot: () => Promise<DataRoot | null>;
-    gate: WorkspaceRuntimeGate;
-    getConfig?: (database: ReturnType<typeof migrateDatabase>, payload: XObservationPayload) => Promise<XListBrowserConfig>;
+    isCurrent?: () => boolean;
+    getConfig?: (database: DatabaseSync, payload: XObservationPayload) => Promise<XListBrowserConfig>;
   }) {}
 
   start(): void {
@@ -54,28 +54,29 @@ export class XObservationScheduler {
     this.timer = null;
     const generation = this.generation;
     let delayMs = 60_000;
-    this.current = this.input.gate.run(async () => {
+    this.current = (async () => {
       const root = await this.input.loadSelectedDataRoot();
-      if (!root || this.stopped || generation !== this.generation) return;
-      const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-      try {
-        if (this.recoveredRoot !== root.path) {
-          recoverRunningXObservationJobs(database);
-          this.recoveredRoot = root.path;
-        }
-        await processDueXObservationJobs(database, {
-          isCurrent: () => !this.stopped && generation === this.generation,
-          getConfig: (payload) => this.input.getConfig
-            ? this.input.getConfig(database, payload)
-            : selectedXListBrowser(database).then((config) => ({ ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }))
-        });
-        const dueAt = nextXObservationDueAt(database);
-        if (dueAt) delayMs = Math.max(0, Math.min(60_000, Date.parse(dueAt) - Date.now()));
-      } finally { database.close(); }
-    }).catch(() => {});
+      const runtime = this.input.runtime;
+      if (!root || this.stopped || generation !== this.generation || !runtime.isActive || (this.input.isCurrent && !this.input.isCurrent())) return;
+      const database = runtime.database;
+      if (this.recoveredRoot !== root.path) {
+        await recoverRunningXObservationJobs(runtime, generation);
+        this.recoveredRoot = root.path;
+      }
+      await processDueXObservationJobs(runtime, {
+        generation,
+        isCurrent: () => !this.stopped && generation === this.generation && runtime.isActive && (!this.input.isCurrent || this.input.isCurrent()),
+        getConfig: (payload) => this.input.getConfig
+          ? this.input.getConfig(database, payload)
+          : selectedXListBrowser(database).then((config) => ({ ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }))
+      });
+      if (!runtime.isActive || (this.input.isCurrent && !this.input.isCurrent())) return;
+      const dueAt = nextXObservationDueAt(database);
+      if (dueAt) delayMs = Math.max(0, Math.min(60_000, Date.parse(dueAt) - Date.now()));
+    })().catch(() => {});
     await this.current;
     this.current = null;
-    if (this.stopped) return;
+    if (this.stopped || (this.input.isCurrent && !this.input.isCurrent())) return;
     if (this.rerun) { this.rerun = false; return this.wake(); }
     this.timer = setTimeout(() => void this.tick(), delayMs);
     this.timer.unref();

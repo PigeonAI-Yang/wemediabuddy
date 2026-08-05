@@ -10,6 +10,15 @@ import { Icon, domainOf, formatSourcePublishedAt } from './today-view-parts';
 
 import { asSourceKnowledgeContext, isLibrarySection, type KnowledgeSourcePage, type LibrarySection, type LibrarySourceItem, type RediscoveryItem, type SourceKnowledgeContext } from './library-view-parts';
 
+// 资料列表按新鲜度分组，沿用服务端排序，只加分组头不打乱顺序。
+const RECENCY_GROUPS = ['今天', '昨天', '近 7 天', '更早'] as const;
+const recencyGroupOf = (source: LibrarySourceItem): (typeof RECENCY_GROUPS)[number] => {
+  const time = Date.parse(source.publishedAt ?? source.collectedAt ?? '');
+  if (!Number.isFinite(time)) return '更早';
+  const days = (Date.now() - time) / 86_400_000;
+  return days < 1 ? '今天' : days < 2 ? '昨天' : days < 7 ? '近 7 天' : '更早';
+};
+
 export function LibraryView(props: {
   onOpenTopic?: (topicId: string) => void;
   onOpenStudio?: (projectId: string) => void;
@@ -414,7 +423,12 @@ export function LibraryView(props: {
         <span className="chip-label">管理</span>
         {([['', '全部'], ['active', '活跃'], ['watching', '观察中'], ['expired', '已过期'], ['archived', '已归档']] as const).map(([value, label]) => <button key={value} className={`chip${managementFilter === value ? ' on' : ''}`} aria-label={`管理状态 ${label}`} onClick={() => { setManagementFilter(value); setKnowledgeOffset(0); }}>{label}</button>)}
       </div>
-      {knowledge?.items.length ? <div className="library-list">{knowledge.items.map((source) => {
+      {knowledge?.items.length ? <div className="library-list">{RECENCY_GROUPS.map((groupLabel) => {
+        const groupItems = knowledge.items.filter((source) => recencyGroupOf(source) === groupLabel);
+        if (!groupItems.length) return null;
+        return <div className="lib-group" key={groupLabel}>
+          <div className="lib-group-head"><span>{groupLabel}</span><span>{groupItems.length} 条</span></div>
+          {groupItems.map((source) => {
         const statePill = source.managementStatus === 'watching' ? { cls: 'blue', text: '观察中' }
           : source.managementStatus === 'archived' ? { cls: 'gray', text: '已归档' }
           : source.managementStatus === 'expired' ? { cls: 'gray', text: '已过期' }
@@ -423,12 +437,17 @@ export function LibraryView(props: {
           : source.verificationStatus === 'rejected' ? { cls: 'gray', text: '已排除' }
           : { cls: 'gray', text: '待验证' };
         const tags = String(source.topics || '').split(/[,，、]/).map((tag) => tag.trim()).filter((tag) => tag && tag !== '尚未归入主题').slice(0, 4);
+        const domain = domainOf(source.originalUrl ?? null);
+        const used = (source.opportunityCount ?? 0) + (source.projectCount ?? 0) + (source.publicationCount ?? 0) > 0;
         return <article className="lib-row" key={source.id} onClick={() => { void openSourceDrawer(source); }}>
           <SourceMark canonicalUrl={source.originalUrl ?? null} aiSourcePresentation={aiSourcePresentation}/>
           <div className="lib-main">
+            {domain ? <div className="lib-eyebrow">{domain}</div> : null}
             <div className="lib-title">{source.title}</div>
             <div className="lib-sum">{source.summary || '暂无摘要'}</div>
-            <div className="lib-tags">{tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}<span className="tag lib-count">机会 {source.opportunityCount ?? 0} · 内容 {source.projectCount ?? 0} · 发布 {source.publicationCount ?? 0}</span></div>
+            <div className="lib-tags">{tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}{used
+              ? <span className="tag lib-count">机会 {source.opportunityCount ?? 0} · 内容 {source.projectCount ?? 0} · 发布 {source.publicationCount ?? 0}</span>
+              : <span className="tag lib-count lib-unused">尚未使用</span>}</div>
           </div>
           <div className="lib-side">
             <span className={`pill-status ${statePill.cls}`}><span className="dot"/>{statePill.text}</span>
@@ -436,6 +455,8 @@ export function LibraryView(props: {
             {source.originalUrl ? <button onClick={(event) => { event.stopPropagation(); const url = source.originalUrl; if (url) void window.wmb.openExternal(url); }}>原文 ↗</button> : null}
           </div>
         </article>;
+          })}
+        </div>;
       })}</div> : <section className="empty-state library-empty"><h2>没有匹配资料</h2><p>调整搜索或筛选条件后再看。</p></section>}
       <div className="knowledge-pager"><button disabled={knowledgeOffset === 0} onClick={() => setKnowledgeOffset(Math.max(0, knowledgeOffset - 50))}>上一页</button><span>{knowledgeOffset + 1}–{Math.min(knowledgeOffset + 50, knowledge?.total ?? 0)} / {knowledge?.total ?? 0}</span><button disabled={!knowledge?.hasMore} onClick={() => setKnowledgeOffset(knowledgeOffset + 50)}>下一页</button></div>
     </> : <div className="rediscovery-groups">{([['高价值但尚未创作', rediscovery.unused], ['持续观察', rediscovery.watching], ['待核验超过 7 天', rediscovery.pending]] as const).map(([title, items]) => <section key={title}><h2>{title}<span>{items.length}</span></h2>{items.length ? items.map((item) => <button key={item.id} onClick={() => { void openSourceDrawer(item); openSection('saved'); }}><strong>{item.title}</strong><small>{item.reason}</small></button>) : <p>当前没有此类资料。</p>}</section>)}</div>}

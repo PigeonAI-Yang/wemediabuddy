@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform, ContentProjectStatus, ContentProjectSummary } from '../main/content';
+import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform, ContentProjectStatus, ContentProjectStatusSummary, ContentProjectSummary } from '../main/content';
 import { bodyWithoutLeadingTitle, formatTime, htmlToMarkdown, insertTextAtCursor, looksLikeMarkdown, platformNames, renderMarkdown, statuses, wrapTextareaSelection } from './studio-view-helpers';
-import { StudioContext, StudioEditorTop, StudioFormatBar, StudioOutline } from './studio-view-panels';
+import { StudioContext, StudioEditorTop, StudioFormatBar, StudioLibraryHeader, StudioOutline } from './studio-view-panels';
 export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, planDate, enabledPlatforms }: {
   openPublish: () => void; selectedId: string | null; onSelect: (projectId: string | null) => void;
   onContext: (project: { id: string; title: string } | null) => void; planDate: string; enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
 }): React.JSX.Element {
   const [projects, setProjects] = useState<ContentProjectSummary[]>([]); const [topics,setTopics]=useState<any[]>([]);
+  const [statusSummary, setStatusSummary] = useState<ContentProjectStatusSummary | null>(null);
   const [selected, setSelected] = useState<ContentProjectDetail | null>(null); const [queryDraft, setQueryDraft] = useState('');
   const [query, setQuery] = useState(''); const [status, setStatus] = useState<ContentProjectStatus | undefined>();
   const [archived, setArchived] = useState(false); const [order, setOrder] = useState<ContentProjectOrder>('recent');
@@ -26,10 +27,14 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const loadFirst = async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const result = await window.wmb.listStudioProjects({ ...input, offset });
+      const [result, nextSummary] = await Promise.all([
+        window.wmb.listStudioProjects({ ...input, offset }),
+        window.wmb.getStudioSummary()
+      ]);
       const page = result?.items ?? [];
       setProjects(page);
       setHasMore(Boolean(result?.hasMore));
+      setStatusSummary(nextSummary);
       setMessage('');
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setLoading(false); }
@@ -377,18 +382,11 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     finally { setBusy(false); }
   };
 
-  if (!selectedId) return <section className="studio-library">
+  if (!selectedId) {
+    return <section className="studio-library">
     <input ref={importInput} className="studio-import-input" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProject(file); }}/>
     <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
-    <header className="studio-library-heading">
-      <div><h1>创作项目</h1><p>管理长期选题、稿件版本和平台内容。</p></div>
-      <button className="primary-button" onClick={() => setCreating(true)}>新建创作项目</button>
-    </header>
-    <nav className="studio-library-summary" aria-label="项目状态">
-      <button className={!status && !archived ? 'active' : ''} onClick={() => { setStatus(undefined); setArchived(false); }}><strong>{projects.length}{hasMore ? '+' : ''}</strong><span>全部项目</span></button>
-      {statuses.filter((item) => item.value !== 'idea').map((item) => <button key={item.value} className={status === item.value && !archived ? 'active' : ''} onClick={() => { setStatus(item.value); setArchived(false); }}><strong>{projects.filter((project) => project.status === item.value).length}{hasMore ? '+' : ''}</strong><span>{item.label}</span></button>)}
-      <button className={archived ? 'active' : ''} onClick={() => { setStatus(undefined); setArchived(true); }}><strong>{archived ? projects.length : '—'}</strong><span>已归档</span></button>
-    </nav>
+    <StudioLibraryHeader summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} onCreate={() => setCreating(true)}/>
     <div className="studio-library-body">
       {creating && <div className="studio-create-row"><input autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createProject(); }} placeholder="输入新项目标题"/><button className="primary-button" disabled={!newTitle.trim() || busy} onClick={() => void createProject()}>创建并开始写作</button><button className="secondary-button" onClick={() => { setCreating(false); setNewTitle(''); }}>取消</button></div>}
       <div className="studio-library-tools">
@@ -416,6 +414,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       <footer className="studio-library-pagination"><span>第 {projects.length ? offset + 1 : 0}–{offset + projects.length} 项，每页最多 50 项</span><div><button className="secondary-button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>上一页</button><button className="secondary-button" disabled={!hasMore} onClick={() => setOffset(offset + 50)}>下一页</button></div></footer>
     </div>
   </section>;
+  }
 
   return <section className={`studio-editor-view${contextOpen ? ' context-open' : ''}`}>
     <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
@@ -490,8 +489,8 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
           </div>
         </>}
         {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
-        {tab === 'platforms' && <section className="studio-detail-list">{Object.entries(selected.platformVersions).flatMap(([platform, versions]) => versions.map((version) => <article key={version.id}><span>{platformNames[platform]} · {version.format}</span><h3>{version.title || `平台版本 ${version.id.slice(0, 8)}`}</h3><p>{version.body}</p><small>绑定核心版本 {selected.revisions.find((item) => item.id === version.contentVersionId)?.number ?? version.contentVersionId} · revision {version.revision} · 素材 {version.assets.length}</small></article>))}{!Object.values(selected.platformVersions).flat().length && <div className="compact-empty"><h2>没有平台版本</h2><p>平台适配内容会在这里按真实绑定关系显示。</p></div>}</section>}
-        {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>SHA-256 {asset.sha256}</p><small>{asset.byteCount} bytes{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} ms` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
+        {tab === 'platforms' && <section className="studio-detail-list">{Object.entries(selected.platformVersions).flatMap(([platform, versions]) => versions.map((version) => <article key={version.id}><span>{platformNames[platform]} · {version.format}</span><h3>{version.title || `平台版本 ${version.id.slice(0, 8)}`}</h3><p>{version.body}</p><small>绑定核心版本 第 {selected.revisions.find((item) => item.id === version.contentVersionId)?.number ?? version.contentVersionId} 版 · 素材 {version.assets.length} 项</small></article>))}{!Object.values(selected.platformVersions).flat().length && <div className="compact-empty"><h2>没有平台版本</h2><p>平台适配内容会在这里按真实绑定关系显示。</p></div>}</section>}
+        {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>素材指纹 {asset.sha256}</p><small>{asset.byteCount} 字节{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} 毫秒` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
       </> : <section className="empty-state editor-empty"><h2>{message ? '项目详情读取失败' : '选择一个内容项目'}</h2><p>{message || '左侧会显示符合当前条件的项目。'}</p>{selectedId && message && <button onClick={() => void loadDetail(selectedId)}>重新读取</button>}</section>}
     </main>
     <StudioContext selected={selected} contextTab={contextTab} setContextTab={setContextTab} setTab={setTab} setViewedVersionId={setViewedVersionId} latestId={latest?.id} busy={busy} update={update} topics={topics} writeDraft={writeDraft} reload={reload}/>

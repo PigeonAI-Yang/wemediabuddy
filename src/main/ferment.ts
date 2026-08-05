@@ -168,7 +168,8 @@ export function listFermentingBundle(database: DatabaseSync, planDate = shanghai
 
 export function setCarryState(
   database: DatabaseSync,
-  input: { id: string; expectedRevision: number; state: CarryState; reason?: string }
+  input: { id: string; expectedRevision: number; state: CarryState; reason?: string },
+  broadcast = true
 ): WorkCarryItem {
   const existing = getCarryItem(database, input.id);
   if (!existing) throw new Error('续命条目不存在。');
@@ -184,7 +185,7 @@ export function setCarryState(
     WHERE id=?`).run(input.state, input.reason ?? null, expiresAt, now, input.id);
   const next = getCarryItem(database, input.id);
   if (!next) throw new Error('续命条目更新失败。');
-  broadcastDataChanged({ scopes: ['today'], reason: 'carry.state' });
+  if (broadcast) broadcastDataChanged({ scopes: ['today'], reason: 'carry.state' });
   return next;
 }
 

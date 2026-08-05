@@ -1,0 +1,39 @@
+{
+  "schema": "wmb.task-evidence.v1",
+  "taskId": "WMB-4804",
+  "date": "2026-08-05",
+  "specIds": ["CAP-005", "CAP-025"],
+  "behavior": {
+    "envelope": "CommandEnvelopeV1 hashes command, normalized input, workspace/runtime, actor, task/worker/grant and bound object identity.",
+    "replay": "workspaceId + requestId returns the exact stored receipt only when command and inputHash match; mismatches raise REQUEST_REPLAY_CONFLICT.",
+    "atomicity": "domain mutation, CommandReceiptV1 and operation_log commit in one BEGIN IMMEDIATE transaction; handler failures roll back domain state before persisting an error receipt and audit in a new atomic transaction.",
+    "staleWrites": "workspace/runtime identity is checked before transaction; optimistic revision conflicts roll back with zero source mutation.",
+    "representativeRoute": "sources.upsert_batch is shared by Owner UI sources:save-discovered and external MCP.",
+    "legacy": "mcp_request_results is unchanged and remains readable."
+  },
+  "verification": [
+    {
+      "command": "node --test tests/command-dispatcher.test.mjs tests/migrations.test.mjs tests/settings.test.mjs",
+      "result": "pass",
+      "tests": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "result": "pass"
+    },
+    {
+      "command": "node scripts/smoke-renderer.mjs",
+      "result": "pass",
+      "readback": "[wmb-smoke] ok http://127.0.0.1:27391/"
+    }
+  ],
+  "review": {
+    "result": "pass",
+    "reviewer": "Main adversarial contract pass",
+    "conclusion": "No blocking issue found across hash/replay, transaction rollback, stale identity/revision, UI/MCP parity, legacy evidence and operator Skill semantics.",
+    "automationNote": "Two external reviewer attempts were made. The configured Task reviewer failed because no subagent model was selected; Codex rescue returned empty output. The main agent therefore completed a separate evidence-led adversarial pass rather than treating either failed reviewer declaration as acceptance."
+  },
+  "piOperatorSkillImpact": "updated - documented CommandEnvelopeV1 requestId reuse, exact replay, REQUEST_REPLAY_CONFLICT, stale workspace/runtime errors, and CommandReceiptV1 result handling."
+}

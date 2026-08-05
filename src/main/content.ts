@@ -7,6 +7,15 @@ import { broadcastDataChanged } from './data-changed.ts';
 export type ContentProjectStatus = 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
 export type ContentProjectOrder = 'recent' | 'oldest' | 'versions';
 export type ContentProjectPlatform = 'x' | 'xiaohongshu' | 'wechat';
+export type SavedCoreVersion = {
+  id: string;
+  versionNumber: number;
+  createdAt: string;
+  author: 'user' | 'ai';
+  projectRevision: number;
+  project: { id: string; title: string; revision: number };
+};
+export type SavedPlatformVersion = { id: string; revision: number };
 
 export type ContentProjectSummary = {
   id: string;
@@ -129,6 +138,8 @@ export function listContentProjects(
   return { items: rows.slice(0, limit).map(summaryFromRow), limit, offset, hasMore: rows.length > limit };
 }
 
+export { getContentProjectStatusSummary, type ContentProjectStatusSummary } from './content-summary.ts';
+
 export function getContentProject(database: DatabaseSync, projectId: string): ContentProjectDetail | null {
   const row = database.prepare(`
     SELECT p.id, p.topic_id AS topicId, p.plan_item_id AS planItemId, p.title, p.status,
@@ -223,6 +234,7 @@ export function copyContentVersionToNewProject(
     const created = createContentProjectWithVersion(database, { title, body: version.body, sourceIds }, false);
     const detail = getContentProject(database, created.id)!;
     if (transaction) database.exec('COMMIT');
+    if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.copy' });
     return success(detail);
   } catch (error) {
     if (transaction) database.exec('ROLLBACK');
@@ -255,7 +267,7 @@ export function createContentProjectWithVersion(
     const project = createContentProject(database, input, false);
     const version = insertCoreVersion(database, project.id, input.body);
     if (transaction) database.exec('COMMIT');
-    broadcastDataChanged({ scopes: ['studio'], reason: 'content.create' });
+    if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.create' });
     return {
       ...project,
       title: input.title,
@@ -269,7 +281,7 @@ export function createContentProjectWithVersion(
   }
 }
 
-export function createProjectFromPlanItem(database: DatabaseSync, planItemId: string): { id: string; revision: number; created: boolean } {
+export function createProjectFromPlanItem(database: DatabaseSync, planItemId: string, transaction = true): { id: string; revision: number; created: boolean } {
   const existing = database.prepare('SELECT id, revision FROM content_projects WHERE plan_item_id = ?').get(planItemId) as { id: string; revision: number } | undefined;
   if (existing) return { ...existing, created: false };
   const item = database.prepare(`SELECT topic_id AS topicId, title, point_of_view AS pointOfView,
@@ -279,7 +291,7 @@ export function createProjectFromPlanItem(database: DatabaseSync, planItemId: st
       openingGuidance: string; structureGuidance: string; sourceIds: string;
     } | undefined;
   if (!item) throw new Error('内容机会不存在。');
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const project = createContentProject(database, {
       title: item.title,
@@ -288,11 +300,11 @@ export function createProjectFromPlanItem(database: DatabaseSync, planItemId: st
       sourceIds: JSON.parse(item.sourceIds) as string[]
     }, false);
     insertCoreVersion(database, project.id, `# ${item.title}\n\n## 核心观点\n${item.pointOfView}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}`);
-    database.exec('COMMIT');
     markCarryDoneForPlanItem(database, planItemId);
+    if (transaction) database.exec('COMMIT');
     return { ...project, created: true };
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 }
@@ -323,14 +335,7 @@ export function saveCoreVersion(
   database: DatabaseSync,
   input: { projectId: string; body: string; expectedRevision: number; author?: 'user' | 'ai'; title?: string },
   transaction = true
-): CommandResult<{
-  id: string;
-  versionNumber: number;
-  createdAt: string;
-  author: 'user' | 'ai';
-  projectRevision: number;
-  project: { id: string; title: string; revision: number };
-}> {
+): CommandResult<SavedCoreVersion> {
   if (!input.body.trim()) return failure('VALIDATION_ERROR', '正文不能为空。');
   const requestedTitle = input.title?.trim();
   if (input.title !== undefined && !requestedTitle) return failure('VALIDATION_ERROR', '标题不能为空。');
@@ -354,7 +359,7 @@ export function saveCoreVersion(
     database.prepare('UPDATE content_projects SET title = ?, updated_at = ?, revision = ? WHERE id = ?')
       .run(title, version.createdAt, revision, input.projectId);
     if (transaction) database.exec('COMMIT');
-    broadcastDataChanged({ scopes: ['studio'], reason: 'content.core_version' });
+    if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.core_version' });
     return success({
       ...version,
       projectRevision: revision,
@@ -420,7 +425,7 @@ export function updateContentProject(
 
 // 受限硬删除:只允许删除从未进入发布/知识链路的工作项目(无平台版本、无发布、无上下文使用、无画布引用)。
 // 一旦进入链路,项目被发布记录/指标/复盘回链,只能归档不能删除。
-export function deleteContentProject(database: DatabaseSync, input: { projectId: string; expectedRevision: number }): CommandResult<{ id: string }> {
+export function deleteContentProject(database: DatabaseSync, input: { projectId: string; expectedRevision: number }, transaction = true): CommandResult<{ id: string }> {
   const current = getContentProject(database, input.projectId);
   if (!current) return failure('NOT_FOUND', '内容项目不存在。');
   if (current.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', '内容项目已更新,请重新加载。', { current });
@@ -430,7 +435,7 @@ export function deleteContentProject(database: DatabaseSync, input: { projectId:
   if (contextUses > 0) return failure('HAS_CONTEXT_USES', '项目已被 Pi 上下文引用,不能删除;可以归档。');
   const canvasRefs = Number((database.prepare("SELECT COUNT(*) AS count FROM knowledge_canvas_nodes WHERE object_type = 'content_project' AND object_id = ?").get(input.projectId) as { count: number }).count);
   if (canvasRefs > 0) return failure('HAS_CANVAS_REFS', '项目已被关系画布引用,不能删除;可以归档。');
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     database.prepare('DELETE FROM content_project_sources WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM content_notes WHERE project_id = ?').run(input.projectId);
@@ -439,15 +444,15 @@ export function deleteContentProject(database: DatabaseSync, input: { projectId:
     database.prepare('DELETE FROM content_project_context_packages WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM creative_brief_projects WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM content_projects WHERE id = ?').run(input.projectId);
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     return success({ id: input.projectId });
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 }
 
-export function savePlatformVersion(database: DatabaseSync, input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string }): CommandResult<{ id: string; revision: number }> {
+export function savePlatformVersion(database: DatabaseSync, input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string }): CommandResult<SavedPlatformVersion> {
   const now = new Date().toISOString();
   if (!input.id) {
     const id = randomUUID(); database.prepare('INSERT INTO platform_versions (id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').run(id, input.projectId, input.contentVersionId, input.platform, input.format, input.title ?? null, input.body, JSON.stringify(input.assetIds ?? []), now, now);

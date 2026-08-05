@@ -1,5 +1,18 @@
 import { callTool, textResult, type ToolDefinition } from './wmb-mcp-client.ts';
 
+const authorityProperties = {
+  requestId: { type: 'string' },
+  taskId: { type: 'string' },
+  grantId: { type: 'string' },
+  workerLeaseId: { type: 'string' }
+};
+const authorityPayload = (params: Record<string, unknown>) => ({
+  request_id: String(params.requestId ?? ''),
+  task_id: String(params.taskId ?? ''),
+  grant_id: String(params.grantId ?? ''),
+  worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined
+});
+
 const getWorkbench: ToolDefinition = {
   name: 'wmb_get_workbench',
   label: '读取 WMB 工作台',
@@ -22,6 +35,26 @@ const getAgentTask: ToolDefinition = {
     return textResult(await callTool('agent_tasks.get', { task_id: String(params.taskId) }));
   }
 };
+
+const getTaskGrant: ToolDefinition = {
+  name: 'wmb_get_task_grant',
+  label: '读取任务授权',
+  description: '按 grantId 读取当前工作空间的任务授权。只读，不能签发或撤销。',
+  parameters: { type: 'object', properties: { grantId: { type: 'string' } }, required: ['grantId'], additionalProperties: false },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('task_grants.get', { grant_id: String(params.grantId) }));
+  }
+};
+
+const listTaskGrants: ToolDefinition = {
+  name: 'wmb_list_task_grants',
+  label: '列出任务授权',
+  description: '按 taskId 列出当前工作空间的任务授权。只读，不能签发或撤销。',
+  parameters: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('task_grants.list', { task_id: String(params.taskId) }));
+  }
+};
 const reportAgentProgress: ToolDefinition = {
   name: 'wmb_report_agent_progress',
   label: '汇报情报进度',
@@ -29,17 +62,19 @@ const reportAgentProgress: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      taskId: { type: 'string' }, phase: { type: 'string' }, currentSource: { type: 'string' },
+      ...authorityProperties,
+      phase: { type: 'string' }, currentSource: { type: 'string' },
       planned: { type: 'number' }, processed: { type: 'number' }, failed: { type: 'number' },
       verified: { type: 'number' }, saved: { type: 'number' }, opportunityCount: { type: 'number' },
       checkpoint: { type: 'object' }, message: { type: 'string' }, level: { type: 'string' }, clearControl: { type: 'boolean' }
     },
-    required: ['taskId'],
+    required: ['requestId', 'taskId', 'grantId'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('agent_tasks.report_progress', {
-      task_id: String(params.taskId), phase: params.phase, current_source: params.currentSource,
+      ...authorityPayload(params),
+      phase: params.phase, current_source: params.currentSource,
       planned: params.planned, processed: params.processed, failed: params.failed, verified: params.verified,
       saved: params.saved, opportunity_count: params.opportunityCount, checkpoint: params.checkpoint,
       message: params.message, level: params.level, clear_control: params.clearControl
@@ -96,14 +131,20 @@ const saveSource: ToolDefinition = {
       title: { type: 'string' },
       originalUrl: { type: 'string' },
       summary: { type: 'string' },
-      author: { type: 'string' }
+      author: { type: 'string' },
+      taskId: { type: 'string' },
+      grantId: { type: 'string' },
+      workerLeaseId: { type: 'string' }
     },
-    required: ['requestId', 'title', 'originalUrl', 'summary'],
+    required: ['requestId', 'taskId', 'grantId', 'workerLeaseId', 'title', 'originalUrl', 'summary'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     const result = await callTool('sources.upsert_batch', {
       request_id: String(params.requestId ?? ''),
+      task_id: String(params.taskId ?? ''),
+      grant_id: String(params.grantId ?? ''),
+      worker_lease_id: String(params.workerLeaseId ?? ''),
       items: [{
         title: String(params.title ?? ''),
         originalUrl: String(params.originalUrl ?? ''),
@@ -127,7 +168,7 @@ const savePlan: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      requestId: { type: 'string' },
+      ...authorityProperties,
       planDate: { type: 'string' },
       summary: { type: 'string' },
       items: {
@@ -157,12 +198,12 @@ const savePlan: ToolDefinition = {
         }
       }
     },
-    required: ['requestId', 'planDate', 'summary', 'items'],
+    required: ['requestId', 'taskId', 'grantId', 'planDate', 'summary', 'items'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('plans.save', {
-      request_id: String(params.requestId ?? ''),
+      ...authorityPayload(params),
       plan_date: String(params.planDate ?? ''),
       summary: String(params.summary ?? ''),
       items: params.items
@@ -185,17 +226,17 @@ const suggestKnowledge: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      requestId: { type: 'string' },
+      ...authorityProperties,
       canvasId: { type: 'string' },
       kind: { type: 'string', enum: ['node', 'relation'] },
       payload: { type: 'object' }
     },
-    required: ['requestId', 'canvasId', 'kind', 'payload'],
+    required: ['requestId', 'taskId', 'grantId', 'canvasId', 'kind', 'payload'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('knowledge.suggestion_create', {
-      request_id: String(params.requestId ?? ''),
+      ...authorityPayload(params),
       canvas_id: String(params.canvasId ?? ''),
       kind: params.kind,
       payload: params.payload
@@ -203,4 +244,4 @@ const suggestKnowledge: ToolDefinition = {
   }
 };
 
-export const coreTools = [getWorkbench, getAgentTask, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, suggestKnowledge];
+export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, suggestKnowledge];

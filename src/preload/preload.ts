@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 contextBridge.exposeInMainWorld('wmb', {
   getDataRoot: () => ipcRenderer.invoke('data-root:get'),
@@ -89,11 +90,16 @@ contextBridge.exposeInMainWorld('wmb', {
   createProjectFromBrief: (input:unknown) => ipcRenderer.invoke('knowledge-context:create-project-from-brief',input),
   getCreativeBriefLineage: (briefId:string) => ipcRenderer.invoke('knowledge-context:get-brief-lineage',briefId),
   windowControl: (action: 'minimize' | 'maximize' | 'close') => ipcRenderer.invoke('window:control', action),
-  configureBrowser: (id: string) => ipcRenderer.invoke('browser:configure', id),
-  savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
+  listBrowserProfiles: () => ipcRenderer.invoke('browser-profiles:list'),
+  getWorkspaceBrowserBinding: () => ipcRenderer.invoke('workspace-browser:get-binding'),
+  createBrowserProfile: (input: OwnerBrowserCommand & { label?: string }) => ipcRenderer.invoke('browser-profiles:create', input),
+  rebindBrowserProfile: (input: OwnerBrowserCommand & { profileId: string }) => ipcRenderer.invoke('workspace-browser:rebind', input),
+  verifyBrowserAccount: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:verify', input),
+  migrateLegacyBrowserProfile: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:migrate-legacy', input),
+  savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
-  listPiModels: (input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<string[]>,
+  listPiModels: (input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>,
   listPiSkills: () => ipcRenderer.invoke('pi-skills:list'),
   savePiSkill: (input: { originalName?: string; name: string; description: string; instructions: string }) => ipcRenderer.invoke('pi-skills:save', input),
   deletePiSkill: (name: string) => ipcRenderer.invoke('pi-skills:delete', name),
@@ -162,7 +168,7 @@ contextBridge.exposeInMainWorld('wmb', {
     messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
+  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
     const handler = (_event: unknown, payload: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
@@ -178,6 +184,14 @@ contextBridge.exposeInMainWorld('wmb', {
   getAgentTask: (input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }) => ipcRenderer.invoke('agent:get', input ?? {}),
   agentRequestId: (input: { taskId: string; logicalStep: string }) => ipcRenderer.invoke('agent:request-id', input),
   updateAgentTaskPhase: (input: { id: string; phase: string; piSessionId?: string | null }) => ipcRenderer.invoke('agent:update-phase', input),
+  issueTaskGrant: (input: { requestId?: string; taskId: string; ownerGoal: string; allowedCommands: string[]; workers: Array<{ type: 'pi' | 'external_agent'; id: string }>; relevantContext?: Record<string, unknown>; expiresAt: string }) => ipcRenderer.invoke('task-grants:issue', input),
+  revokeTaskGrant: (input: { requestId?: string; grantId: string; expectedRevision: number }) => ipcRenderer.invoke('task-grants:revoke', input),
+  getTaskGrant: (grantId: string) => ipcRenderer.invoke('task-grants:get', grantId),
+  listTaskGrants: (taskId: string) => ipcRenderer.invoke('task-grants:list', taskId),
+  issueExecutionGrant: (input: { requestId?: string; taskId?: string; taskGrantId?: string; command: 'intelligence_channels.proposal_apply' | 'x_lists.operation_execute'; inputHash: string; boundIdentity: Record<string, unknown>; targetActor: { type: 'owner_ui'; id: 'renderer' }; browserProfileId?: string; bindingRevision?: number; expectedAccount?: string; allowedTransition: string; requiredReadback: Record<string, unknown>; expiresAt: string }) => ipcRenderer.invoke('execution-grants:issue', input),
+  revokeExecutionGrant: (input: { requestId?: string; executionGrantId: string; expectedRevision: number }) => ipcRenderer.invoke('execution-grants:revoke', input),
+  getExecutionGrant: (executionGrantId: string) => ipcRenderer.invoke('execution-grants:get', executionGrantId),
+  listExecutionGrants: (filters?: { taskId?: string | null; status?: 'active' | 'consumed' | 'revoked' | 'expired' | 'stale' }) => ipcRenderer.invoke('execution-grants:list', filters),
   completeAgentTask: (id: string) => ipcRenderer.invoke('agent:complete', id),
   failAgentTask: (input: { id: string; errorCode: string; errorMessage: string }) => ipcRenderer.invoke('agent:fail', input),
   cancelAgentTask: (id: string) => ipcRenderer.invoke('agent:cancel', id),
@@ -185,7 +199,6 @@ contextBridge.exposeInMainWorld('wmb', {
   startResultsReview: (input: { businessDate: string; publicationId: string }) => ipcRenderer.invoke('agent:start-results-review', input),
   startDailyIntelligence: (input: { businessDate: string }) => ipcRenderer.invoke('agent:start-daily-intelligence', input),
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
-  startBrowser: (input: { mode?: 'quiet' | 'visible' | 'headless' } = {}) => ipcRenderer.invoke('browser:start', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
   refreshFermenting: (planDate: string) => ipcRenderer.invoke('today:refresh-fermenting', planDate),
   listFermenting: (planDate: string) => ipcRenderer.invoke('today:list-fermenting', planDate),
@@ -193,11 +206,12 @@ contextBridge.exposeInMainWorld('wmb', {
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
   listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),
+  getStudioSummary: () => ipcRenderer.invoke('studio:summary'),
   getStudioProject: (projectId: string) => ipcRenderer.invoke('studio:get-detail', projectId),
   createStudioProject: (input: { title: string; body: string }) => ipcRenderer.invoke('studio:create-project', input),
   updateStudioProject: (input: { projectId: string; expectedRevision: number; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; topicId?:string|null }) => ipcRenderer.invoke('studio:update-project', input),
   deleteStudioProject: (input: { projectId: string; expectedRevision: number }) => ipcRenderer.invoke('studio:delete-project', input),
-  saveDiscoveredSource: (input: { title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
+  saveDiscoveredSource: (input: { requestId: string; title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
   copyStudioVersionToProject: (input: { sourceProjectId: string; contentVersionId: string; title: string }) => ipcRenderer.invoke('studio:copy-version', input),
   saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number }) => ipcRenderer.invoke('studio:save-core', input),
   listStudioAssets: (projectId: string) => ipcRenderer.invoke('studio:list-assets', projectId),
@@ -230,8 +244,12 @@ contextBridge.exposeInMainWorld('wmb', {
     findings?: Array<{ id?: string; title: string; body: string }>;
   }) => ipcRenderer.invoke('reviews:save', input),
   listReviewBacklinks: (input?: { reviewIds?: string[]; findingIds?: string[] }) => ipcRenderer.invoke('reviews:backlinks', input),
-  prepareXPublication: (platformVersionId: string) => ipcRenderer.invoke('publish:prepare-x', platformVersionId),
-  prepareWechatArticlePublication: (platformVersionId: string) => ipcRenderer.invoke('publish:prepare-wechat-article', platformVersionId),
+  createPublicationSnapshot: (platformVersionId: string, requestId?: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId, requestId }),
+  authorizePublicationEditor: (input: { publicationId: string; expectedRevision: number; requestId?: string }) => ipcRenderer.invoke('publish:editor-prepare', input),
+  getPublicationSnapshot: (publicationId: string) => ipcRenderer.invoke('publish:snapshot-get', publicationId),
+  getPublicationBrowserOperation: (operationId: string) => ipcRenderer.invoke('publish:operation-get', operationId),
+  prepareXPublication: (platformVersionId: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId }),
+  prepareWechatArticlePublication: (platformVersionId: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId }),
   readBackWechatPublication: (publicationId: string, expectedRevision: number, articleUrl: string) => ipcRenderer.invoke('publish:readback-wechat', publicationId, expectedRevision, articleUrl),
   reconcileNotPublished: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:reconcile-not-published', publicationId, expectedRevision)
 });

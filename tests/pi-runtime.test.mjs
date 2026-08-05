@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PiRpcSupervisor } from '../src/main/pi-runtime.ts';
+import { humanizePiProviderError, PiRpcSupervisor } from '../src/main/pi-runtime.ts';
 import { readPiCommands } from '../src/main/pi-commands.ts';
+
+test('Pi RPC streams authoritative block snapshots instead of replayed deltas', async () => {
+  const fixture = `let b='';process.stdin.on('data',d=>{b+=d;while(b.includes('\\n')){const i=b.indexOf('\\n');const r=JSON.parse(b.slice(0,i));b=b.slice(i+1);if(r.type==='get_state'){process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true,data:{}})+'\\n');continue}if(r.type==='prompt'){process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true})+'\\n');const send=x=>process.stdout.write(JSON.stringify(x)+'\\n');send({type:'message_start',message:{role:'assistant',content:[]}});send({type:'message_update',assistantMessageEvent:{type:'thinking_delta',contentIndex:0,delta:'用户',partial:{role:'assistant',content:[{type:'thinking',thinking:'用户'}]}}});send({type:'message_update',assistantMessageEvent:{type:'thinking_delta',contentIndex:0,delta:'用户问',partial:{role:'assistant',content:[{type:'thinking',thinking:'用户问'}]}}});send({type:'message_update',assistantMessageEvent:{type:'text_delta',contentIndex:1,delta:'我先',partial:{role:'assistant',content:[{type:'thinking',thinking:'用户问'},{type:'text',text:'我先'}]}}});send({type:'message_update',assistantMessageEvent:{type:'text_delta',contentIndex:1,delta:'我先看看',partial:{role:'assistant',content:[{type:'thinking',thinking:'用户问'},{type:'text',text:'我先看看'}]}}});send({type:'message_end',message:{role:'assistant',content:[{type:'thinking',thinking:'用户问'},{type:'text',text:'我先看看'}]}});send({type:'agent_settled'});}}});`;
+  const events = [];
+  const deltas = [];
+  const runtime = new PiRpcSupervisor(process.execPath, ['-e', fixture], process.env, (event) => events.push(event));
+  await runtime.start();
+  const result = await runtime.promptUntilSettled('test', { onDelta: (text) => deltas.push(text) });
+  assert.deepEqual(deltas, ['我先', '我先看看']);
+  assert.deepEqual(events.filter((event) => event.type === 'wmb_thinking_delta').map((event) => event.text), ['用户', '用户问']);
+  assert.equal(events.some((event) => String(event.text).includes('用户用户') || String(event.text).includes('我先我先')), false);
+  assert.deepEqual(result, { text: '我先看看', thinking: '用户问', stopped: false });
+  await runtime.stop();
+});
 
 test('Pi RPC supervisor streams deltas, settles prompts, aborts and stops', async () => {
   const fixture = `
@@ -239,6 +253,7 @@ process.stdin.on('data',d=>{
     process.stdout.write(JSON.stringify({id:r.id,type:'response',command:r.type,success:true})+'\\n');
   }
 });
+
 `;
   const runtime = new PiRpcSupervisor(process.execPath, ['-e', fixture], process.env);
   await runtime.start();
@@ -247,4 +262,11 @@ process.stdin.on('data',d=>{
     /RegionError|中国区|opt-in|opt in/i
   );
   await runtime.stop();
+});
+
+test('Pi provider bodyless 5xx keeps completed-work semantics explicit', () => {
+  assert.equal(
+    humanizePiProviderError('500 status code (no body)'),
+    'Pi 模型服务暂时异常（HTTP 500，服务端未返回详情）。已完成的工具结果已保留，可稍后重试回答。'
+  );
 });

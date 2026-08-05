@@ -35,13 +35,21 @@ foreach ($relativePath in @('AGENTS.md', 'docs/ai-harness.md', 'docs/development
     }
 }
 
+Write-Host '> checking renderer port anchor'
+foreach ($relativePath in @('AGENTS.md', 'docs/development-workflow.md', 'docs/verification.md', 'vite.renderer.config.ts')) {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $projectRoot $relativePath)
+    if ($text -notmatch '27391') {
+        throw "Missing renderer port anchor 27391 in: $relativePath"
+    }
+}
+
 Write-Host '> checking unresolved placeholders'
 $placeholderPattern = '\b(T' + 'BD|T' + 'ODO)\b'
 $projectFiles = git -C $projectRoot ls-files --cached --others --exclude-standard
 if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate project files.' }
 $placeholderExtensions = @('.md', '.json', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.css', '.html', '.ps1', '.yml', '.yaml')
 $placeholderMatches = foreach ($relativePath in $projectFiles) {
-    if ($relativePath -eq 'TASKS.md' -or $relativePath -match '^(?:node_modules|out|\.git|\.ai|resources|data|tests)/') { continue }
+    if ($relativePath -in @('TASKS.md', 'TASKS.archive.md') -or $relativePath -match '^(?:node_modules|out|\.git|\.ai|resources|data|tests)/') { continue }
     if ([IO.Path]::GetExtension($relativePath) -notin $placeholderExtensions) { continue }
     $fullPath = Join-Path $projectRoot $relativePath
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
@@ -55,10 +63,7 @@ if ($placeholderMatches) {
 Write-Host '> checking 500-line source limit'
 $sourceExtensions = @('.ts', '.tsx', '.js', '.mjs', '.cjs', '.css', '.scss', '.html', '.ps1')
 $sourceFiles = $projectFiles
-$legacySourceLineCaps = @{
-    'src/renderer/library-topics-view.tsx' = 1575
-    'src/renderer/x-lists-view.tsx' = 1105
-}
+$legacySourceLineCaps = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'scripts/line-caps.json') | ConvertFrom-Json
 $oversizedSources = foreach ($relativePath in $sourceFiles) {
     if ($relativePath -match '^(?:node_modules|out|\.git|\.ai|resources)/') { continue }
     if ([IO.Path]::GetExtension($relativePath) -notin $sourceExtensions) { continue }
@@ -66,8 +71,16 @@ $oversizedSources = foreach ($relativePath in $sourceFiles) {
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
     $lineCount = (Get-Content -LiteralPath $fullPath).Count
     $normalizedPath = $relativePath.Replace('\', '/')
-    $legacyCap = $legacySourceLineCaps[$normalizedPath]
-    if ($lineCount -gt 500 -and (-not $legacyCap -or $lineCount -gt $legacyCap)) {
+    $legacyCap = $legacySourceLineCaps."$normalizedPath"
+    if ($null -ne $legacyCap) {
+        if ($lineCount -gt $legacyCap) {
+            "$relativePath ($lineCount lines, cap $legacyCap)"
+        }
+        elseif ($lineCount -lt $legacyCap) {
+            throw "Source file $relativePath has $lineCount lines, below its legacy cap $legacyCap; tighten scripts/line-caps.json to $lineCount (ratchet only moves down)."
+        }
+    }
+    elseif ($lineCount -gt 500) {
         "$relativePath ($lineCount lines)"
     }
 }
@@ -78,66 +91,9 @@ if ($oversizedSources) {
 node (Join-Path $projectRoot 'scripts/verify-prototype-split.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Prototype split verification failed.' }
 
-Write-Host '> checking task traceability'
-$prdText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'PRD.md')
-$specText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'SPEC.md')
-$planText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'PLAN.md')
-$tasksText = Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'TASKS.md')
-$capabilityIds = [regex]::Matches($specText, '\bCAP-\d{3}\b') |
-    ForEach-Object { $_.Value } |
-    Sort-Object -Unique
-foreach ($capabilityId in $capabilityIds) {
-    if ($planText -notmatch [regex]::Escape($capabilityId)) {
-        throw "Capability has no plan mapping: $capabilityId"
-    }
-    if ($tasksText -notmatch [regex]::Escape($capabilityId)) {
-        throw "Capability has no task mapping: $capabilityId"
-    }
-}
-
-$requirementIds = [regex]::Matches($specText, '\b(?:REQ|AC)-\d{3}\b') |
-    ForEach-Object { $_.Value } |
-    Sort-Object -Unique
-foreach ($requirementId in $requirementIds) {
-    if ($prdText -notmatch [regex]::Escape($requirementId)) {
-        throw "SPEC references unknown PRD requirement: $requirementId"
-    }
-}
-
-$taskRows = Get-Content -LiteralPath (Join-Path $projectRoot 'TASKS.md') |
-    Where-Object { $_ -match '^\|\s*WMB-\d{4}\s*\|' }
-$taskIds = $taskRows |
-    ForEach-Object { ([regex]::Match($_, 'WMB-\d{4}')).Value }
-$doingCount = 0
-foreach ($taskRow in $taskRows) {
-    $cells = $taskRow.Trim('|').Split('|') | ForEach-Object { $_.Trim() }
-    if ($cells.Count -ne 8) {
-        throw "Invalid task row: $taskRow"
-    }
-    $status = $cells[3]
-    if ($status -notin @('todo', 'doing', 'blocked', 'done')) {
-        throw "Invalid task status '$status' in $($cells[0])"
-    }
-    if ($status -eq 'doing') {
-        $doingCount++
-    }
-    if ($status -eq 'done' -and (
-        [string]::IsNullOrWhiteSpace($cells[5]) -or
-        [string]::IsNullOrWhiteSpace($cells[6])
-    )) {
-        throw "Done task lacks deliverable or evidence: $($cells[0])"
-    }
-    $dependencies = [regex]::Matches($cells[4], 'WMB-\d{4}') |
-        ForEach-Object { $_.Value }
-    foreach ($dependency in $dependencies) {
-        if ($dependency -notin $taskIds) {
-            throw "Unknown dependency $dependency in $($cells[0])"
-        }
-    }
-}
-if ($doingCount -gt 1) {
-    throw 'More than one task is doing.'
-}
+Write-Host '> checking task ledger'
+node (Join-Path $projectRoot 'scripts/check-ledger.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Task ledger check failed.' }
 
 $packageJson = Join-Path $projectRoot 'package.json'
 if ($Full -and (Test-Path -LiteralPath $packageJson -PathType Leaf)) {

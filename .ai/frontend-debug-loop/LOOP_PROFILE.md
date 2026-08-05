@@ -1,7 +1,7 @@
-project-purpose: Pi tool summaries tell the user both what is running and whether work is still progressing without opening raw details.
-target-surface: Current tool row inside the packaged Pi transcript.
-runtime-chain: Pi tool start/result events -> streaming message segments -> transcript running-state projection -> logo activity DOM/CSS.
-completion-authority: only an unfinished tool in the streaming turn animates; tool result, error, stop and turn completion remove the activity state while details remain expandable.
-focused-gate: deterministic start/result projection test plus packaged live Pi tool call animation and completion readback.
-budgets: one transcript render change, one CSS change, one focused regression, one packaged live verification.
-stop-conditions: tool completion cannot be inferred truthfully from existing events, animation obscures the summary, or live tool execution cannot be observed.
+project-purpose: Pi streaming stays readable by following new output by default while preserving a reader's deliberate historical position.
+target-surface: Packaged Pi transcript scroller and the existing 回到最新 control.
+runtime-chain: user wheel/touch/scrollbar intent -> transcript scroll event -> followingLatest -> message layout effect -> visible scroll position.
+completion-authority: Real packaged streaming proves both default follow and deliberate pause with measured scroll geometry.
+focused-gate: Pi message-flow regression, typecheck, package identity, no-interaction growth at bottom, user-scroll growth at a stable historical position.
+budgets: One state-machine repair in the existing transcript and utility; no visual redesign or dependency.
+stop-conditions: User intent cannot be distinguished from layout scroll, either direction fails live twice, or the fix requires transcript architecture changes.

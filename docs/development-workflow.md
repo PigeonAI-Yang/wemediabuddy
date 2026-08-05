@@ -2,9 +2,9 @@
 
 ## Before editing
 
-1. Read the required documents in `AGENTS.md`.
+1. Run `node scripts/task-context.mjs <WMB-id>` for the selected task and use its machine-extracted output (ledger header contract, the task row, dependency rows, referenced `CAP-*` SPEC sections, PRD index lines) as the task context; read documents in full only when the change touches harness rules, the excerpt is insufficient, or the change spans multiple `CAP-*` (see `AGENTS.md` → Required reading).
 2. Select one `todo` task and confirm its dependencies are `done`.
-3. Move it to `doing`; only one task may have that status.
+3. Move it to `doing`; at most one `doing` per Owner (Owner column; empty means `main`), so parallel work uses different Owners.
 4. Inspect the relevant source, callers, tests, live configuration, and runtime state.
 5. For a bug, write and run a minimal falsifiable reproduction before changing code.
 6. If the change affects a WMB workflow, Pi/MCP tool, confirmation/state boundary, workspace identity or Skill packaging, read `docs/pi-operation-skill-maintenance.md` and freeze the operator Skill impact before editing.
@@ -43,6 +43,8 @@ Rules:
 
 Run one focused check that directly covers the changed behavior. Add typecheck only for TypeScript/type-boundary changes. Do not run the full suite or Windows package merely because a file changed.
 
+Subagent and wait discipline: hub waits return on any worker message, and every return is a full main-context re-bill. Task contracts must forbid progress messages (workers report only on completion or when blocked); waiting uses one long timeout (10+ minutes) with batch processing of all settled results per wake — no short-wait polling loops and no mid-flight steering.
+
 Use `scripts/check.ps1` for the lightweight contract/ledger check. Use `scripts/check.ps1 -Full` only for release, final acceptance, or a change to packaging/startup/shared infrastructure.
 
 Never repeat an unchanged successful check in the same task. Record and reuse its receipt.
@@ -51,7 +53,7 @@ Do not replace real platform acceptance with mocks, screenshots, a green unit te
 
 ## Final response
 
-Report task ID, delivered capability, files, checks, live receipts, failures, and remaining risks.
+Report task ID, delivered capability, files, checks, live receipts, failures, and remaining risks. For tasks at or above waterline WMB-4810, the Evidence cell must also carry the four receipts (exact formats in `docs/verification.md` → "Done receipt contract"): an existing repository-relative evidence path, a `Pi operator Skill impact:` line, an `Independent review:` line, and the 700-character limit. Narrative evidence goes in `.ai/wmb-XXXX-evidence.md`; the Evidence cell holds only the receipts and paths.
 
 ## Stop and ask
 
