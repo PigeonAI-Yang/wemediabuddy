@@ -1,9 +1,0 @@
-
-DevTools listening on ws://127.0.0.1:9334/devtools/browser/af6c4767-d640-4427-ba23-acdd42624def
-Error occurred in handler for 'pi:chat': Error: Error while decrypting the ciphertext provided to safeStorage.decryptString.
-    at resolvePiConfig (J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:24267:25)
-    at ensurePi (J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:25320:19)
-    at J:\PigeonYang\WeMediaBuddy\.vite\build\index.js:25598:29
-    at async Session.<anonymous> (node:electron/js2c/browser_init:2:120530)
-
-An unhandled exception has occurred inside Forge:

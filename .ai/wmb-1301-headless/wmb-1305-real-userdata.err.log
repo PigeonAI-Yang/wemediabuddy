@@ -1,7 +1,0 @@
-
-DevTools listening on ws://127.0.0.1:9335/devtools/browser/b6c58310-713a-41e0-b0d9-9e66332f5e6f
-
-An unhandled exception has occurred inside Forge:
-read EPIPE
-Error: read EPIPE
-    at TTY.onStreamRead (node:internal/stream_base_commons:216:20)

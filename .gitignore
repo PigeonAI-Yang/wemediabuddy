@@ -23,3 +23,5 @@ out/
 .ai/wmb-1301-headless/Preferences
 .ai/wmb-1301-headless/SharedStorage*
 .ai/wmb-1301-headless/data-root.json
+.ai/**/*.log
+.ai/**/*.err.log
