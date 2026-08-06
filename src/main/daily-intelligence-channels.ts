@@ -81,7 +81,7 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     workspaceProfileRevision: input.profileRevision,
     intelligenceChannels: frozen
   };
-  const provisional = preflightCode(frozen, summary.sources);
+  const provisional = preflightCode(frozen);
   if (provisional) {
     const reusable = getReusableNeedsUserAgentTask(database, 'daily_intelligence', input.businessDate, contextRefs, provisional.code);
     if (reusable) return { task: reusable, reused: true, shouldRunJudgment: false, frozen: readFrozenChannels(reusable) ?? frozen, aggregation: null };
@@ -164,10 +164,13 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     checkpoint: { intelligenceChannels: stored, channelReceiptIds: aggregation.receipts.map((receipt) => receipt.id) },
     message: `来源检查完成：${aggregation.receipts.length}/${selected.length}，保存 ${saved} 条资料。`
   }, commandContext(`${current.id}:progress:channel-scanned`, current.id));
-  if (aggregation.status === 'needs_user') return finishBlocked(dependency, commandContext, current, stored, 'CHANNELS_NEEDS_USER', '全部已选情报来源需要用户处理。', aggregation, started.reused);
-  if (aggregation.status === 'failed') {
-    const failedTask = await dispatchFailAgentTask(dependency, current.id, 'CHANNEL_SCAN_FAILED', '没有可信的来源检查回执。', commandContext(`${current.id}:fail:channel-scan`, current.id));
-    return { task: failedTask, reused: started.reused, shouldRunJudgment: false, frozen: stored, aggregation };
+  if (aggregation.status === 'needs_user' || aggregation.status === 'failed') {
+    // 渠道缺席/失败只标注，不再阻塞判断：库存资料永远可供判断，缺席信息由回执与池视图呈现。
+    await dispatchReportAgentTaskProgress(dependency, current.id, {
+      phase: 'channel_scanned',
+      message: aggregation.status === 'needs_user' ? '全部已选来源需要处理；将基于库存资料继续判断。' : '来源检查未全部成功；将基于库存资料继续判断。',
+      level: 'warning'
+    }, commandContext(`${current.id}:progress:channel-absent`, current.id));
   }
   const ready = getAgentTask(database, current.id);
   if (!ready) throw new Error('每日情报任务读取失败。');
@@ -229,9 +232,10 @@ function readFrozenChannels(task: AgentTask): FrozenDailyChannels | null {
   return frozen as FrozenDailyChannels;
 }
 
-function preflightCode(frozen: FrozenDailyChannels, sources: IntelligenceChannelSource[]): { code: string } | null {
+function preflightCode(frozen: FrozenDailyChannels): { code: string } | null {
+  // 只有"完全没有启用来源"才是真正的配置阻塞；单个渠道未就绪只记录缺席回执，判断照常。
   if (!frozen.sources.length) return { code: 'CHANNELS_NOT_CONFIGURED' };
-  return frozen.sources.some((source) => sources.some((item) => item.sourceId === source.sourceId && item.status === 'ready')) ? null : { code: 'CHANNELS_NEEDS_USER' };
+  return null;
 }
 
 function sourceIsReady(database: DatabaseSync, source: FrozenDailyChannelSource, browserConfig: XListBrowserConfig | null): boolean {

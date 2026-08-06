@@ -39,6 +39,7 @@ type IntelligenceInput = {
   workerLeaseId?: string;
   onTaskReady?: TaskReadyGrantHook;
   modules?: IntelligenceModule[];
+  scanOnly?: boolean;
   activeRuntime?: ActiveWorkspaceRuntime;
 };
 
@@ -73,7 +74,7 @@ export async function startWorkspaceDailyIntelligence(
     const workspace = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
     if (!workspace?.value) throw new Error('WORKSPACE_ID_REQUIRED');
     const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
-    if (!hasInjected) {
+    if (!hasInjected && !input.scanOnly) {
       const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
       if (prerequisite.waiting) return prerequisite.waiting;
     }
@@ -81,7 +82,7 @@ export async function startWorkspaceDailyIntelligence(
       businessDate: input.businessDate, workspaceId: workspace.value, profileRevision: profile.revision, modules: input.modules,
       workerLeaseId: input.workerLeaseId, onTaskReady: input.onTaskReady
     } satisfies DailyChannelInput);
-    if (!channels.shouldRunJudgment) return { task: channels.task, reused: channels.reused };
+    if (input.scanOnly || !channels.shouldRunJudgment) return { task: channels.task, reused: channels.reused };
   } finally { close(); }
   if (profile.intelligencePackId === 'wemedia-intelligence-engine') return runners.ai ? runners.ai(input) : startDailyIntelligence(input);
   if (profile.intelligencePackId === 'uk-life-content-radar') return runners.uk ? runners.uk(input, profile) : startLaneDailyIntelligence(input, profile);

@@ -370,21 +370,22 @@ export function finishDailyIntelligenceFromReceipts(database: DatabaseSync, id: 
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
   if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以结束。');
   const aggregation = readDailyReceiptAggregation(database, task);
-  if (aggregation.status === 'needs_user') {
-    return needsUserAgentTask(database, id, input.errorCode ?? 'CHANNELS_NEEDS_USER', input.errorMessage ?? '全部已选情报来源需要用户处理。');
-  }
-  if (aggregation.status === 'failed') {
-    return failAgentTask(database, id, input.errorCode ?? 'CHANNEL_SCAN_FAILED', input.errorMessage ?? '没有可信的来源检查回执。');
-  }
+  // 渠道缺席/失败一律以 partial 收尾并保留标注，不再把整任务打成 needs_user/failed；
+  // 唯一真正的配置阻塞（未启用任何来源）在渠道编排的 preflight 阶段处理，不会到达这里。
+  const annotatedCode = input.errorCode
+    ?? (aggregation.status === 'needs_user' ? 'CHANNELS_NEEDS_USER' : aggregation.status === 'failed' ? 'CHANNEL_SCAN_FAILED' : null);
+  const annotatedMessage = input.errorMessage
+    ?? (aggregation.status === 'needs_user' ? '全部已选情报来源需要处理；已基于库存资料完成判断。'
+      : aggregation.status === 'failed' ? '来源检查未全部成功；已基于库存资料完成判断。' : null);
   const now = new Date().toISOString();
-  const status = input.forcePartial || aggregation.status === 'partial' ? 'partial' : 'succeeded';
+  const status = input.forcePartial || aggregation.status !== 'succeeded' ? 'partial' : 'succeeded';
   database.prepare(`UPDATE agent_tasks SET status=?, phase=?, result_refs_json=?, error_code=?, error_message=?,
     control_action=NULL, updated_at=?, finished_at=? WHERE id=?`).run(
     status,
     status === 'partial' ? 'partial' : 'completed',
     JSON.stringify({ receiptIds: aggregation.receipts.map((receipt) => receipt.id), checkedSourceCount: aggregation.receipts.length, missingReceiptCount: aggregation.missingReceiptCount }),
-    input.errorCode ?? null,
-    input.errorMessage ?? null,
+    annotatedCode,
+    annotatedMessage,
     now,
     now,
     id
@@ -397,14 +398,14 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
   const task = getAgentTask(database, taskId);
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
   const aggregation = readDailyReceiptAggregation(database, task);
-  if (aggregation.status === 'needs_user') return failure('BROWSER_NEEDS_USER', '全部已选情报来源需要用户处理。');
-  if (aggregation.status === 'failed') return failure('VALIDATION_ERROR', '成功要求至少一条可信来源检查回执。');
-
+  // 渠道缺席不再使完成校验失败；方案本身的存在性、归属与引用真实性仍是硬门槛。
   const today = getToday(database, businessDate);
   const plan = today.plan;
   if (!plan) return failure('VALIDATION_ERROR', '成功要求存在当日 current plan。');
-  if (!database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`)
-    .get(agentRequestId(taskId, 'plan'))) return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
+  const planRequestId = agentRequestId(taskId, 'plan');
+  const owned = database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`).get(planRequestId)
+    ?? database.prepare(`SELECT 1 FROM command_receipts WHERE command='plans.save' AND request_id=? AND task_id=? AND status='ok'`).get(planRequestId, taskId);
+  if (!owned) return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
 
   const existsStmt = database.prepare('SELECT 1 AS ok FROM source_items WHERE id = ?');
   for (const item of plan.items) {
@@ -414,7 +415,7 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
     }
   }
   return success({
-    taskStatus: aggregation.status,
+    taskStatus: aggregation.status === 'succeeded' ? 'succeeded' : 'partial',
     receiptIds: aggregation.receipts.map((receipt) => receipt.id),
     checkedSourceCount: aggregation.receipts.length,
     missingReceiptCount: aggregation.missingReceiptCount,

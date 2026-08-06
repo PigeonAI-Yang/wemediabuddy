@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
+import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, getLatestAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
 import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
@@ -138,7 +138,7 @@ test('a later lane/runtime failure preserves trustworthy channel results as part
   }
 });
 
-test('all blocked sources persist needs_user before any injected lane runner starts', async () => {
+test('all blocked sources annotate absence but never block judgment', async () => {
   const current = await makeRoot('wmb-daily-blocked-');
   try {
     insertWorkspaceProfile(current.database, {
@@ -156,20 +156,30 @@ test('all blocked sources persist needs_user before any injected lane runner sta
     const result = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', onTaskReady: async (taskId) => {
       const task = getAgentTask(current.database, taskId);
       if (task?.status !== 'running' || task.phase !== 'starting') {
-        readyCalls += 1;
         throw Object.assign(new Error('TASK_NOT_ACTIVE: 无法为非运行中的任务绑定自动授权。'), { code: 'TASK_NOT_ACTIVE' });
       }
+      readyCalls += 1;
     } }, {
-      uk: async () => { calls += 1; throw new Error('lane runner must not start'); }
+      uk: async () => {
+        calls += 1;
+        const task = getLatestAgentTask(current.database, 'daily_intelligence', '2026-08-03');
+        assert.ok(task, 'judgment must start even when every channel is blocked');
+        assert.equal(task.phase, 'channel_scanned');
+        savePlanReadback(current.database, task, '2026-08-03');
+        const completed = completeAgentTask(current.database, task.id);
+        assert.equal(completed.ok, true);
+        return { task: completed.data, reused: false };
+      }
     });
-    assert.equal(result.task.status, 'needs_user');
-    assert.equal(result.task.errorCode, 'CHANNELS_NEEDS_USER');
+    assert.equal(calls, 1, 'judgment runs on inventory despite all channels blocked');
+    assert.equal(readyCalls, 1);
+    assert.equal(result.task.status, 'partial');
     assert.equal(result.task.progress.planned, 1);
     assert.equal(result.task.progress.processed, 1);
     assert.equal(result.task.progress.failed, 1);
-    assert.equal(calls, 0);
-    assert.equal(readyCalls, 0);
-    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count, 1);
+    const receipt = current.database.prepare('SELECT status, error_code AS errorCode FROM source_scan_receipts').get();
+    assert.equal(receipt.status, 'needs_user');
+    assert.equal(receipt.errorCode, 'CHANNEL_SOURCE_NOT_READY');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });
@@ -213,8 +223,8 @@ test('a thrown orchestration scan records an accurate durable failure instead of
         throw new Error('scanner aborted before receipt');
       }
     });
-    assert.equal(run.shouldRunJudgment, false);
-    assert.equal(run.task.status, 'failed');
+    assert.equal(run.shouldRunJudgment, true, 'judgment continues on inventory even when every scan fails');
+    assert.equal(run.task.status, 'running');
     const receipt = current.database.prepare('SELECT status, error_code AS errorCode, error_message AS errorMessage FROM source_scan_receipts WHERE task_id=? AND source_id=?').get(run.task.id, source.id);
     assert.equal(receipt.status, 'failed');
     assert.equal(receipt.errorCode, 'CHANNEL_SCAN_FAILED');
@@ -433,6 +443,37 @@ test('a duplicate start observes a preflight task without scanning the same sour
     const completed = await first;
     assert.equal(completed.shouldRunJudgment, true);
     assert.equal(scans, 1);
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('plan saved through command_receipts (real plans.save path) also satisfies ownership validation', async () => {
+  const current = await makeRoot('wmb-daily-receipts-owned-');
+  try {
+    const source = website(current.database, 'receipts-owned');
+    const started = startAgentTask(current.database, {
+      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+        workspaceId: current.workspaceId,
+        intelligenceChannels: {
+          workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web'],
+          sources: [{ module: 'official_web', sourceId: source.id, sourceFeedId: source.sourceFeedId, revision: source.revision }]
+        }
+      }
+    });
+    assert.equal(started.ok, true);
+    recordWebsiteSuccess(current.database, started.data.id, current.workspaceId, source);
+    saveCurrentPlan(current.database, { planDate: '2026-08-03', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
+    const planRequestId = agentRequestId(started.data.id, 'plan');
+    const now = new Date().toISOString();
+    current.database.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash,
+      actor_type, actor_id, task_id, envelope_json, receipt_json, status, side_effect_state, created_at)
+      VALUES (?, ?, 'epoch', ?, 'plans.save', 'hash', 'pi', 'pi:worker', ?, '{}', '{}', 'ok', 'none', ?)`)
+      .run(`receipt-${planRequestId}`, current.workspaceId, planRequestId, started.data.id, now);
+    const completed = completeAgentTask(current.database, started.data.id);
+    assert.equal(completed.ok, true, 'command_receipts plans.save row must satisfy ownership validation');
+    assert.equal(completed.data.status, 'succeeded');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });

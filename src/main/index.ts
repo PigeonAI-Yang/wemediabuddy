@@ -34,6 +34,8 @@ import { createDataRootSelection } from './data-root-selection';
 import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspaceIpcGate, RUNTIME_MANAGING_IPC_CHANNELS, type WorkspaceRuntimeLease } from './workspace-runtime';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
+import { DailyScanScheduler } from './daily-scan-scheduler';
+import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { dispatchRecoverInterruptedPublications } from './publication-commands.ts';
@@ -165,12 +167,32 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     const scheduler = new XObservationScheduler({ runtime, loadSelectedDataRoot, isCurrent: () => activeRuntime === runtime && runtime.isActive });
     runtime.setScheduler(scheduler);
     scheduler.start();
+    const scanScheduler = new DailyScanScheduler({
+      isCurrent: () => activeRuntime === runtime && runtime.isActive,
+      run: (modules) => withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
+        dataRootPath: dataRoot.path,
+        businessDate: shanghaiDate(),
+        modules,
+        scanOnly: true,
+        mcpUrl: currentMcp()?.url ?? '',
+        xhsMcpUrl: currentXhs()?.getUrl() || '',
+        activeRuntime: runtime,
+        ...hooks
+      })),
+      onError: (error) => console.error('[daily-scan-scheduler]', error)
+    });
+    scanSchedulerRef?.stop();
+    scanSchedulerRef = scanScheduler;
+    scanScheduler.start();
   } catch (error) {
+    scanSchedulerRef?.stop();
+    scanSchedulerRef = null;
     if (activeRuntime === runtime) activeRuntime = null;
     await runtime.stop({ drain: false }).catch(() => {});
     throw error;
   }
 }
+let scanSchedulerRef: DailyScanScheduler | null = null;
 const browserRegistryPath = path.join(app.getPath('userData'), 'browser-config.json');
 configureBrowserProfileRegistryPath(browserRegistryPath);
 openBrowserProfileRegistry(browserRegistryPath);
@@ -183,7 +205,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -483,6 +505,8 @@ app.on('before-quit', (event) => {
   void (async () => {
     const runtime = activeRuntime;
     try {
+      scanSchedulerRef?.stop();
+      scanSchedulerRef = null;
       if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {});
       await runtime?.closeClaimsAndDrain().catch(() => {});
       await runtime?.stop({ drain: false }).catch(() => {});
