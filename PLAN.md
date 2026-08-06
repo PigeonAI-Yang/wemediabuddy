@@ -2,6 +2,25 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+## M-4910 Rolling opportunity pool and editorial brief
+
+Scope: intelligence-to-topic pipeline only — channel failure isolation, incremental judgment with a live-assembled editorial brief, rolling opportunity pool semantics, Today pool projection, and bounded deep-dive ingestion. Does not change publication, precise grants, browser binding, Studio or Results; `plan_items` structure is unchanged (pool state rides the existing ferment/carry state machine).
+
+Design: `docs/spark/2026-08-06-intelligence-to-topic-agent-design.md`
+
+Order:
+
+1. `WMB-4910` — land pure `assembleEditorialBrief` (identity/history/inventory/increment) with seed-DB fixtures.
+2. `WMB-4911` — rewire daily judgment prompt to the brief and four-question mandate; judgment must not depend on browser state.
+3. `WMB-4912` — isolate per-channel scan failure (official-web never browser-bound; X absence is annotated, never blocking) and unify rolling/manual scan entries.
+4. `WMB-4913` — incremental judgment via checkpoint watermark, single-instance judge with queued follow-up, auto-trigger after each scan (Owner-approved trigger 甲).
+5. `WMB-4914` — pool semantics: cross-date unterminated pool view in workbench plus ferment expired/dismissed states and publish-time same-topic demotion.
+6. `WMB-4915` — Today pool projection: pool list, timeliness/new markers, evidence-chain links, channel-absent banner, dismiss action.
+7. `WMB-4916` — deep-dive ingestion constraint (canonicalUrl required before citation) and preset native-search capability flag in Pi settings.
+8. `WMB-4917` — end-to-end acceptance: absent-channel run, watermark continuity, review-visible-in-brief within minutes, pool four-question quality readback.
+
+Gate: X absence never blocks judgment; every pool opportunity answers the four questions with clickable evidence; a review saved at 20:00 is visible in the brief of any judgment run at 20:05; no new scheduler framework, scoring system or second agent.
+
 ## M-4800 Workspace-scoped human-AI collaboration architecture
 
 Scope: approved product/architecture contracts for workspace-isolated self-media operations, task-authorized AI autonomy, one authoritative business-command boundary, and explicit installation/workspace/runtime ownership. This milestone changes documents and freezes a migration chain only; it does not start implementation or weaken existing publication confirmation and evidence requirements.
@@ -23,6 +42,22 @@ Order:
 Gate for WMB-4800: REQ-027, AC-023, CAP-025, EVAL-029 and `docs/architecture/workspace-ai-collaboration-architecture.md` agree on the same product center, scope boundaries, authority, runtime ownership and migration gates; while planning, WMB-4800 is the only `doing` task; on completion WMB-4801 is the next `todo`. No production code, schema, packaged Skill or runtime artifact changes in WMB-4800.
 
 Gate for M-4800 completion: no `focusedCoverageRequired` remains and architecture §8 is proven in the current Windows package.
+
+
+## M-4900 Today daily-intelligence mainline convergence
+
+Scope: Today page user narrative only — one run view, one CTA matrix, no fake human todos. Does not redesign channel modules, Pi judgment prompts, or Studio/Results.
+
+Design: `docs/spark/2026-08-06-today-daily-intelligence-mainline-design.md`
+
+Order:
+
+1. `WMB-4900` — freeze the design and hang the task chain (docs/ledger only).
+2. `WMB-4901` — land pure `TodayRunView` projection and make Today render from that single source.
+3. `WMB-4902` — remove fake plan pending actions; apply CTA/blocker matrix and minimal settings deep-links.
+4. `WMB-4903` — regression evidence for start/continue/partial/needs_user paths without contradictory copy.
+
+Gate: Owner can name the current step in one sentence; at most one primary CTA; no “创建今日运营方案” fake todo; real blockers are actionable; command bar, empty state and right rail never contradict.
 
 ## M-4700 Daily intelligence run isolation
 
