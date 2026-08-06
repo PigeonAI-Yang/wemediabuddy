@@ -2,7 +2,7 @@ import { dialog, ipcMain } from 'electron';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getToday } from './workbench.ts';
-import { listFermentingBundle, refreshWorkCarry, setCarryState, type CarryState } from './ferment.ts';
+import { dismissCarryForPlanItem, listFermentingBundle, refreshWorkCarry, setCarryState, type CarryState } from './ferment.ts';
 import {
   copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject,
   getContentProject, getContentProjectStatusSummary, getStudio, listContentProjects, saveCoreVersion, updateContentProject,
@@ -37,6 +37,14 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       execute: (database, value) => { const data = setCarryState(database, value, false); return { data, entityId: data.id,
         beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
     const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today'], reason: 'carry.state' }); return data;
+  });
+  ipcMain.handle('today:dismiss-plan-item', async (_event, input: { planItemId: string; reason?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'opportunities.dismiss', requestId: freshRequestId(), actor: ownerUiActor,
+      input, boundIdentity: { entityType: 'plan_item', entityId: input.planItemId }, entityType: 'work_carry',
+      execute: (database, value) => { const data = dismissCarryForPlanItem(database, value, false); return { data, entityId: data.id,
+        beforeRevision: undefined, afterRevision: data.revision, readback: data }; } });
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today'], reason: 'carry.dismiss' }); return data;
   });
   ipcMain.handle('today:create-project', async (_event, planItemId: string) => {
     const runtime = await requireBusinessRuntime(dependencies);

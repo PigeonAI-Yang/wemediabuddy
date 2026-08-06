@@ -338,6 +338,7 @@ declare global {
       refreshFermenting(planDate: string): Promise<any>;
       listFermenting(planDate: string): Promise<any>;
       setCarryState(input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }): Promise<any>;
+      dismissPlanItem(input: { planItemId: string; reason?: string }): Promise<any>;
       createProjectFromPlanItem(planItemId: string): Promise<{ id: string; revision: number; created: boolean }>;
       getStudio(): Promise<Array<{
         id: string;

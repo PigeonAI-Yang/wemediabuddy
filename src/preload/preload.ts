@@ -199,6 +199,7 @@ contextBridge.exposeInMainWorld('wmb', {
   refreshFermenting: (planDate: string) => ipcRenderer.invoke('today:refresh-fermenting', planDate),
   listFermenting: (planDate: string) => ipcRenderer.invoke('today:list-fermenting', planDate),
   setCarryState: (input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }) => ipcRenderer.invoke('today:set-carry-state', input),
+  dismissPlanItem: (input: { planItemId: string; reason?: string }) => ipcRenderer.invoke('today:dismiss-plan-item', input),
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
   listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),

@@ -102,6 +102,75 @@ export function isMultiDayTimeliness(value: string | null | undefined): boolean 
   const text = value.toLowerCase();
   return /持续|多日|本周|这周|一周|7\s*天|长期|余波|跟踪|跟进|发酵|week|ongoing|multi/.test(text);
 }
+
+export type TimelinessClass = 'breaking' | 'hot' | 'evergreen';
+
+export const TIMELINESS_WINDOW_HOURS: Record<TimelinessClass, number | null> = {
+  breaking: 24,
+  hot: 72,
+  evergreen: null
+};
+
+/**
+ * 时效分类：判断 Agent 在四问中输出的 timeliness 文本 → 系统执行过期检查的窗口。
+ * 爆点约 24h、热点约 3 天、长青常驻；无法识别时按热点处理。
+ */
+export function classifyTimeliness(value: string | null | undefined): TimelinessClass {
+  if (!value) return 'hot';
+  const text = value.toLowerCase();
+  if (/长青|常青|长期有效|常驻|系列|教程|方法论|evergreen/.test(text)) return 'evergreen';
+  if (/爆点|突发|今日|今天|当天|当日|24\s*小时|小时内|即时|紧急|breaking/.test(text)) return 'breaking';
+  return 'hot';
+}
+
+/**
+ * 否决一个机会：已有 carry 行的走状态机；没有 carry 行（短时效未入池的 plan_item）直接落一条
+ * dismissed 指纹行，保证后续方案重播种（upsertCarryFromPlanItem）永远不会复活它。
+ */
+export function dismissCarryForPlanItem(
+  database: DatabaseSync,
+  input: { planItemId: string; reason?: string },
+  broadcast = false
+): WorkCarryItem {
+  const item = database.prepare(`SELECT id, title, priority, timeliness, topic_id AS topicId, source_ids_json AS sourceIds
+    FROM plan_items WHERE id = ?`).get(input.planItemId) as {
+    id: string; title: string; priority: number; timeliness: string | null; topicId: string | null; sourceIds: string;
+  } | undefined;
+  if (!item) throw new Error('机会不存在。');
+  const sourceIds = JSON.parse(item.sourceIds) as string[];
+  const fingerprint = fingerprintPlanItem({ title: item.title, topicId: item.topicId, sourceIds });
+  const existing = database.prepare(`SELECT id FROM work_carry_items WHERE object_type='plan_item' AND fingerprint=?`).get(fingerprint) as { id: string } | undefined;
+  if (existing) {
+    const current = getCarryItem(database, existing.id);
+    if (!current) throw new Error('续命条目读取失败。');
+    if (current.state === 'dismissed') return current;
+    return setCarryState(database, { id: existing.id, expectedRevision: current.revision, state: 'dismissed', reason: input.reason }, broadcast);
+  }
+  const now = new Date().toISOString();
+  const id = randomUUID();
+  database.prepare(`INSERT INTO work_carry_items (
+      id, object_type, object_id, fingerprint, title, state, priority, topic_id, source_ids_json, origin_plan_date,
+      first_seen_at, last_seen_at, expires_at, decay_score, reason, aftershock_json, created_at, updated_at, revision
+    ) VALUES (?, 'plan_item', ?, ?, ?, 'dismissed', ?, ?, ?, NULL, ?, ?, ?, 1, ?, '[]', ?, ?, 1)`).run(
+    id,
+    item.id,
+    fingerprint,
+    item.title,
+    item.priority,
+    item.topicId,
+    JSON.stringify(sourceIds),
+    now,
+    now,
+    now,
+    input.reason ?? '用户否决',
+    now,
+    now
+  );
+  const created = getCarryItem(database, id);
+  if (!created) throw new Error('否决写入后读取失败。');
+  if (broadcast) broadcastDataChanged({ scopes: ['today'], reason: 'carry.dismiss' });
+  return created;
+}
 export function refreshWorkCarry(database: DatabaseSync, planDate = shanghaiDate()): FermentingBundle {
   expireDueCarryItems(database);
   promoteCarryWatchingToLibrary(database);
