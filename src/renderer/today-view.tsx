@@ -337,7 +337,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
             <h2>{runView.opportunityEmptyTitle}</h2>
             <p>{runView.opportunityEmptyBody}</p>
           </section>}
-          <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry}/>
         </div>
         <aside className="today-rail" ref={railRef}>
           <TodayBlockers blockers={runView.blockers} onAction={onBlocker} />
@@ -370,6 +369,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
           </div>
         </aside>
       </div>
+      <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry}/>
     </section>
     <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>
     <SourceList sources={sources} sourceDate={today?.sourcesDate ?? null} planDate={planDate} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()} aiSourcePresentation={aiSourcePresentation}/>

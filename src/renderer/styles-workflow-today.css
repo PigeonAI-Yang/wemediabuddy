@@ -129,7 +129,8 @@
 .source-detail-actions button { min-height: 34px; }
 .fermenting-rail,
 .fermenting-rail.light {
-  margin-top: 8px;
+  width: 100%;
+  margin-top: 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
