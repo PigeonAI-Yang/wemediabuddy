@@ -96,7 +96,7 @@ contextBridge.exposeInMainWorld('wmb', {
   rebindBrowserProfile: (input: OwnerBrowserCommand & { profileId: string }) => ipcRenderer.invoke('workspace-browser:rebind', input),
   verifyBrowserAccount: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:verify', input),
   migrateLegacyBrowserProfile: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:migrate-legacy', input),
-  savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
+  savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
   listPiModels: (input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>,

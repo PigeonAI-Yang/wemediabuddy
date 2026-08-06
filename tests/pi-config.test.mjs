@@ -139,3 +139,26 @@ test('official AI presets migrate once to the installation store shared by every
     assert.deepEqual(migratePiConfigToInstallation(configPath, [ai.path, uk.path]), { migratedFrom: null, profileCount: 0 });
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
 });
+
+test('Pi config nativeSearch flag roundtrips and survives updates without the field', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-nativesearch-'));
+  const configPath = path.join(rootPath, 'pi-api-config.json');
+  try {
+    await writeFile(configPath, JSON.stringify({ version: 1, state: {
+        activeId: 'one',
+        profiles: [
+          { id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', encryptedApiKey: 'secret-one' }
+        ]
+      } }), 'utf8');
+
+    const saved = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', nativeSearch: true }, configPath);
+    assert.equal(saved.profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+    assert.equal(readPiConfig(configPath).profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+
+    const updated = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses' }, configPath);
+    assert.equal(updated.profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+    assert.equal(readPiConfig(configPath).profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+  } finally {
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});

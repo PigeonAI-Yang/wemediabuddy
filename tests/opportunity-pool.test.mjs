@@ -148,6 +148,23 @@ test('publish within 24h demotes same-topic opportunities to the tail with annot
   });
 });
 
+test('plan items citing sources without canonicalUrl are rejected', async () => {
+  await withDb(async (database) => {
+    const withUrl = upsertSource(database, { title: '有链接', originalUrl: 'https://example.com/citable', summary: '可引用' }, false);
+    const noUrl = upsertSource(database, { title: '无链接', summary: '不可引用' }, false);
+    const item = {
+      title: '机会', priority: 1, whyNow: '现在', timeliness: '热点', targetAudience: '受众', angle: '角度', pointOfView: '观点',
+      platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m'
+    };
+    assert.throws(
+      () => saveCurrentPlan(database, { planDate: '2026-08-05', timezone: 'Asia/Shanghai', summary: '方案', items: [{ ...item, sourceIds: [noUrl.id] }] }),
+      /缺少可追溯链接/
+    );
+    const saved = saveCurrentPlan(database, { planDate: '2026-08-05', timezone: 'Asia/Shanghai', summary: '方案', items: [{ ...item, sourceIds: [withUrl.id] }] });
+    assert.ok(saved.id, 'citable source passes the canonicalUrl constraint');
+  });
+});
+
 test('carry rows in expired state are excluded from the pool', async () => {
   await withDb(async (database) => {
     const sourceId = seedSource(database, 'exp');

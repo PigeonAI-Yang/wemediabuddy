@@ -8,6 +8,7 @@ type ResolvedPiConfig = {
   model: string;
   api: 'openai-responses' | 'openai-completions';
   thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  nativeSearch?: boolean;
   contextWindow?: number;
   maxTokens?: number;
   apiKey: string;

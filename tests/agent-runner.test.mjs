@@ -51,6 +51,12 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const inheritedPrompt = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
     assert.match(inheritedPrompt, /水印 2026-08-05T02:00:00.000Z 之后/, 'fresh task inherits the latest watermark across tasks');
 
+    const withSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: true });
+    assert.match(withSearch, /模型自带的联网搜索补充证据/);
+    const withoutSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: false });
+    assert.match(withoutSearch, /未开启自带搜索/);
+    assert.doesNotMatch(withoutSearch, /模型自带的联网搜索补充证据/);
+
     const requested = requestAgentTaskControl(database, started.data.id, 'cancel');
     assert.equal(requested.ok, true);
     const cancelled = cancelDailyIntelligenceIfRequested(database, getAgentTask(database, started.data.id));

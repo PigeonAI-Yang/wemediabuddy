@@ -34,6 +34,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piModels, setPiModels] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>([]);
   const [piContextWindow, setPiContextWindow] = useState('');
   const [piMaxTokens, setPiMaxTokens] = useState('');
+  const [piNativeSearch, setPiNativeSearch] = useState(false);
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [runtimeNote, setRuntimeNote] = useState('');
   const [workspaceNote, setWorkspaceNote] = useState('');
@@ -48,6 +49,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiModel(profile?.model ?? '');
     setPiContextWindow(profile?.contextWindow ? String(profile.contextWindow) : '');
     setPiMaxTokens(profile?.maxTokens ? String(profile.maxTokens) : '');
+    setPiNativeSearch(profile?.nativeSearch === true);
     setPiApiKey('');
     setPiModels([]);
     setPiConfigNote('');
@@ -65,6 +67,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         model: piModel,
         api: piApi,
         thinking: settings?.pi.profiles.find((profile) => profile.id === piProfileId)?.thinking,
+        nativeSearch: piNativeSearch,
         contextWindow: piContextWindow ? Number(piContextWindow) : null,
         maxTokens: piMaxTokens ? Number(piMaxTokens) : null,
         apiKey: piApiKey || undefined
@@ -142,7 +145,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             <div className="settings-profile-list">
               {settings.pi.profiles.map((profile) => <button type="button" key={profile.id} className={`settings-profile${profile.id === piProfileId ? ' selected' : ''}`} onClick={() => selectPiProfile(profile.id)}>
                 <span className="settings-provider-mark">{profile.name.slice(0, 1).toUpperCase()}</span>
-                <span><strong>{profile.name}</strong><small>{profile.model} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'}</small></span>
+                <span><strong>{profile.name}</strong><small>{profile.model} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'}{profile.nativeSearch ? ' · 自带搜索' : ''}</small></span>
                 {profile.active && <em>● 正在使用</em>}
               </button>)}
             </div>
@@ -150,7 +153,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
               <button type="button" className="text-button" onClick={() => selectPiProfile('')}>＋ 添加配置预设</button>
               <button type="button" className="text-button" onClick={() => {
                 setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1');
-                setPiApi('openai-completions'); setPiModel(''); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens('');
+                setPiApi('openai-completions'); setPiModel(''); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiNativeSearch(false);
                 setPiConfigNote('填写 OpenCode Go API Key 后获取模型');
               }}>＋ OpenCode Go</button>
             </div>
@@ -174,6 +177,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             </label>
             <label><span>上下文长度（tokens）</span><input type="number" min="1" step="1" value={piContextWindow} onChange={(event) => setPiContextWindow(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label><span>最大输出（tokens）</span><input type="number" min="1" step="1" value={piMaxTokens} onChange={(event) => setPiMaxTokens(event.target.value)} placeholder="由模型元数据决定" /></label>
+            <label><span>模型自带联网搜索</span><input type="checkbox" checked={piNativeSearch} onChange={(event) => setPiNativeSearch(event.target.checked)} /></label>
             <p className="settings-help wide">不同模型分别保存；接口未提供元数据时可以手动填写，留空则使用 Pi 的运行时默认值。</p>
             <label className="wide"><span>Base URL</span><input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="http://localhost:61946/v1" /></label>
             <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>

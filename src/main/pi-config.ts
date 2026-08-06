@@ -15,6 +15,7 @@ type StoredProfile = {
   model: string;
   api?: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
   contextWindow?: number;
   maxTokens?: number;
   encryptedApiKey: string;
@@ -30,6 +31,7 @@ export type PiConfigProfile = {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
   contextWindow?: number;
   maxTokens?: number;
   configured: boolean;
@@ -62,6 +64,7 @@ export function readPiConfig(configPath = defaultConfigPath()): PiConfig {
       model: profile.model,
       api: requirePiApiType(profile.api),
       thinking: profile.thinking,
+      nativeSearch: profile.nativeSearch,
       ...modelLimits(profile.model, profile),
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
@@ -79,6 +82,7 @@ export function savePiConfig(input: {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
   contextWindow?: number | null;
   maxTokens?: number | null;
   apiKey?: string;
@@ -110,6 +114,7 @@ export function savePiConfig(input: {
     model,
     api,
     thinking: input.thinking,
+    nativeSearch: input.nativeSearch ?? current?.nativeSearch,
     ...limits,
     encryptedApiKey
   };
@@ -167,7 +172,7 @@ export async function listPiModels(input: {
   return models;
 }
 
-export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; contextWindow?: number; maxTokens?: number; apiKey: string } {
+export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; nativeSearch?: boolean; contextWindow?: number; maxTokens?: number; apiKey: string } {
   const state = readStored(configPath);
   const active = state.profiles.find((profile) => profile.id === state.activeId);
   if (!active) throw new Error('请先在设置中配置 Pi API。');
@@ -176,6 +181,7 @@ export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: st
     model: active.model,
     api: requirePiApiType(active.api),
     thinking: active.thinking,
+    nativeSearch: active.nativeSearch,
     ...modelLimits(active.model, active),
     apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
   };

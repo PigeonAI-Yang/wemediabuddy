@@ -129,7 +129,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const root = await confirmOwnerCommand(event, 'migrate-legacy', input);
     return browserProfileOwner.migrateLegacy(root.path, input);
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
     const api = requirePiApiType(input.api);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
     const saved = savePiConfig({ ...input, api });

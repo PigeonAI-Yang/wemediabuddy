@@ -95,7 +95,10 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string): string {
+function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, options: { nativeSearch?: boolean } = {}): string {
+  const deepDiveRule = options.nativeSearch
+    ? '9. 对四问证据不足的候选，可用模型自带的联网搜索补充证据；搜索发现的材料必须先用 wmb_save_source 带原始 URL 入库，之后才能作为 sourceIds 写入方案。'
+    : '9. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源；可用 wmb_save_source 仅入库你已有原始 URL 的材料。';
   return [
     '执行 WeMediaBuddy 今日情报判断任务。',
     `task_id=${task.id}`,
@@ -115,11 +118,12 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string):
     `5. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有答得出四问的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。方案使用 request_id=${planRequestId}。`,
     '6. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
     '7. 趋势只引用简报「存量」块给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。',
-    '8. 你可用的 wmb_* 工具只有：wmb_get_workbench、wmb_get_agent_task、wmb_get_knowledge_context、wmb_save_plan、wmb_save_source、wmb_record_knowledge、wmb_get_current_workspace、wmb_list_workspaces、wmb_report_agent_progress。除此之外的工具名都不存在；一旦出现 Tool not found，立即停止臆造新工具名，回到简报继续判断。简报已包含判断所需的全部上下文；只有查同主题历史（第 3 条）和写回方案（第 5 条）时才需要调用工具。'
+    '8. 你可用的 wmb_* 工具只有：wmb_get_workbench、wmb_get_agent_task、wmb_get_knowledge_context、wmb_save_plan、wmb_save_source、wmb_record_knowledge、wmb_get_current_workspace、wmb_list_workspaces、wmb_report_agent_progress。除此之外的工具名都不存在；一旦出现 Tool not found，立即停止臆造新工具名，回到简报继续判断。简报已包含判断所需的全部上下文；只有查同主题历史（第 3 条）和写回方案（第 5 条）时才需要调用工具。',
+    deepDiveRule
   ].join('\n');
 }
 
-export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string): string {
+export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string, options: { nativeSearch?: boolean } = {}): string {
   const watermark = typeof task.checkpoint?.judgeWatermark === 'string' && task.checkpoint.judgeWatermark
     ? task.checkpoint.judgeWatermark
     : readLatestJudgeWatermark(database);
@@ -128,7 +132,7 @@ export function buildDailyOpportunityPrompt(database: Parameters<typeof assemble
     businessDate: task.businessDate,
     watermark
   });
-  return dailyPrompt(task, planRequestId, renderEditorialBrief(brief));
+  return dailyPrompt(task, planRequestId, renderEditorialBrief(brief), options);
 }
 
 export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof cancelAgentTask>[0], task: AgentTask | null | undefined): AgentTask | null {
@@ -228,7 +232,7 @@ export async function startDailyIntelligence(input: {
         try {
           await synthesis.start();
           const promptBuiltAt = new Date().toISOString();
-          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 10 * 60_000 });
+          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan'), { nativeSearch: config.nativeSearch === true }), { timeoutMs: 10 * 60_000 });
           // 增量判断水印：本轮简报组装时刻之前的入库资料均已评估；失败不写入，下轮重评。
           await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { judgeWatermark: promptBuiltAt } }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
         } catch (error) {

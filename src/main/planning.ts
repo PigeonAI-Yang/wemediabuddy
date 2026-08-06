@@ -23,6 +23,9 @@ export function saveCurrentPlan(database: DatabaseSync, input: { planDate: strin
   if (sourceIds.length) {
     const sourceCount = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')})`).get(...sourceIds) as { count: number }).count);
     if (sourceCount !== new Set(sourceIds).size) throw new Error('计划引用了不存在的资料。');
+    const withoutUrl = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')}) AND (canonical_url IS NULL OR canonical_url = '')`).get(...sourceIds) as { count: number }).count);
+    // 深挖约束：机会只能引用带可追溯链接的入库资料；搜索发现的材料必须带原始 URL 入库。
+    if (withoutUrl > 0) throw new Error('计划引用的资料缺少可追溯链接；深挖发现的材料必须带原始 URL 入库后才能引用。');
   }
   validateReferences(database, 'topics', input.items.flatMap((item) => item.topicId ? [item.topicId] : []), '计划引用了不存在的主题。');
   validateReferences(database, 'reviews', input.items.flatMap((item) => item.reviewIds ?? []), '计划引用了不存在的复盘。', "status='final'");

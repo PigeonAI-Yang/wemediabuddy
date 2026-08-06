@@ -196,7 +196,7 @@ declare global {
       rebindBrowserProfile(input: OwnerBrowserCommand & { profileId: string }): Promise<unknown>;
       verifyBrowserAccount(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
       migrateLegacyBrowserProfile(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
-      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
+      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
       listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>;
