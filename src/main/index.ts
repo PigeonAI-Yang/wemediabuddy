@@ -401,6 +401,12 @@ app.whenReady().then(async () => {
     if (result.ok) {
       broadcastPiEvent({ type: 'agent_task', task: result.data });
       await abortDailyIntelligence(input.id);
+      // 取消必须立即可靠：没有活跃 runner 的任务（重启遗留 resume_pending 等）也要能真正取消，
+      // 不能只把 control_action 挂在那里等一个永远不会来的消费者。
+      if (input.action === 'cancel') {
+        const cancelled = await uiCommandResult(() => dispatchCancelAgentTask(runtime, input.id, { actor: ownerUiActor, requestId: randomUUID(), taskId: input.id }));
+        if (cancelled.ok) broadcastPiEvent({ type: 'agent_task', task: cancelled.data });
+      }
     }
     return result;
   });

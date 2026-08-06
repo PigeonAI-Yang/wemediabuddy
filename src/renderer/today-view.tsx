@@ -8,6 +8,7 @@ import {
   priorityGrade, sortFeedSources, type SelectedTodaySource
 } from './today-view-parts';
 import { FermentingRail, TodaySourceDetail } from './today-view-panels';
+import { poolBadges, poolItemToPlanItem } from './today-pool-view';
 import { useTodayRunningTransition } from './today-running-transition';
 import { TodayCommandBar } from './today-command-bar';
 import { TodayBlockers } from './today-blockers';
@@ -42,9 +43,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const pinnedSourceIds = new Set((fermenting.pinnedSources || []).map((item) => item.id));
   const todayPlan = today?.plan ?? null;
   const latestPlan = today?.latestPlan ?? null;
-  const displayPlan = todayPlan ?? latestPlan;
+  const pool = today?.pool ?? null;
   const todayItems = todayPlan?.items ?? [];
-  const displayItems = displayPlan?.items ?? [];
+  const displayItems = pool ? pool.map(poolItemToPlanItem) : (todayPlan ?? latestPlan)?.items ?? [];
   const primary = displayItems[0] ?? null;
   const sssCount = todayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
@@ -178,6 +179,20 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   }, [runView.statusLine, running, onStatusChange]);
 
   const create = async (item: TodayPlanItem) => { await window.wmb.createProjectFromPlanItem(item.id); openStudio(); };
+  const poolBadgeMap = useMemo(() => {
+    const nowMs = Date.now();
+    return new Map((pool ?? []).map((item) => [item.planItemId, poolBadges(item, nowMs)]));
+  }, [pool]);
+  const dismissOpportunity = async (planItemId: string) => {
+    if (!window.confirm('否掉这个机会？它会从池中移除且不再出现。')) return;
+    try {
+      await window.wmb.dismissPlanItem({ planItemId });
+      refresh();
+    } catch (error) {
+      onStatusChange?.({ text: error instanceof Error ? error.message : String(error), running: false });
+    }
+  };
+  const xChannelAbsent = Boolean(intelligenceChannels?.readiness?.some((entry) => entry.module === 'x_lists' && entry.status === 'needs_user'));
   const createFromCarry = async (item: { objectType: string; objectId: string }) => {
     if (item.objectType !== 'plan_item') return;
     await window.wmb.createProjectFromPlanItem(item.objectId);
@@ -297,10 +312,10 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
       />
       <div className="today-grid">
         <div className="today-opps" ref={oppsRef}>
-          {primary && !runView.showOpportunityEmpty ? <>
-            {!today?.plan && displayPlan ? <p className="eyebrow">最近方案 · {displayPlan.planDate}</p> : null}
-            <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>
-            {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources}/>)}</div>}
+          {primary ? <>
+            {xChannelAbsent ? <div className="pool-absent-banner" role="status"><span>X 渠道缺席：本次判断未包含 X 动态。</span><button type="button" onClick={() => openSettings?.('browser')}>重新验证浏览器</button></div> : null}
+            <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
+            {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(item.id)} onDismiss={() => void dismissOpportunity(item.id)}/>)}</div>}
           </> : <section className="empty-state">
             <h2>{runView.opportunityEmptyTitle}</h2>
             <p>{runView.opportunityEmptyBody}</p>

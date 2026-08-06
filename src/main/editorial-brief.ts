@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { refreshWorkCarry, shanghaiDate, type FermentingBundle } from './ferment.ts';
+import { listFermentingBundle, shanghaiDate, type FermentingBundle } from './ferment.ts';
 import { listWatchingSources } from './knowledge.ts';
 import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
@@ -102,7 +102,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   const publishedDays = options.publishedDays ?? 30;
   const reviewLimit = options.reviewLimit ?? 3;
   const findingLimit = options.findingLimit ?? 5;
-  const sourceLimit = options.sourceLimit ?? 100;
+  const sourceLimit = options.sourceLimit ?? 60;
   const businessDate = options.businessDate ?? shanghaiDate(now);
 
   const profile = readWorkspaceProfile(database);
@@ -149,7 +149,8 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
     FROM method_findings ORDER BY updated_at DESC LIMIT ?
   `).all(findingLimit) as BriefFinding[];
 
-  const fermenting = refreshWorkCarry(database, businessDate);
+  // 读侧只取发酵池快照；过期/播种/衰减等写操作由判断流程经 dispatcher 单独执行（WMB_WRITE 守卫）。
+  const fermenting = listFermentingBundle(database, businessDate);
   const watching = (listWatchingSources(database, 20) as Array<{ id: string; title: string; topics: string; priority: number | null }>).map((item) => ({
     id: item.id,
     title: item.title,
@@ -159,18 +160,20 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   const trends = listXPostTrends(database, { limit: 20 });
 
   const since = watermark ?? new Date(now.getTime() - fallbackHours * 3_600_000).toISOString();
+  // 最新优先：截断时保留最新资料（旧实现升序截断会把最新资料丢掉）。
   const incrementRows = database.prepare(`
     SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
       collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
       timeliness, priority
     FROM source_items
     WHERE collected_at > ?
-    ORDER BY collected_at ASC
+    ORDER BY collected_at DESC
     LIMIT ?
   `).all(since, sourceLimit + 1) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
   const truncated = incrementRows.length > sourceLimit;
-  const sources: BriefIncrementSource[] = incrementRows.slice(0, sourceLimit).map((row) => ({
+  const sources: BriefIncrementSource[] = incrementRows.slice(0, sourceLimit).reverse().map((row) => ({
     ...row,
+    summary: typeof row.summary === 'string' && row.summary.length > 500 ? `${row.summary.slice(0, 500)}…` : row.summary,
     categories: parseJsonArray(row.categories)
   }));
 

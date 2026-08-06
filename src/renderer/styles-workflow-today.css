@@ -269,3 +269,16 @@
 .filter:hover { color: var(--ink); background: var(--surface-hover); }
 .filter:active:not(:disabled) { transform: translateY(1px) scale(0.98); background: color-mix(in srgb, var(--surface-hover) 70%, var(--border)); }
 .filter.active { color: var(--accent-soft); background: var(--tag-bg); }
+
+/* WMB-4915 机会池：时效/新/降权徽章 + 否决 + 渠道缺席横幅 */
+.pill.pool-new { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-soft); }
+.pill.pool-breaking { background: var(--amber-soft); color: var(--amber); }
+.pill.pool-hot { background: var(--tag-bg); color: var(--muted); }
+.pill.pool-evergreen { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+.pill.pool-demotion { background: var(--amber-soft); color: var(--amber); }
+.opp-dismiss { border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted-low); padding: 7px 10px; cursor: pointer; font-size: 12px; }
+.opp-dismiss:hover:not(:disabled) { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
+.opp-dismiss:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+.pool-absent-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 12px; border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--border)); border-radius: 10px; background: var(--amber-soft); padding: 10px 14px; color: var(--amber); font-size: 13px; }
+.pool-absent-banner button { border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--border)); border-radius: 7px; background: transparent; color: var(--amber); padding: 6px 12px; cursor: pointer; font-size: 12.5px; }
+.pool-absent-banner button:hover { background: color-mix(in srgb, var(--amber) 14%, transparent); }

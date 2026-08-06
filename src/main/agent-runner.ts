@@ -6,7 +6,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
+import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
 import { assembleEditorialBrief, renderEditorialBrief } from './editorial-brief.ts';
+import { refreshWorkCarry } from './ferment.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
 import {
@@ -112,7 +114,8 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string):
     '4. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。',
     `5. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有答得出四问的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。方案使用 request_id=${planRequestId}。`,
     '6. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
-    '7. 趋势只引用简报「存量」块给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。'
+    '7. 趋势只引用简报「存量」块给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。',
+    '8. 你可用的 wmb_* 工具只有：wmb_get_workbench、wmb_get_agent_task、wmb_get_knowledge_context、wmb_save_plan、wmb_save_source、wmb_record_knowledge、wmb_get_current_workspace、wmb_list_workspaces、wmb_report_agent_progress。除此之外的工具名都不存在；一旦出现 Tool not found，立即停止臆造新工具名，回到简报继续判断。简报已包含判断所需的全部上下文；只有查同主题历史（第 3 条）和写回方案（第 5 条）时才需要调用工具。'
   ].join('\n');
 }
 
@@ -204,12 +207,28 @@ export async function startDailyIntelligence(input: {
           return { task: partial, reused: started.reused };
         }
         await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { phase: 'synthesizing', message: '共享来源扫描结束，正在整理内容机会。' }, taskCommandContext(lane, `${beforePlan.id}:progress:synthesizing`, beforePlan.id, input.workerLeaseId));
+        // 发酵池刷新是写操作：生产运行时走 dispatcher（判断简报本身只读）；裸数据库（测试）直写。
+        if ('database' in dependency) {
+          requireReceiptData(await dispatchBusinessCommand(dependency, {
+            command: 'daily.refresh_carry',
+            requestId: `${beforePlan.id}:refresh-carry`,
+            actor: schedulerActor(lane),
+            taskId: beforePlan.id,
+            workerLeaseId: input.workerLeaseId,
+            input: { planDate: beforePlan.businessDate },
+            boundIdentity: { entityType: 'work_carry' },
+            entityType: 'work_carry',
+            execute: (commandDatabase, value) => ({ data: refreshWorkCarry(commandDatabase, value.planDate) })
+          }));
+        } else {
+          refreshWorkCarry(dependency, beforePlan.businessDate);
+        }
         const synthesis = makeRuntime();
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
           await synthesis.start();
           const promptBuiltAt = new Date().toISOString();
-          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 6 * 60_000 });
+          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 10 * 60_000 });
           // 增量判断水印：本轮简报组装时刻之前的入库资料均已评估；失败不写入，下轮重评。
           await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { judgeWatermark: promptBuiltAt } }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
         } catch (error) {

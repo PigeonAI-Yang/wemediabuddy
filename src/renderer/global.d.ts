@@ -285,6 +285,34 @@ declare global {
         sourcesDate: string | null;
         plan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
         latestPlan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
+        pool: Array<{
+          planItemId: string;
+          planDate: string;
+          title: string;
+          priority: number;
+          timeliness: string | null;
+          timelinessClass: 'breaking' | 'hot' | 'evergreen';
+          expiresAt: string | null;
+          topicId: string | null;
+          sourceIds: string[];
+          whyNow: string;
+          angle: string;
+          pointOfView: string;
+          targetAudience: string;
+          platforms: string[];
+          formats: string[];
+          titleGuidance: string;
+          openingGuidance: string;
+          structureGuidance: string;
+          effortEstimate: string;
+          availableMaterials: string[];
+          missingMaterials: string[];
+          trendEvidence: TodayPlanItem['trendEvidence'];
+          createdAt: string;
+          isNew: boolean;
+          carry: { id: string; state: string; revision: number } | null;
+          demotion: { publishedAt: string; platform: string } | null;
+        }>;
         pendingActions: string[];
         fermenting: {
           items: Array<{

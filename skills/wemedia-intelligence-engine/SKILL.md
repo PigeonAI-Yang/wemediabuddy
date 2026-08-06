@@ -28,6 +28,7 @@ description: 为 AI 自媒体快速发现外部信息，核对关键事实，形
 
 ## 执行
 
+0. **daily_intelligence 判断任务（最高优先级）**：以上方注入的「编辑简报」为全部判断上下文；发现与扫描已由渠道完成，不得探索文件系统、不得臆造工具名。只做四问判断 → 用 `wmb_get_knowledge_context` 查同主题历史 → 用 `wmb_save_plan` 写回。出现一次 Tool not found 立即停止臆造并回到简报。
 1. 按 [采集 SOP](references/collection-sop.md)：A 类 must_check 全量；C 类可抽样。信源见 [信源索引](references/source-index.md)。
 2. 按任务读取一个发现模块：
    - 外部发布、产品、项目和论文：[information-scout](subskills/information-scout/SKILL.md)

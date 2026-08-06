@@ -6,6 +6,7 @@ import { SourceMark } from './source-mark';
 import { PlatformMark } from './platform-mark';
 import { formatNames, platformNames } from './app-types';
 import { dailyPreflightMessage } from './intelligence-channel-ui';
+import { poolBadgeClass, type PoolBadge } from './today-pool-view';
 export function formatSourcePublishedAt(value?: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -213,9 +214,10 @@ export function CreateIconButton({ onClick, primary }: { onClick: () => void; pr
   </button>;
 }
 
-export function Opportunity({ item, primary, selected, onToggle, onCreate, sources }: {
+export function Opportunity({ item, primary, selected, onToggle, onCreate, sources, badges, onDismiss }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
   onCreate: (item: TodayPlanItem) => void; sources: TodaySource[];
+  badges?: PoolBadge[]; onDismiss?: () => void;
 }): React.JSX.Element {
   const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时${trend.velocityChange.status === 'value' ? ` · 加速 ${Math.round(trend.velocityChange.value).toLocaleString('zh-CN')}` : ''}` : null;
   const trendTitle = trend?.viewsPerHour.status === 'value' ? `快照 ${(trend.velocityChange.status === 'value' ? trend.velocityChange.snapshotIds : trend.viewsPerHour.snapshotIds).join('、')} · 最近采集 ${trend.snapshots.at(-1)?.capturedAt ?? '未知'}` : undefined;
@@ -224,6 +226,8 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
   const timeLabel = timeText
     ? (sourceTime.kind === 'collected' ? `入库 ${timeText}` : timeText)
     : '时间未知';
+  const badgePills = badges?.length ? badges.map((badge) => <span key={badge.kind} className={`pill ${poolBadgeClass(badge)}`}>{badge.text}</span>) : null;
+  const dismissButton = onDismiss ? <button type="button" className="opp-dismiss" title="否掉这个机会，不再出现" onClick={(event) => { event.stopPropagation(); onDismiss(); }}>否掉</button> : null;
   if (!primary) return <article data-opportunity-card className={`opp-row${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
     <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{priorityGrade(item.priority)}</strong>
     <div className="opp-main">
@@ -232,10 +236,12 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
       <div className="opp-meta">
         {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
         <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
+        {badgePills}
         {trendText && <span className="pill violet" title={trendTitle}>{trendText}</span>}
       </div>
     </div>
     <span className="opportunity-check" aria-hidden="true">✓</span>
+    {dismissButton}
     <CreateIconButton onClick={() => onCreate(item)}/>
   </article>;
   return <article data-opportunity-card className={`opportunity-primary hero-card${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
@@ -244,6 +250,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
       <strong data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong>
       {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
       <span className="pill violet">时效 {item.timeliness}</span>
+      {badgePills}
       <time dateTime={sourceTime.at ?? undefined}>{timeLabel}</time>
     </div>
     <h2>{item.title}</h2>
@@ -267,6 +274,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
       <span className="pill gray">形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
       <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
       {trendText && <span className="pill violet" title={trendTitle}>{trendText}</span>}
+      {dismissButton}
       <CreateIconButton primary onClick={() => onCreate(item)}/>
     </footer>
   </article>;

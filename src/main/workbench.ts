@@ -123,6 +123,16 @@ export type OpportunityPoolItem = {
   whyNow: string;
   angle: string;
   pointOfView: string;
+  targetAudience: string;
+  platforms: string[];
+  formats: string[];
+  titleGuidance: string;
+  openingGuidance: string;
+  structureGuidance: string;
+  effortEstimate: string;
+  availableMaterials: string[];
+  missingMaterials: string[];
+  trendEvidence: XPostTrend[];
   createdAt: string;
   isNew: boolean;
   carry: { id: string; state: string; revision: number } | null;
@@ -156,6 +166,10 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
   const rows = database.prepare(`
     SELECT pi.id AS planItemId, pi.title, pi.priority, pi.timeliness, pi.topic_id AS topicId,
       pi.why_now AS whyNow, pi.angle, pi.point_of_view AS pointOfView, pi.source_ids_json AS sourceIds,
+      pi.target_audience AS targetAudience, pi.platforms_json AS platforms, pi.formats_json AS formats,
+      pi.title_guidance AS titleGuidance, pi.opening_guidance AS openingGuidance,
+      pi.structure_guidance AS structureGuidance, pi.effort_estimate AS effortEstimate,
+      pi.available_materials_json AS availableMaterials, pi.missing_materials_json AS missingMaterials,
       pi.created_at AS createdAt, p.plan_date AS planDate
     FROM plan_items pi
     JOIN plans p ON p.id = pi.plan_id
@@ -165,6 +179,8 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
   `).all() as Array<{
     planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
     whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
+    targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
+    structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
   }>;
 
   const demoteSince = new Date(now.getTime() - demoteHours * 3_600_000).toISOString();
@@ -208,6 +224,16 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
       whyNow: row.whyNow,
       angle: row.angle,
       pointOfView: row.pointOfView,
+      targetAudience: row.targetAudience,
+      platforms: parseSourceIds(row.platforms),
+      formats: parseSourceIds(row.formats),
+      titleGuidance: row.titleGuidance,
+      openingGuidance: row.openingGuidance,
+      structureGuidance: row.structureGuidance,
+      effortEstimate: row.effortEstimate,
+      availableMaterials: parseSourceIds(row.availableMaterials),
+      missingMaterials: parseSourceIds(row.missingMaterials),
+      trendEvidence: listXPostTrends(database, { sourceIds }),
       createdAt: row.createdAt,
       isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
       carry: carry ? { id: carry.id, state: carry.state, revision: carry.revision } : null,
