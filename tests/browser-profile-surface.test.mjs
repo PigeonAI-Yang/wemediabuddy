@@ -25,21 +25,23 @@ test('browser profile writes are exposed only by the Owner preload surface', asy
 });
 
 test('Owner browser mutations use native Main confirmation without renderer tokens or platform bias', async () => {
-  const [owner, preload, globals, settingsIpc, settingsView] = await Promise.all([
+  const [owner, preload, globals, settingsIpc, settingsView, browserSettings] = await Promise.all([
     readFile('src/main/browser-profile-owner.ts', 'utf8'),
     readFile('src/preload/preload.ts', 'utf8'),
     readFile('src/renderer/global.d.ts', 'utf8'),
     readFile('src/main/ipc-settings-config.ts', 'utf8'),
-    readFile('src/renderer/settings-view.tsx', 'utf8')
+    readFile('src/renderer/settings-view.tsx', 'utf8'),
+    readFile('src/renderer/browser-settings.tsx', 'utf8')
   ]);
-  for (const source of [owner, preload, globals, settingsView]) assert.doesNotMatch(source, /commandToken|requireToken|CREATE_BROWSER_PROFILE|REBIND_BROWSER_PROFILE|VERIFY_BROWSER_ACCOUNT|MIGRATE_LEGACY_PROFILE/);
+  for (const source of [owner, preload, globals, settingsView, browserSettings]) assert.doesNotMatch(source, /commandToken|requireToken|CREATE_BROWSER_PROFILE|REBIND_BROWSER_PROFILE|VERIFY_BROWSER_ACCOUNT|MIGRATE_LEGACY_PROFILE/);
   assert.match(settingsIpc, /dialog\.showMessageBox/);
   assert.match(settingsIpc, /BrowserWindow\.fromWebContents\(event\.sender\)/);
   for (const binding of ['command=', 'workspace=', 'bindingRevision=', 'registryRevision=', 'target=', 'platform=']) assert.match(settingsIpc, new RegExp(binding));
   assert.match(settingsIpc, /response !== 1/);
-  assert.match(settingsView, /aria-label="账号平台"/);
-  assert.match(settingsView, /platform: browserPlatform/g);
-  assert.doesNotMatch(settingsView, /platforms\.includes\('x'\) \? 'x' : 'wechat'/);
+  assert.match(browserSettings, /aria-label="账号平台"/);
+  assert.match(browserSettings, /platform: browserPlatform/g);
+  assert.doesNotMatch(browserSettings, /platforms\.includes\('x'\) \? 'x' : 'wechat'/);
+  assert.match(settingsView, /<BrowserSettings/);
 });
 
 test('production browser consumers have no installation singleton fallback', async () => {

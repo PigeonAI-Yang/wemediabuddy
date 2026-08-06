@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Theme } from './app-types';
+import { BrowserSettings } from './browser-settings';
 import { IntelligenceChannelsView } from './intelligence-channels-view';
 import { PiSkillsSettings } from './pi-skills-settings';
 import { XListDisplaySettings } from './x-list-display-settings';
@@ -17,7 +18,12 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   setTheme: (value: Theme) => void; back: () => void;
 }): React.JSX.Element {
   type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
-  const [section, setSection] = useState<SettingsSection>('ai');
+  const [section, setSection] = useState<SettingsSection>(() => {
+    const requested = sessionStorage.getItem('wmb.settingsSection');
+    sessionStorage.removeItem('wmb.settingsSection');
+    const allowed: SettingsSection[] = ['general', 'ai', 'skills', 'data', 'browser', 'channels', 'lists', 'agent', 'diagnostics', 'about'];
+    return allowed.includes(requested as SettingsSection) ? requested as SettingsSection : 'ai';
+  });
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
   const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
@@ -30,12 +36,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piMaxTokens, setPiMaxTokens] = useState('');
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [runtimeNote, setRuntimeNote] = useState('');
-  const [timelineCacheNote, setTimelineCacheNote] = useState('');
   const [workspaceNote, setWorkspaceNote] = useState('');
-  const [browserNote, setBrowserNote] = useState('');
-  const browserPlatforms = (settings?.workspace.profile.platforms ?? []).filter((platform): platform is 'x' | 'wechat' => platform === 'x' || platform === 'wechat');
-  const [browserPlatform, setBrowserPlatform] = useState<'x' | 'wechat'>(browserPlatforms[0] ?? 'x');
-  const [timelineCacheStats, setTimelineCacheStats] = useState<{ rows: number; bytes: number; accounts: number } | null>(null);
   const [workspaces, setWorkspaces] = useState<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>({ activeWorkspaceId: null, workspaces: [] });
   const [workspaceProposals, setWorkspaceProposals] = useState<Awaited<ReturnType<typeof window.wmb.listWorkspaceProposals>>>([]);
   const selectPiProfile = (id: string) => {
@@ -54,14 +55,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   useEffect(() => {
     selectPiProfile(settings?.pi.activeId ?? '');
   }, [settings?.pi.activeId, settings?.pi.profiles]);
-  useEffect(() => {
-    if (section !== 'browser') return;
-    void window.wmb.getXListTimelineCacheStats().then(setTimelineCacheStats).catch(() => setTimelineCacheStats(null));
-  }, [section, settings?.browser.status]);
   useEffect(() => { if (section === 'data') void Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]).then(([listed, proposals]) => { setWorkspaces(listed); setWorkspaceProposals(proposals); }); }, [section, dataRoot]);
-  useEffect(() => {
-    if (!browserPlatforms.includes(browserPlatform) && browserPlatforms[0]) setBrowserPlatform(browserPlatforms[0]);
-  }, [browserPlatform, browserPlatforms.join('|')]);
   const saveProfile = async () => {
     try {
       await window.wmb.savePiConfig({
@@ -210,41 +204,14 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           </>}
           <div className="settings-row"><div><h3>日志</h3><p>logs/ · {settings ? formatBytes(settings.usage.logs) : '查看应用运行记录和错误信息。'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}
-        {section === 'browser' && settings && <section className="settings-section">
-          <div className="settings-section-heading">
-            <h3>当前工作空间浏览器绑定</h3>
-            <p>{settings.browserBinding
-              ? `${settings.browserBinding.state}${settings.browserBinding.error ? ` · ${settings.browserBinding.error.code}: ${settings.browserBinding.error.message}` : ''}`
-              : '等待处理 · 当前安装缺少浏览器绑定，请在下方创建或改绑。'}</p>
-          </div>
-          <div className="settings-row"><div><h3>Installation default</h3><p>{settings.defaultBrowserProfileId}</p></div><span className="pill-status green"><span className="dot"/>新 root 继承</span></div>
-          <div className="settings-row"><div><h3>当前绑定 profile</h3><p>{settings.boundBrowserProfile ? `${settings.boundBrowserProfile.label} · ${settings.boundBrowserProfile.userDataDir}` : '未绑定或 profile 已悬空'}</p><p>预期账号：{JSON.stringify(settings.browserBinding?.expectedAccountSnapshot ?? {})}</p></div></div>
-          <div className="settings-row"><div><h3>Legacy 登录态来源（只读）</h3><p>{settings.legacyBrowserSource.path} · {settings.legacyBrowserSource.detected ? `检测到 ${settings.legacyBrowserSource.entryCount} 项` : '未检测到可迁移内容'}</p></div></div>
-          <div className="settings-browser-controls">
-            <label><span>账号平台</span><select aria-label="账号平台" value={browserPlatform} onChange={(event) => setBrowserPlatform(event.target.value as 'x' | 'wechat')}>
-              {browserPlatforms.map((platform) => <option key={platform} value={platform}>{platform === 'x' ? 'X' : '微信公众号'}</option>)}
-            </select></label>
-            <select value={browserChoice} onChange={(event) => setBrowserChoice(event.target.value)}>{settings.browserProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}{profile.id === settings.defaultBrowserProfileId ? '（default）' : ''}</option>)}</select>
-            <button className="secondary-button" onClick={() => {
-              setBrowserNote('正在创建并重启…');
-              void window.wmb.createBrowserProfile({ workspaceId: settings.workspace.id, expectedBindingRevision: settings.browserBinding?.bindingRevision ?? 0, expectedRegistryRevision: settings.browserRegistryRevision }).catch((error) => setBrowserNote(error instanceof Error ? error.message : String(error)));
-            }}>创建独立 profile</button>
-            <button className="secondary-button" disabled={!browserChoice || browserChoice === settings.browserBinding?.profileId} onClick={() => {
-              setBrowserNote('正在改绑并重启…');
-              void window.wmb.rebindBrowserProfile({ workspaceId: settings.workspace.id, profileId: browserChoice, expectedBindingRevision: settings.browserBinding?.bindingRevision ?? 0, expectedRegistryRevision: settings.browserRegistryRevision }).catch((error) => setBrowserNote(error instanceof Error ? error.message : String(error)));
-            }}>改绑</button>
-            <button className="secondary-button" disabled={!settings.legacyBrowserSource.detected || browserPlatforms.length === 0} onClick={() => {
-              setBrowserNote(`正在停止浏览器、复制并验证 ${browserPlatform === 'x' ? 'X' : '微信公众号'} 账号…`);
-              void window.wmb.migrateLegacyBrowserProfile({ workspaceId: settings.workspace.id, platform: browserPlatform, expectedBindingRevision: settings.browserBinding?.bindingRevision ?? 0, expectedRegistryRevision: settings.browserRegistryRevision }).catch((error) => setBrowserNote(error instanceof Error ? error.message : String(error)));
-            }}>迁移并验证{browserPlatform === 'x' ? ' X' : '微信公众号'}</button>
-            <button className="primary-button" disabled={!settings.browserBinding || browserPlatforms.length === 0} onClick={() => {
-              setBrowserNote(`正在验证 ${browserPlatform === 'x' ? 'X' : '微信公众号'} 账号…`);
-              void window.wmb.verifyBrowserAccount({ workspaceId: settings.workspace.id, platform: browserPlatform, expectedBindingRevision: settings.browserBinding!.bindingRevision, expectedRegistryRevision: settings.browserRegistryRevision }).catch((error) => setBrowserNote(error instanceof Error ? error.message : String(error)));
-            }}>验证{browserPlatform === 'x' ? ' X' : '微信公众号'}账号</button>
-          </div>
-          {browserNote && <p className={`settings-note${/失败|错误|invalid|mismatch/i.test(browserNote) ? ' error' : ''}`}>{browserNote}</p>}
-          <div className="settings-row"><div><h3>X List 浏览缓存</h3><p>{timelineCacheStats ? `${timelineCacheStats.rows} 条预览 · ${formatBytes(timelineCacheStats.bytes)} · ${timelineCacheStats.accounts} 个账号` : '缓存属于当前 root，不随共享 physical profile 跨 root 复用。'}</p>{timelineCacheNote && <p className="task-status">{timelineCacheNote}</p>}</div><button className="secondary-button" onClick={() => void window.wmb.clearXListTimelineCache().then(async (result) => { setTimelineCacheStats(await window.wmb.getXListTimelineCacheStats()); setTimelineCacheNote(`已清理 ${result.deleted} 条浏览缓存。`); }).catch((error) => setTimelineCacheNote(error instanceof Error ? error.message : '清理失败'))}>清理浏览缓存</button></div>
-        </section>}
+        {section === 'browser' && settings && (
+          <BrowserSettings
+            settings={settings}
+            browserChoice={browserChoice}
+            setBrowserChoice={setBrowserChoice}
+            refresh={refresh}
+          />
+        )}
         {section === 'channels' && settings && <IntelligenceChannelsView settingsMode />}
         {section === 'lists' && settings && <XListDisplaySettings workspaceId={settings.workspace.id} />}
         {section === 'agent' && settings && <section className="settings-section">

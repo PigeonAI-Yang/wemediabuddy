@@ -266,14 +266,35 @@
 .settings-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; border-bottom: 1px solid var(--border); padding: 17px 0; }
 .settings-row:last-child { border-bottom: 0; }
 .settings-row > strong { color: var(--ink-soft); }
-.settings-row select, .settings-browser-controls select {
+.settings-row select {
   min-width: 230px; height: 42px; border: 1px solid var(--border-strong); border-radius: 7px;
   background: var(--surface-raised); color: var(--ink); padding: 0 12px;
 }
-.settings-browser-controls { display: flex; align-items: center; gap: 8px; }
-.settings-browser-controls select { flex: 1; }
 .settings-row-actions { display: flex; align-items: center; gap: 8px; }
 .settings-ok { color: var(--success) !important; }
+.settings-help { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.settings-note { margin: 14px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.settings-note.error { color: var(--danger); }
+.settings-status-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 16px 18px;
+}
+.settings-status-main { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 13px; min-width: 0; }
+.settings-status-main strong, .settings-status-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-status-main small { margin-top: 3px; color: var(--muted); }
+.settings-meta-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; margin-top: 18px;
+}
+.settings-meta-grid h4 { margin: 0 0 5px; color: var(--ink-soft); font-size: 13px; font-weight: 650; }
+.settings-meta-grid p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.settings-meta-path {
+  margin-top: 4px !important; color: var(--muted-low) !important; font-family: var(--mono); font-size: 11.5px !important;
+}
+.pill-status.gray { background: color-mix(in srgb, var(--muted-low) 16%, transparent); color: var(--muted); }
+@media (max-width: 900px) {
+  .settings-meta-grid { grid-template-columns: 1fr; }
+  .settings-status-card { grid-template-columns: 1fr; align-items: start; }
+}
 /* WMB-1507 设置:mono 路径片 + 诊断行状态丸对齐 */
 .path-chip { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-bg); padding: 4px 10px; color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
 .diagnostic-list article .pill-status { flex: none; }
