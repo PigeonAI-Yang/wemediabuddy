@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { buildDailyOpportunityPrompt, cancelDailyIntelligenceIfRequested } from '../src/main/agent-runner.ts';
-import { agentRequestId, getAgentTask, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
+import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
@@ -40,6 +40,16 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.doesNotMatch(prompt, /sources_request_id=/);
     assert.doesNotMatch(prompt, /官方产品与模型发布/);
     assert.doesNotMatch(prompt, /共享渠道模块完成真实扫描/);
+
+    const withWatermark = { ...started.data, checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } };
+    const scopedPrompt = buildDailyOpportunityPrompt(database, withWatermark, agentRequestId(withWatermark.id, 'plan'));
+    assert.match(scopedPrompt, /水印 2026-08-05T02:00:00.000Z 之后/);
+
+    const fresh = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-04' });
+    assert.equal(fresh.ok, true);
+    reportAgentTaskProgress(database, withWatermark.id, { checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } });
+    const inheritedPrompt = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
+    assert.match(inheritedPrompt, /水印 2026-08-05T02:00:00.000Z 之后/, 'fresh task inherits the latest watermark across tasks');
 
     const requested = requestAgentTaskControl(database, started.data.id, 'cancel');
     assert.equal(requested.ok, true);

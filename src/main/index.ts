@@ -179,6 +179,16 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
         activeRuntime: runtime,
         ...hooks
       })),
+      onNewSources: (modules) => withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
+        dataRootPath: dataRoot.path,
+        businessDate: shanghaiDate(),
+        modules,
+        judgeOnly: true,
+        mcpUrl: currentMcp()?.url ?? '',
+        xhsMcpUrl: currentXhs()?.getUrl() || '',
+        activeRuntime: runtime,
+        ...hooks
+      })),
       onError: (error) => console.error('[daily-scan-scheduler]', error)
     });
     scanSchedulerRef?.stop();

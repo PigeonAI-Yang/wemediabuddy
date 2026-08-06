@@ -139,6 +139,25 @@ export function getLatestAgentTask(database: DatabaseSync, intent?: AgentIntent,
   return row ? parseTask(row) : null;
 }
 
+/**
+ * 最近一次成功写入的增量判断水印。水印存于各任务 checkpoint，但判断任务往往是一轮一个新任务，
+ * 跨任务读取最近一次水印才能让"只评新资料"在滚动流程中真正生效（评审 N1 修复）。
+ */
+export function readLatestJudgeWatermark(database: DatabaseSync): string | null {
+  const rows = database.prepare(`SELECT checkpoint_json AS checkpointJson FROM agent_tasks
+    WHERE intent = 'daily_intelligence' AND checkpoint_json LIKE '%judgeWatermark%'
+    ORDER BY updated_at DESC LIMIT 5`).all() as Array<{ checkpointJson: string }>;
+  for (const row of rows) {
+    try {
+      const checkpoint = JSON.parse(row.checkpointJson) as { judgeWatermark?: unknown };
+      if (typeof checkpoint.judgeWatermark === 'string' && checkpoint.judgeWatermark) return checkpoint.judgeWatermark;
+    } catch {
+      // 忽略无法解析的历史检查点，继续向前找。
+    }
+  }
+  return null;
+}
+
 export function startAgentTask(
   database: DatabaseSync,
   input: { intent: AgentIntent; businessDate: string; contextRefs?: Record<string, unknown>; piSessionId?: string | null }

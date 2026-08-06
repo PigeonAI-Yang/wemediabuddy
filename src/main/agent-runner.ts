@@ -14,6 +14,7 @@ import {
   cancelAgentTask,
   dailyAgentSessionId,
   getAgentTask,
+  readLatestJudgeWatermark,
   type AgentTask
 } from './agent-tasks.ts';
 import {
@@ -63,6 +64,7 @@ export async function abortDailyIntelligence(taskId: string): Promise<boolean> {
 export type DailyIntelligenceRun = {
   task: AgentTask;
   reused: boolean;
+  savedCount?: number;
 };
 
 function skillSourcePath(): string {
@@ -115,10 +117,13 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string):
 }
 
 export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string): string {
+  const watermark = typeof task.checkpoint?.judgeWatermark === 'string' && task.checkpoint.judgeWatermark
+    ? task.checkpoint.judgeWatermark
+    : readLatestJudgeWatermark(database);
   const brief = assembleEditorialBrief(database, {
     now: new Date(),
     businessDate: task.businessDate,
-    watermark: typeof task.checkpoint?.judgeWatermark === 'string' ? task.checkpoint.judgeWatermark : null
+    watermark
   });
   return dailyPrompt(task, planRequestId, renderEditorialBrief(brief));
 }
@@ -203,7 +208,10 @@ export async function startDailyIntelligence(input: {
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
           await synthesis.start();
+          const promptBuiltAt = new Date().toISOString();
           await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan')), { timeoutMs: 6 * 60_000 });
+          // 增量判断水印：本轮简报组装时刻之前的入库资料均已评估；失败不写入，下轮重评。
+          await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { judgeWatermark: promptBuiltAt } }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
         } catch (error) {
           const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
           const cancelled = await cancelIfRequested(latest);

@@ -480,6 +480,40 @@ test('plan saved through command_receipts (real plans.save path) also satisfies 
   }
 });
 
+test('scanOnly finishes when nothing new lands, and judgeOnly routes straight to the judgment runner', async () => {
+  const current = await makeRoot('wmb-daily-scanonly-');
+  try {
+    insertWorkspaceProfile(current.database, {
+      profileId: 'profile.test.scanonly', revision: 1, officialTemplateId: null, officialTemplateVersion: null,
+      displayName: 'AI', audience: '受众', contentGoal: '内容', editorialBrief: '实用优先',
+      intelligencePackId: 'wemedia-intelligence-engine', intelligencePackVersion: 1,
+      creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x']
+    });
+    const binding = bindXList(current.database, {
+      accountKey: '@owner', list: { listId: '303', canonicalUrl: 'https://x.com/i/lists/303', ownerHandle: '@owner', name: 'Scan only', kind: 'owned' }
+    });
+    assert.equal(binding.ok, true);
+    const scanned = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', scanOnly: true });
+    assert.equal(scanned.savedCount, 0);
+    assert.equal(scanned.task.status, 'partial', 'no new sources finishes partial instead of leaving a zombie running task');
+    assert.equal(scanned.task.errorCode, 'CHANNELS_NEEDS_USER');
+    const receipt = current.database.prepare('SELECT status FROM source_scan_receipts WHERE task_id=?').get(scanned.task.id);
+    assert.equal(receipt.status, 'needs_user');
+
+    let aiCalls = 0;
+    const judged = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', judgeOnly: true }, {
+      ai: async () => { aiCalls += 1; return { task: scanned.task, reused: true }; }
+    });
+    assert.equal(aiCalls, 1, 'judgeOnly routes straight to the judgment runner');
+    assert.equal(judged.reused, true);
+    const receiptCount = current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count;
+    assert.equal(receiptCount, 1, 'judgeOnly does not create new scan receipts');
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
 test('plans.save MCP accepts an empty current plan and persists its readback', async () => {
   const current = await makeRoot('wmb-daily-mcp-empty-');
   let mcp, runtime;
