@@ -35,6 +35,7 @@ import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspa
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { DailyScanScheduler } from './daily-scan-scheduler';
+import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -169,16 +170,20 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     scheduler.start();
     const scanScheduler = new DailyScanScheduler({
       isCurrent: () => activeRuntime === runtime && runtime.isActive,
-      run: (modules) => withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
-        dataRootPath: dataRoot.path,
-        businessDate: shanghaiDate(),
-        modules,
-        scanOnly: true,
-        mcpUrl: currentMcp()?.url ?? '',
-        xhsMcpUrl: currentXhs()?.getUrl() || '',
-        activeRuntime: runtime,
-        ...hooks
-      })),
+      run: (modules) => {
+        // 该模块没有启用来源时直接跳过，不落任何任务/回执（防假 needs_user 任务污染今日页）。
+        if (!hasEnabledDailySources(runtime.database, modules)) return Promise.resolve({ savedCount: 0 });
+        return withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
+          dataRootPath: dataRoot.path,
+          businessDate: shanghaiDate(),
+          modules,
+          scanOnly: true,
+          mcpUrl: currentMcp()?.url ?? '',
+          xhsMcpUrl: currentXhs()?.getUrl() || '',
+          activeRuntime: runtime,
+          ...hooks
+        }));
+      },
       onNewSources: (modules) => withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
         dataRootPath: dataRoot.path,
         businessDate: shanghaiDate(),

@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, getLatestAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
 import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
-import { startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
+import { hasEnabledDailySources, startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createWebsiteSource, recordSourceScanReceipt, setWebsiteSourceEnabled } from '../src/main/intelligence-channels.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
@@ -508,6 +508,30 @@ test('scanOnly finishes when nothing new lands, and judgeOnly routes straight to
     assert.equal(judged.reused, true);
     const receiptCount = current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count;
     assert.equal(receiptCount, 1, 'judgeOnly does not create new scan receipts');
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('hasEnabledDailySources gates scheduler ticks per module', async () => {
+  const current = await makeRoot('wmb-daily-precheck-');
+  try {
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), false, 'no sources at all');
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), false);
+
+    const web = website(current.database, 'precheck-web');
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), true);
+    setWebsiteSourceEnabled(current.database, { id: web.id, enabled: false, expectedRevision: web.revision });
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), false, 'disabled website does not count');
+
+    const binding = bindXList(current.database, {
+      accountKey: '@owner', list: { listId: '404', canonicalUrl: 'https://x.com/i/lists/404', ownerHandle: '@owner', name: 'Precheck', kind: 'owned' }
+    });
+    assert.equal(binding.ok, true);
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), true);
+    setXListBindingEnabled(current.database, { accountKey: '@owner', listId: '404', enabled: false, expectedRevision: binding.data.revision });
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), false, 'disabled binding does not count');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });

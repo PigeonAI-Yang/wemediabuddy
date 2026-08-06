@@ -64,6 +64,25 @@ const BROWSER_NEEDS_USER_CODES: Record<string, true> = {
   PROFILE_STALE: true
 };
 
+/**
+ * 滚动调度前置检查：某模块连一个启用的来源都没有时，tick 直接跳过——
+ * 不创建任务、不写回执。否则每次 X 心跳都会落一个 CHANNELS_NEEDS_USER/NOT_CONFIGURED 假任务，
+ * 还会以「最新任务」身份在今日页投出假 blocker。
+ */
+export function hasEnabledDailySources(database: DatabaseSync, modules: IntelligenceModule[]): boolean {
+  for (const module of modules) {
+    if (module === 'official_web') {
+      const row = database.prepare('SELECT COUNT(*) AS count FROM website_sources WHERE enabled=1').get() as { count: number };
+      if (row.count > 0) return true;
+    }
+    if (module === 'x_lists') {
+      const row = database.prepare('SELECT COUNT(*) AS count FROM x_list_bindings WHERE enabled=1').get() as { count: number };
+      if (row.count > 0) return true;
+    }
+  }
+  return false;
+}
+
 export async function startDailyChannelRun(dependency: AgentTaskMutationDependency, input: DailyChannelInput, dependencies: {
   browserConfig?: XListBrowserConfig | null;
   websiteFetch?: typeof fetch;
