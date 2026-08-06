@@ -73,56 +73,73 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     channelsSummary: intelligenceChannels
   }), [task, todayPlan, latestPlan, todayItems.length, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running]);
 
+  const feedRowHeightsRef = useRef<number[]>([]);
+  const feedHeightsSignatureRef = useRef('');
   useEffect(() => {
     const opps = oppsRef.current;
     const rail = railRef.current;
     const feed = feedListRef.current;
     if (!opps || !rail || !feed || typeof ResizeObserver === 'undefined') return;
-    let measuring = false;
+    let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    // 行高取决于可用宽度（标题换行）与文本长度；两个都进缓存键，否则 resize/收放 Pi 栏后用旧高度算出错误裁剪。
+    const signature = `${sources.map((item) => `${item.id}:${item.title.length}`).join('|')}@${Math.round(feed.clientWidth)}`;
+
+    const computeFit = (targetHeight: number): number => {
+      const railStyles = getComputedStyle(rail);
+      const gap = Number.parseFloat(railStyles.rowGap || railStyles.gap || '0') || 0;
+      let reserved = 0;
+      for (const child of [...rail.children] as HTMLElement[]) {
+        if (child === feed) continue;
+        reserved += Math.ceil(child.getBoundingClientRect().height) + gap;
+      }
+      const feedStyles = getComputedStyle(feed);
+      const padY = (Number.parseFloat(feedStyles.paddingTop || '0') || 0) + (Number.parseFloat(feedStyles.paddingBottom || '0') || 0);
+      const available = Math.max(0, targetHeight - reserved - padY);
+      let used = 0;
+      let fit = 0;
+      for (const height of feedRowHeightsRef.current) {
+        const next = used + height + (fit ? gap : 0);
+        if (next > available + 0.5) break;
+        used = next;
+        fit += 1;
+      }
+      return Math.max(1, Math.min(feedSources.length, fit || 1));
+    };
+
     const sync = () => {
-      if (measuring) return;
       const targetHeight = Math.ceil(opps.getBoundingClientRect().height);
       if (targetHeight <= 0) return;
       rail.style.height = `${targetHeight}px`;
       rail.style.minHeight = `${targetHeight}px`;
       rail.style.maxHeight = `${targetHeight}px`;
       if (!feedSources.length) { setVisibleFeedCount(0); return; }
-      measuring = true;
-      const previousCount = visibleFeedCount;
-      setVisibleFeedCount(feedSources.length);
-      window.requestAnimationFrame(() => {
-        const railStyles = getComputedStyle(rail);
-        const gap = Number.parseFloat(railStyles.rowGap || railStyles.gap || '0') || 0;
-        let reserved = 0;
-        for (const child of [...rail.children] as HTMLElement[]) {
-          if (child === feed) continue;
-          reserved += Math.ceil(child.getBoundingClientRect().height) + gap;
-        }
-        const feedStyles = getComputedStyle(feed);
-        const padY = (Number.parseFloat(feedStyles.paddingTop || '0') || 0) + (Number.parseFloat(feedStyles.paddingBottom || '0') || 0);
-        const available = Math.max(0, targetHeight - reserved - padY);
-        const rows = [...feed.querySelectorAll('.feed-item')] as HTMLElement[];
-        let used = 0;
-        let fit = 0;
-        for (const row of rows) {
-          const height = Math.ceil(row.getBoundingClientRect().height);
-          const next = used + height + (fit ? gap : 0);
-          if (next > available + 0.5) break;
-          used = next;
-          fit += 1;
-        }
-        const next = Math.max(1, Math.min(feedSources.length, fit || 1));
-        setVisibleFeedCount((prev) => (prev === next ? prev : next));
-        if (next === previousCount && previousCount !== feedSources.length) setVisibleFeedCount(next);
-        measuring = false;
-      });
+      if (feedHeightsSignatureRef.current !== signature) {
+        // 数据变化：全量渲染一次以测量真实行高并缓存；之后只按缓存做纯算术，不再触发渲染循环。
+        setVisibleFeedCount(feedSources.length);
+        window.requestAnimationFrame(() => {
+          if (cancelled) return;
+          feedRowHeightsRef.current = ([...feed.querySelectorAll('.feed-item')] as HTMLElement[])
+            .map((row) => Math.ceil(row.getBoundingClientRect().height));
+          feedHeightsSignatureRef.current = signature;
+          const fit = computeFit(targetHeight);
+          setVisibleFeedCount((prev) => (prev === fit ? prev : fit));
+        });
+        return;
+      }
+      const fit = computeFit(targetHeight);
+      setVisibleFeedCount((prev) => (prev === fit ? prev : fit));
     };
-    const ro = new ResizeObserver(() => sync());
+    const ro = new ResizeObserver(() => {
+      // resize 拖动会连续触发；等宽度稳定后再测量，避免拖动期间反复全量渲染。
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
+      debounceTimer = setTimeout(() => { if (!cancelled) sync(); }, 120);
+    });
     ro.observe(opps);
     ro.observe(rail);
     sync();
-    return () => ro.disconnect();
-  }, [primary?.id, displayItems.length, sources.length, runView.blockers.length, task?.status, sources.map((item) => item.id).join('|'), feedSources.length, visibleFeedCount]);
+    return () => { cancelled = true; clearTimeout(debounceTimer ?? undefined); ro.disconnect(); };
+  }, [primary?.id, displayItems.length, sources.map((item) => item.id).join('|'), runView.blockers.length, task?.status, feedSources.length]);
 
   useEffect(() => {
     let active = true;
