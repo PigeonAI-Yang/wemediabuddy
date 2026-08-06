@@ -56,3 +56,47 @@ test('Owner account mismatch leaves durable binding and platform accounts byte-f
     await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });
+
+test('Owner verify login failure returns verified:false without fake success', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-owner-login-'));
+  const rootPath = path.join(directory, 'root');
+  const databasePath = path.join(rootPath, 'wmb.db');
+  const registryPath = path.join(directory, 'installation', 'browser-config.json');
+  let database;
+  try {
+    await mkdir(rootPath, { recursive: true });
+    const registry = openBrowserProfileRegistry(registryPath);
+    migrateDatabase(databasePath).close();
+    writeRootWorkspaceId(rootPath, 'workspace-owner');
+    database = migrateDatabase(databasePath);
+    initializeWorkspaceBrowserBinding(database, registry.defaultProfileId);
+    database.close();
+    database = null;
+
+    const owner = createBrowserProfileOwner({
+      registryPath,
+      relaunchCurrentWorkspace: async (apply) => apply(),
+      stopBrowserSessions: async () => {},
+      setBrowser: () => {},
+      identifyAccount: async () => {
+        throw Object.assign(new Error('微信公众号尚未登录。'), { code: 'BROWSER_NEEDS_USER' });
+      }
+    });
+    const result = await owner.verify(rootPath, {
+      workspaceId: 'workspace-owner',
+      expectedBindingRevision: 1,
+      expectedRegistryRevision: registry.revision,
+      platform: 'wechat'
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.relaunching, false);
+    assert.match(result.error.message, /尚未登录/);
+    database = migrateDatabase(databasePath);
+    const binding = database.prepare("SELECT state, error_code AS errorCode FROM workspace_browser_bindings WHERE id='effective'").get();
+    assert.equal(binding.state, 'needs_user');
+    assert.equal(binding.errorCode, 'BROWSER_NEEDS_USER');
+  } finally {
+    database?.close();
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
+});

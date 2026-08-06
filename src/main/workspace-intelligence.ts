@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,7 +19,7 @@ import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runne
 import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { preparePiExtension } from './pi-extension.ts';
-import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';
+import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
@@ -26,6 +27,7 @@ import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager
 import { requireWorkspaceProfile, type WorkspaceProfileV1 } from './workspace-profiles.ts';
 import type { IntelligenceModule } from './intelligence-channels.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
+import type { TaskReadyGrantHook } from './task-grants.ts';
 
 type IntelligenceInput = {
   dataRootPath: string; piConfigPath?: string;
@@ -35,7 +37,7 @@ type IntelligenceInput = {
   onEvent?: (event: Record<string, unknown>) => void;
   onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string;
-  onTaskReady?: (taskId: string) => void;
+  onTaskReady?: TaskReadyGrantHook;
   modules?: IntelligenceModule[];
   activeRuntime?: ActiveWorkspaceRuntime;
 };
@@ -77,9 +79,8 @@ export async function startWorkspaceDailyIntelligence(
     }
     const channels = await startDailyChannelRun(dependency, {
       businessDate: input.businessDate, workspaceId: workspace.value, profileRevision: profile.revision, modules: input.modules,
-      workerLeaseId: input.workerLeaseId
+      workerLeaseId: input.workerLeaseId, onTaskReady: input.onTaskReady
     } satisfies DailyChannelInput);
-    input.onTaskReady?.(channels.task.id);
     if (!channels.shouldRunJudgment) return { task: channels.task, reused: channels.reused };
   } finally { close(); }
   if (profile.intelligencePackId === 'wemedia-intelligence-engine') return runners.ai ? runners.ai(input) : startDailyIntelligence(input);
@@ -90,7 +91,7 @@ export async function startWorkspaceDailyIntelligence(
 async function startLaneDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
   const { dependency, database, close } = workspaceDependency(input);
   const lane = profile.intelligencePackId;
-  const startRequestId = `daily_intelligence:${input.businessDate}:${profile.profileId}:${profile.revision}:start`;
+  const startRequestId = `daily_intelligence:${input.businessDate}:${profile.profileId}:start:${randomUUID()}`;
   try {
     const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
@@ -99,6 +100,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
     const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, schedulerContext(lane, startRequestId, undefined, input.workerLeaseId));
     const task = started.task;
     if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
+    const grantId = await input.onTaskReady?.(task.id) ?? null;
     const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
     await dispatchUpdateAgentTaskPhase(dependency, task.id, task.phase, { piSessionId }, schedulerContext(lane, `${task.id}:phase:session:${piSessionId}`, task.id, input.workerLeaseId));
     const layout = await ensurePiConversationLayout(input.dataRootPath);
@@ -113,7 +115,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
       '--session', path.join(layout.agentDir, 'sessions', `${piSessionId}.jsonl`),
       '--skill', installedSkill, '-e', extensionPath, '--provider', 'wmb-api', '--model', config.model,
-      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前工作空间是${profile.displayName}；赛道判断只使用 ${profile.intelligencePackId}。当前 taskId=${task.id}；当前 Pi workerLeaseId=${input.workerLeaseId ?? 'unavailable'}。写业务事实必须使用这两个值和 Owner 已签发的精确 task grant。`
+      '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId, context: `当前工作空间是${profile.displayName}；赛道判断只使用 ${profile.intelligencePackId}。` })
     ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
     (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
     input.onRuntime?.(runtime);

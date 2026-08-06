@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { CommandDispatchError, createCommandEnvelope, type CommandActorV1, type CommandEnvelopeV1, type CommandReceiptV1 } from './command-dispatcher.ts';
+import { getAgentTask } from './agent-tasks.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 export const TASK_GRANT_ISSUE_COMMAND = 'task_grants.issue';
@@ -149,6 +150,72 @@ export function dispatchRevokeTaskGrant(runtime: ActiveWorkspaceRuntime, input: 
     if (!revoked) throw new CommandDispatchError('TASK_GRANT_NOT_FOUND', 'Task grant 撤销后无法读回。');
     return { data: revoked, entityType: 'task_grant', entityId: revoked.id, beforeRevision: current.revision, afterRevision: revoked.revision, readback: revoked };
   });
+}
+
+export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
+  daily_intelligence: Object.freeze([
+    'agent_tasks.report_progress',
+    'knowledge.record_batch',
+    'knowledge.suggestion_create',
+    'plans.save',
+    'sources.upsert_batch'
+  ]),
+  studio_draft: Object.freeze([
+    'agent_tasks.report_progress',
+    'content.save_version'
+  ]),
+  results_review: Object.freeze([
+    'agent_tasks.report_progress',
+    'knowledge.record_batch',
+    'reviews.save'
+  ])
+} as const);
+
+export const AUTOMATIC_TASK_GRANT_EXPIRY_MS = 4 * 60 * 60_000;
+
+export const AUTOMATIC_TASK_GRANT_WORKERS = Object.freeze([
+  Object.freeze({ type: 'pi', id: 'pi' }),
+  Object.freeze({ type: 'external_agent', id: 'mcp' })
+] as const);
+
+export type TaskReadyGrantHook = (taskId: string) => Promise<string>;
+
+export async function ensureAutomaticTaskGrant(runtime: ActiveWorkspaceRuntime, taskId: string, now = new Date()): Promise<string> {
+  const task = getAgentTask(runtime.database, taskId);
+  if (!task || task.status !== 'running') throw new CommandDispatchError('TASK_NOT_ACTIVE', '无法为非运行中的任务绑定自动授权。');
+  const allowedCommands = AUTOMATIC_TASK_GRANT_SCOPES[task.intent];
+  const active = listTaskGrants(runtime.database, taskId, now, runtime.identity).find((grant) => grant.status === 'active');
+  if (active && sameCommandSet(active.allowedCommands, allowedCommands) && sameWorkerSet(active.workers, AUTOMATIC_TASK_GRANT_WORKERS)) return active.id;
+  if (active) {
+    const revoked = await dispatchRevokeTaskGrant(runtime, {
+      requestId: `automatic-grant:${taskId}:replace:${randomUUID()}`,
+      grantId: active.id,
+      expectedRevision: active.revision
+    });
+    if (!revoked.ok) throw new CommandDispatchError(revoked.error?.code ?? 'TASK_GRANT_REVOKE_FAILED', revoked.error?.message ?? '旧 Task grant 无法撤销。');
+  }
+  const issued = await dispatchIssueTaskGrant(runtime, {
+    requestId: `automatic-grant:${taskId}:${randomUUID()}`,
+    taskId,
+    ownerGoal: `自动授权：完成 ${task.intent} 任务所需的业务事实写入`,
+    allowedCommands: [...allowedCommands],
+    workers: [...AUTOMATIC_TASK_GRANT_WORKERS],
+    relevantContext: { intent: task.intent, businessDate: task.businessDate, automatic: true },
+    expiresAt: new Date(now.getTime() + AUTOMATIC_TASK_GRANT_EXPIRY_MS).toISOString()
+  });
+  if (!issued.ok || !issued.data) throw new CommandDispatchError(issued.error?.code ?? 'TASK_GRANT_ISSUE_FAILED', issued.error?.message ?? '自动 Task grant 无法签发。');
+  return issued.data.id;
+}
+
+function sameCommandSet(actual: readonly string[], expected: readonly string[]): boolean {
+  if (actual.length !== expected.length) return false;
+  const set = new Set(actual);
+  return expected.every((command) => set.has(command));
+}
+
+function sameWorkerSet(actual: readonly TaskGrantWorker[], expected: readonly TaskGrantWorker[]): boolean {
+  if (actual.length !== expected.length) return false;
+  return expected.every((worker) => actual.some((item) => item.type === worker.type && item.id === worker.id));
 }
 
 export function assertTaskGrantForEnvelope(

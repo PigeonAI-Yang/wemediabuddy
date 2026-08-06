@@ -38,20 +38,17 @@ import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { dispatchRecoverInterruptedPublications } from './publication-commands.ts';
 import { dispatchRecoverRunningMetricJobs, dispatchSchedulePublishedPublicationMetricJobs } from './metric-commands.ts';
-import { registerTaskGrantIpc } from './ipc-task-grants';
+import { ensureAutomaticTaskGrant } from './task-grants.ts';
 import { registerExecutionGrantIpc } from './ipc-execution-grants';
 import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
 import { visiblePiPrompt } from './pi-persistence';
 import { registerSettingsConfigIpc } from './ipc-settings-config';
 import { registerPiDockIpc } from './ipc-pi-dock';
-import { registerXListIpc } from './ipc-x-lists';
-import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
+import { registerXListIpc } from './ipc-x-lists'; import { dispatchRecoverOrphanedXListOperations } from './x-list-business-command'; import { activeXListOperationIds } from './x-list-execution'; import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
-import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals';
-import { createWorkspaceConfirmation } from './workspace-confirmation';
-import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session';
-import { createBrowserProfileOwner } from './browser-profile-owner';
+import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals'; import { createWorkspaceConfirmation } from './workspace-confirmation';
+import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session'; import { createBrowserProfileOwner } from './browser-profile-owner';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
   {
@@ -82,7 +79,7 @@ async function uiCommandResult<T>(work: () => Promise<T>): Promise<{ ok: true; d
     return { ok: false, data: null, error: { code: typeof value?.code === 'string' ? value.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error), ...(value?.details ? { details: value.details } : {}) } };
   }
 }
-async function withRuntimeWorker<T>(taskId: string | null, onEvent: (event: Record<string, unknown>) => void, work: (hooks: { workerLeaseId: string; onTaskReady: (taskId: string) => void; onRuntime: (worker: PiRpcSupervisor) => void; onEvent: (event: Record<string, unknown>) => void }) => Promise<T>): Promise<T> {
+async function withRuntimeWorker<T>(taskId: string | null, onEvent: (event: Record<string, unknown>) => void, work: (hooks: { workerLeaseId: string; onTaskReady: (taskId: string) => Promise<string>; onRuntime: (worker: PiRpcSupervisor) => void; onEvent: (event: Record<string, unknown>) => void }) => Promise<T>): Promise<T> {
   const runtime = activeRuntime;
   if (!runtime) throw new Error('当前工作空间运行时不可用。');
   const lease = runtime.acquireWorkerLease(taskId);
@@ -91,7 +88,7 @@ async function withRuntimeWorker<T>(taskId: string | null, onEvent: (event: Reco
   try {
     return await work({
       workerLeaseId: lease.leaseId,
-      onTaskReady: (value) => { runtime.bindWorkerTask(lease, value); },
+      onTaskReady: async (value) => { runtime.bindWorkerTask(lease, value); return ensureAutomaticTaskGrant(runtime, value); },
       onRuntime: (value) => { worker = value; },
       onEvent: (event) => { runtime.guardLease(lease, () => onEvent(event)); }
     });
@@ -157,6 +154,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   activeRuntime = runtime;
   try {
     await dispatchRecoverInterruptedPublications(runtime);
+    await dispatchRecoverOrphanedXListOperations(runtime, activeXListOperationIds);
     await dispatchRecoverInterruptedAgentTasks(runtime);
     await dispatchRecoverRunningMetricJobs(runtime);
     await dispatchSchedulePublishedPublicationMetricJobs(runtime);
@@ -186,7 +184,12 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
   stopRuntime: async () => { const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
-  relaunch: () => { app.relaunch(); app.quit(); }
+  relaunch: async (dataRoot) => {
+    // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
+    if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
+    await refreshRuntime(dataRoot);
+    for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.reloadIgnoringCache();
+  }
 });
 const browserProfileOwner = createBrowserProfileOwner({
   registryPath: browserRegistryPath,
@@ -390,8 +393,14 @@ app.whenReady().then(async () => {
     })).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; }).catch((error) => {
       coordinatorError = error; broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) }); return null;
     }).finally(() => dailyRuns.delete(runKey));
-    const task = getActiveAgentTask(runtime.database, 'daily_intelligence', businessDate) ?? getLatestAgentTask(runtime.database, 'daily_intelligence', businessDate);
-    if (!task || (task.id === previous?.id && !active)) {
+    // Task is created early in the channel run. Poll briefly instead of awaiting full scan.
+    let task = getActiveAgentTask(runtime.database, 'daily_intelligence', businessDate) ?? getLatestAgentTask(runtime.database, 'daily_intelligence', businessDate);
+    const startedAt = Date.now();
+    while ((!task || (task.id === previous?.id && !active && task.status !== 'running')) && Date.now() - startedAt < 2_500) {
+      await new Promise<void>((resolve) => { setTimeout(resolve, 40); });
+      task = getActiveAgentTask(runtime.database, 'daily_intelligence', businessDate) ?? getLatestAgentTask(runtime.database, 'daily_intelligence', businessDate);
+    }
+    if (!task || (task.id === previous?.id && !active && task.status !== 'running')) {
       const result = await run;
       if (result) return { ok: true, data: result, error: null };
       const message = coordinatorError instanceof Error ? coordinatorError.message : coordinatorError ? String(coordinatorError) : '每日情报任务未创建。';
@@ -455,19 +464,9 @@ app.whenReady().then(async () => {
       return { ok: false, data: null, error: { code: 'RESULTS_REVIEW_FAILED', message: messageText } };
     }
   });
-  ipcMain.handle('settings:open-logs', async () => {
-    const dataRoot = await loadSelectedDataRoot();
-    if (!dataRoot) throw new Error('请先选择数据根目录。');
-    const error = await shell.openPath(path.join(dataRoot.path, 'logs'));
-    if (error) throw new Error(error);
-  });
-  ipcMain.handle('link:open', async (_event, value: string) => {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('只允许打开网页链接。');
-    await shell.openExternal(url.toString());
-  });
+  ipcMain.handle('settings:open-logs', async () => { const dataRoot = await loadSelectedDataRoot(); if (!dataRoot) throw new Error('请先选择数据根目录。'); const error = await shell.openPath(path.join(dataRoot.path, 'logs')); if (error) throw new Error(error); });
+  ipcMain.handle('link:open', async (_event, value: string) => { const url = new URL(value); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('只允许打开网页链接。'); await shell.openExternal(url.toString()); });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
-  registerTaskGrantIpc(ipcMain, () => activeRuntime);
   registerExecutionGrantIpc(ipcMain, () => activeRuntime);
   registerPublishingResultsIpc({ getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('发布浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); } });
  registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals, getActiveRuntime: () => activeRuntime }); registerXListIpc({ loadSelectedDataRoot, getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('X 浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); }, wakeObservationScheduler: () => activeRuntime?.getScheduler<XObservationScheduler>()?.wake() }); registerXhsIpc({ loadSelectedDataRoot, getXhs: currentXhs, setXhs: (runtime) => { activeRuntime?.setXhs(runtime); }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, currentXhs()) });

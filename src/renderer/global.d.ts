@@ -271,10 +271,6 @@ declare global {
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
       updateAgentTaskPhase(input: { id: string; phase: string; piSessionId?: string | null }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      issueTaskGrant(input: { requestId?: string; taskId: string; ownerGoal: string; allowedCommands: string[]; workers: Array<{ type: 'pi' | 'external_agent'; id: string }>; relevantContext?: Record<string, unknown>; expiresAt: string }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      revokeTaskGrant(input: { requestId?: string; grantId: string; expectedRevision: number }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      getTaskGrant(grantId: string): Promise<unknown>;
-      listTaskGrants(taskId: string): Promise<unknown[]>;
       issueExecutionGrant(input: { requestId?: string; taskId?: string; taskGrantId?: string; command: 'intelligence_channels.proposal_apply' | 'x_lists.operation_execute' | 'publication.editor_prepare_execute'; inputHash: string; boundIdentity: Record<string, unknown>; targetActor: { type: 'owner_ui'; id: 'renderer' }; browserProfileId?: string; bindingRevision?: number; expectedAccount?: string; allowedTransition: string; requiredReadback: Record<string, unknown>; expiresAt: string }): Promise<{ version: 'CommandReceiptV1'; ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       completeAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       failAgentTask(input: { id: string; errorCode: string; errorMessage: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;

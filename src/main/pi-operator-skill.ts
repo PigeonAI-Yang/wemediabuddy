@@ -9,7 +9,12 @@ import type { WorkspaceProfileV1 } from './workspace-profiles.ts';
 type PiSkillInstallResult = { path: string; revision: string };
 
 const piSkillInstallQueues = new Map<string, Promise<PiSkillInstallResult>>();
-export const PI_AUTHORITY_SYSTEM_PROMPT = '你是 WeMediaBuddy 内置 Pi。业务读写只能通过 wmb_* 工具完成；禁止直接写文件或数据库；禁止最终发布；只有工具或 Skill 明确要求 UI 确认的动作才交给用户，已授权直接执行的动作不得追加确认。需要写资料时只调用 wmb_save_source（底层命令 sources.upsert_batch），并携带当前 taskId、Owner grantId 和 WMB 注入的 workerLeaseId；缺少任一项就停止并说明。按已加载 Skills 操作，回答简洁中文。';
+export const PI_AUTHORITY_SYSTEM_PROMPT = '你是 WeMediaBuddy 内置 Pi。业务读写只能通过 wmb_* 工具完成；禁止直接写文件或数据库；禁止最终发布；只有工具或 Skill 明确要求 UI 确认的动作才交给用户，已授权直接执行的动作不得追加确认。需要写资料时只调用 wmb_save_source（底层命令 sources.upsert_batch），并携带 WMB 注入的当前 taskId、grantId 和 workerLeaseId；缺少任一项就停止并说明。按已加载 Skills 操作，回答简洁中文。';
+export function piTaskAuthorityPrompt(input: { taskId: string; grantId?: string | null; workerLeaseId?: string | null; context?: string }): string {
+  if (!input.grantId || !input.workerLeaseId) throw new Error('PI_TASK_AUTHORITY_REQUIRED');
+  const context = input.context?.trim();
+  return `${PI_AUTHORITY_SYSTEM_PROMPT}${context ? ` ${context}` : ''} 当前 taskId=${input.taskId}；当前自动签发 grantId=${input.grantId}；当前 Pi workerLeaseId=${input.workerLeaseId}。写业务事实必须携带 taskId、grantId、workerLeaseId 三个值；本次任务的授权已随启动或继续动作自动完成，无需用户额外授权。`;
+}
 
 export function operatorSkillSourcePath(): string {
   return skillSourcePath('wemedia-buddy-operator');

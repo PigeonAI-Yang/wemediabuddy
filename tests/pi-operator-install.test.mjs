@@ -103,7 +103,7 @@ test('Pi system prompts keep detailed operating playbooks in the shared Skill', 
   const prompts = sources.flatMap((source) => [...source.matchAll(/['"]--append-system-prompt['"]\s*,\s*([^,\]\r\n]+)/g)].map((match) => match[1]));
   assert.equal(prompts.length, 5);
   assert.doesNotMatch(prompts.join('\n'), /wmb_(?:prepare|create|save|get|list|read)_[a-z0-9_]+/);
-  assert.equal(prompts.every((prompt) => prompt.includes('PI_AUTHORITY_SYSTEM_PROMPT')), true);
+  assert.equal(prompts.every((prompt) => prompt.includes('PI_AUTHORITY_SYSTEM_PROMPT') || prompt.includes('piTaskAuthorityPrompt(')), true);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /禁止直接写文件或数据库/);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /禁止最终发布/);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /只有工具或 Skill 明确要求 UI 确认/);

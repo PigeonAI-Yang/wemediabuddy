@@ -5,7 +5,7 @@ import { readXListDetail, readXListIndex, readXListMembers, readXListPostDetail,
 import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import { selectedXListBrowser, type CurrentXListContext } from './x-list-context.ts';
 import { activeXListOperationIds, captureXListOperationSnapshot, readBoundXListTimeline, runAcceptedXListOperation } from './x-list-execution.ts';
-import { getXListBinding, getXListOperation, listXListBindings, readXListExecutionAuthority, type PrepareXListOperationInput } from './x-lists.ts';
+import { getXListBinding, getXListOperation, listXListBindings, listXListOperations, readXListExecutionAuthority, type PrepareXListOperationInput } from './x-lists.ts';
 import { readXListTimelineCache, summarizeXListTimelineCache } from './x-list-timeline-cache.ts';
 import { listSourcesByFeed } from './sources.ts';
 import { XListNeedsUserError } from './platforms/x-list-session.ts';
@@ -22,7 +22,6 @@ import {
   dispatchClearXListTimelineCache,
   dispatchFinishXListOperation,
   dispatchLeaseXListOperation,
-  dispatchListXListOperations,
   dispatchPersistBoundXListTimeline,
   dispatchPersistXListIndex,
   dispatchPersistXListPost,
@@ -134,7 +133,7 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
   });
   ipcMain.handle('x-lists:get-observation', async (_event, input: { sessionId: string }) => readXObservationFromRuntime(requiredRuntime(getActiveRuntime), input.sessionId));
   ipcMain.handle('x-lists:stop-observation', async (_event, input: { sessionId: string }) => dispatchStopXObservation(requiredRuntime(getActiveRuntime), input.sessionId));
-  ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => dispatchListXListOperations(requiredRuntime(getActiveRuntime), input, activeXListOperationIds));
+  ipcMain.handle('x-lists:list-operations', async (_event, input: { accountKey?: string; limit?: number } = {}) => listXListOperations(requiredRuntime(getActiveRuntime).database, input));
   ipcMain.handle('x-lists:get-operation', async (_event, operationId: string) => getXListOperation(requiredRuntime(getActiveRuntime).database, operationId));
   ipcMain.handle('x-lists:prepare', async (_event, input: PrepareXListOperationInput) => {
     const runtime = requiredRuntime(getActiveRuntime);

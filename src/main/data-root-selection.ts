@@ -23,7 +23,7 @@ export function createDataRootSelection(input: {
   closeMutationGate: () => Promise<void>;
   openMutationGate: () => void;
   stopRuntime: () => Promise<void>;
-  relaunch: () => void;
+  relaunch: (dataRoot?: DataRoot) => void | Promise<void>;
 }) {
   let switching = false;
   const dataRootConfigPath = () => path.join(input.userDataPath(), 'data-root.json');
@@ -111,7 +111,7 @@ export function createDataRootSelection(input: {
       await beginWorkspaceSwitch({ registryPath: registryPath(), targetWorkspaceId });
       journalStarted = true;
       await input.stopRuntime();
-      input.relaunch();
+      await input.relaunch();
     } catch (error) {
       if (journalStarted) {
         await rollbackWorkspaceSwitch(registryPath());
@@ -132,7 +132,7 @@ export function createDataRootSelection(input: {
       const result = await apply();
       committed = true;
       await input.stopRuntime();
-      input.relaunch();
+      await input.relaunch(current);
       return result;
     } catch (error) {
       if (committed) await input.refreshRuntime(current);

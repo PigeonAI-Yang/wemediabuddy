@@ -5,8 +5,8 @@
   "executable": "j:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\WeMediaBuddy.exe",
   "receiptPath": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-4809-package-readback.json",
   "roots": {
-    "ai": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-zLQ1v4\\parent\\ai-root",
-    "uk": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-zLQ1v4\\parent\\uk-root"
+    "ai": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-w9sKKK\\parent\\ai-root",
+    "uk": "J:\\Users\\yangda01\\Temp\\wmb-eval-029-package-w9sKKK\\parent\\uk-root"
   },
   "workspaces": {
     "ai": "eval029.workspace.ai",
@@ -14,10 +14,10 @@
     "switchedByOwnerIpc": true
   },
   "defaultProfile": {
-    "id": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+    "id": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
     "sharedAtStartup": true,
-    "initialAiBinding": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
-    "initialUkBinding": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c"
+    "initialAiBinding": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
+    "initialUkBinding": "08a03685-e6d7-4410-98fa-a7ac82ff5165"
   },
   "expectedAccounts": {
     "ai": {
@@ -27,8 +27,8 @@
         "displayName": "EVAL-029 AI expected account",
         "loginState": "authenticated",
         "evidenceUrl": "https://example.com/eval-029/ai/expected-account",
-        "accountRevision": 1,
-        "browserProfileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+        "accountRevision": 2,
+        "browserProfileId": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
         "browserBindingRevision": 1,
         "verifiedAt": "2026-08-05T09:29:00.000Z"
       }
@@ -40,8 +40,8 @@
         "displayName": "EVAL-029 UK expected account",
         "loginState": "authenticated",
         "evidenceUrl": "https://example.com/eval-029/uk/expected-account",
-        "accountRevision": 1,
-        "browserProfileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+        "accountRevision": 2,
+        "browserProfileId": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
         "browserBindingRevision": 1,
         "verifiedAt": "2026-08-05T09:29:00.000Z"
       }
@@ -51,8 +51,8 @@
   },
   "taskGrant": {
     "requestId": "eval029.package.owner-grant",
-    "id": "e733a315-b5a1-49cf-9505-54898233fa98",
-    "taskId": "d184bb8e-4b07-4687-9310-02797fde34b8",
+    "id": "cf7e9c53-197b-466d-bd71-b667796b207a",
+    "taskId": "53cf17fb-85fc-4e10-a757-25c51b1a9ff8",
     "allowedCommands": [
       "sources.upsert_batch"
     ],
@@ -66,15 +66,15 @@
         "id": "mcp"
       }
     ],
-    "mcpGetReadback": "e733a315-b5a1-49cf-9505-54898233fa98",
+    "mcpGetReadback": "cf7e9c53-197b-466d-bd71-b667796b207a",
     "mcpListReadback": [
-      "e733a315-b5a1-49cf-9505-54898233fa98"
+      "cf7e9c53-197b-466d-bd71-b667796b207a"
     ]
   },
   "mcpReplayConflict": {
     "requestId": "eval029.package.external-source",
-    "sourceId": "48f7f07f-8892-4ef3-a1e9-f0b4106eef55",
-    "firstReceiptId": "d3336058-ab95-4a33-b85b-41ebba932480",
+    "sourceId": "3c9ec21e-fbea-4ea5-9645-a17661d122dc",
+    "firstReceiptId": "b51f6a58-2f35-4d3a-9f31-2fec1951c472",
     "replayByteEquivalent": true,
     "conflictCode": "REQUEST_REPLAY_CONFLICT",
     "ukSourceVisible": false,
@@ -82,24 +82,205 @@
     "aiReceiptCount": 1
   },
   "piContinuation": {
-    "modelExecuted": false,
-    "evidence": "Pi alias availability is covered by tests/pi-extension.test.mjs; this package run does not claim a model invocation or Pi write."
+    "modelExecuted": true,
+    "intent": "studio_draft",
+    "businessDate": "2026-08-06",
+    "projectId": "eval029.ai.project",
+    "configuredModel": "deepseek-v4-flash",
+    "task": {
+      "id": "f1310790-1fea-46d9-9450-3f7087c29aa7",
+      "status": "succeeded",
+      "phase": "completed",
+      "errorCode": null,
+      "errorMessage": null
+    },
+    "grant": {
+      "requestId": "eval029.package.pi-continuation-grant",
+      "id": "70c906d3-b15b-4adc-8a1b-2118872d4150",
+      "taskId": "f1310790-1fea-46d9-9450-3f7087c29aa7",
+      "taskIdMatches": true,
+      "allowedCommands": [
+        "content.save_version"
+      ],
+      "workers": [
+        {
+          "type": "pi",
+          "id": "pi"
+        },
+        {
+          "type": "external_agent",
+          "id": "mcp"
+        }
+      ],
+      "status": "active",
+      "expiresAt": "2026-08-05T23:04:45.888Z",
+      "mcpGetReadback": "70c906d3-b15b-4adc-8a1b-2118872d4150",
+      "mcpListReadback": [
+        "70c906d3-b15b-4adc-8a1b-2118872d4150"
+      ]
+    },
+    "leaseBound": {
+      "sameTaskGrant": true,
+      "runnerOrdering": {
+        "startStudioDraft": {
+          "onTaskReadyBeforePhaseTransition": true,
+          "onTaskReadyBeforeRuntimeLaunch": true,
+          "exactlyOnce": true
+        },
+        "startResultsReview": {
+          "onTaskReadyBeforePhaseTransition": true,
+          "onTaskReadyBeforeRuntimeLaunch": true,
+          "exactlyOnce": true
+        }
+      }
+    },
+    "toolEvents": {
+      "total": 6073,
+      "runningModelEvents": 1,
+      "deltaEvents": 258,
+      "saveToolInvocationCount": 1,
+      "saveToolResultCount": 1,
+      "saveToolSucceeded": true,
+      "saveToolNames": [
+        "wmb_save_core_version"
+      ],
+      "otherToolNames": [
+        "wmb_get_content",
+        "wmb_get_workbench",
+        "wmb_get_agent_task",
+        "wmb_list_task_grants",
+        "bash",
+        "wmb_get_current_workspace",
+        "wmb_get_task_grant"
+      ]
+    },
+    "readback": {
+      "before": {
+        "projectRevision": 1,
+        "versionCount": 1,
+        "latestVersionId": "eval029.ai.content-version",
+        "latestVersionNumber": 1
+      },
+      "after": {
+        "projectRevision": 2,
+        "versionCount": 2,
+        "latestVersionId": "53f82fd3-a4f4-409d-9781-e23fdec69fa5",
+        "latestVersionNumber": 2,
+        "savedBodyLength": 896
+      },
+      "newCoreVersionSaved": true
+    },
+    "note": "Real configured Pi model ran under a live worker lease; evidence comes only from packaged WMB APIs and Pi events. The installed pi-api-config.json was copied into temp userData without reading or logging its contents; no final publication is claimed."
+  },
+  "preciseGrantNegativeMatrix": {
+    "prevalidationCases": [
+      {
+        "name": "task-scope-mismatch",
+        "requestId": "eval029.package.precise.scope-mismatch",
+        "code": "EXECUTION_GRANT_SCOPE_MISMATCH",
+        "grantCountUnchanged": true,
+        "receiptCountUnchanged": true,
+        "zeroWrite": true
+      },
+      {
+        "name": "unsupported-command",
+        "requestId": "eval029.package.precise.unsupported-command",
+        "code": "EXECUTION_GRANT_SCOPE_MISMATCH",
+        "grantCountUnchanged": true,
+        "receiptCountUnchanged": true,
+        "zeroWrite": true
+      },
+      {
+        "name": "non-owner-target",
+        "requestId": "eval029.package.precise.non-owner",
+        "code": "EXECUTION_GRANT_IDENTITY_MISMATCH",
+        "grantCountUnchanged": true,
+        "receiptCountUnchanged": true,
+        "zeroWrite": true
+      },
+      {
+        "name": "expired-timestamp",
+        "requestId": "eval029.package.precise.expired",
+        "code": "EXECUTION_GRANT_EXPIRED",
+        "grantCountUnchanged": true,
+        "receiptCountUnchanged": true,
+        "zeroWrite": true
+      }
+    ],
+    "controlLifecycle": {
+      "requestId": "eval029.package.precise.control-issue",
+      "grantId": "08728678-d540-4962-be2f-34134f1e4218",
+      "beforeStatus": "active",
+      "afterStatus": "revoked",
+      "revisionBefore": 1,
+      "revisionAfter": 2
+    },
+    "dispatchedRejections": [
+      {
+        "name": "revoke-revision-conflict",
+        "requestId": "eval029.package.precise.revision-conflict",
+        "code": "EXECUTION_GRANT_REVISION_CONFLICT",
+        "receiptStatus": "error",
+        "sideEffectState": "not_started",
+        "grantRemainedActive": true
+      },
+      {
+        "name": "revoked-reuse",
+        "requestId": "eval029.package.precise.revoked-reuse",
+        "code": "EXECUTION_GRANT_REVOKED",
+        "receiptStatus": "error",
+        "sideEffectState": "not_started"
+      }
+    ],
+    "grantCountBefore": 0,
+    "grantCountAfter": 1,
+    "listReadbackIds": [
+      "08728678-d540-4962-be2f-34134f1e4218"
+    ],
+    "ukIsolation": {
+      "controlGrantVisible": false
+    }
+  },
+  "publicationSnapshotReconciliation": {
+    "snapshotRequestId": "eval029.package.publication-snapshot",
+    "platformVersionId": "eval029.ai.platform-version",
+    "publicationId": "dd822730-d099-4bec-a990-e4d24f4e25d5",
+    "snapshotId": "c91bc356-dd43-4e40-a6f6-ddbdad526b4a",
+    "operationId": "97fdc412-3a7d-49bf-95cf-ae1ffe203d50",
+    "operationStateBefore": "prepared",
+    "operationStateAfter": "prepared",
+    "operationRevisionUnchanged": true,
+    "snapshotImmutableAcrossProfileRelaunch": true,
+    "authorizeRejectedCode": "BROWSER_NEEDS_USER",
+    "noExecutionGrantAdded": true,
+    "noFinalPublication": true,
+    "identityDelta": {
+      "profileIdBefore": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
+      "profileIdAfter": "426f2c4e-4a19-463d-b85a-8c34ae532dcb",
+      "bindingRevisionBefore": 1,
+      "bindingRevisionAfter": 2,
+      "runtimeEpochChanged": true
+    },
+    "ukIsolation": {
+      "preciseGrantVisible": false,
+      "publicationSnapshotVisible": false
+    }
   },
   "ownerProfileRelaunch": {
     "command": "createBrowserProfile",
-    "cdpPort": 56126,
+    "cdpPort": 51467,
     "before": {
-      "profileId": "01d80f39-a5c6-4399-98dd-b0cef19b4a9c",
+      "profileId": "08a03685-e6d7-4410-98fa-a7ac82ff5165",
       "bindingRevision": 1,
-      "runtimeEpoch": "1f057f43-feb4-4f25-ba3b-d6ee85ec5988",
-      "mcpUrl": "http://127.0.0.1:56131/mcp",
+      "runtimeEpoch": "bb656c3e-34e5-4998-8b1b-adc8bb605134",
+      "mcpUrl": "http://127.0.0.1:51483/mcp",
       "registryRevision": 1
     },
     "after": {
-      "profileId": "47f69090-cbf2-4e2b-892b-55b781f9bfe7",
+      "profileId": "426f2c4e-4a19-463d-b85a-8c34ae532dcb",
       "bindingRevision": 2,
-      "runtimeEpoch": "a031cebc-bbc4-41ae-8c90-47b05e82fe11",
-      "mcpUrl": "http://127.0.0.1:51143/mcp"
+      "runtimeEpoch": "4840e758-8171-4b49-936d-964b891c452c",
+      "mcpUrl": "http://127.0.0.1:57043/mcp"
     },
     "oldMcpRejected": true
   },
@@ -107,19 +288,19 @@
     "command": "window.wmb.switchWorkspace",
     "from": {
       "workspaceId": "eval029.workspace.ai",
-      "runtimeEpoch": "a031cebc-bbc4-41ae-8c90-47b05e82fe11",
-      "mcpUrl": "http://127.0.0.1:51143/mcp"
+      "runtimeEpoch": "4840e758-8171-4b49-936d-964b891c452c",
+      "mcpUrl": "http://127.0.0.1:57043/mcp"
     },
     "to": {
       "workspaceId": "eval029.workspace.uk",
-      "runtimeEpoch": "3887123f-f8cc-4eb9-b829-5e15f5c356cb",
-      "mcpUrl": "http://127.0.0.1:51167/mcp"
+      "runtimeEpoch": "ecd53f2b-ed87-4a9d-be9a-8d73f1873113",
+      "mcpUrl": "http://127.0.0.1:61574/mcp"
     },
     "oldMcpRejected": true
   },
   "legacyBytePreservation": {
-    "pointerSha256": "7b66f2a35997ced3a4b69117fa6098888ca259f6aa38dcb2f98c082e47f6b4d1",
-    "sessionSha256": "e59bee4a223eed58841d8806213708ab8ba4ed5869a1454ea452284c797f9dc7",
+    "pointerSha256": "846c876f91d717a98165355877e1bbe3abab051ba9f1036e734519b279e5239d",
+    "sessionSha256": "dde46b84acda512c4cdccf4c6f54f00b7361d7fa5516373441e384280d6031b1",
     "browserSentinelSha256": "c2d8c64ee9d7cbe57f975da864435859380791d9f31f0f0e08137a9bc0dce70a",
     "browserConfig": "{\"accountKey\":\"@eval029_shared_account_label\",\"profile\":\"legacy-root-local\",\"readOnlyExpectation\":true}",
     "canonicalConversationId": "eval029.ai.legacy-conversation",
@@ -137,8 +318,8 @@
   "inactiveRootDigest": {
     "root": "ai",
     "observedMs": 2500,
-    "before": "18de2401402a8e3d12946113a3f17a781347542abbd6ff5b23e280b6117b56eb",
-    "after": "18de2401402a8e3d12946113a3f17a781347542abbd6ff5b23e280b6117b56eb",
+    "before": "04e7984ee074f063ba75a84895ef207726a2aacbdb788e6678915f0a18890eec",
+    "after": "04e7984ee074f063ba75a84895ef207726a2aacbdb788e6678915f0a18890eec",
     "unchanged": true
   },
   "manualFinalPublicationBoundary": "Final platform publication remains an explicit human action; no package step publishes content.",

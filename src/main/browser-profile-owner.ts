@@ -64,8 +64,11 @@ export function createBrowserProfileOwner(dependencies: OwnerDependencies): Brow
   };
   const identify = async (profile: BrowserProfile, platform: OwnerBrowserPlatform): Promise<AccountIdentity> => {
     if (dependencies.identifyAccount) return dependencies.identifyAccount(profile, platform);
+    await dependencies.stopBrowserSessions();
+    dependencies.setBrowser(null);
     const runtime = await startBrowser(profile, { mode: 'visible' });
     dependencies.setBrowser(runtime);
+    // Keep the managed browser open on failure so QR/login pages remain visible.
     return platform === 'x' ? identifyXAccount(runtime.cdpUrl) : identifyWechatAccount(runtime.cdpUrl);
   };
 
@@ -94,7 +97,8 @@ export function createBrowserProfileOwner(dependencies: OwnerDependencies): Brow
         return { profile, binding, relaunching: true };
       } finally { database.close(); }
     }),
-    verify: async (rootPath, input) => dependencies.relaunchCurrentWorkspace(async () => {
+    // Verify only mutates binding state; do not kill Vite/runtime like create/rebind.
+    verify: async (rootPath, input) => {
       if (openBrowserProfileRegistry(dependencies.registryPath).revision !== input.expectedRegistryRevision) throw ownerError('PROFILE_STALE', '浏览器档案注册表已变化。');
       const database = openWorkspaceDatabase(rootPath, input.workspaceId);
       try {
@@ -104,7 +108,7 @@ export function createBrowserProfileOwner(dependencies: OwnerDependencies): Brow
         try {
           const account = await identify(profile, input.platform);
           const verified = markWorkspaceBrowserBindingVerified(database, { profileId: profile.id, expectedBindingRevision: binding.bindingRevision, account });
-          return { verified: true, binding: verified, relaunching: true };
+          return { verified: true, binding: verified, relaunching: false };
         } catch (error) {
           if (errorCode(error) === 'ACCOUNT_MISMATCH') throw error;
           const code = errorCode(error);
@@ -113,10 +117,10 @@ export function createBrowserProfileOwner(dependencies: OwnerDependencies): Brow
             expectedBindingRevision: binding.bindingRevision,
             error: { code, message: errorMessage(error) }
           });
-          return { verified: false, binding: failed, error: { code, message: errorMessage(error) }, relaunching: true };
+          return { verified: false, binding: failed, error: { code, message: errorMessage(error) }, relaunching: false };
         }
       } finally { database.close(); }
-    }),
+    },
     migrateLegacy: async (rootPath, input) => dependencies.relaunchCurrentWorkspace(async () => {
       const database = openWorkspaceDatabase(rootPath, input.workspaceId);
       try {

@@ -1,0 +1,109 @@
+{
+  "stalledAt": "after publication.snapshot_create / before successful createBrowserProfile relaunch waitForWorkspace",
+  "preservedTemp": "J:/Users/yangda01/Temp/wmb-eval-029-package-9O9B23",
+  "aiDb": "J:/Users/yangda01/Temp/wmb-eval-029-package-9O9B23/parent/ai-root/wmb.db",
+  "bindingStillVerifiedOnOldProfile": true,
+  "publicationSnapshotPrepared": true,
+  "createBrowserProfileCompleted": false,
+  "xListOperationsTableEmpty": true,
+  "recoverLoop": {
+    "count": 1134,
+    "first": {
+      "request_id": "ed762be3-3e9f-4b6a-8d71-e927f1c15583",
+      "created_at": "2026-08-05T21:54:07.367Z"
+    },
+    "last": {
+      "request_id": "427643d8-596c-4381-98d2-4fd7a2939288",
+      "created_at": "2026-08-05T22:13:00.374Z"
+    },
+    "intervalApproxSec": 1
+  },
+  "commandHistogram": [
+    {
+      "command": "x_lists.operation_recover",
+      "c": 1134
+    },
+    {
+      "command": "agent_tasks.start",
+      "c": 3
+    },
+    {
+      "command": "execution_grants.revoke",
+      "c": 3
+    },
+    {
+      "command": "agent_tasks.update_phase",
+      "c": 2
+    },
+    {
+      "command": "task_grants.issue",
+      "c": 2
+    },
+    {
+      "command": "agent_tasks.complete",
+      "c": 1
+    },
+    {
+      "command": "agent_tasks.fail",
+      "c": 1
+    },
+    {
+      "command": "agent_tasks.needs_user",
+      "c": 1
+    },
+    {
+      "command": "agent_tasks.recover_interrupted",
+      "c": 1
+    },
+    {
+      "command": "agent_tasks.report_progress",
+      "c": 1
+    },
+    {
+      "command": "content.save_version",
+      "c": 1
+    },
+    {
+      "command": "execution_grants.issue",
+      "c": 1
+    },
+    {
+      "command": "metrics.publication.schedule",
+      "c": 1
+    },
+    {
+      "command": "publication.recover_interrupted",
+      "c": 1
+    },
+    {
+      "command": "publication.snapshot_create",
+      "c": 1
+    },
+    {
+      "command": "sources.upsert_batch",
+      "c": 1
+    },
+    {
+      "command": "x_observation.jobs_recover",
+      "c": 1
+    }
+  ],
+  "profileRelatedReceipts": [],
+  "contentVersions": [
+    {
+      "id": "eval029.ai.content-version",
+      "project_id": "eval029.ai.project",
+      "version_number": 1,
+      "bodyLen": 22,
+      "created_at": "2026-08-05T09:29:00.000Z"
+    },
+    {
+      "id": "f5171c17-42bf-4a7d-8942-173f738054b9",
+      "project_id": "eval029.ai.project",
+      "version_number": 2,
+      "bodyLen": 1156,
+      "created_at": "2026-08-05T21:58:46.810Z"
+    }
+  ],
+  "note": "No x_list_operations rows exist, yet x_lists.operation_recover committed every ~1s and flooded command_receipts (1156 total). Acceptance killed; temp/DB retained."
+}

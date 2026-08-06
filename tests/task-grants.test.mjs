@@ -4,11 +4,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
+import { dispatchCancelAgentTask, dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { createCommandEnvelope } from '../src/main/command-dispatcher.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { dispatchSourceUpsertBatch } from '../src/main/source-commands.ts';
-import { dispatchIssueTaskGrant, dispatchRevokeTaskGrant, getTaskGrant, TASK_INTERNAL_COMMANDS } from '../src/main/task-grants.ts';
+import { AUTOMATIC_TASK_GRANT_EXPIRY_MS, ensureAutomaticTaskGrant, dispatchIssueTaskGrant, dispatchRevokeTaskGrant, getTaskGrant, TASK_INTERNAL_COMMANDS } from '../src/main/task-grants.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
@@ -212,6 +212,67 @@ test('a grant from another root authorizes zero writes', async () => {
     await rm(firstRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     await rm(secondRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
+});
+
+test('ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers', async () => {
+  await withRuntime(async ({ runtime, database }) => {
+    const expectedByIntent = {
+      daily_intelligence: ['agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plans.save', 'sources.upsert_batch'],
+      studio_draft: ['agent_tasks.report_progress', 'content.save_version'],
+      results_review: ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']
+    };
+    for (const [intent, expected] of Object.entries(expectedByIntent)) {
+      const task = (await dispatchStartAgentTask(runtime, {
+        intent, businessDate: '2026-08-05', contextRefs: { workspaceId: runtime.identity.workspaceId }
+      }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: `auto-scope-${intent}` })).task;
+      assert.equal(task.status, 'running');
+      const grantId = await ensureAutomaticTaskGrant(runtime, task.id);
+      const grant = getTaskGrant(runtime.database, grantId);
+      assert.equal(grant.status, 'active');
+      assert.deepEqual([...grant.allowedCommands].sort(), [...expected].sort());
+      assert.deepEqual([...grant.workers], [{ type: 'pi', id: 'pi' }, { type: 'external_agent', id: 'mcp' }]);
+      assert.equal(grant.relevantContext.automatic, true);
+      assert.ok(grant.allowedCommands.every((command) => !command.startsWith('intelligence_channels.') && !command.startsWith('x_lists.')));
+      assert.ok(Date.parse(grant.expiresAt) - Date.parse(grant.issuedAt) >= AUTOMATIC_TASK_GRANT_EXPIRY_MS - 60_000);
+    }
+  });
+});
+
+test('ensureAutomaticTaskGrant reuses an active exact-scope grant and rejects inactive tasks', async () => {
+  await withRuntime(async ({ runtime, database }) => {
+    const task = (await dispatchStartAgentTask(runtime, {
+      intent: 'daily_intelligence', businessDate: '2026-08-05', contextRefs: { workspaceId: runtime.identity.workspaceId }
+    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'auto-reuse-task' })).task;
+    const first = await ensureAutomaticTaskGrant(runtime, task.id);
+    const second = await ensureAutomaticTaskGrant(runtime, task.id);
+    assert.equal(first, second);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM task_grants WHERE task_id=? AND status='active'").get(task.id).count, 1);
+
+    await rejectsCode(() => ensureAutomaticTaskGrant(runtime, 'missing-task-id'), 'TASK_NOT_ACTIVE');
+    await dispatchCancelAgentTask(runtime, task.id, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'auto-cancel-task' });
+    await rejectsCode(() => ensureAutomaticTaskGrant(runtime, task.id), 'TASK_NOT_ACTIVE');
+  });
+});
+
+test('ensureAutomaticTaskGrant revokes and replaces an active mismatched grant', async () => {
+  await withRuntime(async ({ runtime, database }) => {
+    const task = (await dispatchStartAgentTask(runtime, {
+      intent: 'results_review', businessDate: '2026-08-05', contextRefs: { workspaceId: runtime.identity.workspaceId }
+    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'auto-replace-task' })).task;
+    const mismatched = await dispatchIssueTaskGrant(runtime, {
+      requestId: 'mismatched-grant', taskId: task.id, ownerGoal: '手动越权授权',
+      allowedCommands: ['agent_tasks.report_progress', 'reviews.save', 'knowledge.record_batch', 'content.create'],
+      workers: [{ type: 'pi', id: 'pi' }], expiresAt: expiry()
+    });
+    assert.equal(mismatched.ok, true);
+    const grantId = await ensureAutomaticTaskGrant(runtime, task.id);
+    assert.notEqual(grantId, mismatched.data.id);
+    assert.equal(getTaskGrant(runtime.database, mismatched.data.id).status, 'revoked');
+    const grant = getTaskGrant(runtime.database, grantId);
+    assert.deepEqual([...grant.allowedCommands].sort(), ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']);
+    assert.deepEqual([...grant.workers], [{ type: 'pi', id: 'pi' }, { type: 'external_agent', id: 'mcp' }]);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM task_grants WHERE task_id=? AND status='active'").get(task.id).count, 1);
+  });
 });
 
 async function withRuntime(work) {

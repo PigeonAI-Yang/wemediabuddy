@@ -152,7 +152,14 @@ test('all blocked sources persist needs_user before any injected lane runner sta
     });
     assert.equal(binding.ok, true);
     let calls = 0;
-    const result = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
+    let readyCalls = 0;
+    const result = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', onTaskReady: async (taskId) => {
+      const task = getAgentTask(current.database, taskId);
+      if (task?.status !== 'running' || task.phase !== 'starting') {
+        readyCalls += 1;
+        throw Object.assign(new Error('TASK_NOT_ACTIVE: 无法为非运行中的任务绑定自动授权。'), { code: 'TASK_NOT_ACTIVE' });
+      }
+    } }, {
       uk: async () => { calls += 1; throw new Error('lane runner must not start'); }
     });
     assert.equal(result.task.status, 'needs_user');
@@ -161,7 +168,34 @@ test('all blocked sources persist needs_user before any injected lane runner sta
     assert.equal(result.task.progress.processed, 1);
     assert.equal(result.task.progress.failed, 1);
     assert.equal(calls, 0);
+    assert.equal(readyCalls, 0);
     assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count, 1);
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('a stale-context channel start fails truthfully without a task grant', async () => {
+  const current = await makeRoot('wmb-daily-stale-context-');
+  try {
+    const started = startAgentTask(current.database, {
+      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+        workspaceId: current.workspaceId,
+        intelligenceChannels: { workspaceId: 'other-workspace', profileRevision: 1, modules: ['official_web'], sources: [] }
+      }
+    });
+    assert.equal(started.ok, true);
+    let readyCalls = 0;
+    const run = await startDailyChannelRun(current.database, {
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1,
+      onTaskReady: async () => { readyCalls += 1; throw new Error('stale-context task must not bind a grant'); }
+    });
+    assert.equal(run.task.status, 'failed');
+    assert.equal(run.task.errorCode, 'CHANNEL_CONTEXT_STALE');
+    assert.equal(run.shouldRunJudgment, false);
+    assert.equal(readyCalls, 0);
+    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM task_grants WHERE task_id=?').get(run.task.id).count, 0);
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });
@@ -342,7 +376,11 @@ test('a resumed task with one completed source and one newly blocked source runs
     updateAgentTaskPhase(current.database, started.data.id, 'resume_pending');
     setWebsiteSourceEnabled(current.database, { id: blocked.id, enabled: false, expectedRevision: blocked.revision });
     let laneCalls = 0;
-    const routed = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
+    const routed = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', onTaskReady: async (taskId) => {
+      const task = getAgentTask(current.database, taskId);
+      assert.equal(task?.status, 'running', 'grant binds only for a running task');
+      assert.equal(task?.phase, 'resume_pending', 'grant binds before any channel scan progress');
+    } }, {
       uk: async () => {
         laneCalls += 1;
         const channelScanned = getAgentTask(current.database, started.data.id);

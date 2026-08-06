@@ -104,7 +104,8 @@ export function getToday(database: DatabaseSync, planDate: string): {
   const fermenting = listFermentingBundle(database, planDate);
   const plan = loadPlan(database, planDate);
   const latestPlan = plan ? null : loadPlan(database);
-  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pendingActions: plan ? [] : ['创建今日运营方案'], fermenting };
+  // No plan is not a human blocker: the primary CTA is「开始今日情报」, not a fake todo card.
+  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pendingActions: [], fermenting };
 }
 
 export function getFermentingOnly(database: DatabaseSync, planDate: string): FermentingBundle {

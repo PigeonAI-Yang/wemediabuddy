@@ -309,14 +309,23 @@ export async function dispatchStopXObservation(runtime: ActiveWorkspaceRuntime, 
   return requireReceiptData(receipt);
 }
 
-export async function dispatchListXListOperations(runtime: ActiveWorkspaceRuntime, input: { accountKey?: string; limit?: number }, activeIds: ReadonlySet<string>): Promise<XListOperation[]> {
+export async function dispatchRecoverOrphanedXListOperations(
+  runtime: ActiveWorkspaceRuntime,
+  activeIds: ReadonlySet<string> = new Set()
+): Promise<number> {
+  const interrupted = listXListOperations(runtime.database, { limit: 100 }).filter((operation) =>
+    ['execution_granted', 'browser_leased', 'running'].includes(operation.state) && !activeIds.has(operation.id));
+  if (interrupted.length === 0) return 0;
   const receipt = await dispatchBusinessCommand(runtime, {
-    command: 'x_lists.operation_recover', requestId: randomUUID(), actor: owner, input,
-    boundIdentity: { accountKey: input.accountKey ?? null }, entityType: 'x_list_operation',
-    execute: (database, value) => {
-      recoverOrphanedXListOperations(database, activeIds);
-      const operations = listXListOperations(database, value);
-      return { data: operations, readback: { count: operations.length } };
+    command: 'x_lists.operation_recover',
+    requestId: `${runtime.identity.runtimeEpoch}:x-list-operation-recover`,
+    actor: owner,
+    input: { activeIds: [...activeIds].sort() },
+    boundIdentity: { runtimeEpoch: runtime.identity.runtimeEpoch },
+    entityType: 'x_list_operation',
+    execute: (database) => {
+      const recovered = recoverOrphanedXListOperations(database, activeIds);
+      return { data: recovered, readback: { recovered }, sideEffectState: recovered > 0 ? 'committed' : 'not_started' };
     }
   });
   return requireReceiptData(receipt);

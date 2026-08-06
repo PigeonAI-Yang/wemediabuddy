@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   getAgentTask,
@@ -27,6 +28,7 @@ import { dispatchBusinessCommand, requireReceiptData } from './business-command.
 import { collectBoundXListTimeline, persistBoundXListTimeline, readBoundXListTimeline } from './x-list-execution.ts';
 import { getXListBinding } from './x-lists.ts';
 import { dispatchScheduleXObservationCapture, scheduleXObservationCapture } from './x-observation-jobs.ts';
+import type { TaskReadyGrantHook } from './task-grants.ts';
 
 export type DailyChannelInput = {
   businessDate: string;
@@ -34,6 +36,7 @@ export type DailyChannelInput = {
   profileRevision: number;
   modules?: IntelligenceModule[];
   workerLeaseId?: string;
+  onTaskReady?: TaskReadyGrantHook;
 };
 
 export type FrozenDailyChannelSource = Pick<IntelligenceChannelSource,
@@ -78,14 +81,14 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     workspaceProfileRevision: input.profileRevision,
     intelligenceChannels: frozen
   };
-  const browserConfig = await resolveBrowserConfig(database, frozen, dependencies.browserConfig);
   const provisional = preflightCode(frozen, summary.sources);
   if (provisional) {
     const reusable = getReusableNeedsUserAgentTask(database, 'daily_intelligence', input.businessDate, contextRefs, provisional.code);
     if (reusable) return { task: reusable, reused: true, shouldRunJudgment: false, frozen: readFrozenChannels(reusable) ?? frozen, aggregation: null };
   }
 
-  const startRequestId = `daily_intelligence:${input.businessDate}:${input.workspaceId}:${input.profileRevision}:channels:start`;
+  // requestId must be unique per click: frozen channel revisions change between runs.
+  const startRequestId = `daily_intelligence:${input.businessDate}:${input.workspaceId}:channels:start:${randomUUID()}`;
   const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, commandContext(startRequestId));
   const task = started.task;
   const stored = readFrozenChannels(task) ?? frozen;
@@ -97,6 +100,16 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     return { task, reused: true, shouldRunJudgment: false, frozen: stored, aggregation: readDailyReceiptAggregation(database, task) };
   }
 
+  await input.onTaskReady?.(task.id);
+
+  await dispatchReportAgentTaskProgress(dependency, task.id, {
+    phase: 'starting',
+    progress: { planned: stored.sources.length, processed: 0, failed: 0 },
+    checkpoint: { intelligenceChannels: stored },
+    message: '正在启动今日情报…'
+  }, commandContext(`${task.id}:progress:starting`, task.id));
+
+  const browserConfig = await resolveBrowserConfig(database, stored, dependencies.browserConfig);
   const selected = stored.sources;
   const existingReceipts = readDailyReceiptAggregation(database, task).receipts;
   const checked = new Set(existingReceipts.map((receipt) => `${receipt.module}:${receipt.sourceId}`));

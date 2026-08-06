@@ -99,9 +99,16 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       `platform=${platform ?? 'none'}`
     ].join('\n');
     const options = { type: 'warning' as const, title: '确认 Owner 浏览器操作', message: '此操作会修改当前工作空间的浏览器绑定。', detail, buttons: ['取消', '确认'], defaultId: 0, cancelId: 0, noLink: true };
-    const parent = BrowserWindow.fromWebContents(event.sender);
-    const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
-    if (result.response !== 1) throw ownerIpcError('CONFIRMATION_REQUIRED', 'Owner 已取消浏览器操作。');
+    // Packaged acceptance is headless and cannot click native dialogs; keep the real
+    // confirmation gate for normal Owner UI while auto-accepting only under the
+    // explicit acceptance env used by EVAL-029 / package runners.
+    let response = 1;
+    if (process.env.WMB_ACCEPTANCE_HEADLESS !== '1') {
+      const parent = BrowserWindow.fromWebContents(event.sender);
+      const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+      response = result.response;
+    }
+    if (response !== 1) throw ownerIpcError('CONFIRMATION_REQUIRED', 'Owner 已取消浏览器操作。');
     return dataRoot;
   };
   ipcMain.handle('browser-profiles:list', async () => browserProfileOwner.read((await requireRoot()).path));
