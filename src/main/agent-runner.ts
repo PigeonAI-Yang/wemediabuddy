@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import * as z from 'zod';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
 import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
@@ -36,6 +37,116 @@ import { ensurePiConversationLayout, readPiConversation } from './pi-conversatio
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
+import { saveCurrentPlan } from './planning.ts';
+
+const planOutputItemSchema = z.object({
+  title: z.string().min(1),
+  priority: z.number().int().min(0).max(7),
+  whyNow: z.string().min(1),
+  timeliness: z.string().min(1),
+  targetAudience: z.string().min(1),
+  angle: z.string().min(1),
+  pointOfView: z.string().min(1),
+  platforms: z.array(z.string()).min(1),
+  formats: z.array(z.string()).min(1),
+  titleGuidance: z.string(),
+  openingGuidance: z.string(),
+  structureGuidance: z.string(),
+  effortEstimate: z.string(),
+  sourceIds: z.array(z.string().min(1)).min(1),
+  availableMaterials: z.array(z.string()).optional(),
+  missingMaterials: z.array(z.string()).optional(),
+  topicId: z.string().optional(),
+  reviewIds: z.array(z.string()).optional(),
+  methodFindingIds: z.array(z.string()).optional()
+});
+const planOutputSchema = z.object({
+  planDate: z.string().optional(),
+  summary: z.string().min(1),
+  items: z.array(planOutputItemSchema).max(12)
+});
+
+export type DailyPlanOutput = z.infer<typeof planOutputSchema>;
+
+/**
+ * 结构化输出路径：模型只需读简报并输出一个 ```json 代码块，由系统校验后代为保存。
+ * 弱模型无法稳定构造多字段工具调用（四次实机空转证据），但读+判+写 JSON 文本是可靠的。
+ */
+export function parseDailyPlanOutput(sessionText: string): DailyPlanOutput {
+  const fences = [...sessionText.matchAll(/```json\s*([\s\S]*?)```/g)];
+  if (!fences.length) throw new Error('模型未输出有效的 ```json 方案块。');
+  const last = fences[fences.length - 1][1];
+  let value: unknown;
+  try {
+    value = JSON.parse(last);
+  } catch {
+    throw new Error('模型输出的 ```json 方案块不是合法 JSON。');
+  }
+  const parsed = planOutputSchema.safeParse(value);
+  if (!parsed.success) throw new Error(`模型方案结构不完整：${parsed.error.issues.slice(0, 3).map((issue) => issue.path.join('.') || issue.message).join('；')}`);
+  return parsed.data;
+}
+
+/**
+ * 从会话 JSONL 解码 assistant 文本段。baseline 之后的行才算本轮输出：
+ * resume 复用同一会话文件时，防止把上一轮的围栏当成本轮方案（评审 N1）。
+ */
+export function readAssistantTexts(raw: string, baseline = 0): string[] {
+  const texts: string[] = [];
+  const lines = raw.split(/\r?\n/).slice(baseline);
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line) as { type?: string; message?: { role?: string; content?: unknown } };
+      const content = entry.message?.content;
+      if (entry.type !== 'message' || entry.message?.role !== 'assistant' || !Array.isArray(content)) continue;
+      for (const segment of content) {
+        if (segment && typeof segment === 'object' && (segment as { type?: unknown }).type === 'text') {
+          const text = (segment as { text?: unknown }).text;
+          if (typeof text === 'string' && text.trim()) texts.push(text);
+        }
+      }
+    } catch {
+      // 跳过无法解析的行
+    }
+  }
+  return texts;
+}
+
+export async function savePlanFromSynthesisOutput(
+  dependency: AgentTaskMutationDependency,
+  task: AgentTask,
+  sessionFile: string,
+  planRequestId: string,
+  workerLeaseId?: string,
+  grantId?: string | null,
+  sessionBaseline = 0
+): Promise<{ itemCount: number }> {
+  const plan = parseDailyPlanOutput(readAssistantTexts(await readFile(sessionFile, 'utf8'), sessionBaseline).join('\n'));
+  const input = { planDate: task.businessDate, timezone: 'Asia/Shanghai', summary: plan.summary, items: plan.items };
+  if ('database' in dependency) {
+    requireReceiptData(await dispatchBusinessCommand(dependency, {
+      command: 'plans.save',
+      requestId: planRequestId,
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: task.id,
+      workerLeaseId,
+      grantId: grantId ?? undefined,
+      input,
+      boundIdentity: { planDate: task.businessDate },
+      entityType: 'plan',
+      execute: (commandDatabase, value) => {
+        const data = saveCurrentPlan(commandDatabase, value, false);
+        return { data, entityId: data.id, afterRevision: data.revision, readback: data };
+      }
+    }));
+  } else {
+    const saved = saveCurrentPlan(dependency, input);
+    dependency.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)')
+      .run('plans.save', planRequestId, JSON.stringify(saved), new Date().toISOString());
+  }
+  return { itemCount: plan.items.length };
+}
 
 function schedulerActor(lane: string) {
   return { type: 'scheduler' as const, id: lane, label: lane };
@@ -97,8 +208,8 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
 
 function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, options: { nativeSearch?: boolean } = {}): string {
   const deepDiveRule = options.nativeSearch
-    ? '9. 对四问证据不足的候选，可用模型自带的联网搜索补充证据；搜索发现的材料必须先用 wmb_save_source 带原始 URL 入库，之后才能作为 sourceIds 写入方案。'
-    : '9. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源；可用 wmb_save_source 仅入库你已有原始 URL 的材料。';
+    ? '5. 对四问证据不足的候选，可用模型自带的联网搜索补充证据；搜索发现的材料必须先用 wmb_save_source 带原始 URL 入库，之后才能作为 sourceIds 写入方案。'
+    : '5. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源。';
   return [
     '执行 WeMediaBuddy 今日情报判断任务。',
     `task_id=${task.id}`,
@@ -111,15 +222,37 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     briefText,
     '',
     '判断要求：',
-    '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-    '2. 判断任何机会前，先对齐简报「身份」块的受众、内容目标与编辑简报；脱离身份的泛泛线索直接丢弃。',
-    '3. 每个候选写入方案前，必须调用 wmb_get_knowledge_context 查询同主题历史，写清它与你的库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。',
-    '4. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。',
-    `5. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有答得出四问的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。方案使用 request_id=${planRequestId}。`,
-    '6. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
-    '7. 趋势只引用简报「存量」块给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。',
-    '8. 你可用的 wmb_* 工具只有：wmb_get_workbench、wmb_get_agent_task、wmb_get_knowledge_context、wmb_save_plan、wmb_save_source、wmb_record_knowledge、wmb_get_current_workspace、wmb_list_workspaces、wmb_report_agent_progress。除此之外的工具名都不存在；一旦出现 Tool not found，立即停止臆造新工具名，回到简报继续判断。简报已包含判断所需的全部上下文；只有查同主题历史（第 3 条）和写回方案（第 5 条）时才需要调用工具。',
-    deepDiveRule
+    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；脱离身份的泛泛线索直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
+    '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。答不出四问的线索不得写入方案。',
+    '3. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑数。',
+    '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。',
+    deepDiveRule,
+    '6. 收尾只输出一个 ```json 代码块，结构必须严格如下（sourceIds 只能从简报「增量」块选择真实 id；不要输出其它任何文字）：',
+    '```json',
+    '{',
+    `  "planDate": "${task.businessDate}",`,
+    '  "summary": "一句话概括今日判断",',
+    '  "items": [{',
+    '    "title": "机会标题",',
+    '    "priority": 1,',
+    '    "whyNow": "为什么是现在（具体事实+时效）",',
+    '    "timeliness": "热点 2-3 天",',
+    '    "targetAudience": "目标读者",',
+    '    "angle": "表达角度",',
+    '    "pointOfView": "核心观点",',
+    '    "platforms": ["x"],',
+    '    "formats": ["text"],',
+    '    "titleGuidance": "标题建议",',
+    '    "openingGuidance": "开头建议",',
+    '    "structureGuidance": "结构建议",',
+    '    "effortEstimate": "约 40 分钟",',
+    '    "sourceIds": ["简报「增量」块中的真实 id"],',
+    '    "availableMaterials": [],',
+    '    "missingMaterials": []',
+    '  }]',
+    '}',
+    '```',
+    '没有答得出四问的机会时 items 输出 []。'
   ].join('\n');
 }
 
@@ -232,7 +365,14 @@ export async function startDailyIntelligence(input: {
         try {
           await synthesis.start();
           const promptBuiltAt = new Date().toISOString();
-          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, agentRequestId(beforePlan.id, 'plan'), { nativeSearch: config.nativeSearch === true }), { timeoutMs: 10 * 60_000 });
+          const planRequestId = agentRequestId(beforePlan.id, 'plan');
+          const sessionBaseline = await readFile(dailySessionFile, 'utf8').then((text) => text.split(/\r?\n/).length).catch(() => 0);
+          await synthesis.promptUntilSettled(buildDailyOpportunityPrompt(database, getAgentTask(database, beforePlan.id) ?? beforePlan, planRequestId, { nativeSearch: config.nativeSearch === true }), { timeoutMs: 10 * 60_000 });
+          // 结构化输出路径：从本轮会话增量读出 ```json 方案块，校验后由系统经 dispatcher 保存（弱模型不必构造工具调用）。
+          const saved = await savePlanFromSynthesisOutput(dependency, getAgentTask(database, beforePlan.id) ?? beforePlan, dailySessionFile, planRequestId, input.workerLeaseId, grantId, sessionBaseline);
+          await dispatchReportAgentTaskProgress(dependency, beforePlan.id, {
+            message: saved.itemCount > 0 ? `方案已保存：${saved.itemCount} 个机会。` : '方案已保存：今日没有合格机会。'
+          }, taskCommandContext(lane, `${beforePlan.id}:progress:plan-saved`, beforePlan.id, input.workerLeaseId));
           // 增量判断水印：本轮简报组装时刻之前的入库资料均已评估；失败不写入，下轮重评。
           await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { judgeWatermark: promptBuiltAt } }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
         } catch (error) {

@@ -74,7 +74,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`。Pi 保存外部资料必须用 `wmb_save_source` 并传当前 task、grant 和 WMB 注入的 worker lease；它在 MCP 内执行 `sources.upsert_batch`。外部 Agent 直接调用 `sources.upsert_batch`。两条路径都必须保留原始 URL。
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点；写入时遵守下方统一 task grant 与回执规则。
 - 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
-- 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报，脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。简报已包含判断所需全部上下文，除查重与写回外不需要额外工具调用。
+- 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报，脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。简报已包含判断所需全部上下文；**判断任务中禁止调用 `wmb_get_workbench`（全量工作台几十万字会挤爆上下文）**，除查重（`wmb_get_knowledge_context`）与写回（`wmb_save_plan`）外不需要额外工具调用，写回成功即结束。
 - 判断任务中臆造不存在的工具名是失败信号：可用的 wmb_* 工具只有本 Skill 列出的这些；一旦出现 Tool not found，立即停止臆造，回到简报继续判断，不得改用 bash 探索文件系统。
 - 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。
 - 候选写入方案前必须先用 `wmb_get_knowledge_context` 查询同主题历史，写清它与库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。

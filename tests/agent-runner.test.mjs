@@ -35,7 +35,11 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /长期观察资料/);
     assert.match(prompt, /跨日发酵机会/);
     assert.match(prompt, /为什么是现在/);
-    assert.match(prompt, /wmb_get_knowledge_context 查询同主题历史/);
+    assert.match(prompt, /仅可调用 wmb_get_knowledge_context/);
+    assert.match(prompt, /尤其禁止 wmb_get_workbench/);
+    assert.match(prompt, /收尾只输出一个 ```json 代码块/);
+    assert.match(prompt, /"planDate": "2026-08-03"/);
+    assert.doesNotMatch(prompt, /先调用 wmb_get_workbench/);
     assert.match(prompt, /禁止为此另行扫描新来源/);
     assert.doesNotMatch(prompt, /sources_request_id=/);
     assert.doesNotMatch(prompt, /官方产品与模型发布/);
