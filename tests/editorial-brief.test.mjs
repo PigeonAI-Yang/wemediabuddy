@@ -128,6 +128,16 @@ test('history carries final reviews and method findings', async () => {
   });
 });
 
+test('businessDate override anchors header and ferment carry, not wall clock', async () => {
+  await withDb(async (database) => {
+    const brief = assembleEditorialBrief(database, { now: NOW, businessDate: '2026-08-03' });
+    assert.equal(brief.businessDate, '2026-08-03');
+    const text = renderEditorialBrief(brief);
+    assert.ok(text.includes('业务日期 2026-08-03'));
+    assert.ok(!text.includes('业务日期 2026-08-05'));
+  });
+});
+
 test('render produces four blocks with payloads and degrades on empty db', async () => {
   await withDb(async (database) => {
     ensureOfficialWorkspaceProfile(database, 'official.ai');

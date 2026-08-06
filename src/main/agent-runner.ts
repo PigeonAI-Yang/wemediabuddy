@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,9 +6,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
+import { assembleEditorialBrief, renderEditorialBrief } from './editorial-brief.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
-import { refreshWorkCarry } from './ferment.ts';
-import { listWatchingSources } from './knowledge.ts';
+import type { TaskReadyGrantHook } from './task-grants.ts';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -32,7 +33,6 @@ import { ensurePiConversationLayout, readPiConversation } from './pi-conversatio
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
-import { listXPostTrends } from './x-post-metrics.ts';
 
 function schedulerActor(lane: string) {
   return { type: 'scheduler' as const, id: lane, label: lane };
@@ -40,6 +40,11 @@ function schedulerActor(lane: string) {
 
 function taskCommandContext(lane: string, requestId: string, taskId?: string, workerLeaseId?: string, causation?: Readonly<Record<string, unknown>>): AgentTaskCommandContext {
   return { actor: schedulerActor(lane), requestId, taskId, workerLeaseId, causation };
+}
+
+function piPromptTimeoutMs(): number {
+  const raw = Number(process.env.WMB_PI_PROMPT_TIMEOUT_MS ?? 300_000);
+  return Number.isFinite(raw) && raw >= 30_000 ? Math.floor(raw) : 300_000;
 }
 
 function mutationDependency(input: { activeRuntime?: ActiveWorkspaceRuntime; dataRootPath: string }): { dependency: AgentTaskMutationDependency; database: DatabaseSync; close: () => void } {
@@ -86,42 +91,36 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, planRequestId: string, context: { watchingSummary: string; fermentingSummary: string; trendSummary: string }): string {
+function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string): string {
   return [
-    '执行 WeMediaBuddy 今日情报任务。',
+    '执行 WeMediaBuddy 今日情报判断任务。',
     `task_id=${task.id}`,
     `intent=${task.intent}`,
     `plan_date=${task.businessDate}`,
     'skill=wemedia-intelligence-engine',
     `plan_request_id=${planRequestId}`,
     `checkpoint=${JSON.stringify(task.checkpoint)}`,
-    '要求：',
+    '',
+    briefText,
+    '',
+    '判断要求：',
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-    '2. 官网和 X List 已由共享渠道模块完成真实扫描。只基于当前根已入库资料、受众和编辑目标做机会判断；不得再次调用固定 AI source-index、固定 AI List/wire、扫描其他未选来源，或写入未选渠道的新资料。',
-    '3. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有值得做的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。',
-    `4. 方案使用 request_id=${planRequestId}。非空方案的每个机会必须引用真实 sourceIds。`,
-    '5. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
-    '6. 综合时同时参考以下已有的观察与发酵差集；它们只用于判断，禁止为此另行浏览或扫描新来源。',
-    `当前观察中：${context.watchingSummary}`,
-    `当前发酵差集：${context.fermentingSummary}`,
-    `当前 X 趋势证据：${context.trendSummary}`,
-    '7. 趋势只引用给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。'
+    '2. 判断任何机会前，先对齐简报「身份」块的受众、内容目标与编辑简报；脱离身份的泛泛线索直接丢弃。',
+    '3. 每个候选写入方案前，必须调用 wmb_get_knowledge_context 查询同主题历史，写清它与你的库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。',
+    '4. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。',
+    `5. 先调用 wmb_get_workbench 与 wmb_get_agent_task；若没有答得出四问的机会，仍必须用空 items 调用 wmb_save_plan 保存空方案。方案使用 request_id=${planRequestId}。`,
+    '6. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑成方案。',
+    '7. 趋势只引用简报「存量」块给出的真实 sourceItemId、snapshotIds、流速和采集时间；不得补齐缺失指标或制造热度分。写回后调用 wmb_get_workbench 读回资料和方案。'
   ].join('\n');
 }
 
-export function buildDailyOpportunityPrompt(database: Parameters<typeof refreshWorkCarry>[0], task: AgentTask, planRequestId: string): string {
-  const fermenting = refreshWorkCarry(database, task.businessDate);
-  const watchingSummary = JSON.stringify(listWatchingSources(database, 20).map((item) => ({ id: item.id, title: item.title, topics: item.topics, priority: item.priority })));
-  const fermentingSummary = JSON.stringify({
-    items: fermenting.items.slice(0, 5).map((item) => ({ title: item.title, state: item.state, priority: item.priority, fermentedDays: item.fermentedDays, reason: item.reason, aftershocks: item.aftershocks.slice(0, 2).map((shock) => shock.title) })),
-    topics: fermenting.topics.slice(0, 5)
+export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string): string {
+  const brief = assembleEditorialBrief(database, {
+    now: new Date(),
+    businessDate: task.businessDate,
+    watermark: typeof task.checkpoint?.judgeWatermark === 'string' ? task.checkpoint.judgeWatermark : null
   });
-  const trendSummary = JSON.stringify(listXPostTrends(database, { limit: 20 }).map((trend) => ({
-    sourceItemId: trend.sourceItemId, status: trend.status, reason: trend.reason,
-    viewsPerHour: trend.viewsPerHour, velocityChange: trend.velocityChange,
-    capturedAt: trend.snapshots.at(-1)?.capturedAt ?? null
-  })));
-  return dailyPrompt(task, planRequestId, { watchingSummary, fermentingSummary, trendSummary });
+  return dailyPrompt(task, planRequestId, renderEditorialBrief(brief));
 }
 
 export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof cancelAgentTask>[0], task: AgentTask | null | undefined): AgentTask | null {
@@ -136,12 +135,13 @@ export async function startDailyIntelligence(input: {
   xhsMcpUrl?: string | null;
   onEvent?: (event: Record<string, unknown>) => void;
   onRuntime?: (runtime: PiRpcSupervisor) => void;
+  onTaskReady?: TaskReadyGrantHook;
   workerLeaseId?: string;
   activeRuntime?: ActiveWorkspaceRuntime;
 }): Promise<DailyIntelligenceRun> {
   const { dependency, database, close } = mutationDependency(input);
   const lane = 'daily-intelligence';
-  const startRequestId = `daily_intelligence:${input.businessDate}:start`;
+  const startRequestId = `daily_intelligence:${input.businessDate}:start:${randomUUID()}`;
   try {
     const contextRefs = { planDate: input.businessDate };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
@@ -150,6 +150,7 @@ export async function startDailyIntelligence(input: {
     const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     const task = started.task;
     if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
+    const grantId = await input.onTaskReady?.(task.id) ?? null;
     const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
     await dispatchUpdateAgentTaskPhase(dependency, task.id, task.phase, { piSessionId }, taskCommandContext(lane, `${task.id}:phase:session:${piSessionId}`, task.id, input.workerLeaseId, { requestId: startRequestId }));
 
@@ -169,7 +170,7 @@ export async function startDailyIntelligence(input: {
       await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', dailySessionFile,
       '--skill', path.join(layout.agentDir, 'skills', 'wemedia-intelligence-engine'), '-e', extensionPath,
       '--provider', 'wmb-api', '--model', config.model,
-      '--append-system-prompt', `${PI_AUTHORITY_SYSTEM_PROMPT} 当前 taskId=${task.id}；当前 Pi workerLeaseId=${input.workerLeaseId ?? 'unavailable'}。写业务事实必须使用这两个值和 Owner 已签发的精确 task grant。`
+      '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
     ];
     const runtimeEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' };
     const makeRuntime = () => {
@@ -273,6 +274,7 @@ export async function startStudioDraft(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string; projectId: string; mcpUrl: string;
   xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
+  onTaskReady?: TaskReadyGrantHook;
 }): Promise<DailyIntelligenceRun> {
   const { dependency, database, close } = mutationDependency(input);
   const lane = 'studio-draft';
@@ -286,6 +288,7 @@ export async function startStudioDraft(input: {
     const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
+    const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
@@ -294,13 +297,13 @@ export async function startStudioDraft(input: {
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const runtime = new PiRpcSupervisor(process.execPath, [
       await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', layout.sessionFile, '-e', extensionPath,
-      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
     ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
     (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
     input.onRuntime?.(runtime);
     try {
       await runtime.start();
-      await runtime.promptUntilSettled(draftPrompt(task, input.projectId, requestId), { timeoutMs: 300000 });
+      await runtime.promptUntilSettled(draftPrompt(task, input.projectId, requestId), { timeoutMs: piPromptTimeoutMs() });
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
       const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
       return { task: completed, reused: false };
@@ -339,6 +342,7 @@ export async function startResultsReview(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string; publicationId: string; mcpUrl: string;
   xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
+  onTaskReady?: TaskReadyGrantHook;
 }): Promise<DailyIntelligenceRun> {
   const { dependency, database, close } = mutationDependency(input);
   const lane = 'results-review';
@@ -352,6 +356,7 @@ export async function startResultsReview(input: {
     const started = await dispatchStartAgentTask(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
+    const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
     const extensionPath = await preparePiExtension(layout.agentDir);
@@ -360,13 +365,13 @@ export async function startResultsReview(input: {
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-review-'));
     const runtime = new PiRpcSupervisor(process.execPath, [
       await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', layout.sessionFile, '-e', extensionPath,
-      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+      '--provider', 'wmb-api', '--model', config.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
     ], { ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, WMB_MCP_URL: input.mcpUrl, WMB_XHS_MCP_URL: input.xhsMcpUrl || '' },
     (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
     input.onRuntime?.(runtime);
     try {
       await runtime.start();
-      await runtime.promptUntilSettled(reviewPrompt(task, input.publicationId, requestId), { timeoutMs: 300000 });
+      await runtime.promptUntilSettled(reviewPrompt(task, input.publicationId, requestId), { timeoutMs: piPromptTimeoutMs() });
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
       const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
       return { task: completed, reused: false };
@@ -382,4 +387,4 @@ export async function startResultsReview(input: {
   } finally { close(); }
 }
 import { preparePiExtension } from './pi-extension.ts';
-import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill.ts';
+import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';

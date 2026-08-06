@@ -74,19 +74,22 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`。Pi 保存外部资料必须用 `wmb_save_source` 并传当前 task、grant 和 WMB 注入的 worker lease；它在 MCP 内执行 `sources.upsert_batch`。外部 Agent 直接调用 `sources.upsert_batch`。两条路径都必须保留原始 URL。
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点；写入时遵守下方统一 task grant 与回执规则。
 - 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
+- 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报，脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。
+- 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。
+- 候选写入方案前必须先用 `wmb_get_knowledge_context` 查询同主题历史，写清它与库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。
 - 保存方案使用 `wmb_save_plan`，并携带当前 request/task/grant/worker authority。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
 - 保存后用 `wmb_get_workbench` 回读并确认精确日期的 `plan`；不要用 `latestPlan` 代替当前任务的保存结果。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。二者都是 task-authorized 业务写入，必须携带当前 request/task/grant/worker authority。
 
 ### 任务授权与统一回执
 
-- `agent task`、Pi session 和聊天记录都不是授权。Pi 或外部 Agent 写业务事实前，必须使用 Owner 在 WMB 今日任务上签发的当前 `task grant`；Agent 不能签发、扩大或撤销 grant。
-- `task grant` 仅授权 Agent 参与任务和准备业务事实，绝不授权平台副作用。`PreciseExecutionGrantV1` 与 task grant 分离，只能由 Owner UI 签发/撤销，且只能消费一次；目标 command、规范化 `inputHash`、完整 `boundIdentity`、target actor、browser profile/binding revision、expected account、允许状态转换、过期时间和 required readback 任一不匹配时写入必须为零。
+- `agent task`、Pi session 和聊天记录都不是独立授权。Owner 在 WMB 明确启动或继续收集、创作、复盘任务时，WMB 会自动为该任务签发最小范围 `task grant` 并绑定当前 worker lease；这是同一个人机协作动作，不得再要求用户点击“授权 AI 协作”。Agent 不能签发、扩大或撤销 grant。
+- `task grant` 仅授权当前任务所需的业务事实写入，绝不授权平台副作用。来源配置、账号/Profile、X List 变更、浏览器动作和最终发布继续使用各自的精确 UI 确认；`PreciseExecutionGrantV1` 与 task grant 分离，只能由 Owner UI 签发/撤销，且只能消费一次。目标 command、规范化 `inputHash`、完整 `boundIdentity`、target actor、browser profile/binding revision、expected account、允许状态转换、过期时间和 required readback 任一不匹配时写入必须为零。
 - `EXECUTION_GRANT_REQUIRED`、`EXECUTION_GRANT_STALE`、`EXECUTION_GRANT_EXPIRED`、`EXECUTION_GRANT_REVOKED`、`EXECUTION_GRANT_SCOPE_MISMATCH`、`EXECUTION_GRANT_ACTOR_MISMATCH`、`EXECUTION_GRANT_REVISION_CONFLICT` 都必须停止并重新读取现场。不能复用已消费 grant、换 request ID 绕过、由 Agent 自签或把历史 replay 当成本次执行。
 - 已知 `taskId` 时先调用 `wmb_list_task_grants({ taskId })`，只选择 `status=active`、worker 与自己匹配、`allowedCommands` 包含本次工具对应底层命令且 `expiresAt` 未过期的 grant；已知准确 `grantId` 时用 `wmb_get_task_grant({ grantId })` 回读。不要创建新 task 来绕过缺失授权。两者在 Pi 中分别只读映射到底层 MCP `task_grants.list` 与 `task_grants.get`；raw MCP 名不是 Pi 可直接调用的工具。
 - 当前 Agent 可写命令为 `agent_tasks.report_progress`、`content.create`、`content.save_version`、`intelligence_channels.proposal_apply`、`knowledge.creative_brief_create`、`knowledge.creative_brief_create_project`、`knowledge.creative_brief_update`、`knowledge.domain_create`、`knowledge.domain_update`、`knowledge.record_batch`、`knowledge.suggestion_create`、`plans.save`、`reviews.save`、`sources.upsert_batch`、`x_lists.observation_start`、`x_lists.observation_stop`、`x_lists.operation_execute`。每次新业务动作必须携带新的 `request_id`、原任务 `task_id`、回读得到的 `grant_id` 和完整业务输入；Pi 还必须携带本次 worker 的 `worker_lease_id`。缺任一必需 authority 或 grant 未列出对应 command 时写入必须为零。MCP 服务器由有效 lease 派生 Pi 身份；没有 lease 的调用固定归属 `external_agent:mcp`，调用方不能自报或改写 worker 身份。
 - 成功结果是完整 `CommandReceiptV1`，必须核对 `ok=true`、`workspaceId`、`runtimeEpoch`、`taskId`、`grantId`、`actor`、`inputHash`、`data` 和 `readback`。同一 `request_id` 加同一规范化输入只会回放原回执；改变命令或输入会返回 `REQUEST_REPLAY_CONFLICT`，必须生成新的 request id，不得把冲突说成重试成功。
-- `TASK_GRANT_REQUIRED`、`TASK_GRANT_STALE`、`TASK_GRANT_EXPIRED`、`TASK_GRANT_REVOKED`、`TASK_SCOPE_BROADENED`、`TASK_WORKER_MISMATCH`、`WORKER_LEASE_STALE` 或 `WORKSPACE_STALE` 都表示本次业务写入为零。停止并请 Owner 在当前任务重新签发准确 grant；不得改 task、worker、root、epoch 或省略身份字段绕过。
+- `TASK_GRANT_REQUIRED`、`TASK_GRANT_STALE`、`TASK_GRANT_EXPIRED`、`TASK_GRANT_REVOKED`、`TASK_SCOPE_BROADENED`、`TASK_WORKER_MISMATCH`、`WORKER_LEASE_STALE` 或 `WORKSPACE_STALE` 都表示本次业务写入为零。自动任务授权缺失或失效时停止并由 WMB 在同一任务的继续动作中恢复准确 grant；不得要求用户管理 grant，也不得改 task、worker、root、epoch 或省略身份字段绕过。
 - Grant 到期或撤销后，只有完全相同的既有 request/hash 可以读取原回执；任何新写入仍须当前有效 grant。回放是历史证据，不表示本次再次执行。
 
 ### 创建和续写内容

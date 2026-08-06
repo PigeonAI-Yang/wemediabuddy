@@ -76,6 +76,7 @@ export type EditorialBrief = {
 
 export type AssembleBriefOptions = {
   now?: Date;
+  businessDate?: string;
   watermark?: string | null;
   fallbackHours?: number;
   publishedDays?: number;
@@ -102,7 +103,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   const reviewLimit = options.reviewLimit ?? 3;
   const findingLimit = options.findingLimit ?? 5;
   const sourceLimit = options.sourceLimit ?? 100;
-  const businessDate = shanghaiDate(now);
+  const businessDate = options.businessDate ?? shanghaiDate(now);
 
   const profile = readWorkspaceProfile(database);
   const identity: BriefIdentity | null = profile

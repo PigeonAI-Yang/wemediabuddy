@@ -8,6 +8,7 @@ import { agentRequestId, getAgentTask, requestAgentTaskControl, startAgentTask }
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
+import { piTaskAuthorityPrompt } from '../src/main/pi-operator-skill.ts';
 import { upsertSource } from '../src/main/sources.ts';
 
 test('daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery', async () => {
@@ -25,12 +26,20 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-03' });
     assert.equal(started.ok, true);
     const prompt = buildDailyOpportunityPrompt(database, started.data, agentRequestId(started.data.id, 'plan'));
+    assert.match(prompt, /【编辑简报/);
+    assert.match(prompt, /业务日期 2026-08-03/);
+    assert.match(prompt, /■ 身份/);
+    assert.match(prompt, /■ 历史/);
+    assert.match(prompt, /■ 存量/);
+    assert.match(prompt, /■ 增量/);
     assert.match(prompt, /长期观察资料/);
     assert.match(prompt, /跨日发酵机会/);
-    assert.match(prompt, /共享渠道模块完成真实扫描/);
-    assert.match(prompt, /禁止为此另行浏览或扫描新来源/);
+    assert.match(prompt, /为什么是现在/);
+    assert.match(prompt, /wmb_get_knowledge_context 查询同主题历史/);
+    assert.match(prompt, /禁止为此另行扫描新来源/);
     assert.doesNotMatch(prompt, /sources_request_id=/);
     assert.doesNotMatch(prompt, /官方产品与模型发布/);
+    assert.doesNotMatch(prompt, /共享渠道模块完成真实扫描/);
 
     const requested = requestAgentTaskControl(database, started.data.id, 'cancel');
     assert.equal(requested.ok, true);
@@ -56,4 +65,18 @@ test('daily IPC leaves task creation to the shared channel coordinator and dedup
   assert.match(handler, /const runKey = `\$\{dataRoot\.path\}/);
   assert.match(handler, /dailyRuns\.has\(runKey\)/);
   assert.match(handler, /dailyRuns\.set\(runKey, run\)/);
+});
+
+test('Pi task authority prompt carries exact automatic task, grant and lease values', () => {
+  const prompt = piTaskAuthorityPrompt({
+    taskId: 'task-exact', grantId: 'grant-exact', workerLeaseId: 'lease-exact', context: '当前赛道为测试赛道。'
+  });
+  assert.match(prompt, /taskId=task-exact/);
+  assert.match(prompt, /grantId=grant-exact/);
+  assert.match(prompt, /workerLeaseId=lease-exact/);
+  assert.match(prompt, /当前赛道为测试赛道/);
+  assert.match(prompt, /无需用户额外授权/);
+  assert.doesNotMatch(prompt, /Owner 已签发|Owner 必须|另行授权/);
+  assert.throws(() => piTaskAuthorityPrompt({ taskId: 'task-exact', grantId: null, workerLeaseId: 'lease-exact' }), /PI_TASK_AUTHORITY_REQUIRED/);
+  assert.throws(() => piTaskAuthorityPrompt({ taskId: 'task-exact', grantId: 'grant-exact' }), /PI_TASK_AUTHORITY_REQUIRED/);
 });
