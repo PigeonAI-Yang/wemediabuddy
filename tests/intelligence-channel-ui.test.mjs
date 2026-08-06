@@ -20,11 +20,15 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   assert.equal(dailyPreflightMessage({ summary: { ...summary, readiness: [readiness('official_web', {}), readiness('x_lists', { blockedCount: 1, status: 'needs_user' })] }, piConfigured: true }), '已有来源需要浏览器登录或重新确认。');
   assert.equal(dailyPreflightMessage({ summary, piConfigured: false }), '请先在设置中配置 Pi API。');
 
-  const today = (await Promise.all([
+  const todayLegacy = (await Promise.all([
     'today-view.tsx',
     'today-view-parts.tsx',
     'today-view-panels.tsx'
   ].map((name) => readFile(new URL(`../src/renderer/${name}`, import.meta.url), 'utf8')))).join('\n');
+  const today = `${todayLegacy}\n${(await Promise.all([
+    'today-command-bar.tsx',
+    'today-run-view.ts'
+  ].map((name) => readFile(new URL(`../src/renderer/${name}`, import.meta.url), 'utf8')))).join('\n')}`;
   const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const workspaceIntelligence = await readFile(new URL('../src/main/workspace-intelligence.ts', import.meta.url), 'utf8');
@@ -33,10 +37,11 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   const channels = await readFile(new URL('../src/renderer/intelligence-channels-view.tsx', import.meta.url), 'utf8');
   assert.match(today, /Intl\.DateTimeFormat\('en-CA', \{ timeZone: 'Asia\/Shanghai' \}\)\.format\(new Date\(\)\)/);
   assert.match(today, /startDailyIntelligence\(\{ businessDate \}\)/);
-  assert.doesNotMatch(today, /本次情报渠道|selectedModules|configuredCount|enabledCount|blockedCount/);
-  assert.doesNotMatch(today, /没有可运行的情报渠道。|前往发现配置|openDiscover|noRunnableChannels/);
-  assert.doesNotMatch(today, /跳过当前来源/);
-  assert.equal((today.match(/onClick=\{\(\) => void startIntelligence\(\)\}/g) ?? []).length, 1);
+  assert.doesNotMatch(todayLegacy, /本次情报渠道|selectedModules|configuredCount|enabledCount|blockedCount/);
+  assert.doesNotMatch(todayLegacy, /没有可运行的情报渠道。|前往发现配置|openDiscover|noRunnableChannels/);
+  assert.doesNotMatch(todayLegacy, /跳过当前来源/);
+  assert.equal((today.match(/className="primary-button" onClick=\{onPrimary\}/g) ?? []).length, 1);
+  assert.match(today, /view\.primaryCta\.kind !== 'none'/);
   assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string \}\)/);
   assert.doesNotMatch(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules:/);
   assert.match(main, /businessDate, modules: input\.modules, mcpUrl/);
@@ -49,7 +54,7 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   assert.match(channels, /停止观察/);
   assert.match(today, /channel_scanned: '渠道扫描已完成'/);
   assert.match(today, /judging_opportunities: '正在生成今日运营方案'/);
-  assert.match(today, /data-indeterminate=\{judgmentPhase/);
+  assert.match(today, /data-indeterminate=\{view\.progress\?\.indeterminate/);
   assert.match(workspaceIntelligence, /phase: 'judging_opportunities'/);
   assert.match(workspaceIntelligence, /setInterval\([\s\S]*15_000\)/);
 });

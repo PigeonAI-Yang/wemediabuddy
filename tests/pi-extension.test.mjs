@@ -25,11 +25,11 @@ test('Pi extension copies every companion imported by index and starts with trut
     await rm(agentDir, { recursive: true, force: true });
   }
 
-  const todayView = await readFile('src/renderer/today-view.tsx', 'utf8');
-  const progressExpression = todayView.match(/const progressRatio = ([^;]+);/)?.[1];
+  const todayRunView = await readFile('src/renderer/today-run-view.ts', 'utf8');
+  const progressExpression = todayRunView.match(/const ratio = ([^;]+);/)?.[1];
   assert.ok(progressExpression, 'progress ratio expression must exist');
   const calculateProgress = Function('planned', 'processed', 'running', `return ${progressExpression};`);
-  assert.equal(calculateProgress(0, 0, true), 0);
+  assert.equal(calculateProgress(0, 0, true), undefined);
   assert.equal(calculateProgress(4, 1, true), 0.25);
 
   const xListTools = await readFile('.pi/extensions/wmb-mcp/wmb-mcp-tools-x-lists.ts', 'utf8');

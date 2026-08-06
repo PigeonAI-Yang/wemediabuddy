@@ -108,6 +108,14 @@
 .feed-sub:hover { color: var(--ink-soft); }
 .feed-body-pill { color: var(--accent); font-weight: 650; }
 .feed-selection-bar { margin: 8px 0 2px; color: var(--muted); font-size: 11.5px; font-weight: 650; }
+.feed-context { margin: 8px 0 2px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.today-command-detail { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.today-command-diagnostics { margin-top: 8px; color: var(--muted-low); font-size: 12px; }
+.today-command-diagnostics summary { cursor: pointer; font-weight: 650; color: var(--muted); }
+.today-command-diagnostics ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.today-rail .action-card-button { width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.today-rail .action-card-button:hover { border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+.today-rail .action-link { color: var(--amber); font-weight: 650; }
 .rail-feed-empty { padding: 12px 0; }
 .source-detail-panel { z-index: 45; }
 .source-detail-body { min-height: 0; margin-top: 22px; overflow-y: auto; display: grid; gap: 18px; }

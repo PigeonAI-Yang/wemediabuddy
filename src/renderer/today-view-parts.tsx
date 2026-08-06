@@ -45,17 +45,6 @@ export const phaseLabels: Record<string, string> = {
 export const MAX_SELECTED_SOURCES = 5;
 export const BODY_EXCERPT_CHARS = 4000;
 
-export function formatTodayActionLine(pendingCount: number, opportunityCount: number, sssCount: number, fermentingCount: number): string {
-  if (pendingCount > 0) return `${pendingCount} 项任务待你处理，完成后流程才能继续。`;
-  if (opportunityCount > 0) {
-    const parts = [`已根据入库资料整理出 ${opportunityCount} 个内容机会`];
-    if (sssCount) parts.push(`${sssCount} 个 SSS 级优先`);
-    if (fermentingCount) parts.push(`${fermentingCount} 条资料仍在发酵`);
-    return `${parts.join('，')}。`;
-  }
-  if (fermentingCount) return `${fermentingCount} 条资料仍在发酵，开始今日情报可补充新的内容机会。`;
-  return '开始今日情报，整理出今天值得讲的内容机会。';
-}
 
 export function isHeartbeatSource(source: TodaySource): boolean {
   const title = source.title || '';
@@ -161,18 +150,22 @@ export function Icon({ name }: { name: string }): React.JSX.Element {
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
 
-export function SourceList({ sources, open, close, openLibrary, aiSourcePresentation }: {
+export function SourceList({ sources, sourceDate, planDate, open, close, openLibrary, aiSourcePresentation }: {
   sources: TodaySource[];
+  sourceDate: string | null;
+  planDate: string;
   open: boolean; close: () => void;
   openLibrary: (sourceId?: string) => void;
   aiSourcePresentation: boolean;
 }): React.JSX.Element {
   const ordered = sortFeedSources(sources);
-  return <aside className={`sources-panel${open ? ' open' : ''}`} aria-label="今日资料">
+  const sourcesAreToday = sourceDate === planDate;
+  const sourceLabel = sourcesAreToday ? '今日资料' : (sourceDate ? `最近资料 · ${sourceDate}` : '今日资料');
+  return <aside className={`sources-panel${open ? ' open' : ''}`} aria-label={sourceLabel}>
     <div className="panel-heading">
-      <p className="eyebrow">今日资料 · {ordered.length}</p>
-      <div><h2>完整入库列表</h2><button className="close-sources" aria-label="关闭今日资料" onClick={close}>×</button></div>
-      <p>首页只展示最新最重要；这里看今日全部资料</p>
+      <p className="eyebrow">{sourceLabel} · {ordered.length}</p>
+      <div><h2>完整入库列表</h2><button className="close-sources" aria-label="关闭资料列表" onClick={close}>×</button></div>
+      <p>{sourcesAreToday ? '首页只展示最新最重要；这里看今日全部资料' : (sourceDate ? `今天暂无新资料，这里显示 ${sourceDate} 的最近入库` : '今天暂无新资料')}</p>
     </div>
     <div className="source-list">
       {ordered.map((source) => <article className="source-row" key={source.id}>
