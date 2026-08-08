@@ -1,7 +1,7 @@
 # GenericEmployeeRunner 修复设计（四员工工单统一执行器）
 
 Date: 2026-08-08  
-Status: 设计章节已批准；Owner lock 待书面确认  
+Status: Owner locked 2026-08-08；待后续合同与 TASKS 授权  
 范围：reporter / planner / writer / librarian 四角色工单的统一执行器、契约、生命周期、资源竞争、完成读回与干净迁移。只写设计，不写代码。  
 Related:
 
@@ -418,15 +418,16 @@ GenericEmployeeRunner 对四角色走同一序列（角色差异只在步骤 5/6
 
 ---
 
-## 16. Owner-lock 决策块（Pending —— 待 Owner 书面确认）
+## 16. Owner-lock 决策块
 
-> 以下决策已按会话逐节批准进设计；Owner 书面 lock（在本文档上确认「同意执行」）尚未落地，全部标记 Pending。任何一条未获书面确认前，不进入实现切片。
-
-1. **[Pending] 统一执行器**：四角色工单统一由 `GenericEmployeeRunner` 执行，删除 `createDailyJobExecutor` 及其双入口分流。
-2. **[Pending] 外部 spawn 删除 intent**：`wmb_spawn_job` / `jobs.spawn` 不再接受 intent；调用方只按角色派工。
-3. **[Pending] 角色注册表唯一派生 intent**：intent 由注册表单向派生：reporter→`daily_scan`、planner→`daily_judge`、writer→`studio_draft`、librarian→`page_library`；`defaultIntentForRole` 不作为兜底存在。
-4. **[Pending] 角色专属锁键**：reporter 锁扫描批次/渠道专属键，planner 锁 `plan:<workspaceId>:<businessDate>`，writer 锁 `project:<workspaceId>:<projectId>`，librarian 锁 `library-maintenance:<workspaceId>`；reporter 与 planner 不共享 planDate 锁，同日 writer/librarian/reporter 可并发。
-5. **[Pending] 资源竞争进入 waiting_resource**：锁冲突与 lease 忙不再硬失败/退队重试，进入显式 `waiting_resource` 状态，可取消、资源释放自动晋升；删除 requeue 黑客。
-6. **[Pending] 结构化五态 outcome + 成功必须业务读回**：`JobExecutionOutcome` / `RoleJobReportV1` 契约落地（`succeeded/failed/cancelled/partial/needs_user`，取消优先）；无读回证据不得 `succeeded`。
-7. **[Pending] 资料员权限不扩大**：librarian 工单授权保持 `page_library` 现状集合，capability registry no change 且实现必须跑一致性检查。
-8. **[Pending] 一次性干净切换**：删除面与迁移在单一变更集完成，无旧入口 shim、无双轨运行窗口；JobPool 本次不做整体持久化。
+Owner lock 2026-08-08:
+1. 四角色工单统一由 `GenericEmployeeRunner` 执行，删除 `createDailyJobExecutor` 及双入口。
+2. `wmb_spawn_job` / `jobs.spawn` 删除外部 `intent`；intent 由角色注册表唯一派生。
+3. 角色专属锁：reporter=`scan:<workspaceId>:<businessDate>:<channel>`，planner=`plan:<workspaceId>:<businessDate>`，writer=`project:<workspaceId>:<projectId>`，librarian=`library-maintenance:<workspaceId>`；reporter 与 planner 不共享 planDate 锁。
+4. 锁冲突与 lease 忙进入 `waiting_resource`，不落失败；资源释放后按 FIFO 晋升。
+5. `JobExecutionOutcome` / `RoleJobReportV1` 使用 `succeeded` / `failed` / `cancelled` / `partial` / `needs_user` 五态；取消优先；成功必须业务读回。
+6. 资料员权限不扩大；Capability registry 预期 no change，但实现必须通过 capability 一致性检查。
+7. 一次性干净切换，无 shim、无双轨；JobPool 本次不整体持久化。
+8. Non-goals: 不新增角色、不做可配置权限 UI、不重做 Today 产品形态、不改变最终人工发布边界。
+9. Route: Design.
+10. Design path: `docs/spark/2026-08-08-agent-crew-generic-runner-repair-design.md`。
