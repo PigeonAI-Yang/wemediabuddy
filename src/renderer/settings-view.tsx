@@ -6,6 +6,7 @@ import { PiSkillsSettings } from './pi-skills-settings';
 import { XListDisplaySettings } from './x-list-display-settings';
 import { AgentsSettingsPanel } from './agents-settings-panel';
 import { appConfirm } from './app-confirm';
+import { AppUpdateSettings } from './app-update-settings';
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0 B';
@@ -299,7 +300,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           <div className="settings-form-actions"><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}
         {section === 'about' && settings && <section className="settings-section">
-          <div className="settings-row"><div><h3>WeMediaBuddy</h3></div><strong>0.1.0</strong></div>
+          <AppUpdateSettings/>
           <div className="settings-row"><div><h3>Pi 运行组件</h3><p>{settings.piRuntime?.source === 'override' ? '数据目录版本' : '随应用安装'} · {settings.piRuntime?.root}</p>{runtimeNote && <p className="task-status">{runtimeNote}</p>}</div><div className="settings-row-actions"><strong>{settings.piRuntime?.version || 'unknown'}</strong><button className="secondary-button" onClick={() => void window.wmb.getPiRuntime().then((info) => setRuntimeNote(`当前 ${info.version}（${info.source}）`)).then(refresh)}>刷新版本</button><button className="secondary-button" disabled={!settings.piRuntime?.previousVersion} onClick={() => void window.wmb.rollbackPiRuntime().then((result) => { setRuntimeNote(result.ok ? '已回滚到上一版本' : (result.error?.message || '回滚失败')); refresh(); })}>回滚</button></div></div>
         </section>}
       </div>

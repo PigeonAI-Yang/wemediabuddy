@@ -37,7 +37,7 @@ Pi 首版使用 RPC 子进程，不把 AgentSession 直接运行在 Electron Mai
 - WMB 可在退出时先中止任务，再终止子进程；
 - 只有真实测试证明 RPC 不满足需求时，才重新评估 SDK 或 Electron Utility Process。
 
-Pi 随 WMB 安装包放在独立 `resources/.pi-runtime` 目录，像内置 Python 一样由 WMB 使用固定路径启动。它不被编译进 `app.asar`，因此后续可单独下载、校验并原子替换；升级失败时继续使用现有版本。
+Pi 随 WMB 安装包放在独立 `resources/.r` 目录，像内置 Python 一样由 WMB 使用固定路径启动。它不被编译进 `app.asar`，因此后续可单独下载、校验并原子替换；短目录名同时规避 Squirrel.Windows 对安装包内部路径的 260 字符限制，升级失败时继续使用现有版本。
 
 ### 2.1 模型与认证
 

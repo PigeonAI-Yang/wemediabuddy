@@ -17,6 +17,8 @@ import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding'
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
 import type { PublicationBrowserOperationV1 as PublicationBrowserOperation, PublicationSnapshotV1 as PublicationSnapshot } from '../main/publication-operations';
 import type { WmbSettingsSnapshot } from './wmb-settings-types';
+import type { OnboardingAiSaveInput, OnboardingAiTestRecord, OnboardingAiTestResult, OnboardingAiTestSettings, OnboardingStatus, OnboardingStep, OnboardingWorkspaceResult, PlatformCheckStatus } from '../main/onboarding';
+import type { UpdateState } from '../main/app-update';
 
 type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
@@ -25,17 +27,14 @@ type XListCommand<T> = CommandResult<T>;
 declare global {
   interface Window {
     wmb: {
-      getDataRoot(): Promise<{ path: string; isNew: boolean } | null>;
-      chooseDataRoot(): Promise<{ path: string; isNew: boolean } | null>;
-      listWorkspaces(): Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
-      switchWorkspace(workspaceId: string): Promise<{ relaunching: boolean }>;
-      createUkWorkspace(): Promise<{ id: string; displayName: string; rootPath: string } | null>;
-      listWorkspaceProposals(): Promise<Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding; selectedRootPath: string | null }>>;
-      selectWorkspaceProposalRoot(binding: WorkspaceProposalBinding): Promise<{ proposalId: string; rootPath: string } | null>;
-      confirmWorkspaceProposal(binding: WorkspaceProposalBinding): Promise<unknown>;
-      getSettings(): Promise<WmbSettingsSnapshot | null>;
-      openLogs(): Promise<void>;
-      openExternal(url: string): Promise<void>;
+      getDataRoot(): Promise<{ path: string; isNew: boolean } | null>; chooseDataRoot(): Promise<{ path: string; isNew: boolean } | null>; listWorkspaces(): Promise<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>;
+      switchWorkspace(workspaceId: string): Promise<{ relaunching: boolean }>; createUkWorkspace(): Promise<{ id: string; displayName: string; rootPath: string } | null>; listWorkspaceProposals(): Promise<Array<{ proposal: WorkspaceProposal; binding: WorkspaceProposalBinding; selectedRootPath: string | null }>>;
+      selectWorkspaceProposalRoot(binding: WorkspaceProposalBinding): Promise<{ proposalId: string; rootPath: string } | null>; confirmWorkspaceProposal(binding: WorkspaceProposalBinding): Promise<unknown>; getSettings(): Promise<WmbSettingsSnapshot | null>;
+      getOnboardingStatus(): Promise<OnboardingStatus>; recordOnboardingStep(step: Exclude<OnboardingStep, 'complete'>): Promise<OnboardingStep>; createDefaultWorkspace(): Promise<OnboardingWorkspaceResult>; chooseOnboardingWorkspace(): Promise<OnboardingWorkspaceResult | null>;
+      testOnboardingAi(input: OnboardingAiTestSettings): Promise<OnboardingAiTestResult>; saveOnboardingAi(input: OnboardingAiSaveInput, testResult: OnboardingAiTestRecord): Promise<unknown>; setOnboardingPlatform(platformId: string, status: PlatformCheckStatus): Promise<Record<string, { status: PlatformCheckStatus; updatedAt: string }>>; completeOnboarding(): Promise<OnboardingStatus>;
+      getAppUpdateState(): Promise<UpdateState>; checkAppUpdate(): Promise<UpdateState>; downloadAppUpdate(): Promise<UpdateState>; installAppUpdateNow(): Promise<UpdateState>;
+      installAppUpdateOnQuit(): Promise<UpdateState>; remindAppUpdateLater(): Promise<UpdateState>; markRendererReady(): Promise<unknown>; onAppUpdateState(listener: (state: UpdateState) => void): () => void;
+      openLogs(): Promise<void>; openExternal(url: string): Promise<void>;
       getGitHubRankings(refresh?: boolean): Promise<{
         fetchedAt: string;
         boards: Array<{

@@ -32,8 +32,8 @@ function appPaths(): { isPackaged: boolean; resourcesPath: string; appPath: stri
 function bundledRuntimeRoot(): string {
   const paths = appPaths();
   return paths.isPackaged
-    ? path.join(paths.resourcesPath, '.pi-runtime')
-    : path.join(paths.appPath, '.pi-runtime');
+    ? path.join(paths.resourcesPath, '.r')
+    : path.join(paths.appPath, '.r');
 }
 function overrideRoot(dataRootPath: string): string {
   return path.join(dataRootPath, 'pi-runtime');
@@ -52,7 +52,7 @@ function stagingOverrideRoot(dataRootPath: string): string {
 }
 
 export function piCliFromRuntimeRoot(runtimeRoot: string): string {
-  return path.join(runtimeRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js');
+  return path.join(runtimeRoot, 'node_modules', 'a', 'dist', 'cli.js');
 }
 
 export function piVisionExtensionFromRuntimeRoot(runtimeRoot: string): string {
@@ -61,7 +61,7 @@ export function piVisionExtensionFromRuntimeRoot(runtimeRoot: string): string {
 
 export async function readRuntimeVersion(runtimeRoot: string): Promise<string | null> {
   try {
-    const manifest = JSON.parse(await readFile(path.join(runtimeRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'package.json'), 'utf8')) as { version?: string };
+    const manifest = JSON.parse(await readFile(path.join(runtimeRoot, 'node_modules', 'a', 'package.json'), 'utf8')) as { version?: string };
     return manifest.version ?? null;
   } catch {
     return null;

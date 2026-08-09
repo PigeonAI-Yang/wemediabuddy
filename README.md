@@ -123,29 +123,32 @@ npm ci
 npm start
 ```
 
-首次启动后：
+首次启动向导会依次完成：
 
-1. 选择 WMB 数据目录；
-2. 在“设置”中选择专用浏览器 Profile；
-3. 填写提供 OpenAI-compatible 接口的 Base URL、API Key 和模型名称；
-4. 回到右侧 Pi 对话区开始使用。
+1. 创建默认工作空间，或选择现有数据目录；
+2. 配置并实际测试 OpenAI-compatible 模型连接；
+3. 按需登录小红书、X、微信公众号；
+4. 进入主界面。平台登录可跳过，工作空间与 AI 配置不可跳过。
 
 API Key、浏览器登录态和业务数据只应保存在本机，不要提交到仓库。
 
-### 生成 Windows 打包目录
+### 生成 Windows 安装包
 
 ```powershell
 npm ci
 npm run build
 ```
 
-完成后从以下位置启动：
+本地 Windows 构建使用短路径避免 Squirrel/NuGet 的 260 字符限制；默认输出到当前盘根目录的 `wmb-out`：
 
 ```text
-out\WeMediaBuddy-win32-x64\WeMediaBuddy.exe
+<当前盘>:\wmb-out\WeMediaBuddy-win32-x64\WeMediaBuddy.exe
+<当前盘>:\wmb-out\make\squirrel.windows\x64\WeMediaBuddy Setup.exe
+<当前盘>:\wmb-out\make\squirrel.windows\x64\RELEASES
+<当前盘>:\wmb-out\make\squirrel.windows\x64\*.nupkg
 ```
 
-`npm run build` 当前生成可运行的 Windows 应用目录，不生成安装向导。正式安装包将在 Release 流程完成后提供。
+`npm run package` 只生成免安装应用目录；`npm run build` 生成 Squirrel.Windows 安装器。正式发布由 `.github/workflows/release.yml` 在受保护的 `release` Environment 中签名并上传为 GitHub Draft Release，随后人工提升为 prerelease、验收，再转正式版本。证书 Base64 和密码只允许存入 GitHub Environment Secrets `WMB_WINDOWS_CERTIFICATE_BASE64`、`WMB_WINDOWS_CERTIFICATE_PASSWORD`，不得写入仓库、缓存、日志或构建产物。
 
 ## 文档
 

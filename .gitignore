@@ -1,5 +1,5 @@
 node_modules/
-.pi-runtime/
+.r/
 out/
 .vite/
 /data/

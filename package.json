@@ -1,9 +1,10 @@
 {
   "name": "wemedia-buddy",
   "productName": "WeMediaBuddy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "A local desktop terminal for human and external-Agent self-media operations.",
+  "author": "PigeonAI-Yang",
   "main": ".vite/build/index.js",
   "scripts": {
     "prestart": "node scripts/check-dev-port.mjs",
@@ -11,12 +12,16 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "check:capabilities": "node scripts/check-capability-registry.mjs",
-    "build": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
+    "package": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
+    "build": "node scripts/prepare-pi-runtime.mjs && electron-forge make",
+    "publish": "node scripts/prepare-pi-runtime.mjs && electron-forge publish",
     "icons:brand": "node scripts/build-brand-icons.mjs"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/plugin-vite": "7.11.2",
+    "@electron-forge/publisher-github": "^7.11.2",
     "@types/node": "24.10.1",
     "@types/react": "19.2.8",
     "@types/react-dom": "19.2.3",

@@ -11,10 +11,11 @@ import { LegacyStudioView } from './legacy-studio-view';
 import { PublishView } from './publishing-results-view';
 import { ResultsView } from './results-view';
 import { SettingsView } from './settings-view';
+import { OnboardingView } from './onboarding-view';
 import { AgentsRosterView } from './agents-roster-view';
 import { PiDock } from './pi-dock';
 import { XListOperationTray } from './x-list-operation-tray';
-import { AppConfirmHost } from './app-confirm';
+import { AppConfirmHost } from './app-confirm'; import { AppUpdateBanner } from './app-update-banner';
 import type { PiContextRef, PiFocusObject, RankingContext, Theme, View, XListPiContext } from './app-types';
 import { logoUrl, views } from './app-types';
 import { workspaceStorageKey } from './workspace-storage';
@@ -53,10 +54,15 @@ function App(): React.JSX.Element {
   const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('wmb.theme') === 'light' ? 'light' : 'dark');
   const [dataRoot, setDataRoot] = useState<string | null>(null);
   const [settings, setSettings] = useState<Awaited<ReturnType<typeof window.wmb.getSettings>>>(null);
+  const [onboardingStatus, setOnboardingStatus] = useState<Awaited<ReturnType<typeof window.wmb.getOnboardingStatus>> | null>(null);
   const [today, setToday] = useState<Awaited<ReturnType<typeof window.wmb.getToday>>>(null);
   const [publications, setPublications] = useState<Awaited<ReturnType<typeof window.wmb.getPublications>>>([]);
   const [browserChoice, setBrowserChoice] = useState('');
   const [piDockCollapsed, setPiDockCollapsed] = useState(() => localStorage.getItem('wmb.piDockCollapsed') === 'true');
+  useEffect(() => {
+    void window.wmb.getOnboardingStatus().then(setOnboardingStatus);
+    void window.wmb.markRendererReady();
+  }, []);
   useEffect(() => {
     const expand = () => setPiDockCollapsed(false);
     window.addEventListener('wmb:pi-dock-expand', expand);
@@ -358,6 +364,8 @@ function App(): React.JSX.Element {
     }
     return { page: view, pageLabel: pageLabels[view], objectType: null, objectId: null, objectTitle: null, focus: pageFocus };
   }, [view, todaySelectedItems, todaySelectedSources, today?.fermenting, fermentSelectedItem, proposalsSelectedItem, xListContext, rankingContext, libraryTopicContext, pageFocus, canvasContext, studioContext, publishSelected, publications]);
+  if (!onboardingStatus) return <main className="onboarding-shell onboarding-loading"><div className="onboarding-card"><span className="eyebrow">STARTING</span><h2>正在准备本地工作空间…</h2></div></main>;
+  if (!onboardingStatus.completed) return <OnboardingView initialStatus={onboardingStatus} onComplete={() => { void window.wmb.getOnboardingStatus().then(setOnboardingStatus); void window.wmb.getDataRoot().then((root) => setDataRoot(root?.path ?? null)); refreshSettings(); refreshToday(); refreshPublications(); }}/>;
   return <main className={`app-shell${piDockCollapsed ? ' pi-collapsed' : ' pi-open'}${view === 'settings' ? ' settings-mode' : ''}${view === 'studio' ? ' studio-mode' : ''}${view === 'topic' ? ' topic-mode' : ''}`} style={{ '--pi-open-width': `${piDockWidth}px` } as React.CSSProperties}>
     <header className="topbar">
       <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName}</small>}</div>
@@ -367,7 +375,7 @@ function App(): React.JSX.Element {
         <button aria-label="最大化或还原窗口" onClick={() => void window.wmb.windowControl('maximize')}>□</button>
         <button className="window-close" aria-label="关闭窗口" onClick={() => void window.wmb.windowControl('close')}>×</button>
       </div>
-    </header>
+    </header><AppUpdateBanner openSettings={() => navigate('settings')}/>
     <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view === 'topic' ? 'active' : ''} onClick={() => navigate('topic')} title="主题"><Icon name="knowledge"/><span>主题</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="canvas"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
     <section className="workspace">
       {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={openStudio} openTopic={openTopic} openProposals={() => navigate('proposals')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} openSettings={(section) => { if (section) sessionStorage.setItem('wmb.settingsSection', section); navigate('settings'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} fermentSelectedItem={fermentSelectedItem} onFermentSelectedItemChange={setFermentSelectedItem} planDate={planDate} onStatusChange={setPageStatus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} intelligenceChannels={settings?.workspace.intelligenceChannels ?? null} piConfigured={settings?.pi.configured === true}/>}

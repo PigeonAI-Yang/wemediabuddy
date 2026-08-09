@@ -240,7 +240,7 @@ MCP 工具按业务能力组织：
 
 ## 6.1 Pi RPC executor
 
-- 安装包的 `resources/.pi-runtime` 保存固定版本的官方 Pi CLI 及其生产依赖；
+- 安装包的 `resources/.r` 保存固定版本的官方 Pi CLI 及其生产依赖；短目录名用于规避 Squirrel.Windows 对安装包内部路径的 260 字符限制；
 - 该目录不进入 `app.asar`，可独立替换升级；升级必须先验证版本和 RPC 启停，失败时保留现有版本；
 - ActiveWorkspaceRuntime 管理当前唯一的 task/conversation Pi worker lease；Pi RPC 子进程通过 LF JSONL 发送固定 intent，并携带 workspaceId、runtimeEpoch、taskId、workerLeaseId、requestId 与 causation 转发事件；
 - WMB 在安装级用户目录保存一套加密的 Pi API/model 预设，并为每个根的 Pi 进程注入当前共享预设、该根 MCP URL 和任务上下文；Pi 会话与运行文件仍按 data-root 隔离，不读取其他 Agent OAuth；

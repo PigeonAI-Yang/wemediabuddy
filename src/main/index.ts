@@ -2,14 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } fro
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { DataRoot } from './data-root';
+import { openDataRoot, type DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { stopManagedBrowsers, type BrowserRuntime } from './browser'; import { configureBrowserProfileRegistryPath, openBrowserProfileRegistry } from './browser-config';
-import { migratePiConfigToInstallation, resolvePiConfigChain } from './pi-config';
+import { migratePiConfigToInstallation, readPiConfig, resolvePiConfigChain, savePiConfig } from './pi-config';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
 import { piModelsJson, WMB_VISION_MODEL } from './pi-model';
@@ -65,6 +65,8 @@ import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals'; import { createWorkspaceConfirmation } from './workspace-confirmation';
 import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session'; import { createBrowserProfileOwner } from './browser-profile-owner';
+import { handleSquirrelLifecycle } from './squirrel-lifecycle';
+import { createDesktopLifecycle } from './desktop-lifecycle';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
   {
@@ -139,7 +141,9 @@ async function withRuntimeWorker<T>(
   } finally { runtime.releaseWorker(lease); }
 }
 let shuttingDown = false;
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+app.setAppUserModelId('com.pigeonyang.wemediabuddy');
+const handlingSquirrelLifecycle = handleSquirrelLifecycle({ quit: () => app.quit() });
+const hasSingleInstanceLock = handlingSquirrelLifecycle ? false : app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
@@ -489,6 +493,16 @@ const browserProfileOwner = createBrowserProfileOwner({
   setBrowser: (runtime) => { if (runtime) activeRuntime?.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); else activeRuntime?.releaseBrowser(); }
 });
 const workspaceConfirmation = createWorkspaceConfirmation({ userDataPath: () => app.getPath('userData'), defaultBrowserProfileId, chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; }, loadSelectedDataRoot, relaunchCurrentWorkspace, proposals: workspaceProposals });
+const desktopLifecycle = createDesktopLifecycle({
+  refreshRuntime,
+  defaultBrowserProfileId,
+  getActiveRuntime: () => activeRuntime,
+  clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
+  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } },
+  abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
+  setShuttingDown: (value) => { shuttingDown = value; },
+  restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,
+});
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await syncPiSkillsForDataRoots(app.getPath('userData'), app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills'), registry.workspaces.map((workspace) => workspace.rootPath));
@@ -525,6 +539,7 @@ app.whenReady().then(async () => {
     }
   }
   registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals: workspaceConfirmation.list, selectWorkspaceProposalRoot: workspaceConfirmation.selectRoot, confirmWorkspaceProposal: workspaceConfirmation.confirm, getMcp: currentMcp, getXhs: currentXhs, getBrowser: currentBrowser, getRuntimeEpoch: () => activeRuntime?.identity.runtimeEpoch ?? null, stopPi: async () => { await activeRuntime?.stopWorker(); }, browserProfileOwner });
+  desktopLifecycle.registerIpcAndStartUpdater();
   protocol.handle('wmb-asset', async (request) => {
     try {
       const dataRoot = await loadSelectedDataRoot();
@@ -947,24 +962,7 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
   });
 });
 
-app.on('before-quit', (event) => {
-  if (shuttingDown) return;
-  event.preventDefault();
-  shuttingDown = true;
-  void (async () => {
-    const runtime = activeRuntime;
-    try {
-      scanSchedulerRef?.stop();
-      scanSchedulerRef = null;
-      if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {});
-      await runtime?.closeClaimsAndDrain().catch(() => {});
-      await runtime?.stop({ drain: false }).catch(() => {});
-    } finally {
-      if (activeRuntime === runtime) activeRuntime = null;
-      app.exit(0);
-    }
-  })();
-});
+app.on('before-quit', (event) => desktopLifecycle.handleBeforeQuit(event));
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
