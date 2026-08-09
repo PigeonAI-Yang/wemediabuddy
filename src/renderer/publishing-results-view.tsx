@@ -58,6 +58,19 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
   const browserReady = settings?.browser.status === 'ready';
   const mcpReady = settings?.mcp.status === 'ready';
   return <section className="workflow-page publish-page">
+    <section className="page-command" aria-label="发布概览">
+      <div className="page-command-main">
+        <div className="page-command-copy">
+          <div className="page-command-title-row">
+            <h1>发布</h1>
+            <p>{publications.length ? `当前 ${publications.length} 个发布任务。` : '从创作页准备平台版本后会出现在这里。'}</p>
+          </div>
+        </div>
+        <div className="page-command-actions">
+          <button type="button" className="secondary-button" onClick={openStudio}>回到创作</button>
+        </div>
+      </div>
+    </section>
     <div className="publish-layout">
       <main className="publish-preview">
       {!publications.length && <div className="compact-empty"><h2>还没有发布任务</h2><p>从创作页准备平台版本后会出现在这里。</p><button onClick={openStudio}>回到创作</button></div>}

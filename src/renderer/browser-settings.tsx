@@ -110,7 +110,6 @@ export function BrowserSettings({
     <section className="settings-section">
       <div className="settings-section-heading">
         <h3>当前登录环境</h3>
-        <p>每个工作空间绑定一套专用浏览器登录环境，用于平台登录、发布和结果读取。</p>
       </div>
       <div className="settings-status-card">
         <div className="settings-status-main">
@@ -154,7 +153,6 @@ export function BrowserSettings({
     <section className="settings-section">
       <div className="settings-section-heading">
         <h3>切换或创建登录环境</h3>
-        <p>先选择目标环境，再执行改绑；创建会生成独立环境并重启浏览器。</p>
       </div>
       <div className="settings-form">
         <label className="wide">
@@ -214,7 +212,6 @@ export function BrowserSettings({
     <section className="settings-section">
       <div className="settings-section-heading">
         <h3>验证平台账号</h3>
-        <p>验证会打开专用浏览器核对登录身份，不会重启应用；迁移会从旧版登录数据复制后再验证。</p>
       </div>
       <div className="settings-form">
         <label>
@@ -275,7 +272,6 @@ export function BrowserSettings({
     <section className="settings-section">
       <div className="settings-section-heading">
         <h3>X List 浏览缓存</h3>
-        <p>缓存只属于当前数据目录，不会随共享登录环境跨目录复用。</p>
       </div>
       <div className="settings-row">
         <div>

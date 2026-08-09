@@ -321,8 +321,18 @@
 .x-list-form { display: grid; gap: 9px; color: var(--muted); font-size: 12px; }
 .x-list-form > label,
 .x-list-confirmation > label { display: grid; gap: 5px; }
-.x-list-description-toggle { display: flex !important; align-items: center; gap: 6px; }
-.x-list-form input,
+.x-list-description-toggle { display: flex !important; align-items: center; gap: 8px; color: var(--ink-soft); font-weight: 650; }
+.x-list-description-toggle input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.x-list-form input:not([type="checkbox"]):not([type="radio"]),
 .x-list-form textarea,
 .x-list-form select,
 .x-list-confirmation input {
@@ -337,7 +347,7 @@
 }
 .x-list-form textarea { min-height: 76px; resize: vertical; }
 .x-list-form select { height: 34px; }
-.x-list-form input:focus-visible,
+.x-list-form input:not([type="checkbox"]):not([type="radio"]):focus-visible,
 .x-list-form textarea:focus-visible,
 .x-list-form select:focus-visible,
 .x-list-confirmation input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { TodayScoutCreature } from './today-scout-creature';
 import type { TodayRunView, TodaySecondaryId } from './today-run-view';
 
 export function TodayCommandBar(props: {
@@ -25,16 +24,16 @@ export function TodayCommandBar(props: {
       <div className="today-command-state" data-mode={running ? 'running' : 'idle'}>
         {running ? (
           <>
-            <TodayScoutCreature />
             <div className="today-command-run">
               <div className="today-command-run-head">
                 <div className="today-command-run-title">
-                  <strong>{view.headline}</strong>
-                  {view.progress?.currentSource ? <span className="intelligence-source">当前：{view.progress.currentSource}</span> : null}
+                  <strong>
+                    {view.headline}
+                    {view.progress?.currentSource ? <span className="intelligence-source"> · {view.progress.currentSource}</span> : null}
+                  </strong>
                 </div>
                 <div className="today-command-run-meta">
                   {view.progress?.stalled ? <em className="intelligence-stalled-pill">已等待 {formatWait(view.progress.stalled.waitSec)}</em> : null}
-                  <span>{view.progress?.label || ''}</span>
                 </div>
               </div>
               <div
@@ -44,7 +43,7 @@ export function TodayCommandBar(props: {
               >
                 <i style={{ width: `${barWidth}%` }} />
               </div>
-              <p className="today-command-detail">{view.detail}</p>
+              {view.detail ? <p className="today-command-detail">{view.detail}</p> : null}
               {(view.progress?.diagnostics?.length || view.progress?.stalled) ? (
                 <details className="today-command-diagnostics" open={detailsOpen} onToggle={(event) => setDetailsOpen((event.target as HTMLDetailsElement).open)}>
                   <summary>详情</summary>
@@ -71,18 +70,20 @@ export function TodayCommandBar(props: {
           </>
         ) : (
           <>
-            <p className="today-command-line">{view.headline}</p>
-            {view.detail ? <p className="today-command-detail">{view.detail}</p> : null}
-            {view.stats && view.stats.length > 0 ? (
-              <div className="today-command-stats" aria-label="今日指标">
-                {view.stats.map((stat) => (
-                  <div className="today-command-stat" key={stat.label}>
-                    <span className="stat-label">{stat.label}</span>
-                    <strong className="stat-value" data-tone={stat.tone}>{stat.value}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <div className="today-command-copy">
+              <p className="today-command-line">{view.headline}</p>
+              {view.detail ? <p className="today-command-detail">{view.detail}</p> : null}
+              {view.stats && view.stats.length > 0 ? (
+                <div className="today-command-stats" aria-label="今日指标">
+                  {view.stats.map((stat) => (
+                    <div className="today-command-stat" key={stat.label}>
+                      <span className="stat-label">{stat.label}</span>
+                      <strong className="stat-value" data-tone={stat.tone}>{stat.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="today-command-actions">
               {view.secondaryCtas.map((action) => (
                 <button

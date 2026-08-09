@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('wmb', {
   listKnowledgeSources: (input = {}) => ipcRenderer.invoke('knowledge:list-sources', input),
   updateKnowledgeSource: (input: unknown) => ipcRenderer.invoke('knowledge:update-source', input),
   deleteKnowledgeSource: (input: { id: string; expectedRevision: number }) => ipcRenderer.invoke('knowledge:delete-source', input),
+  laneRestoreSource: (input: { sourceId: string; expectedRevision: number; reason?: string }) => ipcRenderer.invoke('knowledge:lane-restore', input),
   listWatchingSources: (input: { limit?: number } = {}) => ipcRenderer.invoke('knowledge:list-watching', input),
   markSourcesWatching: (input: { sourceIds: string[] }) => ipcRenderer.invoke('knowledge:mark-watching', input),
   getSourceBodyCache: (sourceId: string) => ipcRenderer.invoke('sources:get-body-cache', sourceId),
@@ -99,11 +100,13 @@ contextBridge.exposeInMainWorld('wmb', {
   savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
+  setPiFallbackOrder: (ids: string[]) => ipcRenderer.invoke('pi-config:set-fallback-order', ids),
   listPiModels: (input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>,
   listPiSkills: () => ipcRenderer.invoke('pi-skills:list'),
   savePiSkill: (input: { originalName?: string; name: string; description: string; instructions: string }) => ipcRenderer.invoke('pi-skills:save', input),
   deletePiSkill: (name: string) => ipcRenderer.invoke('pi-skills:delete', name),
   listPiCommands: () => ipcRenderer.invoke('pi:commands'),
+  getPiAuthorityStatus: () => ipcRenderer.invoke('pi:authority-status'),
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),
@@ -168,7 +171,7 @@ contextBridge.exposeInMainWorld('wmb', {
     messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
+  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
     const handler = (_event: unknown, payload: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
@@ -193,13 +196,43 @@ contextBridge.exposeInMainWorld('wmb', {
   cancelAgentTask: (id: string) => ipcRenderer.invoke('agent:cancel', id),
   controlDailyIntelligence: (input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }) => ipcRenderer.invoke('agent:control-daily', input),
   startResultsReview: (input: { businessDate: string; publicationId: string }) => ipcRenderer.invoke('agent:start-results-review', input),
-  startDailyIntelligence: (input: { businessDate: string }) => ipcRenderer.invoke('agent:start-daily-intelligence', input),
+  startDailyIntelligence: (input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'>; legacyPipeline?: boolean }) => ipcRenderer.invoke('agent:start-daily-intelligence', input),
+  getManagerTask: (input?: { businessDate?: string }) => ipcRenderer.invoke('agent:get-manager-task', input ?? {}),
+  syncManagerTask: (input?: { businessDate?: string }) => ipcRenderer.invoke('agent:sync-manager-task', input ?? {}),
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
+  getAgentsRoster: (input?: { businessDate?: string }) => ipcRenderer.invoke('agents:roster-status', input ?? {}),
+  listAgentAvatars: () => ipcRenderer.invoke('agents:list-avatars'),
+  setAgentAvatar: (input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }) => ipcRenderer.invoke('agents:set-avatar', input),
+  clearAgentAvatar: (input: { roleId: string }) => ipcRenderer.invoke('agents:clear-avatar', input),
+  jobsSpawn: (input: {
+    roleId: 'reporter' | 'planner' | 'writer' | 'librarian';
+    brief: string;
+    businessDate?: string | null;
+    channelIds?: readonly string[] | null;
+    sourceFeedIds?: readonly string[] | null;
+    projectId?: string | null;
+    sourceIds?: readonly string[] | null;
+    scope?: 'workspace' | null;
+  }) => ipcRenderer.invoke('jobs:spawn', input),
+  jobsList: () => ipcRenderer.invoke('jobs:list'),
+  jobsGet: (jobId: string) => ipcRenderer.invoke('jobs:get', jobId),
+  jobsAwait: (input: { jobId: string; timeoutMs?: number }) => ipcRenderer.invoke('jobs:await', input),
+  jobsCancel: (jobId: string) => ipcRenderer.invoke('jobs:cancel', jobId),
+  jobsMessage: (input: { jobId: string; body: string }) => ipcRenderer.invoke('jobs:message', input),
+  jobsMessages: (jobId: string) => ipcRenderer.invoke('jobs:messages', jobId),
+  jobsPoolStatus: () => ipcRenderer.invoke('jobs:pool-status'),
+  jobsSetMaxWorkers: (maxWorkers: number) => ipcRenderer.invoke('jobs:set-max-workers', maxWorkers),
+  getAgentsCapabilitySummary: () => ipcRenderer.invoke('agents:capability-summary'),
+  listAgentsOverlays: () => ipcRenderer.invoke('agents:list-overlays'),
+  setAgentsOverlay: (input: { roleId: string; capabilityId: string; enabled: boolean }) => ipcRenderer.invoke('agents:set-overlay', input),
+  getProposalLedger: (input: { planDate: string; tab?: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired'; limit?: number; offset?: number }) => ipcRenderer.invoke('proposals:get', input),
+  getProposalLedgerSummary: (planDate: string) => ipcRenderer.invoke('proposals:summary', planDate),
   refreshFermenting: (planDate: string) => ipcRenderer.invoke('today:refresh-fermenting', planDate),
   listFermenting: (planDate: string) => ipcRenderer.invoke('today:list-fermenting', planDate),
   setCarryState: (input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }) => ipcRenderer.invoke('today:set-carry-state', input),
   dismissPlanItem: (input: { planItemId: string; reason?: string }) => ipcRenderer.invoke('today:dismiss-plan-item', input),
+  restoreProposal: (input: { planItemId: string; reason?: string }) => ipcRenderer.invoke('proposals:restore', input),
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
   listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),

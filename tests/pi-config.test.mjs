@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { activatePiConfig, deletePiConfig, listPiModels, migratePiConfigToInstallation, readPiConfig, resolvePiConfig, savePiConfig } from '../src/main/pi-config.ts';
+import { activatePiConfig, deletePiConfig, listPiModels, migratePiConfigToInstallation, readPiConfig, resolvePiConfig, savePiConfig, setPiFallbackOrder } from '../src/main/pi-config.ts';
 import { piModelsJson, WMB_VISION_MODEL } from '../src/main/pi-model.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
@@ -36,6 +36,37 @@ test('Pi API presets read, switch and delete without exposing keys', async () =>
     const remaining = deletePiConfig('two', configPath);
     assert.equal(remaining.activeId, 'one');
     assert.deepEqual(remaining.profiles.map((profile) => profile.name), ['主接口']);
+  } finally {
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Pi fallback order is configurable and stays after the active profile', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-fallback-'));
+  const configPath = path.join(rootPath, 'pi-api-config.json');
+  try {
+    await writeFile(configPath, JSON.stringify({ version: 1, state: {
+      activeId: 'one',
+      profiles: [
+        { id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', encryptedApiKey: 'secret-one' },
+        { id: 'two', name: '备用甲', baseUrl: 'https://two.test/v1', model: 'model-two', api: 'openai-completions', encryptedApiKey: 'secret-two' },
+        { id: 'three', name: '备用乙', baseUrl: 'https://three.test/v1', model: 'model-three', api: 'openai-responses', encryptedApiKey: 'secret-three' }
+      ]
+    } }), 'utf8');
+
+    const initial = readPiConfig(configPath);
+    assert.deepEqual(initial.fallbackOrder, []);
+
+    const ordered = setPiFallbackOrder(['three', 'one', 'two', 'missing'], configPath);
+    assert.deepEqual(ordered.fallbackOrder, ['three', 'two']);
+
+    const activated = activatePiConfig('two', configPath);
+    assert.equal(activated.activeId, 'two');
+    assert.deepEqual(activated.fallbackOrder, ['three']);
+
+    const deleted = deletePiConfig('three', configPath);
+    assert.deepEqual(deleted.fallbackOrder, []);
+    assert.equal(deleted.activeId, 'two');
   } finally {
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

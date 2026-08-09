@@ -270,3 +270,39 @@ test('Pi provider bodyless 5xx keeps completed-work semantics explicit', () => {
     'Pi 模型服务暂时异常（HTTP 500，服务端未返回详情）。已完成的工具结果已保留，可稍后重试回答。'
   );
 });
+
+test('Pi RPC stop rejects hanging promptUntilSettled promptly', async () => {
+  const fixture = `
+let b='';
+process.stdin.on('data',d=>{
+  b+=d;
+  while(b.includes('\\n')){
+    const i=b.indexOf('\\n');
+    const r=JSON.parse(b.slice(0,i));
+    b=b.slice(i+1);
+    if(r.type==='get_state'){
+      process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true,data:{}})+'\\n');
+      continue;
+    }
+    if(r.type==='prompt'){
+      process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true})+'\\n');
+      process.stdout.write(JSON.stringify({type:'agent_start'})+'\\n');
+      // intentionally never settle — stop() must reject waiters
+      continue;
+    }
+    if(r.type==='abort'){
+      process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true})+'\\n');
+      continue;
+    }
+    process.stdout.write(JSON.stringify({id:r.id,type:'response',success:true})+'\\n');
+  }
+});
+`;
+  const runtime = new PiRpcSupervisor(process.execPath, ['-e', fixture], process.env);
+  await runtime.start();
+  const pending = runtime.promptUntilSettled('hang-forever');
+  await new Promise((r) => setTimeout(r, 30));
+  const stopped = runtime.stop();
+  await assert.rejects(() => pending, /Pi RPC 已停止|已停止|exit/i);
+  await stopped;
+});

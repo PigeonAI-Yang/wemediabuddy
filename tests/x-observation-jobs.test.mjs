@@ -6,7 +6,7 @@ import test from 'node:test';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { xMetricEvidenceMap } from '../src/main/platforms/metric-value.ts';
 import { bindXList } from '../src/main/x-lists.ts';
-import { getXObservationSession, processDueXObservationJobs, startXObservationSession, stopXObservationSession } from '../src/main/x-observation-jobs.ts';
+import { getXObservationSession, processDueXObservationJobs, recoverRunningXObservationJobs, startXObservationSession, stopXObservationSession } from '../src/main/x-observation-jobs.ts';
 import { insertWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 test('X observation schedules exact windows, replays idempotently, and resumes only the latest overdue window', async () => {
@@ -65,6 +65,28 @@ test('stopping an in-flight X observation rejects its late browser result withou
     assert.equal(count(fixture.db, 'source_items'), 1);
     assert.equal(count(fixture.db, 'x_post_metric_snapshots'), 1);
     assert.equal(getXObservationSession(fixture.db, started.data.id).status, 'stopped');
+  } finally { await fixture.close(); }
+});
+
+test('recovery retries only stale low-attempt claims and terminalizes exhausted claims once', async () => {
+  const fixture = await createFixture('bounded-recovery');
+  try {
+    const started = await startXObservationSession(fixture.db, fixture.config, {
+      requestId: 'bounded-recovery', bindingIds: [fixture.binding.id], readTimeline: timelineAt('2026-08-02T00:00:00.000Z', 100)
+    });
+    assert.equal(started.ok, true, JSON.stringify(started));
+    const [exhausted, retryable, current] = started.data.jobs;
+    fixture.db.prepare("UPDATE jobs SET status='running', attempts=3, started_at='2026-08-02T00:10:00.000Z' WHERE id=?").run(exhausted.id);
+    fixture.db.prepare("UPDATE jobs SET status='running', attempts=2, started_at='2026-08-02T00:11:00.000Z' WHERE id=?").run(retryable.id);
+    fixture.db.prepare("UPDATE jobs SET status='running', attempts=1, started_at='2026-08-02T00:12:00.000Z' WHERE id=?").run(current.id);
+    assert.equal(await recoverRunningXObservationJobs(fixture.db, 7, '2026-08-02T00:12:00.000Z'), 1);
+    const recovered = getXObservationSession(fixture.db, started.data.id).jobs;
+    assert.deepEqual(recovered.map((job) => [job.id, job.status, job.lastError]), [
+      [exhausted.id, 'failed', 'OBSERVATION_RETRY_EXHAUSTED'],
+      [retryable.id, 'pending', null],
+      [current.id, 'running', null]
+    ]);
+    assert.equal(await recoverRunningXObservationJobs(fixture.db, 7, '2026-08-02T00:12:00.000Z'), 0);
   } finally { await fixture.close(); }
 });
 

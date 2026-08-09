@@ -1,23 +1,18 @@
-.pi-collapsed .pi-dock-toggle,
-.pi-dock.collapsed .pi-dock-toggle,
-.app-shell.pi-collapsed .pi-dock-toggle {
-  /* pi column width is 0; left:0 is the screen right edge, translate keeps the tab outside. */
-  left: 0;
-  right: auto;
-  transform: translate(-100%, -50%);
-  border-right: 0;
-  opacity: 1;
-}
 .pi-dock-header {
   position: relative;
   display: grid; gap: 8px; border-bottom: 1px solid var(--border-soft); padding: 16px 16px 12px;
 }
 .pi-dock-title-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.pi-dock-title-row .pi-session-trigger {
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
 }
 .pi-session-trigger {
   display: grid;
@@ -406,7 +401,7 @@ button.pi-jump-latest:not(:disabled):not([aria-disabled="true"]):active { transf
 .pi-native-queue li div { min-width: 0; }
 .pi-native-queue li b { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 650; }
 .pi-native-queue li p { display: -webkit-box; overflow: hidden; margin: 2px 0 0; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; line-height: 1.4; }
-.pi-dock.collapsed > :not(.pi-dock-toggle) { display: none; }
+.pi-dock.collapsed > :not(.pi-dock-toggle-rail) { display: none; }
 .pi-open .today-layout { display: block; }
 .pi-open .today-main { height: 100%; }
 .pi-open .sources-toggle { display: inline-flex; }
@@ -423,3 +418,9 @@ button.pi-jump-latest:not(:disabled):not([aria-disabled="true"]):active { transf
 @media (max-width: 1279px) {
   .pi-open .publish-preview { overflow: visible; }
 }
+
+.pi-authority-chip { display:inline-flex; align-items:center; gap:6px; margin-left:8px; border-radius:999px; padding:2px 8px; font-size:11px; border:1px solid var(--border-soft); }
+.pi-authority-chip em { font-style:normal; opacity:.75; }
+.pi-authority-chip.tone-write { background: color-mix(in srgb, #3ecf8e 18%, transparent); color:#8dffc5; }
+.pi-authority-chip.tone-readonly { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
+.pi-authority-chip.tone-prepare { background: color-mix(in srgb, #e6b84d 18%, transparent); color:#ffd27a; }

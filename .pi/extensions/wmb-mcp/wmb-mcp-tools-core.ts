@@ -244,4 +244,117 @@ const suggestKnowledge: ToolDefinition = {
   }
 };
 
-export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, suggestKnowledge];
+
+const judgeSources: ToolDefinition = {
+  name: 'wmb_judge_sources',
+  label: '移出/判定资料',
+  description: '赛道判定并软移出资料库（archived）。需 taskId/grantId/workerLeaseId。irrelevant 必须 reason。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      taskId: { type: 'string' },
+      grantId: { type: 'string' },
+      workerLeaseId: { type: 'string' },
+      judgments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            sourceId: { type: 'string' },
+            decision: { type: 'string', enum: ['relevant', 'irrelevant'] },
+            reasonCode: {
+              type: 'string',
+              enum: [
+                'off_lane_content',
+                'lifestyle_noise',
+                'ad_promotion',
+                'out_of_scope_region',
+                'duplicate_series',
+                'edge_ai_adjacent',
+                'official_source',
+                'editor_override',
+                'lane_relevant'
+              ]
+            },
+            reason: { type: 'string' },
+            expectedRevision: { type: 'number' },
+            confidence: { type: 'number' }
+          },
+          required: ['sourceId', 'decision', 'reasonCode', 'expectedRevision']
+        }
+      }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'judgments'],
+    additionalProperties: false
+  },
+  execute: async (_toolCallId, params) => textResult(await callTool('sources.lane_gate', {
+    request_id: String(params.requestId ?? ''),
+    task_id: String(params.taskId ?? ''),
+    grant_id: String(params.grantId ?? ''),
+    worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined,
+    judgments: params.judgments
+  }))
+};
+
+const restoreSource: ToolDefinition = {
+  name: 'wmb_restore_source',
+  label: '恢复资料',
+  description: '恢复已移出资料。需 taskId/grantId/workerLeaseId 与 expectedRevision。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      taskId: { type: 'string' },
+      grantId: { type: 'string' },
+      workerLeaseId: { type: 'string' },
+      sourceId: { type: 'string' },
+      expectedRevision: { type: 'number' },
+      reason: { type: 'string' }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'sourceId', 'expectedRevision'],
+    additionalProperties: false
+  },
+  execute: async (_toolCallId, params) => textResult(await callTool('sources.lane_restore', {
+    request_id: String(params.requestId ?? ''),
+    task_id: String(params.taskId ?? ''),
+    grant_id: String(params.grantId ?? ''),
+    worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined,
+    source_id: String(params.sourceId ?? ''),
+    expected_revision: Number(params.expectedRevision),
+    reason: params.reason ? String(params.reason) : undefined
+  }))
+};
+
+const updateSourceStatus: ToolDefinition = {
+  name: 'wmb_update_source_status',
+  label: '更新资料状态',
+  description: '更新核验/管理状态（不改主题）。需 taskId/grantId/workerLeaseId。',
+  parameters: {
+    type: 'object',
+    properties: {
+      requestId: { type: 'string' },
+      taskId: { type: 'string' },
+      grantId: { type: 'string' },
+      workerLeaseId: { type: 'string' },
+      id: { type: 'string' },
+      expectedRevision: { type: 'number' },
+      verificationStatus: { type: 'string' },
+      managementStatus: { type: 'string' }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'id', 'expectedRevision'],
+    additionalProperties: false
+  },
+  execute: async (_toolCallId, params) => textResult(await callTool('sources.update_status', {
+    request_id: String(params.requestId ?? ''),
+    task_id: String(params.taskId ?? ''),
+    grant_id: String(params.grantId ?? ''),
+    worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined,
+    id: String(params.id ?? ''),
+    expected_revision: Number(params.expectedRevision),
+    verification_status: params.verificationStatus ? String(params.verificationStatus) : undefined,
+    management_status: params.managementStatus ? String(params.managementStatus) : undefined
+  }))
+};
+
+export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, suggestKnowledge, judgeSources, restoreSource, updateSourceStatus];

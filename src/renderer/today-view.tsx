@@ -5,36 +5,44 @@ import { SourceMark } from './source-mark';
 import {
   MAX_SELECTED_SOURCES, Opportunity, SourceList,
   bodyToSelectedFields, formatSourcePublishedAt, isHeartbeatSource,
-  priorityGrade, sortFeedSources, type SelectedTodaySource
+  priorityGrade, sortFeedSources, sourceOriginLabel, type SelectedTodaySource
 } from './today-view-parts';
 import { FermentingRail, TodaySourceDetail } from './today-view-panels';
-import { poolBadges, poolItemToPlanItem } from './today-pool-view';
+import { poolBadges, resolveChairDisplayItems } from './today-pool-view';
 import { useTodayRunningTransition } from './today-running-transition';
+import { readTodayRunCache, writeTodayRunCache } from './today-run-cache';
 import { TodayCommandBar } from './today-command-bar';
 import { TodayBlockers } from './today-blockers';
 import {
   deriveTodayRunView,
+  isManagerNonterminal,
   type DailyTaskSnapshot,
   type TodayBlockerAction,
   type TodaySecondaryId
 } from './today-run-view';
+import { appConfirm } from './app-confirm';
 
 export type SettingsSectionId = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
 
-export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
-  refresh: () => void; openStudio: () => void;
+  refresh: () => void; openStudio: (projectId?: string) => void;
   openLibrary: (sourceId?: string) => void;
   openSettings?: (section?: SettingsSectionId) => void;
+  openTopic?: (topicId: string) => void;
   selectedItems: TodayPlanItem[]; onSelectionChange: (items: TodayPlanItem[]) => void;
   selectedSources: SelectedTodaySource[]; onSelectedSourcesChange: (sources: SelectedTodaySource[]) => void;
+  fermentSelectedItem?: any | null; onFermentSelectedItemChange?: (item: any | null) => void;
   planDate: string;
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void; aiSourcePresentation: boolean;
   intelligenceChannels: IntelligenceChannelsSummary | null; piConfigured: boolean;
+  openProposals?: () => void;
 }): React.JSX.Element {
+  const cachedRun = readTodayRunCache(planDate);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [running, setRunning] = useTodayRunningTransition();
-  const [task, setTask] = useState<DailyTaskSnapshot | null>(null);
+  const [running, setRunning] = useTodayRunningTransition(Boolean(cachedRun?.running));
+  const [task, setTask] = useState<DailyTaskSnapshot | null>(cachedRun?.task ?? null);
+  const [controlPending, setControlPending] = useState<'save_partial' | 'cancel' | null>(null);
   const startingRef = useRef(false);
   const [, tick] = useState(0);
   const sources = today?.sources ?? [];
@@ -45,18 +53,17 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const latestPlan = today?.latestPlan ?? null;
   const pool = today?.pool ?? null;
   const todayItems = todayPlan?.items ?? [];
-  const displayItems = pool ? pool.map(poolItemToPlanItem) : (todayPlan ?? latestPlan)?.items ?? [];
+  // 主席：pool > 今日非空 plan > 最近非空 plan；空 current 运行记录不得掏空主区。
+  const displayItems = resolveChairDisplayItems(pool, todayPlan, latestPlan);
   const primary = displayItems[0] ?? null;
   const sssCount = todayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
+  const [proposalSummary, setProposalSummary] = useState<Awaited<ReturnType<typeof window.wmb.getProposalLedgerSummary>>>(null);
   const [detailSource, setDetailSource] = useState<TodaySource | null>(null);
   const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
   const [detailBodyLoading, setDetailBodyLoading] = useState(false);
   const [detailBodyError, setDetailBodyError] = useState('');
-  const oppsRef = useRef<HTMLDivElement | null>(null);
-  const railRef = useRef<HTMLElement | null>(null);
   const feedListRef = useRef<HTMLDivElement | null>(null);
-  const [visibleFeedCount, setVisibleFeedCount] = useState(feedSources.length);
   const sourcesAreToday = today?.sourcesDate === planDate;
   const todaySourcesTotal = sourcesAreToday ? (today?.sourcesTotal ?? sources.length) : 0;
 
@@ -70,76 +77,49 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     sourcesTotal: todaySourcesTotal,
     studioActive,
     piConfigured,
-    channelsSummary: intelligenceChannels
-  }), [task, todayPlan, latestPlan, todayItems.length, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running]);
+    channelsSummary: intelligenceChannels,
+    controlPending: controlPending != null,
+    controlPendingAction: controlPending
+  }), [task, todayPlan, latestPlan, todayItems.length, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running, controlPending]);
 
-  const feedRowHeightsRef = useRef<number[]>([]);
-  const feedHeightsSignatureRef = useRef('');
+  // 入库信息流：内容超出视口时无缝自动向上滚动；悬停暂停，便于点选。
   useEffect(() => {
-    const opps = oppsRef.current;
-    const rail = railRef.current;
     const feed = feedListRef.current;
-    if (!opps || !rail || !feed || typeof ResizeObserver === 'undefined') return;
-    let cancelled = false;
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    // 行高取决于可用宽度（标题换行）与文本长度；两个都进缓存键，否则 resize/收放 Pi 栏后用旧高度算出错误裁剪。
-    const signature = `${sources.map((item) => `${item.id}:${item.title.length}`).join('|')}@${Math.round(feed.clientWidth)}`;
+    if (!feed || feedSources.length < 2) return;
+    const track = feed.querySelector<HTMLElement>('.feed-stream-track');
+    if (!track) return;
 
-    const computeFit = (targetHeight: number): number => {
-      const railStyles = getComputedStyle(rail);
-      const gap = Number.parseFloat(railStyles.rowGap || railStyles.gap || '0') || 0;
-      let reserved = 0;
-      for (const child of [...rail.children] as HTMLElement[]) {
-        if (child === feed) continue;
-        reserved += Math.ceil(child.getBoundingClientRect().height) + gap;
-      }
-      const feedStyles = getComputedStyle(feed);
-      const padY = (Number.parseFloat(feedStyles.paddingTop || '0') || 0) + (Number.parseFloat(feedStyles.paddingBottom || '0') || 0);
-      const available = Math.max(0, targetHeight - reserved - padY);
-      let used = 0;
-      let fit = 0;
-      for (const height of feedRowHeightsRef.current) {
-        const next = used + height + (fit ? gap : 0);
-        if (next > available + 0.5) break;
-        used = next;
-        fit += 1;
-      }
-      return Math.max(1, Math.min(feedSources.length, fit || 1));
-    };
+    let raf = 0;
+    let last = performance.now();
+    let offset = 0;
+    let paused = false;
+    const speed = 22; // px/s
 
-    const sync = () => {
-      const targetHeight = Math.ceil(opps.getBoundingClientRect().height);
-      if (targetHeight <= 0) return;
-      rail.style.height = `${targetHeight}px`;
-      rail.style.minHeight = `${targetHeight}px`;
-      rail.style.maxHeight = `${targetHeight}px`;
-      if (!feedSources.length) { setVisibleFeedCount(0); return; }
-      if (feedHeightsSignatureRef.current !== signature) {
-        // 数据变化：全量渲染一次以测量真实行高并缓存；之后只按缓存做纯算术，不再触发渲染循环。
-        setVisibleFeedCount(feedSources.length);
-        window.requestAnimationFrame(() => {
-          if (cancelled) return;
-          feedRowHeightsRef.current = ([...feed.querySelectorAll('.feed-item')] as HTMLElement[])
-            .map((row) => Math.ceil(row.getBoundingClientRect().height));
-          feedHeightsSignatureRef.current = signature;
-          const fit = computeFit(targetHeight);
-          setVisibleFeedCount((prev) => (prev === fit ? prev : fit));
-        });
-        return;
+    const onEnter = () => { paused = true; };
+    const onLeave = () => { paused = false; last = performance.now(); };
+    feed.addEventListener('pointerenter', onEnter);
+    feed.addEventListener('pointerleave', onLeave);
+
+    const tickFrame = (now: number) => {
+      const half = track.scrollHeight / 2;
+      if (!paused && half > feed.clientHeight + 8) {
+        const dt = Math.min(0.05, (now - last) / 1000);
+        offset += speed * dt;
+        if (offset >= half) offset -= half;
+        track.style.transform = `translate3d(0, ${-offset}px, 0)`;
       }
-      const fit = computeFit(targetHeight);
-      setVisibleFeedCount((prev) => (prev === fit ? prev : fit));
+      last = now;
+      raf = requestAnimationFrame(tickFrame);
     };
-    const ro = new ResizeObserver(() => {
-      // resize 拖动会连续触发；等宽度稳定后再测量，避免拖动期间反复全量渲染。
-      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-      debounceTimer = setTimeout(() => { if (!cancelled) sync(); }, 120);
-    });
-    ro.observe(opps);
-    ro.observe(rail);
-    sync();
-    return () => { cancelled = true; clearTimeout(debounceTimer ?? undefined); ro.disconnect(); };
-  }, [primary?.id, displayItems.length, sources.map((item) => item.id).join('|'), runView.blockers.length, task?.status, feedSources.length]);
+    raf = requestAnimationFrame(tickFrame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      feed.removeEventListener('pointerenter', onEnter);
+      feed.removeEventListener('pointerleave', onLeave);
+      track.style.transform = '';
+    };
+  }, [feedSources.map((item) => item.id).join('|'), primary?.id, displayItems.length, runView.blockers.length]);
 
   useEffect(() => {
     let active = true;
@@ -149,6 +129,18 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     }).catch(() => {});
     return () => { active = false; };
   }, [todayPlan?.id, latestPlan?.id, displayItems.length]);
+
+  useEffect(() => {
+    let active = true;
+    const loadSummary = () => void window.wmb.getProposalLedgerSummary(planDate).then((value) => {
+      if (active) setProposalSummary(value);
+    }).catch(() => {});
+    loadSummary();
+    const unsubscribe = window.wmb.onDataChanged((event) => {
+      if (event.scopes.includes('today') || event.scopes.includes('proposals')) loadSummary();
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [planDate]);
 
   useEffect(() => {
     if (!detailSource) { setDetailBody(null); setDetailBodyError(''); setDetailBodyLoading(false); return; }
@@ -166,15 +158,56 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   }, [detailSource?.id]);
 
   useEffect(() => {
-    const load = () => void window.wmb.getAgentTask({ intent: 'daily_intelligence', businessDate: planDate }).then((value) => {
-      const typed = (value && typeof value === 'object') ? value as DailyTaskSnapshot : null;
-      setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(typed ?? null) ? prev : typed);
-      if (!typed) { if (!startingRef.current) setRunning(false); return; }
-      const nextRunning = typed.status === 'running';
-      if (nextRunning) startingRef.current = false;
-      if (!nextRunning && startingRef.current) return;
-      setRunning(nextRunning);
-    }).catch(() => {});
+    const load = () => {
+      void (async () => {
+        try {
+          await window.wmb.syncManagerTask?.({ businessDate: planDate });
+          const projection = await window.wmb.getManagerTask?.({ businessDate: planDate });
+          const manager = projection?.managerTask;
+          const child = projection?.legacyChild;
+          if (manager && isManagerNonterminal(manager)) {
+            const summary = manager.checkpoint?.summary || manager.progress?.message || '主管任务进行中';
+            const runningChild = child?.status === 'running' ? child : null;
+            // 诚实投影：有运行中 child 用 child 的 phase/计数（determinate）；否则用 manager checkpoint 阶段。
+            // 主管未终态（含 waiting_human/report）恒为 running：不得因旧方案存在或 child 停止而降级 partial→idle。
+            const snapshot = {
+              id: runningChild?.id || manager.id,
+              intent: runningChild?.intent || 'page_agents',
+              status: 'running',
+              phase: runningChild?.phase || manager.checkpoint?.phase || 'manager',
+              progress: {
+                ...(runningChild?.progress || {}),
+                message: summary,
+                planned: runningChild?.progress?.planned,
+                processed: runningChild?.progress?.processed
+              },
+              events: runningChild?.events?.length ? runningChild.events : (summary ? [{ message: summary }] : []),
+              errorMessage: summary
+            } as DailyTaskSnapshot;
+            setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(snapshot) ? prev : snapshot);
+            startingRef.current = false;
+            setRunning(true);
+            writeTodayRunCache({ planDate, task: snapshot, running: true });
+            return;
+          }
+        } catch { /* fall through */ }
+        const value = await window.wmb.getAgentTask({ intent: 'daily_intelligence', businessDate: planDate });
+        const typed = (value && typeof value === 'object') ? value as DailyTaskSnapshot : null;
+        setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(typed ?? null) ? prev : typed);
+        if (!typed) {
+          if (!startingRef.current) {
+            setRunning(false);
+            writeTodayRunCache({ planDate, task: null, running: false });
+          }
+          return;
+        }
+        const nextRunning = typed.status === 'running';
+        if (nextRunning) startingRef.current = false;
+        if (!nextRunning && startingRef.current) return;
+        setRunning(nextRunning);
+        writeTodayRunCache({ planDate, task: typed, running: nextRunning });
+      })().catch(() => {});
+    };
     load();
     const unsubscribe = window.wmb.onDataChanged((event) => {
       if (event.scopes.includes('agent') || event.scopes.includes('today')) load();
@@ -195,13 +228,16 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     return () => onStatusChange(null);
   }, [runView.statusLine, running, onStatusChange]);
 
-  const create = async (item: TodayPlanItem) => { await window.wmb.createProjectFromPlanItem(item.id); openStudio(); };
+  const create = async (item: TodayPlanItem) => {
+    const project = await window.wmb.createProjectFromPlanItem(item.id);
+    openStudio(project?.id);
+  };
   const poolBadgeMap = useMemo(() => {
     const nowMs = Date.now();
-    return new Map((pool ?? []).map((item) => [item.planItemId, poolBadges(item, nowMs)]));
-  }, [pool]);
+    return new Map((pool ?? []).map((item) => [item.planItemId, poolBadges(item, nowMs, planDate)]));
+  }, [pool, planDate]);
   const dismissOpportunity = async (planItemId: string) => {
-    if (!window.confirm('否掉这个机会？它会从池中移除且不再出现。')) return;
+    if (!await appConfirm({ title: '否掉机会', message: '否掉这个机会？它会从池中移除且不再出现。', confirmLabel: '否掉', danger: true })) return;
     try {
       await window.wmb.dismissPlanItem({ planItemId });
       refresh();
@@ -210,10 +246,25 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     }
   };
   const xChannelAbsent = Boolean(intelligenceChannels?.readiness?.some((entry) => entry.module === 'x_lists' && entry.status === 'needs_user'));
-  const createFromCarry = async (item: { objectType: string; objectId: string }) => {
-    if (item.objectType !== 'plan_item') return;
-    await window.wmb.createProjectFromPlanItem(item.objectId);
-    openStudio();
+  const createFromCarry = async (item: { objectType: string; objectId: string; title?: string }) => {
+    if (item.objectType === 'plan_item') {
+      const project = await window.wmb.createProjectFromPlanItem(item.objectId);
+      openStudio(project?.id);
+      return;
+    }
+    if (item.objectType === 'topic') {
+      const title = (item.title || '主题创作').trim();
+      const project = await window.wmb.createStudioProject({ title, body: `# ${title}\n\n` });
+      if (project?.id != null && project.revision != null) {
+        try {
+          await window.wmb.updateStudioProject({ projectId: project.id, expectedRevision: project.revision, topicId: item.objectId });
+        } catch {
+          // Project exists even if topic bind fails; still open studio.
+        }
+      }
+      openStudio(project?.id);
+      return;
+    }
   };
   const toggleSelection = (item: TodayPlanItem) => {
     onSelectionChange(selectedItems.some((selected) => selected.id === item.id)
@@ -245,10 +296,14 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
 
   const startIntelligence = async () => {
     if (running || startingRef.current) return;
-    if (runView.primaryCta.confirm && !window.confirm(runView.primaryCta.confirm)) return;
+    if (runView.primaryCta.confirm && !await appConfirm({ title: '开始今日情报', message: runView.primaryCta.confirm, confirmLabel: '继续' })) return;
     startingRef.current = true;
     setRunning(true);
-    setTask((prev) => prev?.status === 'running' ? prev : { status: 'running', phase: 'starting', progress: {}, events: [] });
+    setTask((prev) => {
+      const next = prev?.status === 'running' ? prev : { status: 'running', phase: 'starting', progress: {}, events: [] } as DailyTaskSnapshot;
+      writeTodayRunCache({ planDate, task: next, running: true });
+      return next;
+    });
     try {
       const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
       const result = await window.wmb.startDailyIntelligence({ businessDate }) as {
@@ -262,9 +317,42 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         setTask({ status: 'failed', errorMessage: result.error?.message || '今日情报失败' });
         return;
       }
-      if (result.data?.task) {
-        setTask(result.data.task);
-        startingRef.current = result.data.task.status === 'running' ? false : false;
+      const data = result.data as {
+        task?: DailyTaskSnapshot;
+        managerTask?: { id: string; checkpoint?: { summary?: string; status?: string; phase?: string }; status?: string };
+        focusDialog?: boolean;
+        action?: string;
+        reused?: boolean;
+      } | undefined;
+      if (data?.focusDialog) {
+        window.dispatchEvent(new CustomEvent('wmb:focus-manager-dialog', {
+          detail: { managerTaskId: data.managerTask?.id, action: data.action }
+        }));
+      }
+      if (data?.action === 'focus_existing') {
+        // Serial lock: do not show a second run; surface manager summary on the command bar.
+        startingRef.current = false;
+        if (data.task) {
+          setRunning(data.task.status === 'running');
+          setTask(data.task);
+        } else if (data.managerTask) {
+          const nonterminal = isManagerNonterminal(data.managerTask);
+          setRunning(nonterminal);
+          setTask({
+            id: data.managerTask.id,
+            status: nonterminal ? 'running' : (data.managerTask.checkpoint?.status === 'waiting_human' ? 'partial' : data.managerTask.status),
+            phase: data.managerTask.checkpoint?.phase || 'manager',
+            progress: {},
+            events: [],
+            errorMessage: data.managerTask.checkpoint?.summary || '主管任务进行中 · 查看对话进度'
+          } as DailyTaskSnapshot);
+        }
+        refresh();
+        return;
+      }
+      if (data?.task) {
+        setTask(data.task);
+        startingRef.current = data.task.status === 'running' ? false : false;
       } else {
         startingRef.current = false;
       }
@@ -281,6 +369,10 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const onPrimary = () => {
     if (runView.primaryCta.kind === 'open_studio') { openStudio(); return; }
     if (runView.primaryCta.kind === 'none') return;
+    if (runView.primaryCta.label === '对话中 · 查看进度' || runView.headline === '主管编排中') {
+      window.dispatchEvent(new CustomEvent('wmb:focus-manager-dialog', { detail: { action: 'focus_existing' } }));
+      return;
+    }
     void startIntelligence();
   };
 
@@ -288,20 +380,70 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     if (id === 'view_sources') { setSourcesOpen(true); return; }
     if (id === 'refresh') { refresh(); return; }
     if (id === 'open_studio') { openStudio(); return; }
+    if (id === 'continue') { void startIntelligence(); return; }
     if (id === 'restart') {
-      if (!window.confirm('重新侦察会用新结果替换今日方案，继续？')) return;
-      void startIntelligence();
+      void (async () => {
+        if (!await appConfirm({ title: '重新侦察', message: '重新侦察会用新结果替换今日方案，继续？', confirmLabel: '继续侦察' })) return;
+        await startIntelligence();
+      })();
       return;
     }
     if (id === 'save_partial') {
-      if (!task?.id) return;
-      void window.wmb.controlDailyIntelligence({ id: task.id, action: 'save_partial' });
+      const taskId = task?.id;
+      if (!taskId) {
+        setTask((current) => current ? { ...current, errorMessage: '没有可停止的运行中任务。' } : { status: 'failed', errorMessage: '没有可停止的运行中任务。' });
+        return;
+      }
+      if (controlPending) return;
+      void (async () => {
+        setControlPending('save_partial');
+        try {
+          const result = await window.wmb.controlDailyIntelligence({ id: taskId, action: 'save_partial' });
+          if (result && typeof result === 'object' && result.ok === false) {
+            setTask((current) => ({ ...(current ?? { id: taskId }), status: current?.status || 'running', errorMessage: result.error?.message || '保存并停止失败' }));
+          } else if (result?.data && typeof result.data === 'object') {
+            setTask(result.data as DailyTaskSnapshot);
+          }
+          refresh();
+        } catch (error) {
+          setTask((current) => ({ ...(current ?? { id: taskId }), status: current?.status || 'running', errorMessage: error instanceof Error ? error.message : String(error) }));
+        } finally {
+          setControlPending(null);
+          window.setTimeout(() => refresh(), 300);
+        }
+      })();
       return;
     }
     if (id === 'cancel') {
-      if (!task?.id) return;
-      if (!window.confirm('未保存的渠道结果会丢弃；想保留请先「保存并停止」。')) return;
-      void window.wmb.controlDailyIntelligence({ id: task.id, action: 'cancel' });
+      const taskId = task?.id;
+      if (!taskId) {
+        setTask((current) => current ? { ...current, errorMessage: '没有可取消的运行中任务。' } : { status: 'failed', errorMessage: '没有可取消的运行中任务。' });
+        return;
+      }
+      if (controlPending) return;
+      void (async () => {
+        if (!await appConfirm({
+          title: '停止任务',
+          message: '将结束本次运行。已入库资料仍保留；未完成的方案综合会丢弃。想保留已扫描进度请用「保存并停止」。',
+          confirmLabel: '直接停止',
+          danger: true
+        })) return;
+        setControlPending('cancel');
+        try {
+          const result = await window.wmb.controlDailyIntelligence({ id: taskId, action: 'cancel' });
+          if (result && typeof result === 'object' && result.ok === false) {
+            setTask((current) => ({ ...(current ?? { id: taskId }), status: current?.status || 'running', errorMessage: result.error?.message || '取消失败' }));
+          } else if (result?.data && typeof result.data === 'object') {
+            setTask(result.data as DailyTaskSnapshot);
+          }
+          refresh();
+        } catch (error) {
+          setTask((current) => ({ ...(current ?? { id: taskId }), status: current?.status || 'running', errorMessage: error instanceof Error ? error.message : String(error) }));
+        } finally {
+          setControlPending(null);
+          window.setTimeout(() => refresh(), 300);
+        }
+      })();
     }
   };
 
@@ -327,8 +469,13 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         onPrimary={onPrimary}
         onSecondary={onSecondary}
       />
+      {openProposals && proposalSummary ? <button type="button" className="proposal-ledger-entry" onClick={openProposals} title="打开选题台账">
+        <span className="proposal-ledger-entry-title">选题台账 · {(proposalSummary.today ?? 0) + (proposalSummary.shelved ?? 0)}</span>
+        <span className="proposal-ledger-entry-counts">今日可批 · {proposalSummary.today ?? 0} ｜ 待处理 · {proposalSummary.shelved ?? 0}</span>
+        <span className="proposal-ledger-entry-arrow" aria-hidden="true">›</span>
+      </button> : null}
       <div className="today-grid">
-        <div className="today-opps" ref={oppsRef}>
+        <div className="today-opps">
           {primary ? <>
             {xChannelAbsent ? <div className="pool-absent-banner" role="status"><span>X 渠道缺席：本次判断未包含 X 动态。</span><button type="button" onClick={() => openSettings?.('browser')}>重新验证浏览器</button></div> : null}
             <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
@@ -338,38 +485,48 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
             <p>{runView.opportunityEmptyBody}</p>
           </section>}
         </div>
-        <aside className="today-rail" ref={railRef}>
+        <aside className="today-rail">
           <TodayBlockers blockers={runView.blockers} onAction={onBlocker} />
-          <div className="feed-list" ref={feedListRef}>
-            {!sourcesAreToday && today?.sourcesDate && feedSources.length > 0 ? <p className="feed-context">今天暂无新资料，以下为 {today.sourcesDate} 入库</p> : null}
+          <div className="feed-list" ref={feedListRef} aria-label="入库信息流">
+            {!sourcesAreToday && today?.sourcesDate && feedSources.length > 0 ? <p className="feed-context">今天暂无新资料，以下为最近有效入库</p> : null}
             {selectedSources.length > 0 && <div className="feed-selection-bar">已选 {selectedSources.length}/{MAX_SELECTED_SOURCES} 条资料进 Pi</div>}
-            {feedSources.slice(0, visibleFeedCount).map((source) => {
-              const selected = selectedSources.some((item) => item.id === source.id);
-              const heartbeat = isHeartbeatSource(source);
-              const disabled = !selected && selectedSources.length >= MAX_SELECTED_SOURCES;
-              return <div
-                className={`feed-item${selected ? ' selected' : ''}${heartbeat ? ' heartbeat' : ''}${pinnedSourceIds.has(source.id) ? ' pinned' : ''}${disabled ? ' disabled' : ''}`}
-                data-feed-item
-                key={source.id}
-                title={disabled ? `最多选择 ${MAX_SELECTED_SOURCES} 条` : (selected ? '点击空白处移出 Pi 上下文' : '点击空白处加入 Pi 上下文')}
-                onClick={() => { if (!disabled) toggleSourceSelection(source); }}
-              >
-                <SourceMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/>
-                <div className="feed-main">
-                  <div className="feed-title" title="打开资料详情" onClick={(event) => { event.stopPropagation(); setDetailSource(source); }}>{source.title}</div>
-                  <div className="feed-sub" title="打开资料详情" onClick={(event) => { event.stopPropagation(); setDetailSource(source); }}>
-                    <span>{pinnedSourceIds.has(source.id) ? '重点' : heartbeat ? '巡检打卡' : (source.categories[0] || '入库资料')}</span>
-                    <span>·</span>
-                    <span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span>
-                    {selected && selectedSources.find((item) => item.id === source.id)?.bodyStatus === 'ready' ? <span className="feed-body-pill">含正文</span> : null}
-                  </div>
+            {feedSources.length ? (
+              <div className="feed-stream-viewport">
+                <div className="feed-stream-track">
+                  {[0, 1].map((copy) => (
+                    <div className="feed-stream-copy" key={`feed-copy-${copy}`} aria-hidden={copy === 1 ? true : undefined}>
+                      {feedSources.map((source) => {
+                        const selected = selectedSources.some((item) => item.id === source.id);
+                        const heartbeat = isHeartbeatSource(source);
+                        const disabled = !selected && selectedSources.length >= MAX_SELECTED_SOURCES;
+                        return <div
+                          className={`feed-item${selected ? ' selected' : ''}${heartbeat ? ' heartbeat' : ''}${pinnedSourceIds.has(source.id) ? ' pinned' : ''}${disabled ? ' disabled' : ''}`}
+                          data-feed-item
+                          key={`${copy}-${source.id}`}
+                          title={disabled ? `最多选择 ${MAX_SELECTED_SOURCES} 条` : (selected ? '点击空白处移出 Pi 上下文' : '点击空白处加入 Pi 上下文')}
+                          onClick={() => { if (!disabled && copy === 0) toggleSourceSelection(source); }}
+                        >
+                          <SourceMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation} avatarUrl={source.avatarUrl}/>
+                          <div className="feed-main">
+                            <div className="feed-title" title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) setDetailSource(source); }}>{source.title}</div>
+                            <div className="feed-sub" title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) setDetailSource(source); }}>
+                              <span>{sourceOriginLabel({ ...source, pinned: pinnedSourceIds.has(source.id) })}</span>
+                              <span>·</span>
+                              <span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span>
+                              {selected && selectedSources.find((item) => item.id === source.id)?.bodyStatus === 'ready' ? <span className="feed-body-pill">含正文</span> : null}
+                            </div>
+                          </div>
+                        </div>;
+                      })}
+                    </div>
+                  ))}
                 </div>
-              </div>;
-            })}
+              </div>
+            ) : <p className="empty-copy">{sourcesAreToday ? '今日还没有入库资料。' : '暂无可用入库资料。'}</p>}
           </div>
         </aside>
       </div>
-      <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry}/>
+      <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry} selectedId={fermentSelectedItem?.id ?? null} onSelectItem={onFermentSelectedItemChange}/>
     </section>
     <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>
     <SourceList sources={sources} sourceDate={today?.sourcesDate ?? null} planDate={planDate} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()} aiSourcePresentation={aiSourcePresentation}/>

@@ -50,6 +50,11 @@ export function LibraryView(props: {
   const [sourceActionError, setSourceActionError] = useState('');
   const [sourceActionBusy, setSourceActionBusy] = useState(false);
   const [pendingSourceAction, setPendingSourceAction] = useState<null | 'archive' | 'delete'>(null);
+  const [removedList, setRemovedList] = useState<LibrarySourceItem[]>([]);
+  const [removedTotal, setRemovedTotal] = useState(0);
+  const [removedError, setRemovedError] = useState('');
+  const [removedBusyId, setRemovedBusyId] = useState<string | null>(null);
+  const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const focusRequestId = useRef(0);
   const publishFocus = (source: LibrarySourceItem | null, body: Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>> | null = null) => {
     if (!onFocusChange) return;
@@ -132,6 +137,28 @@ export function LibraryView(props: {
     setWatchingBoard((rows ?? []) as LibrarySourceItem[]);
   };
 
+  // 「已移出」视图：archived 条目 + 最新判定流水（AI 判定不相关原因 / 主编归档），上限 100 条按时间倒序。
+  const loadRemoved = async () => {
+    const page = await window.wmb.listKnowledgeSources({ managementStatus: 'archived', limit: 100, offset: 0 });
+    setRemovedList(((page?.items ?? []) as LibrarySourceItem[]));
+    setRemovedTotal(page?.total ?? 0);
+  };
+  const restoreRemovedSource = async (source: LibrarySourceItem) => {
+    if (source.revision == null) return;
+    setRemovedBusyId(source.id);
+    setRemovedError('');
+    try {
+      await window.wmb.laneRestoreSource({ sourceId: source.id, expectedRevision: source.revision });
+      setRestoreConfirmId(null);
+      void loadRemoved();
+    } catch (error) {
+      setRemovedError(error instanceof Error ? error.message : String(error));
+      void loadRemoved(); // 陈旧 revision 冲突后刷新列表，可重试
+    } finally {
+      setRemovedBusyId(null);
+    }
+  };
+
   const loadKnowledge = async () => {
     const page = await window.wmb.listKnowledgeSources({
       query: knowledgeQuery,
@@ -189,6 +216,16 @@ export function LibraryView(props: {
         });
       });
     }
+    if (section === 'removed') {
+      void loadRemoved();
+    }
+  }, [section]);
+  useEffect(() => {
+    if (section !== 'removed') return;
+    return window.wmb.onDataChanged((event) => {
+      if (!event.scopes.includes('library') && !event.scopes.includes('sources')) return;
+      void loadRemoved();
+    });
   }, [section]);
 
   const closeSourceDetail = () => {
@@ -381,10 +418,27 @@ export function LibraryView(props: {
   }
 
   return <section className="page library-page">
-    <nav className="library-sections" aria-label="资料库分页面">
-      <button className={section === 'saved' ? 'active' : ''} onClick={() => openSection('saved')}>资料</button>
-      <button className={section === 'rediscovery' ? 'active' : ''} onClick={() => openSection('rediscovery')}>重新发现</button>
-    </nav>
+    <section className="page-command" aria-label="资料库概览">
+      <div className="page-command-main">
+        <div className="page-command-copy">
+          <div className="page-command-title-row">
+            <h1>资料库</h1>
+            <p>{section === 'rediscovery' ? '回看高价值但未用上的资料。' : section === 'removed' ? '已移出资料可查原因并恢复。' : '沉淀可引用的原始资料与核验状态。'}</p>
+          </div>
+          <div className="page-command-stats" role="navigation" aria-label="资料库分页面">
+            <button type="button" className={`page-command-stat${section === 'saved' ? ' active' : ''}`} onClick={() => openSection('saved')}>
+              <strong>资料</strong><span>在库</span>
+            </button>
+            <button type="button" className={`page-command-stat${section === 'rediscovery' ? ' active' : ''}`} onClick={() => openSection('rediscovery')}>
+              <strong>重发</strong><span>重新发现</span>
+            </button>
+            <button type="button" className={`page-command-stat${section === 'removed' ? ' active' : ''}`} onClick={() => openSection('removed')}>
+              <strong>移出</strong><span>已移出</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     {section === 'saved' ? <>
       {watchingBoard.length > 0 && managementFilter !== 'watching' && <section className="library-watching-board" aria-label="观察中">
@@ -459,7 +513,45 @@ export function LibraryView(props: {
         </div>;
       })}</div> : <section className="empty-state library-empty"><h2>没有匹配资料</h2><p>调整搜索或筛选条件后再看。</p></section>}
       <div className="knowledge-pager"><button disabled={knowledgeOffset === 0} onClick={() => setKnowledgeOffset(Math.max(0, knowledgeOffset - 50))}>上一页</button><span>{knowledgeOffset + 1}–{Math.min(knowledgeOffset + 50, knowledge?.total ?? 0)} / {knowledge?.total ?? 0}</span><button disabled={!knowledge?.hasMore} onClick={() => setKnowledgeOffset(knowledgeOffset + 50)}>下一页</button></div>
-    </> : <div className="rediscovery-groups">{([['高价值但尚未创作', rediscovery.unused], ['持续观察', rediscovery.watching], ['待核验超过 7 天', rediscovery.pending]] as const).map(([title, items]) => <section key={title}><h2>{title}<span>{items.length}</span></h2>{items.length ? items.map((item) => <button key={item.id} onClick={() => { void openSourceDrawer(item); openSection('saved'); }}><strong>{item.title}</strong><small>{item.reason}</small></button>) : <p>当前没有此类资料。</p>}</section>)}</div>}
+    </> : section === 'rediscovery' ? <div className="rediscovery-groups">{([['高价值但尚未创作', rediscovery.unused], ['持续观察', rediscovery.watching], ['待核验超过 7 天', rediscovery.pending]] as const).map(([title, items]) => <section key={title}><h2>{title}<span>{items.length}</span></h2>{items.length ? items.map((item) => <button key={item.id} onClick={() => { void openSourceDrawer(item); openSection('saved'); }}><strong>{item.title}</strong><small>{item.reason}</small></button>) : <p>当前没有此类资料。</p>}</section>)}</div> : <section className="removed-section" aria-label="已移出资料">
+      <div className="page-toolbar knowledge-toolbar">
+        <span className="removed-head">已移出 · {removedTotal} 条</span>
+        <span className="removed-hint">被判定与本赛道无关（AI 判定不相关）或主编手动归档的资料，可查原因并恢复。</span>
+      </div>
+      {removedError ? <p className="source-detail-error">{removedError}</p> : null}
+      {removedList.length ? <div className="library-list">{removedList.map((source) => {
+        const laneBadge = source.laneJudgment?.decision === 'irrelevant' && (source.laneJudgment.judgedBy === 'agent' || source.laneJudgment.judgedBy === 'system')
+          ? { cls: 'amber', text: `AI 判定不相关：${source.laneJudgment.reason || '未提供原因'}` }
+          : { cls: 'gray', text: '主编归档' };
+        const tags = String(source.topics || '').split(/[,，、]/).map((tag) => tag.trim()).filter((tag) => tag && tag !== '尚未归入主题').slice(0, 4);
+        const domain = domainOf(source.originalUrl ?? null);
+        return <div className="lib-row-wrap" key={source.id}>
+          <article className="lib-row" onClick={() => { void openSourceDrawer(source); }}>
+            <SourceMark canonicalUrl={source.originalUrl ?? null} aiSourcePresentation={aiSourcePresentation}/>
+            <div className="lib-main">
+              {domain ? <div className="lib-eyebrow">{domain}</div> : null}
+              <div className="lib-title">{source.title}</div>
+              <div className="lib-sum">{source.summary || '暂无摘要'}</div>
+              <div className="lib-tags">
+                <span className={`tag lane-badge ${laneBadge.cls}`}>{laneBadge.text}</span>
+                {tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
+              </div>
+            </div>
+            <div className="lib-side">
+              <span className="lib-time">{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt)}</span>
+              <button className="secondary-button" disabled={removedBusyId === source.id} onClick={(event) => { event.stopPropagation(); setRemovedError(''); setRestoreConfirmId(source.id); }}>恢复</button>
+            </div>
+          </article>
+          {restoreConfirmId === source.id ? <div className="lane-restore-confirm" role="group" aria-label="确认恢复">
+            <p>恢复后该资料回到有效资料库，7 天内不会再被自动判定</p>
+            <div className="lane-restore-actions">
+              <button className="primary-button" disabled={removedBusyId === source.id} onClick={(event) => { event.stopPropagation(); void restoreRemovedSource(source); }}>确认恢复</button>
+              <button className="secondary-button" disabled={removedBusyId === source.id} onClick={(event) => { event.stopPropagation(); setRestoreConfirmId(null); }}>取消</button>
+            </div>
+          </div> : null}
+        </div>;
+      })}</div> : <section className="empty-state library-empty"><h2>没有已移出资料</h2><p>被判定与本赛道无关或手动归档的资料会出现在这里，可查原因并恢复。</p></section>}
+    </section>}
   </section>;
 }
 

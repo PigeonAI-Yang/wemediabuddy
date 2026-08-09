@@ -8,8 +8,8 @@ import {
 } from './knowledge.ts';
 import { fetchAndCacheSourceBody, getSourceBodyCache, listSourceBodyCaches, writeSourceBodyCache } from './source-body-cache.ts';
 import { getWireHealthLedger } from './source-wire-health.ts';
-import { dispatchSourceUpsertBatch } from './source-commands.ts';
-import { assertAiOnlyRoute } from './workspace-profiles.ts';
+import { dispatchSourceUpsertBatch, dispatchLaneRestore } from './source-commands.ts';
+import { assertAiOnlyRoute, readWorkspaceProfile } from './workspace-profiles.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import {
   freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation,
@@ -66,6 +66,21 @@ export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencie
       input: { sourceIds }, boundIdentity: { entityType: 'source_item' }, entityType: 'source_item',
       execute: (database, value) => { const data = markSourcesWatching(database, value.sourceIds, false); return { data, readback: data }; } });
     const data = requireReceiptData(receipt); if (data.updated > 0) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' }); return data;
+  });
+
+  // 资料库「已移出」视图恢复（WMB-4944）：主编覆写走既有 sources.lane_restore 命令（归档 → active
+  // + judged_by=editor 流水行 + 7 日冷却），workspaceLane 由当前工作空间配方快照派生，恢复成功
+  // 由 dispatchLaneRestore 广播 dataChanged。
+  ipcMain.handle('knowledge:lane-restore', async (_event, input: { sourceId: string; expectedRevision: number; reason?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const profile = readWorkspaceProfile(runtime.database);
+    if (!profile) throw new Error('OFFICIAL_PACK_UNAVAILABLE: 工作空间尚未配置有效配方。');
+    const receipt = await dispatchLaneRestore(runtime, {
+      requestId: freshRequestId(), actor: ownerUiActor,
+      sourceId: input.sourceId, workspaceLane: profile.intelligencePackId,
+      expectedRevision: input.expectedRevision, reason: input.reason
+    });
+    return requireReceiptData(receipt);
   });
 
   ipcMain.handle('sources:get-body-cache', (_event, sourceId: string) => readWorkspaceDatabase(dependencies, () => null, database => getSourceBodyCache(database, sourceId)));

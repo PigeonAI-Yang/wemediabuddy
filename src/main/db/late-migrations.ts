@@ -425,5 +425,153 @@ export const lateMigrations = [
       CREATE INDEX x_list_operations_account_updated ON x_list_operations(account_key, updated_at DESC);
       CREATE INDEX x_list_operation_items_operation ON x_list_operation_items(operation_id, sort_order);
     `
+  },
+  {
+    version: 45,
+    sql: `
+      -- WMB-4931 完整版：故事身份列（story_key）+ 派生阶段列（stage）。
+      -- 不加 UNIQUE 索引：dismissed 泊车/合并历史行与活跃行同属一个 story 是常态（合并语义），
+      -- 唯一约束会违反「否决/合并行保留可查证历史」的既有语义；身份收敛由 mergeSimilarCarryItems 负责。
+      ALTER TABLE work_carry_items ADD COLUMN story_key TEXT;
+      ALTER TABLE work_carry_items ADD COLUMN stage TEXT;
+      CREATE INDEX work_carry_items_story_key ON work_carry_items(story_key) WHERE story_key IS NOT NULL;
+      CREATE INDEX work_carry_items_stage ON work_carry_items(stage);
+    `
+  },
+  {
+    version: 46,
+    sql: `
+      CREATE TABLE source_lane_judgments (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES source_items(id) ON DELETE CASCADE,
+        workspace_lane TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('relevant', 'irrelevant')),
+        reason_code TEXT NOT NULL,
+        reason TEXT,
+        judged_by TEXT NOT NULL CHECK (judged_by IN ('system', 'agent', 'editor')),
+        confidence REAL,
+        source_revision INTEGER NOT NULL,
+        judged_at TEXT NOT NULL
+      );
+      CREATE INDEX source_lane_judgments_source_judged ON source_lane_judgments(source_id, judged_at DESC);
+      CREATE INDEX source_lane_judgments_lane_judged ON source_lane_judgments(workspace_lane, judged_at DESC);
+    `
+  },
+  {
+    version: 47,
+    sql: `
+      -- M-4980: expand agent_tasks.intent CHECK for page_* dock copilot intents.
+      -- Recreate via _new table (FK off in migrateDatabase) so task_grants/execution_grants keep valid REFERENCES agent_tasks.
+      CREATE TABLE agent_tasks_new (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN (
+          'daily_intelligence', 'studio_draft', 'results_review',
+          'page_today', 'page_discover', 'page_proposals', 'page_topic',
+          'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
+        )),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted', 'needs_user')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks_new SELECT * FROM agent_tasks;
+      DROP TABLE agent_tasks;
+      ALTER TABLE agent_tasks_new RENAME TO agent_tasks;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+    `
+  },
+  {
+    version: 48,
+    sql: `
+      -- M-5100: daily_scan / daily_judge intents (scan=reporter, judge=planner).
+      CREATE TABLE agent_tasks_new (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN (
+          'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review',
+          'page_today', 'page_discover', 'page_proposals', 'page_topic',
+          'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
+        )),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted', 'needs_user')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks_new SELECT * FROM agent_tasks;
+      DROP TABLE agent_tasks;
+      ALTER TABLE agent_tasks_new RENAME TO agent_tasks;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+    `
+  },
+  {
+    version: 49,
+    sql: `
+      CREATE TABLE IF NOT EXISTS capability_overlays (
+        workspace_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        capability_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, role_id, capability_id)
+      );
+    `
+  },
+  {
+    version: 50,
+    sql: `
+      -- M-5120: page_agents dock intent (agents roster limited write scope).
+      CREATE TABLE agent_tasks_new (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN (
+          'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review',
+          'page_today', 'page_agents', 'page_discover', 'page_proposals', 'page_topic',
+          'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
+        )),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted', 'needs_user')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks_new SELECT * FROM agent_tasks;
+      DROP TABLE agent_tasks;
+      ALTER TABLE agent_tasks_new RENAME TO agent_tasks;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+    `
   }
 ] as const;
+

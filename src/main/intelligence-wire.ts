@@ -310,7 +310,11 @@ function upsertTimelinePost(
     author: post.authorHandle ?? undefined,
     publishedAt: post.postedAt ?? undefined,
     summary: post.text,
-    evidence: JSON.stringify(evidence)
+    evidence: JSON.stringify({
+      ...evidence,
+      avatarUrl: post.avatarUrl ?? (typeof evidence.avatarUrl === 'string' ? evidence.avatarUrl : null),
+      displayName: post.displayName ?? (typeof evidence.displayName === 'string' ? evidence.displayName : null)
+    })
   }).id;
 }
 

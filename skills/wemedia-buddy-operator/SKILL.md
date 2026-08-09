@@ -74,13 +74,22 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`。Pi 保存外部资料必须用 `wmb_save_source` 并传当前 task、grant 和 WMB 注入的 worker lease；它在 MCP 内执行 `sources.upsert_batch`。外部 Agent 直接调用 `sources.upsert_batch`。两条路径都必须保留原始 URL。
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点；写入时遵守下方统一 task grant 与回执规则。
 - 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
-- 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报，脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。简报已包含判断所需全部上下文；**判断任务中禁止调用 `wmb_get_workbench`（全量工作台几十万字会挤爆上下文）**，除查重（`wmb_get_knowledge_context`）与写回（`wmb_save_plan`）外不需要额外工具调用，写回成功即结束。
+- 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报（默认「AI × 个人商业化成长」），脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。简报已包含判断所需全部上下文；**判断任务中禁止调用 `wmb_get_workbench`（全量工作台几十万字会挤爆上下文）**，除查重（`wmb_get_knowledge_context`）与写回（`wmb_save_plan`）外不需要额外工具调用，写回成功即结束。
 - 判断任务中臆造不存在的工具名是失败信号：可用的 wmb_* 工具只有本 Skill 列出的这些；一旦出现 Tool not found，立即停止臆造，回到简报继续判断，不得改用 bash 探索文件系统。
-- 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法、证据在哪（真实 sourceIds+具体事实点）。答不出四问的线索不得写入方案。
+- 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法、证据在哪（真实 sourceIds+具体事实点）。另须点明命中五维哪一环（认知/技能/表达/获客/产品化）；说不出环节则降权或丢弃。`structureGuidance` 点名六栏目之一并套骨架（实验日志/开发日志/原则卡/机会判断/周复盘/变现实验）。答不出四问的线索不得写入方案。
 - 候选写入方案前必须先用 `wmb_get_knowledge_context` 查询同主题历史，写清它与库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。
 - 保存方案使用 `wmb_save_plan`，并携带当前 request/task/grant/worker authority。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
 - 保存后用 `wmb_get_workbench` 回读并确认精确日期的 `plan`；不要用 `latestPlan` 代替当前任务的保存结果。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。二者都是 task-authorized 业务写入，必须携带当前 request/task/grant/worker authority。
+- 资料员整理任务（librarian / page_library）无可整理内容时必须回报 no-op 确认：末条回复附 `` ```json {"wmb_noop": true} ``` `` 确认块；声明 wmb_noop 后不得执行任何写操作。
+
+### 主管派工与工单编排
+
+- 先调 `wmb_daily_readiness` 查看今日扫/判状态与建议下一阶段；续接方式由你决定：扫描完成后要续接策划用 `wmb_continue_after_scan`（只要单项采集就不要调用），按阶段编排用 `wmb_run_daily_stage`（scan=单项采集，judge=单项策划，full=一条龙），派单项执行用 `wmb_spawn_job`。
+- `wmb_spawn_job` 只传角色与业务参数（reporter/planner/writer/librarian；系统按角色自动选择固定工作流，不接受 intent）：写手必须带 `projectId`；资料员是真实执行任务，无可整理内容时回报 no-op 确认。不可派主管自己。
+- 派单后等系统 JOB_EVENT 终态推送（succeeded/failed/cancelled/partial/needs_user，含 code/message/readback）再汇报；不要 sleep+bash 轮询 session，必要时才用 `wmb_get_job` 看 monitor.task。成功必须业务读回；partial 表示部分达成，needs_user 表示需主管判定或补料；取消优先。
+- 监工与传话：`wmb_list_agents_roster` 读席位状态与进度摘要，`wmb_list_jobs` 读工单池，`wmb_message_job` / `wmb_list_job_messages` 留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job` 取消工单。
+- 工单是 WMB 内部业务编排，不构成平台执行授权：最终确认、激活和最终发布仍只由用户在 WMB UI 完成；平台写入继续走各自的精确 UI 授权路径。
 
 ### 任务授权与统一回执
 
@@ -126,8 +135,15 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 1. 用 `wmb_get_metrics` 读取真实发布指标快照。
 2. 用 `wmb_get_reviews` 读取已有复盘。
-3. 用 `wmb_save_review` 保存 Keep/Stop/Change；final 复盘必须引用真实 `metricSnapshotIds`。
+3. 用 `wmb_save_review` 保存 Keep/Stop/Change；final 复盘必须引用真实 `metricSnapshotIds`。`summary`（或 notes）固定追加商业化信号模板（无新字段）：
+   - 【商业化信号】追问原话（平台/篇目+原话≥2）｜重复问题（问题+次数；≥3→需求信号候选）｜需求信号（是否有人问工具/模板/服务；最小形态假设）
+   - 【本周】兑现了什么｜图景是否还真｜五维偏科｜K/S/C
 4. 再次用 `wmb_get_reviews` 回读最终状态。
+
+### 创作栏目骨架（Studio）
+
+- 起草/改稿时 `structureGuidance` 与正文结构优先套六栏目之一，禁止空话扩写冒充实测。
+- 变现实验栏目仅在真实成交或真实失败后写；不得把「有人问」写成「很多人买」。
 
 ## 工具清单
 
@@ -136,6 +152,22 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 渠道：`wmb_get_intelligence_channels`、`wmb_list_intelligence_channel_receipts`、`wmb_resolve_intelligence_website`、`wmb_trial_intelligence_website`、`wmb_resolve_intelligence_x_list`、`wmb_prepare_intelligence_channel_changes`。所有渠道写入只在 WMB UI 精确授权后执行。
 
 X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_create_x_list`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
+
+主管与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
+
+
+
+## 页面 dock 自动授权（M-4980）
+
+- 在业务页与内置 Pi 自由对话时，WMB 会按当前 `page` 自动签发最小 `page_*` task grant，并在消息中注入 `taskId` / `grantId` / `workerLeaseId`。
+- 资料库页可写：`wmb_judge_sources`（软移出 archived，`irrelevant` 必填 reason）、`wmb_restore_source`（恢复）、`wmb_update_source_status`（核验/管理状态）、`wmb_save_source`、`wmb_record_knowledge` / `wmb_suggest_knowledge`。
+- **禁止硬删资料**；硬删仅 Owner UI。
+- 发布页为零自动写权；若见 `[WMB_AUTHORITY_BLOCKED] reason=readonly_page`，说明本页只读，引导用户去创作/资料库等页。
+- 发现页可启动/停止有界观察；**不得**在无 Owner UI Precise 确认时执行 X List 创建/改成员（operation_execute）。
+- 创作页可 `wmb_save_core_version` / `wmb_create_content_project`（page_studio scope）。
+- 消息含 `[WMB_AUTHORITY_BLOCKED]` 时：向用户说明原因，**不得伪造** taskId/grantId/workerLeaseId。
+- 软移出后系统判定 7 日冷却：向用户说明「7 日内不会自动重判」；恢复始终可用 `wmb_restore_source`。
+
 
 资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`（底层命令 `sources.upsert_batch`）、`wmb_get_task_grant`（底层只读映射 `task_grants.get`）、`wmb_list_task_grants`（底层只读映射 `task_grants.list`）、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。Pi 只能调用这里列出的 `wmb_*` 名称。
 

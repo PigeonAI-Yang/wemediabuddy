@@ -32,7 +32,9 @@ export type PoolBadge =
   | { kind: 'new'; text: string }
   | { kind: 'timeliness'; text: string; tone: 'breaking' | 'hot' | 'evergreen' }
   | { kind: 'expiry'; text: string }
-  | { kind: 'demotion'; text: string };
+  | { kind: 'written'; text: string }
+  | { kind: 'demotion'; text: string }
+  | { kind: 'pending'; text: string };
 
 const CLASS_LABELS: Record<PoolItemLike['timelinessClass'], string> = {
   breaking: '爆点',
@@ -68,17 +70,54 @@ export function poolItemToPlanItem(item: PoolItemLike): TodayPlanItem {
   };
 }
 
+/**
+ * 主席清单投影：pool（未终结）优先；否则今日非空方案；否则最近非空方案。
+ * 当日空 current plan 只是运行记录，不得把主区掏空。
+ */
+export function resolveChairDisplayItems<TPool extends PoolItemLike, TPlan extends { items: TodayPlanItem[] }>(
+  pool: TPool[] | null | undefined,
+  todayPlan: TPlan | null | undefined,
+  latestPlan: TPlan | null | undefined
+): TodayPlanItem[] {
+  if (pool && pool.length > 0) return pool.map(poolItemToPlanItem);
+  if (todayPlan && todayPlan.items.length > 0) return todayPlan.items;
+  if (latestPlan && latestPlan.items.length > 0) return latestPlan.items;
+  return [];
+}
+
 export function poolBadgeClass(badge: PoolBadge): string {
   if (badge.kind === 'new') return 'pool-new';
   if (badge.kind === 'timeliness') return `pool-${badge.tone}`;
   if (badge.kind === 'demotion') return 'pool-demotion';
+  if (badge.kind === 'pending') return 'pool-pending';
+  if (badge.kind === 'written') return 'pool-written';
   return 'gray';
 }
 
-export function poolBadges(item: PoolItemLike, nowMs: number): PoolBadge[] {
+function formatWrittenAt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  const date = new Date(ms);
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  const stamp = `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}`;
+  return stamp.includes('undefined') || !pick('year') ? null : `写入 ${stamp}`;
+}
+
+export function poolBadges(item: PoolItemLike, nowMs: number, planDate?: string): PoolBadge[] {
   const badges: PoolBadge[] = [];
   if (item.isNew) badges.push({ kind: 'new', text: '新' });
   badges.push({ kind: 'timeliness', text: CLASS_LABELS[item.timelinessClass], tone: item.timelinessClass });
+  if (planDate && item.planDate && item.planDate < planDate) badges.push({ kind: 'pending', text: '待处理' });
   if (item.expiresAt) {
     const remainMs = Date.parse(item.expiresAt) - nowMs;
     if (remainMs > 0) {
@@ -86,6 +125,8 @@ export function poolBadges(item: PoolItemLike, nowMs: number): PoolBadge[] {
       badges.push({ kind: 'expiry', text: hours >= 1 ? `还剩 ~${hours}h` : `还剩 ~${Math.max(1, Math.round(remainMs / 60_000))}m` });
     }
   }
+  const written = formatWrittenAt(item.createdAt);
+  if (written) badges.push({ kind: 'written', text: written });
   if (item.demotion) badges.push({ kind: 'demotion', text: '刚发布过同主题' });
   return badges;
 }

@@ -2,6 +2,218 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+
+## M-5100 角色编制 × Capability 注册表（CAP-026）
+
+Scope: implement fixed staff roles + Capability registry + harness gates + readonly Agents page; then scan/judge split and worker roleId. Canonical design `docs/spark/2026-08-07-role-permission-design.md`. Owner approved 2026-08-07 full lock + harness first.
+
+Order:
+
+1. `WMB-5100` — harness + legislate + registry file + CI gate (this foundation).
+2. `WMB-5101` — grant filter by roleId in ensureAutomaticTaskGrant + tests.
+3. `WMB-5102` — readonly Agents roster page + nav.
+4. `WMB-5103` — P0 evidence / focused regression (desk zero-regression).
+5. `WMB-5104` — split daily_scan / daily_judge intents (P1).
+6. `WMB-5105` — lease roleId + roster live projection API (P1).
+7. `WMB-5106` — safe capability overlays UI (P2; blocked until P0/P1 gates).
+
+Gate P0: `npm run check:capabilities` green; writer cannot receive lane_restore via filter; Agents view readonly; no capability_overlays write IPC.
+
+
+
+## M-5110 Desk 经理 + 员工工单池（CAP-027）
+
+Scope: main Pi = Desk manager; role agents = subagent jobs with worker pool (default maxWorkers=2), per-job session, role-filtered grants (CAP-026 reuse), entity locks on planDate/projectId. Canonical: `docs/spark/2026-08-07-desk-manager-job-runtime.md`. Aligns role-permission design §11 P1 worker pool + single-hop dispatch.
+
+Order:
+
+1. `WMB-5111` — JobPool + multi-lease runtime
+2. `WMB-5112` — JobSpawner + role grant projection
+3. `WMB-5113` — jobs IPC + preload
+4. `WMB-5114` — Agents job board + today chip
+5. `WMB-5115` — tests + evidence pack
+
+Gate: job-pool tests green; two non-conflicting leases; roster shows multi running; CAP-026 registry unchanged except wiring.
+
+
+## M-5000 产品形态宪法锁定（Agent 主路径终端）
+
+Scope: freeze product form so later Today/desk/topic/opportunity work cannot drift back to traditional CMS or VS Code-like human-primary IDE. Docs/rules only in the freeze task; continuous-attention rewrite to topic projection is a follow-up milestone, not silently implied by this lock.
+
+Normative:
+
+- `PRODUCT.md` constitution C1–C7
+- `PRD.md` §2.0
+- `SPEC.md` §1.0
+- `AGENTS.md` Project goal
+- Detail: `docs/spark/2026-08-07-product-form-agent-desk-constitution.md`
+
+Owner lock 2026-08-07:
+
+1. Form = Codex Desktop-like agent-primary terminal; reject VS Code-like human-primary writing IDE.
+2. Human = editor-in-chief (approve/dispatch/supervise/publish confirm/liability); Agent = primary labor.
+3. Today = editor desk for decidable/must-know submissions only.
+4. Long-horizon attention formal identity = **Topic**; continuous-attention must not dump untriaged sources as opportunity-drafting offload.
+5. Topic induction = LLM editorial judgment, not regex primary.
+
+Order:
+
+1. `WMB-5000` — write constitution into PRODUCT/PRD/SPEC/AGENTS/README + spark detail + ledger (this freeze).
+2. Follow-up (separate milestone when scheduled) — **same four items as** `docs/spark/2026-08-07-product-form-agent-desk-constitution.md` §8:
+   1. Replace Today continuous-attention: retire `work_carry_items` + `storyKey`/`sameStory` as long-horizon identity; project **topic progress**.
+   2. Backend upsert/merge **topic** + link evidence when agent marks long-horizon worth (LLM induction, not regex primary).
+   3. Stop promoting bare high-value sources onto the desk without an opportunity brief.
+   4. UI glossary: 关注 / 主题 / 选题 / 资料.
+
+Gate: any new desk/topic/opportunity design cites §2.0 / SPEC §1.0 / PRODUCT C1–C7; agents read AGENTS form clause before those surfaces; follow-up work must name replacement of carry/storyKey rail explicitly.
+
+## M-5001 持续关注 → 主题进展投影
+
+Scope: implement product-form constitution §8 four items for Today continuous-attention. Replace long-horizon rail identity from `work_carry_items`+`storyKey`/bare source to **topic progress**. Keep plan_item carry for proposals state machine. Does not redesign chair/opportunity pool.
+
+Design: `docs/spark/2026-08-07-continuous-attention-topic-progress-design.md`  
+Normative: PRODUCT C3/C4, PRD §2.0, SPEC §1.0, form constitution §5/§8
+
+Owner lock (inherits M-5000):
+
+1. Rail long-horizon identity = Topic only.
+2. Stop bare high-value source desk promotion.
+3. plan_item open/dismiss stays on proposals/carry — not the attention identity.
+4. Topic induction remains LLM/multi-day bind + evidence link; no regex primary.
+
+Order:
+
+1. `WMB-5001` — freeze this design + hang 5002-5004.
+2. `WMB-5002` — `listFermentingBundle` topic-progress projection; no-op `seedCarryFromHighValueSources`; plan-save topic↔source links.
+3. `WMB-5003` — FermentingRail topic UI + glossary + create/open path.
+4. `WMB-5004` — focused tests + typecheck + evidence.
+
+Gate: rail shows topics never bare sources; proposals restore intact; ferment/desk focused tests green.
+
+
+
+
+## M-4990 今日情报任务控制鲁棒性
+
+Scope: make Today daily-intelligence controls (save_partial / cancel / timeout / zombie) reliable: click feedback, bounded exit from running, sync terminal state after abort, stall/wall-clock paths. Does not redesign judgment content, Today visual IA, or Pi page authority (M-4980).
+
+Design: `docs/spark/2026-08-07-daily-intelligence-control-robustness-design.md`
+Owner lock 2026-08-07: wall clock 30m auto partial; stall>10m auto partial (P1); cancel keeps ingested sources; zombie primary=cleanup keep results; start P0 now.
+
+Order:
+
+1. `WMB-4990` — freeze design and hang chain (docs/ledger).
+2. `WMB-4991` — control-daily authoritative sequence + idempotent + single-flight.
+3. `WMB-4992` — UI pending/error/refresh for save_partial/cancel.
+4. `WMB-4993` — runner catch dual-path + abortDailyIntelligence harden; no rewrite after terminal.
+5. `WMB-4994` — zombie running CTA + minimal startup interrupted reconcile.
+6. `WMB-4995`–`WMB-4998` — P1/P2 stall wall-clock, scan cooperative cancel, tests, diagnostics.
+
+Gate: synthesis-phase save_partial leaves running within 15s with UI feedback; no 68m hang; zombie cleanable.
+
+## M-4980 内置 Pi 页面级权限（dock 自由对话）
+
+Scope: replace studio-only dock auto-grant with page-scoped `PAGE_TASK_GRANT_SCOPES` + `page_*` intents; library organize tools (soft archive/restore/status); authority chip and non-silent BLOCKED errors. Does not auto-grant X List platform mutation or final publish (PreciseExecution stays). Owner lock 2026-08-07: 1A hard-delete Owner-UI only; 2A grants expire ~4h without revoke-on-leave; 3A discover observation may auto-grant.
+
+Design: `docs/spark/2026-08-07-pi-page-authority-design.md`  
+Audit: `.ai/2026-08-07-pi-page-authority-audit.md`
+
+Order:
+
+1. `WMB-4980` — freeze design/audit + hang 4981-4986 (docs/ledger).
+2. `WMB-4981` — shared `page-authority` table + AgentIntent/page_* migration + AUTOMATIC_TASK_GRANT_SCOPES.
+3. `WMB-4982` — `ensurePageAuthority` replaces studio special-case in pi dock.
+4. `WMB-4983` — MCP `lane_gate` / `lane_restore` / `sources.update_status` + library P0 tools.
+5. `WMB-4984` — operator Skill + authority prompt BLOCKED guidance.
+6. `WMB-4985` — chip + `pi:authority-status` + non-silent authorize failures.
+7. `WMB-4986` — focused tests, typecheck, evidence, studio regression.
+
+Gate: library dock can soft-archive/restore/status with grants; publish dock readonly BLOCKED; studio save_version still works; no silent authorize swallow.
+
+
+
+## M-4970 Pi 页面点选焦点统一
+
+Scope: unify “click card = Pi focus without navigating in” across workflow pages. Today’s opportunity/source multi-select is the reference. Delivers interaction contract, shared selection helpers, payload honesty, then per-page wiring starting with Proposals and Results. Does not add comment/DM scraping, settings Pi dock, or full-page screenshot context.
+
+Design: `.ai/2026-08-07-pi-page-context-selection-audit.md`  
+Owner lock 2026-08-07: single-click focuses Pi context; enter detail is a separate gesture; prefer single-focus by default; multi-select kept where Today/canvas/rankings already use it.
+
+Order:
+
+1. `WMB-4970` — freeze audit/contract and hang 4971-4976 (docs/ledger only).
+2. `WMB-4971` — shared focus helper + `buildPiContextPayload` pure module + unit tests.
+3. `WMB-4972` — Proposals page click-to-focus (no navigate) + main `piContext` branch.
+4. `WMB-4973` — Results click-to-focus + shallow metrics/review fields in payload.
+5. `WMB-4974` — Studio list click=focus vs open-editor; editor auto-focus + body excerpt.
+6. `WMB-4975` — Publish / Library / Topic align to contract.
+7. `WMB-4976` — Today ferment item focus + chip/clear copy consistency + acceptance evidence.
+
+Gate: Proposals/Results/Studio-list support focus-without-enter; Chip honest when empty; Today multi-select and canvas/X-list do not regress; settings still has no business Pi dock.
+
+
+## M-4960 AI×个人商业化成长配方落地
+
+Scope: tighten the existing `official.ai` workspace + `wemedia-intelligence-engine` judgment/creation copy into Owner-locked「AI × 个人商业化成长」without a new lane, pack id, or publication automation. Delivers template v2 identity strings, official-root re-ensure (current `ensure` no-ops on existing profiles), dailyPrompt/Skill four-question overlay, lane-gate copy, review/method seed docs, and Owner ops checklist. Does not implement xhs editor prep, method-library aggregate UI, ReviewRecord new columns, product-seed automation, or M-4950 proposal-ledger P1.
+
+Design: `.ai/2026-08-07-ai-commercialization-recipe-impl.md`  
+Strategy: `docs/spark/2026-08-07-ai-personal-commercialization-wmb-plan.md`  
+Owner lock 2026-08-07: rename display; accept xhs manual publish for 90d; map commercialization signals into review summary/notes first; bump officialTemplateVersion and re-ensure official AI roots; add indie-hacker / tool-review X List via config (no hard-coded list ids).
+
+Order:
+
+1. `WMB-4960` — freeze design, Owner resolutions, and 4961-4965 chain (docs/ledger only).
+2. `WMB-4961` — `official.ai` template v2 + ensure upgrade path for official lineage + tests.
+3. `WMB-4962` — `dailyPrompt` + intelligence opportunity Skill/standard commercialization overlay and column skeleton (parallel with 4961 after 4960).
+4. `WMB-4963` — lane-gate / gate-section copy aligned to commercial audience (after 4961+4962).
+5. `WMB-4964` — operator review template + method seeds doc (parallel after 4960).
+6. `WMB-4965` — Owner ops checklist + acceptance evidence (after 4961-4964).
+
+Gate: new and existing official AI roots surface commercial identity in editorial brief; judge prompt requires五维 hit; xhs remains manual-publish night-light; no fake List bindings; focused tests + typecheck green; M-4950 code surfaces untouched unless coincidental.
+
+## M-4930 Today as editor desk（主编办公台）
+
+Scope: reposition Today as the chief-editor desk — chair = current approvable opportunities (never cleared while a new run is in flight), secondary rail =「持续关注」(story-keyed event cards with “why still watching”), backlog labeled「待处理」, task/partial narrative stays on Discover. Does not change publication, precise grants, browser binding, Studio or Results schema; reuses `plan_items` + `work_carry_items`.
+
+Design: `.ai/2026-08-06-today-editor-desk-design.md` (north-star revision; supersedes `.ai/2026-08-06-fermenting-rail-redesign.md` as the governing IA/copy/acceptance doc).
+
+Order:
+
+1. `WMB-4930` — land MVP: chair `displayItems` empty-pool fallback, storyKey merge +「持续关注」rail filter/fields/copy, pool「待处理」badge, planning carry reason seed, focused tests.
+2. `WMB-4932` — close MVP gaps: chair pool storyKey dedupe (same-story one card) + live Electron acceptance (run keeps prior plan; copy; dismiss path).
+3. `WMB-4931` (later) — full version: aftershock without topic hard-dep, optional `story_key`/`stage` columns, Discover owns task/partial stream, higher `topic_id` bind rate.
+4. `WMB-4933` — zero-update empty current plan must not blank the chair: pool reads latest non-empty plan per date (not `is_current`); `latestPlan`/displayItems fall back to latest non-empty plan. Design: `.ai/2026-08-07-empty-current-plan-chair-fix.md`.
+
+
+## M-4950 选题台账（编辑部提案夹）
+
+Scope: new workflow nav「选题」between Discover and Studio — full decision ledger for plans/plan_items (今日可批 / 待处理·搁置 / 已采纳 / 已否掉 / 已过期). Today stays the editor desk only (chair + 持续关注 + one ledger entry link). Zero schema; reuse pool row source + create/dismiss write paths. Does not put archive drawers on Today, does not mix unadopted proposals into Studio, does not put plans into Discover.
+
+Design: `.ai/2026-08-07-proposals-ledger-design.md`
+
+Order:
+
+1. `WMB-4946` — backend ledger query + shared pool helpers + IPC/preload/types + tests.
+2. `WMB-4947` — frontend ProposalsView + nav + Today entry bar + adopt/dismiss wiring.
+3. `WMB-4948` (later) — pagination, restore, batch ops, Pi context refinement.
+
+## M-4940 Lane relevance gate（赛道资料门 / 有效资料库）
+
+Scope: after broad channel collect, add a workspace-lane relevance gate before topic/opportunity judgment. Irrelevant sources leave the effective library with traceable reasons and restore; effective sources alone feed brief, Today source counts/feed, and four-question planning. Does not change scan-all collection, publication, precise grants, browser binding, Studio/Results, plan_items structure, or M-4930 chair/rail rules.
+
+Design: `.ai/2026-08-07-lane-relevance-gate-design.md` (Owner-locked pipeline: 广收 → 赛道门 → 有效库 → 四问选题 → 今日办公台).
+
+Order:
+
+1. `WMB-4940` — freeze design and hang 4941-4945 implementation chain (docs/ledger only).
+2. `WMB-4941` — `source_lane_judgments` contract + dispatcher `sources.lane_gate` / `sources.lane_restore` + judge grant mount.
+3. `WMB-4942` — Tier0 official/lane-source pass + Tier1 same-turn binary gate with reason codes; archive write path; parse-fail zero-archive.
+4. `WMB-4943` — effective-library consumers: brief increment filter + transparency line; Today feed/stats effective-only + tail count; searchSources default exclude + include flag; regression that ferment/knowledge consumers already exclude archived.
+5. `WMB-4944` — Library「已移出」view with reason badges, restore, 7-day rejudge cooldown.
+6. `WMB-4945` — end-to-end mixed-batch acceptance (split/restore/stats) + empty-run no-op (AC-017) + M-4930 desk regression.
+
+Gate: lifestyle/off-lane noise is archived with reason and disappears from effective library/brief/Today counts; official/lane sources stay active without model call; restore returns to effective set and blocks rejudge for 7 days; parse failure archives nothing; chair/rail/pool invariants from M-4930 still hold.
+
 ## M-4910 Rolling opportunity pool and editorial brief
 
 Scope: intelligence-to-topic pipeline only — channel failure isolation, incremental judgment with a live-assembled editorial brief, rolling opportunity pool semantics, Today pool projection, and bounded deep-dive ingestion. Does not change publication, precise grants, browser binding, Studio or Results; `plan_items` structure is unchanged (pool state rides the existing ferment/carry state machine).

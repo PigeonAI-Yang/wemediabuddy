@@ -1,5 +1,5 @@
 :root {
-  font-family: "Inter", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
   color: var(--ink);
   background: var(--app-bg);
   font-synthesis: none;
@@ -43,6 +43,8 @@
   --warning: #f0b45a;
   --danger: #e5636f;
   --danger-soft: rgb(229 99 111 / 12%);
+  --status-running: #c98300;
+  --status-running-soft: rgb(201 131 0 / 12%);
   --info: #5aa9f0;
 
   /* 优先级 SSS→F 渐阶 */
@@ -64,6 +66,8 @@
   --scroll-hover: #707070;
   --overlay: rgb(0 0 0 / 55%);
   --topbar-height: 56px;
+  --page-space: 16px;
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
 }
 
@@ -101,6 +105,8 @@
   --warning: #b97c1e;
   --danger: #c4304b;
   --danger-soft: rgb(196 48 75 / 10%);
+  --status-running: #9a5f00;
+  --status-running-soft: rgb(154 95 0 / 12%);
   --info: #2f7fd4;
   --grade-sss: #7b4fd6;
   --grade-s: #6d51e8;
@@ -120,7 +126,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 1100px; min-height: 100vh; background: var(--app-bg); overflow: hidden; font-size: 14px; line-height: 1.5; }
-button, select { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button {
   color: inherit;
   cursor: pointer;
@@ -136,8 +142,11 @@ button[aria-disabled="true"] {
   filter: none !important;
   box-shadow: none !important;
 }
-button:not(:disabled):not([aria-disabled="true"]):active {
+button:not(:disabled):not([aria-disabled="true"]):not(.pi-dock-toggle):active {
   transform: translateY(1px) scale(0.98);
+}
+button.pi-dock-toggle:active {
+  transform: none !important;
 }
 h1, h2, h3, p { text-wrap: pretty; }
 
@@ -324,7 +333,7 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 
 /* 视图切换过渡:还原设计稿 .view.active 的 fade(仅内容区,侧栏/顶栏/Pi 栏不重渲染) */
 @keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
-.workspace > * { animation: view-in 0.12s ease; }
+.workspace > * { height: 100%; min-height: 0; min-width: 0; box-sizing: border-box; animation: view-in 0.12s ease; }
 
 .status-bar {
   grid-column: 1 / -1;
@@ -360,72 +369,184 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 .status-item[data-phase="failed"] { color: #ff8e8e; }
 .status-item[data-phase="failed"] .status-dot { background: var(--danger); }
 .status-sep { display: none; }
-.pi-dock.collapsed { border-left: 0; }
-/* Hover bridge sits on the dock itself so it is not separated by the center scrollbar gutter. */
-.pi-dock:not(.collapsed)::before {
-  content: "";
+.pi-dock.collapsed { border-left: 0; overflow: visible; }
+/* Pi toggle：展开/收起同一尺寸；阴影不在按钮上（窗口外框另论） */
+.pi-dock-toggle-rail {
+  --pi-toggle-w: 18px;
+  --pi-toggle-h: 44px;
   position: absolute;
-  z-index: 49;
   top: 0;
   bottom: 0;
-  left: -28px;
-  width: 28px;
+  left: 0;
+  z-index: 1000;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  pointer-events: auto;
+  background: transparent;
+}
+.pi-dock-toggle-rail.is-collapsed {
+  position: fixed;
+  top: var(--topbar-height, 48px);
+  right: 0;
+  bottom: var(--status-height, 28px);
+  left: auto;
+  width: 18px;
+  z-index: 1000;
+  justify-content: flex-end;
 }
 .pi-dock-toggle {
-  /* Bound to Pi panel, not the viewport — avoids the middle-column scrollbar gap. */
-  position: absolute;
-  top: 50%;
-  left: 0;
-  z-index: 120;
+  position: relative;
+  top: auto;
+  left: auto;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 48px;
+  box-sizing: border-box;
+  width: var(--pi-toggle-w);
+  height: var(--pi-toggle-h);
+  min-width: var(--pi-toggle-w);
+  min-height: var(--pi-toggle-h);
+  max-width: var(--pi-toggle-w);
+  max-height: var(--pi-toggle-h);
   margin: 0;
   padding: 0;
-  /* Full continuous stroke; left corners rounded, right edge flush to Pi frame. */
-  border: 1px solid color-mix(in srgb, var(--border-strong) 88%, transparent);
-  border-right: 0;
-  border-radius: 10px 0 0 10px;
-  background: color-mix(in srgb, var(--panel-bg) 94%, #000 6%);
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--panel-bg);
   color: var(--muted);
-  box-shadow: none;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+  transform: none !important;
   cursor: pointer;
-  transform: translate(-100%, -50%);
   opacity: 0;
-  pointer-events: auto;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease, border-color 120ms ease;
+  pointer-events: none;
+  transition: opacity 100ms ease, color 100ms ease, background-color 100ms ease, border-color 100ms ease;
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
 }
-/* Hit area extends left without creating a visual gap from the panel. */
-.pi-dock-toggle::before {
-  content: "";
-  position: absolute;
-  top: -14px;
-  bottom: -14px;
-  left: -10px;
-  right: -1px;
+.pi-dock-toggle-rail.is-collapsed .pi-dock-toggle {
+  /* 仅镜像贴边方向，尺寸不变 */
+  border-left: 1px solid var(--border);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  width: var(--pi-toggle-w);
+  height: var(--pi-toggle-h);
+  min-width: var(--pi-toggle-w);
+  min-height: var(--pi-toggle-h);
+  max-width: var(--pi-toggle-w);
+  max-height: var(--pi-toggle-h);
+}
+.pi-dock-toggle-rail:hover .pi-dock-toggle,
+.pi-dock-toggle-rail:focus-within .pi-dock-toggle,
+.pi-dock-toggle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  box-shadow: none !important;
 }
 .pi-dock-toggle > svg {
-  position: relative;
-  z-index: 1;
   width: 12px;
   height: 12px;
   display: block;
-}
-.pi-dock:hover .pi-dock-toggle,
-.pi-dock:focus-within .pi-dock-toggle,
-.pi-dock.collapsed .pi-dock-toggle,
-.app-shell.pi-collapsed .pi-dock-toggle,
-.pi-dock-toggle:hover,
-.pi-dock-toggle:focus-visible {
-  opacity: 1;
-}
-.pi-dock-toggle:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--surface-raised) 88%, var(--accent) 6%);
-  border-color: color-mix(in srgb, var(--border-strong) 70%, var(--accent) 18%);
+  pointer-events: none;
 }
 .pi-dock-toggle:focus-visible {
   outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 2px;
+}
+
+/* 应用内确认框：替代原生 window.confirm 的产品皮 */
+.app-confirm-root {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.app-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: var(--overlay);
+  cursor: default;
+}
+.app-confirm-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(420px, calc(100vw - 48px));
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background:
+    radial-gradient(420px 160px at 12% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%),
+    var(--surface-raised);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 42%);
+  padding: 18px 18px 16px;
+  color: var(--ink);
+}
+.app-confirm-dialog.danger {
+  background:
+    radial-gradient(420px 160px at 12% 0%, color-mix(in srgb, #ff6b6b 14%, transparent), transparent 62%),
+    var(--surface-raised);
+}
+.app-confirm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.app-confirm-head strong {
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -.01em;
+}
+.app-confirm-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.app-confirm-close:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.app-confirm-message {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.app-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+.app-confirm-actions .primary-button,
+.app-confirm-actions .secondary-button {
+  min-width: 88px;
+}
+.primary-button.danger-button,
+.danger-button.primary-button {
+  background: #d94848;
+  color: #fff;
+}
+.primary-button.danger-button:hover:not(:disabled),
+.danger-button.primary-button:hover:not(:disabled) {
+  background: #e85b5b;
 }

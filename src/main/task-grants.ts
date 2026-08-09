@@ -1,3 +1,6 @@
+import { PAGE_TASK_GRANT_SCOPES, type PageTaskIntent } from '../shared/page-authority.ts';
+import { filterCommandsForRole, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
+import { roleWriteCommandsWithOverlays } from './capability-overlays.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { CommandDispatchError, createCommandEnvelope, type CommandActorV1, type CommandEnvelopeV1, type CommandReceiptV1 } from './command-dispatcher.ts';
@@ -21,6 +24,9 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'plans.save',
   'reviews.save',
   'sources.upsert_batch',
+  'sources.lane_gate',
+  'sources.lane_restore',
+  'sources.update_status',
   'x_lists.observation_start',
   'x_lists.observation_stop',
   'x_lists.operation_execute'
@@ -152,13 +158,61 @@ export function dispatchRevokeTaskGrant(runtime: ActiveWorkspaceRuntime, input: 
   });
 }
 
+/**
+ * R3（WMB-5120）：任务终态时按 task 幂等回收全部 active grant。
+ * 复用 TASK_GRANT_REVOKE_COMMAND + receipt + operation audit；scheduler actor 旁路 grant 门；
+ * 原子幂等 UPDATE（重复 0 行），receipt data = 本次实际撤销的 grant 列表（重复 = []）。
+ * 唯一触发点 = agent_task 终态（写包已被 requireRunningTask 拦截），不要求 expectedRevision。
+ */
+export function dispatchRevokeTaskGrantsForTask(
+  runtime: ActiveWorkspaceRuntime,
+  input: { requestId: string; taskId: string }
+): Promise<CommandReceiptV1<TaskGrant[]>> {
+  const envelope = createCommandEnvelope({
+    workspaceId: runtime.identity.workspaceId,
+    runtimeEpoch: runtime.identity.runtimeEpoch,
+    command: TASK_GRANT_REVOKE_COMMAND,
+    requestId: input.requestId,
+    input,
+    boundIdentity: { taskId: input.taskId },
+    actor: { type: 'scheduler', id: 'task-grant-reaper', label: 'task-grant-reaper' }
+  });
+  return runtime.dispatchCommand(envelope, () => {
+    const revokedAt = new Date().toISOString();
+    const active = runtime.database.prepare(
+      "SELECT id FROM task_grants WHERE task_id=? AND runtime_epoch=? AND status='active'"
+    ).all(input.taskId, runtime.identity.runtimeEpoch) as Array<{ id: string }>;
+    if (active.length > 0) {
+      runtime.database.prepare(
+        "UPDATE task_grants SET status='revoked', revoked_at=?, revision=revision+1 WHERE task_id=? AND runtime_epoch=? AND status='active'"
+      ).run(revokedAt, input.taskId, runtime.identity.runtimeEpoch);
+    }
+    const revoked = active
+      .map((row) => getTaskGrant(runtime.database, row.id))
+      .filter((grant): grant is TaskGrant => grant !== null);
+    return { data: revoked, entityType: 'task_grant', entityId: input.taskId, readback: revoked };
+  });
+}
+
 export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
   daily_intelligence: Object.freeze([
     'agent_tasks.report_progress',
     'knowledge.record_batch',
     'knowledge.suggestion_create',
     'plans.save',
+    'sources.upsert_batch',
+    'sources.lane_gate'
+  ]),
+  daily_scan: Object.freeze([
+    'agent_tasks.report_progress',
     'sources.upsert_batch'
+  ]),
+  daily_judge: Object.freeze([
+    'agent_tasks.report_progress',
+    'knowledge.record_batch',
+    'knowledge.suggestion_create',
+    'plans.save',
+    'sources.lane_gate'
   ]),
   studio_draft: Object.freeze([
     'agent_tasks.report_progress',
@@ -168,7 +222,17 @@ export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
     'agent_tasks.report_progress',
     'knowledge.record_batch',
     'reviews.save'
-  ])
+  ]),
+  page_today: PAGE_TASK_GRANT_SCOPES.today.writeScope ?? Object.freeze([] as const),
+  page_agents: PAGE_TASK_GRANT_SCOPES.agents.writeScope ?? Object.freeze([] as const),
+  page_discover: PAGE_TASK_GRANT_SCOPES.discover.writeScope ?? Object.freeze([] as const),
+  page_proposals: PAGE_TASK_GRANT_SCOPES.proposals.writeScope ?? Object.freeze([] as const),
+  page_topic: PAGE_TASK_GRANT_SCOPES.topic.writeScope ?? Object.freeze([] as const),
+  page_library: PAGE_TASK_GRANT_SCOPES.library.writeScope ?? Object.freeze([] as const),
+  page_canvas: PAGE_TASK_GRANT_SCOPES.canvas.writeScope ?? Object.freeze([] as const),
+  page_studio: PAGE_TASK_GRANT_SCOPES.studio.writeScope ?? Object.freeze([] as const),
+  page_publish: PAGE_TASK_GRANT_SCOPES.publish.writeScope ?? Object.freeze([] as const),
+  page_results: PAGE_TASK_GRANT_SCOPES.results.writeScope ?? Object.freeze([] as const),
 } as const);
 
 export const AUTOMATIC_TASK_GRANT_EXPIRY_MS = 4 * 60 * 60_000;
@@ -180,10 +244,41 @@ export const AUTOMATIC_TASK_GRANT_WORKERS = Object.freeze([
 
 export type TaskReadyGrantHook = (taskId: string) => Promise<string>;
 
-export async function ensureAutomaticTaskGrant(runtime: ActiveWorkspaceRuntime, taskId: string, now = new Date()): Promise<string> {
+function roleForTaskIntent(intent: string | null | undefined): RoleId | null {
+  if (!intent) return null;
+  // 仅扫/判/整理拆分强制角色：combined daily_intelligence 仍跟 caller/context，避免丢掉 reporter 专属写权。
+  if (intent === 'daily_scan') return 'reporter';
+  if (intent === 'daily_judge') return 'planner';
+  if (intent === 'page_library') return 'librarian';
+  return null;
+}
+
+export async function ensureAutomaticTaskGrant(
+  runtime: ActiveWorkspaceRuntime,
+  taskId: string,
+  now = new Date(),
+  roleId?: RoleId | null
+): Promise<string> {
   const task = getAgentTask(runtime.database, taskId);
   if (!task || task.status !== 'running') throw new CommandDispatchError('TASK_NOT_ACTIVE', '无法为非运行中的任务绑定自动授权。');
-  const allowedCommands = AUTOMATIC_TASK_GRANT_SCOPES[task.intent];
+  const baseCommands = AUTOMATIC_TASK_GRANT_SCOPES[task.intent as keyof typeof AUTOMATIC_TASK_GRANT_SCOPES];
+  if (!baseCommands || baseCommands.length === 0) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '该任务 intent 无自动写权（只读页）。');
+  // Intent 绑定角色优先：扫->判同进程时 caller 仍可能是 reporter，不能盖住 daily_judge/planner 写权。
+  const intentRole = roleForTaskIntent(task.intent);
+  const contextRole = typeof task.contextRefs?.roleId === 'string' && isRoleId(task.contextRefs.roleId) ? task.contextRefs.roleId : null;
+  const callerRole = roleId && isRoleId(roleId) ? roleId : null;
+  const resolvedRole = intentRole ?? contextRole ?? callerRole;
+  let allowedCommands = filterCommandsForRole(resolvedRole, baseCommands);
+  if (resolvedRole && resolvedRole !== 'desk') {
+    try {
+      const overlayAllowed = new Set(roleWriteCommandsWithOverlays(runtime.database, runtime.identity.workspaceId, resolvedRole));
+      for (const infra of ['agent_tasks.report_progress']) overlayAllowed.add(infra);
+      allowedCommands = allowedCommands.filter((command) => overlayAllowed.has(command));
+    } catch {
+      /* overlays table may be absent on old DBs mid-migration */
+    }
+  }
+  if (!allowedCommands.length) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '角色过滤后无剩余写权。');
   const active = listTaskGrants(runtime.database, taskId, now, runtime.identity).find((grant) => grant.status === 'active');
   if (active && sameCommandSet(active.allowedCommands, allowedCommands) && sameWorkerSet(active.workers, AUTOMATIC_TASK_GRANT_WORKERS)) return active.id;
   if (active) {
@@ -200,7 +295,14 @@ export async function ensureAutomaticTaskGrant(runtime: ActiveWorkspaceRuntime, 
     ownerGoal: `自动授权：完成 ${task.intent} 任务所需的业务事实写入`,
     allowedCommands: [...allowedCommands],
     workers: [...AUTOMATIC_TASK_GRANT_WORKERS],
-    relevantContext: { intent: task.intent, businessDate: task.businessDate, automatic: true },
+    relevantContext: {
+      intent: task.intent,
+      businessDate: task.businessDate,
+      automatic: true,
+      roleId: resolvedRole ?? undefined,
+      page: typeof task.contextRefs?.page === 'string' ? task.contextRefs.page : undefined,
+      objectId: typeof task.contextRefs?.objectId === 'string' ? task.contextRefs.objectId : (typeof task.contextRefs?.projectId === 'string' ? task.contextRefs.projectId : undefined)
+    },
     expiresAt: new Date(now.getTime() + AUTOMATIC_TASK_GRANT_EXPIRY_MS).toISOString()
   });
   if (!issued.ok || !issued.data) throw new CommandDispatchError(issued.error?.code ?? 'TASK_GRANT_ISSUE_FAILED', issued.error?.message ?? '自动 Task grant 无法签发。');

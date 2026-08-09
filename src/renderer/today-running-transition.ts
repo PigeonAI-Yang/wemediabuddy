@@ -5,9 +5,9 @@ type TransitionDocument = Document & {
   startViewTransition?: (update: () => void | Promise<void>) => unknown;
 };
 
-export function useTodayRunningTransition(): readonly [boolean, (next: boolean) => void] {
-  const [running, setRunning] = useState(false);
-  const current = useRef(false);
+export function useTodayRunningTransition(initialRunning = false): readonly [boolean, (next: boolean) => void] {
+  const [running, setRunning] = useState(initialRunning);
+  const current = useRef(initialRunning);
   const update = useCallback((next: boolean) => {
     if (current.current === next) return;
     current.current = next;

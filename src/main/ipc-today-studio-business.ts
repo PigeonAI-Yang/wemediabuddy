@@ -1,20 +1,149 @@
 import { dialog, ipcMain } from 'electron';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getToday } from './workbench.ts';
-import { dismissCarryForPlanItem, listFermentingBundle, refreshWorkCarry, setCarryState, type CarryState } from './ferment.ts';
+import { broadcastDataChanged } from './data-changed.ts';
+import { getProposalLedger, restoreDismissedProposal, summarizeProposalLedger, type ProposalTab } from './proposals.ts';
+import { dismissCarryForPlanItem, listFermentingBundle, refreshWorkCarry, setCarryState, shanghaiDate, type CarryState } from './ferment.ts';
 import {
   copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject,
   getContentProject, getContentProjectStatusSummary, getStudio, listContentProjects, saveCoreVersion, updateContentProject,
   type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus
 } from './content.ts';
+import { getToday } from './workbench.ts';
+import { buildRoleRoster } from './role-roster.ts';
+import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
+import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
+import { bindAgentAvatarAsset, clearAgentAvatarMapping, listAgentAvatars } from './agent-avatars.ts';
 import { getAsset, guessImageMime, linkProjectAsset, listProjectAssets, markdownImageForAsset, registerStagedAsset, stageAssetBytes } from './assets.ts';
-import { broadcastDataChanged } from './data-changed.ts';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData, requireReceiptData } from './business-command.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
 
 export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependencies): void {
   ipcMain.handle('today:get', (_event, planDate: string) => readWorkspaceDatabase(dependencies, () => null, database => getToday(database, planDate)));
+  ipcMain.handle('agents:roster-status', (_event, input: { businessDate?: string } = {}) => readWorkspaceDatabase(dependencies, () => [], database => {
+    const runtime = dependencies.getActiveRuntime();
+    const workers = runtime?.getWorkerSnapshots?.() ?? [];
+    const worker = runtime?.getWorkerSnapshot() ?? null;
+    return buildRoleRoster(database, { businessDate: input?.businessDate ?? shanghaiDate(), worker, workers });
+  }));
+  
+  ipcMain.handle('agents:capability-summary', () => {
+    return {
+      roles: Object.values(ROLE_CATALOG).map((role) => ({
+        roleId: role.roleId,
+        labelZh: role.labelZh,
+        roomZh: role.roomZh,
+        skills: [...role.skills]
+      })),
+      capabilities: AGENT_CAPABILITIES.filter((cap) => cap.agentGrantable).map((cap) => ({
+        id: cap.id,
+        displayName: cap.displayName,
+        description: cap.description,
+        defaultRoleBindings: cap.defaultRoleBindings,
+        pageScopePassThrough: Boolean(cap.pageScopePassThrough)
+      }))
+    };
+  });
+  ipcMain.handle('agents:list-overlays', () => readWorkspaceDatabase(dependencies, () => [], (database) => {
+    const runtime = dependencies.getActiveRuntime();
+    const workspaceId = runtime?.identity.workspaceId;
+    if (!workspaceId) return [];
+    return listCapabilityOverlays(database, workspaceId);
+  }));
+  ipcMain.handle('agents:set-overlay', async (_event, input: { roleId: string; capabilityId: string; enabled: boolean }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    if (!isRoleId(input.roleId)) throw new Error('未知角色。');
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'agents.set_overlay',
+      requestId: freshRequestId(),
+      actor: ownerUiActor,
+      input: {
+        workspaceId: runtime.identity.workspaceId,
+        roleId: input.roleId,
+        capabilityId: input.capabilityId,
+        enabled: input.enabled
+      },
+      boundIdentity: { entityType: 'capability_overlay', roleId: input.roleId, capabilityId: input.capabilityId },
+      entityType: 'capability_overlay',
+      execute: (database, value) => {
+        const data = setCapabilityOverlay(database, {
+          workspaceId: value.workspaceId,
+          roleId: value.roleId,
+          capabilityId: value.capabilityId as import('../shared/agent-capabilities.ts').AgentCapabilityId,
+          enabled: value.enabled
+        });
+        return { data, entityId: `${value.roleId}:${value.capabilityId}`, afterRevision: 1, readback: data };
+      }
+    });
+    const row = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['agent'], reason: 'capability.overlay' });
+    return row;
+  });
+
+  ipcMain.handle('agents:list-avatars', () => readWorkspaceDatabase(dependencies, () => [], database => listAgentAvatars(database)));
+  ipcMain.handle('agents:set-avatar', async (_event, input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    if (!input?.roleId || !input?.base64) throw new Error('roleId 与图片数据必填。');
+    if (!isRoleId(input.roleId)) throw new Error('未知角色。');
+    const bytes = Buffer.from(String(input.base64).replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    if (!bytes.length) throw new Error('图片数据无效。');
+    if (bytes.byteLength > 5 * 1024 * 1024) throw new Error('头像不能超过 5MB。');
+    const staged = await stageAssetBytes(runtime.identity.rootPath, {
+      bytes,
+      fileName: `${input.roleId}.png`,
+      mimeType: input.mimeType || 'image/png',
+      origin: 'agent-avatar',
+      width: input.width ?? 256,
+      height: input.height ?? 256
+    });
+    if (!staged.mimeType.startsWith('image/')) throw new Error('头像必须是图片。');
+    try {
+      const aliasAbs = path.join(runtime.identity.rootPath, 'assets', 'agent-avatars', `${input.roleId}.png`);
+      const { mkdir, writeFile } = await import('node:fs/promises');
+      await mkdir(path.dirname(aliasAbs), { recursive: true });
+      await writeFile(aliasAbs, bytes);
+    } catch { /* alias best-effort */ }
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'agents.set_avatar',
+      requestId: freshRequestId(),
+      actor: ownerUiActor,
+      input: { roleId: input.roleId as import('../shared/agent-capabilities.ts').RoleId, staged },
+      boundIdentity: { entityType: 'agent_avatar', roleId: input.roleId },
+      entityType: 'agent_avatar',
+      execute: (database, value) => {
+        const data = bindAgentAvatarAsset(database, { roleId: value.roleId, staged: value.staged });
+        return { data, entityId: value.roleId, afterRevision: 1, readback: data };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['agent'], reason: 'agent.avatar' });
+    return data;
+  });
+  ipcMain.handle('agents:clear-avatar', async (_event, input: { roleId: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    if (!input?.roleId || !isRoleId(input.roleId)) throw new Error('未知角色。');
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'agents.clear_avatar',
+      requestId: freshRequestId(),
+      actor: ownerUiActor,
+      input: { roleId: input.roleId },
+      boundIdentity: { entityType: 'agent_avatar', roleId: input.roleId },
+      entityType: 'agent_avatar',
+      execute: (database, value) => {
+        clearAgentAvatarMapping(database, value.roleId);
+        return { data: { ok: true as const }, entityId: value.roleId, afterRevision: 1, readback: { ok: true } };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['agent'], reason: 'agent.avatar.clear' });
+    return data;
+  });
+
+
+  ipcMain.handle('proposals:get', (_event, input: { planDate: string; tab?: ProposalTab; limit?: number; offset?: number }) =>
+    readWorkspaceDatabase(dependencies, () => null, database => getProposalLedger(database, input)));
+  ipcMain.handle('proposals:summary', (_event, planDate: string) =>
+    readWorkspaceDatabase(dependencies, () => null, database => summarizeProposalLedger(database, { planDate })));
   ipcMain.handle('today:list-fermenting', (_event, planDate: string) => readWorkspaceDatabase(dependencies, () => null, database => listFermentingBundle(database, planDate)));
   ipcMain.handle('studio:get', () => readWorkspaceDatabase(dependencies, () => null, database => getStudio(database)));
   ipcMain.handle('studio:list', (_event, input: { query?: string; status?: ContentProjectStatus; archived?: boolean; order?: ContentProjectOrder; platform?: ContentProjectPlatform; limit?: number; offset?: number }) =>
@@ -36,7 +165,15 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       input, boundIdentity: { entityType: 'work_carry', entityId: input.id }, entityType: 'work_carry',
       execute: (database, value) => { const data = setCarryState(database, value, false); return { data, entityId: data.id,
         beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today'], reason: 'carry.state' }); return data;
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'carry.state' }); return data;
+  });
+  ipcMain.handle('proposals:restore', async (_event, input: { planItemId: string; reason?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'opportunities.restore', requestId: freshRequestId(), actor: ownerUiActor,
+      input, boundIdentity: { entityType: 'plan_item', entityId: input.planItemId }, entityType: 'work_carry',
+      execute: (database, value) => { const data = restoreDismissedProposal(database, value, false); return { data, entityId: data.id,
+        afterRevision: data.revision, readback: data }; } });
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'proposal.restore' }); return data;
   });
   ipcMain.handle('today:dismiss-plan-item', async (_event, input: { planItemId: string; reason?: string }) => {
     const runtime = await requireBusinessRuntime(dependencies);
@@ -44,7 +181,7 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       input, boundIdentity: { entityType: 'plan_item', entityId: input.planItemId }, entityType: 'work_carry',
       execute: (database, value) => { const data = dismissCarryForPlanItem(database, value, false); return { data, entityId: data.id,
         beforeRevision: undefined, afterRevision: data.revision, readback: data }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today'], reason: 'carry.dismiss' }); return data;
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'carry.dismiss' }); return data;
   });
   ipcMain.handle('today:create-project', async (_event, planItemId: string) => {
     const runtime = await requireBusinessRuntime(dependencies);
@@ -52,7 +189,7 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       input: { planItemId }, boundIdentity: { entityType: 'plan_item', entityId: planItemId }, entityType: 'content_project',
       execute: (database, value) => { const data = createProjectFromPlanItem(database, value.planItemId, false); return { data,
         entityId: data.id, afterRevision: data.revision, readback: getContentProject(database, data.id) }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'studio'], reason: 'content.create_from_plan' }); return data;
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'content.create_from_plan' }); return data;
   });
 
   ipcMain.handle('studio:create-project', async (_event, input: { title: string; body: string }) => {

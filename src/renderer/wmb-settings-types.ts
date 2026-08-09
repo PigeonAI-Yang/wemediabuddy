@@ -19,6 +19,7 @@ export type WmbSettingsSnapshot = {
   pi: {
     activeId: string | null;
     profiles: Array<{ id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number; maxTokens?: number; configured: boolean; active: boolean }>;
+    fallbackOrder: string[];
     baseUrl: string;
     model: string;
     configured: boolean;

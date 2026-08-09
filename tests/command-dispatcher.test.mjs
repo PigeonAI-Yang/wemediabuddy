@@ -4,15 +4,60 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { createCommandEnvelope } from '../src/main/command-dispatcher.ts';
-import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { startMcp } from '../src/main/mcp.ts';
-import { dispatchSourceUpsertBatch } from '../src/main/source-commands.ts';
-import { getSource, upsertSource } from '../src/main/sources.ts';
-import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
-import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
-import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
-import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
+import { register } from 'node:module';
+
+// ---- WMB-5122: test-local Node ESM resolution hook ----
+// The src/main graph reachable from mcp.ts (WMB-5116 chain mcp-job-tools -> manager-job-notify ->
+// manager-dispatch -> ipc-pi-dock) mixes extensionless relative imports (`./pi-conversation`, ...)
+// with `electron` value imports. Bare Node ESM can resolve neither; production runs these sources only
+// through the Vite bundler (moduleResolution: bundler, allowImportingTsExtensions) inside the Electron
+// runtime, where both resolve natively. This inline hook mirrors exactly that production resolution for
+// the bare-Node harness: it appends .ts to extensionless relative specifiers and maps `electron` to an
+// inert stub (only satisfying linking; none of those call sites run in these tests). App-graph imports
+// below are top-level-await dynamic imports so the hook is registered before any of them load. No
+// assertion is skipped or weakened; the MCP adapter test below still starts the real startMcp HTTP
+// server and executes JSON-RPC requests against it.
+const ELECTRON_STUB = [
+  'const noop = () => {};',
+  'class BrowserWindow {',
+  '  static getAllWindows() { return []; }',
+  '  loadURL() { return Promise.resolve(); }',
+  '  loadFile() { return Promise.resolve(); }',
+  '}',
+  "const app = { getAppPath: () => '', whenReady: () => Promise.resolve(), on: noop };",
+  'const ipcMain = { handle: noop, on: noop, removeHandler: noop, removeAllListeners: noop };',
+  "const safeStorage = { encryptString: (s) => Buffer.from(String(s), 'utf8'), decryptString: (b) => String(b) };",
+  'export { app, BrowserWindow, ipcMain, safeStorage };',
+  'export default { app, safeStorage };',
+].join('\n');
+const HOOK_SOURCE = [
+  "const { existsSync } = process.getBuiltinModule('node:fs');",
+  "const path = process.getBuiltinModule('node:path');",
+  "const { fileURLToPath, pathToFileURL } = process.getBuiltinModule('node:url');",
+  'const ELECTRON_STUB = ' + JSON.stringify(ELECTRON_STUB) + ';',
+  'export async function resolve(specifier, context, nextResolve) {',
+  "  if (specifier === 'electron') return { url: 'data:text/javascript,' + encodeURIComponent(ELECTRON_STUB), shortCircuit: true };",
+  "  if ((specifier.startsWith('./') || specifier.startsWith('../')) && !path.extname(specifier)) {",
+  '    const base = path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);',
+  "    for (const ext of ['.ts', '.mts', '.cts']) {",
+  '      const candidate = base + ext;',
+  '      if (existsSync(candidate)) return { url: pathToFileURL(candidate).href, shortCircuit: true };',
+  '    }',
+  '  }',
+  '  return nextResolve(specifier, context);',
+  '}',
+].join('\n');
+register('data:text/javascript,' + encodeURIComponent(HOOK_SOURCE), import.meta.url);
+
+const { createCommandEnvelope } = await import('../src/main/command-dispatcher.ts');
+const { migrateDatabase } = await import('../src/main/db/migrations.ts');
+const { startMcp } = await import('../src/main/mcp.ts');
+const { dispatchSourceUpsertBatch } = await import('../src/main/source-commands.ts');
+const { getSource, upsertSource } = await import('../src/main/sources.ts');
+const { ActiveWorkspaceRuntime } = await import('../src/main/workspace-runtime.ts');
+const { ensureOfficialWorkspaceProfile } = await import('../src/main/workspace-profiles.ts');
+const { dispatchStartAgentTask } = await import('../src/main/agent-task-commands.ts');
+const { dispatchIssueTaskGrant } = await import('../src/main/task-grants.ts');
 
 const owner = { type: 'owner_ui', id: 'renderer', label: 'Owner UI' };
 const external = { type: 'external_agent', id: 'mcp', label: 'External MCP Agent' };

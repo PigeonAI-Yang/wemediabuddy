@@ -158,7 +158,13 @@ export function persistBoundXListTimeline(
       author: post.authorHandle ?? undefined,
       publishedAt: post.postedAt ?? undefined,
       summary: post.text,
-      evidence: JSON.stringify({ listId: current.listId, listUrl: current.canonicalUrl, collectedAt: capturedAt })
+      evidence: JSON.stringify({
+        listId: current.listId,
+        listUrl: current.canonicalUrl,
+        collectedAt: capturedAt,
+        avatarUrl: post.avatarUrl ?? null,
+        displayName: post.displayName ?? null
+      })
     }) }));
     const snapshotIds = saved.flatMap(({ post, source }) => post.metricEvidence ? [saveXPostMetricSnapshot(database, {
       sourceItemId: source.id,

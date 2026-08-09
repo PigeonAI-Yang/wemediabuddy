@@ -32,6 +32,10 @@ import { createCommandEnvelope } from './command-dispatcher.ts';
 import { registerExecutionGrantMcp } from './mcp-execution-grants.ts';
 import { registerBusinessMutationMcp } from './mcp-business-commands.ts';
 import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
+import { registerJobToolsMcp } from './mcp-job-tools.ts';
+import { continueAfterScan, describeDailyReadiness, runManagerDailyStage } from './manager-orchestration.ts';
+import { buildRoleRoster } from './role-roster.ts';
+import { shanghaiDate } from './ferment.ts';
 export type McpRuntime = { url: string; close: () => Promise<void> };
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
 function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): McpServer {
@@ -85,10 +89,10 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     const db = database(); try { return text(getSource(db, id)); } finally { db.close(); }
   });
   server.registerTool('sources.search', {
-    description: '搜索并读取完整资料字段。',
-    inputSchema: { query: z.string().optional(), limit: z.number().int().min(1).max(200).optional() }
-  }, async ({ query, limit }) => {
-    const db = database(); try { return text(searchSources(db, query, limit)); } finally { db.close(); }
+    description: '搜索并读取完整资料字段。默认只返回有效资料（未移出）；传 include_archived=true 可含已移出条目。',
+    inputSchema: { query: z.string().optional(), limit: z.number().int().min(1).max(200).optional(), include_archived: z.boolean().optional() }
+  }, async ({ query, limit, include_archived }) => {
+    const db = database(); try { return text(searchSources(db, query, limit, Boolean(include_archived))); } finally { db.close(); }
   });
   if (aiOnlyRoutes) server.registerTool('sources.wire_health_get', {
     description: '读取最近一次今日情报导线巡检健康台账（按 registry/X List 源）。',
@@ -342,7 +346,79 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       return text(listReviews(db, publication_id));
     } finally { db.close(); }
   });
-  return server;
+  
+  // 主管编排：读班组 / 派工 / 传话（desk manager tools）
+  server.registerTool('agents.roster', {
+    description: '读取固定角色班组席位状态（主管/记者/策划/写手/资料员）与摘要进度。只读。',
+    inputSchema: { business_date: z.string().optional() }
+  }, async ({ business_date }) => {
+    const db = database();
+    try {
+      const workers = runtime?.getWorkerSnapshots?.() ?? [];
+      const worker = runtime?.getWorkerSnapshot() ?? null;
+      return text(buildRoleRoster(db, {
+        businessDate: business_date || shanghaiDate(),
+        worker,
+        workers
+      }));
+    } finally { db.close(); }
+  });
+
+  if (runtime) {
+    registerJobToolsMcp(server, runtime, database);
+    server.registerTool('daily.readiness', {
+      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由主管决定并调用 continue/run_stage/spawn。',
+      inputSchema: { business_date: z.string().optional() }
+    }, async ({ business_date }) => {
+      return text(describeDailyReadiness(runtime, business_date || undefined));
+    });
+    server.registerTool('daily.continue_after_scan', {
+      description: '主管工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
+      inputSchema: { business_date: z.string().optional() }
+    }, async ({ business_date }) => {
+      const mcp = runtime.getMcp<McpRuntime>();
+      if (!mcp?.url) return text({ ok: false, error: 'MCP_UNAVAILABLE' });
+      try {
+        return text(await continueAfterScan({
+          runtime,
+          dataRootPath: runtime.identity.rootPath,
+          mcpUrl: mcp.url,
+          xhsMcpUrl: '',
+          businessDate: business_date
+        }));
+      } catch (error) {
+        return text({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+    server.registerTool('daily.run_stage', {
+      description: '主管启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由主管选用，不是禁用。',
+      inputSchema: {
+        stage: z.enum(['scan', 'judge', 'full']),
+        business_date: z.string().optional(),
+        modules: z.array(z.enum(['official_web', 'x_lists'])).optional()
+      }
+    }, async ({ stage, business_date, modules }) => {
+      const mcp = runtime.getMcp<McpRuntime>();
+      if (!mcp?.url) return text({ ok: false, error: 'MCP_UNAVAILABLE' });
+      try {
+        const result = await runManagerDailyStage({
+          runtime,
+          dataRootPath: runtime.identity.rootPath,
+          mcpUrl: mcp.url,
+          xhsMcpUrl: '',
+          stage,
+          businessDate: business_date,
+          modules
+        });
+        return text(result);
+      } catch (error) {
+        return text({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    });
+
+  }
+
+return server;
 }
 
 export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): Promise<McpRuntime> {

@@ -19,20 +19,45 @@ export type WorkspaceProfileV1 = {
 
 export const OFFICIAL_WORKSPACE_TEMPLATES: Record<OfficialTemplateId, Omit<WorkspaceProfileV1, 'revision'>> = {
   'official.ai': {
-    profileId: 'profile.ai.official', officialTemplateId: 'official.ai', officialTemplateVersion: 1, displayName: 'AI',
-    audience: '关注 AI 工具、行业、开发和商业机会的中文受众', contentGoal: '持续发现并做出有判断、有证据、可执行的 AI 内容',
-    editorialBrief: '优先官方发布、真实实测和受众正在遇到的问题；机会按 SSS 至 F 保留全部合格结果。',
-    intelligencePackId: 'wemedia-intelligence-engine', intelligencePackVersion: 1,
-    creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x', 'xiaohongshu', 'wechat']
+    profileId: 'profile.ai.official',
+    officialTemplateId: 'official.ai',
+    officialTemplateVersion: 2,
+    displayName: 'AI × 商业化成长',
+    audience: '已在用 AI 干活、想靠「内容→信任→付费」独立收入的中文创作者与独立开发者；要可复现实验与真实卡点，不要躺赚话术',
+    contentGoal: '公开用 AI 做内容、跑实验、沉淀方法，把一个人靠内容和产品活下去的路径讲清楚并持续兑现',
+    editorialBrief: '编辑使命=公开用 AI 把自己做成能靠内容和产品活下去的人。五维=认知/技能/表达/获客/产品化。优先：真实实验与公开开发回执、可复现用法、受众重复问题、可变现/可产品化信号。降权：纯公告搬运、宏大综述、无观点热点、无法验证的赚钱承诺。栏目骨架：实验日志/开发日志/原则卡/机会判断/周复盘/变现实验。机会按 SSS 至 F 保留全部合格结果。发布是夜灯（X 主战场；小红书客户端人工发）。',
+    intelligencePackId: 'wemedia-intelligence-engine',
+    intelligencePackVersion: 1,
+    creationPackId: 'wmb-core-creation',
+    creationPackVersion: 1,
+    platforms: ['x', 'xiaohongshu', 'wechat']
   },
   'official.uk': {
-    profileId: 'profile.uk.official', officialTemplateId: 'official.uk', officialTemplateVersion: 1, displayName: '英国生活',
-    audience: '在英国生活、学习、工作或准备赴英的中国人', contentGoal: '把英国政策与生活信息转化为有来源、可执行的中文内容',
+    profileId: 'profile.uk.official',
+    officialTemplateId: 'official.uk',
+    officialTemplateVersion: 1,
+    displayName: '英国生活',
+    audience: '在英国生活、学习、工作或准备赴英的中国人',
+    contentGoal: '把英国政策与生活信息转化为有来源、可执行的中文内容',
     editorialBrief: '政策、签证、金融、劳动和合同结论回到当前官方来源；区分事实、专业解释与个案。',
-    intelligencePackId: 'uk-life-content-radar', intelligencePackVersion: 1,
-    creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x', 'xiaohongshu']
+    intelligencePackId: 'uk-life-content-radar',
+    intelligencePackVersion: 1,
+    creationPackId: 'wmb-core-creation',
+    creationPackVersion: 1,
+    platforms: ['x', 'xiaohongshu']
   }
 };
+
+export function buildOfficialTemplateProfile(templateId: OfficialTemplateId, revision: number): WorkspaceProfileV1 {
+  return { ...OFFICIAL_WORKSPACE_TEMPLATES[templateId], revision };
+}
+
+function isOfficialTemplateLineage(existing: WorkspaceProfileV1, templateId: OfficialTemplateId): boolean {
+  const template = OFFICIAL_WORKSPACE_TEMPLATES[templateId];
+  return existing.officialTemplateId === templateId
+    && existing.profileId === template.profileId
+    && existing.intelligencePackId === template.intelligencePackId;
+}
 
 export const AI_ONLY_ROUTE_IDS = [
   'ai.intelligence.skill',
@@ -54,10 +79,17 @@ export function readWorkspaceProfile(database: DatabaseSync): WorkspaceProfileV1
 
 export function ensureOfficialWorkspaceProfile(database: DatabaseSync, templateId: OfficialTemplateId): WorkspaceProfileV1 {
   const existing = readWorkspaceProfile(database);
-  if (existing) return existing;
-  const profile = { ...OFFICIAL_WORKSPACE_TEMPLATES[templateId], revision: 1 };
-  insertWorkspaceProfile(database, profile);
-  return profile;
+  const template = OFFICIAL_WORKSPACE_TEMPLATES[templateId];
+  if (!existing) {
+    const profile = buildOfficialTemplateProfile(templateId, 1);
+    insertWorkspaceProfile(database, profile);
+    return profile;
+  }
+  const existingVersion = existing.officialTemplateVersion ?? 0;
+  const templateVersion = template.officialTemplateVersion ?? 0;
+  if (!isOfficialTemplateLineage(existing, templateId) || existingVersion >= templateVersion) return existing;
+  if (database.prepare("SELECT 1 FROM agent_tasks WHERE status='running' LIMIT 1").get()) return existing;
+  return activateWorkspaceProfile(database, buildOfficialTemplateProfile(templateId, existing.revision + 1), existing.revision);
 }
 
 export function insertWorkspaceProfile(database: DatabaseSync, profile: WorkspaceProfileV1): WorkspaceProfileV1 {

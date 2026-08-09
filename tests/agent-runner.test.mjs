@@ -35,6 +35,8 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /长期观察资料/);
     assert.match(prompt, /跨日发酵机会/);
     assert.match(prompt, /为什么是现在/);
+    assert.match(prompt, /五维/);
+    assert.match(prompt, /六栏目/);
     assert.match(prompt, /仅可调用 wmb_get_knowledge_context/);
     assert.match(prompt, /尤其禁止 wmb_get_workbench/);
     assert.match(prompt, /收尾只输出一个 ```json 代码块/);
@@ -82,7 +84,7 @@ test('daily IPC leaves task creation to the shared channel coordinator and dedup
   const coordinator = handler.indexOf('startWorkspaceDailyIntelligence');
   assert.ok(coordinator > 0);
   assert.doesNotMatch(handler.slice(0, coordinator), /startAgentTask|resolveAgentPiPrerequisite/);
-  assert.match(handler, /const runKey = `\$\{dataRoot\.path\}/);
+  assert.match(handler, /dailyRunKey\(dataRoot\.path, businessDate\)|const runKey = `\$\{dataRoot\.path\}/);
   assert.match(handler, /dailyRuns\.has\(runKey\)/);
   assert.match(handler, /dailyRuns\.set\(runKey, run\)/);
 });

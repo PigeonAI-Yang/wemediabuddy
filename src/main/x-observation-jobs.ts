@@ -211,17 +211,29 @@ export function stopXObservationSession(database: DatabaseSync, sessionId: strin
   return getXObservationSession(database, sessionId);
 }
 
-export async function recoverRunningXObservationJobs(dependency: ActiveWorkspaceRuntime | DatabaseSync, generation = 0): Promise<number> {
+export async function recoverRunningXObservationJobs(
+  dependency: ActiveWorkspaceRuntime | DatabaseSync,
+  generation = 0,
+  recoveredBefore = new Date().toISOString()
+): Promise<number> {
   const database = 'database' in dependency ? dependency.database : dependency;
   const execute = () => {
     const now = new Date().toISOString();
-    return Number(database.prepare(`UPDATE jobs SET status='pending', started_at=NULL, updated_at=?
-      WHERE kind='x_list_observation' AND status='running'`).run(now).changes ?? 0);
+    const rows = database.prepare(`UPDATE jobs SET
+      status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,
+      last_error=CASE WHEN attempts>=3 THEN 'OBSERVATION_RETRY_EXHAUSTED' ELSE NULL END,
+      started_at=CASE WHEN attempts>=3 THEN started_at ELSE NULL END,
+      finished_at=CASE WHEN attempts>=3 THEN ? ELSE NULL END,
+      updated_at=?
+      WHERE kind='x_list_observation' AND status='running'
+        AND (started_at IS NULL OR started_at<?)
+      RETURNING status`).all(now, now, recoveredBefore) as Array<{ status: string }>;
+    return rows.filter((row) => row.status === 'pending').length;
   };
   if (!('database' in dependency)) return execute();
   const receipt = await dispatchBusinessCommand(dependency, {
     command: 'x_observation.jobs_recover', requestId: `${dependency.identity.runtimeEpoch}:xobs:recover:${generation}`,
-    actor: observationActor, input: { generation }, boundIdentity: dependency.identity, entityType: 'x_observation_job',
+    actor: observationActor, input: { generation, recoveredBefore }, boundIdentity: dependency.identity, entityType: 'x_observation_job',
     execute: () => ({ data: execute(), sideEffectState: 'committed' })
   });
   return requireReceiptData(receipt);

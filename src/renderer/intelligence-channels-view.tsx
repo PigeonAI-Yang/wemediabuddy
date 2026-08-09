@@ -158,7 +158,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
 
   return <section className="intelligence-channels" aria-label="情报渠道">
     <header className="intelligence-channels-head">
-      <div>{settingsMode ? <h3>来源与扫描</h3> : <h1>情报渠道</h1>}<p>管理当前工作空间每天会检查的官网和 X Lists。来源各自同等参与今日情报。</p></div>
+      <div className={settingsMode ? "settings-section-heading" : "channel-page-heading"}>{settingsMode ? <h3>来源与扫描</h3> : <h1>情报渠道</h1>}{settingsMode ? null : <p>每天检查的官网与 X Lists。</p>}</div>
       <button className="refresh-button" onClick={() => void load()} disabled={loading || Boolean(busy)} title="刷新渠道" aria-label="刷新渠道">↻</button>
     </header>
     <div className="channel-readiness" aria-label="渠道就绪情况">
@@ -170,7 +170,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
     {note && <p className="channel-note" data-tone={note.includes('失败') || note.includes('错误') ? 'danger' : undefined}>{note}</p>}
     <div className="channel-add-grid">
       <section className="channel-add-form" aria-labelledby="add-website-title">
-        <div><h2 id="add-website-title">添加官网</h2><p>输入网站名称或公开 URL，先确认候选并完成试读。</p></div>
+        <div className="settings-section-heading"><h3 id="add-website-title">添加官网</h3></div>
         <label>网站名称或 URL<input value={websiteInput} onChange={(event) => setWebsiteInput(event.target.value)} placeholder="例如 GOV.UK 或 https://www.gov.uk/" /></label>
         <button className="secondary-button" onClick={() => void resolveWebsite()} disabled={!websiteInput.trim() || Boolean(busy)}>识别网站</button>
         {websiteCandidates.length > 0 && <div className="channel-candidates" aria-label="官网候选">
@@ -182,7 +182,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
         </div>}
       </section>
       <section className="channel-add-form" aria-labelledby="add-x-list-title">
-        <div><h2 id="add-x-list-title">添加 X List</h2><p>输入 List 名称、URL 或 ID，只从当前工作空间账号读取。</p></div>
+        <div className="settings-section-heading"><h3 id="add-x-list-title">添加 X List</h3></div>
         <label>List 名称、URL 或 ID<input value={xInput} onChange={(event) => setXInput(event.target.value)} placeholder="例如 AI Sources 或 https://x.com/i/lists/..." /></label>
         <button className="secondary-button" onClick={() => void resolveXList()} disabled={!xInput.trim() || Boolean(busy)}>查找 List</button>
         {xResolution && <div className="channel-candidates" aria-label="X List 候选">
@@ -195,14 +195,14 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
       </section>
     </div>
     {proposals.length > 0 && <section className="channel-proposal-list" aria-labelledby="channel-proposal-title">
-      <header><div><h2 id="channel-proposal-title">待确认的来源变更</h2><p>这是 Pi 或协作助手准备的精确清单。确认前会重新核验当前工作空间、配方、来源和 X 账号。</p></div></header>
+      <header><div className="settings-section-heading"><h3 id="channel-proposal-title">待确认的来源变更</h3></div></header>
       {proposals.map((entry) => <article key={entry.proposal.id} className="channel-proposal">
         <ol>{entry.proposal.displayedDiff.map((item, index) => <li key={`${item.module}:${item.stableIdentity}`}><strong>{index + 1}. {item.display.title}</strong>{item.display.details.map((detail) => <small key={detail}>{detail}</small>)}</li>)}</ol>
         <button className="primary-button" onClick={() => void confirmProposal(entry)} disabled={Boolean(busy)}>确认这 {entry.proposal.displayedDiff.length} 项变更</button>
       </article>)}
     </section>}
     <section className="channel-source-list" aria-labelledby="configured-sources-title">
-      <header><div><h2 id="configured-sources-title">当前来源</h2><p>每次扫描都会留下真实检查回执。停用或移除不会删除已有资料。</p></div></header>
+      <header><div className="settings-section-heading"><h3 id="configured-sources-title">当前来源</h3></div></header>
       {loading && !data ? <p className="channel-empty">正在读取来源…</p> : data?.summary.sources.length ? <div>{data.summary.sources.map((source) => {
         const receipt = latestReceipts.get(source.sourceId);
         const trend = xTrends[source.sourceId]?.find((item) => item.viewsPerHour.status === 'value');

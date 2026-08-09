@@ -64,9 +64,7 @@
 .channel-proposal ol { display: grid; gap: 9px; min-width: 0; margin: 0; padding-left: 21px; }
 .channel-proposal li { display: grid; gap: 3px; color: var(--ink); font-size: 13px; }
 .channel-proposal small { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
-.today-command[data-mode="idle"] { align-items: stretch; flex-wrap: wrap; }
-.today-command[data-mode="idle"] .today-command-stats { flex: 0 1 auto; min-width: 0; }
-.today-command[data-mode="idle"] .today-command-actions { margin-left: auto; flex: 0 0 auto; }
+/* today-command idle layout lives in styles-workflow.css (buttons never shrink). */
 
 @media (max-width: 1180px) {
   .channel-add-grid { grid-template-columns: 1fr; }

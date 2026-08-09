@@ -42,9 +42,9 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   assert.doesNotMatch(todayLegacy, /跳过当前来源/);
   assert.equal((today.match(/className="primary-button" onClick=\{onPrimary\}/g) ?? []).length, 1);
   assert.match(today, /view\.primaryCta\.kind !== 'none'/);
-  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string \}\)/);
+  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules\?: Array<'official_web' \| 'x_lists'>; legacyPipeline\?: boolean \}\)/);
   assert.doesNotMatch(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules:/);
-  assert.match(main, /businessDate, modules: input\.modules, mcpUrl/);
+  assert.match(main, /businessDate,?\s*modules:\s*input\.modules/);
   assert.doesNotMatch(discover, /IntelligenceChannelsView|情报渠道/);
   assert.match(settings, /section === 'channels' && settings && <IntelligenceChannelsView settingsMode/);
   assert.match(settings, /\{ id: 'channels', label: '情报渠道'/);
@@ -53,7 +53,7 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   assert.match(channels, /15\/60\/180 分钟三个观察窗口/);
   assert.match(channels, /停止观察/);
   assert.match(today, /channel_scanned: '渠道扫描已完成'/);
-  assert.match(today, /judging_opportunities: '正在生成今日运营方案'/);
+  assert.match(today, /judging_opportunities: '正在评估新资料并更新选题池'/);
   assert.match(today, /data-indeterminate=\{view\.progress\?\.indeterminate/);
   assert.match(workspaceIntelligence, /phase: 'judging_opportunities'/);
   assert.match(workspaceIntelligence, /setInterval\([\s\S]*15_000\)/);

@@ -118,7 +118,10 @@ function preferProjectedMessages(stored: PiChatMessage[], projected: PiChatMessa
   const projectedUsers = projected.filter((message) => message.role === 'user');
   if (projectedUsers.length !== storedUsers.length) return projectedUsers.length > storedUsers.length;
   if (projectedUsers.at(-1)?.text !== storedUsers.at(-1)?.text) return false;
-  return visibleMessageSize(projected) > visibleMessageSize(stored);
+  const storedSize = visibleMessageSize(stored);
+  const projectedSize = visibleMessageSize(projected);
+  if (projectedSize !== storedSize) return projectedSize > storedSize;
+  return !stored.some((message) => message.segments?.length) && projected.some((message) => message.segments?.length);
 }
 
 function recoverInterruptedTurn(messages: PiChatMessage[]): PiChatMessage[] {
@@ -175,7 +178,7 @@ async function writeIndex(dataRootPath: string, index: PiConversationIndex): Pro
   await writeFile(indexPath(dataRootPath), JSON.stringify(index, null, 2), 'utf8');
 }
 
-async function readConversationFile(dataRootPath: string, id: string): Promise<PiConversationSnapshot | null> {
+async function readConversationFile(dataRootPath: string, id: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot | null> {
   try {
     const raw = JSON.parse(await readFile(conversationFilePath(dataRootPath, id), 'utf8')) as Partial<PiConversationSnapshot>;
     if (typeof raw.id !== 'string') return null;
@@ -191,10 +194,10 @@ async function readConversationFile(dataRootPath: string, id: string): Promise<P
       try {
         const entries = (await readFile(raw.sessionFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as unknown);
         const projected = messagesFromPiEntries(entries);
-        if (projected.length && (preferProjectedMessages(messages, projected) || !messages.some((message) => message.segments?.length))) messages = projected;
+        if (projected.length && preferProjectedMessages(messages, projected)) messages = projected;
       } catch { /* keep the stored snapshot when the Pi session is unavailable */ }
     }
-    messages = recoverInterruptedTurn(messages);
+    if (options.recoverInterrupted) messages = recoverInterruptedTurn(messages);
     return {
       id: raw.id,
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : titleFromMessages(messages),
@@ -285,16 +288,16 @@ async function migrateLegacyConversation(dataRootPath: string): Promise<PiConver
   }
 }
 
-async function ensureActiveConversation(dataRootPath: string): Promise<PiConversationSnapshot> {
+async function ensureActiveConversation(dataRootPath: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot> {
   await ensurePiConversationLayout(dataRootPath);
   const index = await readIndex(dataRootPath);
   if (index.activeId) {
-    const existing = await readConversationFile(dataRootPath, index.activeId);
+    const existing = await readConversationFile(dataRootPath, index.activeId, options);
     if (existing) return existing;
   }
   const firstVisible = index.conversations.find((item) => !item.archivedAt);
   if (firstVisible) {
-    const existing = await readConversationFile(dataRootPath, firstVisible.id);
+    const existing = await readConversationFile(dataRootPath, firstVisible.id, options);
     if (existing) {
       await writeIndex(dataRootPath, { ...index, activeId: existing.id });
       return existing;
@@ -329,8 +332,8 @@ export async function ensurePiConversationLayout(dataRootPath: string): Promise<
   return { agentDir: root, sessionFile: sessionFilePath(dataRootPath), workspace };
 }
 
-export async function readPiConversation(dataRootPath: string): Promise<PiConversationSnapshot> {
-  return ensureActiveConversation(dataRootPath);
+export async function readPiConversation(dataRootPath: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot> {
+  return ensureActiveConversation(dataRootPath, options);
 }
 
 export async function listPiConversations(dataRootPath: string): Promise<PiConversationSummary[]> {

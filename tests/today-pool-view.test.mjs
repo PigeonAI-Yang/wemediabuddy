@@ -41,21 +41,25 @@ test('poolItemToPlanItem maps planItemId to id and carries full fields', () => {
   assert.deepEqual(item.sourceIds, ['s1']);
 });
 
-test('poolBadges emits new, class, countdown and demotion annotations', () => {
+test('poolBadges emits new, class, countdown, written-at and demotion annotations', () => {
   const badges = poolBadges(base, NOW);
-  assert.deepEqual(badges.map((badge) => badge.text), ['新', '爆点', '还剩 ~4h']);
+  assert.deepEqual(badges.map((badge) => badge.text), ['新', '爆点', '还剩 ~4h', '写入 2026-08-05 13:00']);
 
   const demoted = poolBadges({ ...base, isNew: false, demotion: { publishedAt: '2026-08-05T04:00:00.000Z', platform: 'x' } }, NOW);
-  assert.deepEqual(demoted.map((badge) => badge.text), ['爆点', '还剩 ~4h', '刚发布过同主题']);
+  assert.deepEqual(demoted.map((badge) => badge.text), ['爆点', '还剩 ~4h', '写入 2026-08-05 13:00', '刚发布过同主题']);
 
   const evergreen = poolBadges({ ...base, isNew: false, timelinessClass: 'evergreen', expiresAt: null }, NOW);
-  assert.deepEqual(evergreen.map((badge) => badge.text), ['长青']);
+  assert.deepEqual(evergreen.map((badge) => badge.text), ['长青', '写入 2026-08-05 13:00']);
 
   const minutes = poolBadges({ ...base, isNew: false, expiresAt: '2026-08-05T06:30:00.000Z' }, NOW);
-  assert.deepEqual(minutes.map((badge) => badge.text), ['爆点', '还剩 ~30m']);
+  assert.deepEqual(minutes.map((badge) => badge.text), ['爆点', '还剩 ~30m', '写入 2026-08-05 13:00']);
 
   const past = poolBadges({ ...base, isNew: false, expiresAt: '2026-08-05T05:00:00.000Z' }, NOW);
-  assert.deepEqual(past.map((badge) => badge.text), ['爆点'], 'past expiry renders no countdown');
+  assert.deepEqual(past.map((badge) => badge.text), ['爆点', '写入 2026-08-05 13:00'], 'past expiry renders no countdown but keeps written-at');
+
+  const pending = poolBadges({ ...base, isNew: false, planDate: '2026-08-04' }, NOW, '2026-08-05');
+  assert.ok(pending.some((badge) => badge.kind === 'pending' && badge.text === '待处理'));
+  assert.ok(pending.some((badge) => badge.kind === 'written' && badge.text === '写入 2026-08-05 13:00'));
 });
 
 test('poolBadgeClass maps badge kinds to pill tones', () => {
@@ -63,5 +67,7 @@ test('poolBadgeClass maps badge kinds to pill tones', () => {
   assert.equal(poolBadgeClass({ kind: 'timeliness', text: '爆点', tone: 'breaking' }), 'pool-breaking');
   assert.equal(poolBadgeClass({ kind: 'timeliness', text: '长青', tone: 'evergreen' }), 'pool-evergreen');
   assert.equal(poolBadgeClass({ kind: 'demotion', text: '刚发布过同主题' }), 'pool-demotion');
+  assert.equal(poolBadgeClass({ kind: 'pending', text: '待处理' }), 'pool-pending');
   assert.equal(poolBadgeClass({ kind: 'expiry', text: '还剩 ~4h' }), 'gray');
+  assert.equal(poolBadgeClass({ kind: 'written', text: '写入 2026-08-05 13:00' }), 'pool-written');
 });

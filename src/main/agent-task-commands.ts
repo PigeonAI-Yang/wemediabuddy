@@ -18,7 +18,21 @@ import {
   type AgentIntent
 } from './agent-tasks.ts';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData } from './business-command.ts';
+import { dispatchRevokeTaskGrantsForTask } from './task-grants.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
+
+/**
+ * R3（WMB-5120）：agent_task 终态命令集。命令成功后 best-effort 回收该任务 grant，
+ * 绝不按 job 终态 / channel_scanned 回收（保护 scan→judge 交接复用）。
+ */
+const AGENT_TASK_TERMINAL_COMMANDS = Object.freeze([
+  'agent_tasks.cancel',
+  'agent_tasks.fail',
+  'agent_tasks.needs_user',
+  'agent_tasks.partial',
+  'agent_tasks.finish_daily',
+  'agent_tasks.complete'
+] as const);
 
 export type AgentTaskMutationDependency = ActiveWorkspaceRuntime | DatabaseSync;
 export type AgentTaskCommandContext = {
@@ -54,7 +68,17 @@ async function dispatchTask<TInput, TData>(
     entityType: 'agent_task',
     execute: (database, normalizedInput) => ({ data: execute(database, normalizedInput), entityId })
   });
-  return requireCommandResultData(receiptAsCommandResult<TData>(receipt));
+  const data = requireCommandResultData(receiptAsCommandResult<TData>(receipt));
+  // 终态写已提交 → best-effort 幂等 revoke 该任务 grant（try/catch 吞错，绝不破坏终态；失败留 command_receipts/operation_log 审计痕迹）。
+  if (entityId && (AGENT_TASK_TERMINAL_COMMANDS as readonly string[]).includes(command)) {
+    try {
+      await dispatchRevokeTaskGrantsForTask(dependency, {
+        requestId: `${context.requestId}:grant-revoke`,
+        taskId: entityId
+      });
+    } catch { /* best-effort：终态不变，错误走现有 audit 路径可追踪 */ }
+  }
+  return data;
 }
 
 export async function dispatchStartAgentTask(
@@ -70,7 +94,7 @@ export async function dispatchStartAgentTask(
 
 export function dispatchUpdateAgentTaskPhase(
   dependency: AgentTaskMutationDependency, id: string, phase: string,
-  extras: { piSessionId?: string | null; contextRefs?: Record<string, unknown> }, context: AgentTaskCommandContext
+  extras: { piSessionId?: string | null; contextRefs?: Record<string, unknown>; intent?: string }, context: AgentTaskCommandContext
 ): Promise<AgentTask> {
   return dispatchTask(dependency, context, 'agent_tasks.update_phase', { id, phase, extras }, id,
     (database, input) => requireCommandResultData(updateAgentTaskPhase(database, input.id, input.phase, input.extras)));

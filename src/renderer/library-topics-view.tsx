@@ -449,6 +449,8 @@ export function LibraryTopicsView(props: {
   onOpenStudio?: (projectId: string) => void;
   onGoStudio?: () => void;
   onOpenCanvas?: (canvasId?: string) => void;
+  onOpenPi?: () => void;
+  piConfigured?: boolean;
 }): React.JSX.Element {
   const {
     workspaceId,
@@ -457,6 +459,8 @@ export function LibraryTopicsView(props: {
     onOpenStudio,
     onGoStudio,
     onOpenCanvas,
+    onOpenPi,
+    piConfigured = false,
   } = props;
 
   const [topics, setTopics] = useState<TopicListItem[]>([]);
@@ -469,7 +473,8 @@ export function LibraryTopicsView(props: {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TopicStatusFilter>('all');
 
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialTopicId);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [focusedTopicId, setFocusedTopicId] = useState<string | null>(null);
   const [segment, setSegment] = useState<WorkspaceSegment>('judgments');
   const [segmentReloadToken, setSegmentReloadToken] = useState(0);
   const [deepMode, setDeepMode] = useState(false);
@@ -517,7 +522,7 @@ export function LibraryTopicsView(props: {
   const lastEmittedKeyRef = useRef<string | null>(null);
   const listPaneRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
-  const preferIdOnListLoadRef = useRef<string | null>(initialTopicId);
+  const preferIdOnListLoadRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedTopicIdRef.current = selectedTopicId;
@@ -645,13 +650,11 @@ export function LibraryTopicsView(props: {
 
       const preferredCandidate = options?.preferId
         ?? preferIdOnListLoadRef.current
-        ?? selectedTopicIdRef.current
-        ?? initialTopicId
         ?? null;
       preferIdOnListLoadRef.current = null;
       const preferred = preferredCandidate && nextItems.some((item) => item.id === preferredCandidate)
         ? preferredCandidate
-        : (nextItems[0]?.id ?? null);
+        : null;
 
       if (preferred) {
         const row = nextItems.find((item) => item.id === preferred) ?? null;
@@ -660,8 +663,13 @@ export function LibraryTopicsView(props: {
         } else if (row?.title) {
           emitContext(preferred, row.title);
         }
-      } else {
-        selectTopic(null);
+      } else if (selectedTopicIdRef.current) {
+        const stillVisible = nextItems.some((item) => item.id === selectedTopicIdRef.current);
+        if (!stillVisible) selectTopic(null);
+        else {
+          const row = nextItems.find((item) => item.id === selectedTopicIdRef.current) ?? null;
+          if (row?.title) emitContext(row.id, row.title);
+        }
       }
     } catch (error) {
       if (seq !== listLoadSeq.current) return;
@@ -681,12 +689,23 @@ export function LibraryTopicsView(props: {
         setListLoadingMore(false);
       }
     }
-  }, [debouncedQuery, emitContext, initialTopicId, selectTopic, statusFilter]);
+  }, [debouncedQuery, emitContext, selectTopic, statusFilter]);
 
   useEffect(() => {
-    preferIdOnListLoadRef.current = selectedTopicIdRef.current ?? initialTopicId;
-    void loadTopicList({ preferId: preferIdOnListLoadRef.current });
-  }, [debouncedQuery, statusFilter, loadTopicList, initialTopicId]);
+    void loadTopicList();
+  }, [debouncedQuery, statusFilter, loadTopicList]);
+
+  useEffect(() => {
+    const topicId = asString(initialTopicId);
+    if (!topicId) return;
+    preferIdOnListLoadRef.current = topicId;
+    setSegment('judgments');
+    setDeepMode(false);
+    selectTopic(topicId);
+    void loadTopicList({ preferId: topicId });
+    // Mount-time deep link only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!selectedTopicId || deepMode) {
@@ -891,38 +910,37 @@ export function LibraryTopicsView(props: {
     return parts.join(' · ');
   }, [sourceTotal, opportunityTotal, contentTotal, reviewTotal, recentLabel]);
 
-  const moveSelection = useCallback((delta: number) => {
+  const moveFocus = useCallback((delta: number) => {
     if (!topics.length) return;
-    const currentIndex = topics.findIndex((item) => item.id === selectedTopicIdRef.current);
+    const currentIndex = topics.findIndex((item) => item.id === focusedTopicId);
     const nextIndex = currentIndex < 0
       ? (delta > 0 ? 0 : topics.length - 1)
       : Math.max(0, Math.min(topics.length - 1, currentIndex + delta));
     const next = topics[nextIndex];
     if (!next) return;
-    setSegment('judgments');
-    selectTopic(next.id, next.title);
-  }, [selectTopic, topics]);
+    setFocusedTopicId(next.id);
+  }, [focusedTopicId, topics]);
 
-  const onListKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'ArrowDown') {
+  const onGridKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
       event.preventDefault();
-      moveSelection(1);
+      moveFocus(1);
       return;
     }
-    if (event.key === 'ArrowUp') {
+    if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
       event.preventDefault();
-      moveSelection(-1);
+      moveFocus(-1);
       return;
     }
     if (event.key === 'Enter') {
       event.preventDefault();
-      const current = topics.find((item) => item.id === selectedTopicIdRef.current);
+      const current = topics.find((item) => item.id === (focusedTopicId ?? selectedTopicIdRef.current));
       if (current) {
         setSegment('judgments');
         selectTopic(current.id, current.title);
       }
     }
-  }, [moveSelection, selectTopic, topics]);
+  }, [focusedTopicId, moveFocus, selectTopic, topics]);
 
   const onWorkspaceKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
@@ -1081,6 +1099,24 @@ export function LibraryTopicsView(props: {
     onOpenStudio?.('');
   }, [contentHistory, displayTopic, onGoStudio, onOpenStudio]);
 
+  const backToGrid = useCallback(() => {
+    setFocusedTopicId(selectedTopicIdRef.current);
+    selectTopic(null);
+  }, [selectTopic]);
+
+  const askPiBrief = useCallback(() => {
+    if (!displayTopic) return;
+    emitContext(displayTopic.id, displayTopic.title);
+    onOpenPi?.();
+    const prompt = [
+      `请基于当前主题「${displayTopic.title}」的档案（判断、关键资料与回流），产出 1–3 条可执行选题方案。`,
+      '每条含：标题方向、why now、时效、角度、目标读者、建议平台/体裁、还缺什么证据。',
+      '不要空泛综述，优先可马上开写的切口。'
+    ].join('');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('wmb-pi-generate', { detail: prompt }));
+    }, 0);
+  }, [displayTopic, emitContext, onOpenPi]);
 
   const renderSourceCard = (item: DossierItem, forceContradicting = false) => {
     const relation = item.metadata?.relation ?? (forceContradicting ? 'contradicting' : null);
@@ -1237,15 +1273,19 @@ export function LibraryTopicsView(props: {
     </article>;
   };
 
-  return <div className="topic-layout">
-    <aside
-      className="topic-list-pane"
-      aria-label="主题列表"
-      ref={listPaneRef}
-      tabIndex={0}
-      onKeyDown={onListKeyDown}
-    >
-      <div className="library-topic-list-toolbar">
+  const homeView = (
+    <div className="topic-home" aria-label="主题首页">
+      <section className="page-command" aria-label="主题概览">
+        <div className="page-command-main">
+          <div className="page-command-copy">
+            <div className="page-command-title-row">
+              <h1>主题</h1>
+              <p>先扫主题卡，再点进档案；需要时让 Pi 基于单个主题出选题方案。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="topic-home-toolbar library-topic-list-toolbar">
         <input
           type="search"
           value={topicQuery}
@@ -1263,51 +1303,103 @@ export function LibraryTopicsView(props: {
           >{filter.label}</button>)}
         </div>
       </div>
-      <div className="library-topic-list">
+      <div
+        className="topic-card-grid"
+        aria-label="主题卡片"
+        ref={listPaneRef as React.RefObject<HTMLDivElement>}
+        tabIndex={0}
+        onKeyDown={onGridKeyDown}
+      >
         {listLoading ? <p className="library-panel-empty library-topic-list-state">正在加载主题…</p> : null}
         {listError ? <div className="library-topic-error library-topic-list-state" role="alert">
           <strong>主题列表失败</strong>
           <p>{listError}</p>
-          <button type="button" onClick={() => void loadTopicList({ preferId: selectedTopicId })}>重试</button>
+          <button type="button" onClick={() => void loadTopicList()}>重试</button>
         </div> : null}
-        {!listLoading && !listError && !topics.length ? <section className="empty-state library-empty">
+        {!listLoading && !listError && !topics.length ? <section className="empty-state library-empty topic-home-empty">
           <h2>尚未形成主题</h2>
           <p>{debouncedQuery || statusFilter !== 'all' ? '没有匹配当前筛选的主题。' : '下一轮情报会把资料归入稳定主题。'}</p>
         </section> : null}
         {topics.map((item) => {
+          const summary = asString(item.summary);
+          const focused = item.id === focusedTopicId;
           return <button
             key={item.id}
             type="button"
-            className={item.id === selectedTopicId ? 'active' : ''}
+            className={`topic-object-card${focused ? ' focused' : ''}`}
             onClick={() => {
+              setFocusedTopicId(item.id);
               setSegment('judgments');
               selectTopic(item.id, item.title);
             }}
+            onFocus={() => setFocusedTopicId(item.id)}
           >
-            <strong>{item.title}</strong>
-            <span>{listTopicMeta(item)}</span>
+            <div className="topic-object-card-top">
+              <strong>{item.title}</strong>
+              <span className={`pill-status ${topicStatusClass(item.status)}`}>
+                <span className="dot" />
+                {topicStatusLabel(item.status)}
+              </span>
+            </div>
+            {summary ? <p className="topic-object-card-summary">{summary}</p> : null}
+            <div className="topic-object-card-meta">{listTopicMeta(item)}</div>
           </button>;
         })}
-        {listHasMore ? <div className="library-topic-list-more">
-          <button type="button" disabled={listLoadingMore} onClick={loadMoreTopics}>
-            {listLoadingMore ? '加载中…' : `加载更多（${topics.length}/${listTotal || topics.length}）`}
-          </button>
-        </div> : null}
       </div>
-    </aside>
+      {listHasMore ? <div className="library-topic-list-more topic-home-more">
+        <button type="button" disabled={listLoadingMore} onClick={loadMoreTopics}>
+          {listLoadingMore ? '加载中…' : `加载更多（${topics.length}/${listTotal || topics.length}）`}
+        </button>
+      </div> : null}
+    </div>
+  );
 
+  if (!selectedTopicId) {
+    return <div className="topic-layout topic-layout-home">{homeView}</div>;
+  }
+
+  return <div className="topic-layout topic-layout-detail">
     <section
-      className={`topic-work-pane library-topic-workspace${showSourcesRail ? ' with-rail' : ''}`}
-      aria-label="主题工作台"
+      className={`topic-work-pane library-topic-workspace topic-detail-pane${showSourcesRail ? ' with-rail' : ''}`}
+      aria-label="主题详情"
       ref={workspaceRef}
       tabIndex={0}
       onKeyDown={onWorkspaceKeyDown}
     >
       {!displayTopic ? <div className="empty-state library-empty">
-        <h2>{listLoading ? '正在准备主题' : '选择一个主题'}</h2>
-        <p>先看判断，再看证据与回流。</p>
+        <button type="button" className="topic-back-button" onClick={backToGrid}>← 主题</button>
+        <h2>{listLoading || segmentLoading ? '正在准备主题' : '主题读取中'}</h2>
+        <p>如果长时间无响应，返回主题卡重试。</p>
       </div> : <>
         <header className="topic-object-head">
+          <div className="topic-object-head-bar">
+            <button type="button" className="topic-back-button" onClick={backToGrid}>← 主题</button>
+            <div className="library-topic-head-actions topic-object-head-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!piConfigured}
+                title={!piConfigured ? '请先配置 Pi' : '基于当前主题让 Pi 出选题方案'}
+                onClick={askPiBrief}
+              >让 Pi 出选题方案</button>
+              <button type="button" onClick={goCreate}>去创作</button>
+              <details className="topic-more">
+                <summary>更多</summary>
+                <div className="topic-more-menu">
+                  {deepMode ? (
+                    <button type="button" onClick={() => { setDeepMode(false); setDeepCategory(''); }}>退出档案</button>
+                  ) : (
+                    <button type="button" onClick={() => { setDeepMode(true); setDeepCategory(''); }}>完整档案</button>
+                  )}
+                  {onOpenCanvas ? <button
+                    type="button"
+                    disabled={canvasBusy}
+                    onClick={() => void openCanvasForTopic()}
+                  >{canvasBusy ? '处理中…' : '放画布'}</button> : null}
+                </div>
+              </details>
+            </div>
+          </div>
           <div className="library-topic-title-row">
             <h2>{displayTopic.title}</h2>
             <span className={`pill-status ${topicStatusClass(displayTopic.status)}`}>
@@ -1316,25 +1408,8 @@ export function LibraryTopicsView(props: {
             </span>
           </div>
           <p className="topic-object-meta">{objectMetaLine}</p>
-          <div className="library-topic-head-actions topic-object-head-actions">
-            <button type="button" className="primary-button" onClick={goCreate}>去创作</button>
-            <details className="topic-more">
-              <summary>更多</summary>
-              <div className="topic-more-menu">
-                {deepMode ? (
-                  <button type="button" onClick={() => { setDeepMode(false); setDeepCategory(''); }}>退出档案</button>
-                ) : (
-                  <button type="button" onClick={() => { setDeepMode(true); setDeepCategory(''); }}>完整档案</button>
-                )}
-                {onOpenCanvas ? <button
-                  type="button"
-                  disabled={canvasBusy}
-                  onClick={() => void openCanvasForTopic()}
-                >{canvasBusy ? '处理中…' : '放画布'}</button> : null}
-              </div>
-            </details>
-          </div>
           {canvasMessage ? <p className="library-topic-action-note">{canvasMessage}</p> : null}
+          {!piConfigured ? <p className="library-topic-action-note">Pi 尚未配置时，无法直接生成选题方案。</p> : null}
         </header>
 
         {deepMode ? <>

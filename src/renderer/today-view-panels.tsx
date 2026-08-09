@@ -1,35 +1,84 @@
+import { useState } from 'react';
 import type { TodaySource } from '../main/workbench';
 import { CreateIconButton, MAX_SELECTED_SOURCES, domainOf, formatSourcePublishedAt, isHeartbeatSource, priorityGrade, priorityLabel, type SelectedTodaySource } from './today-view-parts';
 
 type Fermenting = NonNullable<NonNullable<Awaited<ReturnType<typeof window.wmb.getToday>>>['fermenting']>;
 type FermentingItem = Fermenting['items'][number];
 
-export function FermentingRail({ fermenting, createFromCarry }: {
+function initialFermentingOpen(): boolean {
+  // 仅首屏默认展开；之后完全由用户点击决定（不可每帧写死 open=true）。
+  return typeof window !== 'undefined' ? window.matchMedia('(min-height: 900px)').matches : false;
+}
+
+export function FermentingRail({ fermenting, createFromCarry, selectedId = null, onSelectItem }: {
   fermenting: Fermenting;
   createFromCarry: (item: FermentingItem) => Promise<void>;
+  selectedId?: string | null;
+  onSelectItem?: (item: FermentingItem | null) => void;
 }): React.JSX.Element | null {
-  return <>{(fermenting.items?.length ?? 0) > 0 && <section className="fermenting-rail light" aria-label="仍在发酵">
-            <div className="fermenting-head">
-              <h2>仍在发酵 · {fermenting.items.length}</h2>
+  // M-5001: prefer topic-progress rows; fall back only if backend still emits legacy rows.
+  const topicItems = (fermenting.topics ?? []).map((topic) => ({
+    id: `topic:${topic.topicId}`,
+    objectType: 'topic' as const,
+    objectId: topic.topicId,
+    title: topic.title,
+    priority: null as number | null,
+    reason: topic.latestTitle ? `最新进展：${topic.latestTitle}` : '主题持续关注',
+    fermentedDays: topic.fermentedDays,
+    aftershocks: topic.latestTitle ? [{ sourceId: '', title: topic.latestTitle, collectedAt: '' }] : []
+  }));
+  const projected = (fermenting.items ?? []).filter((item) => item.objectType === 'topic');
+  const items = (projected.length ? projected : topicItems) as FermentingItem[];
+  const watchingCount = fermenting.watchingItems?.length ?? 0;
+  const [open, setOpen] = useState(initialFermentingOpen);
+  const onToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    setOpen(event.currentTarget.open);
+  };
+  if (!items.length && !watchingCount) {
+    return <details className="fermenting-rail light" aria-label="持续关注" open={open} onToggle={onToggle}>
+      <summary className="fermenting-head"><h2>持续关注 · 主题 · 0</h2></summary>
+      <p className="empty-copy">没有需要持续关注的主题。</p>
+    </details>;
+  }
+  return <details className="fermenting-rail light" aria-label="持续关注" open={open} onToggle={onToggle}>
+    <summary className="fermenting-head">
+      <h2>持续关注 · 主题 · {items.length}</h2>
+      {watchingCount > 0 ? <span className="fermenting-watching-count">观察中 · {watchingCount}</span> : null}
+    </summary>
+    <div className="fermenting-list">
+      {items.map((item) => {
+        const why = item.aftershocks?.[0]?.title
+          ? `最新进展：${item.aftershocks[0].title}`
+          : (item.reason || '主题持续关注');
+        const latest = item.aftershocks?.[0];
+        const canCreate = item.objectType === 'topic' || item.objectType === 'plan_item';
+        return <article
+          className={`fermenting-row${selectedId === item.id ? ' selected' : ''}`}
+          key={item.id}
+          title={selectedId === item.id ? '再次点击取消 Pi 焦点' : '点击设为 Pi 焦点'}
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest('button')) return;
+            onSelectItem?.(selectedId === item.id ? null : item);
+          }}
+        >
+          <div className="fermenting-row-main">
+            <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{item.objectType === 'topic' ? '主题' : priorityLabel(item.priority)}</strong>
+            <div className="fermenting-row-text">
+              <h3>{item.title}</h3>
+              <div className="fermenting-row-meta">
+                <span>为何关注：{why}</span>
+                <span>已关注 {item.fermentedDays} 天</span>
+                <span>最新进展：{latest ? latest.title : '暂无新进展'}</span>
+              </div>
             </div>
-            <div className="fermenting-list">
-              {fermenting.items.map((item) => <article className="fermenting-row" key={item.id}>
-                <div className="fermenting-row-main">
-                  <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong>
-                  <div className="fermenting-row-text">
-                    <h3>{item.title}</h3>
-                    <div className="fermenting-row-meta">
-                      <span>{item.fermentedDays} 天</span>
-                      {item.originPlanDate ? <span>{item.originPlanDate}</span> : null}
-                    </div>
-                  </div>
-                </div>
-                <div className="fermenting-actions">
-                  {item.objectType === 'plan_item' ? <CreateIconButton onClick={() => void createFromCarry(item)}/> : null}
-                </div>
-              </article>)}
-            </div>
-          </section>}</>;
+          </div>
+          <div className="fermenting-actions">
+            {canCreate ? <CreateIconButton onClick={() => void createFromCarry(item)}/> : null}
+          </div>
+        </article>;
+      })}
+    </div>
+  </details>;
 }
 
 export function TodaySourceDetail({ detailSource, detailBody, detailBodyLoading, detailBodyError, selectedSources, onClose, onToggleSelection, onAttachBody, openLibrary }: {

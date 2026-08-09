@@ -78,19 +78,33 @@ test('Pi conversation cold read prefers newer canonical session entries over a s
   }
 });
 
-test('Pi conversation cold read preserves a submitted turn when Pi never commits it', async () => {
+test('Pi conversation preserves a live turn on ordinary reads and recovers it at runtime start', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-conversation-pending-'));
   try {
     const active = await readPiConversation(root);
+    await writeFile(active.sessionFile, [
+      { type: 'message', id: 'u1', message: { role: 'user', content: '上一条问题' } },
+      { type: 'message', id: 'a1', message: { role: 'assistant', content: [{ type: 'text', text: '上一条回答' }] } }
+    ].map((entry) => JSON.stringify(entry)).join('\n'), 'utf8');
     await writePiConversation(root, {
       id: active.id,
       sessionFile: active.sessionFile,
-      messages: [{ role: 'user', text: '刚提交的问题' }, { role: 'assistant', text: '', status: 'streaming' }]
+      messages: [
+        { role: 'user', text: '上一条问题' },
+        { role: 'assistant', text: '上一条回答' },
+        { role: 'user', text: '刚提交的问题' },
+        { role: 'assistant', text: '', status: 'streaming' }
+      ]
     });
-    const reopened = await readPiConversation(root);
-    assert.equal(reopened.messages[0].text, '刚提交的问题');
-    assert.equal(reopened.messages[1].text, '生成被中断。');
-    assert.equal(reopened.messages[1].status, 'stopped');
+
+    const liveRead = await readPiConversation(root);
+    assert.equal(liveRead.messages.at(-2).text, '刚提交的问题');
+    assert.equal(liveRead.messages.at(-1).status, 'streaming');
+
+    const relaunched = await readPiConversation(root, { recoverInterrupted: true });
+    assert.equal(relaunched.messages.at(-2).text, '刚提交的问题');
+    assert.equal(relaunched.messages.at(-1).text, '生成被中断。');
+    assert.equal(relaunched.messages.at(-1).status, 'stopped');
   } finally {
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

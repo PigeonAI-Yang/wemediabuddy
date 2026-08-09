@@ -8,7 +8,7 @@ import type { BrowserRuntime } from './browser';
 import type { BrowserProfileOwner, OwnerBrowserCommand, OwnerBrowserPlatform } from './browser-profile-owner.ts';
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, type PiThinkingLevel } from './pi-config';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, setPiFallbackOrder, type PiThinkingLevel } from './pi-config';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
 import { deletePiSkill, listPiSkills, savePiSkill, syncPiSkillsForDataRoots, type PiSkillInput } from './pi-skill-library';
@@ -46,6 +46,12 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     if (!settings || !dataRoot) return null;
     const pi = readPiConfig();
     const workspace = await readCurrentWorkspaceSnapshot(dataRoot.path, listWorkspaces, getRuntimeEpoch());
+    const browserState = ownerBrowser ?? {
+      registry: { profiles: [], defaultProfileId: '', revision: 0 },
+      binding: null,
+      boundProfile: null,
+      legacySource: { path: '', detected: false, metadataDetected: false, entryCount: 0 }
+    };
     return {
       ...settings,
       mcp: getMcp() ? { status: 'ready', url: getMcp()!.url } : { status: 'not_started', url: null },
@@ -53,12 +59,12 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       browser: getBrowser()
         ? { status: 'ready', pid: getBrowser()!.pid, cdpUrl: getBrowser()!.cdpUrl, profilePath: getBrowser()!.profilePath, mode: getBrowser()!.mode }
         : { status: 'not_started' },
-      browserProfiles: ownerBrowser!.registry.profiles,
-      defaultBrowserProfileId: ownerBrowser!.registry.defaultProfileId,
-      browserRegistryRevision: ownerBrowser!.registry.revision,
-      browserBinding: ownerBrowser!.binding,
-      boundBrowserProfile: ownerBrowser!.boundProfile,
-      legacyBrowserSource: ownerBrowser!.legacySource,
+      browserProfiles: browserState.registry.profiles,
+      defaultBrowserProfileId: browserState.registry.defaultProfileId,
+      browserRegistryRevision: browserState.registry.revision,
+      browserBinding: browserState.binding,
+      boundBrowserProfile: browserState.boundProfile,
+      legacyBrowserSource: browserState.legacySource,
       pi,
       workspace
     };
@@ -143,6 +149,12 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
   });
   ipcMain.handle('pi-config:delete', async (_event, id: string) => {
     const saved = deletePiConfig(id);
+    await stopPi();
+    return saved;
+  });
+  ipcMain.handle('pi-config:set-fallback-order', async (_event, ids: string[]) => {
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw new Error('降级顺序无效。');
+    const saved = setPiFallbackOrder(ids);
     await stopPi();
     return saved;
   });

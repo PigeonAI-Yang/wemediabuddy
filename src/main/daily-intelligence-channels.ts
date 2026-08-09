@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
+  getActiveAgentTask,
   getAgentTask,
   getReusableNeedsUserAgentTask,
   readDailyReceiptAggregation,
@@ -9,6 +10,7 @@ import {
 } from './agent-tasks.ts';
 import {
   dispatchFailAgentTask,
+  dispatchFinishDailyIntelligence,
   dispatchNeedsUserAgentTask,
   dispatchReportAgentTaskProgress,
   dispatchStartAgentTask,
@@ -29,6 +31,8 @@ import { collectBoundXListTimeline, persistBoundXListTimeline, readBoundXListTim
 import { getXListBinding } from './x-lists.ts';
 import { dispatchScheduleXObservationCapture, scheduleXObservationCapture } from './x-observation-jobs.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
+import type { DeferredSignal } from './role-job-registry.ts';
+import { dailyControlWatchdogDecision } from './daily-control-policy.ts';
 
 export type DailyChannelInput = {
   businessDate: string;
@@ -53,6 +57,8 @@ export type DailyChannelRun = {
   shouldRunJudgment: boolean;
   frozen: FrozenDailyChannels;
   aggregation: DailyReceiptAggregation | null;
+  /** WMB-5118 §5.2：守卫命中 running judge 的瞬时让路信号（不写 agent_task 终态）。 */
+  deferred?: DeferredSignal | null;
 };
 
 type XCollect = typeof collectBoundXListTimeline;
@@ -102,18 +108,48 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
   };
   const provisional = preflightCode(frozen);
   if (provisional) {
-    const reusable = getReusableNeedsUserAgentTask(database, 'daily_intelligence', input.businessDate, contextRefs, provisional.code);
+    const reusable = getReusableNeedsUserAgentTask(database, 'daily_scan', input.businessDate, contextRefs, provisional.code);
     if (reusable) return { task: reusable, reused: true, shouldRunJudgment: false, frozen: readFrozenChannels(reusable) ?? frozen, aggregation: null };
+  }
+
+  // 判断进行中禁止再开扫描，避免 source revision 被扫写顶掉导致整轮判定失败。
+  // WMB-5118：不再把 judge 任务静默当扫描任务返回（交叉 A 伪失败根因）——打 deferred 让路标记，
+  // 由 runner 产出瞬时 deferred outcome → pool 泊车 RESOURCE_JUDGE_IN_FLIGHT；task 引用仅作参考。
+  const activeJudge = getActiveAgentTask(database, 'daily_judge', input.businessDate)
+    || getActiveAgentTask(database, 'daily_intelligence', input.businessDate);
+  if (activeJudge && activeJudge.status === 'running' && activeJudge.phase !== 'channel_scanned' && activeJudge.phase !== 'starting') {
+    const phase = String(activeJudge.phase || '');
+    if (/judg|synth|validat|running_pi/i.test(phase)) {
+      return {
+        task: activeJudge,
+        reused: true,
+        shouldRunJudgment: false,
+        frozen: readFrozenChannels(activeJudge) ?? frozen,
+        aggregation: readDailyReceiptAggregation(database, activeJudge),
+        deferred: { reason: 'JUDGE_IN_FLIGHT', taskId: activeJudge.id }
+      };
+    }
   }
 
   // requestId must be unique per click: frozen channel revisions change between runs.
   const startRequestId = `daily_intelligence:${input.businessDate}:${input.workspaceId}:channels:start:${randomUUID()}`;
-  const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, commandContext(startRequestId));
+  const started = await dispatchStartAgentTask(dependency, { intent: 'daily_scan', businessDate: input.businessDate, contextRefs: { ...contextRefs, roleId: 'reporter' } }, commandContext(startRequestId));
   const task = started.task;
   const stored = readFrozenChannels(task) ?? frozen;
   if (stored.workspaceId !== input.workspaceId || stored.profileRevision !== input.profileRevision) {
     const failed = await dispatchFailAgentTask(dependency, task.id, 'CHANNEL_CONTEXT_STALE', '工作空间或配方已变化，不能继续旧的每日情报任务。', commandContext(`${task.id}:channels:context-stale`, task.id));
     return { task: failed, reused: started.reused, shouldRunJudgment: false, frozen: stored, aggregation: null };
+  }
+  // channel_scanned (or resume after scan completed): do not re-scan; hand off to judgment.
+  if (started.reused && task.phase === 'channel_scanned') {
+    return { task, reused: true, shouldRunJudgment: true, frozen: stored, aggregation: readDailyReceiptAggregation(database, task) };
+  }
+  if (started.reused && task.phase === 'resume_pending') {
+    const prior = readDailyReceiptAggregation(database, task);
+    const planned = stored.sources.length;
+    if (planned > 0 && prior.receipts.length >= planned) {
+      return { task, reused: true, shouldRunJudgment: true, frozen: stored, aggregation: prior };
+    }
   }
   if (started.reused && task.phase !== 'resume_pending') {
     return { task, reused: true, shouldRunJudgment: false, frozen: stored, aggregation: readDailyReceiptAggregation(database, task) };
@@ -126,7 +162,7 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     progress: { planned: stored.sources.length, processed: 0, failed: 0 },
     checkpoint: { intelligenceChannels: stored },
     message: '正在启动今日情报…'
-  }, commandContext(`${task.id}:progress:starting`, task.id));
+  }, commandContext(`${task.id}:progress:starting:${randomUUID()}`, task.id));
 
   const browserConfig = await resolveBrowserConfig(database, stored, dependencies.browserConfig);
   const selected = stored.sources;
@@ -140,15 +176,41 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     progress: { planned: selected.length, processed: existingReceipts.length, failed: existingReceipts.filter((receipt) => receipt.status !== 'succeeded').length },
     checkpoint: { intelligenceChannels: stored },
     message: `已冻结 ${selected.length} 个情报来源，待检查 ${pending.length} 个。`
-  }, commandContext(`${task.id}:progress:channel-preflight`, task.id));
+  }, commandContext(`${task.id}:progress:channel-preflight:${randomUUID()}`, task.id));
   if (!selected.length) return finishBlocked(dependency, commandContext, task, stored, 'CHANNELS_NOT_CONFIGURED', '当前工作空间没有启用的官网或 X List。', null, started.reused);
 
   for (const source of blocked) await recordBlockedReceipt(dependency, database, task.id, stored.workspaceId, source, input.workerLeaseId);
+  if (blocked.length) {
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      message: `已标记 ${blocked.length} 个未就绪来源，继续检查可运行渠道。`
+    });
+  }
 
   const scanWebsite = dependencies.scanWebsite ?? scanWebsiteSource;
   const collectX = dependencies.collectX ?? collectBoundXListTimeline;
   const websites = live.filter((source) => source.module === 'official_web');
-  await Promise.all(websites.map(async (source) => {
+  const stopScanIfControlled = async (): Promise<boolean> => {
+    const cur = getAgentTask(database, task.id);
+    if (!cur || cur.status !== 'running') return true;
+    if (cur.controlAction === 'cancel' || cur.controlAction === 'save_partial') return true;
+    const decision = dailyControlWatchdogDecision(cur);
+    if (decision) {
+      await dispatchFinishDailyIntelligence(dependency, cur.id, {
+        forcePartial: true,
+        errorCode: decision.code,
+        errorMessage: decision.message
+      }, commandContext(`${cur.id}:finish:${decision.reason}`, cur.id));
+      return true;
+    }
+    return false;
+  };
+  for (const source of websites) {
+    if (await stopScanIfControlled()) break;
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      currentSource: channelSourceLabel(database, source),
+      message: `正在扫描官网：${channelSourceLabel(database, source)}`
+    });
     const scanInput = { taskId: task.id, workspaceId: stored.workspaceId, sourceId: source.sourceId, fetchImpl: dependencies.websiteFetch };
     try {
       if (dependencies.scanWebsite) await scanWebsite(database, scanInput);
@@ -159,15 +221,29 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     } catch (error) {
       await recordAttemptFailure(dependency, database, task.id, stored.workspaceId, source, error, input.workerLeaseId);
     }
-  }));
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      message: '官网来源已写入扫描回执'
+    });
+  }
   // The profile was resolved from this root's verified binding before any X scan.
   const selectedXBindingIds = selected.filter((item) => item.module === 'x_lists').map((item) => item.sourceId);
   for (const source of live.filter((item) => item.module === 'x_lists')) {
+    if (await stopScanIfControlled()) break;
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      currentSource: channelSourceLabel(database, source),
+      message: `正在扫描 X List：${channelSourceLabel(database, source)}`
+    });
     try {
       await scanXList(dependency, database, task.id, input.workerLeaseId, stored.workspaceId, source, selectedXBindingIds, browserConfig, collectX);
     } catch (error) {
       await recordAttemptFailure(dependency, database, task.id, stored.workspaceId, source, error, input.workerLeaseId);
     }
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      message: 'X List 来源已写入扫描回执'
+    });
   }
 
   const current = getAgentTask(database, task.id);
@@ -182,14 +258,14 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     progress: { planned: selected.length, processed: aggregation.receipts.length, failed, saved },
     checkpoint: { intelligenceChannels: stored, channelReceiptIds: aggregation.receipts.map((receipt) => receipt.id) },
     message: `来源检查完成：${aggregation.receipts.length}/${selected.length}，保存 ${saved} 条资料。`
-  }, commandContext(`${current.id}:progress:channel-scanned`, current.id));
+  }, commandContext(`${current.id}:progress:channel-scanned:${randomUUID()}`, current.id));
   if (aggregation.status === 'needs_user' || aggregation.status === 'failed') {
     // 渠道缺席/失败只标注，不再阻塞判断：库存资料永远可供判断，缺席信息由回执与池视图呈现。
     await dispatchReportAgentTaskProgress(dependency, current.id, {
       phase: 'channel_scanned',
       message: aggregation.status === 'needs_user' ? '全部已选来源需要处理；将基于库存资料继续判断。' : '来源检查未全部成功；将基于库存资料继续判断。',
       level: 'warning'
-    }, commandContext(`${current.id}:progress:channel-absent`, current.id));
+    }, commandContext(`${current.id}:progress:channel-absent:${randomUUID()}`, current.id));
   }
   const ready = getAgentTask(database, current.id);
   if (!ready) throw new Error('每日情报任务读取失败。');
@@ -255,6 +331,50 @@ function preflightCode(frozen: FrozenDailyChannels): { code: string } | null {
   // 只有"完全没有启用来源"才是真正的配置阻塞；单个渠道未就绪只记录缺席回执，判断照常。
   if (!frozen.sources.length) return { code: 'CHANNELS_NOT_CONFIGURED' };
   return null;
+}
+
+function channelSourceLabel(database: DatabaseSync, source: FrozenDailyChannelSource): string {
+  if (source.module === 'official_web') {
+    const row = database.prepare('SELECT input_text AS name, canonical_url AS url FROM website_sources WHERE id=?').get(source.sourceId) as { name: string | null; url: string | null } | undefined;
+    return (row?.name || row?.url || source.sourceId).trim();
+  }
+  if (source.accountKey && source.listId) {
+    const binding = getXListBinding(database, source.accountKey, source.listId);
+    if (binding?.name) return binding.name;
+    return `${source.accountKey} / ${source.listId}`;
+  }
+  return source.sourceId;
+}
+
+async function reportChannelScanProgress(
+  dependency: AgentTaskMutationDependency,
+  database: DatabaseSync,
+  taskId: string,
+  planned: number,
+  stored: FrozenDailyChannels,
+  commandContext: (requestId: string, taskId?: string) => { actor: { type: 'scheduler'; id: string; label: string }; requestId: string; taskId?: string; workerLeaseId?: string },
+  input: { phase?: string; currentSource?: string; message: string }
+): Promise<void> {
+  const current = getAgentTask(database, taskId);
+  if (!current || current.status !== 'running') return;
+  const aggregation = readDailyReceiptAggregation(database, current);
+  const failed = aggregation.receipts.filter((receipt) => receipt.status !== 'succeeded').length + aggregation.missingReceiptCount;
+  const saved = aggregation.receipts.reduce((total, receipt) => total + receipt.savedCount, 0);
+  await dispatchReportAgentTaskProgress(dependency, taskId, {
+    phase: input.phase ?? 'scanning_sources',
+    progress: {
+      planned,
+      processed: aggregation.receipts.length,
+      failed,
+      saved,
+      ...(input.currentSource ? { currentSource: input.currentSource } : {})
+    },
+    checkpoint: {
+      intelligenceChannels: stored,
+      channelReceiptIds: aggregation.receipts.map((receipt) => receipt.id)
+    },
+    message: input.message
+  }, commandContext(`${taskId}:progress:channel-tick:${aggregation.receipts.length}:${Date.now()}`, taskId));
 }
 
 function sourceIsReady(database: DatabaseSync, source: FrozenDailyChannelSource, browserConfig: XListBrowserConfig | null): boolean {

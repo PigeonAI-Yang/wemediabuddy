@@ -191,12 +191,17 @@ export function getSource(database: DatabaseSync, id: string): SourceRecord | nu
   return row ? parseSource(row) : null;
 }
 
-export function searchSources(database: DatabaseSync, query = '', limit = 50): SourceRecord[] {
+/**
+ * 搜索资料：默认只返回有效资料库（management_status != 'archived'），
+ * 传 includeArchived=true 可含已移出条目（资料库「已移出」视图等场景）。
+ */
+export function searchSources(database: DatabaseSync, query = '', limit = 50, includeArchived = false): SourceRecord[] {
   const boundedLimit = Math.min(Math.max(limit, 1), 200);
   const pattern = `%${query}%`;
   const rows = database.prepare(`${sourceSelect}
-    WHERE ? = '' OR title LIKE ? OR summary LIKE ? OR keywords_json LIKE ?
-    ORDER BY collected_at DESC LIMIT ?`).all(query, pattern, pattern, pattern, boundedLimit) as unknown as SourceRow[];
+    WHERE (? = '' OR title LIKE ? OR summary LIKE ? OR keywords_json LIKE ?)
+      AND (? = 1 OR management_status != 'archived')
+    ORDER BY collected_at DESC LIMIT ?`).all(query, pattern, pattern, pattern, includeArchived ? 1 : 0, boundedLimit) as unknown as SourceRow[];
   return rows.map(parseSource);
 }
 

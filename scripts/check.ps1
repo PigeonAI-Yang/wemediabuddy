@@ -95,6 +95,14 @@ Write-Host '> checking task ledger'
 node (Join-Path $projectRoot 'scripts/check-ledger.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Task ledger check failed.' }
 
+Write-Host '> checking idea intake contracts'
+node (Join-Path $projectRoot 'scripts/check-intake.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Idea intake check failed.' }
+
+Write-Host '> checking capability registry'
+node (Join-Path $projectRoot 'scripts/check-capability-registry.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Capability registry check failed.' }
+
 $packageJson = Join-Path $projectRoot 'package.json'
 if ($Full -and (Test-Path -LiteralPath $packageJson -PathType Leaf)) {
     Write-Host '> running full package verification'

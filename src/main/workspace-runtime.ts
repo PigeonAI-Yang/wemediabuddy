@@ -7,6 +7,8 @@ import { CommandDispatcher, type CommandEnvelopeV1, type CommandHandlerResult, t
 import { assertTaskGrantForEnvelope } from './task-grants.ts';
 import { assertExecutionGrantForEnvelope } from './execution-grants.ts';
 import { installWorkspaceWriteGuard } from './db/write-guard.ts';
+import { MAX_WORKER_LEASES, MAX_EMPLOYEE_LEASES } from './worker-limits.ts';
+export { MAX_WORKER_LEASES, MAX_EMPLOYEE_LEASES } from './worker-limits.ts';
 
 function busy(message: string): Error {
   return Object.assign(new Error(message), { code: 'WORKSPACE_BUSY' });
@@ -22,11 +24,14 @@ export type WorkspaceRuntimeLease = Readonly<WorkspaceRuntimeIdentity & {
   kind: 'pi-worker' | 'browser';
   leaseId: string;
   taskId: string | null;
+  roleId?: string | null;
 }>;
 
 type Stoppable = { stop: () => void | Promise<void> };
 type Closable = { close: () => void | Promise<void> };
 type RuntimeResource = Stoppable | Closable;
+type WorkerEntry = { lease: WorkspaceRuntimeLease; resource: Stoppable | null; purpose: 'desk' | 'employee'; boundTaskIds: Set<string> };
+
 
 export type ActiveWorkspaceRuntimeOptions = {
   expectedWorkspaceId?: string;
@@ -89,7 +94,7 @@ export class ActiveWorkspaceRuntime {
   private writeAuthorizationDepth = 0;
   private readonly isWriteAuthorized = (): boolean => this.writeAuthorizationDepth > 0;
   private state: 'active' | 'draining' | 'stopping' | 'stopped' = 'active';
-  private worker: { lease: WorkspaceRuntimeLease; resource: Stoppable | null } | null = null;
+  private workers = new Map<string, WorkerEntry>();
   private browser: { lease: WorkspaceRuntimeLease; resource: object; closer: Stoppable } | null = null;
   private scheduler: Stoppable | null = null;
   private mcp: Closable | null = null;
@@ -124,7 +129,24 @@ export class ActiveWorkspaceRuntime {
   }
 
   get isActive(): boolean { return this.state === 'active'; }
-  getWorker<T extends Stoppable>(): T | null { return this.worker?.resource as T ?? null; }
+  /**
+   * 兼容旧接口：只返回 desk 席（主编席）Pi worker。
+   * 员工工单 worker 是多开 lease，请用 getWorkerSnapshots() 枚举。
+   */
+  getWorker<T extends Stoppable>(): T | null { return this.deskWorker()?.resource as T ?? null; }
+  /** 兼容旧接口：只返回 desk 席（主编席）lease。 */
+  getWorkerLease(): WorkspaceRuntimeLease | null { return this.deskWorker()?.lease ?? null; }
+
+  /**
+   * 主编席（desk）是全局唯一 Pi worker：getWorker/getWorkerLease/stopWorker
+   * 与 desk lease 独占性全部以「map 中第一个 desk 条目」为准（本类内共 5 处调用点，语义须一致）。
+   */
+  private deskWorker(): WorkerEntry | null {
+    for (const entry of this.workers.values()) {
+      if (entry.purpose === 'desk') return entry;
+    }
+    return null;
+  }
   getBrowser<T extends object>(): T | null { return this.browser?.resource as T ?? null; }
   getMcp<T extends Closable>(): T | null { return this.mcp as T ?? null; }
   getXhs<T extends Stoppable>(): T | null { return this.xhs as T ?? null; }
@@ -133,7 +155,13 @@ export class ActiveWorkspaceRuntime {
   getScheduler<T extends Stoppable>(): T | null { return this.scheduler as T ?? null; }
 
   isCurrentWorkerLease(leaseId: string, taskId: string): boolean {
-    return this.state === 'active' && this.worker?.lease.leaseId === leaseId && this.worker.lease.taskId === taskId;
+    if (this.state !== 'active') return false;
+    for (const entry of this.workers.values()) {
+      if (entry.lease.leaseId !== leaseId) continue;
+      if (entry.lease.taskId === taskId) return true;
+      if (entry.boundTaskIds?.has(taskId)) return true;
+    }
+    return false;
   }
   runAtomic<T>(work: () => T | Promise<T>): Promise<T> {
     this.assertActive();
@@ -166,36 +194,103 @@ export class ActiveWorkspaceRuntime {
     this.state = 'active';
   }
 
-  acquireWorkerLease(taskId: string | null = null): WorkspaceRuntimeLease {
+  /**
+   * 获取 Pi worker lease。
+   * - desk：主编席，全站唯一（不占 JobPool 员工槽）；旧接口 getWorker/getWorkerLease/stopWorker 只认它。
+   * - employee：员工工单，可多开；并发上限由 JobPool（默认 maxWorkers=2）强制，这里只做软上限防失控。
+   */
+  acquireWorkerLease(taskId: string | null = null, roleId: string | null = null, purpose: 'desk' | 'employee' = 'employee'): WorkspaceRuntimeLease {
     this.assertActive();
-    if (this.worker) throw busy('当前 Pi worker lease 尚未释放。');
-    const lease = Object.freeze({ ...this.identity, kind: 'pi-worker' as const, leaseId: randomUUID(), taskId });
-    this.worker = { lease, resource: null };
+    if (purpose === 'desk' && this.deskWorker()) throw busy('当前 Pi worker lease 尚未释放。');
+    if (this.workers.size >= MAX_WORKER_LEASES) throw busy(`Pi worker 数量已达软上限（${MAX_WORKER_LEASES}），请等待工单释放。`);
+    const lease = Object.freeze({
+      ...this.identity,
+      kind: 'pi-worker' as const,
+      leaseId: randomUUID(),
+      taskId,
+      roleId: roleId ?? null
+    });
+    this.workers.set(lease.leaseId, { lease, resource: null, purpose, boundTaskIds: new Set(taskId ? [taskId] : []) });
     return lease;
   }
 
   bindWorker(lease: WorkspaceRuntimeLease, resource: Stoppable): void {
     this.assertActive();
     this.assertCurrentLease(lease, 'pi-worker');
-    if (!this.worker || this.worker.resource) throw busy('当前 Pi worker lease 尚未释放。');
-    this.worker.resource = resource;
+    const entry = this.workers.get(lease.leaseId);
+    if (!entry || entry.resource) throw busy('当前 Pi worker lease 尚未释放。');
+    entry.resource = resource;
   }
 
   bindWorkerTask(lease: WorkspaceRuntimeLease, taskId: string): void {
     this.assertActive();
     this.assertCurrentLease(lease, 'pi-worker');
-    if (!this.worker || !taskId.trim() || (this.worker.lease.taskId && this.worker.lease.taskId !== taskId)) throw busy('Pi worker lease 不能改绑到其他任务。');
-    this.worker.lease = Object.freeze({ ...this.worker.lease, taskId });
+    const entry = this.workers.get(lease.leaseId);
+    if (!entry || !taskId.trim()) throw busy('Pi worker lease 不能改绑到其他任务。');
+    // 员工/主管 lease 可绑定多个在飞 task（授权校验认 boundTaskIds）；primary taskId 取最新。
+    if (!entry.boundTaskIds) entry.boundTaskIds = new Set();
+    entry.boundTaskIds.add(taskId);
+    entry.lease = Object.freeze({ ...entry.lease, taskId });
+  }
+
+  /**
+   * Dock freeform 切页/切项目：primary taskId 指向新任务，但保留旧 taskId 在 boundTaskIds，
+   * 避免在飞任务写包因 rebind 立刻 WORKER_LEASE_STALE。
+   */
+  rebindWorkerTask(lease: WorkspaceRuntimeLease, taskId: string): void {
+    this.assertActive();
+    this.assertCurrentLease(lease, 'pi-worker');
+    const entry = this.workers.get(lease.leaseId);
+    if (!entry || !taskId.trim()) throw busy('Pi worker lease 无法改绑。');
+    if (!entry.boundTaskIds) entry.boundTaskIds = new Set();
+    if (entry.lease.taskId) entry.boundTaskIds.add(entry.lease.taskId);
+    entry.boundTaskIds.add(taskId);
+    entry.lease = Object.freeze({ ...entry.lease, taskId });
+  }
+
+  /** 任务终态后可释放单个绑定，避免 bound 集无限涨。 */
+  unbindWorkerTask(leaseId: string, taskId: string): void {
+    const entry = this.workers.get(leaseId);
+    if (!entry) return;
+    entry.boundTaskIds?.delete(taskId);
+    if (entry.lease.taskId === taskId) {
+      const next = entry.boundTaskIds?.values().next().value as string | undefined;
+      entry.lease = Object.freeze({ ...entry.lease, taskId: next ?? null });
+    }
+  }
+
+  /** 兼容旧接口：只返回 desk 席快照；无 desk 时返回 null（禁止把 employee 冒充主编席）。 */
+  getWorkerSnapshot(): { leaseId: string; taskId: string | null; roleId: string | null; purpose: 'desk' } | null {
+    const entry = this.deskWorker();
+    if (!entry) return null;
+    return {
+      leaseId: entry.lease.leaseId,
+      taskId: entry.lease.taskId,
+      roleId: entry.lease.roleId ?? null,
+      purpose: 'desk'
+    };
+  }
+
+  /** 全部 pi-worker lease 快照（desk + 员工工单）。 */
+  getWorkerSnapshots(): Array<{ leaseId: string; taskId: string | null; roleId: string | null; purpose: 'desk' | 'employee' }> {
+    return [...this.workers.values()].map((entry) => ({
+      leaseId: entry.lease.leaseId,
+      taskId: entry.lease.taskId,
+      roleId: entry.lease.roleId ?? null,
+      purpose: entry.purpose
+    }));
   }
 
   releaseWorker(lease: WorkspaceRuntimeLease): void {
-    if (this.worker?.lease.leaseId === lease.leaseId) this.worker = null;
+    if (this.workers.has(lease.leaseId)) this.workers.delete(lease.leaseId);
   }
 
+  /** 只停止 desk 席 worker（兼容旧行为）；员工工单由 JobPool 与 stopOwnedResources 管理。 */
   async stopWorker(): Promise<void> {
-    const worker = this.worker;
-    this.worker = null;
-    await worker?.resource?.stop();
+    const desk = this.deskWorker();
+    if (!desk) return;
+    this.workers.delete(desk.lease.leaseId);
+    await desk.resource?.stop();
   }
 
   bindBrowser(resource: object, closer?: Stoppable): WorkspaceRuntimeLease {
@@ -228,8 +323,8 @@ export class ActiveWorkspaceRuntime {
 
   isCurrentLease(lease: WorkspaceRuntimeLease): boolean {
     if (this.state === 'stopping' || this.state === 'stopped' || !this.matchesIdentity(lease)) return false;
-    const current = lease.kind === 'pi-worker' ? this.worker?.lease : this.browser?.lease;
-    return current?.leaseId === lease.leaseId;
+    if (lease.kind === 'pi-worker') return this.workers.has(lease.leaseId);
+    return this.browser?.lease.leaseId === lease.leaseId;
   }
 
   matchesIdentity(identity: WorkspaceRuntimeIdentity): boolean {
@@ -255,10 +350,10 @@ export class ActiveWorkspaceRuntime {
   private async stopOwnedResources({ drain = true, timeoutMs = 5_000 }: { drain?: boolean; timeoutMs?: number }): Promise<void> {
     if (drain && this.state === 'active') await this.closeClaimsAndDrain(timeoutMs);
     this.state = 'stopping';
-    const scheduler = this.scheduler; const worker = this.worker; const browser = this.browser; const mcp = this.mcp; const xhs = this.xhs;
-    this.scheduler = null; this.worker = null; this.browser = null; this.mcp = null; this.xhs = null;
+    const scheduler = this.scheduler; const workers = [...this.workers.values()]; const browser = this.browser; const mcp = this.mcp; const xhs = this.xhs;
+    this.scheduler = null; this.workers.clear(); this.browser = null; this.mcp = null; this.xhs = null;
     const errors: unknown[] = [];
-    for (const resource of [scheduler, worker?.resource, browser?.closer, mcp, xhs]) {
+    for (const resource of [scheduler, ...workers.map((entry) => entry.resource), browser?.closer, mcp, xhs]) {
       if (!resource) continue;
       try {
         if ('stop' in resource) await resource.stop();

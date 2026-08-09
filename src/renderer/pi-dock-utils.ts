@@ -13,8 +13,17 @@ export function piToolActivity(toolName?: string): string {
 }
 
 export function piThinkingSummary(text: string): string {
-  const compact = text.replace(/\s+/g, ' ').trim();
-  return `思考 · ${compact.length > 64 ? `${compact.slice(0, 64)}…` : compact}`;
+  const compact = text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~]+/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `思考 · ${compact.length > 64 ? `${compact.slice(0, 64)}…` : compact || '整理中'}`;
 }
 
 export function updatePiMessageSegment(message: PiChatMessage, segment: PiMessageSegment): PiChatMessage {

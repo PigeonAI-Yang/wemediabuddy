@@ -157,7 +157,9 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
           calls.uk += 1;
           const database = migrateDatabase(path.join(ukRoot.path, 'wmb.db'));
           try {
-            const task = getAgentTask(database, database.prepare("SELECT id FROM agent_tasks WHERE intent='daily_intelligence' AND business_date=?").get('2026-08-02').id);
+            const taskRow = database.prepare("SELECT id FROM agent_tasks WHERE intent IN ('daily_intelligence','daily_scan','daily_judge') AND business_date=? ORDER BY created_at DESC").get('2026-08-02');
+            assert.ok(taskRow, 'channel task must exist before judgment runner');
+            const task = getAgentTask(database, taskRow.id);
             assert.ok(task);
             assert.deepEqual(task.contextRefs.intelligenceChannels, {
               workspaceId: uk.id, profileRevision: 1, modules: ['official_web', 'x_lists'],

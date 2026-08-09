@@ -20,7 +20,7 @@ Required after scaffold:
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-This validates required contracts, task-ledger structure and traceability. It intentionally does not run all package checks.
+This validates required contracts, task-ledger structure and traceability, idea-intake task contracts via `scripts/check-intake.mjs`, and the Capability registry gate via `scripts/check-capability-registry.mjs`. It intentionally does not run all package checks.
 
 ## Change-proportional checks
 
@@ -54,6 +54,10 @@ From waterline WMB-4810 on (compare the numeric part of the `Task` column), a `d
 2. `Pi operator Skill impact: (updated|no change) — <non-empty note>`
 3. `Independent review: <name> — <non-empty conclusion>` or `Independent review: not required — (docs-only|test-only|evidence-only|copy-only)`
 4. Evidence cell total at most 700 characters; narrative detail goes in `.ai/wmb-XXXX-evidence.md` (XXXX = numeric task part)
+
+From waterline WMB-5100 on, when the task touches grants, page authority, MCP write tools, internal commands, roles, or `agent-capabilities.ts`, the Evidence cell (or linked evidence file) must also include:
+
+`Capability registry impact: (updated|no change) — <non-empty note>`
 
 CAP eval execution: for every `CAP-xxx` in `SPEC.md`, if all tasks referencing it in `TASKS.md` are `done` and the largest task number among them is ≥ 4810, `.ai/evals/EVAL-CAP-xxx.md` must exist (compare by the CAP number as lowercase 3 digits; file name uppercase, e.g. `EVAL-CAP-025.md`).
 

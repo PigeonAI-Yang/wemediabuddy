@@ -84,14 +84,22 @@ test('active runtimes keep exact root identity and receive a fresh epoch', async
   await second.runtime.stop({ drain: false });
 });
 
-test('worker reservation is atomic and closing claims rejects every new lease', async () => {
+test('worker leases are multi-lease with an exclusive desk slot and drain blocks new leases', async () => {
   const { runtime } = openRuntime('epoch-atomic');
-  const workerLease = runtime.acquireWorkerLease();
-  assert.throws(() => runtime.acquireWorkerLease('task-2'), { code: 'WORKSPACE_BUSY' });
+  const deskLease = runtime.acquireWorkerLease(null, null, 'desk');
+  assert.throws(() => runtime.acquireWorkerLease(null, null, 'desk'), { code: 'WORKSPACE_BUSY' });
+  const workerLease = runtime.acquireWorkerLease('task-2', 'reporter');
+  assert.notEqual(workerLease.leaseId, deskLease.leaseId);
+  assert.equal(runtime.getWorkerSnapshots().length, 2);
+  assert.equal(runtime.getWorkerLease()?.leaseId, deskLease.leaseId); // desk still first
   runtime.bindWorker(workerLease, { stop() {} });
-  runtime.bindWorkerTask(workerLease, 'task-1');
-  assert.equal(runtime.isCurrentWorkerLease(workerLease.leaseId, 'task-1'), true);
-  assert.throws(() => runtime.bindWorkerTask(workerLease, 'task-2'), { code: 'WORKSPACE_BUSY' });
+  runtime.bindWorkerTask(workerLease, 'task-2');
+  assert.equal(runtime.isCurrentWorkerLease(workerLease.leaseId, 'task-2'), true);
+  assert.equal(runtime.isCurrentWorkerLease(deskLease.leaseId, 'task-2'), false);
+  runtime.bindWorkerTask(workerLease, 'task-3');
+  assert.equal(runtime.isCurrentWorkerLease(workerLease.leaseId, 'task-2'), true);
+  assert.equal(runtime.isCurrentWorkerLease(workerLease.leaseId, 'task-3'), true);
+  assert.equal(runtime.isCurrentWorkerLease(deskLease.leaseId, 'task-3'), false);
   runtime.bindBrowser({}, { stop() {} });
 
   const hold = deferred();
@@ -103,6 +111,34 @@ test('worker reservation is atomic and closing claims rejects every new lease', 
   assert.equal(await accepted, 'complete');
   await draining;
   await runtime.stop({ drain: false });
+});
+
+test('desk-scoped accessors and stopWorker leave employee workers untouched', async () => {
+  const { runtime } = openRuntime('epoch-desk-scope');
+  const stopped = [];
+  const deskResource = { stop: () => stopped.push('desk') };
+  const employeeResource = { stop: () => stopped.push('employee') };
+  const desk = runtime.acquireWorkerLease(null, null, 'desk');
+  const employee = runtime.acquireWorkerLease('task-e', 'writer');
+  runtime.bindWorker(desk, deskResource);
+  runtime.bindWorker(employee, employeeResource);
+
+  assert.equal(runtime.getWorkerLease()?.leaseId, desk.leaseId);
+  assert.equal(runtime.getWorker(), deskResource);
+  assert.equal(runtime.getWorkerSnapshot()?.leaseId, desk.leaseId);
+  assert.equal(runtime.getWorkerSnapshots().length, 2);
+
+  await runtime.stopWorker();
+  assert.deepEqual(stopped, ['desk']);
+  assert.equal(runtime.getWorkerLease(), null);
+  assert.equal(runtime.getWorkerSnapshots().length, 1);
+  assert.equal(runtime.getWorkerSnapshots()[0].purpose, 'employee');
+  assert.equal(runtime.isCurrentLease(employee), true);
+  assert.equal(runtime.isCurrentLease(desk), false);
+
+  // stopOwnedResources stops ALL worker resources, desk and employee.
+  await runtime.stop({ drain: false });
+  assert.deepEqual(stopped, ['desk', 'employee']);
 });
 
 test('failed drain and unsafe browser rejection reopen the current runtime without invalidating claims', async () => {

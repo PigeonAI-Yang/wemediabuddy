@@ -1,4 +1,5 @@
 import { useEffect,useState } from 'react';
+import { appConfirm } from './app-confirm';
 
 type DomainEditor={id?:string;revision?:number;title:string;description:string;status:'active'|'watching'|'dormant';topicIds:string[]};
 
@@ -30,7 +31,7 @@ export function DomainMapView({selectedDomainId,onSelectDomain,onOpenTopic}:{sel
     setEditor(null);onSelectDomain(saved.id);setMessage(`已保存领域“${saved.title}”`);await refresh();
   };
   const archive=async(domain:any)=>{
-    if(!window.confirm(`归档领域“${domain.title}”？主题和资料不会被删除。`))return;
+    if(!await appConfirm({ title: '归档领域', message: `归档领域“${domain.title}”？主题和资料不会被删除。`, confirmLabel: '归档' }))return;
     await window.wmb.updateKnowledgeDomain({id:domain.id,expectedRevision:domain.revision,archived:true});
     setOpened(null);setMessage('领域已归档，主题和资料保持不变');await refresh();
   };

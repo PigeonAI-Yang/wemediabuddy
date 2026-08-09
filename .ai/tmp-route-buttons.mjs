@@ -1,0 +1,2 @@
+
+import {chromium} from 'playwright-core';const b=await chromium.connectOverCDP('http://127.0.0.1:9222');const p=b.contexts()[0].pages()[0];console.log(await p.evaluate(()=>({buttons:[...document.querySelectorAll('button')].slice(0,80).map(x=>({text:(x.innerText||'').trim().slice(0,40),cls:x.className,aria:x.getAttribute('aria-label')})),nav:[...document.querySelectorAll('.sidebar button')].map(x=>({text:(x.innerText||'').trim(),cls:x.className}))})));await b.close().catch(()=>{});

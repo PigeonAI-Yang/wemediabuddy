@@ -1,4 +1,4 @@
-export type DataChangedScope = 'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio';
+export type DataChangedScope = 'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals';
 
 export type DataChangedEvent = {
   scopes: DataChangedScope[];

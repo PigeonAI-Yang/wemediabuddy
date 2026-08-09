@@ -1,5 +1,7 @@
+import { pageAuthoritySpec } from '../shared/page-authority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
+import { buildPiContextPayload, describePiContextChip } from './pi-context-payload';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 import { PiComposer } from './pi-composer';
 import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
@@ -20,12 +22,33 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const [phase, setPhase] = useState<'idle' | 'starting' | 'running' | 'failed' | 'stopped'>('idle');
   const [statusText, setStatusText] = useState(configured ? '已配置' : '等待配置');
+  /** 仅真 Pi 回合占用 busy；主管投影 tool-line 不得阻塞发送/队列。 */
+  const [piTurnActive, setPiTurnActive] = useState(false);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const conversationTouched = useRef(false);
   const forkActionRef = useRef(false);
   const [forkAction, setForkAction] = useState<{ entryId: string; retry: boolean } | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
-  const busy = phase === 'starting' || phase === 'running';
+  const busy = piTurnActive;
+
+  useEffect(() => {
+    const onFocusManager = () => {
+      try { window.dispatchEvent(new CustomEvent('wmb:pi-dock-expand')); } catch { /* */ }
+      setStatusText('主管任务进行中');
+      void window.wmb.getPiConversation().then((conversation) => {
+        conversationTouched.current = false;
+        setMessages(conversation.messages ?? []);
+        setActiveSessionId(conversation.id || null);
+        requestAnimationFrame(() => {
+          const el = conversationRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }).catch(() => {});
+    };
+    window.addEventListener('wmb:focus-manager-dialog', onFocusManager as EventListener);
+    return () => window.removeEventListener('wmb:focus-manager-dialog', onFocusManager as EventListener);
+  }, []);
+
   const [modelLabel, setModelLabel] = useState('默认模型');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelOptions, setModelOptions] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>([]);
@@ -74,13 +97,90 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [sessionMenuOpen]);
+  const showToast = (text: string) => {
+    setToast(text);
+    window.setTimeout(() => setToast(''), 1400);
+  };
+
+  useEffect(() => {
+    if (!window.wmb.onDataChanged) return;
+    return window.wmb.onDataChanged((event) => {
+      if (!event?.scopes?.includes('agent')) return;
+      if (event.reason && !String(event.reason).startsWith('manager.')) return;
+      // 主管回合中的原生 tool/subagent 行只在内存事件流里；全量 reload 会抹掉。
+      void window.wmb.getPiConversation().then((conversation) => {
+        conversationTouched.current = false;
+        setMessages((current) => {
+          const live = current[current.length - 1];
+          const liveHasTools = Boolean(
+            live?.role === 'assistant'
+            && live.status === 'streaming'
+            && live.segments?.some((segment) => segment.kind === 'tool')
+          );
+          if (liveHasTools) {
+            const disk = conversation.messages ?? [];
+            // 保留当前 streaming 助手（含 tool-line），替换更早消息
+            if (disk.length === 0) return current;
+            const diskWithoutTrailingStreaming = disk[disk.length - 1]?.role === 'assistant' && disk[disk.length - 1]?.status === 'streaming'
+              ? disk.slice(0, -1)
+              : disk;
+            return [...diskWithoutTrailingStreaming, live];
+          }
+          return conversation.messages ?? current;
+        });
+        setActiveSessionId(conversation.id || null);
+        requestAnimationFrame(() => {
+          const el = conversationRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }).catch(() => {});
+    });
+  }, []);
 
   useEffect(() => window.wmb.onPiEvent((event) => {
+    if (event.type === 'fallback-try' || event.type === 'fallback') {
+      if (event.type === 'fallback-try') {
+        setPhase('starting');
+        setStatusText(event.text || '正在降级到备用 AI 服务');
+        showToast(event.text || '正在降级到备用 AI 服务');
+      } else {
+        setStatusText(event.text || '已切换备用 AI 服务');
+        showToast(event.text || '已切换备用 AI 服务');
+        if (typeof event.model === 'string' && event.model) setModelLabel(event.model);
+        if (typeof event.profileName === 'string' && event.profileName) {
+          setActivePiProfile((current) => current ? { ...current, name: event.profileName!, model: typeof event.model === 'string' ? event.model : current.model } : current);
+        }
+      }
+      return;
+    }
     if (event.scope !== 'dock') return;
-    if (event.type === 'starting') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
-    if (event.type === 'running') { setPhase('starting'); setStatusText('正在连接 Pi'); return; }
+    const managerSource = event.source === 'manager';
+    if (event.type === 'starting') {
+      if (managerSource) {
+        setStatusText(event.text || '主管编排中');
+        return;
+      }
+      setPiTurnActive(true);
+      setPhase('starting'); setStatusText('正在连接 Pi');
+      return;
+    }
+    if (event.type === 'running') {
+      if (managerSource) {
+        setStatusText(event.text || '主管编排中');
+        return;
+      }
+      setPiTurnActive(true);
+      setPhase('starting'); setStatusText('正在连接 Pi');
+      return;
+    }
     if (event.type === 'tool') {
-      setPhase('running'); setStatusText(piToolActivity(event.toolName));
+      if (!managerSource) {
+        setPiTurnActive(true);
+        setPhase('running');
+        setStatusText(piToolActivity(event.toolName));
+      } else {
+        setStatusText(piToolActivity(event.toolName));
+      }
       setMessages((items) => appendPiStream(items, streamingToolSegment(event.toolName, event.toolCallId, event.toolArgs)));
       return;
     }
@@ -93,21 +193,38 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'queued') {
+      setPiTurnActive(true);
       setPhase('running');
       setStatusText(event.delivery === 'followUp' ? '已加入下一轮' : '已加入插队队列');
       return;
     }
     if (event.type === 'thinking') {
+      setPiTurnActive(true);
       setPhase('running'); setStatusText('正在输出');
       setMessages((items) => appendPiStream(items, { kind: 'thinking', text: event.text ?? '', streamKey: event.streamKey }, { thinking: event.text ?? '' }));
       return;
     }
     if (event.type === 'delta') {
+      setPiTurnActive(true);
       setPhase('running'); setStatusText('正在回复');
       setMessages((items) => appendPiStream(items, { kind: 'text', text: event.text ?? '', streamKey: event.streamKey }, { text: event.text ?? '' }));
       return;
     }
     if (event.type === 'stopped') {
+      if (managerSource) {
+        setStatusText(event.text || '主管编排已结束');
+        setMessages((items) => {
+          const next = items.slice();
+          const last = next[next.length - 1];
+          const text = (event.text && event.text.trim()) || last?.text || '主管编排已结束。';
+          if (last?.role === 'assistant' && last.status === 'streaming') {
+            next[next.length - 1] = { ...last, role: 'assistant', text, status: 'stopped' };
+          }
+          return next;
+        });
+        return;
+      }
+      setPiTurnActive(false);
       setPhase('stopped'); setStatusText('已停止');
       setMessages((items) => {
         const next = items.slice();
@@ -121,6 +238,11 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'failed') {
+      if (managerSource) {
+        setStatusText(event.error || '主管编排失败');
+        return;
+      }
+      setPiTurnActive(false);
       setNativeQueue({ steering: [], followUp: [] });
       setPhase('failed'); setStatusText('失败');
       setMessages((items) => {
@@ -134,6 +256,29 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'idle') {
+      if (managerSource) {
+        // 主管投影结束不得清掉真 Pi 回合
+        setStatusText(event.text || (configured ? '已配置' : '等待配置'));
+        setMessages((items) => {
+          const next = items.slice();
+          const last = next[next.length - 1];
+          if (last?.role === 'assistant' && last.status === 'streaming' && event.text) {
+            next[next.length - 1] = {
+              ...last,
+              role: 'assistant',
+              text: event.text,
+              status: undefined,
+              segments: [
+                ...(last.segments || []).filter((segment) => segment.kind === 'tool'),
+                { kind: 'text' as const, text: event.text }
+              ]
+            };
+          }
+          return next;
+        });
+        return;
+      }
+      setPiTurnActive(false);
       setNativeQueue({ steering: [], followUp: [] });
       setPhase('idle'); setStatusText(configured ? '已配置' : '等待配置');
       setMessages((items) => {
@@ -210,129 +355,55 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
   };
 
-  const showToast = (text: string) => {
-    setToast(text);
-    window.setTimeout(() => setToast(''), 1400);
-  };
-  const contextChip = useMemo(() => {
-    const rankingCount = (context.rankingContext?.boards.length ?? 0) + (context.rankingContext?.items.length ?? 0);
-    const xList = context.xListContext;
-    if (context.contextSelection) {
-      return `${context.pageLabel} · ${context.contextSelection.mode==='selected'?`已选 ${context.contextSelection.nodeIds.length} 项`:`当前页 ${context.contextSelection.nodeIds.length} 项`}`;
-    }
-    if (xList) {
-      if (xList.mode === 'post' && xList.selectedPost) return `${context.pageLabel} · 帖子 ${xList.selectedPost.authorHandle || ''}`.trim();
-      if (xList.listName) return `${context.pageLabel} · ${xList.listName}${xList.loadedCount ? ` · 已加载 ${xList.loadedCount} 条` : (xList.visiblePosts.length ? ` · ${xList.visiblePosts.length} 条动态` : '')}`;
-      return `${context.pageLabel} · 当前页`;
-    }
-    if (rankingCount) return `${context.pageLabel} · 已选 ${context.rankingContext?.boards.length ?? 0} 个榜单、${context.rankingContext?.items.length ?? 0} 个项目`;
-    if (context.focus) return `${context.pageLabel} · ${context.focus.title}${context.focus.bodyStatus === 'ready' ? ' · 含正文' : ''}`;
-    const oppCount = context.selectedItems?.length ?? 0;
-    const sourceCount = context.selectedSources?.length ?? 0;
-    const bodyCount = context.selectedSources?.filter((item) => item.bodyStatus === 'ready' && item.bodyExcerpt).length ?? 0;
-    const fermentCount = (context.fermenting?.items?.length ?? 0) + (context.fermenting?.watchingItems?.length ?? 0);
-    if (oppCount || sourceCount || fermentCount) {
-      const parts = [context.pageLabel];
-      if (oppCount) parts.push(`已选 ${oppCount} 个机会`);
-      if (sourceCount) parts.push(`${sourceCount} 条资料${bodyCount ? `（${bodyCount} 含正文）` : '（摘要）'}`);
-      if (fermentCount) parts.push(`发酵 ${fermentCount}`);
-      return parts.join(' · ');
-    }
-    return context.objectTitle ? `${context.pageLabel} · ${context.objectTitle}` : context.pageLabel;
-  }, [context]);
-  const xList = context.xListContext;
-  const buildPayload = (text: string, directContext?: {scope:string;items:Array<{nodeId:string}>;relations:Array<{id:string}>;estimatedCharacters:number}) => {
-    const selectedContext = context.selectedItems?.map((item) => ({
-      id: item.id,
-      title: item.title,
-      whyNow: item.whyNow,
-      angle: item.angle,
-      pointOfView: item.pointOfView,
-      titleGuidance: item.titleGuidance,
-      openingGuidance: item.openingGuidance,
-      structureGuidance: item.structureGuidance,
-      sourceIds: item.sourceIds
-    })) ?? [];
-    const selectedSources = context.selectedSources?.map((source) => ({
-      id: source.id,
-      title: source.title,
-      url: source.canonicalUrl,
-      author: source.author,
-      publishedAt: source.publishedAt,
-      collectedAt: source.collectedAt,
-      summary: source.summary,
-      categories: source.categories,
-      bodyStatus: source.bodyStatus ?? 'none',
-      bodyChars: source.bodyChars ?? 0,
-      bodyExcerpt: source.bodyExcerpt ?? null
-    })) ?? [];
-    const contextInstruction = directContext
-      ? `\ncontextRule=只使用下面直接提供的页面上下文，不得调用上下文包工具，也不得扩展到选中范围之外。`
-        + `\nmode=${context.packagePurpose??'discussion'}`
-        + `\ncanvasId=${context.canvasId??''}`
-        + `\nselectionMode=${context.contextSelection?.mode??'current_page'}`
-        + `\nsuggestionRule=若要提出新节点或关系，只能调用 wmb_suggest_knowledge 创建待确认建议；用户确认前不得视为正式知识。`
-        + `\ncontextNodeIds=${JSON.stringify(directContext.items.map(item=>item.nodeId))}`
-        + `\ncontextManifest=${JSON.stringify(directContext)}`
-      : xList
-      ? `\ncontextRule=优先使用下面直接提供的 X List 页面上下文；用户没点帖子时讨论当前列表已加载的全部动态（loadedCount/visiblePosts），点了帖子时只讨论该帖及其评论。不要假设未加载的更早帖子。`
-      : context.focus
-      ? `\ncontextRule=focus 是用户当前正在看的对象。有 bodyExcerpt 时优先依据正文；否则用 summary。不要把摘要当成全文，也不要假设未提供的页面内容。`
-      : selectedSources.length
-      ? `\ncontextRule=selectedSources 是用户勾选的原始资料。默认只有摘要（summary）；bodyStatus=ready 且 bodyExcerpt 非空时才有正文摘录。selectedItems 是选题机会。fermenting 是跨日仍在发酵的机会/主题，优先考虑未消化的高价值续命项。回答优先引用 selectedSources 证据，不要把摘要当成全文。`
-      : ((context.fermenting?.items?.length ?? 0) + (context.fermenting?.watchingItems?.length ?? 0))
-      ? `\ncontextRule=fermenting.items 是仍值得做的跨日项；fermenting.watchingItems 是观察中项。都不是今日主清单。讨论时优先今日 selectedItems，再看发酵补充。`
-      : '';
-    const xListPayload = xList ? JSON.stringify({
-      accountKey: xList.accountKey,
-      listId: xList.listId,
-      listName: xList.listName,
-      listKind: xList.listKind,
-      mode: xList.mode,
-      loadedCount: xList.loadedCount ?? xList.visiblePosts.length,
-      selectedPost: xList.selectedPost,
-      visiblePosts: xList.visiblePosts
-    }) : 'null';
-    const fermentingPayload = JSON.stringify({
-      items: (context.fermenting?.items ?? []).slice(0, 5).map((item) => ({
-        id: item.id,
-        objectType: item.objectType,
-        objectId: item.objectId,
-        title: item.title,
-        state: item.state,
-        priority: item.priority,
-        topicId: item.topicId,
-        sourceIds: item.sourceIds,
-        originPlanDate: item.originPlanDate,
-        fermentedDays: item.fermentedDays,
-        decayScore: item.decayScore,
-        reason: item.reason,
-        aftershocks: (item.aftershocks || []).slice(0, 3)
-      })),
-      watchingItems: (context.fermenting?.watchingItems ?? []).slice(0, 5).map((item) => ({
-        id: item.id,
-        objectType: item.objectType,
-        objectId: item.objectId,
-        title: item.title,
-        state: item.state,
-        priority: item.priority,
-        fermentedDays: item.fermentedDays,
-        originPlanDate: item.originPlanDate
-      })),
-      topics: (context.fermenting?.topics ?? []).slice(0, 6),
-      pinnedSources: (context.fermenting?.pinnedSources ?? []).slice(0, 3)
-    });
-    return `[WMB_CONTEXT]\npage=${context.page}\npageLabel=${context.pageLabel}\nobjectType=${context.objectType ?? ''}\nobjectId=${context.objectId ?? ''}\nobjectTitle=${context.objectTitle ?? ''}${contextInstruction}\nfocus=${JSON.stringify(context.focus ?? null)}\nselectedItems=${JSON.stringify(selectedContext)}\nselectedSources=${JSON.stringify(selectedSources)}\nfermenting=${fermentingPayload}\nrankingContext=${JSON.stringify(context.rankingContext ?? { boards: [], items: [] })}\nxListContext=${xListPayload}\n[USER_MESSAGE]\n${text}`;
-  };
+  const contextChip = useMemo(() => describePiContextChip(context), [context]);
+  const pageSpec = useMemo(() => pageAuthoritySpec(context.page), [context.page]);
+  const [authorityChip, setAuthorityChip] = useState(pageSpec?.chipLabel ?? '—');
+  const [authorityTone, setAuthorityTone] = useState<'write' | 'readonly' | 'prepare'>(pageSpec?.chipTone ?? 'readonly');
+  useEffect(() => {
+    setAuthorityChip(pageSpec?.chipLabel ?? '—');
+    setAuthorityTone(pageSpec?.chipTone ?? 'readonly');
+  }, [pageSpec?.chipLabel, pageSpec?.chipTone]);
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const status = await window.wmb.getPiAuthorityStatus?.();
+        if (cancelled || !status) return;
+        if (status.chipLabel) setAuthorityChip(status.chipLabel);
+        if (status.chipTone) setAuthorityTone(status.chipTone);
+      } catch { /* ignore */ }
+    };
+    void pull();
+    const timer = window.setInterval(() => { void pull(); }, 2500);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [context.page, context.objectId, phase]);
+  const buildPayload = (text: string, directContext?: { scope: string; items: Array<{ nodeId: string }>; relations: Array<{ id: string }>; estimatedCharacters: number }) =>
+    buildPiContextPayload(context, text, directContext);
 
   const sendText = async (text: string, delivery?: 'steer' | 'followUp') => {
     const value = text.trim();
     if (!value) return;
-    const queued = busy;
+    // 只有真 Pi 回合才走 steer/followUp 队列；主管投影 busy 假象不得吞消息。
+    const queued = piTurnActive;
     if (!queued) {
       conversationTouched.current = true;
       const stamped = new Date().toISOString();
-      setMessages((items) => [...items, { role: 'user', text: value, createdAt: stamped }, { role: 'assistant', text: '', status: 'streaming', createdAt: stamped }]);
+      setPiTurnActive(true);
+      setMessages((items) => {
+        const next = items.slice();
+        const last = next[next.length - 1];
+        // 结束仍 streaming 的主管投影气泡，避免把用户话挂在假回合上
+        if (last?.role === 'assistant' && last.status === 'streaming') {
+          next[next.length - 1] = {
+            ...last,
+            status: undefined,
+            text: last.text || '（后台编排继续，你可直接对话）'
+          };
+        }
+        next.push({ role: 'user', text: value, createdAt: stamped });
+        next.push({ role: 'assistant', text: '', status: 'streaming', createdAt: stamped });
+        return next;
+      });
       setPhase('starting'); setStatusText('正在连接 Pi');
     }
     try {
@@ -345,12 +416,14 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         setMessages(result.conversation.messages);
         setActiveSessionId(result.conversation.id || null);
       }
+      setPiTurnActive(false);
       setPhase(result.stopped ? 'stopped' : 'idle');
       setStatusText(result.stopped ? '已停止' : (configured ? '已配置' : '等待配置'));
       void refreshSessions();
     } catch (error) {
       const message = piErrorMessage(error);
       if (queued) { showToast(message); return; }
+      setPiTurnActive(false);
       setPhase('failed'); setStatusText('失败');
       setMessages((items) => {
         const next = items.slice();
@@ -366,7 +439,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     const value = text.trim();
     if (!value) return;
     await sendText(value, delivery);
-  }, [busy, configured, context]);
+  }, [piTurnActive, configured, context]);
   useEffect(() => {
     const generate = (event: Event) => void sendText((event as CustomEvent<string>).detail);
     window.addEventListener('wmb-pi-generate', generate);
@@ -375,11 +448,17 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const stop = useCallback(async () => {
     try {
       const result = await window.wmb.stopPi();
-      if (result.stopped) setStatusText('正在停止');
+      if (result.stopped) {
+        setStatusText('正在停止');
+      } else if (!piTurnActive) {
+        // 没有真 Pi 回合时，允许用户把投影态收成可继续对话
+        setPhase('idle');
+        setStatusText(configured ? '已配置' : '等待配置');
+      }
     } catch (error) {
       showToast(error instanceof Error ? error.message : '停止失败');
     }
-  }, []);
+  }, [piTurnActive, configured]);
   const newConversation = async () => {
     if (busy) await stop();
     conversationTouched.current = true;
@@ -452,13 +531,15 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
 
   return <aside className={`pi-dock${collapsed ? ' collapsed' : ''}`}>
     {!collapsed && <div className="pi-resize-handle" role="separator" aria-label="调整 Pi 对话栏宽度" aria-orientation="vertical" title="拖拽调整宽度，双击恢复默认" onPointerDown={resize} onDoubleClick={resetWidth}/>}
-    <button type="button" className="pi-dock-toggle" onClick={toggle} aria-label={collapsed ? '展开 Pi' : '收起 Pi'} title={collapsed ? '展开 Pi' : '收起 Pi'}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? 'M14.5 6.5 9 12l5.5 5.5' : 'M9.5 6.5 15 12l-5.5 5.5'} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
-    </button>
+    <div className={`pi-dock-toggle-rail${collapsed ? ' is-collapsed' : ''}`} data-collapsed={collapsed ? 'true' : 'false'}>
+      <button type="button" className="pi-dock-toggle" onClick={(event) => { toggle(); if (event.detail > 0) event.currentTarget.blur(); }} aria-label={collapsed ? '展开 Pi' : '收起 Pi'} title={collapsed ? '展开 Pi' : '收起 Pi'}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? 'M14.5 6.5 9 12l5.5 5.5' : 'M9.5 6.5 15 12l-5.5 5.5'} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    </div>
     {!collapsed && <>
       <PiDockHeader headerRef={headerRef} sessionMenuOpen={sessionMenuOpen} sessions={sessions}
         activeSessionId={activeSessionId} activeTitle={activeTitle} phase={phase} statusText={statusText}
-        contextChip={contextChip} toast={toast}
+        contextChip={contextChip} authorityChip={authorityChip} authorityTone={authorityTone} toast={toast}
         onToggleSessions={() => { setSessionMenuOpen((open) => !open); void refreshSessions(); }}
         onNewConversation={() => { void newConversation(); }} onOpenSession={(id) => { void openSession(id); }} onArchiveSession={(id, archived) => { void archiveSession(id, archived); }} busy={busy}
       />

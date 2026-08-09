@@ -17,6 +17,7 @@ export class XObservationScheduler {
   private rerun = false;
   private generation = 0;
   private recoveredRoot: string | null = null;
+  private generationStartedAt = '';
 
   constructor(private readonly input: {
     runtime: ActiveWorkspaceRuntime;
@@ -29,6 +30,8 @@ export class XObservationScheduler {
     if (!this.stopped) return;
     this.stopped = false;
     this.generation += 1;
+    this.generationStartedAt = new Date().toISOString();
+    this.recoveredRoot = null;
     this.wake();
   }
 
@@ -60,7 +63,7 @@ export class XObservationScheduler {
       if (!root || this.stopped || generation !== this.generation || !runtime.isActive || (this.input.isCurrent && !this.input.isCurrent())) return;
       const database = runtime.database;
       if (this.recoveredRoot !== root.path) {
-        await recoverRunningXObservationJobs(runtime, generation);
+        await recoverRunningXObservationJobs(runtime, generation, this.generationStartedAt);
         this.recoveredRoot = root.path;
       }
       await processDueXObservationJobs(runtime, {

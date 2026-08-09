@@ -1,27 +1,34 @@
 {
-  "active_loop": "wmb-4508-pi-scroll-follow",
+  "active_loop": "wmb-dev-supervisor-takeover",
   "status": "complete",
-  "symptom": "Pi output stopped auto-following even when the reader had not touched the transcript.",
+  "symptom": "The prior supervised launch collided with the neighboring WMB-5116 acceptance runtime.",
   "observation_packet": {
-    "url": "packaged WeMediaBuddy file renderer",
-    "viewport": "1600x960",
-    "user_action": "stream output without interaction, then deliberately wheel upward and stream more output",
-    "expected": "default output remains at the bottom; deliberate upward reading remains fixed until 回到最新 is pressed",
-    "actual": "28 growth samples stayed at distance 0; after upward wheel, 984px of new content left scrollTop unchanged",
-    "screenshot": "not required; scroll geometry and visible-button DOM were captured from the packaged renderer",
-    "console": "no renderer error observed",
-    "network_ws": "real Pi streaming turns completed",
-    "dom_selector": ".pi-conversation and .pi-jump-latest",
-    "computed_style_layout": "default final distance 0 and button hidden; paused distance grew from 4118 to 5102 with identical scrollTop 37259",
-    "state_store_snapshot": "followingLatest stays true without user intent and becomes false only after an upward wheel"
+    "url": "http://127.0.0.1:27391/",
+    "viewport": "native Electron renderer process at device scale factor 1",
+    "user_action": "Wait for the acceptance runtime to exit, start one supervised npm start process, and probe the renderer twice.",
+    "expected": "Exactly one hub-managed wmb-dev runtime remains ready and serves WeMediaBuddy.",
+    "actual": "The acceptance runtime released port 27391; hub-managed wmb-dev started and remained ready with one Electron main process and renderer child.",
+    "screenshot": null,
+    "console": "Startup log contains no current application exception; only Node DEP0147 warning.",
+    "network_ws": "scripts/smoke-renderer.mjs returned ok twice for 127.0.0.1:27391.",
+    "dom_selector": "Renderer HTTP entry and Electron renderer process",
+    "computed_style_layout": "Not changed in this loop.",
+    "state_store_snapshot": "hub wmb-dev ready, restarts=0; Electron main and renderer processes active."
   },
-  "hypotheses": [{
-    "hypothesis": "onScroll treated layout/programmatic scroll events as user intent and permanently disabled following",
-    "would_disprove": "a no-interaction scroll event cannot flip followingLatest false in the current handler",
-    "result": "confirmed by the current policy reproduction; intent-aware state preserves follow until an actual wheel/touch/scrollbar action"
-  }],
-  "breakpoint": "Resolved in the transcript scroll event state transition.",
-  "owner_check": "Current package is running at the latest message; default follow and deliberate pause both passed live.",
+  "hypotheses": [
+    {
+      "hypothesis": "The neighboring acceptance runtime still owns the renderer port.",
+      "would_disprove": "scripts/check-dev-port.mjs reports port 27391 free.",
+      "result": "disproved before takeover: port 27391 was free."
+    },
+    {
+      "hypothesis": "A single supervised launch now remains healthy.",
+      "would_disprove": "hub reports failed/restarting or the renderer smoke fails after startup.",
+      "result": "confirmed: hub reports ready after more than one minute with restarts=0; repeated renderer smoke passed."
+    }
+  ],
+  "breakpoint": "resolved process ownership handoff",
+  "owner_check": "One supervised runtime now owns the normal user-data directory; no source or UI behavior changed.",
   "attempts": 1,
-  "last_gate": "11/11 focused tests, typecheck, Windows package, 28 zero-distance growth samples and paused 984px growth with fixed scrollTop passed"
+  "last_gate": "wmb-dev ready for more than one minute with zero restarts; repeated renderer smoke passed."
 }

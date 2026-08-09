@@ -31,10 +31,14 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
   }
   const clause = where.join(' AND ');
   const total = Number((database.prepare(`SELECT count(*) AS count FROM source_items s WHERE ${clause}`).get(...args) as { count: number }).count);
-  const items = database.prepare(`
+  const rows = database.prepare(`
     SELECT s.id, s.title, s.original_url AS originalUrl, s.author, s.published_at AS publishedAt,
       s.collected_at AS collectedAt, s.summary, s.priority, s.verification_status AS verificationStatus,
       s.management_status AS managementStatus, s.revision,
+      (SELECT json_object('decision', j.decision, 'reasonCode', j.reason_code, 'reason', j.reason,
+        'judgedBy', j.judged_by, 'judgedAt', j.judged_at)
+        FROM source_lane_judgments j WHERE j.source_id = s.id
+        ORDER BY j.judged_at DESC, j.id DESC LIMIT 1) AS laneJudgmentJson,
       coalesce((SELECT group_concat(t.title, '、') FROM topic_source_links l JOIN topics t ON t.id=l.topic_id WHERE l.source_id=s.id), '') AS topics,
       (SELECT count(*) FROM plan_items pi, json_each(pi.source_ids_json) j WHERE j.value=s.id) AS opportunityCount,
       (SELECT count(*) FROM content_project_sources cps WHERE cps.source_id=s.id) AS projectCount,
@@ -43,6 +47,12 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
         JOIN publications p ON p.platform_version_id=pv.id WHERE cps.source_id=s.id AND p.status='published') AS publicationCount
     FROM source_items s WHERE ${clause}
     ORDER BY s.collected_at DESC, s.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
+  // 「已移出」视图徽标数据源：source_lane_judgments 最新一行（追加型语义，按 judged_at DESC 取首行）；
+  // 无判定行 = 主编手动归档（徽标显示「主编归档」），有判定行 = AI/系统判定原因可展示。
+  const items = rows.map((item) => {
+    const { laneJudgmentJson, ...rest } = item as { laneJudgmentJson: string | null } & Record<string, unknown>;
+    return { ...rest, laneJudgment: laneJudgmentJson ? JSON.parse(laneJudgmentJson) : null };
+  });
   return { items, total, limit, offset, hasMore: offset + items.length < total };
 }
 
@@ -332,7 +342,8 @@ export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: s
   const sourceIds = input.sourceId ? [input.sourceId] : topicIds.length
     ? (database.prepare(`SELECT DISTINCT source_id AS id FROM topic_source_links WHERE topic_id IN (${topicIds.map(() => '?').join(',')}) LIMIT ?`).all(...topicIds, limit) as Array<{ id: string }>).map((r) => r.id) : [];
   const topics = topicIds.length ? database.prepare(`SELECT id,title,kind,summary,status,first_seen_at AS firstSeenAt,last_seen_at AS lastSeenAt FROM topics WHERE id IN (${topicIds.map(() => '?').join(',')})`).all(...topicIds) : [];
-  const sources = sourceIds.length ? database.prepare(`SELECT id,title,original_url AS originalUrl,summary,priority,verification_status AS verificationStatus,management_status AS managementStatus,collected_at AS collectedAt FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')})`).all(...sourceIds) : [];
+  // 有效资料库口径：知识上下文只带回未移出（archived）资料；已移出条目经「已移出」视图（4944）单独可查。
+  const sources = sourceIds.length ? database.prepare(`SELECT id,title,original_url AS originalUrl,summary,priority,verification_status AS verificationStatus,management_status AS managementStatus,collected_at AS collectedAt FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')}) AND management_status != 'archived'`).all(...sourceIds) : [];
   const opportunities = sourceIds.length ? database.prepare(`SELECT DISTINCT pi.id,pi.title,pi.priority,p.plan_date AS planDate
     FROM plan_items pi JOIN plans p ON p.id=pi.plan_id, json_each(pi.source_ids_json) j WHERE j.value IN (${sourceIds.map(() => '?').join(',')})
     ORDER BY p.plan_date DESC,pi.priority LIMIT ?`).all(...sourceIds, limit) : [];

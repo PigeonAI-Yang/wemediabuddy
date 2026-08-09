@@ -1,5 +1,7 @@
 # Development Workflow
 
+Bare ideas without a `WMB-*` id must follow `docs/intake-routing.md` before this workflow. Construction starts only from a `TASKS.md` `doing` row (and, for ids ≥ 5001, `.ai/wmb-NNNN-contract.md`).
+
 ## Before editing
 
 1. Run `node scripts/task-context.mjs <WMB-id>` for the selected task and use its machine-extracted output (ledger header contract, the task row, dependency rows, referenced `CAP-*` SPEC sections, PRD index lines) as the task context; read documents in full only when the change touches harness rules, the excerpt is insufficient, or the change spans multiple `CAP-*` (see `AGENTS.md` → Required reading).

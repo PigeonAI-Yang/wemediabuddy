@@ -88,12 +88,12 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
   };
   return <>
     <section className="settings-section">
-      <div className="settings-section-heading"><h3>List 工作台显示</h3><p>只决定发现页展示哪些 Lists，不会改变今日情报来源。</p></div>
+      <div className="settings-section-heading"><h3>List 工作台显示</h3></div>
       <div className="settings-inline-actions"><button type="button" className="secondary-button" disabled={loading} onClick={() => void load(true)}>{loading ? '读取中…' : '刷新账号 Lists'}</button><span className="settings-list-note">{note}</span></div>
       {index && <div className="settings-list-choices">{index.lists.map((list) => { const binding = bindings.find((item) => item.listId === list.listId); return <label key={list.listId}><input type="checkbox" checked={displayedIds.includes(list.listId)} onChange={(event) => toggle(list.listId, event.target.checked)}/><span><strong>{list.name}</strong><small>{binding?.enabled ? '今日情报已启用' : '未接入今日情报'}</small></span></label>; })}</div>}
     </section>
     {index && <section className="settings-section x-list-settings-management">
-      <div className="settings-section-heading"><h3>List 管理</h3><p>选择 List 后管理今日情报接入或准备平台变更；Pi 会在对话框里请求一次最终确认。</p></div>
+      <div className="settings-section-heading"><h3>List 管理</h3></div>
       <div className="settings-inline-actions">
         <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{index.lists.map((list) => <option key={list.listId} value={list.listId}>{list.name} · {list.kind === 'owned' ? '我创建的' : list.kind === 'following' ? '我关注的' : '我在其中'}</option>)}</select>
         {selected && <button type="button" className="secondary-button" disabled={loading} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出今日情报' : '接入今日情报'}</button>}
@@ -119,7 +119,7 @@ function XListComposer({ accountKey, selected, disabled, onPrepare }: { accountK
     void onPrepare(input);
   };
   const modes: Array<{ id: typeof kind; label: string }> = [{ id: 'create', label: '新建' }, ...(canManage ? [{ id: 'update' as const, label: '编辑' }, { id: 'members_remove' as const, label: '移除成员' }, { id: 'delete' as const, label: '删除' }] : [])];
-  return <section className="x-list-composer"><header><div><p className="eyebrow">平台操作</p><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div></header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
+  return <section className="x-list-composer"><header><div><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div></header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
     {(kind === 'create' || kind === 'update') && <div className="x-list-form"><label>名称<input value={name} placeholder={kind === 'create' ? '例如：行业观察' : '不修改'} onChange={(event) => setName(event.target.value)}/></label><label className="x-list-description-toggle"><input type="checkbox" checked={kind === 'create' || changeDescription} onChange={(event) => setChangeDescription(event.target.checked)} disabled={kind === 'create'}/> {kind === 'create' ? '添加描述' : '修改或清空描述'}</label>{(kind === 'create' || changeDescription) && <label>描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="这份 List 关注什么？"/></label>}<label>公开性<select value={privacy} onChange={(event) => setPrivacy(event.target.value as typeof privacy)}><option value="unchanged">{kind === 'create' ? '公开' : '不修改'}</option><option value="public">公开</option><option value="private">私密</option></select></label></div>}
     {(kind === 'members_add' || kind === 'members_remove') && <label className="x-list-form">精确 handle（一行一个）<textarea value={handles} onChange={(event) => setHandles(event.target.value)} placeholder={'@karpathy\n@ylecun'}/></label>}
     {kind === 'delete' && <p className="x-list-danger">删除不会立即执行；下一步仍需读取快照，并要求输入当前 List 名称确认。</p>}

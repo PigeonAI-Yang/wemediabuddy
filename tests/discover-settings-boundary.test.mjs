@@ -14,7 +14,7 @@ test('Discover shows content while Settings owns channel configuration', async (
   const prd = await readFile(new URL('../PRD.md', import.meta.url), 'utf8');
   const spec = await readFile(new URL('../SPEC.md', import.meta.url), 'utf8');
   assert.doesNotMatch(discover, /IntelligenceChannelsView|情报渠道|List 管理/);
-  assert.match(discover, /rankingsEnabled && <nav[\s\S]*?AI 榜单[\s\S]*?X Lists/);
+  assert.match(discover, /rankingsEnabled \? \([\s\S]*?role="navigation" aria-label="发现内容"[\s\S]*?AI 榜单[\s\S]*?X Lists/);
   assert.match(discover, /!rankingsEnabled && section === 'rankings' \? 'lists'/);
   assert.match(settings, /section === 'channels'[\s\S]*?<IntelligenceChannelsView settingsMode/);
   assert.doesNotMatch(listContent, /XListComposer|XListConfirmation|接入今日情报|移出今日情报|最终确认并执行|操作记录/);
@@ -31,6 +31,6 @@ test('Discover shows content while Settings owns channel configuration', async (
   assert.doesNotMatch(operationTray, /确认并交给 Pi 执行/);
   assert.match(ipc, /x-lists:confirm[\s\S]*currentXListContext[\s\S]*dispatchAcceptXListOperation/);
   assert.match(ipc, /void runAcceptedXListOperation/);
-  assert.match(prd, /Discover 只展示榜单、所选 List 动态/);
+  assert.match(prd, /Discover 不包含来源配置，只呈现榜单、所选 List 动态/);
   assert.match(spec, /Discover is a content-discovery surface/);
 });

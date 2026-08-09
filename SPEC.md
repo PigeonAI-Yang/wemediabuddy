@@ -3,13 +3,40 @@
 - Status: approved design, implementation contract
 - Date: 2026-07-27
 - Scope revision: 2026-08-05 workspace-scoped human-AI collaboration architecture
-- Product source: `PRD.md`
+- Form revision: 2026-08-07 product form invariants (§1.0); agent-primary terminal constitution
+- Auth revision: 2026-08-07 fixed roles + Capability registry (CAP-026); design `docs/spark/2026-08-07-role-permission-design.md`
+- Product source: `PRD.md` (§2.0 form, §2.3 roles) and `PRODUCT.md`
 - Architecture source: `TECHNICAL_DESIGN.md`
 - Scope: PRD current product range only
 
 Keywords `must`, `must not`, and `only` are normative.
 
 ## 1. Completion boundary
+
+### 1.0 Product form invariants
+
+These invariants interpret PRD §2.0 and `PRODUCT.md`. Implementations and task designs must not violate them without an explicit PRD/SPEC revision.
+
+1. WMB is an **AI-driven self-media human-agent collaborative terminal**. It must not be designed as a traditional CMS or as a human-primary writing IDE with AI chat as a side panel.
+2. **Agent-primary path**: background and foreground agents perform research, filing, topic induction, opportunity drafting, drafting, and review preparation by default. The human Owner is editor-in-chief: goals, approvals, dispatch, supervision, publish confirmation, and liability.
+3. **Today is the editor desk**: the primary surface must present decidable or must-know objects (approvable opportunities/plans, topic progress that warrants attention, in-flight work, run status). Dumping raw sources that still require the human to invent the opportunity brief is a form defect.
+4. **Object layers**: Source = evidence; Opportunity/plan item = one-shot approvable brief; **Topic = the formal long-horizon attention container** (many sources, opportunities, content projects, reviews); Content project = draft/versions for a shot. When an agent judges a line worth long-horizon attention, it must induce or merge into a **topic** using editorial judgment (LLM), not regex/title-string primary matching. One-shot work need not create a topic.
+5. **Continuous-attention UI**, if present on Today, must project **topics (or topic-progress signals)** that the editor should keep watching. It must not be a dumping ground for untriaged sources that offload opportunity drafting onto the human. Legacy Today rail backed by `work_carry_items` ferment carry and `storyKey`/`sameStory` merge is technical debt: it must not be extended as the long-horizon identity, and the dedicated follow-up milestone must **replace** that rail with topic-progress projection (see `docs/spark/2026-08-07-product-form-agent-desk-constitution.md` §5/§8).
+6. Foreground Pi is page-local co-work after dispatch; background jobs produce structured desk submissions. Precise external side effects and the platform final publish click remain human-confirmed.
+7. UI, Pi, and external agents share one workspace fact store. Chat/transcript is not business truth.
+
+### 1.1 CAP-026 Fixed roles and Capability registry
+
+Normative companion to PRD §2.3 and `docs/spark/2026-08-07-role-permission-design.md`.
+
+1. WMB must model fixed staff roles `desk`, `reporter`, `planner`, `writer`, and `librarian`. Roles are lane-stable job identities, not a multi-agent orchestration graph.
+2. Authorization write power for Agents must be derived from a Capability registry (`src/shared/agent-capabilities.ts`) intersected with task/page grants and precise-execution gates. System prompts and Skills must not alone authorize writes.
+3. `writer` must be allowed to **read** library/topic/plan materials needed for drafting and must not receive library organize commands (`sources.lane_restore`, library status mutation as organize). `librarian` may organize library materials and must not receive `plans.save` or primary drafting commands as standing power.
+4. Final platform publish click and hard-delete must not appear in automatic role grants (`agentGrantable: false` red lines).
+5. New internal write commands must register in the Capability registry with default role bindings before merge. Harness check `npm run check:capabilities` / `scripts/check-capability-registry.mjs` must fail the lightweight gate when violated.
+6. A first-class Agents roster surface must eventually project role runtime status from shared APIs; configurable permission UI must not ship before P0 registry + grant filtering + readonly roster (design §11.4).
+7. Switching lane packs must not require redesigning role catalogs or capability matrices; lane packs must carry zero authorization command bindings.
+
 
 WMB is complete when its research, planning, creation, platform-version handoff, metrics-on-supplied-URLs, and review loop pass. It must support these six manual-publication payloads, but real publication receipts are not a completion gate:
 
@@ -22,7 +49,7 @@ WMB is complete when its research, planning, creation, platform-version handoff,
 
 Threads, polls, mixed image/video posts, product links, locations, collections, scheduled platform publishing, live streams, audio, and paid articles are outside current scope.
 
-WMB does not judge whether an Agent's writing is good. WMB must provide complete context, structured persistence, traceable references, and observable execution so an external Agent can perform the AI work.
+WMB does not judge whether an Agent's writing is good. WMB must provide complete context, structured persistence, traceable references, and observable execution so an Agent can perform the AI work on the primary path.
 
 WMB is niche-agnostic inside the self-media boundary. The existing AI lane, the UK lane, and later user-created lanes use the same fixed business loop through isolated workspaces defined by CAP-018 and CAP-019.
 

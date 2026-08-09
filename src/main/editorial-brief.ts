@@ -71,6 +71,11 @@ export type EditorialBrief = {
     since: string;
     sources: BriefIncrementSource[];
     truncated: boolean;
+    /** 有效资料库口径：本轮（since 窗口内）被资料门判为与本赛道无关的条数与原因码 Top3。 */
+    laneFiltered: {
+      count: number;
+      reasonCodes: Array<{ code: string; count: number }>;
+    };
   };
 };
 
@@ -161,12 +166,13 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
 
   const since = watermark ?? new Date(now.getTime() - fallbackHours * 3_600_000).toISOString();
   // 最新优先：截断时保留最新资料（旧实现升序截断会把最新资料丢掉）。
+  // 有效资料库口径：增量只读未移出（archived）资料；被判不相关的条目不进增量、只进透明计数行。
   const incrementRows = database.prepare(`
     SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
       collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
       timeliness, priority
     FROM source_items
-    WHERE collected_at > ?
+    WHERE collected_at > ? AND management_status != 'archived'
     ORDER BY collected_at DESC
     LIMIT ?
   `).all(since, sourceLimit + 1) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
@@ -176,6 +182,24 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
     summary: typeof row.summary === 'string' && row.summary.length > 500 ? `${row.summary.slice(0, 500)}…` : row.summary,
     categories: parseJsonArray(row.categories)
   }));
+  // 本轮透明计数：source_lane_judgments（WMB-4941 流水表，migrateDatabase 必经 v46）在 since 窗口内
+  // 被判 irrelevant 的条数 + 原因码 Top3，供编辑自审（「本轮另判 N 条与本赛道无关」）。
+  const laneFilteredCountRow = database.prepare(`
+    SELECT count(*) AS count FROM source_lane_judgments
+    WHERE decision = 'irrelevant' AND judged_at >= ?
+  `).get(since) as { count: number };
+  const laneFilteredReasonRows = database.prepare(`
+    SELECT reason_code AS code, count(*) AS count
+    FROM source_lane_judgments
+    WHERE decision = 'irrelevant' AND judged_at >= ?
+    GROUP BY reason_code
+    ORDER BY count(*) DESC, reason_code ASC
+    LIMIT 3
+  `).all(since) as Array<{ code: string; count: number }>;
+  const laneFiltered = {
+    count: Number(laneFilteredCountRow?.count ?? 0),
+    reasonCodes: laneFilteredReasonRows.map((row) => ({ code: row.code, count: Number(row.count) }))
+  };
 
   return {
     generatedAt: now.toISOString(),
@@ -183,7 +207,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
     identity,
     history: { publishedDays, published, reviews, findings },
     inventory: { watching, fermenting, trends },
-    increment: { watermark, since, sources, truncated }
+    increment: { watermark, since, sources, truncated, laneFiltered }
   };
 }
 
@@ -213,7 +237,7 @@ export function renderEditorialBrief(brief: EditorialBrief): string {
 
   lines.push('■ 存量（跨天连续性，只用于判断，禁止为此另行扫描新来源）');
   lines.push(`观察中：${JSON.stringify(brief.inventory.watching)}`);
-  lines.push(`发酵池：${JSON.stringify({
+  lines.push(`持续关注：${JSON.stringify({
     items: brief.inventory.fermenting.items.slice(0, 5).map((item) => ({
       title: item.title, state: item.state, priority: item.priority,
       fermentedDays: item.fermentedDays, reason: item.reason,
@@ -231,6 +255,10 @@ export function renderEditorialBrief(brief: EditorialBrief): string {
   const scope = brief.increment.watermark ? `水印 ${brief.increment.watermark} 之后` : `回看自 ${brief.increment.since}`;
   lines.push(`■ 增量（本轮新入库资料，${scope}，共 ${brief.increment.sources.length} 条${brief.increment.truncated ? '，已截断' : ''}）`);
   lines.push(brief.increment.sources.length ? JSON.stringify(brief.increment.sources, null, 1) : '（本轮无新资料）');
+  if (brief.increment.laneFiltered.count > 0) {
+    const reasons = brief.increment.laneFiltered.reasonCodes.map((item) => `${item.code}×${item.count}`).join('、');
+    lines.push(`（本轮另有 ${brief.increment.laneFiltered.count} 条与本赛道无关，已移出有效库${reasons ? `：${reasons}` : ''}）`);
+  }
 
   return lines.join('\n');
 }

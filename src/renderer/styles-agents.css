@@ -1,0 +1,1106 @@
+/* Agents page — aligned to styles-workflow + styles-foundation tokens */
+
+.agents-roster {
+  --agents-callout-danger-bg: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  --agents-lane-bg: color-mix(in srgb, var(--surface) 96%, var(--border));
+  --agents-seat-occupied-ring: color-mix(in srgb, var(--status-running) 55%, transparent);
+  --agents-seat-conflict-ring: color-mix(in srgb, var(--danger) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-space);
+  padding: var(--page-space);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Team overview, seat strip and dispatch form share one outer card. */
+.agents-team-card {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+.agents-team-card > .page-command {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.agents-team-card > .agents-stale-banner,
+.agents-team-card > .seat-conflict { margin: 0 12px; }
+
+.agents-stale-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  background: var(--amber-soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+/* ---- Seat occupancy (visualization primary) ---- */
+.agents-seat-strip {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--page-space);
+  padding: 12px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.agents-seat-cell {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+  min-width: 0;
+}
+
+.agents-seat-cell.occupied {
+  box-shadow: inset 0 0 0 1px var(--agents-seat-occupied-ring);
+}
+
+.agents-seat-cell.conflict {
+  box-shadow: inset 0 0 0 1px var(--agents-seat-conflict-ring);
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border-strong, var(--border)));
+}
+
+.agents-seat-cell header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.agents-seat-cell header strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agents-room {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agents-seat-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-soft, var(--ink));
+}
+
+.agents-seat-meta {
+  margin: 0;
+  color: var(--muted-low);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agents-seat-top {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.agents-seat-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.agents-seat-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  padding: 0;
+  border: 1px solid var(--border-strong, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised, var(--surface)));
+  color: var(--ink);
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex: none;
+}
+
+.agents-seat-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.agents-seat-avatar:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.agents-seat-bars {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.agents-bar-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.agents-bar-label {
+  color: var(--muted-low);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+.agents-seat-cell .agents-seat-meter {
+  margin-top: 0;
+  min-height: 6px;
+}
+
+.agents-work-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+  overflow: hidden;
+}
+
+.agents-work-progress > i {
+  display: block;
+  height: 100%;
+  width: calc(var(--progress, 0) * 100%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #888), var(--accent));
+  transition: width 240ms ease;
+}
+
+.agents-work-progress.active > i {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.agents-seat-cell.occupied .agents-work-progress:not(.active) > i,
+.agents-work-progress.active:not([style*="--progress: 0"]) > i {
+  min-width: 8%;
+}
+
+/* avatar crop modal */
+.agent-avatar-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 55%, transparent);
+  padding: 20px;
+}
+
+.agent-avatar-dialog {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg, var(--surface));
+  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
+}
+
+.agent-avatar-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-avatar-dialog h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.agent-avatar-stage {
+  display: grid;
+  place-items: center;
+  padding: 8px 0;
+}
+
+.agent-avatar-canvas {
+  width: 256px;
+  height: 256px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong, var(--border));
+  cursor: grab;
+  touch-action: none;
+  background: #111;
+}
+
+.agent-avatar-file,
+.agent-avatar-zoom {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.agent-avatar-file input[type='file'] {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.agent-avatar-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+
+/* capacity meter under employee seats */
+.agents-seat-meter {
+  display: grid;
+  grid-template-columns: repeat(var(--seat-slots, 2), minmax(0, 1fr));
+  gap: 3px;
+  height: 6px;
+}
+
+.agents-seat-meter > i {
+  display: block;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.agents-seat-meter > i.on {
+  background: var(--status-running);
+}
+
+.agents-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.agents-status-dot.status-idle {
+  border: 1.5px solid var(--muted);
+  background: transparent;
+}
+
+.agents-status-dot.status-queued {
+  background: conic-gradient(var(--amber) 0 50%, transparent 50%);
+  border: 1.5px solid var(--amber);
+}
+
+.agents-status-dot.status-running {
+  background: var(--status-running);
+  animation: agents-pulse 1.6s linear infinite;
+}
+
+.agents-status-dot.status-blocked,
+.agents-status-dot.status-failed {
+  background: var(--danger);
+}
+
+.agents-status-dot.status-succeeded {
+  background: var(--success);
+}
+
+.agents-status-dot.status-unknown,
+.agents-status-dot.status-cancelled {
+  border: 1.5px dashed var(--muted-low);
+  background: transparent;
+}
+
+@keyframes agents-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agents-status-dot.status-running {
+    animation: none;
+  }
+}
+
+.agents-callout {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agents-callout.danger,
+.agents-callout.seat-conflict {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: var(--agents-callout-danger-bg);
+  color: var(--ink);
+}
+
+.agents-callout-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---- Spawn bar (uses global primary/secondary buttons) ---- */
+.agents-spawn-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.agents-spawn-bar label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.agents-spawn-brief {
+  flex: 1 1 260px;
+}
+
+.agents-spawn-bar input,
+.agents-spawn-bar select {
+  min-height: 40px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface-raised, var(--surface));
+  color: var(--ink);
+  padding: 0 12px;
+  font: inherit;
+}
+
+.agents-spawn-bar input:focus-visible,
+.agents-spawn-bar select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.agents-jobs-msg {
+  margin: 0;
+  width: 100%;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ---- Workspace split ---- */
+.agents-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  align-items: stretch;
+}
+
+@media (max-width: 1280px) {
+  .agents-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agents-seat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+  }
+
+  .agents-roster {
+    padding: var(--page-space);
+  }
+}
+
+.agents-roster-list {
+  display: grid;
+  gap: 10px;
+}
+
+.agents-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.agents-card.status-blocked {
+  border-left: 3px solid var(--danger);
+}
+
+.agents-card.status-running {
+  border-color: color-mix(in srgb, var(--status-running) 35%, var(--border));
+}
+
+.agents-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.agents-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.agents-status-line.status-running .agents-status-word,
+.agents-job-status-word.status-running {
+  color: var(--status-running);
+}
+
+.agents-status-line.status-blocked .agents-status-word,
+.agents-job-status-word.status-failed,
+.agents-job-status-word.status-blocked {
+  color: var(--danger);
+}
+
+.agents-status-line.status-idle .agents-status-word {
+  color: var(--muted);
+}
+
+.agents-lease-line,
+.agents-summary,
+.agents-progress,
+.agents-current-job,
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agents-current-job {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--ink-soft, var(--muted));
+}
+
+/* ---- Job board ---- */
+.agents-job-board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg, var(--surface));
+  min-width: 0;
+}
+
+.agents-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.agents-board-head h3 {
+  margin: 0;
+  margin-right: auto;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.agents-type-filter {
+  display: inline-flex;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface-raised, var(--surface));
+}
+
+.agents-type-filter button {
+  border: 0;
+  border-right: 1px solid var(--border-soft, var(--border));
+  background: transparent;
+  color: var(--muted);
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agents-type-filter button:last-child {
+  border-right: 0;
+}
+
+.agents-type-filter button:hover:not(:disabled) {
+  background: var(--surface-hover, color-mix(in srgb, var(--surface) 80%, var(--border)));
+  color: var(--ink);
+}
+
+.agents-type-filter button.active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  color: var(--ink);
+}
+
+.agents-type-filter button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 1;
+}
+
+.agents-slot-pill {
+  font-size: 12px;
+  font-weight: 650;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface-raised, var(--surface));
+  color: var(--ink-soft, var(--ink));
+}
+
+.agents-board-empty {
+  flex: 1 1 auto;
+  min-height: 200px;
+  display: grid;
+  align-content: center;
+  padding: 18px 16px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--surface);
+}
+
+.agents-board-empty ol {
+  margin: 10px 0;
+  padding-left: 1.25em;
+}
+
+.agents-lanes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--page-space);
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .agents-lanes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agents-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--agents-lane-bg);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.agents-lane h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.agents-lane-count {
+  display: inline-flex;
+  min-width: 1.5em;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.agents-lane-empty {
+  margin: 0;
+  color: var(--muted-low);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agents-job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  align-content: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.agents-job-list.compact {
+  gap: 0;
+}
+
+.agents-job-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.agents-job-card.status-running {
+  border-color: color-mix(in srgb, var(--status-running) 40%, var(--border));
+}
+
+.agents-job-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.agents-type-tag {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.agents-type-tag.scan {
+  border: 1px dashed var(--border-strong, var(--border));
+  color: var(--muted);
+  background: transparent;
+}
+
+.agents-type-tag.job {
+  background: color-mix(in srgb, var(--border) 40%, var(--surface));
+  color: var(--ink-soft, var(--ink));
+}
+
+.agents-owner-badge {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.agents-job-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted-low);
+}
+
+.agents-job-status-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.agents-job-brief {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.agents-job-stamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.agents-job-stamp {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agents-job-intent {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-low);
+  font-size: 11.5px;
+}
+
+.agents-job-timeline {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agents-job-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* terminal compact rows */
+.agents-job-list.compact .agents-job-row {
+  display: grid;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+  font-size: 12px;
+  align-items: start;
+}
+
+.agents-term-mark {
+  color: var(--muted);
+  width: 1em;
+  text-align: center;
+  font-weight: 700;
+}
+
+.agents-job-row.status-succeeded .agents-term-mark {
+  color: var(--success);
+}
+
+.agents-job-row.status-failed .agents-term-mark,
+.agents-job-error {
+  color: var(--danger);
+}
+
+.agents-term-brief {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* ---- Settings panel (same page family) ---- */
+/* Settings → Agent 接入：班组与角色 */
+.agents-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 4px;
+}
+.agents-settings-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 12px;
+}
+.agents-settings-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+.agents-settings-field-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.agents-settings-field-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agents-settings-field select {
+  width: max-content;
+  min-width: 8rem;
+  height: 36px;
+  margin-top: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 10px;
+  font-weight: 650;
+}
+.agents-settings-static-value {
+  margin-top: 2px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+.agents-settings-msg {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+.agents-settings-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.agents-settings-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  padding: 12px 14px;
+}
+.agents-settings-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.agents-settings-card-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.agents-settings-card-head h3 small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agents-settings-skill-line {
+  margin: 4px 0 0;
+  color: var(--muted-low);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.agents-settings-cap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.agents-settings-cap-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.agents-settings-cap-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.agents-settings-cap-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.agents-settings-cap-copy span,
+.agents-settings-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agents-cap-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--surface-raised));
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.agents-cap-toggle.off {
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.agents-cap-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings-section-agent .settings-row-compact {
+  padding-top: 0;
+  padding-bottom: 12px;
+  align-items: start;
+}
+.settings-section-agent .settings-row-compact h3 { margin-bottom: 2px; }
+.settings-section-agent .settings-row-compact p { font-size: 12.5px; }
+.settings-mono-line {
+  font-family: var(--mono);
+  font-size: 12px !important;
+  color: var(--ink-soft) !important;
+}
+@media (max-width: 1100px) {
+  .agents-settings-controls,
+  .agents-settings-role-grid { grid-template-columns: 1fr; }
+}
+
+.agents-term-main {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.agents-term-stamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  padding-left: 1.5em;
+  color: var(--muted);
+}
+
+.agents-job-brief {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.agents-lanes,
+.agents-lane {
+  min-width: 0;
+}
+
+
+
+.agents-job-row.status-running {
+  border-left: 2px solid color-mix(in srgb, var(--status-running) 70%, transparent);
+  padding-left: 8px;
+}
+
+.agents-job-row.status-blocked {
+  border-left: 2px solid color-mix(in srgb, var(--amber) 70%, transparent);
+  padding-left: 8px;
+}
+
+.agents-job-row.lane-queued {
+  opacity: 0.92;
+}
+
+.agents-term-main {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.agents-term-main .agents-job-status-word {
+  margin-left: 0;
+}
+
+.agents-row-action {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.agents-row-action:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hover, color-mix(in srgb, var(--surface) 80%, var(--border)));
+}
+
+.agents-row-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agents-row-tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.agents-term-stamps .agents-job-intent {
+  display: inline;
+  margin-left: 0;
+}

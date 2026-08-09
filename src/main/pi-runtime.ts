@@ -122,6 +122,13 @@ export function humanizePiProviderError(raw: string): string {
   return text.length > 420 ? `${text.slice(0, 420)}…` : text;
 }
 
+export function isPiProviderFallbackError(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const text = raw.replace(/^\d{3}:\s*/, '').trim();
+  if (!text) return false;
+  return /rate limit|too many requests|\b429\b|out of .*messages|quota|limit_reached|resource_exhausted|overloaded|capacity|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|fetch failed|socket|timeout|temporar(?:y|ily)|bad gateway|service unavailable|\b5\d\d\b|status code|unauthorized|invalid.?api.?key|incorrect api key|forbidden|\b401\b|\b403\b|model .*not .*available|provider/i.test(text);
+}
+
 export class PiRpcSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
   private buffer = '';

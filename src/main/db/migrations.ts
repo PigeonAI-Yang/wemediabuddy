@@ -429,11 +429,12 @@ export const migrations = [
 
 export function migrateDatabase(databasePath: string): DatabaseSync {
   const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA foreign_keys = ON');
   database.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
   const applied = new Set(database.prepare('SELECT version FROM schema_migrations').all().map(({ version }) => Number(version)));
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
+    // SQLite forbids changing foreign_keys inside a transaction; table rebuilds that touch FK parents need FK off.
+    database.exec('PRAGMA foreign_keys = OFF');
     database.exec('BEGIN IMMEDIATE');
     try {
       database.exec(migration.sql);
@@ -441,8 +442,11 @@ export function migrateDatabase(databasePath: string): DatabaseSync {
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
+      database.exec('PRAGMA foreign_keys = ON');
       throw error;
     }
+    database.exec('PRAGMA foreign_keys = ON');
   }
+  database.exec('PRAGMA foreign_keys = ON');
   return database;
 }

@@ -60,10 +60,13 @@ test('zero-item website receipt plus an empty saved plan completes daily intelli
       accountKey: '@owner', list: { listId: '900', canonicalUrl: 'https://x.com/i/lists/900', ownerHandle: '@owner', name: 'Ignored this run', kind: 'owned' }
     });
     assert.equal(ignoredX.ok, true);
+    const seenProcessed = [];
     const run = await startDailyChannelRun(current.database, {
       businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web']
     }, {
       scanWebsite: async (database, input) => {
+        const task = getAgentTask(database, input.taskId);
+        seenProcessed.push(task?.progress?.processed ?? null);
         recordWebsiteSuccess(database, input.taskId, input.workspaceId, source);
       }
     });
@@ -71,6 +74,11 @@ test('zero-item website receipt plus an empty saved plan completes daily intelli
     assert.equal(run.aggregation?.status, 'succeeded');
     assert.deepEqual(run.frozen.modules, ['official_web']);
     assert.equal(run.frozen.sources.length, 1);
+    assert.ok(seenProcessed.includes(0), 'scan start should report processed=0 before first receipt');
+    assert.equal(run.task.progress.processed, 1);
+    assert.equal(run.task.progress.planned, 1);
+    const events = run.task.events || [];
+    assert.ok(events.some((event) => String(event.message || '').includes('正在扫描官网')), 'should emit per-channel scanning message');
     savePlanReadback(current.database, run.task, '2026-08-03');
     const completed = completeAgentTask(current.database, run.task.id);
     assert.equal(completed.ok, true);
@@ -162,7 +170,8 @@ test('all blocked sources annotate absence but never block judgment', async () =
     } }, {
       uk: async () => {
         calls += 1;
-        const task = getLatestAgentTask(current.database, 'daily_intelligence', '2026-08-03');
+        const task = getLatestAgentTask(current.database, 'daily_scan', '2026-08-03')
+          || getLatestAgentTask(current.database, 'daily_intelligence', '2026-08-03');
         assert.ok(task, 'judgment must start even when every channel is blocked');
         assert.equal(task.phase, 'channel_scanned');
         savePlanReadback(current.database, task, '2026-08-03');
@@ -190,12 +199,15 @@ test('a stale-context channel start fails truthfully without a task grant', asyn
   const current = await makeRoot('wmb-daily-stale-context-');
   try {
     const started = startAgentTask(current.database, {
-      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+      intent: 'daily_scan', businessDate: '2026-08-03', contextRefs: {
         workspaceId: current.workspaceId,
+        roleId: 'reporter',
         intelligenceChannels: { workspaceId: 'other-workspace', profileRevision: 1, modules: ['official_web'], sources: [] }
       }
     });
     assert.equal(started.ok, true);
+    // Keep stale frozen channels and mark resume so coordinator re-enters and fails context check before grant.
+    current.database.prepare("UPDATE agent_tasks SET phase='resume_pending', updated_at=? WHERE id=?").run(new Date().toISOString(), started.data.id);
     let readyCalls = 0;
     const run = await startDailyChannelRun(current.database, {
       businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1,
@@ -370,8 +382,9 @@ test('a resumed task with one completed source and one newly blocked source runs
     const finished = website(current.database, 'resume-finished');
     const blocked = website(current.database, 'resume-blocked');
     const started = startAgentTask(current.database, {
-      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+      intent: 'daily_scan', businessDate: '2026-08-03', contextRefs: {
         workspaceId: current.workspaceId,
+        roleId: 'reporter',
         intelligenceChannels: {
           workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web'],
           sources: [

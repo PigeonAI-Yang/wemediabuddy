@@ -1,9 +1,9 @@
 /* WMB-1510 结果页:运营学习闭环驾驶舱(散点/分位带/热图 + 周期面板) */
-.results-page { overflow-y: auto; padding-bottom: 32px; }
+.results-page { overflow-y: auto; padding-bottom: var(--page-space); }
 .results-page .today-heading p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
 .rl-page .eyebrow { margin: 0; }
 .rl-action-line { margin: 0 0 10px; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
-.rl-stats { display: flex; gap: 26px; flex-wrap: wrap; margin: 0 0 16px; padding: 13px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.rl-stats { display: flex; gap: 26px; flex-wrap: wrap; margin: 0 0 16px; padding: 13px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); }
 .rl-stat b { display: block; font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; }
 .rl-stat span { color: var(--muted-low); font-size: 11.5px; }
 .rl-filters { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -20,7 +20,7 @@
 .rl-who b { font-size: 13.5px; }
 .rl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .rl-pill { border-radius: 999px; padding: 3px 10px; font-size: 11px; background: var(--amber-soft); color: var(--amber); }
-.rl-hero-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.rl-hero-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--page-space); margin-bottom: var(--page-space); }
 .rl-pt { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); padding: 11px 13px; }
 .rl-pt b { display: block; font-size: 12.5px; margin-bottom: 4px; }
 .rl-pt p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
@@ -28,7 +28,7 @@
 .rl-hero-ksc b { margin-right: 6px; }
 .rl-hero-ksc .k b { color: var(--success); } .rl-hero-ksc .s b { color: var(--danger); } .rl-hero-ksc .c b { color: var(--amber); }
 /* 主区栅格与面板 */
-.rl-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; margin-bottom: 16px; }
+.rl-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--page-space); align-items: stretch; margin-bottom: var(--page-space); }
 .rl-chart-panel { display: flex; flex-direction: column; }
 .rc-frame { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .rc-frame .rc-chart { flex: 1; min-height: 280px; }

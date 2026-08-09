@@ -8,7 +8,11 @@ import { getStudio } from './content.ts';
 import { listReviews } from './reviews.ts';
 import { listSourceScanReceipts, type SourceScanReceipt } from './intelligence-channels.ts';
 
-export type AgentIntent = 'daily_intelligence' | 'studio_draft' | 'results_review';
+export type PageAgentIntent =
+  | 'page_today' | 'page_agents' | 'page_discover' | 'page_proposals' | 'page_topic'
+  | 'page_library' | 'page_canvas' | 'page_studio' | 'page_publish' | 'page_results';
+export type RunnerAgentIntent = 'daily_intelligence' | 'daily_scan' | 'daily_judge' | 'studio_draft' | 'results_review';
+export type AgentIntent = RunnerAgentIntent | PageAgentIntent;
 export type AgentTaskStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted' | 'needs_user';
 export type AgentTaskControl = 'skip_source' | 'save_partial' | 'cancel';
 export type AgentTaskProgress = {
@@ -19,6 +23,10 @@ export type AgentTaskProgress = {
   verified?: number;
   saved?: number;
   opportunityCount?: number;
+  /** Manager 简报/流水摘要：持久化 progress JSON 可携带（manager-dispatch/dock 读取）。 */
+  message?: string;
+  /** Pi 流式输出最近活动时间：长流式输出防 stall 误判（daily-control 读取）。 */
+  streamActivityAt?: string;
   lastActivityAt?: string;
 };
 export type AgentTaskEvent = { at: string; message: string; level?: 'info' | 'warning' };
@@ -72,7 +80,61 @@ type AgentTaskRow = {
   finished_at: string | null;
 };
 
-const intents: AgentIntent[] = ['daily_intelligence', 'studio_draft', 'results_review'];
+const intents: AgentIntent[] = [
+  'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review',
+  'page_today', 'page_agents', 'page_discover', 'page_proposals', 'page_topic',
+  'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
+];
+export function isPageAgentIntent(intent: string): intent is PageAgentIntent {
+  return intent.startsWith('page_');
+}
+
+export function isDailyIntelligenceFamily(intent: string): boolean {
+  return intent === 'daily_intelligence' || intent === 'daily_scan' || intent === 'daily_judge';
+}
+
+/** Prefer running daily_* task for a business date (scan or judge or legacy). */
+export function getActiveDailyIntelligenceTask(database: DatabaseSync, businessDate: string): AgentTask | null {
+  for (const intent of ['daily_scan', 'daily_judge', 'daily_intelligence'] as const) {
+    const hit = getActiveAgentTask(database, intent, businessDate);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+export function getLatestDailyIntelligenceTask(database: DatabaseSync, businessDate?: string): AgentTask | null {
+  // 同一业务日可能有多条 scan/judge：不能只按 updatedAt，否则「成功后又取消」会盖住已交付方案。
+  const intents = ['daily_scan', 'daily_judge', 'daily_intelligence'] as const;
+  const rows: AgentTask[] = [];
+  for (const intent of intents) {
+    const list = businessDate
+      ? database.prepare(
+          `SELECT id FROM agent_tasks WHERE intent = ? AND business_date = ? ORDER BY updated_at DESC LIMIT 8`
+        ).all(intent, businessDate) as Array<{ id: string }>
+      : database.prepare(
+          `SELECT id FROM agent_tasks WHERE intent = ? ORDER BY updated_at DESC LIMIT 8`
+        ).all(intent) as Array<{ id: string }>;
+    for (const row of list) {
+      const task = getAgentTask(database, row.id);
+      if (task) rows.push(task);
+    }
+  }
+  if (!rows.length) return null;
+  const rank = (status: string): number => {
+    if (status === 'running') return 0;
+    if (status === 'needs_user') return 1;
+    if (status === 'succeeded' || status === 'completed') return 2;
+    if (status === 'partial') return 3;
+    if (status === 'failed' || status === 'interrupted') return 4;
+    if (status === 'cancelled') return 5;
+    return 6;
+  };
+  return rows.sort((a, b) => {
+    const dr = rank(a.status) - rank(b.status);
+    if (dr !== 0) return dr;
+    return a.updatedAt < b.updatedAt ? 1 : -1;
+  })[0] ?? null;
+}
 
 function parseTask(row: AgentTaskRow): AgentTask {
   return {
@@ -145,7 +207,7 @@ export function getLatestAgentTask(database: DatabaseSync, intent?: AgentIntent,
  */
 export function readLatestJudgeWatermark(database: DatabaseSync): string | null {
   const rows = database.prepare(`SELECT checkpoint_json AS checkpointJson FROM agent_tasks
-    WHERE intent = 'daily_intelligence' AND checkpoint_json LIKE '%judgeWatermark%'
+    WHERE intent IN ('daily_intelligence','daily_scan','daily_judge') AND checkpoint_json LIKE '%judgeWatermark%'
     ORDER BY updated_at DESC LIMIT 5`).all() as Array<{ checkpointJson: string }>;
   for (const row of rows) {
     try {
@@ -180,7 +242,7 @@ export function startAgentTask(
 
   const now = new Date().toISOString();
   const id = randomUUID();
-  const piSessionId = input.intent === 'daily_intelligence' ? dailyAgentSessionId(input.businessDate, id) : input.piSessionId ?? null;
+  const piSessionId = isDailyIntelligenceFamily(input.intent) ? dailyAgentSessionId(input.businessDate, id) : input.piSessionId ?? null;
   const profileContext = readTaskProfileContext(database);
   database.prepare(`INSERT INTO agent_tasks (
     id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
@@ -227,14 +289,20 @@ export function updateAgentTaskPhase(
   database: DatabaseSync,
   id: string,
   phase: string,
-  extras: { piSessionId?: string | null; contextRefs?: Record<string, unknown> } = {}
+  extras: { piSessionId?: string | null; contextRefs?: Record<string, unknown>; intent?: string } = {}
 ): CommandResult<AgentTask> {
   const current = getRow(database, id);
   if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
   if (current.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以更新阶段。');
   const now = new Date().toISOString();
-  database.prepare(`UPDATE agent_tasks SET phase = ?, pi_session_id = COALESCE(?, pi_session_id),
+  const nextIntent = extras.intent
+    && isDailyIntelligenceFamily(current.intent)
+    && isDailyIntelligenceFamily(extras.intent)
+    ? extras.intent
+    : current.intent;
+  database.prepare(`UPDATE agent_tasks SET intent = ?, phase = ?, pi_session_id = COALESCE(?, pi_session_id),
     context_refs_json = COALESCE(?, context_refs_json), updated_at = ? WHERE id = ?`).run(
+    nextIntent,
     phase,
     extras.piSessionId ?? null,
     extras.contextRefs ? JSON.stringify(extras.contextRefs) : null,
@@ -267,7 +335,8 @@ export function reportAgentTaskProgress(
 export function requestAgentTaskControl(database: DatabaseSync, id: string, action: AgentTaskControl): CommandResult<AgentTask> {
   const task = getAgentTask(database, id);
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
-  if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以控制。');
+  // 幂等：已离开 running 时返回当前快照，避免「保存并停止」二次点击吓人失败。
+  if (task.status !== 'running') return success(task);
   const now = new Date().toISOString();
   database.prepare('UPDATE agent_tasks SET control_action = ?, updated_at = ? WHERE id = ?').run(action, now, id);
   return success(requireTask(database, id));
@@ -280,10 +349,11 @@ export function clearAgentTaskControl(database: DatabaseSync, id: string): void 
 export function cancelAgentTask(database: DatabaseSync, id: string): CommandResult<AgentTask> {
   const current = getRow(database, id);
   if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (current.status === 'cancelled') return success(requireTask(database, id));
   if (current.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以取消。');
   const now = new Date().toISOString();
   database.prepare(`UPDATE agent_tasks SET status = 'cancelled', phase = 'cancelled', error_code = 'CANCELLED',
-    error_message = '用户取消了任务。', updated_at = ?, finished_at = ? WHERE id = ?`).run(now, now, id);
+    error_message = '用户取消了任务。已入库资料仍保留在本地。', updated_at = ?, finished_at = ? WHERE id = ?`).run(now, now, id);
   recordOperation(database, {
     actorType: 'ui',
     command: 'agent_tasks.cancel',
@@ -330,20 +400,21 @@ export function recoverInterruptedAgentTasks(database: DatabaseSync): number {
   const now = new Date().toISOString();
   database.prepare(`UPDATE agent_tasks SET phase = 'resume_pending',
     error_code = NULL, error_message = '应用重启，正在从检查点继续。', updated_at = ?
-    WHERE status = 'running' AND intent = 'daily_intelligence'`).run(now);
+    WHERE status = 'running' AND intent IN ('daily_intelligence','daily_scan','daily_judge')`).run(now);
   const result = database.prepare(`UPDATE agent_tasks SET status = 'interrupted', phase = 'interrupted',
     error_code = COALESCE(error_code, 'INTERRUPTED'),
     error_message = COALESCE(error_message, '应用重启时任务仍在运行。'),
     updated_at = ?, finished_at = COALESCE(finished_at, ?)
-    WHERE status = 'running' AND intent <> 'daily_intelligence'`).run(now, now);
+    WHERE status = 'running' AND intent NOT IN ('daily_intelligence','daily_scan','daily_judge')`).run(now, now);
   return Number(result.changes ?? 0);
 }
 
 export function partialAgentTask(database: DatabaseSync, id: string): CommandResult<AgentTask> {
   const task = getAgentTask(database, id);
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (task.status === 'partial' || task.status === 'succeeded') return success(task);
   if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以部分完成。');
-  if (task.intent === 'daily_intelligence') return finishDailyIntelligenceFromReceipts(database, id, { forcePartial: true });
+  if (isDailyIntelligenceFamily(task.intent)) return finishDailyIntelligenceFromReceipts(database, id, { forcePartial: true });
   const today = getToday(database, task.businessDate);
   const receipts = database.prepare(`SELECT result_json AS resultJson FROM mcp_request_results WHERE tool='sources.upsert_batch' AND request_id LIKE ?
     UNION ALL SELECT result_json FROM command_receipts WHERE command='sources.upsert_batch' AND status='ok' AND request_id LIKE ?`).all(`${id}:source:%`, `${id}:source:%`) as Array<{ resultJson: string }>;
@@ -387,6 +458,7 @@ export function readDailyReceiptAggregation(database: DatabaseSync, task: Pick<A
 export function finishDailyIntelligenceFromReceipts(database: DatabaseSync, id: string, input: { forcePartial?: boolean; errorCode?: string; errorMessage?: string } = {}): CommandResult<AgentTask> {
   const task = getAgentTask(database, id);
   if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (task.status === 'partial' || task.status === 'succeeded' || task.status === 'cancelled') return success(task);
   if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以结束。');
   const aggregation = readDailyReceiptAggregation(database, task);
   // 渠道缺席/失败一律以 partial 收尾并保留标注，不再把整任务打成 needs_user/failed；
@@ -424,7 +496,16 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
   const planRequestId = agentRequestId(taskId, 'plan');
   const owned = database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`).get(planRequestId)
     ?? database.prepare(`SELECT 1 FROM command_receipts WHERE command='plans.save' AND request_id=? AND task_id=? AND status='ok'`).get(planRequestId, taskId);
-  if (!owned) return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
+  // 允许：本任务成功写入；或本任务因空方案保底未覆盖、但当日已有非空 current plan（judge 保底路径）。
+  if (!owned) {
+    const anyPlanSave = database.prepare(
+      `SELECT 1 AS ok FROM command_receipts WHERE command='plans.save' AND task_id=? AND status='ok' LIMIT 1`
+    ).get(taskId);
+    const preservedNonEmpty = Array.isArray(plan.items) && plan.items.length > 0;
+    if (!(anyPlanSave || preservedNonEmpty)) {
+      return failure('VALIDATION_ERROR', '成功要求方案由当前任务写入。');
+    }
+  }
 
   const existsStmt = database.prepare('SELECT 1 AS ok FROM source_items WHERE id = ?');
   for (const item of plan.items) {
@@ -479,9 +560,10 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
 
   const contextRefs = JSON.parse(current.context_refs_json) as Record<string, unknown>;
   let validation: CommandResult<Record<string, unknown>>;
-  if (current.intent === 'daily_intelligence') validation = validateDailyIntelligence(database, current.id, current.business_date);
+  if (isDailyIntelligenceFamily(current.intent)) validation = validateDailyIntelligence(database, current.id, current.business_date);
   else if (current.intent === 'studio_draft') validation = validateStudioDraft(database, contextRefs);
   else if (current.intent === 'results_review') validation = validateResultsReview(database, contextRefs);
+  else if (isPageAgentIntent(current.intent)) validation = success({ page: current.intent, ...contextRefs });
   else validation = failure('VALIDATION_ERROR', '未知 Agent 意图。');
 
   if (!validation.ok) {
@@ -497,7 +579,7 @@ export function completeAgentTask(database: DatabaseSync, id: string): CommandRe
   }
 
   const now = new Date().toISOString();
-  const dailyStatus = current.intent === 'daily_intelligence' && validation.data.taskStatus === 'partial' ? 'partial' : 'succeeded';
+  const dailyStatus = isDailyIntelligenceFamily(current.intent) && validation.data.taskStatus === 'partial' ? 'partial' : 'succeeded';
   database.prepare(`UPDATE agent_tasks SET status = ?, phase = ?, result_refs_json = ?,
     error_code = NULL, error_message = NULL, updated_at = ?, finished_at = ? WHERE id = ?`).run(
     dailyStatus,

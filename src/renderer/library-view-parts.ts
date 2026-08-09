@@ -1,4 +1,4 @@
-export type LibrarySection = 'saved' | 'rediscovery';
+export type LibrarySection = 'saved' | 'rediscovery' | 'removed';
 
 export type LibrarySourceItem = {
   id: string;
@@ -17,6 +17,14 @@ export type LibrarySourceItem = {
   publicationCount?: number;
   reason?: string;
   priority?: number;
+  /** source_lane_judgments 最新一行（WMB-4944「已移出」徽标数据源；无判定行 = 主编手动归档）。 */
+  laneJudgment?: {
+    decision?: string;
+    reasonCode?: string;
+    reason?: string | null;
+    judgedBy?: string;
+    judgedAt?: string;
+  } | null;
 };
 
 export type SourceKnowledgeContext = {
@@ -45,7 +53,7 @@ export type RediscoveryItem = {
 };
 
 export function isLibrarySection(value: string | null): value is LibrarySection {
-  return value === 'saved' || value === 'rediscovery';
+  return value === 'saved' || value === 'rediscovery' || value === 'removed';
 }
 
 export function asSourceKnowledgeContext(value: unknown): SourceKnowledgeContext | null {

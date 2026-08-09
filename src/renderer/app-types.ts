@@ -1,7 +1,7 @@
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 
-export type View = 'today' | 'discover' | 'knowledge' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
-export const views: View[] = ['today', 'discover', 'knowledge', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
+export type View = 'today' | 'agents' | 'discover' | 'proposals' | 'knowledge' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
+export const views: View[] = ['today', 'agents', 'discover', 'proposals', 'knowledge', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
 export type Theme = 'dark' | 'light';
 export type RankingContextItem = { rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string; boardId: string; boardLabel: string };
 export type RankingContext = {

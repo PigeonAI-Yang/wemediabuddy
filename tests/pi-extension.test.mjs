@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { preparePiExtension } from '../src/main/pi-extension.ts';
+import { PI_AUTHORITY_SYSTEM_PROMPT } from '../src/main/pi-operator-skill.ts';
+import { LANE_REASON_CODES } from '../src/main/lane-gate.ts';
 import { coreTools } from '../.pi/extensions/wmb-mcp/wmb-mcp-tools-core.ts';
 import { intelligenceChannelTools } from '../.pi/extensions/wmb-mcp/wmb-mcp-tools-intelligence-channels.ts';
 import { xListTools as xListToolDefinitions } from '../.pi/extensions/wmb-mcp/wmb-mcp-tools-x-lists.ts';
@@ -116,4 +118,24 @@ test('packaged Pi runtime pins and loads the upstream delegated vision extension
   assert.match(main, /piVisionExtensionFromRuntimeRoot\(runtimeRoot\)/);
   assert.match(main, /PI_VISION_MODEL: WMB_VISION_MODEL/);
   assert.match(operator, /describe_image/);
+});
+
+test('wmb_judge_sources reasonCode schema exposes exactly the Main LANE_REASON_CODES enum', () => {
+  const tool = coreTools.find((item) => item.name === 'wmb_judge_sources');
+  assert.ok(tool);
+  const reasonCode = tool.parameters.properties.judgments.items.properties.reasonCode;
+  assert.deepEqual(reasonCode, { type: 'string', enum: [...LANE_REASON_CODES] });
+});
+
+test('WMB-5121 T-20: PI_AUTHORITY_SYSTEM_PROMPT 要求 librarian no-op 围栏确认块', () => {
+  assert.ok(PI_AUTHORITY_SYSTEM_PROMPT.includes('wmb_noop'), '主管提示词必须要求末条 ```json {"wmb_noop": true} 确认块');
+  assert.ok(PI_AUTHORITY_SYSTEM_PROMPT.includes('```json'), '主管提示词必须含 JSON 围栏指令');
+  assert.ok(PI_AUTHORITY_SYSTEM_PROMPT.includes('no-op 确认'), '无可整理内容时必须回报 no-op 确认');
+});
+
+test('WMB-5121: operator SKILL.md 资料员 no-op 围栏要求（canonical Skill）', async () => {
+  const operator = await readFile('skills/wemedia-buddy-operator/SKILL.md', 'utf8');
+  assert.match(operator, /wmb_noop/);
+  assert.match(operator, /资料员整理任务/);
+  assert.match(operator, /```json/);
 });

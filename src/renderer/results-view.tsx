@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { PiFocusObject } from './app-types';
 import { formatNames, platformNames } from './app-types';
 import { BandsChart, DrillView, Heatmap, ScatterChart, median } from './results-charts';
 import type { MetricSnapshotRow, PostPoint, PostView } from './results-charts';
@@ -23,11 +24,12 @@ const nearestWindow = (hours: number) => WINDOWS.reduce((a, b) =>
 const stripQuotes = (title: string) => title.replace(/^[《「『\[]+|[》」』\]]+$/g, '');
 
 // WMB-1510 结果页 = 运营学习闭环驾驶舱:周期聚合优先,单帖钻取在图表区内原位完成
-export function ResultsView({ publications, planDate, enabledPlatforms }: {
+export function ResultsView({ publications, planDate, enabledPlatforms, onFocusChange }: {
   publications: Publications;
   refresh: () => void;
   planDate: string;
   enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  onFocusChange?: (focus: PiFocusObject | null) => void;
 }): React.JSX.Element {
   const published = (publications ?? []).filter((item) => item.publication.status === 'published' && item.publication.publishedAt);
   const [snapshots, setSnapshots] = useState<MetricSnapshotRow[]>([]);
@@ -97,6 +99,39 @@ export function ResultsView({ publications, planDate, enabledPlatforms }: {
   const visible = posts.filter((p) => (period === 0 || p.daysAgo <= period) && (!pf || p.platform === pf) && (!fmt || p.format === fmt));
   const selected = posts.find((p) => p.id === selectedId) ?? null;
   const selectedReview = selected ? reviews.find((r) => r.publicationId === selected.id) ?? null : null;
+  useEffect(() => {
+    if (!onFocusChange) return;
+    if (!selected) {
+      onFocusChange(null);
+      return;
+    }
+    const review = selectedReview;
+    const latestPoint = selected.points[selected.points.length - 1];
+    onFocusChange({
+      type: 'publication',
+      id: selected.id,
+      title: selected.title,
+      summary: [
+        `${platformNames[selected.platform] ?? selected.platform}`,
+        selected.format ? (formatNames[selected.format] ?? selected.format) : null,
+        selected.v24 != null ? `24h主指标 ${selected.v24}` : null,
+        selected.reviewed ? '已有复盘' : '未复盘'
+      ].filter(Boolean).join(' · '),
+      url: selected.externalUrl || null,
+      meta: {
+        platform: selected.platform,
+        format: selected.format,
+        publishedAt: selected.publishedAt,
+        v24: selected.v24,
+        latestMetric: latestPoint ? { hours: latestPoint.hours, value: latestPoint.value } : null,
+        reviewStatus: review?.status ?? null,
+        reviewSummary: review?.summary ?? null,
+        keep: review?.keep ?? [],
+        stop: review?.stop ?? [],
+        change: review?.change ?? []
+      }
+    });
+  }, [selected?.id, selected?.v24, selectedReview?.id, selectedReview?.status, onFocusChange]);
 
   const withV24 = visible.filter((p) => p.v24 !== null);
   const medianV24 = median(withV24.map((p) => p.v24!));
@@ -196,10 +231,24 @@ export function ResultsView({ publications, planDate, enabledPlatforms }: {
     {statusText && <p className="task-status" data-running={busy ? 'true' : 'false'}>{statusText}</p>}
     {!posts.length && <section className="empty-state"><h2>还没有可复盘内容</h2><p>取得真实发布地址后，这里会形成组合形态与复盘。</p></section>}
     {posts.length > 0 && <>
-      <p className="rl-action-line">{resultsActionLine}</p>
-      <div className="rl-stats">{stats.map(([v, label], i) => <div className="rl-stat" key={label}>
-        <b className="num" style={i === 4 && Number(v) > 0 ? { color: 'var(--amber)' } : i === 3 ? { color: 'var(--accent-soft)' } : undefined}>{v}</b><span>{label}</span>
-      </div>)}</div>
+      <section className="page-command" aria-label="结果复盘概览">
+        <div className="page-command-main">
+          <div className="page-command-copy">
+            <div className="page-command-title-row">
+              <h1>结果</h1>
+              <p>{resultsActionLine}</p>
+            </div>
+            <div className="page-command-stats" aria-label="复盘指标">
+              {stats.map(([v, label], i) => (
+                <div className="page-command-stat" key={label}>
+                  <strong style={i === 4 && Number(v) > 0 ? { color: 'var(--amber)' } : i === 3 ? { color: 'var(--accent-soft)' } : undefined}>{v}</strong>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="rl-filters">
         <div className="rl-chip-group"><span>周期</span>{[[7, '近 7 天'], [30, '近 30 天'], [0, '全部']].map(([d, label]) =>
           <button key={d} className={`chip${period === d ? ' on' : ''}`} onClick={() => { setPeriod(d as number); setSelectedId(null); }}>{label}</button>)}</div>

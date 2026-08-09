@@ -26,6 +26,8 @@ export type ContentProjectSummary = {
   createdAt: string;
   updatedAt: string;
   versionCount: number;
+  /** 来自关联 plan_items.priority：0=SSS … 与今日选题评分标一致；无关联则为 null */
+  planItemPriority: number | null;
   latestVersion: { id: string; number: number; createdAt: string; author: 'user' | 'ai' } | null;
   platforms: { x: number; xiaohongshu: number; wechat: number };
 };
@@ -54,9 +56,12 @@ type ProjectListRow = {
   createdAt: string; updatedAt: string; versionCount: number; latestVersionId: string | null;
   latestVersionNumber: number | null; latestVersionCreatedAt: string | null; latestVersionAuthor: 'user' | 'ai' | null;
   xCount: number; xiaohongshuCount: number; wechatCount: number;
+  planItemPriority: number | null;
 };
 
 function summaryFromRow(row: ProjectListRow): ContentProjectSummary {
+  const priorityRaw = row.planItemPriority;
+  const planItemPriority = priorityRaw == null ? null : Number(priorityRaw);
   return {
     id: row.id,
     title: row.title,
@@ -66,6 +71,7 @@ function summaryFromRow(row: ProjectListRow): ContentProjectSummary {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     versionCount: Number(row.versionCount),
+    planItemPriority: Number.isFinite(planItemPriority as number) ? (planItemPriority as number) : null,
     latestVersion: row.latestVersionId ? {
       id: row.latestVersionId,
       number: Number(row.latestVersionNumber),
@@ -127,10 +133,12 @@ export function listContentProjects(
       v.latest_version_id AS latestVersionId, v.latest_version_number AS latestVersionNumber,
       v.latest_version_created_at AS latestVersionCreatedAt, v.latest_version_author AS latestVersionAuthor,
       COALESCE(pv.x_count, 0) AS xCount, COALESCE(pv.xiaohongshu_count, 0) AS xiaohongshuCount,
-      COALESCE(pv.wechat_count, 0) AS wechatCount
+      COALESCE(pv.wechat_count, 0) AS wechatCount,
+      pi.priority AS planItemPriority
     FROM content_projects p
     LEFT JOIN version_summary v ON v.project_id = p.id
     LEFT JOIN platform_summary pv ON pv.project_id = p.id
+    LEFT JOIN plan_items pi ON pi.id = p.plan_item_id
     WHERE ${where.join(' AND ')}
     ORDER BY ${orderBy}
     LIMIT ? OFFSET ?
@@ -143,11 +151,15 @@ export { getContentProjectStatusSummary, type ContentProjectStatusSummary } from
 export function getContentProject(database: DatabaseSync, projectId: string): ContentProjectDetail | null {
   const row = database.prepare(`
     SELECT p.id, p.topic_id AS topicId, p.plan_item_id AS planItemId, p.title, p.status,
-      p.archived_at AS archivedAt, p.revision, p.created_at AS createdAt, p.updated_at AS updatedAt
-    FROM content_projects p WHERE p.id = ?
+      p.archived_at AS archivedAt, p.revision, p.created_at AS createdAt, p.updated_at AS updatedAt,
+      pi.priority AS planItemPriority
+    FROM content_projects p
+    LEFT JOIN plan_items pi ON pi.id = p.plan_item_id
+    WHERE p.id = ?
   `).get(projectId) as {
     id: string; topicId: string | null; planItemId: string | null; title: string; status: ContentProjectStatus;
     archivedAt: string | null; revision: number; createdAt: string; updatedAt: string;
+    planItemPriority: number | null;
   } | undefined;
   if (!row) return null;
   const revisions = database.prepare(`SELECT id, version_number AS number, body, created_at AS createdAt, COALESCE(author, 'ai') AS author
@@ -189,8 +201,10 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
     FROM creative_brief_projects link JOIN creative_briefs b ON b.id=link.brief_id WHERE link.project_id=?`).get(projectId) as any;
   const creativeBrief=creativeBriefRow?{id:creativeBriefRow.id,title:creativeBriefRow.title,revision:creativeBriefRow.revision,status:creativeBriefRow.status,
     canvasId:creativeBriefRow.canvasId,contextNodeIds:JSON.parse(creativeBriefRow.contextNodeIdsJson)}:null;
+  const planItemPriority = row.planItemPriority == null ? null : Number(row.planItemPriority);
   return {
     ...row,
+    planItemPriority: Number.isFinite(planItemPriority as number) ? (planItemPriority as number) : null,
     sourceIds,
     sources,
     notes,

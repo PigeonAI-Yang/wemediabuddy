@@ -363,9 +363,7 @@
 }
 @media (max-width: 1280px) {
   .topic-layout,
-  .library-topics-layout { grid-template-columns: 1fr; }
-  .library-topic-list-pane,
-  .topic-list-pane { max-height: 280px; border-right: 0; border-bottom: 1px solid var(--border-soft); }
+  .library-topics-layout { display: flex; flex-direction: column; }
   .library-topic-stats,
   .topic-object-meta { min-width: 0; }
   .library-topic-segments button,

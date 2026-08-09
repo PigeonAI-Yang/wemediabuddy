@@ -87,6 +87,22 @@ declare global {
       listKnowledgeSources(input?: { query?: string; verificationStatus?: string; managementStatus?: string; includeArchived?: boolean; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>;
       updateKnowledgeSource(input: { id: string; expectedRevision: number; verificationStatus?: string; managementStatus?: string; title?: string; summary?: string | null; author?: string | null }): Promise<{ id: string; revision: number }>;
       deleteKnowledgeSource(input: { id: string; expectedRevision: number }): Promise<{ id: string; deleted: true }>;
+      laneRestoreSource(input: { sourceId: string; expectedRevision: number; reason?: string }): Promise<{
+        restored: boolean;
+        source: { id: string; revision: number; managementStatus: string };
+        judgment: {
+          id: string;
+          sourceId: string;
+          workspaceLane: string;
+          decision: string;
+          reasonCode: string;
+          reason: string | null;
+          judgedBy: string;
+          confidence: number | null;
+          sourceRevision: number;
+          judgedAt: string;
+        } | null;
+      }>;
       listWatchingSources(input?: { limit?: number }): Promise<Array<{
         id: string;
         title: string;
@@ -199,10 +215,12 @@ declare global {
       savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
+      setPiFallbackOrder(ids: string[]): Promise<unknown>;
       listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>;
       listPiSkills(): Promise<PiSkillSummary[]>;
       savePiSkill(input: PiSkillInput): Promise<PiSkillSummary>;
       deletePiSkill(name: string): Promise<{ name: string }>;
+      getPiAuthorityStatus(): Promise<{ status: unknown; chipLabel: string; chipTone: 'write' | 'readonly' | 'prepare' } | null>;
       listPiCommands(): Promise<PiCommand[]>;
       chatPi(message: string, delivery?: 'steer' | 'followUp'): Promise<{
         text: string;
@@ -265,8 +283,8 @@ declare global {
         messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
         updatedAt: string;
       }>;
-      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void): () => void;
-      onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => void): () => void;
+      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[]; model?: string; profileName?: string }) => void): () => void;
+      onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals'>; reason?: string; at: string }) => void): () => void;
       startAgentTask(input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
@@ -276,13 +294,33 @@ declare global {
       failAgentTask(input: { id: string; errorCode: string; errorMessage: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       cancelAgentTask(id: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       controlDailyIntelligence(input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      startDailyIntelligence(input: { businessDate: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      getManagerTask(input?: { businessDate?: string }): Promise<{ managerTask: any; legacyChild: any } | null>;
+      syncManagerTask(input?: { businessDate?: string }): Promise<any>;
+      startDailyIntelligence(input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'>; legacyPipeline?: boolean }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
+      getProposalLedger(input: { planDate: string; tab?: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired'; limit?: number; offset?: number }): Promise<{
+        tab: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
+        items: Array<{
+          planItemId: string; planDate: string; createdAt: string; title: string; priority: number;
+          timeliness: string | null; timelinessClass: 'breaking' | 'hot' | 'evergreen'; expiresAt: string | null;
+          topicId: string | null; sourceIds: string[]; whyNow: string; angle: string; pointOfView: string;
+          targetAudience: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string;
+          structureGuidance: string; effortEstimate: string; availableMaterials: string[]; missingMaterials: string[];
+          trendEvidence: TodayPlanItem['trendEvidence'];
+          state: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
+          carry: { id: string; state: string; revision: number; reason: string | null } | null;
+          adoptedProjectId: string | null; isNew: boolean;
+        }>;
+        total: number; hasMore: boolean;
+        counts: { today: number; shelved: number; adopted: number; dismissed: number; expired: number };
+      } | null>;
+      getProposalLedgerSummary(planDate: string): Promise<{ today: number; shelved: number; adopted: number; dismissed: number; expired: number } | null>;
       getToday(planDate: string): Promise<{
         sources: TodaySource[];
         sourcesTotal: number;
         sourcesDate: string | null;
+        archivedTodayCount: number;
         plan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
         latestPlan: { id: string; planDate: string; summary: string; items: TodayPlanItem[] } | null;
         pool: Array<{
@@ -363,10 +401,36 @@ declare global {
           pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
         };
       } | null>;
+      getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; writeCommandCount: number }>>;
+      listAgentAvatars?(): Promise<Array<{ roleId: string; assetId: string; url: string }>>;
+      setAgentAvatar?(input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }): Promise<{ roleId: string; assetId: string; url: string; relativePath: string }>;
+      clearAgentAvatar?(input: { roleId: string }): Promise<{ ok: boolean }>;
+      jobsSpawn(input: {
+        roleId: 'reporter' | 'planner' | 'writer' | 'librarian';
+        brief: string;
+        businessDate?: string | null;
+        channelIds?: readonly string[] | null;
+        sourceFeedIds?: readonly string[] | null;
+        projectId?: string | null;
+        sourceIds?: readonly string[] | null;
+        scope?: 'workspace' | null;
+      }): Promise<{ id: string; roleId: string; intent: string | null; brief: string; status: string; error: string | null; planDate: string | null; projectId: string | null; queuedAt: string; startedAt: string | null; finishedAt: string | null }>;
+      jobsList(): Promise<Array<{ id: string; roleId: string; intent: string | null; brief: string; status: string; error: string | null; waitReason: string | null; report: { code: string | null; message: string | null; readback: unknown } | null; planDate: string | null; projectId: string | null; queuedAt: string; startedAt: string | null; finishedAt: string | null; handle?: { taskId: string | null; leaseId: string | null; grantId: string | null; sessionFile: string | null } | null }>>;
+      jobsGet(jobId: string): Promise<{ id: string; roleId: string; status: string; error: string | null; handle?: unknown } | null>;
+      jobsAwait(input: { jobId: string; timeoutMs?: number }): Promise<{ id: string; status: string; error: string | null }>;
+      jobsCancel(jobId: string): Promise<{ id: string; status: string } | null>;
+      jobsMessage(input: { jobId: string; body: string }): Promise<{ id: string; jobId: string; from: string; body: string; at: string }>;
+      jobsMessages(jobId: string): Promise<Array<{ id: string; jobId: string; from: string; body: string; at: string }>>;
+      jobsPoolStatus(): Promise<{ maxWorkers: number; running: number; queued: number; waitingResource: number; jobs: unknown[]; deskSnapshot: unknown; employeeSnapshots: unknown[] }>;
+      jobsSetMaxWorkers(maxWorkers: number): Promise<{ maxWorkers: number }>;
+      getAgentsCapabilitySummary(): Promise<{ roles: Array<{ roleId: string; labelZh: string; roomZh: string; skills?: string[] }>; capabilities: Array<{ id: string; displayName: string; description: string; defaultRoleBindings: Record<string, boolean | undefined>; pageScopePassThrough?: boolean }> }>;
+      listAgentsOverlays(): Promise<Array<{ workspaceId: string; roleId: string; capabilityId: string; enabled: boolean; updatedAt: string }>>;
+      setAgentsOverlay(input: { roleId: string; capabilityId: string; enabled: boolean }): Promise<{ workspaceId: string; roleId: string; capabilityId: string; enabled: boolean; updatedAt: string }>;
       refreshFermenting(planDate: string): Promise<any>;
       listFermenting(planDate: string): Promise<any>;
       setCarryState(input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }): Promise<any>;
       dismissPlanItem(input: { planItemId: string; reason?: string }): Promise<any>;
+      restoreProposal(input: { planItemId: string; reason?: string }): Promise<any>;
       createProjectFromPlanItem(planItemId: string): Promise<{ id: string; revision: number; created: boolean }>;
       getStudio(): Promise<Array<{
         id: string;
@@ -388,6 +452,7 @@ declare global {
         items: Array<{
           id: string; title: string; status: 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
           archivedAt: string | null; revision: number; createdAt: string; updatedAt: string; versionCount: number;
+          planItemPriority: number | null;
           latestVersion: { id: string; number: number; createdAt: string; author: 'user' | 'ai' } | null;
           platforms: { x: number; xiaohongshu: number; wechat: number };
         }>;
@@ -406,6 +471,7 @@ declare global {
         expectedRevision: number;
         status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
         archived?: boolean;
+        topicId?: string | null;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string; details?: { current?: ContentProjectDetail } } | null }>;
       deleteStudioProject(input: { projectId: string; expectedRevision: number }): Promise<{ ok: boolean; data?: { id: string }; error: { code: string; message: string } | null }>;
       saveDiscoveredSource(input: { requestId: string; title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }): Promise<{ version: 'CommandReceiptV1'; receiptId: string; ok: boolean; data: { items: Array<{ id: string; created: boolean; revision: number }> } | null; error: { code: string; message: string } | null }>;

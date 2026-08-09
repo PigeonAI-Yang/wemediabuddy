@@ -111,7 +111,7 @@ test('Pi uses distinct WMB creature states for connecting and unfinished tools',
   assert.match(transcript, /WmbCreatureMark state=\{running \? 'working' : completed \? 'sleep' : 'idle'\}/);
   const foundation = await readFile(new URL('../src/renderer/styles-foundation.css', import.meta.url), 'utf8');
   assert.match(dock, /connecting=\{phase === 'starting'\}/);
-  assert.match(dock, /if \(event\.type === 'running'\) \{ setPhase\('starting'\); setStatusText\('正在连接 Pi'\); return; \}/);
+  assert.match(dock, /if \(event\.type === 'running'\) \{[\s\S]*?setPhase\('starting'\); setStatusText\('正在连接 Pi'\)[\s\S]*?if \(event\.type === 'tool'\)/);
   assert.doesNotMatch(dock, /setStatusText\('正在思考'\)/);
   assert.match(transcript, /<WmbCreatureMark state=\{connecting \? 'connect' : 'working'\} className="pi-activity-mark"\/>/);
   assert.match(transcript, /className="pi-activity" role="status" aria-live="polite" aria-label=\{statusText\}/);

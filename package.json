@@ -10,6 +10,7 @@
     "start": "electron-forge start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "check:capabilities": "node scripts/check-capability-registry.mjs",
     "build": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
     "icons:brand": "node scripts/build-brand-icons.mjs"
   },

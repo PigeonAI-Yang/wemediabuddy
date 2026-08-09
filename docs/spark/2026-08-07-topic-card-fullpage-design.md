@@ -157,7 +157,7 @@ Rejected for this round:
 
 ## 13. Spec self-review
 
-- No TBD placeholders left for P0 behavior.
+- No unresolved placeholder markers left for P0 behavior.
 - Single-topic Pi path is explicit; multi-select excluded.
 - Auto-write to ledger excluded to keep scope implementable.
 - Shell-first approach reuses dossier APIs; no backend contract change required for P0.

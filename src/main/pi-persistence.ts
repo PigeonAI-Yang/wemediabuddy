@@ -4,7 +4,7 @@ import {
   type PiChatMessage,
   type PiConversationSnapshot
 } from './pi-conversation.ts';
-import type { PiRpcSupervisor } from './pi-runtime';
+import type { PiRpcSupervisor } from './pi-runtime.ts';
 export { messagesFromPiEntries, visiblePiPrompt } from './pi-transcript-projection.ts';
 import { messagesFromPiEntries } from './pi-transcript-projection.ts';
 

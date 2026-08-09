@@ -15,7 +15,9 @@ test('List display selection is independent, root-storable UI state', async () =
   assert.match(css, /\.x-timeline-more,[\s\S]*?align-items:\s*center/);
   assert.doesNotMatch(discover, /管理显示/);
   assert.match(settings, /List 工作台显示/);
-  assert.match(settings, /不会改变今日情报来源/);
+  const settingsToggle = settings.slice(settings.indexOf('const toggle = '), settings.indexOf('const mergeOperation'));
+  assert.match(settingsToggle, /setListVisibility/);
+  assert.doesNotMatch(settingsToggle, /setXListBindingEnabled|bindXList|prepareXListOperation/);
   const mountCache = discover.slice(discover.indexOf('void (async () => {'), discover.indexOf('}, []);', discover.indexOf('void (async () => {')));
   assert.match(mountCache, /getCachedXListIndex/);
   assert.doesNotMatch(mountCache, /readXListIndex/);

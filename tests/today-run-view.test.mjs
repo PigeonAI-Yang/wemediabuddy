@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deriveTodayRunView, mapTaskToStep } from '../src/renderer/today-run-view.ts';
+import { deriveTodayRunView, isManagerNonterminal, mapTaskToStep } from '../src/renderer/today-run-view.ts';
 
 const base = {
   task: null,
@@ -29,6 +29,8 @@ test('maps backend phases into four user steps', () => {
   assert.equal(mapTaskToStep({ status: 'succeeded' }), 'done');
   assert.equal(mapTaskToStep({ status: 'failed' }), 'failed');
   assert.equal(mapTaskToStep(null, true), 'starting');
+  assert.equal(mapTaskToStep({ status: 'cancelled' }, false, { hasDeliveredPlan: true }), 'done');
+  assert.equal(mapTaskToStep({ status: 'failed' }, false, { hasDeliveredPlan: true }), 'done');
 });
 
 test('idle without plan uses start CTA and empty guidance', () => {
@@ -36,6 +38,7 @@ test('idle without plan uses start CTA and empty guidance', () => {
   assert.equal(view.step, 'idle');
   assert.equal(view.primaryCta.label, '开始今日情报');
   assert.match(view.headline, /开始今日情报/);
+  assert.equal(view.detail, '滚动采集 → 增量判断 → 选题池');
   assert.equal(view.blockers.length, 0);
   assert.match(view.opportunityEmptyBody, /开始今日情报/);
 });
@@ -45,17 +48,18 @@ test('idle with only a historical plan labels it as recent and keeps today count
   assert.equal(view.step, 'idle');
   assert.equal(view.primaryCta.label, '开始今日情报');
   assert.equal(view.showOpportunityEmpty, false);
-  assert.match(view.headline + view.detail + view.statusLine, /最近方案/);
+  assert.equal(view.headline, '当前显示最近可批选题');
   assert.equal(view.stats?.find((stat) => stat.label === '今日新资料')?.value, '0');
   assert.equal(view.stats?.find((stat) => stat.label === '今日内容机会')?.value, '0');
   assert.doesNotMatch(view.headline + view.detail, /已根据入库资料整理出/);
 });
 
-test('idle with plan uses restart confirm and hides empty state', () => {
+test('current opportunity pool opens studio and offers rescan', () => {
   const view = deriveTodayRunView({ ...base, hasTodayPlan: true, opportunityCount: 2, sssCount: 1 });
-  assert.equal(view.step, 'idle');
-  assert.equal(view.primaryCta.label, '重新侦察');
-  assert.match(view.primaryCta.confirm || '', /替换今日方案/);
+  assert.equal(view.step, 'done');
+  assert.equal(view.headline, '当前有可批选题');
+  assert.equal(view.primaryCta.label, '去创作');
+  assert.ok(view.secondaryCtas.some((c) => c.id === 'restart'));
   assert.equal(view.showOpportunityEmpty, false);
 });
 
@@ -82,31 +86,45 @@ test('judging is indeterminate and keeps single narrative', () => {
     task: { id: 't1', status: 'running', phase: 'synthesizing', progress: { planned: 5, processed: 5 } }
   });
   assert.equal(view.step, 'judging');
-  assert.equal(view.headline, '正在生成今日运营方案');
+  assert.equal(view.headline, '正在评估新资料并更新选题池');
   assert.equal(view.progress?.indeterminate, true);
   assert.equal(view.primaryCta.kind, 'none');
 });
 
-test('partial CTA is continue-generate-plan with no fake blockers', () => {
+test('partial CTA continues opportunity-pool update with no fake blockers', () => {
   const view = deriveTodayRunView({
     ...base,
     task: { id: 't1', status: 'partial', errorMessage: '综合整理失败' },
     sourcesTotal: 12
   });
   assert.equal(view.step, 'partial');
-  assert.equal(view.primaryCta.label, '继续生成方案');
+  assert.equal(view.primaryCta.label, '继续更新选题池');
   assert.equal(view.blockers.length, 0);
-  assert.match(view.opportunityEmptyBody, /继续生成方案/);
-  assert.doesNotMatch(view.headline + view.detail + view.opportunityEmptyBody, /创建今日运营方案|待你处理/);
+  assert.match(view.opportunityEmptyBody, /继续更新选题池/);
+  assert.doesNotMatch(view.headline + view.detail + view.opportunityEmptyBody, /今日运营方案|待你处理/);
 });
 
 test('internal failure codes do not leak into partial copy', () => {
   const view = deriveTodayRunView({
     ...base,
+    opportunityCount: 0,
     task: { id: 't2', status: 'partial', errorMessage: 'WMB_WRITE_REQUIRES_COMMAND_DISPATCH' }
   });
-  assert.equal(view.detail, '已保存部分渠道结果，方案生成时遇到内部错误');
+  assert.equal(view.step, 'partial');
+  assert.equal(view.detail, '已保存部分渠道结果；可点继续更新选题池完成增量判断');
   assert.doesNotMatch(view.headline + view.detail, /WMB_|COMMAND_DISPATCH/);
+});
+
+test('partial with opportunities presents ready state', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    opportunityCount: 8,
+    task: { id: 't2', status: 'partial', errorMessage: '部分渠道未完全成功' }
+  });
+  assert.equal(view.step, 'done');
+  assert.equal(view.headline, '当前有可批选题');
+  assert.equal(view.primaryCta.label, '去创作');
+  assert.equal(view.showOpportunityEmpty, false);
 });
 
 test('needs_user surfaces actionable blocker and continue CTA', () => {
@@ -139,6 +157,7 @@ test('failed puts a user-facing error on command-bar detail', () => {
 test('done with opportunities opens studio; zero opportunities is empty-success', () => {
   const withOps = deriveTodayRunView({ ...base, hasTodayPlan: true, opportunityCount: 3, sssCount: 1, task: { status: 'succeeded' } });
   assert.equal(withOps.step, 'done');
+  assert.equal(withOps.headline, '当前有可批选题');
   assert.equal(withOps.primaryCta.label, '去创作');
   assert.equal(withOps.showOpportunityEmpty, false);
 
@@ -181,3 +200,113 @@ test('running view exposes no grant administration action', () => {
   assert.ok(view.secondaryCtas.some((action) => action.id === 'cancel'));
 });
 
+
+
+test('zombie running shows cleanup CTA', () => {
+  const old = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const view = deriveTodayRunView({
+    task: {
+      id: 't-zombie',
+      status: 'running',
+      phase: 'synthesizing',
+      heartbeatAt: old,
+      updatedAt: old,
+      startedAt: old,
+      progress: { planned: 15, processed: 15 }
+    },
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0,
+    sssCount: 0,
+    sourcesTotal: 0,
+    studioActive: null,
+    piConfigured: true,
+    channelsSummary: { enabledCount: 1, readyCount: 1, needsUserCount: 0, blockedCount: 0 }
+  });
+  assert.equal(view.step, 'judging');
+  assert.match(view.headline, /失去执行者|卡住|保存并停止|清理/);
+  const save = view.secondaryCtas.find((a) => a.id === 'save_partial');
+  assert.ok(save);
+  assert.equal(save.label, '清理并保留结果');
+});
+
+test('controlPending disables save and cancel', () => {
+  const view = deriveTodayRunView({
+    task: { id: 't1', status: 'running', phase: 'synthesizing', progress: { planned: 1, processed: 1 } },
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0,
+    sssCount: 0,
+    sourcesTotal: 0,
+    studioActive: null,
+    piConfigured: true,
+    channelsSummary: { enabledCount: 1, readyCount: 1, needsUserCount: 0, blockedCount: 0 },
+    controlPending: true,
+    controlPendingAction: 'save_partial'
+  });
+  assert.match(view.headline, /保存并停止/);
+  assert.ok(view.secondaryCtas.every((a) => a.id === 'view_sources' || a.disabled));
+});
+
+
+test('manager-owned running shows view-progress CTA', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    task: {
+      id: 'm1',
+      status: 'running',
+      phase: 'manager',
+      errorMessage: '主管任务进行中 · 查看对话进度'
+    }
+  });
+  assert.equal(view.headline, '主管编排中');
+  assert.equal(view.primaryCta.label, '对话中 · 查看进度');
+  assert.equal(view.primaryCta.kind, 'continue');
+});
+
+test('manager monitor_reporter maps to scanning with determinate progress', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    task: {
+      id: 'm1',
+      status: 'running',
+      phase: 'monitor_reporter',
+      progress: { message: '主管任务进行中', planned: 5, processed: 3 }
+    }
+  });
+  assert.equal(view.headline, '主管编排中');
+  assert.equal(view.step, 'scanning');
+  assert.equal(view.progress?.ratio, 0.6);
+  assert.equal(view.progress?.indeterminate, false);
+  assert.equal(view.primaryCta.kind, 'continue');
+});
+
+test('manager monitor_planner maps to judging with indeterminate pool update', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    task: { id: 'm1', status: 'running', phase: 'monitor_planner', progress: { message: '主管任务进行中' } }
+  });
+  assert.equal(view.headline, '主管编排中');
+  assert.equal(view.step, 'judging');
+  assert.equal(view.progress?.indeterminate, true);
+  assert.equal(view.progress?.ratio, undefined);
+  assert.equal(view.progress?.label, '正在更新选题池');
+});
+
+test('manager report maps to judging with indeterminate pool update', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    task: { id: 'm1', status: 'running', phase: 'report', progress: { message: '主管任务进行中' } }
+  });
+  assert.equal(view.headline, '主管编排中');
+  assert.equal(view.step, 'judging');
+  assert.equal(view.progress?.indeterminate, true);
+  assert.equal(view.progress?.ratio, undefined);
+  assert.equal(view.progress?.label, '正在更新选题池');
+});
+
+test('isManagerNonterminal treats running and waiting_human as nonterminal, succeeded as terminal', () => {
+  assert.equal(isManagerNonterminal({ status: 'running' }), true);
+  assert.equal(isManagerNonterminal({ checkpoint: { status: 'waiting_human' } }), true);
+  assert.equal(isManagerNonterminal({ status: 'succeeded' }), false);
+});

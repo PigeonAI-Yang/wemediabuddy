@@ -30,6 +30,9 @@ test('task grants expose the canonical internal business command IDs', () => {
     'plans.save',
     'reviews.save',
     'sources.upsert_batch',
+    'sources.lane_gate',
+    'sources.lane_restore',
+  'sources.update_status',
     'x_lists.observation_start',
     'x_lists.observation_stop',
     'x_lists.operation_execute'
@@ -217,7 +220,7 @@ test('a grant from another root authorizes zero writes', async () => {
 test('ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers', async () => {
   await withRuntime(async ({ runtime, database }) => {
     const expectedByIntent = {
-      daily_intelligence: ['agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plans.save', 'sources.upsert_batch'],
+      daily_intelligence: ['agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plans.save', 'sources.upsert_batch', 'sources.lane_gate'],
       studio_draft: ['agent_tasks.report_progress', 'content.save_version'],
       results_review: ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']
     };
