@@ -14,11 +14,10 @@ export function StudioLibraryHeader({ summary, projects, hasMore, status, archiv
       : '还没有创作项目，从「新建创作项目」开始。';
     const attention = [
       summary.byStatus.review ? `${summary.byStatus.review} 个待审` : '',
-      summary.byStatus.ready ? `${summary.byStatus.ready} 个待发布` : '',
-      summary.byStatus.drafting ? `${summary.byStatus.drafting} 个创作中` : ''
+      summary.byStatus.ready ? `${summary.byStatus.ready} 个待发布` : ''
     ].filter(Boolean);
     const activity = summary.updatedWithin7Days ? `本周更新 ${summary.updatedWithin7Days} 个` : '';
-    return [[attention.length ? attention.join(' · ') : `${summary.total} 个项目`, activity].filter(Boolean).join('，'), '。'].join('');
+    return [[attention.length ? attention.join(' · ') : activity ? '' : `${summary.total} 个项目`, activity].filter(Boolean).join('，'), '。'].join('');
   })();
   return <section className="page-command" aria-label="创作项目概览">
     <div className="page-command-main">

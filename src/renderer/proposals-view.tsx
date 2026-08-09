@@ -76,11 +76,19 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
   const [error, setError] = useState('');
   const [offset, setOffset] = useState(0);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
+  const [batchMode, setBatchMode] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const tabRef = useRef(tab);
   tabRef.current = tab;
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
+
+  const enterBatch = useCallback(() => setBatchMode(true), []);
+
+  const exitBatch = useCallback(() => {
+    setCheckedIds([]);
+    setBatchMode(false);
+  }, []);
 
   const load = useCallback(async (nextTab: ProposalTab, nextOffset: number, append: boolean) => {
     setLoading(true);
@@ -124,9 +132,21 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
     return unsubscribe;
   }, [load]);
 
+  useEffect(() => {
+    if (!batchMode) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (document.querySelector('.app-confirm-root')) return;
+      exitBatch();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [batchMode, exitBatch]);
+
   const counts = data?.counts ?? EMPTY_COUNTS;
   const items = data?.items ?? [];
   const openTab = tab === 'today' || tab === 'shelved';
+  const batchSupported = openTab || tab === 'dismissed';
   const hasMore = data?.hasMore === true;
   const total = data?.total ?? 0;
 
@@ -234,6 +254,14 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
           <span className="proposal-tab-count">{counts[entry.id]}</span>
         </button>
       ))}
+      {batchSupported ? (
+        <button
+          type="button"
+          className={`proposal-batch-toggle${batchMode ? ' active' : ''}`}
+          aria-pressed={batchMode}
+          onClick={batchMode ? exitBatch : enterBatch}
+        >{batchMode ? '退出批量' : '批量操作'}</button>
+      ) : null}
     </nav>
 
     {checkedIds.length > 0 && (openTab || tab === 'dismissed') ? (
@@ -262,10 +290,12 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
           const planItem = poolItemToPlanItem(poolItem);
           const badges = poolBadges(poolItem, Date.now(), planDate);
           const checked = checkedIds.includes(item.planItemId);
-          return <div className={`proposal-open-item${checked ? ' checked' : ''}`} key={item.planItemId}>
-            <label className="proposal-check" onClick={(event) => event.stopPropagation()} title="勾选以批量操作">
-              <input type="checkbox" checked={checked} onChange={() => toggleChecked(item.planItemId)} aria-label={`勾选 ${item.title}`} />
-            </label>
+          return <div className={`proposal-open-item${checked ? ' checked' : ''}${batchMode ? ' batch' : ''}`} key={item.planItemId}>
+            {batchMode ? (
+              <label className="proposal-check" onClick={(event) => event.stopPropagation()} title="勾选以批量操作">
+                <input type="checkbox" checked={checked} onChange={() => toggleChecked(item.planItemId)} aria-label={`勾选 ${item.title}`} />
+              </label>
+            ) : null}
             <Opportunity
               item={planItem}
               selected={selectedItem?.id === planItem.id}
@@ -294,7 +324,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
           const checked = checkedIds.includes(item.planItemId);
           return (
           <article
-            className={`proposal-row${selectedItem?.id === item.planItemId ? ' selected' : ''}${checked ? ' checked' : ''}`}
+            className={`proposal-row${selectedItem?.id === item.planItemId ? ' selected' : ''}${checked ? ' checked' : ''}${batchMode ? ' batch' : ''}`}
             key={item.planItemId}
             title={selectedItem?.id === item.planItemId ? '再次点击取消 Pi 焦点' : '点击设为 Pi 焦点（不进入详情）'}
             onClick={(event) => {
@@ -302,7 +332,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
               focusPlanItem(item);
             }}
           >
-            {tab === 'dismissed' ? (
+            {batchMode && batchSupported ? (
               <label className="proposal-check" onClick={(event) => event.stopPropagation()} title="勾选以批量恢复">
                 <input type="checkbox" checked={checked} onChange={() => toggleChecked(item.planItemId)} aria-label={`勾选 ${item.title}`} />
               </label>

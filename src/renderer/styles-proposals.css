@@ -42,6 +42,25 @@
   color: var(--accent-soft);
 }
 
+/* 批量操作显式模式入口：tabs 行右侧，同按钮二态（批量操作/退出批量） */
+.proposal-batch-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+.proposal-batch-toggle:hover { color: var(--ink); background: var(--surface-hover); }
+.proposal-batch-toggle.active { color: var(--accent-soft); border-bottom-color: var(--accent); }
+
 .proposal-list { display: grid; gap: var(--page-space); align-content: start; }
 
 /* 开放 tab（今日可批 / 待处理）：Opportunity 卡片 + 可选关联主题入口 */
@@ -144,9 +163,9 @@
 
 .proposal-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));font-size:13px}
 .proposal-batch-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.proposal-open-item{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:start}
-.proposal-open-item .opportunity-primary,.proposal-open-item .opp-row{grid-column:2}
-.proposal-open-item .proposal-card-extra{grid-column:2}
+.proposal-open-item{display:grid;gap:8px;align-items:start}
+.proposal-open-item.batch{grid-template-columns:28px minmax(0,1fr)}
+.proposal-open-item.batch .opportunity-primary,.proposal-open-item.batch .opp-row,.proposal-open-item.batch .proposal-card-extra{grid-column:2}
 .proposal-check{display:grid;place-items:center;padding-top:14px;cursor:pointer}
 .proposal-check input{width:15px;height:15px;accent-color:var(--accent)}
 .proposal-row{display:flex;align-items:center;gap:12px}

@@ -13,6 +13,8 @@
 @import './styles-x-lists.css';
 @import './styles-x-lists-timeline.css';
 @import './styles-intelligence-channels.css';
+@import './styles-onboarding.css';
+@import './styles-app-update.css';
 
 /* Pi toggle — cascade end */
 .pi-dock-toggle-rail {
