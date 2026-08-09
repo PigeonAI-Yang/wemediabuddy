@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
 import { AgentAvatarCropDialog } from './agent-avatar-crop';
+import { resolveDeskConflict } from './agents-roster-conflict';
 
 const ORDER: RoleId[] = ['desk', 'reporter', 'planner', 'writer', 'librarian'];
 const EMPLOYEE_ORDER: Exclude<RoleId, 'desk'>[] = ['reporter', 'planner', 'writer', 'librarian'];
@@ -266,8 +267,7 @@ export function AgentsRosterView({
 
   const deskRow = byId.get('desk');
   const deskOccupied = Boolean(pool.deskSnapshot?.leaseId) || ((deskRow?.status === 'running' || deskRow?.status === 'blocked') && deskRow?.roleId === 'desk' && deskRow?.intent !== 'daily_judge' && deskRow?.intent !== 'daily_scan');
-  const deskConflict = deskOccupied && (deskRow?.status === 'blocked' || pool.running > 0);
-
+  const deskConflict = resolveDeskConflict({ deskOccupied, deskStatus: deskRow?.status ?? null, jobs: boardJobs });
   // 顶部席位必须与左侧角色卡同源：工单 + 后台 daily_scan/judge 角色行 + employee lease。
   const runningByRole = useMemo(() => {
     const map = new Map<string, number>();

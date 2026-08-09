@@ -9,9 +9,11 @@ import {
   dispatchCompleteAgentTask,
   dispatchFailAgentTask,
   dispatchNeedsUserAgentTask,
-  dispatchPartialAgentTask
+  dispatchPartialAgentTask,
+  dispatchUpdateAgentTaskPhase
 } from './agent-task-commands.ts';
 import {
+  buildJobContextRefs,
   deriveRoleJobSpec,
   JOB_ERROR_CODES,
   mapOutcomeToTerminal,
@@ -19,7 +21,9 @@ import {
   readbackLibraryMutation,
   readbackPlansRevision,
   readbackScanPhase,
+  roleFailureCode,
   type JobExecutionOutcome,
+  type JobObjectBoundary,
   type RoleJobReadbackV1,
   type RoleJobRequest,
   type RoleJobSpec
@@ -76,11 +80,13 @@ export function createGenericEmployeeRunner(
     if (aborted(ctx.signal)) return cancelledOutcome();
 
     const roleId = ctx.job.roleId;
-    const request: RoleJobRequest = roleId === 'writer'
+    // WMB-5141：优先使用 spawn 原始请求（保留 channelIds/sourceFeedIds/sourceIds/scope），
+    // 无合同任务（测试直连 ctx）回落 JobRecord 重建。
+    const request: RoleJobRequest = ctx.request ?? (roleId === 'writer'
       ? { roleId, brief: ctx.job.brief, projectId: ctx.job.projectId ?? '', businessDate: ctx.job.businessDate }
       : roleId === 'librarian'
         ? { roleId, brief: ctx.job.brief }
-        : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate };
+        : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate });
     const spec = deriveRoleJobSpec(request, runtime.identity.workspaceId);
     const sessionStartedAt = new Date().toISOString();
 
@@ -99,6 +105,15 @@ export function createGenericEmployeeRunner(
       }
       // A1：lease 必须绑到子任务，grant 校验才过。
       runtime.bindWorkerTask(ctx.lease, taskId);
+      // WMB-5141 持久续派合同：jobId/roleId/brief/边界参数原子写入既有 context_refs_json
+      // （不丢既有 refs；缺失边界由 grant issue fail closed 兜底，两者同一硬门链）。
+      if (ctx.boundary) {
+        await writeJobContractRefs(runtime, taskId, {
+          jobId: ctx.job.id,
+          request,
+          boundary: ctx.boundary
+        }, ctx.lease.leaseId);
+      }
       const grantId = await ensureAutomaticTaskGrant(runtime, taskId, new Date(), roleId);
       ctx.onTaskBound?.(taskId, grantId);
       return grantId;
@@ -149,11 +164,22 @@ export function createGenericEmployeeRunner(
         return cancelledOutcome();
       }
       const message = error instanceof Error ? error.message : String(error);
+      // WMB-5137：无 code 异常按角色域落语义错误码（reporter→REPORTER_SCAN_FAILED 等，
+      // 不再跨域借 LIBRARY_ORGANIZE_FAILED）；保留原始 message 不吞信息。
       const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
         ? error.code
-        : JOB_ERROR_CODES.LIBRARY_ORGANIZE_FAILED;
+        : roleFailureCode(roleId);
+      const outcome = failedOutcome(code, message);
+      // WMB-5137：非 abort 异常即时同步 agent_task 终态（failed + 同一映射的 errorCode），
+      // 不依赖重启/orphan sweeper 兜底；仅对仍 running 的已建任务写终态，避免双终态。
+      if (createdTaskId) {
+        const current = getAgentTask(ctx.runtime.database, createdTaskId);
+        if (current?.status === 'running') {
+          await writeAgentTaskTerminal(ctx, outcome, createdTaskId);
+        }
+      }
       console.error('[generic-employee-runner]', roleId, error);
-      return failedOutcome(code, message);
+      return outcome;
     } finally {
       ctx.signal.removeEventListener('abort', onAbortCancel);
     }
@@ -172,6 +198,30 @@ async function bestEffortCancelTask(ctx: JobExecuteContext, taskId: string): Pro
       taskId
     });
   } catch { /* 已终态则忽略 */ }
+}
+
+/**
+ * WMB-5141 持久续派合同写入（设计 §7.3/§12.2.1）：
+ * 把 jobId/roleId/brief/边界参数合并进既有 context_refs_json（原子单命令、不丢既有 refs，
+ * 走 agent_tasks.update_phase 命令面 → receipt + operation_log 审计）。任务非 running 时跳过
+ * （已终态由 grant issue 缺边界 fail closed 兜底，不在此处静默污染）。
+ */
+export async function writeJobContractRefs(
+  runtime: ActiveWorkspaceRuntime,
+  taskId: string,
+  input: { jobId: string; request: RoleJobRequest; boundary: JobObjectBoundary },
+  workerLeaseId?: string
+): Promise<void> {
+  const current = getAgentTask(runtime.database, taskId);
+  if (!current || current.status !== 'running') return;
+  await dispatchUpdateAgentTaskPhase(runtime, taskId, current.phase, {
+    contextRefs: { ...current.contextRefs, ...buildJobContextRefs({ jobId: input.jobId, request: input.request, boundary: input.boundary }) }
+  }, {
+    actor: { type: 'scheduler' as const, id: 'generic-employee-runner', label: 'GenericEmployeeRunner' },
+    requestId: `${taskId}:job-contract:${input.jobId}`,
+    workerLeaseId,
+    taskId
+  });
 }
 
 /** §7 读回：任务终态 + 业务产物证据 → 五态 outcome；无读回证据不得 succeeded。 */
@@ -230,7 +280,7 @@ async function readbackFor(ctx: JobExecuteContext, spec: RoleJobSpec, run: Emplo
 }
 
 /** 写 agent_task 终态（§5.3 同一映射）；取消路径由 spawner.cancel 主导，这里尽力而为。 */
-async function writeAgentTaskTerminal(ctx: JobExecuteContext, outcome: JobExecutionOutcome, taskId: string): Promise<void> {
+export async function writeAgentTaskTerminal(ctx: JobExecuteContext, outcome: JobExecutionOutcome, taskId: string): Promise<void> {
   const mapping = mapOutcomeToTerminal(outcome, ctx.signal.aborted);
   const context = {
     actor: { type: 'scheduler' as const, id: 'generic-employee-runner', label: 'GenericEmployeeRunner' },

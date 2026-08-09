@@ -63,6 +63,15 @@ export type DailyChannelRun = {
 
 type XCollect = typeof collectBoundXListTimeline;
 type WebsiteScan = typeof scanWebsiteSource;
+
+/** WMB-5137：浏览器预检结果。config 为 null 时 X 来源不可扫描；preflightError 记录非用户态
+ * 预检异常（如 identifyXAccount 超时），逐 X 来源落可追踪 failed receipt，不阻断其他渠道。 */
+export type BrowserPreflight = Readonly<{
+  config: XListBrowserConfig | null;
+  preflightError: Readonly<{ code: string; message: string }> | null;
+}>;
+type BrowserPreflightResolver = (database: DatabaseSync, frozen: FrozenDailyChannels, configured: XListBrowserConfig | null | undefined) => Promise<BrowserPreflight>;
+
 const BROWSER_NEEDS_USER_CODES: Record<string, true> = {
   BROWSER_NEEDS_USER: true,
   ACCOUNT_MISMATCH: true,
@@ -94,6 +103,9 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
   websiteFetch?: typeof fetch;
   scanWebsite?: WebsiteScan;
   collectX?: XCollect;
+  /** WMB-5137：浏览器预检解析（缺省 resolveBrowserConfig）；返回非用户态错误信息而非抛出，
+   *  使 X 预检失败只影响 X 来源（逐源 failed 回执），official_web 等渠道继续。 */
+  preflight?: BrowserPreflightResolver;
 } = {}): Promise<DailyChannelRun> {
   const database: DatabaseSync = 'database' in dependency ? dependency.database : dependency;
   const actor = { type: 'scheduler' as const, id: 'daily-intelligence', label: 'daily-intelligence' };
@@ -164,7 +176,9 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
     message: '正在启动今日情报…'
   }, commandContext(`${task.id}:progress:starting:${randomUUID()}`, task.id));
 
-  const browserConfig = await resolveBrowserConfig(database, stored, dependencies.browserConfig);
+  const resolvePreflight = dependencies.preflight ?? resolveBrowserConfig;
+  const preflight = await resolvePreflight(database, stored, dependencies.browserConfig);
+  const browserConfig = preflight.config;
   const selected = stored.sources;
   const existingReceipts = readDailyReceiptAggregation(database, task).receipts;
   const checked = new Set(existingReceipts.map((receipt) => `${receipt.module}:${receipt.sourceId}`));
@@ -179,7 +193,15 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
   }, commandContext(`${task.id}:progress:channel-preflight:${randomUUID()}`, task.id));
   if (!selected.length) return finishBlocked(dependency, commandContext, task, stored, 'CHANNELS_NOT_CONFIGURED', '当前工作空间没有启用的官网或 X List。', null, started.reused);
 
-  for (const source of blocked) await recordBlockedReceipt(dependency, database, task.id, stored.workspaceId, source, input.workerLeaseId);
+  for (const source of blocked) {
+    // WMB-5137：预检失败（identifyXAccount 超时等非用户态异常）的 X 来源逐源落可追踪
+    // failed 回执（渠道标识 + code + message）；其余 blocked（含用户态 needs_user 类）保持原路径。
+    if (preflight.preflightError && source.module === 'x_lists') {
+      await recordPreflightFailure(dependency, database, task.id, stored.workspaceId, source, preflight.preflightError, input.workerLeaseId);
+    } else {
+      await recordBlockedReceipt(dependency, database, task.id, stored.workspaceId, source, input.workerLeaseId);
+    }
+  }
   if (blocked.length) {
     await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
       message: `已标记 ${blocked.length} 个未就绪来源，继续检查可运行渠道。`
@@ -272,13 +294,19 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
   return { task: ready, reused: started.reused === true, shouldRunJudgment: true, frozen: stored, aggregation };
 
 }
-async function resolveBrowserConfig(database: DatabaseSync, frozen: FrozenDailyChannels, configured: XListBrowserConfig | null | undefined): Promise<XListBrowserConfig | null> {
-  if (configured !== undefined) return configured;
-  if (!frozen.sources.some((source) => source.module === 'x_lists')) return null;
-  try { return await selectedXListBrowser(database); }
-  catch (error) {
-    if (BROWSER_NEEDS_USER_CODES[errorCode(error)]) return null;
-    throw error;
+/**
+ * WMB-5137：浏览器预检不再对非用户态异常 rethrow——identifyXAccount 超时等错误被捕获为
+ * preflightError，由调用方逐 X 来源落 failed 回执并继续 official_web；NEEDS_USER 类仍返回
+ * 空 config（既有 needs_user 回执路径）。任何错误都不再使整个工单失败。
+ */
+async function resolveBrowserConfig(database: DatabaseSync, frozen: FrozenDailyChannels, configured: XListBrowserConfig | null | undefined): Promise<BrowserPreflight> {
+  if (configured !== undefined) return { config: configured, preflightError: null };
+  if (!frozen.sources.some((source) => source.module === 'x_lists')) return { config: null, preflightError: null };
+  try {
+    return { config: await selectedXListBrowser(database), preflightError: null };
+  } catch (error) {
+    if (BROWSER_NEEDS_USER_CODES[errorCode(error)]) return { config: null, preflightError: null };
+    return { config: null, preflightError: { code: errorCode(error), message: errorMessage(error) } };
   }
 }
 
@@ -388,6 +416,11 @@ function sourceIsReady(database: DatabaseSync, source: FrozenDailyChannelSource,
 
 async function recordBlockedReceipt(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, workerLeaseId?: string): Promise<void> {
   await dispatchSourceFailureReceipt(dependency, database, taskId, workspaceId, source, 'needs_user', 'CHANNEL_SOURCE_NOT_READY', '来源当前未就绪，需要配置、登录或重新确认。', workerLeaseId);
+}
+
+/** WMB-5137：X 浏览器预检失败（非用户态异常）的渠道级 failed 回执——含渠道标识（行内 module/sourceId）与原因。 */
+async function recordPreflightFailure(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, preflightError: { code: string; message: string }, workerLeaseId?: string): Promise<void> {
+  await dispatchSourceFailureReceipt(dependency, database, taskId, workspaceId, source, 'failed', preflightError.code, `X 浏览器预检失败：${preflightError.message}`, workerLeaseId);
 }
 
 async function recordAttemptFailure(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, error: unknown, workerLeaseId?: string): Promise<void> {
