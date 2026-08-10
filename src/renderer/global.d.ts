@@ -17,6 +17,7 @@ import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding'
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
 import type { PublicationBrowserOperationV1 as PublicationBrowserOperation, PublicationSnapshotV1 as PublicationSnapshot } from '../main/publication-operations';
 import type { WmbSettingsSnapshot } from './wmb-settings-types';
+import type { CrewInstance, CrewProjection } from './agents-instance-logic';
 import type { OnboardingAiSaveInput, OnboardingAiTestRecord, OnboardingAiTestResult, OnboardingAiTestSettings, OnboardingStatus, OnboardingStep, OnboardingWorkspaceResult, PlatformCheckStatus } from '../main/onboarding';
 import type { UpdateState } from '../main/app-update';
 
@@ -174,6 +175,9 @@ declare global {
         summary: { total: number; ok: number; failed: number; saved: number };
       }>;
       listKnowledgeTopics(input?: { query?: string; status?: string; limit?: number; offset?: number }): Promise<{ items: Array<{ id: string; title: string; canonicalKey: string; kind: string; summary: string | null; status: string; firstSeenAt: string | null; lastSeenAt: string | null; revision: number; sourceCount: number; opportunityCount: number; contentCount: number; publicationCount: number }>; total: number; limit: number; offset: number; hasMore: boolean }>;
+      listTopicMaintenanceProposals(input?: { status?: string; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean }>;
+      approveTopicMaintenanceProposal(input: { id: string; expectedRevision: number; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>;
+      rejectTopicMaintenanceProposal(input: { id: string; expectedRevision: number; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>; resumeTopicMaintenanceReproposal(input: { id: string; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>;
       listKnowledgeDomains(input?: {query?:string;status?:string;order?:'manual'|'recent'|'size';limit?:number;offset?:number}):Promise<{items:any[];total:number;limit:number;offset:number;hasMore:boolean}>;
       getKnowledgeDomain(id:string,input?:{limit?:number;offset?:number}):Promise<any>;
       createKnowledgeDomain(input:{title:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[]}):Promise<any>;
@@ -351,6 +355,7 @@ declare global {
           demotion: { publishedAt: string; platform: string } | null;
         }>;
         pendingActions: string[];
+        topicMaintenance: { pending: number };
         fermenting: {
           items: Array<{
             id: string;
@@ -400,7 +405,8 @@ declare global {
           pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
         };
       } | null>;
-      getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; writeCommandCount: number }>>;
+      getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; progressRatio: number | null; createdAt: string | null; updatedAt: string | null; finishedAt: string | null; writeCommandCount: number; instances: CrewInstance[] }>>;
+      getCrewInstanceProjection(): Promise<CrewProjection>;
       listAgentAvatars?(): Promise<Array<{ roleId: string; assetId: string; url: string }>>;
       setAgentAvatar?(input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }): Promise<{ roleId: string; assetId: string; url: string; relativePath: string }>;
       clearAgentAvatar?(input: { roleId: string }): Promise<{ ok: boolean }>;

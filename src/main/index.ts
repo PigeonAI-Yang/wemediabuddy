@@ -48,7 +48,7 @@ import { DailyScanScheduler } from './daily-scan-scheduler';
 import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
-import { registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts';
+import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
 import { setDeskJobNotifyBridges } from './manager-job-notify.ts';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -89,8 +89,7 @@ const dailyControlInflight = new Map<string, Promise<{ ok: boolean; data: unknow
 let activeRuntime: ActiveWorkspaceRuntime | null = null;
 installActiveWorkspaceIpcGate(ipcMain, () => activeRuntime, [...RUNTIME_MANAGING_IPC_CHANNELS]);
 const workspaceProposals = new WorkspaceProposalStore(); const channelProposals = new IntelligenceChannelProposalStore();
-const currentMcp = () => activeRuntime?.getMcp<McpRuntime>() ?? null;
-const currentXhs = () => activeRuntime?.getXhs<XhsMcpRuntime>() ?? null;
+const currentMcp = () => activeRuntime?.getMcp<McpRuntime>() ?? null; const currentXhs = () => activeRuntime?.getXhs<XhsMcpRuntime>() ?? null;
 const currentBrowser = () => activeRuntime?.getBrowser<BrowserRuntime>() ?? null;
 const currentPi = () => activeRuntime?.getWorker<PiRpcSupervisor>() ?? null;
 let lastEnsuredPiProfileId: string | null = null;
@@ -251,6 +250,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     await dispatchSchedulePublishedPublicationMetricJobs(runtime);
     const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime);
     runtime.setMcp(mcp);
+    stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
     const xhs = await refreshXhsRuntime(readWorkspaceIntelligenceProfile(dataRoot.path, runtime).platforms.includes('xiaohongshu') ? dataRoot : null, null);
     runtime.setXhs(xhs);
     // MCP 就绪后再接力：扫完 channel_scanned 且无协调器时优先 judgeOnly。
@@ -382,7 +382,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   }
 }
 let scanSchedulerRef: DailyScanScheduler | null = null;
-let orphanSweepTimer: ReturnType<typeof setInterval> | null = null;
+let orphanSweepTimer: ReturnType<typeof setInterval> | null = null, stopTopicReproposalScheduler: (() => void) | null = null;
 
 async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
@@ -478,7 +478,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -498,7 +498,7 @@ const desktopLifecycle = createDesktopLifecycle({
   defaultBrowserProfileId,
   getActiveRuntime: () => activeRuntime,
   clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
-  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } },
+  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; },
   abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
   setShuttingDown: (value) => { shuttingDown = value; },
   restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,

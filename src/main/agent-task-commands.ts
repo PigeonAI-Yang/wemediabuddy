@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { CommandActorV1 } from './command-dispatcher.ts';
 import {
+  bindNeedsUserJobContract,
   cancelAgentTask,
   completeAgentTask,
   failAgentTask,
@@ -119,6 +120,17 @@ export function dispatchRequestAgentTaskControl(
 export function dispatchCancelAgentTask(dependency: AgentTaskMutationDependency, id: string, context: AgentTaskCommandContext): Promise<AgentTask> {
   return dispatchTask(dependency, context, 'agent_tasks.cancel', { id }, id,
     (database, input) => requireCommandResultData(cancelAgentTask(database, input.id)));
+}
+
+/** WMB-5142 生命周期：为 needs_user 等待卡绑定工单合同 refs（命令面 → receipt + operation_log 审计）。 */
+export function dispatchBindNeedsUserJobContract(
+  dependency: AgentTaskMutationDependency,
+  id: string,
+  contractRefs: Record<string, unknown>,
+  context: AgentTaskCommandContext
+): Promise<AgentTask> {
+  return dispatchTask(dependency, context, 'agent_tasks.bind_job_contract', { id, contractRefs }, id,
+    (database, input) => requireCommandResultData(bindNeedsUserJobContract(database, input.id, input.contractRefs)));
 }
 
 export function dispatchFailAgentTask(

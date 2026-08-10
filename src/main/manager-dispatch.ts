@@ -248,7 +248,7 @@ export async function dispatchManagerDailyIntelligence(
     message: [
       `请执行今日情报编排（${businessDate}）。`,
       '验收：可信渠道回执 + 当日可批方案。',
-      '你是主管，编排方式由你选：',
+      '你是桌助，编排方式由你选：',
       '• 单项采集：wmb_run_daily_stage(stage=scan) 或 wmb_spawn_job(reporter)',
       '• 单项策划：wmb_run_daily_stage(stage=judge) 或 wmb_spawn_job(planner)',
       '• 一条龙：wmb_run_daily_stage(stage=full)',
@@ -257,7 +257,7 @@ export async function dispatchManagerDailyIntelligence(
       `managerTaskId=${view.id}`
     ].join('\n'),
     page: 'agents',
-    pageLabel: '班组 · 主管',
+    pageLabel: '班组 · 桌助',
     objectType: 'manager_task',
     objectId: view.id
   }).catch(async (error) => {

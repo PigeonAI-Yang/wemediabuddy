@@ -37,14 +37,19 @@ function sleep(ms) {
 
 // ---------- JobPool pure boundaries ----------
 
-test('boundary: maxWorkers rejects 0, negative, float', () => {
-  assert.throws(() => new JobPool(0), /maxWorkers/);
+test('boundary: maxWorkers domain 0..7 — negative/float rejected; 0 = dispatch disabled (submit refuses)', () => {
   assert.throws(() => new JobPool(-1), /maxWorkers/);
   assert.throws(() => new JobPool(1.5), /maxWorkers/);
-  assert.throws(() => {
-    const p = new JobPool(2);
-    p.setMaxWorkers(0);
-  }, /maxWorkers/);
+  // WMB-5142：maxWorkers 合法域 0..7；0=停用派工（submit 拒绝，不建工单）。
+  const zero = new JobPool(0);
+  assert.throws(() => zero.submit({ roleId: 'reporter', brief: 'a', businessDate: '2026-08-09' }), (error) => {
+    assert.equal(error.code, 'JOB_SPAWN_DISABLED');
+    return true;
+  });
+  const p = new JobPool(2);
+  p.setMaxWorkers(0);
+  assert.equal(p.getMaxWorkers(), 0, '0 为合法容量（停用派工）');
+  assert.throws(() => p.submit({ roleId: 'reporter', brief: 'a', businessDate: '2026-08-09' }), /JOB_SPAWN_DISABLED/);
 });
 
 test('boundary: maxWorkers=1 serializes completely', () => {

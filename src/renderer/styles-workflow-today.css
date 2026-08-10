@@ -401,3 +401,4 @@
 
 .fermenting-row.selected{background:color-mix(in srgb,var(--surface-selected) 90%,transparent);box-shadow:inset 3px 0 0 var(--accent);}
 .fermenting-row{cursor:pointer;}
+.today-topic-maintenance{margin:10px 0;padding:9px 12px;border:1px solid #d69c2f;border-radius:9px;background:#fff7dd;color:#6b4800;text-align:left}

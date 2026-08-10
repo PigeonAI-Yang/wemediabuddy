@@ -71,6 +71,11 @@ export async function runCancellationSequence(
   handle: CancellableHandle | null,
   deps: CancellationDeps
 ): Promise<JobRecord | null> {
+  const initial = deps.pool.get(jobId);
+  // WMB-5142 生命周期：已 settle 的 needs_user 卡（无运行句柄，句柄在 finally 已清）也可被用户关闭——
+  // 从终态报告取任务引用，任务侧 needs_user → cancelled（历史可追；否则重启后持久卡复现）。
+  const closingNeedsUser = Boolean(initial && initial.status === 'needs_user' && !handle && initial.report?.taskId);
+  const closeTaskId = handle?.taskId ?? (closingNeedsUser ? initial!.report!.taskId : null);
   if (handle) {
     handle.abort.abort();
     // WMB-5119 §6.4 取消优先（planner/reporter 竞态根因）：Pi 强停前先置 controlAction='cancel'
@@ -105,9 +110,31 @@ export async function runCancellationSequence(
       } catch { /* already terminal */ }
     }
   }
+  if (closingNeedsUser && closeTaskId) {
+    try {
+      await dispatchCancelAgentTask(deps.runtime, closeTaskId, {
+        actor: ownerJobsActor(),
+        requestId: `${closeTaskId}:close:${randomUUID()}`,
+        taskId: closeTaskId
+      });
+    } catch { /* already terminal */ }
+  }
+  // 评审 MINOR 3：before 在 await 之后重读——并发 runJob settle（取消竞态）先行终态化时，
+  // 去重依据必须是最新池记录（否则 running 快照会误判「本次取消产出 cancelled」双发事件）。
   const before = deps.pool.get(jobId);
-  const report = before ? cancelledReport(deps.runtime, before, handle?.taskId ?? null) : null;
+  const report = before ? cancelledReport(deps.runtime, before, closeTaskId) : null;
   const cancelled = deps.pool.cancel(jobId, report);
+  // WMB-5142 评审 P3：关闭路径对称清扫——续派 reuse 同任务会 settle 出多张 needs_user 兄弟卡
+  // （均带 report.taskId=closeTaskId）。任务已 cancelled 后兄弟卡若仍以 needs_user 残留 terminal map，
+  // jobs:list 会显示「等你批」幽灵卡（处理路径 closeStaleNeedsUserCards 已按同一标准清扫，关闭路径此前不对称）。
+  // 与 closeStaleNeedsUserCards 同款：以 closeTaskId 扫全池、仅命中 status=needs_user 且 report.taskId
+  // 相同者逐张 pool.cancel——纯池侧终态迁移，不再 dispatch 任务（任务 cancel 只一次，上文已按 closeTaskId
+  // 取消）；只触碰引用同一任务的兄弟卡，不误取消其他 task/job；已终态记录 pool.cancel 为 no-op，竞态安全。
+  if (closeTaskId) {
+    for (const rec of deps.pool.list()) {
+      if (rec.status === 'needs_user' && rec.report?.taskId === closeTaskId) deps.pool.cancel(rec.id, null);
+    }
+  }
   // 评审 MINOR 3：仅当本次取消真正产出 cancelled 且 prior 非 cancelled 才发事件——
   // 对既有 succeeded/failed 终态工单调用 cancel 返回原终态，不得误发 job.cancelled。
   if (cancelled?.status === 'cancelled' && before?.status !== 'cancelled') deps.onCancelled(cancelled);

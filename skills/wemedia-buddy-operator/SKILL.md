@@ -81,14 +81,20 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 保存方案使用 `wmb_save_plan`，并携带当前 request/task/grant/worker authority。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
 - 保存后用 `wmb_get_workbench` 回读并确认精确日期的 `plan`；不要用 `latestPlan` 代替当前任务的保存结果。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。二者都是 task-authorized 业务写入，必须携带当前 request/task/grant/worker authority。
+- 资料员发现重复、命名混乱或归属错误的主题时，先读真实主题与关联，再用 `wmb_propose_topic_maintenance` 提交有序 `create/update/merge/archive/reassign` 变更集（底层 `knowledge.topic_maintenance_propose`，含 task/grant/lease）。该工具只生成待批提案：不得直接改主题。桌助用 `wmb_list_topic_maintenance` / `wmb_get_topic_maintenance` 读取完整冻结清单并呈报；Owner 在主题台账只批准或驳回当前建议，批准后才原子迁移关联并归档旧主题。若批准时出现会改变结果的真实冲突，系统会持久排队并自动派资料员读取最新现场；资料员必须提交带 `supersedesProposalId` 的新版建议，旧建议不复活、不自动批准，桌助不得要求 Owner 手工改主题。历史 stale 仅作记录，不主动重提。
 - 资料员整理任务（librarian / page_library）无可整理内容时必须回报 no-op 确认：末条回复附 `` ```json {"wmb_noop": true} ``` `` 确认块；声明 wmb_noop 后不得执行任何写操作。
 
-### 主管派工与工单编排
+### 桌助派工与工单编排
 
+- 多实例是常态：同一角色可能同时有多个工单实例（两个记者扫不同渠道、写手与资料员同日并行都合法）。实例一等身份是 `jobId`；一切指认、继续、取消、传话、续派都必须用精确 `jobId`，禁止用角色名、显示编号或「那个记者」模糊指认。显示编号只在活动期可见，跨重启、跨会话不可用作指认。员工实例只对当前 job 的上下文负责，不引用其他实例会话、不假设自己是唯一在岗员工。
+- 读取 → 判断 → 精确动作：先读投影事实（`wmb_list_agents_roster` 读角色活动与进度摘要，`wmb_list_jobs` 读工单池，`wmb_get_job` 按 jobId 读单个工单与 monitor.task 进度），判断清楚状态后再按精确 `jobId` 执行动作；禁止凭空猜进度或把历史记录当当前状态。对进度/状态的回答只来自投影 API 返回的事实，禁止编造进度或状态。
+- 状态语义必须准确：`queued`=排队等容量（池满等待）；`waiting_resource`=等资源（对象锁/lease/judge 占用，不占并发，释放后自动晋升）；`running`=工作中（进度见 monitor.task 的 N/M）；`needs_user`=等你批（终态：不占 worker、不持 lease/grant/锁，需用户处理或关闭后才闭环，不自动重试）；`succeeded`/`partial`/`failed`/`cancelled`=终态并退出活动视图。不要把 waiting_resource 说成失败，不要编造完成时间或猜测性进度。
+- 活动与历史不混淆：活动视图=池内 queued/waiting_resource/running + 终态 needs_user；历史只从持久面重建（`agent_tasks.context_refs_json` 为锚 + 任务行），应用重启（池清空）后历史仍在。续派=从 context_refs_json 重建原 RoleJobRequest（jobId/roleId/brief/边界参数）+ 结果摘要，用 `wmb_spawn_job` 派新单（新 jobId）；不得对已终态工单直接继续，也不得伪称新单与旧单同一身份。
+- 桌助边界：桌助是协调入口，主管是主编本人，桌助不代行主管职权——无 standing 写权、不占员工执行容量；班组投影（`wmb_list_agents_roster`）里 desk 行就是桌助（协调入口），主管是主编本人，若遇旧数据把 desk 标为主管/主编席，一律按桌助/协调入口理解，不因此自认主管；`wmb_spawn_job` 的 roleId 只接受 reporter/planner/writer/librarian，不可派工给桌助自己；留言（`wmb_message_job`）不等于代批，批准在 Today/Proposals UI。`maxWorkers`（0..7）是全角色共享并发上限，不是每角色配额；0=派工停用（spawn 拒绝），调整它不改变任何角色或权限。
 - 先调 `wmb_daily_readiness` 查看今日扫/判状态与建议下一阶段；续接方式由你决定：扫描完成后要续接策划用 `wmb_continue_after_scan`（只要单项采集就不要调用），按阶段编排用 `wmb_run_daily_stage`（scan=单项采集，judge=单项策划，full=一条龙），派单项执行用 `wmb_spawn_job`。
-- `wmb_spawn_job` 只传角色与业务参数（reporter/planner/writer/librarian；系统按角色自动选择固定工作流，不接受 intent）：写手必须带 `projectId`；资料员是真实执行任务，无可整理内容时回报 no-op 确认。不可派主管自己。
-- 派单后等系统 JOB_EVENT 终态推送（succeeded/failed/cancelled/partial/needs_user，含 code/message/readback）再汇报；不要 sleep+bash 轮询 session，必要时才用 `wmb_get_job` 看 monitor.task。成功必须业务读回；partial 表示部分达成，needs_user 表示需主管判定或补料；取消优先。
-- 监工与传话：`wmb_list_agents_roster` 读席位状态与进度摘要，`wmb_list_jobs` 读工单池，`wmb_message_job` / `wmb_list_job_messages` 留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job` 取消工单。
+- `wmb_spawn_job` 只传角色与业务参数（系统按角色自动选择固定工作流，不接受 intent）：写手必须带 `projectId`；资料员是真实执行任务，无可整理内容时回报 no-op 确认。
+- 派单后等系统 JOB_EVENT 终态推送（succeeded/failed/cancelled/partial/needs_user，含 code/message/readback）再汇报；不要 sleep+bash 轮询 session，必要时才用 `wmb_get_job` 看 monitor.task。成功必须业务读回；partial 表示部分达成，needs_user 表示需用户处理或补料；取消优先。
+- 监工与传话：`wmb_message_job`（参数 jobId、body）/ `wmb_list_job_messages`（参数 jobId）留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job`（参数 jobId）取消工单。
 - 工单是 WMB 内部业务编排，不构成平台执行授权：最终确认、激活和最终发布仍只由用户在 WMB UI 完成；平台写入继续走各自的精确 UI 授权路径。
 
 ### 任务授权与统一回执
@@ -97,7 +103,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - `task grant` 仅授权当前任务所需的业务事实写入，绝不授权平台副作用。来源配置、账号/Profile、X List 变更、浏览器动作和最终发布继续使用各自的精确 UI 确认；`PreciseExecutionGrantV1` 与 task grant 分离，只能由 Owner UI 签发/撤销，且只能消费一次。目标 command、规范化 `inputHash`、完整 `boundIdentity`、target actor、browser profile/binding revision、expected account、允许状态转换、过期时间和 required readback 任一不匹配时写入必须为零。
 - `EXECUTION_GRANT_REQUIRED`、`EXECUTION_GRANT_STALE`、`EXECUTION_GRANT_EXPIRED`、`EXECUTION_GRANT_REVOKED`、`EXECUTION_GRANT_SCOPE_MISMATCH`、`EXECUTION_GRANT_ACTOR_MISMATCH`、`EXECUTION_GRANT_REVISION_CONFLICT` 都必须停止并重新读取现场。不能复用已消费 grant、换 request ID 绕过、由 Agent 自签或把历史 replay 当成本次执行。
 - 已知 `taskId` 时先调用 `wmb_list_task_grants({ taskId })`，只选择 `status=active`、worker 与自己匹配、`allowedCommands` 包含本次工具对应底层命令且 `expiresAt` 未过期的 grant；已知准确 `grantId` 时用 `wmb_get_task_grant({ grantId })` 回读。不要创建新 task 来绕过缺失授权。两者在 Pi 中分别只读映射到底层 MCP `task_grants.list` 与 `task_grants.get`；raw MCP 名不是 Pi 可直接调用的工具。
-- 当前 Agent 可写命令为 `agent_tasks.report_progress`、`content.create`、`content.save_version`、`intelligence_channels.proposal_apply`、`knowledge.creative_brief_create`、`knowledge.creative_brief_create_project`、`knowledge.creative_brief_update`、`knowledge.domain_create`、`knowledge.domain_update`、`knowledge.record_batch`、`knowledge.suggestion_create`、`plans.save`、`reviews.save`、`sources.upsert_batch`、`x_lists.observation_start`、`x_lists.observation_stop`、`x_lists.operation_execute`。每次新业务动作必须携带新的 `request_id`、原任务 `task_id`、回读得到的 `grant_id` 和完整业务输入；Pi 还必须携带本次 worker 的 `worker_lease_id`。缺任一必需 authority 或 grant 未列出对应 command 时写入必须为零。MCP 服务器由有效 lease 派生 Pi 身份；没有 lease 的调用固定归属 `external_agent:mcp`，调用方不能自报或改写 worker 身份。
+- 当前 Agent 可写命令为 `agent_tasks.report_progress`、`content.create`、`content.save_version`、`intelligence_channels.proposal_apply`、`knowledge.creative_brief_create`、`knowledge.creative_brief_create_project`、`knowledge.creative_brief_update`、`knowledge.domain_create`、`knowledge.domain_update`、`knowledge.record_batch`、`knowledge.suggestion_create`、`knowledge.topic_maintenance_propose`、`plans.save`、`reviews.save`、`sources.upsert_batch`、`x_lists.observation_start`、`x_lists.observation_stop`、`x_lists.operation_execute`。每次新业务动作必须携带新的 `request_id`、原任务 `task_id`、回读得到的 `grant_id` 和完整业务输入；Pi 还必须携带本次 worker 的 `worker_lease_id`。缺任一必需 authority 或 grant 未列出对应 command 时写入必须为零。MCP 服务器由有效 lease 派生 Pi 身份；没有 lease 的调用固定归属 `external_agent:mcp`，调用方不能自报或改写 worker 身份。
 - 成功结果是完整 `CommandReceiptV1`，必须核对 `ok=true`、`workspaceId`、`runtimeEpoch`、`taskId`、`grantId`、`actor`、`inputHash`、`data` 和 `readback`。同一 `request_id` 加同一规范化输入只会回放原回执；改变命令或输入会返回 `REQUEST_REPLAY_CONFLICT`，必须生成新的 request id，不得把冲突说成重试成功。
 - `TASK_GRANT_REQUIRED`、`TASK_GRANT_STALE`、`TASK_GRANT_EXPIRED`、`TASK_GRANT_REVOKED`、`TASK_SCOPE_BROADENED`、`TASK_WORKER_MISMATCH`、`WORKER_LEASE_STALE` 或 `WORKSPACE_STALE` 都表示本次业务写入为零。自动任务授权缺失或失效时停止并由 WMB 在同一任务的继续动作中恢复准确 grant；不得要求用户管理 grant，也不得改 task、worker、root、epoch 或省略身份字段绕过。
 - Grant 到期或撤销后，只有完全相同的既有 request/hash 可以读取原回执；任何新写入仍须当前有效 grant。回放是历史证据，不表示本次再次执行。
@@ -153,7 +159,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_create_x_list`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
-主管与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
+桌助派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
 
 
 

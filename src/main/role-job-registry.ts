@@ -7,7 +7,27 @@ import { getContentProject } from './content.ts';
 import type { EmployeeRole } from './job-pool.ts';
 import { shanghaiDate } from './ferment.ts';
 import { AUTOMATIC_TASK_GRANT_SCOPES } from './task-grants.ts';
-
+import { readLatestTopicMaintenanceProposalForTask, type TopicMaintenanceProposal } from './topic-maintenance.ts';
+// WMB-5141 持久边界与纯对象边界校验器（§12.2.7，签发/执行两门复用）；本模块保持既有导出面。
+export {
+  OBJECT_SCOPE_MISMATCH,
+  assertBoundaryCovers,
+  assertJobBoundaryComplete,
+  boundaryClaimFromContext,
+  buildJobContextRefs,
+  buildJobObjectBoundary,
+  hasBoundaryClaim,
+  isEmployeeRole,
+  maskBoundaryToRole,
+  normalizeSourceIds,
+  readJobContract,
+  readJobContractFromRefs,
+  rebuildRoleJobRequest,
+  resolveCommandObjectBoundary,
+  type JobContract,
+  type JobObjectBoundary
+} from './job-object-boundary.ts';
+import { buildJobObjectBoundary, isEmployeeRole } from './job-object-boundary.ts';
 /**
  * WMB-5116 角色工单注册表（唯一真相源）。
  *
@@ -26,17 +46,25 @@ export type RoleJobRequest =
 
 export type RoleJobPolicy = 'scan' | 'judge' | 'draft' | 'organize';
 export type RoleJobReadbackKind = 'scan_phase' | 'plans_revision' | 'content_version' | 'library_mutation';
-
 export type RoleJobSpec = Readonly<{
   roleId: EmployeeRole;
   intent: AgentIntent;
   businessDate: string;
   projectId: string | null;
+  /** WMB-5141 持久边界：标准化（去重 + 字典序）sourceIds（reporter=channelIds；librarian=sourceIds）。 */
+  sourceIds: readonly string[];
+  /** WMB-5141 持久边界：librarian 的写权范围（workspace=整个工作空间资料库；null=仅限 sourceIds）。 */
+  scope: 'workspace' | null;
   resourceLocks: readonly string[];
   policy: RoleJobPolicy;
   readback: RoleJobReadbackKind;
 }>;
 
+/**
+ * WMB-5141 工单对象边界（设计 §8.1：锁键是什么，写权对象就是什么）。
+ * businessDate/projectId/sourceIds/scope 四维；scope='workspace' 时 sourceIds 不受约束。
+ * 类型与校验器见 ./job-object-boundary.ts（本模块顶部统一 re-export）。
+ */
 export type JobTerminalStatus = 'succeeded' | 'failed' | 'cancelled' | 'partial' | 'needs_user';
 
 /**
@@ -62,6 +90,7 @@ export type RoleJobReadbackV1 =
   | { kind: 'plans_revision'; planDate: string; revision: number }
   | { kind: 'content_version'; projectId: string; versionId: string }
   | { kind: 'sources_mutated'; count: number }
+  | { kind: 'topic_maintenance_proposed'; proposal: TopicMaintenanceProposal }
   | { kind: 'scan_phase_reached'; phase: string }
   | { kind: 'noop_confirmed'; scope: string };
 
@@ -178,10 +207,6 @@ const ROLE_ALLOWED_KEYS: Readonly<Record<EmployeeRole, readonly string[]>> = Obj
   librarian: Object.freeze(['roleId', 'brief', 'sourceIds', 'scope'])
 });
 
-function isEmployeeRole(value: unknown): value is EmployeeRole {
-  return value === 'reporter' || value === 'planner' || value === 'writer' || value === 'librarian';
-}
-
 function validationError(message: string): Error {
   return Object.assign(new Error(message), { code: JOB_ERROR_CODES.VALIDATION_ERROR });
 }
@@ -263,11 +288,14 @@ export function deriveRoleJobSpec(request: RoleJobRequest, workspaceId: string):
   // librarian 联合成员无 businessDate（合同 §5.1）：缺省今日，仅作任务上下文。
   const businessDate = (roleId === 'librarian' ? null : request.businessDate) ?? shanghaiDate();
   const projectId = roleId === 'writer' ? request.projectId : null;
+  const boundary = buildJobObjectBoundary(request, businessDate);
   return Object.freeze({
     roleId,
     intent: ROLE_TO_INTENT[roleId],
     businessDate,
     projectId,
+    sourceIds: boundary.sourceIds,
+    scope: boundary.scope,
     resourceLocks: deriveResourceLocks({
       roleId,
       workspaceId,
@@ -440,6 +468,8 @@ export async function readbackLibraryMutation(
   sessionFile: string,
   finalText?: string | null
 ): Promise<RoleJobReadbackV1 | null> {
+  const proposal = readLatestTopicMaintenanceProposalForTask(database, taskId, sinceIso);
+  if (proposal) return { kind: 'topic_maintenance_proposed', proposal };
   const scope = AUTOMATIC_TASK_GRANT_SCOPES.page_library;
   const commands = scope.filter((command) => command !== 'agent_tasks.report_progress');
   const placeholders = commands.map(() => '?').join(',');

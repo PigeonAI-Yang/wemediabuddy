@@ -1,0 +1,172 @@
+/* ---- 班组概览：五角色始终可见的连续紧凑目录（无任务角色不占大卡） ---- */
+.agents-overview {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+.agents-overview-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.agents-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 6px;
+  align-items: stretch;
+}
+.agents-overview-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 10px;
+  background: var(--surface);
+}
+.agents-overview-row.is-desk {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.agents-overview-row.has-instances {
+  border-color: var(--border-strong, var(--border));
+}
+.agents-overview-row .agents-role-title,
+.agents-overview-row .agents-room {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-overview-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+.agents-overview-jump {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.agents-overview-jump:hover:not(:disabled) {
+  color: var(--accent-soft, var(--accent));
+  background: var(--accent-faint);
+}
+.agents-overview-jump:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 活动区空态：当前筛选无匹配实例（紧凑一行，不占网格）。 */
+.agents-filter-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.agents-role-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.agents-role-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.agents-room {
+  color: var(--muted);
+  font-size: 12px;
+}
+.agents-role-count {
+  margin-left: auto;
+  min-width: 1.6em;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-soft, var(--ink));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agents-role-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  padding: 0;
+  border: 1px solid var(--border-strong, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised, var(--surface)));
+  color: var(--ink);
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+.agents-role-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.agents-role-avatar:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.agents-role-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+.agents-role-hint {
+  margin: 0;
+  color: var(--muted-low);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* 桌助 = 协调入口（非实例）：状态一行 + 提示，不画卡、不计容量。 */
+.agents-state-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  min-width: 0;
+}
+.agents-state-summary {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-overview-loading { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 1500px) {
+  .agents-overview-row .agents-room { display: none; }
+}

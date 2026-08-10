@@ -328,7 +328,7 @@ test('L2-15 WMB-5120 spawner cancel ends agent_task terminal and revokes the bou
     let grantId = null;
     const spawner = new JobSpawner(runtime, {
       maxWorkers: 1,
-      execute: async (ctx) => { const started = await startTask(runtime, { requestId: `test:${ctx.job.id}:start`, contextRefs: { roleId: 'reporter', jobId: ctx.job.id, workspaceId: runtime.identity.workspaceId } }); boundTaskId = started.task.id; grantId = await ensureAutomaticTaskGrant(runtime, started.task.id); ctx.onTaskBound?.(started.task.id, null); await waitForAbort(ctx.signal); return SUCCEEDED; }
+      execute: async (ctx) => { const started = await startTask(runtime, { requestId: `test:${ctx.job.id}:start`, contextRefs: { roleId: 'reporter', jobId: ctx.job.id, brief: 'cancel-grant', businessDate: '2026-08-08', workspaceId: runtime.identity.workspaceId } }); boundTaskId = started.task.id; grantId = await ensureAutomaticTaskGrant(runtime, started.task.id); ctx.onTaskBound?.(started.task.id, null); await waitForAbort(ctx.signal); return SUCCEEDED; }
     });
     const job = spawner.spawn({ roleId: 'reporter', brief: 'cancel-grant', businessDate: '2026-08-08' });
     await waitFor(() => spawner.getHandle(job.id)?.taskId && grantId);

@@ -50,14 +50,14 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
   });
 
   server.registerTool('jobs.list', {
-    description: '列出员工工单池（排队/执行/终态）。主管读进度用。只读。'
+    description: '列出员工工单池（排队/执行/终态）。桌助读进度用。只读。'
   }, async () => {
     const spawner = getActiveJobSpawner() ?? managerSpawner();
     return text(spawner.list().map((job) => ({ ...job, handle: spawner.getHandle(job.id) })));
   });
 
   server.registerTool('jobs.get', {
-    description: '按 jobId 读工单+monitor.task 进度。正确监工方式；禁止 bash session。终态会推送，不必 sleep 轮询。只读。',
+    description: '按 jobId 读工单+monitor.task 进度。桌助读进度用；禁止 bash session。终态会推送，不必 sleep 轮询。只读。',
     inputSchema: { job_id: z.string() }
   }, async ({ job_id }) => {
     const spawner = getActiveJobSpawner() ?? managerSpawner();
@@ -75,7 +75,7 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
       handle,
       messages: spawner.listMessages(job_id),
       monitor: {
-        how: ['用本字段看进度', '有 taskId 看 monitor.task', '写手完成后再 wmb_get_content', '不要 bash session，不要 sleep 空轮询；终态会推送主管'],
+        how: ['用本字段看进度', '有 taskId 看 monitor.task', '写手完成后再 wmb_get_content', '不要 bash session，不要 sleep 空轮询；终态会推送'],
         taskId: handle?.taskId ?? null,
         task: task ? {
           id: task.id, intent: task.intent, status: task.status, phase: task.phase,
@@ -84,13 +84,13 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
           errorMessage: task.errorMessage, updatedAt: task.updatedAt
         } : null,
         sessionFile: handle?.sessionFile ?? null,
-        note: '终态由系统 push 给 desk；主管无需轮询。'
+        note: '终态由系统 push 给 desk；桌助无需轮询。'
       }
     });
   });
 
   server.registerTool('jobs.spawn', {
-    description: '主管向员工角色派有界工单（记者/策划/写手/资料员）。不可派 desk。只传角色与业务参数（系统按角色自动选择固定工作流）；写手必须提供 project_id；librarian 可限定 source_ids 或 scope=workspace；多余字段会被拒绝。',
+    description: '桌助向员工角色派有界工单（记者/策划/写手/资料员）。不可派工给桌助自己。只传角色与业务参数（系统按角色自动选择固定工作流）；写手必须提供 project_id；librarian 可限定 source_ids 或 scope=workspace；多余字段会被拒绝。',
     inputSchema: z.discriminatedUnion('role_id', [
       z.object({ role_id: z.literal('reporter'), brief: z.string().min(1), business_date: z.string().optional(), channel_ids: z.array(z.string()).optional(), source_feed_ids: z.array(z.string()).optional() }).strict(),
       z.object({ role_id: z.literal('planner'), brief: z.string().min(1), business_date: z.string().optional() }).strict(),
@@ -133,7 +133,7 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
   });
 
   server.registerTool('jobs.cancel', {
-    description: '主管取消员工工单。',
+    description: '桌助取消员工工单。',
     inputSchema: { job_id: z.string() }
   }, async ({ job_id }) => {
     const spawner = managerSpawner();
@@ -141,7 +141,7 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
   });
 
   server.registerTool('jobs.message', {
-    description: '主管给指定工单留言（员工执行上下文可见；running 时写入 task 进度）。',
+    description: '桌助给指定工单留言（员工执行上下文可见；running 时写入 task 进度）。',
     inputSchema: { job_id: z.string(), body: z.string().min(1) }
   }, async ({ job_id, body }) => {
     const spawner = managerSpawner();

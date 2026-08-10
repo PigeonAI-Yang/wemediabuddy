@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { workspaceStorageKey } from './workspace-storage';
-
+import { workspaceStorageKey } from './workspace-storage'; import { TopicMaintenanceLedger } from './topic-maintenance-ledger.tsx';
 export type LibraryTopicPiContext = { id: string; title: string } | null;
 
 type TopicStatus = 'active' | 'watching' | 'dormant' | string;
@@ -471,7 +470,7 @@ export function LibraryTopicsView(props: {
   const [listTotal, setListTotal] = useState(0);
   const [topicQuery, setTopicQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<TopicStatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<TopicStatusFilter>('all'); const [maintenanceOpen, setMaintenanceOpen] = useState(false);
 
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [focusedTopicId, setFocusedTopicId] = useState<string | null>(null);
@@ -1275,16 +1274,6 @@ export function LibraryTopicsView(props: {
 
   const homeView = (
     <div className="topic-home" aria-label="主题首页">
-      <section className="page-command" aria-label="主题概览">
-        <div className="page-command-main">
-          <div className="page-command-copy">
-            <div className="page-command-title-row">
-              <h1>主题</h1>
-              <p>先扫主题卡，再点进档案；需要时让 Pi 基于单个主题出选题方案。</p>
-            </div>
-          </div>
-        </div>
-      </section>
       <div className="topic-home-toolbar library-topic-list-toolbar">
         <input
           type="search"
@@ -1302,6 +1291,7 @@ export function LibraryTopicsView(props: {
             onClick={() => setStatusFilter(filter.id)}
           >{filter.label}</button>)}
         </div>
+        <button type="button" className="topic-maintenance-entry" onClick={() => setMaintenanceOpen(true)}>整理台账</button>
       </div>
       <div
         className="topic-card-grid"
@@ -1354,8 +1344,10 @@ export function LibraryTopicsView(props: {
     </div>
   );
 
+  const maintenanceView = (<div className="topic-maintenance-page" aria-label="主题整理台账页面"><header className="topic-maintenance-page-head"><button type="button" className="topic-back-button" onClick={() => setMaintenanceOpen(false)}>← 主题</button><div><h2>整理台账</h2><p>批准当前建议，查看资料员重新整理进度和历史记录。</p></div></header><TopicMaintenanceLedger /></div>);
+
   if (!selectedTopicId) {
-    return <div className="topic-layout topic-layout-home">{homeView}</div>;
+    return <div className="topic-layout topic-layout-home">{maintenanceOpen ? maintenanceView : homeView}</div>;
   }
 
   return <div className="topic-layout topic-layout-detail">

@@ -1,26 +1,36 @@
 import { randomUUID } from 'node:crypto';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { JobExecuteContext } from './job-spawner.ts';
-import { getAgentTask } from './agent-tasks.ts';
+import type { JobPool } from './job-pool.ts';
+import type { EmployeeRole } from './job-pool.ts';
+import { getAgentTask, type AgentTask } from './agent-tasks.ts';
+import { broadcastDataChanged } from './data-changed.ts';
 import { broadcastPiEvent } from './app-window.ts';
 import { ensureAutomaticTaskGrant } from './task-grants.ts';
 import {
+  dispatchBindNeedsUserJobContract,
   dispatchCancelAgentTask,
   dispatchCompleteAgentTask,
   dispatchFailAgentTask,
   dispatchNeedsUserAgentTask,
-  dispatchPartialAgentTask
+  dispatchPartialAgentTask,
+  dispatchUpdateAgentTaskPhase
 } from './agent-task-commands.ts';
+import { readJobContractFromRefs } from './job-object-boundary.ts';
 import {
+  buildJobContextRefs,
+  buildJobObjectBoundary,
   deriveRoleJobSpec,
   JOB_ERROR_CODES,
   mapOutcomeToTerminal,
+  normalizeSourceIds,
   readbackContentVersion,
   readbackLibraryMutation,
   readbackPlansRevision,
   readbackScanPhase,
   roleFailureCode,
   type JobExecutionOutcome,
+  type JobObjectBoundary,
   type RoleJobReadbackV1,
   type RoleJobRequest,
   type RoleJobSpec
@@ -51,6 +61,7 @@ function successCodeFor(readback: RoleJobReadbackV1): string {
     case 'plans_revision': return 'PLANS_REVISION';
     case 'content_version': return 'CONTENT_VERSION';
     case 'sources_mutated': return 'SOURCES_MUTATED';
+    case 'topic_maintenance_proposed': return 'TOPIC_MAINTENANCE_PROPOSED';
     case 'noop_confirmed': return 'NOOP_CONFIRMED';
   }
 }
@@ -77,11 +88,13 @@ export function createGenericEmployeeRunner(
     if (aborted(ctx.signal)) return cancelledOutcome();
 
     const roleId = ctx.job.roleId;
-    const request: RoleJobRequest = roleId === 'writer'
+    // WMB-5141：优先使用 spawn 原始请求（保留 channelIds/sourceFeedIds/sourceIds/scope），
+    // 无合同任务（测试直连 ctx）回落 JobRecord 重建。
+    const request: RoleJobRequest = ctx.request ?? (roleId === 'writer'
       ? { roleId, brief: ctx.job.brief, projectId: ctx.job.projectId ?? '', businessDate: ctx.job.businessDate }
       : roleId === 'librarian'
         ? { roleId, brief: ctx.job.brief }
-        : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate };
+        : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate });
     const spec = deriveRoleJobSpec(request, runtime.identity.workspaceId);
     const sessionStartedAt = new Date().toISOString();
 
@@ -100,6 +113,15 @@ export function createGenericEmployeeRunner(
       }
       // A1：lease 必须绑到子任务，grant 校验才过。
       runtime.bindWorkerTask(ctx.lease, taskId);
+      // WMB-5141 持久续派合同：jobId/roleId/brief/边界参数原子写入既有 context_refs_json
+      // （不丢既有 refs；缺失边界由 grant issue fail closed 兜底，两者同一硬门链）。
+      if (ctx.request) {
+        await writeJobContractRefs(runtime, taskId, {
+          jobId: ctx.job.id,
+          request,
+          boundary: boundaryForTask(request, spec, runtime, getAgentTask(runtime.database, taskId))
+        }, ctx.lease.leaseId);
+      }
       const grantId = await ensureAutomaticTaskGrant(runtime, taskId, new Date(), roleId);
       ctx.onTaskBound?.(taskId, grantId);
       return grantId;
@@ -135,6 +157,23 @@ export function createGenericEmployeeRunner(
         // cancelAgentTask INVALID_STATE 守卫保无双终态，已终态任务跳过。
         if (createdTaskId) await bestEffortCancelTask(ctx, createdTaskId);
         return cancelledOutcome();
+      }
+      // WMB-5142 生命周期「处理」：配置已补齐（真实任务已建）的续派，关闭与本工单同逻辑键的遗留
+      // needs_user 前置卡（旧任务 cancelled → 历史可追；旧池卡 cancelled → 退出活动视图），新实例唯一。
+      if (createdTaskId) {
+        await closeStaleNeedsUserCards(runtime, ctx.pool ?? null, {
+          roleId,
+          businessDate: spec.businessDate,
+          projectId: spec.projectId,
+          workerLeaseId: ctx.lease.leaseId
+        });
+      }
+      // WMB-5142 评审 P1 + 生命周期：复用/前置未绑定任务（onTaskReady 未触发，createdTaskId 未置）——
+      // 新建前置卡绑定工单合同（重启后按 jobId 重建「等你批」卡，修复配置缺失卡重启即丢）并回写
+      // handle 任务引用（settle 报告携带 taskId，投影按任务去重：续派 reuse 同任务不产生第二张卡）。
+      if (!createdTaskId && run.task) {
+        await bindWaitingTaskContract(ctx, runtime, request, spec, run.task.id);
+        ctx.onTaskBound?.(run.task.id, null);
       }
       const outcome = await assembleOutcome(ctx, spec, run, sessionStartedAt);
       // librarian 的 agent_task 终态由 runner 在 lease 仍绑定 task 时统一写入（§6 step 7）；
@@ -180,6 +219,118 @@ async function bestEffortCancelTask(ctx: JobExecuteContext, taskId: string): Pro
       taskId
     });
   } catch { /* 已终态则忽略 */ }
+}
+
+/**
+ * WMB-5141 持久续派合同写入（设计 §7.3/§12.2.1）：
+ * 把 jobId/roleId/brief/边界参数合并进既有 context_refs_json（原子单命令、不丢既有 refs，
+ * 走 agent_tasks.update_phase 命令面 → receipt + operation_log 审计）。任务非 running 时跳过
+ * （已终态由 grant issue 缺边界 fail closed 兜底，不在此处静默污染）。
+ */
+export async function writeJobContractRefs(
+  runtime: ActiveWorkspaceRuntime,
+  taskId: string,
+  input: { jobId: string; request: RoleJobRequest; boundary: JobObjectBoundary },
+  workerLeaseId?: string
+): Promise<void> {
+  const current = getAgentTask(runtime.database, taskId);
+  if (!current || current.status !== 'running') return;
+  await dispatchUpdateAgentTaskPhase(runtime, taskId, current.phase, {
+    contextRefs: { ...current.contextRefs, ...buildJobContextRefs({ jobId: input.jobId, request: input.request, boundary: input.boundary }) }
+  }, {
+    actor: { type: 'scheduler' as const, id: 'generic-employee-runner', label: 'GenericEmployeeRunner' },
+    requestId: `${taskId}:job-contract:${input.jobId}`,
+    workerLeaseId,
+    taskId
+  });
+}
+
+/** 工单对象边界（reporter 冻结渠道 feed 派生；与 onTaskReady 同款，消除双份逻辑漂移）。 */
+function boundaryForTask(request: RoleJobRequest, spec: RoleJobSpec, runtime: ActiveWorkspaceRuntime, task: AgentTask | null): JobObjectBoundary {
+  let boundary = buildJobObjectBoundary(request, spec.businessDate);
+  // reporter 派单未显式给 sourceFeedIds 时，从冻结渠道推导 feed 边界（upsert_batch 以 feedId 写渠道对象）。
+  if (request.roleId === 'reporter' && boundary.feedIds.length === 0) {
+    const frozen = task?.contextRefs?.intelligenceChannels as { sources?: Array<{ sourceFeedId?: unknown }> } | undefined;
+    const feedIds = Array.isArray(frozen?.sources)
+      ? frozen.sources.map((source) => source?.sourceFeedId).filter((id): id is string => typeof id === 'string' && Boolean(id))
+      : [];
+    if (feedIds.length) boundary = Object.freeze({ ...boundary, feedIds: normalizeSourceIds(feedIds) });
+  }
+  return boundary;
+}
+
+/**
+ * WMB-5142 生命周期：为 needs_user 等待卡绑定工单合同 refs（jobId/roleId/brief/边界合并不丢既有 refs）。
+ * 仅当任务仍 needs_user 且尚无可指认合同（新建前置卡 / 旧版无合同卡修复；reuse 旧卡已带合同不覆写 jobId，
+ * 续派卡仍归属最早 job，跨面指认稳定）。命令面 → receipt + operation_log 审计。
+ */
+async function bindWaitingTaskContract(
+  ctx: JobExecuteContext,
+  runtime: ActiveWorkspaceRuntime,
+  request: RoleJobRequest,
+  spec: RoleJobSpec,
+  taskId: string
+): Promise<void> {
+  if (!ctx.request) return;
+  const current = getAgentTask(runtime.database, taskId);
+  if (!current || current.status !== 'needs_user') return;
+  if (readJobContractFromRefs(current.contextRefs)) return;
+  try {
+    await dispatchBindNeedsUserJobContract(runtime, taskId, {
+      ...current.contextRefs,
+      ...buildJobContextRefs({ jobId: ctx.job.id, request, boundary: boundaryForTask(request, spec, runtime, current) })
+    }, {
+      actor: { type: 'scheduler' as const, id: 'generic-employee-runner', label: 'GenericEmployeeRunner' },
+      requestId: `${taskId}:job-contract:${ctx.job.id}`,
+      workerLeaseId: ctx.lease.leaseId,
+      taskId
+    });
+  } catch { /* 任务已终态则跳过（grant issue 缺边界 fail closed 兜底不变） */ }
+}
+
+/** 角色前置 needs_user 任务 intent 集（补配置续派关闭匹配键；reporter scanOnly 无前置，daily_scan 兜底）。 */
+const PREREQUISITE_INTENTS: Readonly<Record<EmployeeRole, readonly string[]>> = Object.freeze({
+  reporter: ['daily_intelligence', 'daily_scan'],
+  planner: ['daily_judge'],
+  writer: ['studio_draft'],
+  librarian: ['page_library']
+});
+
+/**
+ * WMB-5142 生命周期「处理」：关闭与本工单同逻辑键的遗留 needs_user 前置卡（PI_CONFIG_REQUIRED）。
+ * 匹配键 = 角色前置 intent 集 + businessDate；writer 再按 projectId 精确匹配（不同项目互不关闭）。
+ * 任务侧 needs_user → cancelled（历史可追、不再被复用）；池卡（凡引用该任务者，含无合同旧卡）
+ * needs_user → cancelled（退出活动视图，jobs:list 不再残留）。配置补齐后由 runner 在真实任务
+ * 已建（createdTaskId）后调用；测试可直接调用同一函数验证生命周期。
+ */
+export async function closeStaleNeedsUserCards(
+  runtime: ActiveWorkspaceRuntime,
+  pool: JobPool | null,
+  input: { roleId: EmployeeRole; businessDate: string; projectId: string | null; workerLeaseId?: string | null }
+): Promise<void> {
+  const intents = PREREQUISITE_INTENTS[input.roleId] ?? [];
+  if (!intents.length) return;
+  const rows = runtime.database.prepare(
+    `SELECT id FROM agent_tasks WHERE intent IN (${intents.map(() => '?').join(',')}) AND business_date = ?
+       AND status = 'needs_user' AND error_code = 'PI_CONFIG_REQUIRED' ORDER BY updated_at DESC`
+  ).all(...intents, input.businessDate) as Array<{ id: string }>;
+  for (const row of rows) {
+    const task = getAgentTask(runtime.database, row.id);
+    if (!task || task.status !== 'needs_user') continue;
+    if (input.roleId === 'writer' && String(task.contextRefs.projectId ?? '') !== String(input.projectId ?? '')) continue;
+    try {
+      await dispatchCancelAgentTask(runtime, task.id, {
+        actor: { type: 'scheduler' as const, id: 'generic-employee-runner', label: 'GenericEmployeeRunner' },
+        requestId: `${task.id}:handle-close:${randomUUID()}`,
+        workerLeaseId: input.workerLeaseId ?? undefined,
+        taskId: task.id
+      });
+    } catch { /* 已终态则忽略 */ }
+    for (const rec of pool?.list() ?? []) {
+      if (rec.status === 'needs_user' && rec.report?.taskId === task.id) pool?.cancel(rec.id, null);
+    }
+  }
+  if (rows.length) broadcastDataChanged({ scopes: ['agent'], reason: 'jobs.handle-close' });
 }
 
 /** §7 读回：任务终态 + 业务产物证据 → 五态 outcome；无读回证据不得 succeeded。 */

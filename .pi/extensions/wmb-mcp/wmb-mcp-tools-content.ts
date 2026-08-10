@@ -96,6 +96,27 @@ const recordKnowledge: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('knowledge.record_batch', { request_id: params.requestId, ...authorityPayload(params), items: params.items })); }
 };
 
+const proposeTopicMaintenance: ToolDefinition = {
+  name: 'wmb_propose_topic_maintenance', label: '提交主题整理提案',
+  description: '资料员提交 create/update/merge/archive/reassign 的冻结提案；不修改正式主题。Owner 只会在主题台账批准或驳回。',
+  parameters: { type: 'object', properties: { requestId: { type: 'string' }, ...authorityProperties, supersedesProposalId: { type: 'string' }, title: { type: 'string' }, reason: { type: 'string' }, changes: { type: 'array', items: { type: 'object' } } }, required: ['requestId','taskId','grantId','title','reason','changes'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_propose', { request_id: String(params.requestId ?? ''), ...authorityPayload(params), supersedes_proposal_id: params.supersedesProposalId, title: String(params.title ?? ''), reason: String(params.reason ?? ''), changes: params.changes })); }
+};
+
+const listTopicMaintenance: ToolDefinition = {
+  name: 'wmb_list_topic_maintenance', label: '读取主题整理台账',
+  description: '只读主题整理提案台账。桌助用它呈报待批项；资料员用它核对状态。',
+  parameters: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' }, offset: { type: 'number' } }, additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_list', { status: params.status, limit: params.limit, offset: params.offset })); }
+};
+
+const getTopicMaintenance: ToolDefinition = {
+  name: 'wmb_get_topic_maintenance', label: '读取主题整理提案',
+  description: '按 proposalId 读取冻结 before/after、准确关系清单与状态。只读。',
+  parameters: { type: 'object', properties: { proposalId: { type: 'string' } }, required: ['proposalId'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_get', { proposal_id: String(params.proposalId ?? '') })); }
+};
+
 const saveCoreVersion: ToolDefinition = {
   name: 'wmb_save_core_version',
   label: '保存 WMB 核心初稿',
@@ -313,4 +334,4 @@ const saveReview: ToolDefinition = {
   }
 };
 
-export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];
+export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];

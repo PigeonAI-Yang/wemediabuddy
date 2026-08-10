@@ -10,6 +10,7 @@ import {
   updateCreativeBrief
 } from './knowledge-canvas.ts';
 import { createKnowledgeDomain, recordKnowledgeBatch, updateKnowledgeDomain } from './knowledge.ts';
+import { createTopicMaintenanceProposal } from './topic-maintenance.ts';
 import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
 import { saveReview } from './reviews.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
@@ -183,6 +184,22 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
         const data = recordKnowledgeBatch(database, normalized, false);
         return { data, readback: data };
       }
+    }));
+  });
+
+  server.registerTool('knowledge.topic_maintenance_propose', {
+    description: '资料员只创建冻结的主题整理提案；不会修改正式主题或关联。返回 CommandReceiptV1。',
+    inputSchema: { ...authoritySchema, supersedes_proposal_id: z.string().optional(), title: z.string(), reason: z.string(), changes: z.array(z.object({
+      kind: z.enum(['create', 'update', 'merge', 'archive', 'reassign']), topicId: z.string().optional(), retainedTopicId: z.string().optional(), mergedTopicId: z.string().optional(),
+      sourceId: z.string().optional(), fromTopicId: z.string().optional(), toTopicId: z.string().optional(), relation: z.string().optional(),
+      after: z.object({ title: z.string(), canonicalKey: z.string().optional(), kind: z.enum(['theme', 'event']).optional(), summary: z.string().nullable().optional(), status: z.enum(['active', 'watching', 'dormant', 'archived']).optional() }).optional()
+    })).min(1) }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, supersedes_proposal_id, ...commandInput } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'knowledge.topic_maintenance_propose', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { ...commandInput, supersedesProposalId: supersedes_proposal_id, taskId: task_id }, boundIdentity: { entityType: 'topic_maintenance_proposal' }, entityType: 'topic_maintenance_proposal',
+      execute: (database, normalized) => { const data = createTopicMaintenanceProposal(database, normalized as any); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; }
     }));
   });
 

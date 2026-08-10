@@ -572,6 +572,24 @@ export const lateMigrations = [
       ALTER TABLE agent_tasks_new RENAME TO agent_tasks;
       CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
     `
+  },
+  {
+    version: 51,
+    sql: `
+      CREATE TABLE topic_maintenance_proposals (
+        id TEXT PRIMARY KEY,
+        task_id TEXT REFERENCES agent_tasks(id),
+        title TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        changes_json TEXT NOT NULL,
+        expected_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('proposed','approved','rejected','stale')),
+        revision INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT
+      );
+      CREATE INDEX topic_maintenance_proposals_status ON topic_maintenance_proposals(status,created_at DESC,id DESC);
+    `
   }
 ] as const;
-

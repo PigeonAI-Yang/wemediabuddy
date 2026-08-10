@@ -165,12 +165,10 @@
   overflow: auto;
   padding: var(--page-space);
 }
-/* topic-home-head retired — uses .page-command */
-.topic-home > .page-command { margin-bottom: 0; }
-.topic-home-toolbar {
-  display: grid;
-  gap: 10px;
-  max-width: 720px;
+.topic-home-toolbar.library-topic-list-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px;
+  max-width: none;
 }
 .topic-card-grid {
   display: grid;

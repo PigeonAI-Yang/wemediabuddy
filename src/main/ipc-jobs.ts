@@ -12,12 +12,13 @@ import type { RoleJobReportV1 } from './role-job-registry.ts';
 import { notifyDeskJobEvent } from './manager-job-notify.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import type { McpRuntime } from './mcp.ts';
+import { handleTopicReproposalJobEvent } from './topic-maintenance-reproposal.ts';
 
 export type JobsIpcDependencies = {
   getActiveRuntime: () => ActiveWorkspaceRuntime | null;
 };
 
-function requireSpawner(deps: JobsIpcDependencies) {
+export function ensureJobsSpawner(deps: JobsIpcDependencies) {
   const runtime = deps.getActiveRuntime();
   if (!runtime) throw new Error('当前工作空间运行时不可用。');
   return ensureJobSpawner(runtime, {
@@ -40,6 +41,7 @@ function requireSpawner(deps: JobsIpcDependencies) {
         runtime,
         handle: jobId && spawner ? spawner.getHandle(jobId) : null
       });
+      void handleTopicReproposalJobEvent(runtime, event).catch((error) => console.error('[topic-reproposal-event]', error));
     },
     execute: createGenericEmployeeRunner(
       () => deps.getActiveRuntime(),
@@ -54,7 +56,7 @@ function requireSpawner(deps: JobsIpcDependencies) {
 
 export function registerJobsIpc(deps: JobsIpcDependencies): void {
   ipcMain.handle('jobs:spawn', (_event, input: SpawnJobRequest) => {
-    const spawner = requireSpawner(deps);
+    const spawner = ensureJobsSpawner(deps);
     return spawner.spawn(input);
   });
 
@@ -76,7 +78,7 @@ export function registerJobsIpc(deps: JobsIpcDependencies): void {
   });
 
   ipcMain.handle('jobs:await', async (_event, input: { jobId: string; timeoutMs?: number }) => {
-    const spawner = requireSpawner(deps);
+    const spawner = ensureJobsSpawner(deps);
     return spawner.await(input.jobId, input.timeoutMs ?? 120_000);
   });
 
@@ -87,7 +89,7 @@ export function registerJobsIpc(deps: JobsIpcDependencies): void {
   });
 
   ipcMain.handle('jobs:message', async (_event, input: { jobId: string; body: string }) => {
-    const spawner = requireSpawner(deps);
+    const spawner = ensureJobsSpawner(deps);
     const jobId = String(input?.jobId || '').trim();
     const body = String(input?.body || '');
     if (!jobId) throw new Error('缺少 jobId。');
@@ -119,7 +121,7 @@ export function registerJobsIpc(deps: JobsIpcDependencies): void {
   });
 
   ipcMain.handle('jobs:set-max-workers', (_event, maxWorkers: number) => {
-    const spawner = requireSpawner(deps);
+    const spawner = ensureJobsSpawner(deps);
     const n = Number(maxWorkers);
     if (!Number.isFinite(n) || n < 0) throw new Error('maxWorkers 无效。');
     if (n === 0) spawner.setEnabled(false);

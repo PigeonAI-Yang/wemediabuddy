@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { lateMigrations } from './late-migrations.ts';
+import { lateMigrations } from './late-migrations.ts'; import { topicMaintenanceMigrations } from './topic-maintenance-migrations.ts';
 import { knowledgeMigrations } from './knowledge-migrations.ts';
 
 export const migrations = [
@@ -424,7 +424,7 @@ export const migrations = [
       CREATE INDEX x_list_timeline_cache_account_accessed ON x_list_timeline_cache(account_key, last_accessed_at);
     `
   },
-  ...lateMigrations
+  ...lateMigrations, ...topicMaintenanceMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

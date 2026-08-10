@@ -451,3 +451,18 @@ runtimeTest('T-12 WMB-5119 cancel after late failed outcome stays cancelled with
   assert.equal(employeeSnapshotCount(runtime), 0, 'lease 归零');
   spawner.dispose();
 });
+
+runtimeTest('WMB-5159 maxWorkers=0 freezes queued durable jobs until capacity resumes', 'capacity-zero', async (runtime) => {
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const spawner = new JobSpawner(runtime, { maxWorkers: 1, execute: async ({ job }) => { if (job.brief === 'first') await firstGate; return SUCCEEDED; } });
+  const first = spawner.spawn({ roleId: 'reporter', brief: 'first', businessDate: '2026-08-10' });
+  const second = spawner.spawn({ roleId: 'librarian', brief: 'durable', scope: 'workspace' }, 'persistent-job');
+  assert.equal(spawner.get(second.id).status, 'queued');
+  spawner.setEnabled(false); releaseFirst();
+  await awaitStatus(spawner, first.id, 'succeeded'); await sleep(50);
+  assert.equal(spawner.get(second.id).status, 'queued', 'capacity zero must not promote queued work');
+  spawner.setMaxWorkers(1);
+  await awaitStatus(spawner, second.id, 'succeeded');
+  spawner.dispose();
+});

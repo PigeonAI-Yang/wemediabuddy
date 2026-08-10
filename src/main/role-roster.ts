@@ -6,7 +6,14 @@ import {
 } from '../shared/agent-capabilities.ts';
 import { getAgentTask, getLatestAgentTask, type AgentTask } from './agent-tasks.ts';
 import type { EmployeeRole } from './job-pool.ts';
+import { getActiveJobSpawner } from './job-spawner.ts';
 import { deriveIntentForRole } from './role-job-registry.ts';
+import {
+  instanceProgressLabel,
+  instanceProgressRatio,
+  readCrewInstanceProjection,
+  type CrewInstance
+} from './crew-instance-projection.ts';
 
 export type RoleRosterStatus = 'idle' | 'running' | 'blocked' | 'unknown';
 
@@ -26,9 +33,18 @@ export type RoleRosterRow = {
   updatedAt: string | null;
   finishedAt: string | null;
   writeCommandCount: number;
+  /** WMB-5142 实例投影：该角色活动期实例（含 needs_user），按 queuedAt 序；同角色多实例显式可见。 */
+  instances: readonly CrewInstance[];
 };
 
 const ORDER: RoleId[] = ['desk', 'reporter', 'planner', 'writer', 'librarian'];
+
+/**
+ * 桌助在班组投影中的展示面：桌助是协调入口，主管是主编本人。
+ * agent-capabilities 注册表（ROLE_CATALOG.desk = 主管/主编席）是权限注册面，本任务禁止改动；
+ * 这里在展示层覆盖 desk 行的模型/UI 可见标签，消除「主管/主编席」旧隐喻（WMB-5144 复审 P2）。
+ */
+const DESK_ROSTER_FACE = { labelZh: '桌助', roomZh: '协调入口' } as const;
 
 function mapIntentToRole(intent: string | undefined | null): RoleId | null {
   if (!intent) return null;
@@ -42,29 +58,6 @@ function mapIntentToRole(intent: string | undefined | null): RoleId | null {
   return null;
 }
 
-function progressLabel(task: AgentTask): string | null {
-  const p = task.progress || {};
-  if (typeof p.planned === 'number' && typeof p.processed === 'number') {
-    return `渠道 ${p.processed}/${p.planned}` + (p.currentSource ? ` · ${p.currentSource}` : '');
-  }
-  if (p.opportunityCount != null) return `机会 ${p.opportunityCount}`;
-  if (p.saved != null) return `已保存 ${p.saved}`;
-  return task.phase || null;
-}
-
-function progressRatio(task: AgentTask | null): number | null {
-  if (!task || task.status !== 'running') return null;
-  const p = task.progress || {};
-  const planned = Number(p.planned ?? 0);
-  const processed = Number(p.processed ?? 0);
-  if (planned > 0) return Math.max(0, Math.min(1, processed / planned));
-  // judging phases: indeterminate-ish mid pulse
-  const phase = String(task.phase || '');
-  if (/judg|synth|validat|running_pi/i.test(phase)) return 0.62;
-  if (/scan|channel/i.test(phase)) return 0.28;
-  return 0.15;
-}
-
 function statusOf(task: AgentTask | null): RoleRosterStatus {
   if (!task) return 'idle';
   if (task.status === 'needs_user') return 'blocked';
@@ -72,6 +65,85 @@ function statusOf(task: AgentTask | null): RoleRosterStatus {
   return 'idle';
 }
 
+function runningSummary(task: AgentTask | null, fallback: string): string {
+  if (task?.events?.length) return String(task.events[task.events.length - 1]?.message || task.phase || fallback);
+  return task?.phase || fallback;
+}
+
+function rowFromInstance(
+  roleId: RoleId,
+  meta: { labelZh: string; roomZh: string },
+  instance: CrewInstance,
+  instances: readonly CrewInstance[],
+  database: DatabaseSync
+): RoleRosterRow {
+  const running = instance.status === 'running';
+  const blocked = instance.status === 'needs_user';
+  // WMB-5142 评审 P2：活动实例四态 + 历史全分支覆盖，无「待命」虚构待命态默认值。
+  let summary: string;
+  if (running) summary = runningSummary(instance.taskId ? getAgentTask(database, instance.taskId) : null, '工作中');
+  else if (blocked) summary = instance.error || '需要你处理';
+  else if (instance.status === 'waiting_resource') summary = `等资源 · ${instance.waitReason ?? ''}`;
+  else if (instance.status === 'queued') summary = `排队中 · ${instance.brief}`;
+  else summary = `最近：${instance.phase || instance.status}`;
+  return {
+    roleId,
+    labelZh: meta.labelZh,
+    roomZh: meta.roomZh,
+    status: running ? 'running' : blocked ? 'blocked' : 'idle',
+    summary,
+    taskId: instance.taskId,
+    intent: instance.intent ?? deriveIntentForRole(roleId as EmployeeRole),
+    phase: instance.phase,
+    progressLabel: instance.progressLabel,
+    progressRatio: instance.progressRatio,
+    createdAt: instance.queuedAt,
+    updatedAt: instance.startedAt ?? instance.queuedAt,
+    finishedAt: instance.finishedAt,
+    writeCommandCount: roleWriteCommands(roleId).length,
+    instances
+  };
+}
+
+/** 遗留任务行（无投影实例时回落，保持既有字段语义；daily 编排/页任务不经 JobPool）。 */
+function rowFromLegacy(
+  roleId: RoleId,
+  meta: { labelZh: string; roomZh: string },
+  task: AgentTask | null,
+  database: DatabaseSync
+): RoleRosterRow {
+  const running = task?.status === 'running';
+  const blocked = task?.status === 'needs_user';
+  // WMB-5142 评审 P2：空角色无虚构「待命」态，输出中性文案「当前无任务」（§14 A4 / EVAL-CAP-027.5）。
+  let summary = '当前无任务';
+  if (running) summary = runningSummary(task, '工作中');
+  else if (blocked) summary = task!.errorMessage || '需要你处理';
+  else if (task?.finishedAt) summary = `最近：${task.phase || task.status}`;
+  return {
+    roleId,
+    labelZh: meta.labelZh,
+    roomZh: meta.roomZh,
+    status: statusOf(task),
+    summary,
+    taskId: task?.id ?? null,
+    intent: task?.intent ?? (roleId === 'desk' ? null : deriveIntentForRole(roleId as EmployeeRole)),
+    phase: task?.phase ?? null,
+    progressLabel: task ? instanceProgressLabel(task) : null,
+    progressRatio: instanceProgressRatio(task),
+    createdAt: task?.createdAt ?? null,
+    updatedAt: task?.updatedAt ?? null,
+    finishedAt: task?.finishedAt ?? null,
+    writeCommandCount: roleWriteCommands(roleId).length,
+    instances: []
+  };
+}
+
+/**
+ * 角色班组投影（WMB-5142）：实例驱动，单一投影 API 同时驱动强制与显示（§12.2.4 干净切换）。
+ * 每角色取活动期代表实例（queuedAt 序首个）渲染粗粒度行，`instances` 携带该角色全部
+ * 活动实例（同角色多实例显式可见）；无活动实例时回落遗留任务（daily 编排不经 JobPool），
+ * 再无则取最近历史实例；空角色显示「当前无任务」（不预设空槽、无虚构待命态，§3.2 不变量 4 / §14 A4）。
+ */
 export function buildRoleRoster(
   database: DatabaseSync,
   input: {
@@ -81,6 +153,14 @@ export function buildRoleRoster(
   } = {}
 ): RoleRosterRow[] {
   const businessDate = input.businessDate;
+  const spawner = getActiveJobSpawner();
+  const projection = readCrewInstanceProjection({
+    database,
+    pool: spawner?.pool ?? null,
+    getHandle: spawner ? (jobId) => spawner.getHandle(jobId) : null
+  });
+
+  // 遗留面：intent 最近任务 + worker lease 提示（daily 编排/页任务不经 JobPool 的可见性）。
   const latestByRole = new Map<RoleId, AgentTask>();
 
   const intents = [
@@ -147,30 +227,18 @@ export function buildRoleRoster(
     }
   }
 
+  const dateMatches = (instance: CrewInstance): boolean => !businessDate || instance.businessDate === businessDate;
+
   return ORDER.map((roleId) => {
-    const meta = ROLE_CATALOG[roleId];
-    const task = latestByRole.get(roleId) ?? null;
-    const running = task && task.status === 'running';
-    const blocked = task && task.status === 'needs_user';
-    let summary = '待命';
-    if (running) summary = task!.events?.length ? String(task!.events[task!.events.length - 1]?.message || task!.phase) : (task!.phase || '工作中');
-    else if (blocked) summary = task!.errorMessage || '需要你处理';
-    else if (task?.finishedAt) summary = `最近：${task.phase || task.status}`;
-    return {
-      roleId,
-      labelZh: meta.labelZh,
-      roomZh: meta.roomZh,
-      status: statusOf(task),
-      summary,
-      taskId: task?.id ?? null,
-      intent: task?.intent ?? (roleId === 'desk' ? null : deriveIntentForRole(roleId as EmployeeRole)),
-      phase: task?.phase ?? null,
-      progressLabel: task ? progressLabel(task) : null,
-      progressRatio: progressRatio(task),
-      createdAt: task?.createdAt ?? null,
-      updatedAt: task?.updatedAt ?? null,
-      finishedAt: task?.finishedAt ?? null,
-      writeCommandCount: roleWriteCommands(roleId).length
-    };
+    const meta = roleId === 'desk' ? DESK_ROSTER_FACE : ROLE_CATALOG[roleId];
+    if (roleId === 'desk') return rowFromLegacy(roleId, meta, latestByRole.get('desk') ?? null, database);
+    const role = roleId as EmployeeRole;
+    const instances = projection.byRole[role].active.filter(dateMatches);
+    if (instances.length) return rowFromInstance(roleId, meta, instances[0], instances, database);
+    const legacy = latestByRole.get(roleId) ?? null;
+    if (legacy) return rowFromLegacy(roleId, meta, legacy, database);
+    const history = projection.byRole[role].history.filter(dateMatches);
+    if (history.length) return rowFromInstance(roleId, meta, history[0], [], database);
+    return rowFromLegacy(roleId, meta, null, database);
   });
 }

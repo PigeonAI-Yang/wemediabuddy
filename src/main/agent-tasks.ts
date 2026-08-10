@@ -350,7 +350,8 @@ export function cancelAgentTask(database: DatabaseSync, id: string): CommandResu
   const current = getRow(database, id);
   if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
   if (current.status === 'cancelled') return success(requireTask(database, id));
-  if (current.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以取消。');
+  // WMB-5142 生命周期：needs_user（等你批）卡可被用户关闭/处理——needs_user → cancelled（历史可追、不再复用）。
+  if (current.status !== 'running' && current.status !== 'needs_user') return failure('INVALID_STATE', '只有运行中或等待用户处理的任务可以取消。');
   const now = new Date().toISOString();
   database.prepare(`UPDATE agent_tasks SET status = 'cancelled', phase = 'cancelled', error_code = 'CANCELLED',
     error_message = '用户取消了任务。已入库资料仍保留在本地。', updated_at = ?, finished_at = ? WHERE id = ?`).run(now, now, id);
@@ -393,6 +394,24 @@ export function needsUserAgentTask(database: DatabaseSync, id: string, errorCode
     .run(errorCode, errorMessage, now, now, id);
   recordOperation(database, { actorType: 'ui', command: 'agent_tasks.needs_user', entityType: 'agent_task', entityId: id, result: 'error', errorCode });
   broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'agent.needs_user' });
+  return success(requireTask(database, id));
+}
+
+/**
+ * WMB-5142 生命周期：为 needs_user 等待卡绑定工单合同 refs（jobId/roleId/brief/边界，合并不丢既有 refs）。
+ * 仅接受 needs_user（等待中的前置卡）——重启后投影按 jobId 重建「等你批」卡，修复配置缺失卡重启即丢；
+ * 已终态（succeeded/failed/cancelled）任务拒绝，防污染合同（grant issue 缺边界 fail closed 兜底不变）。
+ */
+export function bindNeedsUserJobContract(database: DatabaseSync, id: string, contractRefs: Record<string, unknown>): CommandResult<AgentTask> {
+  const current = getRow(database, id);
+  if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (current.status !== 'needs_user') return failure('INVALID_STATE', '只有等待用户处理的任务可以绑定工单合同。');
+  const now = new Date().toISOString();
+  const existing = JSON.parse(current.context_refs_json) as Record<string, unknown>;
+  database.prepare(`UPDATE agent_tasks SET context_refs_json = ?, updated_at = ? WHERE id = ?`)
+    .run(JSON.stringify({ ...existing, ...contractRefs }), now, id);
+  recordOperation(database, { actorType: 'scheduler', command: 'agent_tasks.bind_job_contract', entityType: 'agent_task', entityId: id, result: 'ok' });
+  broadcastDataChanged({ scopes: ['agent'], reason: 'agent.bind_contract' });
   return success(requireTask(database, id));
 }
 

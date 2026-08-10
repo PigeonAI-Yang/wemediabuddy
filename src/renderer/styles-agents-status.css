@@ -1,0 +1,132 @@
+/* ---- 状态点（颜色 + 文字双编码，WCAG AA；running 琥珀无脉冲） ---- */
+.agents-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+.agents-status-dot.status-idle {
+  border: 1.5px solid var(--muted);
+  background: transparent;
+}
+.agents-status-dot.status-queued {
+  background: var(--muted);
+}
+.agents-status-dot.status-waiting_resource {
+  border: 1.5px dashed var(--muted);
+  background: transparent;
+}
+.agents-status-dot.status-running {
+  background: var(--status-running);
+}
+.agents-status-dot.status-needs_user {
+  background: var(--info);
+}
+.agents-status-dot.status-succeeded,
+.agents-status-dot.status-partial {
+  background: var(--success);
+}
+.agents-status-dot.status-failed {
+  background: var(--danger);
+}
+.agents-status-dot.status-blocked {
+  background: var(--danger);
+}
+.agents-status-dot.status-cancelled,
+.agents-status-dot.status-unknown {
+  border: 1.5px dashed var(--muted-low);
+  background: transparent;
+}
+
+/* 状态词（与状态点同源映射；无虚构空闲态） */
+.agents-status-word.status-running,
+.agents-job-status-word.status-running {
+  color: var(--status-running);
+}
+.agents-status-word.status-needs_user,
+.agents-job-status-word.status-needs_user {
+  color: var(--info);
+}
+.agents-status-word.status-succeeded,
+.agents-status-word.status-partial,
+.agents-job-status-word.status-succeeded,
+.agents-job-status-word.status-partial {
+  color: var(--success);
+}
+.agents-status-word.status-failed,
+.agents-job-status-word.status-failed {
+  color: var(--danger);
+}
+.agents-status-word.status-blocked {
+  color: var(--danger);
+}
+.agents-status-word.status-cancelled,
+.agents-job-status-word.status-cancelled {
+  color: var(--muted-low);
+}
+.agents-status-word.status-queued,
+.agents-status-word.status-waiting_resource,
+.agents-status-word.status-idle,
+.agents-job-status-word.status-queued,
+.agents-job-status-word.status-waiting_resource {
+  color: var(--muted);
+}
+
+.agents-job-status-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.agents-job-stamp {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.agents-job-intent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-low);
+  font-size: 11.5px;
+}
+.agents-job-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+.agents-term-mark {
+  color: var(--muted);
+  width: 1em;
+  text-align: center;
+  font-weight: 700;
+}
+.agents-history-row.status-succeeded .agents-term-mark { color: var(--success); }
+.agents-history-row.status-failed .agents-term-mark { color: var(--danger); }
+.agents-history-row.status-cancelled .agents-term-mark { color: var(--muted-low); }
+
+.agents-callout {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.agents-callout.danger,
+.agents-callout.seat-conflict {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: var(--agents-callout-danger-bg);
+  color: var(--ink);
+}
+.agents-callout-hint {
+  color: var(--muted);
+  font-size: 12px;
+}

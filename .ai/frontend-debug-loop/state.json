@@ -1,34 +1,26 @@
 {
-  "active_loop": "wmb-dev-supervisor-takeover",
+  "active_loop": "wmb-5160-topic-ledger-page",
   "status": "complete",
-  "symptom": "The prior supervised launch collided with the neighboring WMB-5116 acceptance runtime.",
+  "symptom": "主题首页顶部长期占用整块审批台账，异常恢复语义暴露给 Owner。",
   "observation_packet": {
     "url": "http://127.0.0.1:27391/",
-    "viewport": "native Electron renderer process at device scale factor 1",
-    "user_action": "Wait for the acceptance runtime to exit, start one supervised npm start process, and probe the renderer twice.",
-    "expected": "Exactly one hub-managed wmb-dev runtime remains ready and serves WeMediaBuddy.",
-    "actual": "The acceptance runtime released port 27391; hub-managed wmb-dev started and remained ready with one Electron main process and renderer child.",
-    "screenshot": null,
-    "console": "Startup log contains no current application exception; only Node DEP0147 warning.",
-    "network_ws": "scripts/smoke-renderer.mjs returned ok twice for 127.0.0.1:27391.",
-    "dom_selector": "Renderer HTTP entry and Electron renderer process",
-    "computed_style_layout": "Not changed in this loop.",
-    "state_store_snapshot": "hub wmb-dev ready, restarts=0; Electron main and renderer processes active."
+    "viewport": "native Electron, DPR=1",
+    "user_action": "主题 → 整理台账 → 重新交给资料员 → 返回主题",
+    "expected": "首页仅保留同行入口；独立页批准、看历史并恢复失败重提",
+    "actual": "入口同行、独立页恢复 needs_user 到 pending、返回后首页无台账",
+    "screenshot": "J:/Users/yangda01/Temp/wmb-5160-topic-entry.png; J:/Users/yangda01/Temp/wmb-5160-ledger-page.png",
+    "console": "no renderer error",
+    "network_ws": "Owner IPC receipt ok; durable job readback pending attempts=0",
+    "dom_selector": ".topic-maintenance-entry; .topic-maintenance-page; [data-proposal-id]",
+    "computed_style_layout": "entry follows filters; no document overflow; DPR=1",
+    "state_store_snapshot": "needs_user -> pending; stable jobId; fresh runId"
   },
   "hypotheses": [
-    {
-      "hypothesis": "The neighboring acceptance runtime still owns the renderer port.",
-      "would_disprove": "scripts/check-dev-port.mjs reports port 27391 free.",
-      "result": "disproved before takeover: port 27391 was free."
-    },
-    {
-      "hypothesis": "A single supervised launch now remains healthy.",
-      "would_disprove": "hub reports failed/restarting or the renderer smoke fails after startup.",
-      "result": "confirmed: hub reports ready after more than one minute with restarts=0; repeated renderer smoke passed."
-    }
+    { "hypothesis": "台账应是主题页独立子页面而非首页卡片", "would_disprove": "独立入口增加操作距离却不能保留审批与历史", "result": "confirmed; same-row entry and complete ledger path passed" },
+    { "hypothesis": "失败恢复可复用现有 durable job", "would_disprove": "恢复会复活旧 proposal 或改变 jobId", "result": "confirmed; proposal stayed stale and jobId stayed stable" }
   ],
-  "breakpoint": "resolved process ownership handoff",
-  "owner_check": "One supervised runtime now owns the normal user-data directory; no source or UI behavior changed.",
+  "breakpoint": "renderer information architecture plus missing Owner resume adapter",
+  "owner_check": "正常批准仍一次点击生效；异常后台重提；首页无台账卡；独立页无内部语义或假按钮；历史不复活。",
   "attempts": 1,
-  "last_gate": "wmb-dev ready for more than one minute with zero restarts; repeated renderer smoke passed."
+  "last_gate": "Electron entry/subpage/resume/back PASS; full 685/685; typecheck/lightweight/capability/smoke PASS"
 }

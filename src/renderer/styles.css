@@ -4,6 +4,9 @@
 @import './styles-today-scout.css';
 @import './styles-workflow-today.css';
 @import './styles-agents.css';
+@import './styles-agents-overview.css';
+@import './styles-agents-instances.css';
+@import './styles-agents-status.css';
 @import './styles-proposals.css';
 @import './styles-workflow-library.css';
 @import './styles-studio.css';

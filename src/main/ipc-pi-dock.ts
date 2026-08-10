@@ -60,7 +60,7 @@ export async function runDockManagerPrompt(input: {
   const objectId = input.objectId || '';
   const wrapped =
     `[WMB_CONTEXT]\npage=${page}\npageLabel=${pageLabel}\nobjectType=${objectType}\nobjectId=${objectId}\n` +
-    `contextRule=你是主管。自动编排是你的工具：scan/judge/full 用 wmb_run_daily_stage；采完要续策划用 wmb_continue_after_scan；也可 wmb_spawn_job 派单项。先 readiness，再按你的判断选用工具；用 list_jobs/roster 监工并汇报。\n` +
+    `contextRule=你是桌助。自动编排是你的工具：scan/judge/full 用 wmb_run_daily_stage；采完要续策划用 wmb_continue_after_scan；也可 wmb_spawn_job 派单项。先 readiness，再按你的判断选用工具；用 list_jobs/roster 监工并汇报。\n` +
     `[USER_MESSAGE]\n${input.message}`;
 
   // 若已有真 Pi 回合，插入 steer，不另开冲突回合

@@ -21,7 +21,7 @@ test('settings reports actual configured paths, bytes, counts, and current healt
     const settings = await readSettings(root.path, { boundBrowserProfilePath: boundProfile });
     assert.equal(settings.paths.logs, path.join(root.path, 'logs'));
     assert.equal(settings.usage.logs, 3);
-    assert.equal(settings.counts.migrations, 50);
+    assert.equal(settings.counts.migrations, 53);
     assert.equal(settings.paths.boundBrowserProfile, boundProfile);
     assert.equal(settings.paths.legacyBrowserProfile, path.join(root.path, 'browser-profile'));
     assert.equal(settings.usage.boundBrowserProfile, 5);

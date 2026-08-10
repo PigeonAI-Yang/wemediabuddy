@@ -11,6 +11,8 @@ import {
 } from './content.ts';
 import { getToday } from './workbench.ts';
 import { buildRoleRoster } from './role-roster.ts';
+import { getActiveJobSpawner } from './job-spawner.ts';
+import { readCrewInstanceProjection } from './crew-instance-projection.ts';
 import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
 import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
 import { bindAgentAvatarAsset, clearAgentAvatarMapping, listAgentAvatars } from './agent-avatars.ts';
@@ -25,6 +27,16 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     const workers = runtime?.getWorkerSnapshots?.() ?? [];
     const worker = runtime?.getWorkerSnapshot() ?? null;
     return buildRoleRoster(database, { businessDate: input?.businessDate ?? shanghaiDate(), worker, workers });
+  }));
+
+  // WMB-5143：只读投影面（活动实例 + 持久面历史 + 摘要），单一 CrewInstanceProjection DTO。
+  ipcMain.handle('agents:crew-projection', () => readWorkspaceDatabase(dependencies, () => null, database => {
+    const spawner = getActiveJobSpawner();
+    return readCrewInstanceProjection({
+      database,
+      pool: spawner?.pool ?? null,
+      getHandle: spawner ? (jobId) => spawner.getHandle(jobId) : null
+    });
   }));
   
   ipcMain.handle('agents:capability-summary', () => {

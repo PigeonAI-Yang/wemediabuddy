@@ -13,6 +13,7 @@ import { listPublicationMetricSnapshots } from './metrics.ts';
 import * as z from 'zod';
 import { getAgentTask } from './agent-tasks.ts';
 import { getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, topicDossierCategories } from './knowledge.ts';
+import { registerTopicMaintenanceReadMcp } from './mcp-topic-maintenance.ts';
 import { getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage } from './knowledge-canvas.ts';
 import { getXListOperation, listXListBindings, prepareXListOperation, type PrepareXListOperationInput } from './x-lists.ts';
 import { collectBoundXListTimeline } from './x-list-execution.ts';
@@ -41,9 +42,7 @@ const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON
 function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): McpServer {
   const server = new McpServer({ name: 'wemedia-buddy', version: '0.1.0' });
   const database = () => migrateDatabase(path.join(rootPath, 'wmb.db'));
-  const profileDatabase = database();
-  const aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase);
-  profileDatabase.close();
+  const profileDatabase = database(); const aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase); profileDatabase.close();
 
   if (application) registerWorkspaceApplicationMcp(server, rootPath, application);
   if (application?.channelProposals) registerIntelligenceChannelsMcp(server, rootPath, application);
@@ -53,6 +52,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   }
   registerTaskGrantMcp(server, database, runtime);
   registerExecutionGrantMcp(server, database, runtime);
+  registerTopicMaintenanceReadMcp(server, database);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -347,9 +347,9 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     } finally { db.close(); }
   });
   
-  // 主管编排：读班组 / 派工 / 传话（desk manager tools）
+  // 桌助编排：读班组 / 派工 / 传话（desk manager tools）
   server.registerTool('agents.roster', {
-    description: '读取固定角色班组席位状态（主管/记者/策划/写手/资料员）与摘要进度。只读。',
+    description: '读取固定角色班组投影状态（桌助/记者/策划/写手/资料员）与摘要进度。只读。',
     inputSchema: { business_date: z.string().optional() }
   }, async ({ business_date }) => {
     const db = database();
@@ -367,13 +367,13 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   if (runtime) {
     registerJobToolsMcp(server, runtime, database);
     server.registerTool('daily.readiness', {
-      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由主管决定并调用 continue/run_stage/spawn。',
+      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由桌助决定并调用 continue/run_stage/spawn。',
       inputSchema: { business_date: z.string().optional() }
     }, async ({ business_date }) => {
       return text(describeDailyReadiness(runtime, business_date || undefined));
     });
     server.registerTool('daily.continue_after_scan', {
-      description: '主管工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
+      description: '桌助工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
       inputSchema: { business_date: z.string().optional() }
     }, async ({ business_date }) => {
       const mcp = runtime.getMcp<McpRuntime>();
@@ -391,7 +391,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       }
     });
     server.registerTool('daily.run_stage', {
-      description: '主管启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由主管选用，不是禁用。',
+      description: '桌助启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由桌助选用，不是禁用。',
       inputSchema: {
         stage: z.enum(['scan', 'judge', 'full']),
         business_date: z.string().optional(),

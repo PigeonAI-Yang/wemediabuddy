@@ -163,7 +163,7 @@ export async function continueAfterScan(input: {
     businessDate,
     from,
     result,
-    message: `已按主管指令续接策划（from ${from.intent}/${from.phase}）。${result.message}`
+    message: `已按桌助指令续接策划（from ${from.intent}/${from.phase}）。${result.message}`
   };
 }
 

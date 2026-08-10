@@ -601,3 +601,16 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 - `docs/spark/2026-08-07-pi-page-authority-design.md`：1A（硬删 Owner UI only）、2A（grant 4h）、3A（观察入 page_discover）
 - `docs/spark/2026-08-06-intelligence-to-topic-agent-design.md`：滚动机会池、采集/判断解耦（§4）
 - `docs/spark/2026-08-07-fixed-role-agents-ux-design.md`：值班条/dock/名牌/派工 UX（本设计的 UX 层；「不新增一级导航页」决策已被本文件 §7.1 修订）
+
+---
+
+## 12. Owner amendment 2026-08-10：主题整理提案
+
+本节以更晚 Owner lock 修订本设计中“策划直接维护主题结构、资料员只挂主题”的默认边界；其余固定角色、grant 交集和红线不变。详案：`docs/spark/2026-08-10-topic-maintenance-approval-design.md`。
+
+1. 策划继续判断长期线与新主题候选，但正式主题结构变更不再绕过 Owner 审批。
+2. 资料员是主题家底维护人：去重、改名、合并、归档、关系迁移先提交持久提案。
+3. 资料员提案命令进入 `cap.library_organize`；应用/驳回命令是 Owner UI 专属、`agentGrantable:false`。
+4. 桌助只派工和呈报，不能代批，也不能要求 Owner 手工执行提案内的编辑步骤。
+5. 批准绑定提案及被触碰对象 revision，整批原子生效；stale 零部分写。
+6. 后续冲突合同与自动重提修订见 `docs/spark/2026-08-10-topic-maintenance-conflict-reproposal-design.md`：真冲突由系统在提交后重派资料员，新提案仍走 Owner 审批；旧提案不复活、不自动 rebase。

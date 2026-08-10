@@ -32,6 +32,7 @@ export type PageAuthorityCommand =
   | 'sources.lane_restore'
   | 'sources.update_status'
   | 'knowledge.record_batch'
+  | 'knowledge.topic_maintenance_propose'
   | 'knowledge.suggestion_create'
   | 'knowledge.domain_create'
   | 'knowledge.domain_update'
@@ -126,9 +127,10 @@ export const PAGE_TASK_GRANT_SCOPES: Readonly<Record<PageAuthorityView, PageAuth
       'sources.lane_restore',
       'sources.update_status',
       'knowledge.record_batch',
+      'knowledge.topic_maintenance_propose',
       'knowledge.suggestion_create'
     ] as const),
-    chipLabel: '移出/恢复/状态/挂主题/存资料',
+    chipLabel: '移出/恢复/状态/主题整理提案',
     chipTone: 'write'
   }),
   canvas: Object.freeze({

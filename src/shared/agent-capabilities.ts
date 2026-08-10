@@ -25,6 +25,7 @@ export type AgentCapabilityId =
   | 'cap.collect'
   | 'cap.lane_judge'
   | 'cap.library_organize'
+  | 'cap.topic_approval'
   | 'cap.topic_decide'
   | 'cap.knowledge_curate'
   | 'cap.write'
@@ -102,7 +103,8 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
       'sources.lane_gate',
       'sources.lane_restore',
       'sources.update_status',
-      'knowledge.record_batch'
+      'knowledge.record_batch',
+      'knowledge.topic_maintenance_propose'
     ] as const),
     readProfiles: Object.freeze(['sources', 'knowledge'] as const),
     defaultRoleBindings: Object.freeze({ librarian: true }),
@@ -111,6 +113,19 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     agentGrantable: true,
     owner: 'library',
     since: '2026-08-07'
+  }),
+  Object.freeze({
+    id: 'cap.topic_approval',
+    displayName: '主题提案审批（Owner）',
+    description: 'Owner UI 批准/驳回；系统只维护冲突重提生命周期',
+    commands: Object.freeze(['knowledge.topic_maintenance_approve', 'knowledge.topic_maintenance_reject', 'knowledge.topic_maintenance_reproposal_retry'] as const),
+    readProfiles: Object.freeze(['knowledge'] as const),
+    defaultRoleBindings: Object.freeze({}),
+    grantKinds: Object.freeze({}),
+    precise: true,
+    agentGrantable: false,
+    owner: 'owner-ui',
+    since: '2026-08-10'
   }),
   Object.freeze({
     id: 'cap.topic_decide',

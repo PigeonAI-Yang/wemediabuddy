@@ -53,6 +53,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const latestPlan = today?.latestPlan ?? null;
   const pool = today?.pool ?? null;
   const todayItems = todayPlan?.items ?? [];
+  const pendingTopicMaintenance = today?.topicMaintenance?.pending ?? 0;
   // 主席：pool > 今日非空 plan > 最近非空 plan；空 current 运行记录不得掏空主区。
   const displayItems = resolveChairDisplayItems(pool, todayPlan, latestPlan);
   const primary = displayItems[0] ?? null;
@@ -526,6 +527,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
           </div>
         </aside>
       </div>
+      {pendingTopicMaintenance ? <button className="today-topic-maintenance" type="button" onClick={() => openTopic?.('')}>有 {pendingTopicMaintenance} 份主题整理提案待你批准</button> : null}
       <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry} selectedId={fermentSelectedItem?.id ?? null} onSelectItem={onFermentSelectedItemChange}/>
     </section>
     <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>

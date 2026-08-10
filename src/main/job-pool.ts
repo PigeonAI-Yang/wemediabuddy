@@ -71,8 +71,8 @@ function nowIso(): string {
 }
 
 function normalizeMaxWorkers(maxWorkers: number): number {
-  if (!Number.isInteger(maxWorkers) || maxWorkers < 1) {
-    throw new Error(`maxWorkers 必须是 1..${MAX_EMPLOYEE_WORKERS} 的整数。`);
+  if (!Number.isInteger(maxWorkers) || maxWorkers < 0) {
+    throw new Error(`maxWorkers 必须是 0..${MAX_EMPLOYEE_WORKERS} 的整数（0=停用派工）。`);
   }
   if (maxWorkers > MAX_EMPLOYEE_WORKERS) {
     throw new Error(`maxWorkers 不能超过员工软上限 ${MAX_EMPLOYEE_WORKERS}（runtime 总 lease ${MAX_EMPLOYEE_WORKERS + 1}，预留 desk）。`);
@@ -110,13 +110,24 @@ export class JobPool {
 
   /** 提交工单：有空位则立即晋升 running，否则进入 FIFO 队列。不启动 Pi。 */
   submit(input: JobInput): JobRecord {
+    return this.submitWithId(randomUUID(), input);
+  }
+
+  /** 持久 outbox 的内部入口：同一 jobId 在当前进程只入池一次。 */
+  submitWithId(jobId: string, input: JobInput): JobRecord {
+    const existing = this.get(jobId);
+    if (existing) return existing;
     // 运行期防呆：JS 侧可能传入 'desk' 或未知角色，一律拒收（desk 主编席不占员工槽）。
     if (!EMPLOYEE_ROLES.includes(input.roleId)) {
       throw new Error('JobPool 只接受员工角色，desk 主编席不占员工槽。');
     }
     if (!input.brief || !String(input.brief).trim()) throw new Error('工单 brief 不能为空。');
+    // §9.1：maxWorkers=0 = 停用派工，容量零时任何提交拒收（与 spawner enabled 双保险）。
+    if (this.maxWorkers === 0) {
+      throw Object.assign(new Error('JOB_SPAWN_DISABLED: 员工派出已关闭（maxWorkers=0）。'), { code: 'JOB_SPAWN_DISABLED' });
+    }
     const job: JobRecord = Object.freeze({
-      id: randomUUID(),
+      id: jobId,
       roleId: input.roleId,
       intent: input.intent ?? null,
       brief: input.brief,
@@ -277,7 +288,13 @@ export class JobPool {
       const [job] = this.parked.splice(parkedIndex, 1);
       return this.recordTerminal(job, 'cancelled', null, report);
     }
-    return this.settle(jobId, 'cancelled', null, report);
+    const settled = this.settle(jobId, 'cancelled', null, report);
+    // WMB-5142 生命周期：needs_user 是池终态但属活动视图成员——用户关闭须真实迁移 cancelled 退出活动视图
+    // （不再让记录永留 needs_user；其他终态 succeeded/failed 保持 no-op，cancel 返回原终态记录）。
+    if (settled?.status === 'needs_user') {
+      return this.recordTerminal(settled, 'cancelled', null, report ?? settled.report);
+    }
+    return settled;
   }
 
   /** 全部工单（queued、parked 按 FIFO、running、终态），供 jobs:list 投影。 */

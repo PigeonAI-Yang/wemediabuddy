@@ -36,6 +36,60 @@ Order:
 Gate: job-pool tests green; two non-conflicting leases; roster shows multi running; CAP-026 registry unchanged except wiring.
 
 
+## M-5140 智能体班组多实例协同（固定五角色 × 按任务实例）（CAP-027）
+
+Scope: implement the formal construction Owner lock `docs/spark/2026-08-08-agent-crew-multi-instance-design.md` (§17) on top of the M-5110 JobPool runtime: role ≠ slot, same-role multi-instance with explicit visibility, instances created per task and exiting the active view at terminal state, shared pool as pure capacity (maxWorkers 0..7), desk as coordination entry (not supervisor workstation), instance permission = task grant ∩ role capability ∩ resource boundary with dispatcher object-level hard isolation, red lines unchanged, jobId first-class identity with active-period-only display numbering, needs_user staying in the active view without holding slot/lease/grant/lock, and the persistent re-dispatch contract in the existing `context_refs_json` (no new table/column). Spec: PRODUCT C9, PRD §2.4 (REQ-028/REQ-029, AC-024..AC-027), SPEC §1.0 items 8-9 and CAP-027 (EVAL-030).
+
+Owner lock 2026-08-08 (13 points; authoritative text in design doc §17):
+
+1. 固定五角色（桌助/记者/策划/写手/资料员）跨赛道稳定。
+2. 同角色多实例显式可见。
+3. 实例按任务创建，终态退出活动视图（needs_user 例外见 9）。
+4. 不预设空槽：五角色分组始终可见，空角色「当前无任务」。
+5. 共享并发池仅系统容量：maxWorkers（0..7，0=停用派工，默认 2）。
+6. 桌助是协调入口，不是主管工位（无 standing 写权、不进员工槽、不代批）。
+7. 实例权限 = 任务精确授权 ∩ 角色能力 ∩ 资源边界。
+8. 发布/硬删红线不变（agentGrantable:false 对一切实例不可达）。
+9. needs_user 停留活动区「等你批」至用户处理/关闭，期间不占并发/lease/grant/锁。
+10. 空态呈现：五角色分组始终可见，空角色「当前无任务」，不画空槽。
+11. 角色编号仅活动期显示，持久身份 jobId。
+12. 对象级硬隔离（施工必需）：dispatcher 校验工单对象边界，跨对象写拒绝。
+13. 持久续派合同：jobId/roleId/brief/边界参数写入既有 context_refs_json，不新增表。
+
+Order (dependency: 持久合同+对象 gate → 运行投影 → UI → Skill → 验收):
+
+1. `WMB-5141` — 持久续派合同 + dispatcher 对象级硬隔离：spawn 合同写 jobId/roleId/brief/边界参数入 `context_refs_json`；`agent_tasks`/`task_grants`/`execution_grants` 三表 schema 零改动；对象键校验（businessDate/projectId/sourceIds/scope）跨对象写 BLOCKED + 审计；check:capabilities G1 + effective grant 一致性 G2。
+2. `WMB-5142` — 运行投影：实例一等身份 jobId、活动期编号、终态顺序（agent_task 终态 → grant 回收 → lease/锁释放 → pool 终态）、scan→judge 单活动实例不双计、历史只从持久面重建。
+3. `WMB-5143` — 智能体页实例驱动 UI：五角色分组始终可见、空角色「当前无任务」、实例卡、needs_user「等你批」停留、页头摘要（工作中/排队/等你批）、历史折叠 + 一键续派。
+4. `WMB-5144` — Pi operator Skill 多实例感知 + 桌助呈报/续派路径（不新增 Skill；提示词按 `docs/pi-operation-skill-maintenance.md` 规程登记）。
+5. `WMB-5145` — 验收：EVAL-030（设计 §14 A1..A14）+ 聚焦测试 + typecheck + check:capabilities + 实机；变更集零新增角色/能力，注册表零改动。
+
+Gate: EVAL-030 passes; same-role multi-instance visible; empty state shows 「当前无任务」 without seats; needs_user stays without slot/lease/grant/lock; restart re-dispatch from `context_refs_json`; cross-object write blocked with audit; red-line commands unreachable; check:capabilities green. **TASKS doing 仍是唯一施工许可**：每个任务须自带任务合同（显式引用设计 §12 兼容原则与 §16 影响面）+ 施工 Owner lock，进入 TASKS doing 才可开工。
+
+
+## M-5150 主题整理提案与 Owner 审批（CAP-003 / CAP-026）
+
+Scope: 资料员整理主题家底，生成精确变更台账；桌助呈报；Owner 批准后整批原子生效。覆盖主题新建、修改、合并、归档和关系迁移，stale 零部分写；禁止把整理退回 Owner 手工执行。Canonical design: `docs/spark/2026-08-10-topic-maintenance-approval-design.md`。
+
+Order:
+
+1. `WMB-5150` — legislation + durable proposal ledger + transactional apply/reject + librarian job/Pi tools + Topic/Today approval UI + EVAL-031 evidence。
+
+Gate: real duplicate-topic proposal has zero pre-approval mutations; reject zero business write; approve migrates all formal links and archives old topic in one transaction; stale zero partial write; Agent apply blocked; Topic/Today/desk projections agree; operator Skill, typecheck, capability gate, focused tests and renderer smoke pass。
+
+## M-5160 主题冲突合同与自动重提（CAP-003 / CAP-026）
+
+Scope: replace snapshot-wide stale inference with one persisted intent-level conflict contract; real conflicts atomically enqueue a domain-specific reproposal outbox, then dispatch librarian after commit and recover across restart. Preserve immutable old proposals, Owner-only approval and legacy stale history. Canonical design: `docs/spark/2026-08-10-topic-maintenance-conflict-reproposal-design.md`。
+
+Order:
+
+1. `WMB-5158` — snapshot v2 conflict contract, structured conflict evidence and v1-compatible reads/decisions。
+2. `WMB-5159` — topic reproposal outbox, stable internal job identity, post-commit dispatch, bounded failure handling and cold-start recovery。
+3. `WMB-5160` — supersession UI, historical stale classification, operator Skill/Pi prompt synchronization and EVAL-031 full acceptance。
+
+Gate: irrelevant drift approves; true conflict writes zero formal facts and one durable outbox in the approval transaction; no Agent runs before commit; duplicate click/kick/restart creates one successor from current facts; old/legacy proposals remain immutable; focused/full/typecheck/capability/lightweight/smoke and real Electron approval-to-successor readback pass。
+
+
 ## M-5000 产品形态宪法锁定（Agent 主路径终端）
 
 Scope: freeze product form so later Today/desk/topic/opportunity work cannot drift back to traditional CMS or VS Code-like human-primary IDE. Docs/rules only in the freeze task; continuous-attention rewrite to topic projection is a follow-up milestone, not silently implied by this lock.

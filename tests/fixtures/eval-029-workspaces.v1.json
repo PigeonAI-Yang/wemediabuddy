@@ -9,7 +9,7 @@
     "EVAL-029"
   ],
   "fixedTime": "2026-08-05T09:29:00.000Z",
-  "schemaVersion": 50,
+  "schemaVersion": 53,
   "semanticProjectionVersion": 3,
   "installation": {
     "registryRelativePath": "user-data/workspace-registry.json",

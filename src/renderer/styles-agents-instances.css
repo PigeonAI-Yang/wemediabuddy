@@ -1,0 +1,178 @@
+/* 活动实例与历史工单共用一块连续台账。 */
+.agents-work-ledger {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+/* ---- 实例卡（同角色可并列：组内 wrap 网格） ---- */
+.agents-instance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+/* 同角色多实例才展开实例卡网格；单实例收窄为紧凑卡，不占满整行。 */
+.agents-instance-list:has(> .agents-instance-card:only-child) {
+  grid-template-columns: minmax(min(100%, 280px), 460px);
+  justify-content: start;
+}
+
+.agents-instance-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.agents-instance-card.status-running {
+  box-shadow: inset 0 0 0 1px var(--agents-running-ring);
+}
+.agents-instance-card.status-needs_user {
+  border-color: color-mix(in srgb, var(--info) 60%, var(--border));
+  box-shadow: inset 0 0 0 1px var(--agents-needs-ring);
+  background: color-mix(in srgb, var(--info) 5%, var(--surface));
+}
+.agents-instance-card.status-failed {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.agents-instance-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.agents-instance-name {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-instance-number {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.agents-instance-brief {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.agents-instance-step {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agents-instance-detail {
+  margin: 0;
+  color: var(--ink-soft, var(--ink));
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.agents-instance-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.agents-instance-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.agents-instance-progress {
+  display: grid;
+  gap: 5px;
+}
+
+/* ---- 历史（统一区，每角色折叠，最近 N 条终态实例；只从持久面投影） ---- */
+.agents-history-area {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.agents-role-history {
+  min-width: 0;
+}
+.agents-role-history + .agents-role-history {
+  border-top: 1px solid var(--border-soft, var(--border));
+  padding-top: 8px;
+}
+.agents-role-history summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  user-select: none;
+  padding: 2px 0;
+}
+.agents-role-history summary:hover {
+  color: var(--ink);
+}
+.agents-role-history summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.agents-history-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.agents-history-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+  font-size: 12px;
+  min-width: 0;
+}
+.agents-history-row .agents-job-status-word {
+  margin-left: 0;
+}
+.agents-history-time {
+  color: var(--muted-low);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agents-history-brief {
+  order: 3;
+  flex-basis: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.agents-history-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}

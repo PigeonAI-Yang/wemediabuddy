@@ -145,6 +145,7 @@ export function getToday(database: DatabaseSync, planDate: string): {
   latestPlan: TodayPlan | null;
   pool: OpportunityPoolItem[];
   pendingActions: string[];
+  topicMaintenance: { pending: number };
   fermenting: FermentingBundle;
   /** 有效资料库口径：当日已移出（archived）条数，供 feed 行尾「另有 N 条与本赛道无关」计数。 */
   archivedTodayCount: number;
@@ -189,7 +190,8 @@ export function getToday(database: DatabaseSync, planDate: string): {
   // 选题池与今日读模型同用 planDate 上海日界（dayEnd）锚定，避免真实墙钟漂移使当日窗口内机会提前过期。
   const poolNow = new Date(dayEnd);
   // No plan is not a human blocker: the primary CTA is「开始今日情报」, not a fake todo card.
-  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: getOpportunityPool(database, { now: poolNow }), pendingActions: [], fermenting, archivedTodayCount };
+  const topicMaintenance = { pending: Number((database.prepare("SELECT count(*) AS count FROM topic_maintenance_proposals WHERE status='proposed'").get() as { count: number }).count) };
+  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: getOpportunityPool(database, { now: poolNow }), pendingActions: [], topicMaintenance, fermenting, archivedTodayCount };
 }
 
 export type OpportunityPoolItem = {

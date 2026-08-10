@@ -51,7 +51,6 @@ export type JobRuntimeHandle = {
   sessionFile: string | null;
 };
 
-/** 主管 → 员工工单传话（编排附言，不是 dock 多会话客户端）。 */
 export type JobMessage = Readonly<{
   id: string;
   jobId: string;
@@ -63,11 +62,14 @@ export type JobMessage = Readonly<{
 export type JobExecuteContext = {
   runtime: ActiveWorkspaceRuntime;
   job: JobRecord;
+  /** 工单池（本工单所属）；WMB-5142 生命周期「处理」关闭旧卡用。 */
+  pool: JobPool;
   lease: WorkspaceRuntimeLease;
   taskId: string | null;
   grantId: string | null;
   sessionFile: string;
   signal: AbortSignal;
+  request: RoleJobRequest | null;
   /** 单一 stoppable 注册协议（§6.3）：执行器在 Pi runtime 就绪时注册 stop，取消序列强停。 */
   registerStoppable?: (stop: Stoppable) => void;
   /** 当前已注册的 stop（null = 未注册；getter 实时反映注册结果）。 */
@@ -92,11 +94,7 @@ type InternalHandle = Omit<JobRuntimeHandle, 'taskId' | 'grantId'> & {
 };
 
 const TERMINAL_EVENT: Readonly<Record<JobTerminalStatus, string>> = Object.freeze({
-  succeeded: 'job.finished',
-  failed: 'job.failed',
-  cancelled: 'job.cancelled',
-  partial: 'job.partial',
-  needs_user: 'job.needs_user'
+  succeeded: 'job.finished', failed: 'job.failed', cancelled: 'job.cancelled', partial: 'job.partial', needs_user: 'job.needs_user'
 });
 
 function isTerminal(status: JobStatus): boolean {
@@ -121,6 +119,7 @@ export class JobSpawner {
   readonly workspaceKey: string;
   private readonly handles = new Map<string, InternalHandle>();
   private readonly messages = new Map<string, JobMessage[]>();
+  private readonly jobRequests = new Map<string, RoleJobRequest>();
   private readonly execute: NonNullable<JobSpawnerOptions['execute']>;
   private readonly onEvent: (event: Record<string, unknown>) => void;
   private readonly watchdog: ReturnType<typeof setInterval> | null;
@@ -148,11 +147,11 @@ export class JobSpawner {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    if (!enabled) this.pool.setMaxWorkers(0);
   }
 
   setMaxWorkers(max: number): void {
-    if (max <= 0) { this.enabled = false; return; }
-    this.enabled = true;
+    this.enabled = max > 0;
     this.pool.setMaxWorkers(max);
   }
 
@@ -167,21 +166,19 @@ export class JobSpawner {
   get(jobId: string): JobRecord | null {
     return this.pool.get(jobId);
   }
-
   getHandle(jobId: string): JobRuntimeHandle | null {
     const h = this.handles.get(jobId);
     if (!h) return null;
     return { jobId: h.jobId, taskId: h.taskId, leaseId: h.leaseId, grantId: h.grantId, sessionFile: h.sessionFile };
   }
-
-  spawn(input: SpawnJobRequest): JobRecord {
+  spawn(input: SpawnJobRequest, jobId: string | null = null): JobRecord {
+    if (jobId !== null && !jobId.trim()) throw Object.assign(new Error('JOB_ID_REQUIRED'), { code: 'JOB_ID_REQUIRED' });
     if (!this.enabled) {
       throw Object.assign(new Error('JOB_SPAWN_DISABLED: 员工派出已关闭（maxWorkers=0）。'), { code: 'JOB_SPAWN_DISABLED' });
     }
     // strict-key 校验 + 运行时拒 intent；writer 缺 projectId 抛 JOB_PROJECT_REQUIRED。
     const request = parseRoleJobRequest(input);
     const spec = deriveRoleJobSpec(request, this.runtime.identity.workspaceId);
-
     const jobInput: JobInput = {
       roleId: spec.roleId,
       brief: request.brief,
@@ -193,7 +190,10 @@ export class JobSpawner {
     };
 
     // 锁冲突不再在 spawn 预检抛错：资源竞争统一进 waiting_resource，由池内晋升。
-    const job = this.pool.submit(jobInput);
+    const existing = jobId ? this.pool.get(jobId) : null;
+    if (existing) return existing;
+    const job = jobId ? this.pool.submitWithId(jobId, jobInput) : this.pool.submit(jobInput);
+    this.jobRequests.set(job.id, request);
     this.emit('job.queued', job);
     // job.started 只在 runJob 真正启动执行时单点发出（避免与微任务内 runJob 双发）。
     broadcastDataChanged({ scopes: ['agent'], reason: 'jobs.spawn' });
@@ -233,9 +233,7 @@ export class JobSpawner {
       body: text,
       at: new Date().toISOString()
     });
-    const bucket = this.messages.get(jobId) ?? [];
-    bucket.push(msg);
-    this.messages.set(jobId, bucket);
+    const bucket = this.messages.get(jobId) ?? []; bucket.push(msg); this.messages.set(jobId, bucket);
 
     const handle = this.handles.get(jobId);
     if (job.status === 'running' && handle?.taskId) {
@@ -271,6 +269,7 @@ export class JobSpawner {
       onCleanup: (id) => {
         this.handles.delete(id);
         this.starting.delete(id);
+        this.jobRequests.delete(id);
       }
     });
   }
@@ -283,6 +282,7 @@ export class JobSpawner {
     this.handles.clear();
     this.starting.clear();
     this.messages.clear();
+    this.jobRequests.clear();
   }
 
   private emit(type: string, job: JobRecord): void {
@@ -399,11 +399,13 @@ export class JobSpawner {
       const outcome = await this.execute({
         runtime,
         job: this.pool.get(jobId)!,
+        pool: this.pool,
         lease,
         taskId,
         grantId,
         sessionFile,
         signal: abort.signal,
+        request: this.jobRequests.get(jobId) ?? null,
         registerStoppable,
         get stopResource() { return handle.stopResource; },
         onTaskBound: (boundTaskId, boundGrantId) => {
@@ -452,6 +454,7 @@ export class JobSpawner {
       if (lease) { try { runtime.releaseWorker(lease); } catch { /* */ } }
       this.handles.delete(jobId);
       this.starting.delete(jobId);
+      const settled = this.pool.get(jobId); if (!settled || isTerminal(settled.status)) this.jobRequests.delete(jobId);
       broadcastDataChanged({ scopes: ['agent'], reason: 'jobs.terminal' });
     }
   }

@@ -5,6 +5,16 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { CommandDispatchError, createCommandEnvelope, type CommandActorV1, type CommandEnvelopeV1, type CommandReceiptV1 } from './command-dispatcher.ts';
 import { getAgentTask } from './agent-tasks.ts';
+import {
+  assertBoundaryCovers,
+  assertJobBoundaryComplete,
+  boundaryClaimFromContext,
+  hasBoundaryClaim,
+  isEmployeeRole,
+  maskBoundaryToRole,
+  readJobContract,
+  resolveCommandObjectBoundary
+} from './role-job-registry.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 export const TASK_GRANT_ISSUE_COMMAND = 'task_grants.issue';
@@ -20,6 +30,10 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'knowledge.domain_create',
   'knowledge.domain_update',
   'knowledge.record_batch',
+  'knowledge.topic_maintenance_propose',
+  'knowledge.topic_maintenance_approve',
+  'knowledge.topic_maintenance_reject',
+  'knowledge.topic_maintenance_reproposal_retry',
   'knowledge.suggestion_create',
   'plans.save',
   'reviews.save',
@@ -113,6 +127,15 @@ export function dispatchIssueTaskGrant(runtime: ActiveWorkspaceRuntime, input: I
   });
   return runtime.dispatchCommand(envelope, () => {
     requireRunningTask(runtime.database, input.taskId, runtime.identity.workspaceId);
+    // WMB-5141 §12.2.7 签发硬门：任务携带 spawn 合同时，对象边界必须完整（缺失 fail closed），
+    // 且 relevantContext 若有边界主张必须被任务边界覆盖（越界拒签；主张按角色合同维度掩码）。
+    const contract = readJobContract(runtime.database, input.taskId);
+    if (contract) {
+      if (isEmployeeRole(contract.roleId)) assertJobBoundaryComplete(contract.boundary, contract.roleId);
+      const claim = boundaryClaimFromContext(input.relevantContext ?? {});
+      const masked = isEmployeeRole(contract.roleId) ? maskBoundaryToRole(claim, contract.roleId) : claim;
+      if (hasBoundaryClaim(masked)) assertBoundaryCovers(contract.boundary, masked);
+    }
     const issuedAt = new Date().toISOString();
     const active = runtime.database.prepare("SELECT id FROM task_grants WHERE task_id=? AND runtime_epoch=? AND status='active' AND expires_at>? LIMIT 1")
       .get(input.taskId, runtime.identity.runtimeEpoch, issuedAt);
@@ -279,6 +302,10 @@ export async function ensureAutomaticTaskGrant(
     }
   }
   if (!allowedCommands.length) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '角色过滤后无剩余写权。');
+  // WMB-5141 §12.2.7 签发硬门：携带 spawn 合同的工单对象边界必须完整（缺失 fail closed），
+  // 先于 grant 复用/签发执行，杜绝缺边界任务借旧证放行。
+  const contract = readJobContract(runtime.database, taskId);
+  if (contract && isEmployeeRole(contract.roleId)) assertJobBoundaryComplete(contract.boundary, contract.roleId);
   const active = listTaskGrants(runtime.database, taskId, now, runtime.identity).find((grant) => grant.status === 'active');
   if (active && sameCommandSet(active.allowedCommands, allowedCommands) && sameWorkerSet(active.workers, AUTOMATIC_TASK_GRANT_WORKERS)) return active.id;
   if (active) {
@@ -301,7 +328,8 @@ export async function ensureAutomaticTaskGrant(
       automatic: true,
       roleId: resolvedRole ?? undefined,
       page: typeof task.contextRefs?.page === 'string' ? task.contextRefs.page : undefined,
-      objectId: typeof task.contextRefs?.objectId === 'string' ? task.contextRefs.objectId : (typeof task.contextRefs?.projectId === 'string' ? task.contextRefs.projectId : undefined)
+      objectId: typeof task.contextRefs?.objectId === 'string' ? task.contextRefs.objectId : (typeof task.contextRefs?.projectId === 'string' ? task.contextRefs.projectId : undefined),
+      ...(contract ? { jobBoundary: Object.freeze({ ...contract.boundary }) } : {})
     },
     expiresAt: new Date(now.getTime() + AUTOMATIC_TASK_GRANT_EXPIRY_MS).toISOString()
   });
@@ -327,6 +355,9 @@ export function assertTaskGrantForEnvelope(
   isCurrentPiLease: (leaseId: string, taskId: string) => boolean
 ): void {
   if (envelope.actor.type !== 'pi' && envelope.actor.type !== 'external_agent') return;
+  if (envelope.command === 'knowledge.topic_maintenance_approve' || envelope.command === 'knowledge.topic_maintenance_reject') {
+    throw new CommandDispatchError('TASK_SCOPE_BROADENED', '该命令仅允许 Owner UI 执行。');
+  }
   if (!envelope.taskId || !envelope.grantId) throw new CommandDispatchError('TASK_GRANT_REQUIRED', 'Pi 或外部 Agent 写入必须携带 task grant。');
   const grant = getTaskGrant(database, envelope.grantId, now);
   if (!grant) throw new CommandDispatchError('TASK_GRANT_NOT_FOUND', 'Task grant 不存在。');
@@ -340,6 +371,14 @@ export function assertTaskGrantForEnvelope(
     throw new CommandDispatchError('TASK_WORKER_MISMATCH', 'Worker 身份与 Task grant 不匹配。');
   }
   requireRunningTask(database, envelope.taskId, envelope.workspaceId);
+  // WMB-5141 §12.2.7 执行硬门：任务携带 spawn 合同时，命令对象必须落在任务持久边界内
+  // （跨对象写 BLOCKED + details.reason=OBJECT_SCOPE_MISMATCH；handler 未执行 → 零业务写，
+  // 拒绝由 dispatcher persistError 落 command_receipts + operation_log 审计）。
+  const contract = readJobContract(database, envelope.taskId);
+  if (contract) {
+    const claim = resolveCommandObjectBoundary(envelope.command, envelope.input);
+    assertBoundaryCovers(contract.boundary, isEmployeeRole(contract.roleId) ? maskBoundaryToRole(claim, contract.roleId) : claim);
+  }
   if (envelope.actor.type === 'pi') {
     if (!envelope.workerLeaseId || !isCurrentPiLease(envelope.workerLeaseId, envelope.taskId)) {
       throw new CommandDispatchError('WORKER_LEASE_STALE', 'Pi worker lease 已失效。');

@@ -5,6 +5,7 @@ import {
   createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains,
   listKnowledgeTopics, listRediscovery, updateKnowledgeDomain
 } from './knowledge.ts';
+import { decideTopicMaintenanceProposal, listTopicMaintenanceProposals } from './topic-maintenance.ts';
 import {
   addKnowledgeCanvasNode, createContentProjectFromBrief, createCreativeBrief, createKnowledgeCanvas, createKnowledgeRelation,
   decideKnowledgeSuggestion, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage,
@@ -13,6 +14,8 @@ import {
   updateKnowledgeRelation
 } from './knowledge-canvas.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
+import { ensureJobsSpawner } from './ipc-jobs.ts';
+import { kickTopicReproposals, resumeTopicReproposal } from './topic-maintenance-reproposal.ts';
 
 export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependencies): void {
   ipcMain.handle('knowledge:list-topics', (_event, input = {}) => readWorkspaceDatabase(dependencies,
@@ -25,6 +28,28 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
   ipcMain.handle('knowledge:get-topic-dossier', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeTopicDossier(database, input)));
   ipcMain.handle('knowledge:rediscovery', () => readWorkspaceDatabase(dependencies,
     () => ({ unused: [], watching: [], pending: [] }), database => listRediscovery(database)));
+  ipcMain.handle('knowledge:topic-maintenance-proposals', (_event, input = {}) => readWorkspaceDatabase(dependencies,
+    () => ({ items: [], total: 0, limit: 50, offset: 0, hasMore: false }), database => listTopicMaintenanceProposals(database, input)));
+  const decideProposal = (decision: 'approve' | 'reject') => ipcMain.handle(`knowledge:topic-maintenance-${decision}`, async (_event, input) => {
+    const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
+    const receipt = await dispatchBusinessCommand(runtime, { command: `knowledge.topic_maintenance_${decision}`, requestId: input.requestId ?? freshRequestId(), actor: ownerUiActor,
+      input: { id: input.id, expectedRevision: input.expectedRevision, decision }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: input.id }, entityType: 'topic_maintenance_proposal',
+      execute: (database, value) => { const data = decideTopicMaintenanceProposal(database, value); return { data, entityId: data.id, beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['library', 'today'], reason: `topic_maintenance.${decision}` });
+    if (receipt.ok && decision === 'approve' && (receipt.data as { status?: string } | null)?.status === 'stale') {
+      await kickTopicReproposals(runtime, ensureJobsSpawner({ getActiveRuntime: dependencies.getActiveRuntime }));
+    }
+    return receiptAsCommandResult(receipt);
+  });
+  decideProposal('approve'); decideProposal('reject');
+  ipcMain.handle('knowledge:topic-maintenance-reproposal-resume', async (_event, input) => {
+    const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_reproposal_retry', requestId: input.requestId ?? freshRequestId(), actor: ownerUiActor,
+      input: { proposalId: input.id }, boundIdentity: { entityType: 'topic_maintenance_reproposal_job', entityId: input.id }, entityType: 'topic_maintenance_reproposal_job',
+      execute: (database, value) => { const data = resumeTopicReproposal(database, value.proposalId, new Date().toISOString()); return { data, entityId: data.proposalId, readback: data }; } });
+    if (receipt.ok) { broadcastDataChanged({ scopes: ['library', 'today', 'agent'], reason: 'topic_maintenance.reproposal_resume' }); await kickTopicReproposals(runtime, ensureJobsSpawner({ getActiveRuntime: dependencies.getActiveRuntime })); }
+    return receipt;
+  });
   ipcMain.handle('knowledge-canvas:list', () => readWorkspaceDatabase(dependencies, () => [], database => listKnowledgeCanvases(database)));
   ipcMain.handle('knowledge-canvas:get', (_event, id: string) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeCanvas(database, id)));
   ipcMain.handle('knowledge-context:preview-package', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => previewKnowledgeContextPackage(database, input)));
