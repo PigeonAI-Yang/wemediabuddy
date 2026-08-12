@@ -134,6 +134,10 @@ test('orchestration embeds the Owner-approved executable motion asset instead of
   assert.match(bridge, /\.card\[data-action="\$\{action\}"\]/, '从动作图鉴选择真实状态场景');
   assert.match(bridge, /doc\.body\.replaceChildren\(card\)/, '产品表面只保留选中动作场景');
   assert.doesNotMatch(bridge, /WmbCreatureMark|wmb-brand-mark/, '动画资产桥接不得回退到 UI Logo 组件');
+  assert.match(bridge, /body\{display:grid;place-items:center\}/, 'iframe 底框建立双轴中心基准');
+  assert.match(bridge, /\.card\{[^}]*left:calc\(50% - 115px\)[^}]*top:calc\(50% - 79px\)[^}]*transform:scale\(\.4\)[^}]*transform-origin:center/, '先按未缩放 230×158 场景定位中心，再围绕自身中心缩放');
+  assert.match(bridge, /\.stage\{[^}]*padding:0[^}]*place-items:center[^}]*transform:translateY\(-16\.5px\)/, '清除图鉴底部站立基线，并以原始舞台坐标补偿角色视觉中心');
+  assert.doesNotMatch(bridge, /translate\(-50%,-50%\)|padding-bottom:20px/, '不得再用造成上偏的双重位移或图鉴底部留白');
 
   const library = await readFile(new URL('../docs/design/brand-motion/wmb-creature-motion-library.html', import.meta.url), 'utf8');
   for (const action of ['connect', 'settle', 'sleep']) {

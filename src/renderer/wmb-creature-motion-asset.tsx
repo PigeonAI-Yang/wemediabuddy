@@ -5,10 +5,10 @@ export type WmbCreatureMotionAction = 'connect' | 'settle' | 'sleep';
 
 const EMBED_STYLE = `
 html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}
-body{position:relative}
-.card{position:absolute;left:50%;top:50%;width:230px;height:158px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;overflow:visible;transform:translate(-50%,-50%) scale(.4);transform-origin:center}
+body{display:grid;place-items:center}
+.card{position:absolute;left:calc(50% - 115px);top:calc(50% - 79px);width:230px;height:158px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;overflow:visible;transform:scale(.4);transform-origin:center}
 .card>h3,.card>p,.icon-sample{display:none}
-.stage{width:230px;height:158px;padding-bottom:20px}
+.stage{width:230px;height:158px;padding:0;place-items:center;transform:translateY(-16.5px)}
 `;
 function syncMotionAsset(frame: HTMLIFrameElement, action: WmbCreatureMotionAction): void {
   const doc = frame.contentDocument;
