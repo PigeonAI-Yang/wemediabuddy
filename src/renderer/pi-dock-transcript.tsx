@@ -3,8 +3,10 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
-import { coalescePiMessages, isPiConversationNearBottom, nextPiConversationFollowing, piMessageSegments, piThinkingSummary } from './pi-dock-utils';
+import { coalescePiMessages, filterPiNativeQueueMessages, isPiConversationNearBottom, isPiOrchestration, isPiSystemEvent, mergePiJobNotices, mergePiLocalQueueMessages, nextPiConversationFollowing, piLocalQueueEntryId, piMessageSegments, piRetryable, piThinkingSummary, presentPiNativeQueueMessage, type PiLocalQueueItem } from './pi-dock-utils';
+import { isValidOrchestrationData, type OrchestrationData } from '../shared/orchestration-envelope';
 import { WmbCreatureMark } from './wmb-brand-mark';
+import { WmbCreatureMotionAsset, type WmbCreatureMotionAction } from './wmb-creature-motion-asset';
 
 export type PiDockMessage = PiChatMessage;
 
@@ -67,9 +69,51 @@ function PiAssistantSegments({ segments, streaming }: { segments: PiMessageSegme
   </>;
 }
 
+/** WMB-5205 四态：pending「正在安排主管」/ direct「已安排主管」/ steer·follow_up「已加入主管队列」/ failed「安排失败」。 */
+function orchestrationStatusLabel(data: OrchestrationData): string {
+  if (data.state === 'failed') return '安排失败';
+  if (data.state === 'pending') return '正在安排主管';
+  return data.delivery === 'direct' ? '已安排主管' : '已加入主管队列';
+}
+
+function PiOrchestrationRow({ message }: { message: PiChatMessage }): React.JSX.Element | null {
+  const data = message.orchestration;
+  if (!data || !isValidOrchestrationData(data)) return null;
+  const visualState = data.state === 'failed' ? 'failed' : data.state === 'pending' ? 'pending' : 'accepted';
+  const motionAction: WmbCreatureMotionAction = visualState === 'failed' ? 'sleep' : visualState === 'pending' ? 'connect' : 'settle';
+  const status = orchestrationStatusLabel(data);
+  return (
+    <article className={`pi-orchestration-wrap ${visualState}`} data-state={visualState} aria-label={`编排任务：${status}，${data.safe.title}`}>
+      <div className="pi-orchestration-mascot">
+        <WmbCreatureMotionAsset action={motionAction} className="pi-orchestration-motion"/>
+      </div>
+      <div className="pi-orchestration-body">
+        <header className="pi-orchestration-head">
+          <span className="pi-orchestration-status">{status}</span>
+          <time className="pi-orchestration-time">{formatPiMessageTime(message.createdAt)}</time>
+        </header>
+        <strong className="pi-orchestration-title">{data.safe.title}</strong>
+        {visualState === 'failed' && data.error && <p className="pi-orchestration-error">{data.error}</p>}
+        <details className="pi-orchestration-details">
+          <summary>查看任务要求</summary>
+          <dl className="pi-orchestration-requirements">
+            <div className="pi-orchestration-requirement"><dt>来源</dt><dd>{data.safe.originLabel}</dd></div>
+            <div className="pi-orchestration-requirement"><dt>标题</dt><dd>{data.safe.title}</dd></div>
+            <div className="pi-orchestration-requirement"><dt>目标</dt><dd>{data.safe.goal}</dd></div>
+            <div className="pi-orchestration-requirement"><dt>验收</dt><dd>{data.safe.acceptance}</dd></div>
+          </dl>
+        </details>
+      </div>
+    </article>
+  );
+}
+
+
 export function PiDockTranscript({
   messages,
+  jobNotices,
   queue,
+  localQueue,
   busy,
   pendingAction,
   configured,
@@ -81,7 +125,9 @@ export function PiDockTranscript({
   onRetry
 }: {
   messages: PiDockMessage[];
+  jobNotices: PiDockMessage[];
   queue: PiNativeQueue;
+  localQueue: PiLocalQueueItem[];
   busy: boolean;
   pendingAction: { entryId: string; retry: boolean } | null;
   configured: boolean;
@@ -100,7 +146,10 @@ export function PiDockTranscript({
   const [showLatest, setShowLatest] = useState(false);
   const [latestLeaving, setLatestLeaving] = useState(false);
   let retryEntryId: string | undefined;
-  const displayMessages = coalescePiMessages(messages);
+  const localQueueByEntryId = new Map(localQueue.map((item) => [piLocalQueueEntryId(item.localId), item]));
+  const displayMessages = coalescePiMessages(mergePiLocalQueueMessages(mergePiJobNotices(messages, jobNotices), localQueue));
+  const visibleSteering = filterPiNativeQueueMessages(queue.steering, 'steer', localQueue);
+  const visibleFollowUp = filterPiNativeQueueMessages(queue.followUp, 'followUp', localQueue);
   useLayoutEffect(() => {
     const node = conversationRef.current;
     if (node && followingLatest.current) {
@@ -108,7 +157,7 @@ export function PiDockTranscript({
       userScrollIntent.current = false;
       setShowLatest(false);
     }
-  }, [messages, queue, conversationRef]);
+  }, [messages, jobNotices, queue, localQueue, conversationRef]);
   useEffect(() => () => {
     if (jumpFrame.current !== null) cancelAnimationFrame(jumpFrame.current);
     if (hideLatestTimer.current !== null) window.clearTimeout(hideLatestTimer.current);
@@ -155,49 +204,73 @@ export function PiDockTranscript({
       if (scrollbarWidth > 0 && event.clientX >= node.getBoundingClientRect().right - scrollbarWidth) userScrollIntent.current = true;
     }}>
     {displayMessages.length ? displayMessages.map((message, index) => {
-        if (message.role === 'user' && message.entryId) retryEntryId = message.entryId;
+        const isSystemEvent = isPiSystemEvent(message);
+        const isOrchestration = isPiOrchestration(message);
+        const localItem = localQueueByEntryId.get(message.entryId ?? '');
+        if (piRetryable(message)) retryEntryId = message.entryId;
         const timeLabel = formatPiMessageTime(message.createdAt);
+        const localStatusLabel = localItem?.status === 'failed'
+          ? '发送失败'
+          : localItem?.status === 'accepted'
+            ? (localItem.delivery === 'followUp' ? 'Pi 已接收 · 下一轮' : 'Pi 已接收 · 当前回复')
+            : localItem ? '发送中' : '';
         const segments = piMessageSegments(message);
         const activityOnly = message.role === 'assistant' && message.status === 'streaming' && !segments.length;
-        const showActions = Boolean(segments.length) && message.status !== 'streaming';
+        const showActions = Boolean(segments.length) && message.status !== 'streaming' && !localItem;
         const retryId = retryEntryId;
         const forkPending = pendingAction?.entryId === message.entryId && pendingAction?.retry === false;
         const retryPending = pendingAction?.entryId === retryId && pendingAction?.retry === true;
-        return (
-          <div className={`pi-bubble-wrap ${message.role}`} key={message.entryId ?? `${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`}>
-            {message.role === 'assistant'
-              ? <>
-                  {activityOnly
-                    ? <div className="pi-activity" role="status" aria-live="polite" aria-label={statusText}>
-                        <WmbCreatureMark state={connecting ? 'connect' : 'working'} className="pi-activity-mark"/>
-                      </div>
-                    : segments.length
-                      ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} streaming={message.status === 'streaming'} /></div>
-                      : null}
-                </>
-              : <p className="user pi-bubble">{message.text}</p>}
+        const messageKey = message.entryId ?? `${message.role}-${index}-${message.createdAt ?? ''}-${message.text.slice(0, 12)}`;
+        return isOrchestration
+          ? <PiOrchestrationRow key={messageKey} message={message} />
+          : (
+            <div className={`pi-bubble-wrap ${isSystemEvent ? 'system-event' : message.role}`} key={messageKey} data-local-status={localItem?.status}>
+            {isSystemEvent
+              ? <div className="pi-system-event" role="status">
+                  <div className="pi-system-event-label">WMB 系统通知</div>
+                  <div className="pi-system-event-text">{message.text}</div>
+                </div>
+              : message.role === 'assistant'
+                ? <>
+                    {activityOnly
+                      ? <div className="pi-activity" role="status" aria-live="polite" aria-label={statusText}>
+                          <WmbCreatureMark state={connecting ? 'connect' : 'working'} className="pi-activity-mark"/>
+                        </div>
+                      : segments.length
+                        ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} streaming={message.status === 'streaming'} /></div>
+                        : null}
+                  </>
+                : <p className="user pi-bubble">{message.text}</p>}
             {!activityOnly && <div className="pi-bubble-meta">
-              <time className="pi-bubble-time">{timeLabel || (message.status === 'streaming' ? '发送中' : '')}</time>
-              <div className="pi-bubble-actions" aria-hidden={showActions ? undefined : true} style={showActions ? undefined : { visibility: 'hidden' }}>
+              {localItem
+                ? <span className="pi-bubble-time" role="status">{localStatusLabel}</span>
+                : <time className="pi-bubble-time">{timeLabel || (message.status === 'streaming' ? '发送中' : '')}</time>}
+              {!isSystemEvent && <div className="pi-bubble-actions" aria-hidden={showActions ? undefined : true} style={showActions ? undefined : { visibility: 'hidden' }}>
                 <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy(segments.map(segmentText).join('\n\n'))}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
                 </button>
-                {message.role === 'user' && message.entryId && <button type="button" className={forkPending ? 'pending' : undefined} title={forkPending ? '正在创建分支' : '按 Pi 原生分叉撤回'} aria-label="按 Pi 原生分叉撤回" aria-busy={forkPending || undefined} disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
+                {message.role === 'user' && message.entryId && !localItem && <button type="button" className={forkPending ? 'pending' : undefined} title={forkPending ? '正在创建分支' : '按 Pi 原生分叉撤回'} aria-label="按 Pi 原生分叉撤回" aria-busy={forkPending || undefined} disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-3"/></svg>
                 </button>}
                 {retryId && <button type="button" className={retryPending ? 'pending' : undefined} title={retryPending ? '正在重新发送' : '按 Pi 原生分叉重发'} aria-label="按 Pi 原生分叉重发" aria-busy={retryPending || undefined} disabled={!showActions || busy || !configured} onClick={() => onRetry(retryId)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
                 </button>}
-              </div>
+              </div>}
             </div>}
           </div>
         );
     }) : <p className="pi-empty">{configured ? '现在可以直接和我对话。' : '请先在设置中填写 Pi API。'}</p>}
-    {(queue.steering.length || queue.followUp.length) > 0 && <section className="pi-native-queue" aria-label="Pi 原生消息队列" aria-live="polite">
+    {(visibleSteering.length || visibleFollowUp.length) > 0 && <section className="pi-native-queue" aria-label="Pi 原生消息队列" aria-live="polite">
       <header><strong>Pi 队列</strong><small>原生</small></header>
       <ol>
-        {queue.steering.map((message, index) => <li key={`steer-${index}-${message.slice(0, 12)}`} data-kind="steer"><span aria-hidden="true">↥</span><div><b>即将处理</b><p>{message}</p></div></li>)}
-        {queue.followUp.map((message, index) => <li key={`follow-${index}-${message.slice(0, 12)}`} data-kind="follow"><span aria-hidden="true">↳</span><div><b>下一轮</b><p>{message}</p></div></li>)}
+        {visibleSteering.map((message, index) => {
+          const item = presentPiNativeQueueMessage(message, 'steer');
+          return <li key={`${item.kind}-${index}-${item.text.slice(0, 12)}`} data-kind={item.kind}><span aria-hidden="true">{item.kind === 'system_event' ? 'i' : '↥'}</span><div><b>{item.label}</b><p>{item.text}</p></div></li>;
+        })}
+        {visibleFollowUp.map((message, index) => {
+          const item = presentPiNativeQueueMessage(message, 'follow');
+          return <li key={`${item.kind}-${index}-${item.text.slice(0, 12)}`} data-kind={item.kind}><span aria-hidden="true">{item.kind === 'system_event' ? 'i' : '↳'}</span><div><b>{item.label}</b><p>{item.text}</p></div></li>;
+        })}
       </ol>
     </section>}
   </div>{showLatest && <button type="button" className={`pi-jump-latest${latestLeaving ? ' leaving' : ''}`} onClick={jumpToLatest}>回到最新</button>}</div>;
