@@ -1,0 +1,21 @@
+{
+  "activeId": "04eef59c-5937-414e-a72c-ef3ebef4fee0",
+  "conversations": [
+    {
+      "id": "04eef59c-5937-414e-a72c-ef3ebef4fee0",
+      "title": "请检查当前批注",
+      "preview": "当前 Pi worker lease 尚未释放。",
+      "createdAt": "2026-08-12T03:31:23.829Z",
+      "updatedAt": "2026-08-12T03:41:00.406Z",
+      "archivedAt": null
+    },
+    {
+      "id": "8ec6772d-b1fe-4992-bb76-9d858cc99b56",
+      "title": "新会话",
+      "preview": "暂无消息",
+      "createdAt": "2026-08-12T03:31:23.810Z",
+      "updatedAt": "2026-08-12T03:31:23.810Z",
+      "archivedAt": null
+    }
+  ]
+}

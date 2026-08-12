@@ -1,3 +1,0 @@
-
-import {chromium} from 'playwright-core'; const b=await chromium.connectOverCDP('http://127.0.0.1:9222');const p=b.contexts()[0].pages()[0];
-console.log(JSON.stringify(await p.evaluate(()=>{const names=['.app-shell','.pi-dock','.pi-conversation','.pi-dock-toggle-rail','.main-column','.workspace'];const o={};for(const n of names){const e=document.querySelector(n);if(!e){o[n]=null;continue}const r=e.getBoundingClientRect(),c=getComputedStyle(e);o[n]={cls:e.className,rect:{x:r.x,w:r.width,right:r.right},bg:c.backgroundColor,shadow:c.boxShadow,borderRight:c.borderRight,overflow:c.overflow}}return o}),null,2));await b.close().catch(()=>{});

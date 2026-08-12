@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
 import { broadcastDataChanged } from './data-changed.ts';
+import { migrateAnnotationsForCoreSave, migrateAnnotationsForPlatformSave } from './studio-annotations.ts';
+import { recordCoreDraftUsage, recordPlatformUsage } from './knowledge-usage-integration.ts';
 
 export type ContentProjectStatus = 'idea' | 'drafting' | 'review' | 'ready' | 'completed';
 export type ContentProjectOrder = 'recent' | 'oldest' | 'versions';
@@ -280,6 +282,8 @@ export function createContentProjectWithVersion(
   try {
     const project = createContentProject(database, input, false);
     const version = insertCoreVersion(database, project.id, input.body);
+    // WMB-5215：首个核心版本与 usage 包同一事务；usage 失败整体回滚（协议 §10）。
+    recordCoreDraftUsage(database, { contentVersionId: version.id, projectId: project.id, planItemId: input.planItemId ?? null, author: 'ai', reason: 'content.create' });
     if (transaction) database.exec('COMMIT');
     if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.create' });
     return {
@@ -313,7 +317,9 @@ export function createProjectFromPlanItem(database: DatabaseSync, planItemId: st
       planItemId,
       sourceIds: JSON.parse(item.sourceIds) as string[]
     }, false);
-    insertCoreVersion(database, project.id, `# ${item.title}\n\n## 核心观点\n${item.pointOfView}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}`);
+    const version = insertCoreVersion(database, project.id, `# ${item.title}\n\n## 核心观点\n${item.pointOfView}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}`);
+    // WMB-5215：选题采纳生成的首个核心版本与 usage 包同一事务（携带 plan_item_id 血缘）。
+    recordCoreDraftUsage(database, { contentVersionId: version.id, projectId: project.id, planItemId, author: 'ai', reason: 'plan_item_adopt' });
     markCarryDoneForPlanItem(database, planItemId);
     if (transaction) database.exec('COMMIT');
     return { ...project, created: true };
@@ -367,11 +373,21 @@ export function saveCoreVersion(
       if (transaction) database.exec('ROLLBACK');
       return failure('REVISION_CONFLICT', '内容项目已更新，请重新加载。', { current: latest });
     }
+    const latest = database.prepare('SELECT id, body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(input.projectId) as { id: string; body: string } | undefined;
     const version = insertCoreVersion(database, input.projectId, input.body, input.author ?? 'ai');
     const revision = current.revision + 1;
     const title = requestedTitle ?? current.title;
     database.prepare('UPDATE content_projects SET title = ?, updated_at = ?, revision = ? WHERE id = ?')
       .run(title, version.createdAt, revision, input.projectId);
+    // WMB-5207: 批注迁移与正文保存同一事务；迁移异常整体回滚，不产生部分保存。
+    migrateAnnotationsForCoreSave(database, {
+      projectId: input.projectId,
+      previousBody: latest?.body ?? null,
+      nextBody: input.body,
+      newVersionId: version.id
+    });
+    // WMB-5215: 核心版本与 usage 包同一事务；usage 失败整体回滚（协议 §10 无血缘版本零提交）。
+    recordCoreDraftUsage(database, { contentVersionId: version.id, projectId: input.projectId, author: input.author ?? 'ai', reason: 'core_version_save' });
     if (transaction) database.exec('COMMIT');
     if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.core_version' });
     return success({
@@ -457,6 +473,7 @@ export function deleteContentProject(database: DatabaseSync, input: { projectId:
     database.prepare('DELETE FROM content_versions WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM content_project_context_packages WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM creative_brief_projects WHERE project_id = ?').run(input.projectId);
+    database.prepare('DELETE FROM studio_annotations WHERE project_id = ?').run(input.projectId);
     database.prepare('DELETE FROM content_projects WHERE id = ?').run(input.projectId);
     if (transaction) database.exec('COMMIT');
     return success({ id: input.projectId });
@@ -466,17 +483,52 @@ export function deleteContentProject(database: DatabaseSync, input: { projectId:
   }
 }
 
-export function savePlatformVersion(database: DatabaseSync, input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string }): CommandResult<SavedPlatformVersion> {
+export function savePlatformVersion(
+  database: DatabaseSync,
+  input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; id?: string },
+  transaction = false
+): CommandResult<SavedPlatformVersion> {
   const now = new Date().toISOString();
   if (!input.id) {
-    const id = randomUUID(); database.prepare('INSERT INTO platform_versions (id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').run(id, input.projectId, input.contentVersionId, input.platform, input.format, input.title ?? null, input.body, JSON.stringify(input.assetIds ?? []), now, now);
+    const id = randomUUID();
+    if (transaction) database.exec('BEGIN IMMEDIATE');
+    try {
+      database.prepare('INSERT INTO platform_versions (id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)').run(id, input.projectId, input.contentVersionId, input.platform, input.format, input.title ?? null, input.body, JSON.stringify(input.assetIds ?? []), now, now);
+      // WMB-5215：平台版本与 usage 包同一事务；换基/usage 失败整体回滚（协议 §10）。
+      recordPlatformUsage(database, { platformVersionId: id, projectId: input.projectId, contentVersionId: input.contentVersionId, platform: input.platform, format: input.format, reason: 'platform_version_create' });
+      if (transaction) database.exec('COMMIT');
+    } catch (error) {
+      if (transaction) database.exec('ROLLBACK');
+      throw error;
+    }
     return success({ id, revision: 1 });
   }
-  const current = database.prepare('SELECT revision FROM platform_versions WHERE id = ?').get(input.id) as { revision: number } | undefined;
-  if (!current) return failure('NOT_FOUND', '平台版本不存在。');
-  if (input.expectedRevision !== current.revision) return failure('REVISION_CONFLICT', '平台版本已更新，请重新加载。', { currentRevision: current.revision });
-  database.prepare('UPDATE platform_versions SET content_version_id=?, platform=?, format=?, title=?, body=?, asset_ids_json=?, updated_at=?, revision=? WHERE id=?').run(input.contentVersionId, input.platform, input.format, input.title ?? null, input.body, JSON.stringify(input.assetIds ?? []), now, current.revision + 1, input.id);
-  return success({ id: input.id, revision: current.revision + 1 });
+  if (transaction) database.exec('BEGIN IMMEDIATE');
+  try {
+    const current = database.prepare('SELECT revision, platform, body, content_version_id AS contentVersionId, project_id AS projectId FROM platform_versions WHERE id = ?').get(input.id) as { revision: number; platform: 'x' | 'xiaohongshu' | 'wechat'; body: string; contentVersionId: string; projectId: string } | undefined;
+    if (!current) {
+      if (transaction) database.exec('ROLLBACK');
+      return failure('NOT_FOUND', '平台版本不存在。');
+    }
+    if (input.expectedRevision !== current.revision) {
+      if (transaction) database.exec('ROLLBACK');
+      return failure('REVISION_CONFLICT', '平台版本已更新，请重新加载。', { currentRevision: current.revision });
+    }
+    database.prepare('UPDATE platform_versions SET content_version_id=?, platform=?, format=?, title=?, body=?, asset_ids_json=?, updated_at=?, revision=? WHERE id=?').run(input.contentVersionId, input.platform, input.format, input.title ?? null, input.body, JSON.stringify(input.assetIds ?? []), now, current.revision + 1, input.id);
+    // WMB-5207: 批注迁移与平台正文保存同一事务（IPC/MCP 路径由 dispatcher 提供事务；直接调用可传 transaction=true）。
+    migrateAnnotationsForPlatformSave(database, {
+      scope: { projectId: current.projectId, documentKind: 'platform', documentId: input.id, platform: input.platform },
+      previousBody: current.body,
+      nextBody: input.body
+    });
+    // WMB-5215：更新未换基则血缘已固定；换基（事实变化）由 recordPlatformUsage 拒绝并回滚。
+    recordPlatformUsage(database, { platformVersionId: input.id, projectId: input.projectId, contentVersionId: input.contentVersionId, platform: input.platform, format: input.format, existingContentVersionId: current.contentVersionId, reason: 'platform_version_update' });
+    if (transaction) database.exec('COMMIT');
+    return success({ id: input.id, revision: current.revision + 1 });
+  } catch (error) {
+    if (transaction) database.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 export function getStudio(database: DatabaseSync): Array<{

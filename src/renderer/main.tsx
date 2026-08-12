@@ -24,8 +24,6 @@ import './styles.css';
 function normalizeView(raw: string | null): View {
   if (!raw) return 'today';
   if (raw === 'compose') return 'canvas';
-  // Retired knowledge-system home collapses into primary Topics.
-  if (raw === 'knowledge') return 'topic';
   return views.includes(raw as View) ? raw as View : 'today';
 }
 function StatusClock(): React.JSX.Element {
@@ -65,11 +63,17 @@ function App(): React.JSX.Element {
   }, []);
   useEffect(() => {
     const expand = () => setPiDockCollapsed(false);
+    const discussStudioAnnotations = () => {
+      setPiDockCollapsed(false);
+      window.requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('wmb:pi-composer-focus')));
+    };
     window.addEventListener('wmb:pi-dock-expand', expand);
     window.addEventListener('wmb:focus-manager-dialog', expand);
+    window.addEventListener('studio-discuss-pi', discussStudioAnnotations);
     return () => {
       window.removeEventListener('wmb:pi-dock-expand', expand);
       window.removeEventListener('wmb:focus-manager-dialog', expand);
+      window.removeEventListener('studio-discuss-pi', discussStudioAnnotations);
     };
   }, []);
 
@@ -151,7 +155,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     if (view !== 'discover' && view !== 'today') setPageStatus(null);
   }, [view]);
-  useEffect(() => { localStorage.removeItem('wmb.creativeContext'); localStorage.removeItem('wmb.knowledgeDomainId'); localStorage.removeItem('wmb.knowledgeTopicId'); }, []);
+  useEffect(() => { localStorage.removeItem('wmb.creativeContext'); }, []);
   useEffect(() => { localStorage.setItem('wmb.piDockCollapsed', String(piDockCollapsed)); }, [piDockCollapsed]);
   useEffect(() => {
     if (!workspaceId || skipStudioPersist.current) { skipStudioPersist.current = false; return; }
@@ -233,7 +237,7 @@ function App(): React.JSX.Element {
     navigate('studio');
   };
   const nav = [{ id: 'today', label: '今日' }, { id: 'agents', label: '智能体' }, { id: 'discover', label: '发现' }, { id: 'proposals', label: '选题' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
-  const pageLabels: Record<View, string> = { today: '今日内容', agents: '智能体班组', discover: '发现', proposals: '选题台账', knowledge: '主题', topic: '主题', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
+  const pageLabels: Record<View, string> = { today: '今日内容', agents: '智能体班组', discover: '发现', proposals: '选题台账', topic: '主题', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
   const publishSelected = publications.find((item) => item.publication.id === publishSelectedId) ?? publications[0] ?? null;
   const piContext: PiContextRef = useMemo(() => {
     if (view === 'today') {
@@ -394,7 +398,12 @@ function App(): React.JSX.Element {
         />
       )}
       {view === 'library' && workspaceId && <LibraryView key={workspaceId} onOpenTopic={(topicId) => openTopic(topicId)} onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }} onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }} focusSourceId={localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusSourceConsumed={() => localStorage.removeItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} sectionStorageKey={workspaceStorageKey(workspaceId, 'librarySection')}/>}
-      {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
+      {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)} onOpenDetail={(target) => {
+        if (target.type === 'topic' && target.id) openTopic(target.id);
+        else if (target.type === 'source' && target.id) { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), target.id); navigate('library'); }
+        else if (target.type === 'studio' && target.id) { setStudioSelectedId(target.id); navigate('studio'); }
+        else if (target.type === 'results') navigate('results');
+      }}/>}
 
       {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} onFocusChange={setPageFocus} onOpenSource={(sourceId) => { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
       {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={openStudio} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => navigate('settings')} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}

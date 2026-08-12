@@ -359,11 +359,12 @@ test('E2 reporter collect only from daily union', () => {
   assert.equal(reporter.includes('plans.save'), false);
 });
 
-test('E3 each employee role has standing write commands', () => {
+test('E3 each employee role has standing write commands; desk holds full standing', async () => {
   for (const role of ROLES) {
     assert.ok(roleWriteCommands(role).length > 0, role);
   }
-  assert.equal(roleWriteCommands('desk').length, 0);
+  const { deskStandingCommands } = await import('../src/shared/agent-capabilities.ts');
+  assert.deepEqual([...roleWriteCommands('desk')].sort(), deskStandingCommands(), 'desk standing = full internal set (WMB-5182 A1)');
 });
 
 // ---------- F. 进度/心跳基本可写 ----------

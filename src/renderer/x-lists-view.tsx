@@ -386,7 +386,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       indexStamp,
       origin,
       postsMeta?.fetchedAt ? `动态更新于 ${new Date(postsMeta.fetchedAt).toLocaleString('zh-CN')}` : null,
-      `ID ${selected.listId}`,
+      `标识 ${selected.listId}`,
       detail?.isPrivate ? '私密' : '公开'
     ].filter(Boolean);
     onStatusChange?.({ text: parts.join(' · '), running: working || loading });
@@ -918,7 +918,7 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
       {selected ? <div className="x-lists-main">
         <div className="x-list-feed-head">
           <div className="x-list-feed-actions">
-            <button disabled={working} onClick={() => void readTimeline(true)}>刷新动态</button>
+            <button className="x-list-primary" disabled={working} onClick={() => void readTimeline(true)}>刷新动态</button>
             <button disabled={working} onClick={() => void readMembers()}>成员</button>
             <button disabled={working} onClick={() => void readDetail()}>详情</button>
             {selectedBinding?.enabled && <button disabled={working} onClick={() => void collectTimeline()}>采集一批</button>}

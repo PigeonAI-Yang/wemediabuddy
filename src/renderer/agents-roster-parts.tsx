@@ -12,6 +12,7 @@ export type RosterRow = {
   intent?: string | null;
   phase?: string | null;
   progressLabel?: string | null;
+  progressRatio?: number | null;
 };
 
 export function roleLabel(roleId: string): string {
@@ -37,4 +38,26 @@ export function stampLine(label: string, iso: string | null): string {
 
 export function StatusDot({ status }: { status: string }): JSX.Element {
   return <span className={`agents-status-dot status-${status}`} aria-hidden="true" />;
+}
+
+/**
+ * 进度展示规则（WMB-5195）：只认真实比例。
+ * running + 真实 processed/planned → 确定轨 + 百分比；running + null → 不确定轨（不显示数字百分比）；
+ * 其余（idle/排队/终态/主管空席）→ 空轨 0%。禁止任何阶段猜值回退。
+ */
+export type ProgressPresentation = {
+  determinate: boolean;
+  indeterminate: boolean;
+  /** 有真实比例才非 null；不确定态为 null（不显示百分比）。 */
+  percent: string | null;
+  ratio: number | null;
+};
+
+export function progressPresentation(ratio: number | null | undefined, running: boolean): ProgressPresentation {
+  if (running && ratio != null && Number.isFinite(ratio)) {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    return { determinate: true, indeterminate: false, percent: `${Math.round(clamped * 100)}%`, ratio: clamped };
+  }
+  if (running) return { determinate: false, indeterminate: true, percent: null, ratio: null };
+  return { determinate: false, indeterminate: false, percent: '0%', ratio: null };
 }

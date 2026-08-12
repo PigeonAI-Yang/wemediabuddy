@@ -1,10 +1,10 @@
-# 主题整理提案与 Owner 审批闭环（Design draft）
+# 主题整理提案与主管审批闭环（Design draft；2026-08-10 主管授权翻转修订）
 
 - 日期：2026-08-10
-- 路由：Design（角色默认职责 + 人工审批边界变化）
-- 状态：Owner locked；施工仍须 `TASKS.md doing`
+- 路由：Design（角色默认职责 + 内部审批边界变化）
+- 状态：Owner locked（2026-08-10 历史 lock 保留；2026-08-10 主管授权翻转修订已并入，见 §4/§6/§7 注记）；施工仍须 `TASKS.md doing`
 - 触发事实：Owner 要求合并重复主题时，桌助最终要求 Owner 到前端手工处理；真实会话显示资料员只能改资料归属，无法完整合并主题，策划工单又固定为 `daily_judge`。
-- 对齐：`PRODUCT.md` C1/C3/C6/C8、`PRD.md` §2.0/§2.3、`SPEC.md` §1.0/§1.1/CAP-003、`docs/spark/2026-08-07-role-permission-design.md`
+- 对齐：`PRODUCT.md` C1/C3/C6/C8、`PRD.md` §2.0/§2.3、`SPEC.md` §1.0/§1.1/CAP-003、`docs/spark/2026-08-07-role-permission-design.md`、`docs/spark/2026-08-10-supervisor-authority-design.md`（主管授权翻转）
 
 ## 1. 结论
 
@@ -71,16 +71,16 @@ Owner 只需要“批准”或“驳回”；不是进入编辑表单替 Agent �
 - 成功必须读回：提案为 `approved`、全部目标关系已迁移、被合并主题已归档、无对象仍错误指向旧主题。
 - 驳回只改变提案状态，不改变主题事实。
 
-## 4. 授权形状
+## 4. 授权形状（2026-08-10 主管授权翻转修订）
 
 不把 `cap.knowledge_curate` 整包塞给资料员，也不开放权限配置 UI。
 
 建议新增最窄能力：
 
 - `cap.topic_maintain_propose`：资料员默认持有，只能读取主题家底并创建/修订主题整理提案。
-- 提案应用命令：`owner_ui` 专属，`agentGrantable:false`；桌助、策划、资料员和外部 Agent 均不可调用。
+- **提案应用命令（2026-08-10 翻转）**：`knowledge.topic_maintenance_approve / reject / reproposal_retry` 重分类为**仅主管可授予**——`agentGrantable:true`、`precise:false`、`defaultRoleBindings { desk: true }`、零员工绑定；资料员（仅 propose）、策划和外部 Agent 均不可调用（角色/执行边界拒绝，零业务写）。原「owner_ui 专属」表述由本修订取代（历史 Owner lock 记录保留，见 §7 修订注记）；四眼制衡保留：资料员提、主管批。
 
-策划仍持选题判断能力。新主题候选若来自策划，也先成为待批提案，不直接绕过 Owner 改正式主题结构。
+策划仍持选题判断能力。新主题候选若来自策划，也先成为待批提案，不直接绕过主管改正式主题结构。
 
 ## 5. 实现约束（Owner lock 后再拆任务）
 
@@ -88,7 +88,7 @@ Owner 只需要“批准”或“驳回”；不是进入编辑表单替 Agent �
 2. 主题提案是独立业务对象，不复用 `knowledge_suggestions` 表：后者强绑定 canvas 且只接受 node/relation，混用会污染两个领域。
 3. 主题合并必须由一个领域命令完成全量关系迁移与归档；禁止资料员逐条调用现有工具拼出“看似合并”。
 4. 资料员工单新增主题维护策略与专属读回；不能继续映射到只认资料变更的 `page_library` 成功条件。
-5. 桌助/资料员 Pi 工具与共享 `wemedia-buddy-operator` Skill 同步更新；主管遇到待批提案必须呈报，禁止输出“请去前端自行整理”。
+5. 主管/资料员 Pi 工具与共享 `wemedia-buddy-operator` Skill 同步更新；主管遇到待批提案必须呈报与内部审批，禁止输出“请去前端自行整理”。
 6. 实施前先修订 PRD/SPEC 与 canonical 角色设计，再登记 Capability、命令和任务合同；`TASKS.md doing` 仍是唯一施工许可。
 
 ## 6. 验收场景
@@ -101,7 +101,7 @@ Owner 只需要“批准”或“驳回”；不是进入编辑表单替 Agent �
 4. Owner 驳回：零主题业务写。
 5. 再次提案并批准：一次事务完成全部迁移与归档，回读无遗留旧引用。
 6. 在批准前并发修改任一目标主题：批准返回 stale，整批零写入。
-7. 资料员、策划或桌助直接尝试应用提案：稳定返回角色/执行边界拒绝，零业务写。
+7. 资料员、策划或外部 Agent 直接尝试应用提案：稳定返回角色/执行边界拒绝，零业务写（主管应用 = 正常路径，2026-08-10 翻转）。
 
 ## 7. Owner lock
 
@@ -122,3 +122,5 @@ Owner lock 2026-08-10（用户自然语言原话构成有效授权，不要求�
 4. 「实施吧。」授权按本设计进入立法、任务合同与施工。
 5. Owner 随后明确纠正：Owner 的自然语言实施指令本身有效，不得要求复制魔法口令。
 6. 其余边界按本节 1-8：旧主题归档不硬删、stale 零写入、桌助必须呈报、不做通用审批引擎或权限配置 UI。
+
+**§7 修订注记（2026-08-10 主管授权翻转，legislative）**：本节历史 Owner lock（2026-08-10 自然语言确认）保留为历史；依 `docs/spark/2026-08-10-supervisor-authority-design.md` §5/§8-4（Owner lock 2026-08-10 全 10 项），第 2/3 项中「Owner 审批/批准」修订为**主管（软件内 supervisor）审批**——主题整理应用命令 `agentGrantable:true`、`precise:false`、`{desk:true}`，仅主管可授予；资料员只 propose（四眼制衡保留）；「桌助必须呈报」修订为「主管负责内部审批与呈报」。红线定义不含内部审批（红线恰三类：最终发布、硬删执行、外部平台变更执行）。

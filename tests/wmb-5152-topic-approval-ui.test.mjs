@@ -5,7 +5,6 @@ import test from 'node:test';
 const source = await readFile(new URL('../src/renderer/topic-maintenance-ledger.tsx', import.meta.url), 'utf8');
 const topicView = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
 const topicCss = `${await readFile(new URL('../src/renderer/styles-knowledge.css', import.meta.url), 'utf8')}\n${await readFile(new URL('../src/renderer/styles-knowledge-topic.css', import.meta.url), 'utf8')}`;
-const acceptance = await readFile(new URL('../.ai/wmb-5152-ui-acceptance.mjs', import.meta.url), 'utf8');
 
 test('topic approval ledger uses explicit primary and secondary actions', () => {
   assert.match(source, /decision === 'approve' \? window\.wmb\.approveTopicMaintenanceProposal : window\.wmb\.rejectTopicMaintenanceProposal/);
@@ -84,12 +83,17 @@ test('topic home keeps search and filters compact while approval actions stay in
   assert.ok(source.indexOf('className="topic-maintenance-actions"') < source.indexOf('className="topic-maintenance-summary"'));
   assert.match(source, /className="topic-maintenance-reason"/);
   assert.doesNotMatch(source, /<strong>\{item\.title\}<\/strong><p>\{item\.reason\}<\/p>/);
-  assert.match(acceptance, /getBoundingClientRect\(\)/);
-  assert.match(acceptance, /actionsVisible:/);
-  assert.match(acceptance, /ledgerNotClipped:/);
-  assert.match(acceptance, /summaryOnly/);
-  assert.match(acceptance, /relationOnly/);
-  assert.match(acceptance, /toolbarWrapValid/);
-  assert.match(acceptance, /reasonHidden:/);
-  assert.match(acceptance, /row\.innerText\.includes\(reason\)/);
+  const headerIndex = source.indexOf('className="topic-maintenance-head"');
+  const actionsIndex = source.indexOf('className="topic-maintenance-actions"');
+  const summaryIndex = source.indexOf('className="topic-maintenance-summary"');
+  const technicalIndex = source.indexOf('className="topic-maintenance-technical"');
+  const reasonIndex = source.indexOf('className="topic-maintenance-reason"');
+  assert.ok(headerIndex >= 0 && actionsIndex > headerIndex && actionsIndex < summaryIndex, '批准/驳回动作必须位于卡片可见头部，而非折叠明细');
+  assert.ok(technicalIndex > summaryIndex && reasonIndex > technicalIndex, '原始说明只进入二级技术明细，不挤占摘要');
+  assert.match(topicCss, /\.topic-maintenance-row\{[^}]*grid-template-areas:"head" "summary" "diff" "warning"/, '卡片区块顺序固定，动作头部不被摘要覆盖');
+  assert.match(topicCss, /\.topic-maintenance-head\{[^}]*flex-wrap:wrap/, '窄宽度下头部必须换行防裁切');
+  assert.match(topicCss, /\.topic-maintenance-head-side\{[^}]*margin-left:auto/, '动作组保持在头部尾侧');
+  assert.match(topicCss, /\.topic-maintenance-actions\{[^}]*justify-content:flex-end/, '批准动作保持可见对齐');
+  assert.match(topicCss, /@media\(max-width:800px\)\{[^}]*\.topic-maintenance-head\{[^}]*flex-direction:column/, '小屏头部改为纵向，避免动作被截断');
+  assert.match(topicCss, /\.topic-maintenance-actions button\{flex:1\}/, '小屏批准与驳回按钮平分可用宽度');
 });

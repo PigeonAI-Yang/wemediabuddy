@@ -1,9 +1,10 @@
-# 主题审批冲突合同与自动重提
+# 主题审批冲突合同与自动重提（2026-08-10 主管授权翻转修订）
 
 - 日期：2026-08-10
 - 路由：Legislate
-- 状态：Owner locked；施工仍须 `TASKS.md doing`
+- 状态：Owner locked（历史 lock 保留；2026-08-10 主管授权翻转修订已并入 §5/§7）；施工仍须 `TASKS.md doing`
 - 修订对象：`docs/spark/2026-08-10-topic-maintenance-approval-design.md`
+- 2026-08-10 主管授权翻转：依 `docs/spark/2026-08-10-supervisor-authority-design.md` §8（Owner lock 全 10 项），内部审批（主题 approve/reject/reproposal_retry）归主管（desk），`agentGrantable:true`/`precise:false`/`{desk:true}`；员工与外部 Agent 不代批；红线恰三类不含内部审批。
 
 ## 1. 要解决的根因
 
@@ -48,12 +49,12 @@ Owner 批准
 
 迁移不扫描、不复活既有 stale。没有 outbox 的旧记录显示为“历史失效，未分类”；只有 v2 审批产生、带结构化冲突与 outbox 的记录进入自动重提。
 
-## 5. 授权与 Skill
+## 5. 授权与 Skill（2026-08-10 主管授权翻转修订）
 
-- Owner 的批准仍只授权当前冻结提案；真冲突不执行旧变更，只触发资料员在原 workspace 范围重新整理。
-- 资料员仍只有 propose 权；successor 仍需 Owner 新批准。
+- 主管（软件内 supervisor）的批准仍只授权当前冻结提案；真冲突不执行旧变更，只触发资料员在原 workspace 范围重新整理。
+- 资料员仍只有 propose 权；successor 仍需主管新批准（`agentGrantable:true`、`precise:false`、`{desk:true}`，仅主管可授予）。
 - outbox 调度状态写是 scheduler 基础设施命令，不进入任何角色 grant。
-- operator Skill、资料员 prompt、桌助呈报同步说明：真冲突由系统重派，不要求 Owner 手工整理。
+- operator Skill、资料员 prompt、主管呈报同步说明：真冲突由系统重派，内部审批归主管，不要求 Owner 手工整理。
 
 ## 6. 验收
 
@@ -72,6 +73,8 @@ Owner lock 2026-08-10：
 3. 真冲突由系统自动派资料员基于最新现场重提，不能把整理工作退给 Owner。
 4. 旧提案保持冻结并由新提案接替；新提案仍须 Owner 批准，禁止自动 rebase 或自动生效。
 5. 历史误判与真正 stale 分开处理，禁止粗暴复活。
-6. Non-goals：不做通用审批/工作流框架，不新增权限配置 UI，不让桌助或 Agent 代批，不改变发布与硬删红线。
+6. Non-goals：不做通用审批/工作流框架，不新增权限配置 UI，**不让员工或外部 Agent 代批（内部审批归主管，2026-08-10 翻转）**，不改变发布与硬删红线。
 7. Route: Legislate。
 8. 用户原话「我要彻底解决」授权按以上已经对齐的四项方向继续立法与施工，不要求魔法口令。
+
+**§7 修订注记（2026-08-10 主管授权翻转，legislative）**：本节历史 Owner lock（2026-08-10）保留为历史；依 `docs/spark/2026-08-10-supervisor-authority-design.md` §5/§8-4，第 4 项「新提案仍须 Owner 批准」与第 6 项「不让桌助或 Agent 代批」修订为——**内部审批归主管**（主题应用命令仅主管可授予，`agentGrantable:true`/`precise:false`/`{desk:true}`）；员工与外部 Agent 不代批；红线恰三类（最终发布、硬删执行、外部平台变更执行），不含内部审批。

@@ -94,6 +94,35 @@
   color: var(--accent-soft);
 }
 
+/* One Violet：列表页唯一主 CTA 是「刷新动态」；空态里的重复 CTA 降为次级，避免同屏双紫 */
+.x-list-feed-actions .x-list-primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.x-list-feed-actions .x-list-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+.x-lists-view .empty-state button:not(.refresh-button) {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+}
+.x-lists-view .empty-state button:not(.refresh-button):hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.x-lists-view .empty-state button.refresh-button {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.x-lists-view .empty-state button.refresh-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
 .x-list-feed-meta {
   display: flex;
   gap: 8px 14px;

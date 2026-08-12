@@ -36,6 +36,7 @@ export type CrewInstance = Readonly<{
   piSessionId: string | null;
   businessDate: string | null;
   projectId: string | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
   error: string | null;
   code: string | null;
   queuedAt: string;
@@ -220,17 +221,19 @@ export function roleOverviewStatus(active: readonly CrewInstance[], filter: Stat
  * 续派输入（按现有 jobsSpawn handler 落地）：从实例重建 RoleJobRequest 的 UI 侧参数
  * （roleId/brief/businessDate/projectId 取自投影，其余边界字段由系统按角色派生）。
  */
-export function redispatchInput(instance: Pick<CrewInstance, 'roleId' | 'brief' | 'businessDate' | 'projectId'>): {
+export function redispatchInput(instance: Pick<CrewInstance, 'roleId' | 'brief' | 'businessDate' | 'projectId' | 'writerTask'>): {
   roleId: EmployeeRole;
   brief: string;
   businessDate?: string | null;
   projectId?: string | null;
+  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null;
 } {
-  const input: { roleId: EmployeeRole; brief: string; businessDate?: string | null; projectId?: string | null } = {
+  const input: { roleId: EmployeeRole; brief: string; businessDate?: string | null; projectId?: string | null; writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null } = {
     roleId: instance.roleId,
     brief: instance.brief
   };
   if (instance.businessDate) input.businessDate = instance.businessDate;
   if (instance.projectId) input.projectId = instance.projectId;
+  if (instance.writerTask) input.writerTask = instance.writerTask;
   return input;
 }

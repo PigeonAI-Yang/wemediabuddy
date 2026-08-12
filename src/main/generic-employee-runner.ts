@@ -28,6 +28,7 @@ import {
   readbackLibraryMutation,
   readbackPlansRevision,
   readbackScanPhase,
+  readbackXiaohongshuPlatformVersion,
   roleFailureCode,
   type JobExecutionOutcome,
   type JobObjectBoundary,
@@ -60,6 +61,7 @@ function successCodeFor(readback: RoleJobReadbackV1): string {
     case 'scan_phase_reached': return 'SCAN_CHANNEL_SCANNED';
     case 'plans_revision': return 'PLANS_REVISION';
     case 'content_version': return 'CONTENT_VERSION';
+    case 'xiaohongshu_platform_version': return 'XIAOHONGSHU_PLATFORM_VERSION';
     case 'sources_mutated': return 'SOURCES_MUTATED';
     case 'topic_maintenance_proposed': return 'TOPIC_MAINTENANCE_PROPOSED';
     case 'noop_confirmed': return 'NOOP_CONFIRMED';
@@ -91,10 +93,12 @@ export function createGenericEmployeeRunner(
     // WMB-5141：优先使用 spawn 原始请求（保留 channelIds/sourceFeedIds/sourceIds/scope），
     // 无合同任务（测试直连 ctx）回落 JobRecord 重建。
     const request: RoleJobRequest = ctx.request ?? (roleId === 'writer'
-      ? { roleId, brief: ctx.job.brief, projectId: ctx.job.projectId ?? '', businessDate: ctx.job.businessDate }
+      ? { roleId, brief: ctx.job.brief, projectId: ctx.job.projectId ?? '', writerTask: ctx.job.writerTask ?? 'core_draft', businessDate: ctx.job.businessDate }
       : roleId === 'librarian'
         ? { roleId, brief: ctx.job.brief }
-        : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate });
+        : roleId === 'reporter'
+          ? { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate }
+          : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate });
     const spec = deriveRoleJobSpec(request, runtime.identity.workspaceId);
     const sessionStartedAt = new Date().toISOString();
 
@@ -382,9 +386,15 @@ async function readbackFor(ctx: JobExecuteContext, spec: RoleJobSpec, run: Emplo
       return readbackPlansRevision(db, spec.businessDate, task.id);
     case 'content_version':
       return readbackContentVersion(db, spec.projectId ?? '');
+    case 'xiaohongshu_platform_version':
+      return readbackXiaohongshuPlatformVersion(db, spec.projectId ?? '');
     case 'library_mutation':
       // WMB-5121 §8.3：传策略捕获的内存末条文本（免读文件），未捕获时 readbackLibraryMutation 读会话文件兜底。
       return readbackLibraryMutation(db, task.id, sessionStartedAt, ctx.sessionFile, run.finalAssistantText);
+    case 'research_evidence':
+      // WMB-5170：research 读回（EvidencePack）由 WMB-5172 执行器落地；本任务不落 research 行，
+      // 无证据即 null，走既有 JOB_READBACK_MISSING 保守失败，不伪造成功。
+      return null;
   }
 }
 

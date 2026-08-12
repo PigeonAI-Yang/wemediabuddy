@@ -38,19 +38,51 @@ import { buildJobObjectBoundary, isEmployeeRole } from './job-object-boundary.ts
  * - 读回规则（§7）：四角色各自的可证伪业务读回；无读回不得 succeeded。
  */
 
+/**
+ * WMB-5170 §5.2 ResearchGap（研究缺口合同，值对象）。
+ * parentRoleId ∈ {writer, planner, librarian}——禁止 reporter/research 作父（§8.2 硬止环派生层）。
+ * budget = 深度档（本次唯一档位）：12 分钟 / 15 有效来源 / 40 候选 / 3 并行抓取 / 仅一轮。
+ */
+export type ResearchClaimType = 'fact' | 'price' | 'policy';
+export type ResearchRequiredClaim = Readonly<{
+  key: string;
+  text: string;
+  type: ResearchClaimType;
+}>;
+export type ResearchBudget = Readonly<{
+  timeMinutes: number;
+  minValidSources: number;
+  maxCandidates: number;
+  maxParallelFetches: number;
+  maxRounds: number;
+}>;
+export type ResearchGap = Readonly<{
+  gapId: string;
+  parentJobId: string;
+  parentTaskId: string;
+  parentRoleId: 'writer' | 'planner' | 'librarian';
+  requiredClaims: readonly ResearchRequiredClaim[];
+  budget: ResearchBudget;
+  channels: readonly ('web' | 'x' | 'xhs')[];
+}>;
+
+export type WriterTask = 'core_draft' | 'xiaohongshu_platform_version';
+
 export type RoleJobRequest =
   | Readonly<{ roleId: 'reporter'; brief: string; businessDate?: string | null; channelIds?: readonly string[] | null; sourceFeedIds?: readonly string[] | null }>
   | Readonly<{ roleId: 'planner'; brief: string; businessDate?: string | null }>
-  | Readonly<{ roleId: 'writer'; brief: string; projectId: string; businessDate?: string | null }>
-  | Readonly<{ roleId: 'librarian'; brief: string; sourceIds?: readonly string[] | null; scope?: 'workspace' | null }>;
+  | Readonly<{ roleId: 'writer'; brief: string; projectId: string; writerTask: WriterTask; businessDate?: string | null }>
+  | Readonly<{ roleId: 'librarian'; brief: string; sourceIds?: readonly string[] | null; scope?: 'workspace' | null }>
+  | Readonly<{ roleId: 'reporter'; brief: string; businessDate?: string | null; projectId?: string | null; channelIds?: readonly string[] | null; sourceFeedIds?: readonly string[] | null; research: ResearchGap }>;
 
-export type RoleJobPolicy = 'scan' | 'judge' | 'draft' | 'organize';
-export type RoleJobReadbackKind = 'scan_phase' | 'plans_revision' | 'content_version' | 'library_mutation';
+export type RoleJobPolicy = 'scan' | 'judge' | 'draft' | 'organize' | 'research';
+export type RoleJobReadbackKind = 'scan_phase' | 'plans_revision' | 'content_version' | 'xiaohongshu_platform_version' | 'library_mutation' | 'research_evidence';
 export type RoleJobSpec = Readonly<{
   roleId: EmployeeRole;
   intent: AgentIntent;
   businessDate: string;
   projectId: string | null;
+  writerTask: WriterTask | null;
   /** WMB-5141 持久边界：标准化（去重 + 字典序）sourceIds（reporter=channelIds；librarian=sourceIds）。 */
   sourceIds: readonly string[];
   /** WMB-5141 持久边界：librarian 的写权范围（workspace=整个工作空间资料库；null=仅限 sourceIds）。 */
@@ -89,6 +121,7 @@ export type JobExecutionOutcome = Readonly<{
 export type RoleJobReadbackV1 =
   | { kind: 'plans_revision'; planDate: string; revision: number }
   | { kind: 'content_version'; projectId: string; versionId: string }
+  | { kind: 'xiaohongshu_platform_version'; projectId: string; versionId: string; contentVersionId: string }
   | { kind: 'sources_mutated'; count: number }
   | { kind: 'topic_maintenance_proposed'; proposal: TopicMaintenanceProposal }
   | { kind: 'scan_phase_reached'; phase: string }
@@ -126,7 +159,8 @@ export const JOB_ERROR_CODES = Object.freeze({
   LIBRARY_ORGANIZE_FAILED: 'LIBRARY_ORGANIZE_FAILED',
   REPORTER_SCAN_FAILED: 'REPORTER_SCAN_FAILED',
   PLANNER_JUDGE_FAILED: 'PLANNER_JUDGE_FAILED',
-  WRITER_DRAFT_FAILED: 'WRITER_DRAFT_FAILED'
+  WRITER_DRAFT_FAILED: 'WRITER_DRAFT_FAILED',
+  RESEARCH_FAILED: 'RESEARCH_FAILED'
 } as const);
 
 /** §5.2 派生表：roleId → intent（唯一真相源）。 */
@@ -137,25 +171,28 @@ export const ROLE_TO_INTENT: Readonly<Record<EmployeeRole, AgentIntent>> = Objec
   librarian: 'page_library'
 });
 
-const ROLE_TO_POLICY: Readonly<Record<EmployeeRole, RoleJobPolicy>> = Object.freeze({
+const ROLE_TO_POLICY: Readonly<Record<EmployeeRole | 'research', RoleJobPolicy>> = Object.freeze({
   reporter: 'scan',
   planner: 'judge',
   writer: 'draft',
-  librarian: 'organize'
+  librarian: 'organize',
+  research: 'research'
 });
 
-const ROLE_TO_FAILURE_CODE: Readonly<Record<EmployeeRole, string>> = Object.freeze({
+const ROLE_TO_FAILURE_CODE: Readonly<Record<EmployeeRole | 'research', string>> = Object.freeze({
   reporter: JOB_ERROR_CODES.REPORTER_SCAN_FAILED,
   planner: JOB_ERROR_CODES.PLANNER_JUDGE_FAILED,
   writer: JOB_ERROR_CODES.WRITER_DRAFT_FAILED,
-  librarian: JOB_ERROR_CODES.LIBRARY_ORGANIZE_FAILED
+  librarian: JOB_ERROR_CODES.LIBRARY_ORGANIZE_FAILED,
+  research: JOB_ERROR_CODES.RESEARCH_FAILED
 });
 
-const ROLE_TO_READBACK: Readonly<Record<EmployeeRole, RoleJobReadbackKind>> = Object.freeze({
+const ROLE_TO_READBACK: Readonly<Record<EmployeeRole | 'research', RoleJobReadbackKind>> = Object.freeze({
   reporter: 'scan_phase',
   planner: 'plans_revision',
   writer: 'content_version',
-  librarian: 'library_mutation'
+  librarian: 'library_mutation',
+  research: 'research_evidence'
 });
 
 export function deriveIntentForRole(roleId: EmployeeRole): AgentIntent {
@@ -203,9 +240,12 @@ export function deriveResourceLocks(input: {
 const ROLE_ALLOWED_KEYS: Readonly<Record<EmployeeRole, readonly string[]>> = Object.freeze({
   reporter: Object.freeze(['roleId', 'brief', 'businessDate', 'channelIds', 'sourceFeedIds']),
   planner: Object.freeze(['roleId', 'brief', 'businessDate']),
-  writer: Object.freeze(['roleId', 'brief', 'projectId', 'businessDate']),
+  writer: Object.freeze(['roleId', 'brief', 'projectId', 'writerTask', 'businessDate']),
   librarian: Object.freeze(['roleId', 'brief', 'sourceIds', 'scope'])
 });
+
+/** WMB-5170 research 变体（roleId='reporter' + research 块）：不接收 reporter 渠道键（research.channels 自持读面）。 */
+const RESEARCH_ALLOWED_KEYS = Object.freeze(['roleId', 'brief', 'businessDate', 'projectId', 'research'] as const);
 
 function validationError(message: string): Error {
   return Object.assign(new Error(message), { code: JOB_ERROR_CODES.VALIDATION_ERROR });
@@ -217,6 +257,85 @@ function optionalStringArray(value: unknown, label: string): readonly string[] |
     throw validationError(`${label} 必须是字符串数组或 null。`);
   }
   return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+/**
+ * WMB-5170 §5.2/§8.2：research 块 strict-key 校验（fail-closed）。
+ * parentRoleId ∈ {writer, planner, librarian}——reporter/research 作父一律 VALIDATION_ERROR（硬止环派生层）。
+ */
+function parseResearchGap(value: unknown): ResearchGap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw validationError('research 必须是对象。');
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = ['gapId', 'parentJobId', 'parentTaskId', 'parentRoleId', 'requiredClaims', 'budget', 'channels'];
+  for (const key of Object.keys(record)) {
+    if (!allowed.includes(key)) throw validationError(`research 未知字段 ${key}（只接受 ${allowed.join('/')}）。`);
+  }
+  const gapId = typeof record.gapId === 'string' ? record.gapId.trim() : '';
+  if (!gapId) throw validationError('research.gapId 不能为空。');
+  const parentJobId = typeof record.parentJobId === 'string' ? record.parentJobId.trim() : '';
+  if (!parentJobId) throw validationError('research.parentJobId 不能为空。');
+  const parentTaskId = typeof record.parentTaskId === 'string' ? record.parentTaskId.trim() : '';
+  if (!parentTaskId) throw validationError('research.parentTaskId 不能为空。');
+  if (record.parentRoleId !== 'writer' && record.parentRoleId !== 'planner' && record.parentRoleId !== 'librarian') {
+    throw validationError('research.parentRoleId 只允许 writer/planner/librarian（禁止 reporter/research 作父）。');
+  }
+  if (!Array.isArray(record.requiredClaims) || record.requiredClaims.length === 0) {
+    throw validationError('research.requiredClaims 必须是非空数组。');
+  }
+  const requiredClaims = record.requiredClaims.map((claim, index) => {
+    if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
+      throw validationError(`research.requiredClaims[${index}] 必须是对象。`);
+    }
+    const c = claim as Record<string, unknown>;
+    const key = typeof c.key === 'string' ? c.key.trim() : '';
+    const text = typeof c.text === 'string' ? c.text.trim() : '';
+    if (!key || !text) throw validationError(`research.requiredClaims[${index}] 需要非空 key 与 text。`);
+    if (c.type !== 'fact' && c.type !== 'price' && c.type !== 'policy') {
+      throw validationError(`research.requiredClaims[${index}].type 只允许 fact/price/policy。`);
+    }
+    return Object.freeze({ key, text, type: c.type });
+  });
+  const budget = record.budget;
+  if (!budget || typeof budget !== 'object' || Array.isArray(budget)) {
+    throw validationError('research.budget 必须是对象。');
+  }
+  const budgetRecord = budget as Record<string, unknown>;
+  const budgetKeys = ['timeMinutes', 'minValidSources', 'maxCandidates', 'maxParallelFetches', 'maxRounds'] as const;
+  // WMB-5170：逐键校验后把 unknown 收窄进数值形状（不直接赋值 unknown，杜绝 TS2322）。
+  const budgetValues = {} as Record<(typeof budgetKeys)[number], number>;
+  for (const key of budgetKeys) {
+    const n = budgetRecord[key];
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) {
+      throw validationError(`research.budget.${key} 必须是正数。`);
+    }
+    budgetValues[key] = n;
+  }
+  if (!Array.isArray(record.channels) || record.channels.length === 0) {
+    throw validationError('research.channels 必须是非空数组。');
+  }
+  const channels = record.channels.map((channel, index) => {
+    if (channel !== 'web' && channel !== 'x' && channel !== 'xhs') {
+      throw validationError(`research.channels[${index}] 只允许 web/x/xhs。`);
+    }
+    return channel;
+  });
+  return Object.freeze({
+    gapId,
+    parentJobId,
+    parentTaskId,
+    parentRoleId: record.parentRoleId,
+    requiredClaims: Object.freeze(requiredClaims),
+    budget: Object.freeze({
+      timeMinutes: budgetValues.timeMinutes,
+      minValidSources: budgetValues.minValidSources,
+      maxCandidates: budgetValues.maxCandidates,
+      maxParallelFetches: budgetValues.maxParallelFetches,
+      maxRounds: budgetValues.maxRounds
+    }),
+    channels: Object.freeze(channels)
+  });
 }
 
 /**
@@ -241,7 +360,8 @@ export function parseRoleJobRequest(input: unknown): RoleJobRequest {
       code: JOB_ERROR_CODES.ROLE_NOT_SPAWNABLE
     });
   }
-  const allowed = ROLE_ALLOWED_KEYS[roleId];
+  const isResearch = roleId === 'reporter' && 'research' in record;
+  const allowed = isResearch ? RESEARCH_ALLOWED_KEYS : ROLE_ALLOWED_KEYS[roleId];
   for (const key of Object.keys(record)) {
     if (!allowed.includes(key)) throw validationError(`未知字段 ${key}（角色 ${roleId} 只接受 ${allowed.join('/')}）。`);
   }
@@ -258,9 +378,23 @@ export function parseRoleJobRequest(input: unknown): RoleJobRequest {
         code: JOB_ERROR_CODES.JOB_PROJECT_REQUIRED
       });
     }
-    return Object.freeze({ roleId, brief, projectId, businessDate });
+    const writerTask = record.writerTask ?? 'core_draft';
+    if (writerTask !== 'core_draft' && writerTask !== 'xiaohongshu_platform_version') {
+      throw validationError('writerTask 只允许 core_draft 或 xiaohongshu_platform_version。');
+    }
+    return Object.freeze({ roleId, brief, projectId, writerTask, businessDate });
   }
   if (roleId === 'reporter') {
+    if (isResearch) {
+      const projectId = typeof record.projectId === 'string' ? record.projectId.trim() || null : null;
+      return Object.freeze({
+        roleId,
+        brief,
+        businessDate,
+        projectId,
+        research: parseResearchGap(record.research)
+      });
+    }
     return Object.freeze({
       roleId,
       brief,
@@ -285,26 +419,39 @@ export function parseRoleJobRequest(input: unknown): RoleJobRequest {
 /** spawn 期派生（§5.2）：intent 派生后不可再被调用方改写；businessDate 缺省今日。 */
 export function deriveRoleJobSpec(request: RoleJobRequest, workspaceId: string): RoleJobSpec {
   const roleId = request.roleId;
+  // WMB-5170 §5.2：带 research 块的 reporter 请求派生 research intent（角色注册表是 intent 唯一真相源）。
+  const isResearch = roleId === 'reporter' && 'research' in request;
   // librarian 联合成员无 businessDate（合同 §5.1）：缺省今日，仅作任务上下文。
   const businessDate = (roleId === 'librarian' ? null : request.businessDate) ?? shanghaiDate();
-  const projectId = roleId === 'writer' ? request.projectId : null;
+  const projectId = roleId === 'writer' ? request.projectId : isResearch ? (request.projectId ?? null) : null;
+  const writerTask = roleId === 'writer' ? request.writerTask : null;
   const boundary = buildJobObjectBoundary(request, businessDate);
+  const resourceLocks = isResearch
+    ? Object.freeze([...deriveResourceLocks({
+        roleId,
+        workspaceId,
+        businessDate,
+        projectId,
+        channelIds: roleId === 'reporter' ? request.channelIds : null
+      }), `research:${request.research.parentJobId}`])
+    : deriveResourceLocks({
+        roleId,
+        workspaceId,
+        businessDate,
+        projectId,
+        channelIds: roleId === 'reporter' ? request.channelIds : null
+      });
   return Object.freeze({
     roleId,
-    intent: ROLE_TO_INTENT[roleId],
+    intent: isResearch ? 'research' : ROLE_TO_INTENT[roleId],
     businessDate,
     projectId,
+    writerTask,
     sourceIds: boundary.sourceIds,
     scope: boundary.scope,
-    resourceLocks: deriveResourceLocks({
-      roleId,
-      workspaceId,
-      businessDate,
-      projectId,
-      channelIds: roleId === 'reporter' ? request.channelIds : null
-    }),
-    policy: ROLE_TO_POLICY[roleId],
-    readback: ROLE_TO_READBACK[roleId]
+    resourceLocks,
+    policy: ROLE_TO_POLICY[isResearch ? 'research' : roleId],
+    readback: writerTask === 'xiaohongshu_platform_version' ? 'xiaohongshu_platform_version' : ROLE_TO_READBACK[isResearch ? 'research' : roleId]
   });
 }
 
@@ -405,6 +552,15 @@ export function readbackContentVersion(database: DatabaseSync, projectId: string
   const project = getContentProject(database, projectId);
   if (!project || !project.latestVersion) return null;
   return { kind: 'content_version', projectId, versionId: project.latestVersion.id };
+}
+
+/** 写手小红书任务读回：目标项目至少存在一个小红书平台版本。 */
+export function readbackXiaohongshuPlatformVersion(database: DatabaseSync, projectId: string): RoleJobReadbackV1 | null {
+  const row = database.prepare(`SELECT id, content_version_id AS contentVersionId
+    FROM platform_versions WHERE project_id = ? AND platform = 'xiaohongshu'
+    ORDER BY updated_at DESC, id DESC LIMIT 1`).get(projectId) as { id: string; contentVersionId: string } | undefined;
+  if (!row) return null;
+  return { kind: 'xiaohongshu_platform_version', projectId, versionId: row.id, contentVersionId: row.contentVersionId };
 }
 
 /** 会话 JSONL 最后一条 assistant 文本（评审 MINOR 4：no-op 必须 agent 明确声明，防假成功）。 */

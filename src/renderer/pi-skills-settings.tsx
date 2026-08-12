@@ -36,7 +36,7 @@ export function PiSkillsSettings(): React.JSX.Element {
     try {
       const saved = await window.wmb.savePiSkill({ originalName, name, description, instructions });
       await load(saved.name);
-      setNote('已保存。新的 Pi 进程会使用此版本。');
+      setNote('已保存。新的 Pi 会话会使用此版本。');
     } catch (error) { setNote(error instanceof Error ? error.message : '保存失败'); }
   };
   const remove = async () => {
@@ -45,7 +45,7 @@ export function PiSkillsSettings(): React.JSX.Element {
     try {
       await window.wmb.deletePiSkill(selected.name);
       await load();
-      setNote('已删除，所有工作空间的新 Pi 进程都不会再加载它。');
+      setNote('已删除，所有工作空间的新 Pi 会话都不会再加载它。');
     } catch (error) { setNote(error instanceof Error ? error.message : '删除失败'); }
   };
 

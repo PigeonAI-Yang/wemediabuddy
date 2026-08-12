@@ -1,0 +1,21 @@
+{
+  "activeId": "6c1fbea1-095c-4e51-9136-c5dfd13cfe66",
+  "conversations": [
+    {
+      "id": "6c1fbea1-095c-4e51-9136-c5dfd13cfe66",
+      "title": "新会话",
+      "preview": "暂无消息",
+      "createdAt": "2026-08-12T02:38:15.128Z",
+      "updatedAt": "2026-08-12T02:38:15.128Z",
+      "archivedAt": null
+    },
+    {
+      "id": "b9530b60-afde-4dab-8e86-9b626d324ae1",
+      "title": "新会话",
+      "preview": "暂无消息",
+      "createdAt": "2026-08-12T02:38:15.111Z",
+      "updatedAt": "2026-08-12T02:38:15.111Z",
+      "archivedAt": null
+    }
+  ]
+}

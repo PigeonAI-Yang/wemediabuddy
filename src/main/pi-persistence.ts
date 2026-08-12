@@ -5,8 +5,9 @@ import {
   type PiConversationSnapshot
 } from './pi-conversation.ts';
 import type { PiRpcSupervisor } from './pi-runtime.ts';
-export { messagesFromPiEntries, visiblePiPrompt } from './pi-transcript-projection.ts';
+export { messagesFromPiEntries } from './pi-transcript-projection.ts';
 import { messagesFromPiEntries } from './pi-transcript-projection.ts';
+import { reconcileOrchestrationRows } from './pi-orchestration-store.ts';
 
 function stringStateField(data: unknown, field: 'sessionId' | 'sessionFile'): string | null {
   if (!data || typeof data !== 'object') return null;
@@ -37,27 +38,76 @@ export async function readPiTranscript(supervisor: PiRpcSupervisor): Promise<PiT
   };
 }
 
+type PiConversationSettlement = {
+  status?: 'stopped';
+  thinking?: string;
+  text?: string;
+};
+
+function settleLatestAssistant(messages: PiChatMessage[], settlement: PiConversationSettlement): PiChatMessage[] {
+  const finalText = settlement.text?.trim() ? settlement.text : '';
+  const finalThinking = settlement.thinking?.trim() ? settlement.thinking.trim() : '';
+  if (!finalText && !finalThinking && !settlement.status) return messages;
+
+  let lastUserIndex = -1;
+  let lastAssistantIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (lastAssistantIndex < 0 && messages[index]?.role === 'assistant') lastAssistantIndex = index;
+    if (messages[index]?.role === 'user') { lastUserIndex = index; break; }
+  }
+  const assistantIndex = lastAssistantIndex > lastUserIndex ? lastAssistantIndex : -1;
+  const current: PiChatMessage = assistantIndex >= 0
+    ? messages[assistantIndex]!
+    : { role: 'assistant', text: '' };
+  const thinking = current.thinking?.trim() ? current.thinking : finalThinking;
+  let segments = current.segments?.map((segment) => ({ ...segment })) ?? [];
+  if (!segments.length) {
+    if (thinking) segments.push({ kind: 'thinking', text: thinking });
+    if (current.text.trim()) segments.push({ kind: 'text', text: current.text });
+  } else if (thinking && !segments.some((segment) => segment.kind === 'thinking')) {
+    segments.push({ kind: 'thinking', text: thinking });
+  }
+  if (finalText) {
+    const renderedText = segments.filter((segment) => segment.kind === 'text').map((segment) => segment.text).join('');
+    if (!renderedText.endsWith(finalText)) {
+      let lastTextIndex = -1;
+      for (let index = segments.length - 1; index >= 0; index -= 1) {
+        if (segments[index]?.kind === 'text') { lastTextIndex = index; break; }
+      }
+      const partial = lastTextIndex >= 0 ? segments[lastTextIndex]!.text : '';
+      if (lastTextIndex >= 0 && finalText.startsWith(partial)) segments[lastTextIndex] = { kind: 'text', text: finalText };
+      else segments.push({ kind: 'text', text: finalText });
+    }
+  }
+  const text = segments.filter((segment) => segment.kind === 'text').map((segment) => segment.text).join('') || finalText || current.text;
+  const settled: PiChatMessage = {
+    ...current,
+    text,
+    ...(thinking ? { thinking } : {}),
+    ...(segments.length ? { segments } : {}),
+    status: settlement.status
+  };
+  if (assistantIndex < 0) return [...messages, settled];
+  const next = messages.slice();
+  next[assistantIndex] = settled;
+  return next;
+}
+
 export async function syncPiConversation(
   dataRootPath: string,
   conversation: PiConversationSnapshot,
   supervisor: PiRpcSupervisor,
-  lastAssistantStatus?: 'stopped',
-  lastAssistantThinking?: string
+  settlement: PiConversationSettlement = {}
 ): Promise<PiConversationSnapshot | null> {
   const transcript = await readPiTranscript(supervisor);
   const active = await readPiConversation(dataRootPath);
   if (active.id !== conversation.id) return null;
-  const messages = transcript.messages.slice();
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role !== 'assistant') continue;
-    const current = messages[index]!;
-    messages[index] = {
-      ...current,
-      ...(lastAssistantStatus ? { status: lastAssistantStatus } : {}),
-      ...(!current.thinking && lastAssistantThinking?.trim() ? { thinking: lastAssistantThinking.trim() } : {})
-    };
-    break;
-  }
+  // WMB-5178 §11：raw transcript 整体覆盖前先对账——queue-ack-only accepted 行（尚无 raw entry）必须保留，
+  // 同 dispatchId raw 投影只对账不新增第二行；live 行状态权威。
+  const messages = settleLatestAssistant(
+    reconcileOrchestrationRows(conversation.messages, transcript.messages),
+    settlement
+  );
   return writePiConversation(dataRootPath, {
     id: conversation.id,
     title: conversation.title,

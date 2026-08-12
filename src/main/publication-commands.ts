@@ -26,9 +26,15 @@ export type PublicationEditorPrepareDependencies = Readonly<{
   startBrowser?: typeof startVerifiedBoundBrowser;
   invokeEditor?: typeof invokeEditorAdapter;
 }>;
+/** WMB-5183 §4.4 表 ①：发布快照准备经 desk 内部命令执行所需的 task grant 授权（pi/external agent 信封）。 */
+export type PublicationSnapshotAuthority = Readonly<{ taskId: string; taskGrantId: string; workerLeaseId?: string }>;
 type PublicationOperationContext = { publication: PublicationRecord; snapshot: PublicationSnapshotV1; operation: PublicationBrowserOperationV1 };
 
-export function dispatchCreatePublicationSnapshot(runtime: ActiveWorkspaceRuntime, input: SnapshotCreateInput): Promise<CommandReceiptV1<PublicationOperationContext>> {
+export function dispatchCreatePublicationSnapshot(
+  runtime: ActiveWorkspaceRuntime,
+  input: SnapshotCreateInput,
+  authority?: PublicationSnapshotAuthority
+): Promise<CommandReceiptV1<PublicationOperationContext>> {
   const version = runtime.database.prepare(`SELECT id, platform, title, body, format, asset_ids_json AS assetIds FROM platform_versions WHERE id=?`).get(input.platformVersionId) as { id: string; platform: BoundBrowserPlatform; title: string | null; body: string; format: string; assetIds: string } | undefined;
   if (!version || !['x', 'wechat'].includes(version.platform)) throw new CommandDispatchError('NOT_FOUND', '平台版本不存在或暂不支持发布。');
   const binding = requireVerifiedBinding(runtime, version.platform);
@@ -37,7 +43,12 @@ export function dispatchCreatePublicationSnapshot(runtime: ActiveWorkspaceRuntim
   const account = runtime.database.prepare(`SELECT id FROM platform_accounts WHERE platform=? AND account_key=? AND browser_profile_id=? AND browser_binding_revision=?`).get(version.platform, expected.accountKey, binding.profileId, binding.bindingRevision) as { id: string } | undefined;
   if (!account) throw new CommandDispatchError('ACCOUNT_MISMATCH', '当前平台账号与浏览器绑定不一致。');
   const commandInput = { platformVersionId: version.id, accountId: account.id, browserProfileId: binding.profileId, browserBindingRevision: binding.bindingRevision, workspaceId: runtime.identity.workspaceId, runtimeEpoch: runtime.identity.runtimeEpoch, payload: { title: version.title, body: version.body, assets: parseAssetIds(version.assetIds) } };
-  return dispatchBusinessCommand(runtime, { command: PUBLICATION_SNAPSHOT_CREATE_COMMAND, requestId: input.requestId ?? randomUUID(), actor: OWNER, input: commandInput, boundIdentity: { platformVersionId: version.id, accountId: account.id, platform: version.platform, browserProfileId: binding.profileId, browserBindingRevision: binding.bindingRevision }, causation: { actor: OWNER.id }, entityType: 'publication_snapshot', execute: (database, normalized) => { const data = requireCommandResultData(createPublicationSnapshot(database, normalized as CreatePublicationSnapshotInput)); return { data, entityId: data.snapshot.id, readback: data }; } });
+  const actor = authority ? (authority.workerLeaseId
+    ? Object.freeze({ type: 'pi' as const, id: 'pi', label: 'Pi worker' })
+    : Object.freeze({ type: 'external_agent' as const, id: 'mcp', label: 'External Agent' })) : OWNER;
+  return dispatchBusinessCommand(runtime, { command: PUBLICATION_SNAPSHOT_CREATE_COMMAND, requestId: input.requestId ?? randomUUID(), actor,
+    taskId: authority?.taskId, workerLeaseId: authority?.workerLeaseId, grantId: authority?.taskGrantId,
+    input: commandInput, boundIdentity: { platformVersionId: version.id, accountId: account.id, platform: version.platform, browserProfileId: binding.profileId, browserBindingRevision: binding.bindingRevision }, causation: { actor: OWNER.id }, entityType: 'publication_snapshot', execute: (database, normalized) => { const data = requireCommandResultData(createPublicationSnapshot(database, normalized as CreatePublicationSnapshotInput)); return { data, entityId: data.snapshot.id, readback: data }; } });
 }
 export async function dispatchRecoverInterruptedPublications(runtime: ActiveWorkspaceRuntime): Promise<number> {
   const receipt = await dispatchBusinessCommand<{ runtimeEpoch: string }, number>(runtime, {

@@ -82,7 +82,7 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
       if (!proposed.ok) { setNote(proposed.error.message); return; }
       const armed = await window.wmb.armXListOperation({ operationId: proposed.data.operation.id, expectedRevision: proposed.data.operation.revision });
       if (!armed.ok) { mergeOperation(proposed.data.operation); setNote(armed.error.message); return; }
-      mergeOperation(armed.data); setNote('已冻结账号、List 与精确变更集；请回到 Pi 对话框确认一次。');
+      mergeOperation(armed.data); setNote('已冻结账号、List 与本次变更；请回到 Pi 对话框确认一次。');
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setLoading(false); }
   };

@@ -69,7 +69,7 @@
 .proposal-topic-link {
   border: 0;
   background: transparent;
-  color: var(--accent-soft);
+  color: var(--link);
   font-size: 12px;
   font-weight: 650;
   padding: 4px 8px;
@@ -124,14 +124,14 @@
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: transparent;
-  color: var(--accent-soft);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
   font-size: 12.5px;
   font-weight: 650;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
-.proposal-go-studio:hover { border-color: var(--accent); background: var(--surface-hover); }
+.proposal-go-studio:hover { background: var(--surface-hover); color: var(--ink); }
 
 .proposal-empty { min-height: 340px; margin-top: 4px; }
 
@@ -146,7 +146,7 @@
   padding: 10px 16px;
   border: 1px dashed var(--border-strong);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-raised) 88%, var(--accent) 5%);
+  background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
   text-align: left;
@@ -154,14 +154,13 @@
   transition: border-color 140ms ease, background 140ms ease;
 }
 .proposal-ledger-entry:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--surface-raised) 78%, var(--accent) 12%);
+  background: var(--surface-hover);
 }
 .proposal-ledger-entry-title { font-size: 13.5px; font-weight: 700; white-space: nowrap; }
 .proposal-ledger-entry-counts { flex: 1; min-width: 0; color: var(--muted); font-size: 12.5px; }
 .proposal-ledger-entry-arrow { color: var(--muted-low); font-size: 16px; }
 
-.proposal-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));font-size:13px}
+.proposal-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);font-size:13px}
 .proposal-batch-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .proposal-open-item{display:grid;gap:8px;align-items:start}
 .proposal-open-item.batch{grid-template-columns:28px minmax(0,1fr)}

@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { isIP } from 'node:net';
+import type { LookupAddress } from 'node:dns';
+import { lookup } from 'node:dns/promises';
 import {
   createWebsiteSource,
   getWebsiteSource,
@@ -41,6 +43,7 @@ export async function resolveWebsiteCandidates(input: {
   inputText: string;
   fetchImpl?: typeof fetch;
   limit?: number;
+  maxCandidates?: number;
 }): Promise<WebsiteCandidate[]> {
   const inputText = input.inputText.trim();
   if (!inputText) throw websiteError('WEBSITE_INPUT_REQUIRED', '请输入网站名称或 URL。');
@@ -69,7 +72,7 @@ export async function resolveWebsiteCandidates(input: {
     throw websiteError('SOURCE_SEARCH_FAILED', 'Bing 搜索未返回可解析的 HTML。');
   }
 
-  const resolved = parseBingCandidates(body, inputText, input.limit ?? MAX_CANDIDATES);
+  const resolved = parseBingCandidates(body, inputText, input.limit ?? input.maxCandidates ?? MAX_CANDIDATES, input.maxCandidates ?? MAX_CANDIDATES);
   if (!resolved.candidates.length) {
     if (resolved.rejectedPrivate) throw websiteError('WEBSITE_URL_NOT_PUBLIC', '搜索结果只包含非公开网站地址。');
     throw websiteError('SOURCE_SEARCH_FAILED', 'Bing 未返回可确认的公开网站候选。');
@@ -227,8 +230,8 @@ function directCandidateUrl(inputText: string): string | null {
   }
 }
 
-function parseBingCandidates(html: string, inputText: string, limit: number): { candidates: WebsiteCandidate[]; rejectedPrivate: boolean } {
-  const boundedLimit = Math.min(Math.max(limit, 1), MAX_CANDIDATES);
+function parseBingCandidates(html: string, inputText: string, limit: number, maxCandidates = MAX_CANDIDATES): { candidates: WebsiteCandidate[]; rejectedPrivate: boolean } {
+  const boundedLimit = Math.min(Math.max(limit, 1), Math.max(maxCandidates, 1));
   const seen = new Set<string>();
   const candidates: WebsiteCandidate[] = [];
   let rejectedPrivate = false;
@@ -393,6 +396,129 @@ async function fetchWithTimeout(fetchImpl: typeof fetch, url: string, timeoutMs:
   }
 }
 
+export const WEB_READ_DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+export const WEB_READ_DEFAULT_MAX_REDIRECTS = 10;
+
+export type WebFetchedText = {
+  status: number;
+  contentType: string | null;
+  body: string;
+  finalUrl: string;
+  requestedUrl: string;
+  hops: string[];
+};
+
+/**
+ * DNS-rebinding guard: resolve every address for the host and reject when any
+ * resolved target is a non-public address (fail-closed). Literal IP hosts are
+ * already covered by the hostname-level assertPublicUrl check.
+ */
+export async function assertPublicDns(host: string, lookupImpl: typeof lookup = lookup): Promise<void> {
+  if (isIP(host)) return;
+  let addresses: LookupAddress[];
+  try {
+    addresses = await lookupImpl(host, { all: true });
+  } catch (error) {
+    throw websiteError('WEBSITE_DNS_FAILED', `无法解析主机：${host}。`);
+  }
+  if (!addresses.length) throw websiteError('WEBSITE_DNS_FAILED', `主机无解析记录：${host}。`);
+  for (const { address } of addresses) {
+    // Classify the raw address directly — IPv6 literals must not go through URL parsing
+    // (bare forms like `2001:db8::1` would throw ERR_INVALID_URL without brackets).
+    const normalized = address.toLowerCase().replace(/^\[|\]$/g, '');
+    if (isNonPublicHost(normalized)) {
+      throw websiteError('WEBSITE_DNS_REBINDING', `主机 ${host} 解析到非公开地址：${address}。`);
+    }
+  }
+}
+
+/**
+ * Safe web text read for research use: manual redirects with per-hop public-URL
+ * re-validation, DNS resolution re-check before each hop and after the final
+ * response, streaming 2 MiB body cap, and document-type whitelisting by the caller.
+ * Throws WebsiteChannelError with a stable code; never follows non-http(s) redirects.
+ */
+export async function fetchWebText(input: {
+  url: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  lookupImpl?: typeof lookup;
+  maxBytes?: number;
+  maxRedirects?: number;
+}): Promise<WebFetchedText> {
+  const fetchImpl = input.fetchImpl ?? globalThis.fetch;
+  const lookupImpl = input.lookupImpl ?? lookup;
+  const maxBytes = input.maxBytes ?? WEB_READ_DEFAULT_MAX_BYTES;
+  const maxRedirects = input.maxRedirects ?? WEB_READ_DEFAULT_MAX_REDIRECTS;
+  const hops: string[] = [];
+  let currentUrl = normalizePublicFetchUrl(input.url);
+  hops.push(currentUrl);
+  for (let hop = 0; ; hop++) {
+    await assertPublicDns(hostnameOf(new URL(currentUrl)), lookupImpl);
+    let response: Response;
+    try {
+      response = await fetchImpl(currentUrl, {
+        signal: input.signal,
+        redirect: 'manual',
+        headers: {
+          'user-agent': WEBSITE_UA,
+          accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1'
+        }
+      });
+    } catch (error) {
+      if (input.signal?.aborted) throw websiteError('WEBSITE_TIMEOUT', '网页读取超过时限。');
+      throw websiteError('WEBSITE_NETWORK_FAILED', errorMessage(error));
+    }
+    if (response.status >= 300 && response.status < 400) {
+      if (hop >= maxRedirects - 1) throw websiteError('WEBSITE_REDIRECT_LIMIT', '网页重定向次数过多。');
+      const location = response.headers.get('location');
+      if (!location) throw websiteError('WEBSITE_REDIRECT_INVALID', '重定向缺少目标地址。');
+      let next: URL;
+      try { next = new URL(location, currentUrl); }
+      catch { throw websiteError('WEBSITE_REDIRECT_INVALID', '重定向目标地址无效。'); }
+      if (!/^https?:$/.test(next.protocol)) throw websiteError('WEBSITE_REDIRECT_PROTOCOL', '重定向目标协议不受支持。');
+      currentUrl = normalizePublicFetchUrl(next.toString());
+      hops.push(currentUrl);
+      continue;
+    }
+    const finalUrl = normalizeFetchUrl(response.url || currentUrl);
+    assertPublicUrl(finalUrl);
+    await assertPublicDns(hostnameOf(new URL(finalUrl)), lookupImpl);
+    return {
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      body: await readBodyCapped(response, maxBytes),
+      finalUrl,
+      requestedUrl: hops[0],
+      hops
+    };
+  }
+}
+
+/** Stream the response body, aborting as soon as the byte cap is exceeded (never buffers past the limit). */
+async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) return (await response.text()).slice(0, maxBytes);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw websiteError('WEBSITE_BODY_TOO_LARGE', `网页正文超过 ${maxBytes} 字节上限。`);
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return chunks.join('');
+}
+
 function unreadableTrial(url: string, code: string, message: string, httpStatus?: number, contentType?: string | null, requestedUrl = url): WebsitePage {
   return { body: null, trialRead: {
     title: '', url, requestedUrl, readable: false, itemCount: 0, summary: '', httpStatus, contentType: contentType ?? null,
@@ -400,7 +526,7 @@ function unreadableTrial(url: string, code: string, message: string, httpStatus?
   } };
 }
 
-function isTextResponse(contentType: string | null, body: string): boolean {
+export function isTextResponse(contentType: string | null, body: string): boolean {
   const type = (contentType || '').toLowerCase();
   return /(?:^|\b)(text\/(html|plain|markdown)|application\/xhtml\+xml)(?:;|$)/.test(type)
     || (!type && /<(?:!doctype|html|head|body|article|main)\b/i.test(body));
@@ -412,19 +538,19 @@ function isSearchNavigation(url: URL): boolean {
   return host === 'microsoft.com' && /\/(?:bing|search)(?:\/|$)/i.test(url.pathname);
 }
 
-function looksLikeChallenge(body: string): boolean {
+export function looksLikeChallenge(body: string): boolean {
   const sample = body.slice(0, 5000);
   return /(?:captcha|cloudflare|cf-browser-verification|cdn-cgi\/challenge|attention required|just a moment|access denied)/i.test(sample);
 }
 
-function extractTitle(body: string): string {
+export function extractTitle(body: string): string {
   const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
     ?? body.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
     ?? '';
   return textFromHtml(title).slice(0, 180);
 }
 
-function textFromHtml(value: string): string {
+export function textFromHtml(value: string): string {
   return decodeEntities(value
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -454,17 +580,17 @@ function normalizeFetchUrl(value: string): string {
   }
   return url.toString();
 }
-function normalizePublicFetchUrl(value: string): string {
+export function normalizePublicFetchUrl(value: string): string {
   const url = normalizeFetchUrl(value);
   assertPublicUrl(url);
   return url;
 }
-function assertPublicUrl(value: string): void {
+export function assertPublicUrl(value: string): void {
   const host = hostnameOf(new URL(value));
   if (!isNonPublicHost(host)) return;
   throw websiteError('WEBSITE_URL_NOT_PUBLIC', `不支持非公开网站地址：${host}。`);
 }
-function hostnameOf(url: URL): string {
+export function hostnameOf(url: URL): string {
   return url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 }
 function isNonPublicHost(host: string): boolean {
@@ -472,25 +598,67 @@ function isNonPublicHost(host: string): boolean {
   const version = isIP(host);
   if (version === 4) return isNonPublicIpv4(host);
   if (version !== 6) return false;
-  const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1];
-  if (mapped) return isNonPublicIpv4(mapped);
-  if (host === '::1') return true;
-  const first = Number.parseInt(host.split(':')[0] || '0', 16);
-  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+  return isNonPublicIpv6(host);
+}
+/** Normalize an IPv6 literal to exactly 8 hextets; a dotted-quad tail counts as two hextets. */
+function ipv6ToHextets(host: string): string[] | null {
+  const lower = host.toLowerCase();
+  const doubleColon = lower.indexOf('::');
+  const expandTail = (segments: string[]): string[] | null => {
+    const last = segments[segments.length - 1] ?? '';
+    if (!last.includes('.')) return segments;
+    const bytes = last.split('.').map(Number);
+    if (bytes.length !== 4 || !bytes.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return null;
+    return [...segments.slice(0, -1), ((bytes[0] << 8) | bytes[1]).toString(16), ((bytes[2] << 8) | bytes[3]).toString(16)];
+  };
+  const countHextets = (segments: string[]): number => {
+    const last = segments[segments.length - 1] ?? '';
+    return last.includes('.') ? segments.length - 1 + 2 : segments.length;
+  };
+  if (doubleColon === -1) {
+    const expanded = expandTail(lower.split(':'));
+    return expanded && expanded.length === 8 ? expanded : null;
+  }
+  const left = lower.slice(0, doubleColon).split(':').filter((s) => s !== '');
+  const right = lower.slice(doubleColon + 2).split(':').filter((s) => s !== '');
+  const missing = 8 - countHextets(left) - countHextets(right);
+  const expandedLeft = expandTail(left);
+  const expandedRight = expandTail(right);
+  if (!expandedLeft || !expandedRight || missing < 1) return null;
+  return [...expandedLeft, ...new Array(missing).fill('0'), ...expandedRight];
+}
+/** Loopback, ULA/link-local prefixes, and IPv4-mapped/compatible tails whose embedded IPv4 is private (incl. hex/compressed forms). */
+function isNonPublicIpv6(host: string): boolean {
+  const lower = host.toLowerCase();
+  if (lower === '::1') return true;
+  const first = Number.parseInt(lower.split(':')[0] || '0', 16);
+  if ((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80) return true;
+  const hextets = ipv6ToHextets(lower);
+  if (!hextets) return false;
+  // Mapped (::ffff:x.x.x.x) and compatible (::x.x.x.x) forms embed a 32-bit IPv4 tail.
+  const prefix = hextets.slice(0, 6);
+  const mapped = prefix[5] === 'ffff' && prefix.slice(0, 5).every((h) => h === '0');
+  const compatible = prefix.every((h) => h === '0');
+  if (mapped || compatible) {
+    const a = Number.parseInt(hextets[6], 16);
+    const b = Number.parseInt(hextets[7], 16);
+    return isNonPublicIpv4(`${a >> 8}.${a & 0xff}.${b >> 8}.${b & 0xff}`);
+  }
+  return false;
 }
 function isNonPublicIpv4(host: string): boolean {
   const [first, second] = host.split('.').map(Number);
   return first === 127 || first === 10 || (first === 192 && second === 168)
     || (first === 172 && second >= 16 && second <= 31) || (first === 169 && second === 254);
 }
-function websiteError(code: string, message: string): WebsiteChannelError {
+export function websiteError(code: string, message: string): WebsiteChannelError {
   return Object.assign(new Error(`${code}: ${message}`), { code });
 }
-function errorCode(error: unknown, fallback: string): string {
+export function errorCode(error: unknown, fallback: string): string {
   return typeof error === 'object' && error !== null && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
     ? (error as { code: string }).code
     : fallback;
 }
-function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

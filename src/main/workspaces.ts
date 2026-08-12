@@ -137,8 +137,11 @@ async function prepareCandidateRoot(rootPath: string) {
 }
 
 function candidateBusinessRowCount(database: DatabaseSync): number {
-  const metadata = new Set(['schema_migrations', 'app_meta', 'workspace_profiles', 'workspace_browser_bindings']);
-  const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((row) => row.name).filter((name) => !metadata.has(name));
+  // 系统在 schema/工作空间初始化时写入的表不算业务数据：migration 台账、app 元数据、
+  // 工作空间身份配置，以及 v56 迁移内置的关系类型目录（knowledge_relation_registry 种子行；
+  // 用户扩展关系总是随 ChangeSet 写入，knowledge_change_sets 本身会被计数）。
+  const metadata: Record<string, true> = { schema_migrations: true, app_meta: true, workspace_profiles: true, workspace_browser_bindings: true, knowledge_relation_registry: true };
+  const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((row) => row.name).filter((name) => !metadata[name]);
   return tables.reduce((total, name) => total + Number((database.prepare(`SELECT COUNT(*) AS count FROM "${name.replaceAll('"', '""')}"`).get() as { count: number }).count), 0);
 }
 

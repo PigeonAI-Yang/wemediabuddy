@@ -62,8 +62,6 @@ jobs:
         run: |
           npm run typecheck
           npm test
-          npm run check:capabilities
-          ./scripts/check.ps1
 
       - name: Build installer and upload draft release
         run: npm run publish

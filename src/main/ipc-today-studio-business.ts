@@ -6,13 +6,15 @@ import { getProposalLedger, restoreDismissedProposal, summarizeProposalLedger, t
 import { dismissCarryForPlanItem, listFermentingBundle, refreshWorkCarry, setCarryState, shanghaiDate, type CarryState } from './ferment.ts';
 import {
   copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject,
-  getContentProject, getContentProjectStatusSummary, getStudio, listContentProjects, saveCoreVersion, updateContentProject,
+  getContentProject, getContentProjectStatusSummary, getStudio, listContentProjects, saveCoreVersion, savePlatformVersion, updateContentProject,
   type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus
 } from './content.ts';
 import { getToday } from './workbench.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { getActiveJobSpawner } from './job-spawner.ts';
 import { readCrewInstanceProjection } from './crew-instance-projection.ts';
+import { readTaskTranscriptForJob } from './pi-transcript-projection.ts';
+import { migrateDatabase } from './db/migrations.ts';
 import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
 import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
 import { bindAgentAvatarAsset, clearAgentAvatarMapping, listAgentAvatars } from './agent-avatars.ts';
@@ -38,6 +40,25 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       getHandle: spawner ? (jobId) => spawner.getHandle(jobId) : null
     });
   }));
+
+  // WMB-5195：只读工单 transcript。主进程只接受 jobId，依据 authoritative crew projection 反查会话
+  // （daily/employee 会话名均按契约解析、路径 containment fail-closed）；无写操作、不新增 schema/权限，
+  // 缺失/不匹配/解析失败一律返回 null，不向 renderer 暴露路径细节。
+  ipcMain.handle('agents:task-transcript', async (_event, jobId: string) => {
+    if (typeof jobId !== 'string' || !jobId.trim()) return null;
+    const runtime = dependencies.getActiveRuntime();
+    if (runtime) return readTaskTranscriptForJob(runtime.database, runtime.identity.rootPath, jobId, getActiveJobSpawner());
+    const root = await dependencies.loadSelectedDataRoot();
+    const activatedRuntime = dependencies.getActiveRuntime();
+    if (activatedRuntime) return readTaskTranscriptForJob(activatedRuntime.database, activatedRuntime.identity.rootPath, jobId, getActiveJobSpawner());
+    if (!root) return null;
+    const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+    try {
+      return await readTaskTranscriptForJob(database, root.path, jobId, getActiveJobSpawner());
+    } finally {
+      database.close();
+    }
+  });
   
   ipcMain.handle('agents:capability-summary', () => {
     return {
@@ -51,8 +72,7 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
         id: cap.id,
         displayName: cap.displayName,
         description: cap.description,
-        defaultRoleBindings: cap.defaultRoleBindings,
-        pageScopePassThrough: Boolean(cap.pageScopePassThrough)
+        defaultRoleBindings: cap.defaultRoleBindings
       }))
     };
   });
@@ -249,6 +269,19 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       execute: (database, value) => { const data = requireCommandResultData(saveCoreVersion(database, value, false)); return { data,
         entityId: data.id, beforeRevision: value.expectedRevision, afterRevision: data.projectRevision, readback: data }; } });
     if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'content.core_version' });
+    return receiptAsCommandResult(receipt);
+  });
+  ipcMain.handle('studio:save-platform', async (_event, input: {
+    projectId: string; contentVersionId: string; platform: ContentProjectPlatform; format: string; title?: string;
+    body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string;
+  }) => {
+    const runtime = await requireBusinessRuntime(dependencies); if (!input?.projectId) throw new Error('请先选择内容项目。');
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'content.save_version', requestId: freshRequestId(), actor: ownerUiActor,
+      input: { ...input, body: String(input.body ?? ''), id: input.versionId },
+      boundIdentity: { projectId: input.projectId, versionId: input.versionId ?? null }, entityType: 'content_version',
+      execute: (database, value) => { const data = requireCommandResultData(savePlatformVersion(database, value)); return { data,
+        entityId: data.id, beforeRevision: value.versionId ? value.expectedRevision : undefined, afterRevision: data.revision, readback: data }; } });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'content.platform_version' });
     return receiptAsCommandResult(receipt);
   });
 

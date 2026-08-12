@@ -1,4 +1,70 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { StudioAnnotation, StudioAnnotationResolveReason, StudioCommandResult, StudioDocumentScope, StudioReconcileMode } from '../shared/studio-annotations.ts';
+import {
+  KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS,
+  KNOWLEDGE_FLYWHEEL_WRITE_IPC_CHANNEL,
+  type KnowledgeAnnotationReadFilter,
+  type KnowledgeAnnotationRecord,
+  type KnowledgeChangeSetApplyInput,
+  type KnowledgeChangeSetApplyResult,
+  type KnowledgeChangeSetReadFilter,
+  type KnowledgeChangeSetRecord,
+  type KnowledgeEntityReadFilter,
+  type KnowledgeEntityRecord,
+  type KnowledgeEvidenceLinkRecord,
+  type KnowledgeEvidenceReadFilter,
+  type KnowledgeFreeNoteReadFilter,
+  type KnowledgeFreeNoteRecord,
+  type KnowledgeFlywheelListResult,
+  type KnowledgeHealthIssueReadFilter,
+  type KnowledgeHealthIssueRecord,
+  type KnowledgeNoteReadFilter,
+  type KnowledgeNoteRecord,
+  type KnowledgeNoteVersionIdRead,
+  type KnowledgeNoteVersionReadFilter,
+  type KnowledgeNoteVersionRecord,
+  type KnowledgeObjectIdRead,
+  type KnowledgeQueryArtifactReadFilter,
+  type KnowledgeQueryArtifactRecord,
+  type KnowledgeQueryWritebackSummaryRecord,
+  type KnowledgeReceiptReadFilter,
+  type KnowledgeRelationReadFilter,
+  type KnowledgeRelationRecord,
+  type KnowledgeRelationRegistryEntry,
+  type KnowledgeRelationRegistryReadFilter,
+  type KnowledgeRequestIdRead,
+  type KnowledgeUpdateReceiptRecord,
+  type KnowledgeUsagePackageReadFilter,
+  type KnowledgeUsagePackageRecord,
+  type KnowledgeUsageRecordReadFilter,
+  type KnowledgeUsageRecordRecord,
+  type KnowledgeWikiPageReadFilter,
+  type KnowledgeWikiPageRecord,
+  type KnowledgeWikiPageVersionReadFilter,
+  type KnowledgeWikiPageVersionRecord
+} from '../shared/knowledge-flywheel.ts';
+import {
+  KNOWLEDGE_CANVAS_DETAIL_IPC_CHANNEL,
+  KNOWLEDGE_CANVAS_PROJECTION_IPC_CHANNEL,
+  KNOWLEDGE_CANVAS_SELECTION_MANIFEST_IPC_CHANNEL,
+  type KnowledgeCanvasNodeDetail,
+  type KnowledgeCanvasNodeDetailInput,
+  type KnowledgeCanvasProjection,
+  type KnowledgeCanvasProjectionInput,
+  type KnowledgeCanvasSelectionManifest,
+  type KnowledgeCanvasSelectionManifestInput
+} from '../shared/knowledge-canvas.ts';
+import {
+  KNOWLEDGE_DEEP_LINK_IPC_CHANNEL,
+  KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL,
+  KNOWLEDGE_TOPIC_WIKI_DETAIL_IPC_CHANNEL,
+  type KnowledgeDeepLinkInput,
+  type KnowledgeDeepLinkPayload,
+  type SourceKnowledgeDetail,
+  type SourceKnowledgeDetailInput,
+  type TopicWikiDetail,
+  type TopicWikiDetailInput
+} from '../shared/knowledge-topic-library.ts';
 type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 contextBridge.exposeInMainWorld('wmb', {
@@ -83,13 +149,13 @@ contextBridge.exposeInMainWorld('wmb', {
   approveTopicMaintenanceProposal: (input: unknown) => ipcRenderer.invoke('knowledge:topic-maintenance-approve', input),
   rejectTopicMaintenanceProposal: (input: unknown) => ipcRenderer.invoke('knowledge:topic-maintenance-reject', input),
   resumeTopicMaintenanceReproposal: (input: unknown) => ipcRenderer.invoke('knowledge:topic-maintenance-reproposal-resume', input),
-  listKnowledgeDomains: (input = {}) => ipcRenderer.invoke('knowledge-domains:list', input),
-  getKnowledgeDomain: (id:string,input={}) => ipcRenderer.invoke('knowledge-domains:get', id,input),
-  createKnowledgeDomain: (input:unknown) => ipcRenderer.invoke('knowledge-domains:create',input),
-  updateKnowledgeDomain: (input:unknown) => ipcRenderer.invoke('knowledge-domains:update',input),
   getKnowledgeContext: (input: unknown) => ipcRenderer.invoke('knowledge:get-context', input),
   getKnowledgeTopicDossier: (input: unknown) => ipcRenderer.invoke('knowledge:get-topic-dossier', input),
   getRediscovery: () => ipcRenderer.invoke('knowledge:rediscovery'),
+  // WMB-5212：Topic Wiki 详情 / Source 知识详情 / 准确深链（只读投影；类型见 src/shared/knowledge-topic-library.ts）。
+  getTopicWikiDetail: (input: TopicWikiDetailInput) => ipcRenderer.invoke(KNOWLEDGE_TOPIC_WIKI_DETAIL_IPC_CHANNEL, input) as Promise<TopicWikiDetail>,
+  getSourceKnowledgeDetail: (input: SourceKnowledgeDetailInput) => ipcRenderer.invoke(KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL, input) as Promise<SourceKnowledgeDetail>,
+  resolveKnowledgeDeepLink: (input: KnowledgeDeepLinkInput) => ipcRenderer.invoke(KNOWLEDGE_DEEP_LINK_IPC_CHANNEL, input) as Promise<KnowledgeDeepLinkPayload>,
   listKnowledgeCanvases: () => ipcRenderer.invoke('knowledge-canvas:list'),
   createKnowledgeCanvas: (input: unknown) => ipcRenderer.invoke('knowledge-canvas:create', input),
   getKnowledgeCanvas: (id: string) => ipcRenderer.invoke('knowledge-canvas:get', id),
@@ -100,6 +166,10 @@ contextBridge.exposeInMainWorld('wmb', {
   createKnowledgeRelation: (input: unknown) => ipcRenderer.invoke('knowledge-canvas:create-relation', input),
   updateKnowledgeRelation: (input: unknown) => ipcRenderer.invoke('knowledge-canvas:update-relation', input),
   decideKnowledgeSuggestion: (input: unknown) => ipcRenderer.invoke('knowledge-canvas:decide-suggestion', input),
+  // WMB-5213：三模式投影 / 节点详情深链 / selected-only 清单（只读；类型见 src/shared/knowledge-canvas.ts）。
+  getKnowledgeCanvasProjection: (input: KnowledgeCanvasProjectionInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_PROJECTION_IPC_CHANNEL, input) as Promise<KnowledgeCanvasProjection>,
+  getCanvasNodeDetail: (input: KnowledgeCanvasNodeDetailInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_DETAIL_IPC_CHANNEL, input) as Promise<KnowledgeCanvasNodeDetail>,
+  validateKnowledgeSelectionManifest: (input: KnowledgeCanvasSelectionManifestInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_SELECTION_MANIFEST_IPC_CHANNEL, input) as Promise<KnowledgeCanvasSelectionManifest>,
   previewKnowledgeContextPackage: (input: unknown) => ipcRenderer.invoke('knowledge-context:preview-package', input),
   listKnowledgeContextPackages: (input?: unknown) => ipcRenderer.invoke('knowledge-context:list-packages', input),
   getKnowledgeContextPackage: (id: string) => ipcRenderer.invoke('knowledge-context:get-package', id),
@@ -110,6 +180,45 @@ contextBridge.exposeInMainWorld('wmb', {
   updateCreativeBrief: (input:unknown) => ipcRenderer.invoke('knowledge-context:update-brief',input),
   createProjectFromBrief: (input:unknown) => ipcRenderer.invoke('knowledge-context:create-project-from-brief',input),
   getCreativeBriefLineage: (briefId:string) => ipcRenderer.invoke('knowledge-context:get-brief-lineage',briefId),
+  // WMB-5210 M1 知识飞轮边界（通道/类型见 src/shared/knowledge-flywheel.ts）。
+  // 入参纯 JSON 透传，不做猜测性校验/默认值；非法/缺失参数由 main boundary 拒绝。
+  // list* 返回分页信封 {items,total,limit,offset,hasMore}；get* 返回单对象或 null。
+  submitKnowledgeChangeSet: (input: KnowledgeChangeSetApplyInput) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_WRITE_IPC_CHANNEL, input) as Promise<KnowledgeChangeSetApplyResult>,
+  listKnowledgeEntities: (input?: KnowledgeEntityReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listEntities, input) as Promise<KnowledgeFlywheelListResult<KnowledgeEntityRecord>>,
+  getKnowledgeEntity: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getEntity, input) as Promise<KnowledgeEntityRecord | null>,
+  listKnowledgeNotes: (input?: KnowledgeNoteReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listNotes, input) as Promise<KnowledgeFlywheelListResult<KnowledgeNoteRecord>>,
+  getKnowledgeNote: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getNote, input) as Promise<KnowledgeNoteRecord | null>,
+  getKnowledgeNoteVersion: (input: KnowledgeNoteVersionIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getNoteVersion, input) as Promise<KnowledgeNoteVersionRecord | null>,
+  listKnowledgeNoteVersions: (input?: KnowledgeNoteVersionReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listNoteVersions, input) as Promise<KnowledgeFlywheelListResult<KnowledgeNoteVersionRecord>>,
+  listWikiPages: (input?: KnowledgeWikiPageReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listPages, input) as Promise<KnowledgeFlywheelListResult<KnowledgeWikiPageRecord>>,
+  getWikiPage: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getPage, input) as Promise<KnowledgeWikiPageRecord | null>,
+  getWikiPageVersion: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getPageVersion, input) as Promise<KnowledgeWikiPageVersionRecord | null>,
+  listWikiPageVersions: (input?: KnowledgeWikiPageVersionReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listPageVersions, input) as Promise<KnowledgeFlywheelListResult<KnowledgeWikiPageVersionRecord>>,
+  listKnowledgeRelations: (input?: KnowledgeRelationReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listRelations, input) as Promise<KnowledgeFlywheelListResult<KnowledgeRelationRecord>>,
+  getKnowledgeRelation: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getRelation, input) as Promise<KnowledgeRelationRecord | null>,
+  listEvidenceLinks: (input?: KnowledgeEvidenceReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listEvidence, input) as Promise<KnowledgeFlywheelListResult<KnowledgeEvidenceLinkRecord>>,
+  listKnowledgeAnnotations: (input?: KnowledgeAnnotationReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listAnnotations, input) as Promise<KnowledgeFlywheelListResult<KnowledgeAnnotationRecord>>,
+  getKnowledgeAnnotation: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getAnnotation, input) as Promise<KnowledgeAnnotationRecord | null>,
+  listFreeNotes: (input?: KnowledgeFreeNoteReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listFreeNotes, input) as Promise<KnowledgeFlywheelListResult<KnowledgeFreeNoteRecord>>,
+  getFreeNote: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getFreeNote, input) as Promise<KnowledgeFreeNoteRecord | null>,
+  getChangeSet: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getChangeSet, input) as Promise<KnowledgeChangeSetRecord | null>,
+  listChangeSets: (input?: KnowledgeChangeSetReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listChangeSets, input) as Promise<KnowledgeFlywheelListResult<KnowledgeChangeSetRecord>>,
+  getUpdateReceipt: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getReceipt, input) as Promise<KnowledgeUpdateReceiptRecord | null>,
+  getUpdateReceiptByRequest: (input: KnowledgeRequestIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getReceiptByRequest, input) as Promise<KnowledgeUpdateReceiptRecord | null>,
+  listUpdateReceipts: (input?: KnowledgeReceiptReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listReceipts, input) as Promise<KnowledgeFlywheelListResult<KnowledgeUpdateReceiptRecord>>,
+  getQueryArtifact: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getQueryArtifact, input) as Promise<KnowledgeQueryArtifactRecord | null>,
+  getQueryArtifactByRequest: (input: KnowledgeRequestIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getQueryArtifactByRequest, input) as Promise<KnowledgeQueryArtifactRecord | null>,
+  getQueryWritebackSummary: (input: KnowledgeRequestIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getQueryWritebackSummary, input) as Promise<KnowledgeQueryWritebackSummaryRecord | null>,
+  listQueryArtifacts: (input?: KnowledgeQueryArtifactReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listQueryArtifacts, input) as Promise<KnowledgeFlywheelListResult<KnowledgeQueryArtifactRecord>>,
+  getHealthIssue: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getHealthIssue, input) as Promise<KnowledgeHealthIssueRecord | null>,
+  listHealthIssues: (input?: KnowledgeHealthIssueReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listHealthIssues, input) as Promise<KnowledgeFlywheelListResult<KnowledgeHealthIssueRecord>>,
+  listRelationRegistry: (input?: KnowledgeRelationRegistryReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listRelationRegistry, input) as Promise<KnowledgeFlywheelListResult<KnowledgeRelationRegistryEntry>>,
+  // WMB-5215 M6 创作知识调用血缘（不可变 Usage Package/Record 只读面）
+  getKnowledgeUsagePackage: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getUsagePackage, input) as Promise<KnowledgeUsagePackageRecord | null>,
+  getKnowledgeUsagePackageByRequest: (input: KnowledgeRequestIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getUsagePackageByRequest, input) as Promise<KnowledgeUsagePackageRecord | null>,
+  listKnowledgeUsagePackages: (input?: KnowledgeUsagePackageReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listUsagePackages, input) as Promise<KnowledgeFlywheelListResult<KnowledgeUsagePackageRecord>>,
+  getKnowledgeUsageRecord: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getUsageRecord, input) as Promise<KnowledgeUsageRecordRecord | null>,
+  listKnowledgeUsageRecords: (input?: KnowledgeUsageRecordReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listUsageRecords, input) as Promise<KnowledgeFlywheelListResult<KnowledgeUsageRecordRecord>>,
   windowControl: (action: 'minimize' | 'maximize' | 'close') => ipcRenderer.invoke('window:control', action),
   listBrowserProfiles: () => ipcRenderer.invoke('browser-profiles:list'),
   getWorkspaceBrowserBinding: () => ipcRenderer.invoke('workspace-browser:get-binding'),
@@ -130,7 +239,7 @@ contextBridge.exposeInMainWorld('wmb', {
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),
-  chatPi: (message: string, delivery?: 'steer' | 'followUp') => ipcRenderer.invoke('pi:chat', { message, delivery }) as Promise<{
+  chatPi: (input: string | { message: string; delivery?: 'steer' | 'followUp'; orchestration?: { originLabel: string; title: string; goal: string; acceptance: string } }, delivery?: 'steer' | 'followUp') => ipcRenderer.invoke('pi:chat', typeof input === 'string' ? { message: input, delivery } : { ...input, delivery: input.delivery ?? delivery }) as Promise<{
     text: string;
     stopped: boolean;
     queued: boolean;
@@ -191,13 +300,13 @@ contextBridge.exposeInMainWorld('wmb', {
     messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
     updatedAt: string;
   }>,
-  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => void) => {
-    const handler = (_event: unknown, payload: { type: string; text?: string; thinking?: string; error?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[] }) => listener(payload);
+  onPiEvent: (listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[]; action?: string; jobId?: string; roleId?: string; status?: string; waitReason?: string | null }) => void) => {
+    const handler = (_event: unknown, payload: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[]; action?: string; jobId?: string; roleId?: string; status?: string; waitReason?: string | null }) => listener(payload);
     ipcRenderer.on('pi:event', handler);
     return () => { ipcRenderer.removeListener('pi:event', handler); };
   },
-  onDataChanged: (listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => void) => {
-    const handler = (_event: unknown, payload: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio'>; reason?: string; at: string }) => listener(payload);
+  onDataChanged: (listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals' | 'knowledge' | 'topics' | 'canvas' | 'health' | 'receipt'>; reason?: string; at: string }) => void) => {
+    const handler = (_event: unknown, payload: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals' | 'knowledge' | 'topics' | 'canvas' | 'health' | 'receipt'>; reason?: string; at: string }) => listener(payload);
     ipcRenderer.on('data:changed', handler);
     return () => { ipcRenderer.removeListener('data:changed', handler); };
   },
@@ -223,6 +332,15 @@ contextBridge.exposeInMainWorld('wmb', {
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
   getAgentsRoster: (input?: { businessDate?: string }) => ipcRenderer.invoke('agents:roster-status', input ?? {}),
   getCrewInstanceProjection: () => ipcRenderer.invoke('agents:crew-projection'),
+  getAgentTaskTranscript: (jobId: string) => ipcRenderer.invoke('agents:task-transcript', jobId) as Promise<Array<{
+    role: 'user' | 'assistant';
+    text: string;
+    thinking?: string;
+    segments?: Array<{ kind: 'thinking' | 'text' | 'tool'; text: string; toolName?: string; toolCallId?: string; input?: string; output?: string; isError?: boolean }>;
+    entryId?: string;
+    kind?: 'system_event' | 'orchestration';
+    createdAt?: string;
+  }> | null>,
   listAgentAvatars: () => ipcRenderer.invoke('agents:list-avatars'),
   setAgentAvatar: (input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }) => ipcRenderer.invoke('agents:set-avatar', input),
   clearAgentAvatar: (input: { roleId: string }) => ipcRenderer.invoke('agents:clear-avatar', input),
@@ -233,6 +351,7 @@ contextBridge.exposeInMainWorld('wmb', {
     channelIds?: readonly string[] | null;
     sourceFeedIds?: readonly string[] | null;
     projectId?: string | null;
+    writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null;
     sourceIds?: readonly string[] | null;
     scope?: 'workspace' | null;
   }) => ipcRenderer.invoke('jobs:spawn', input),
@@ -265,6 +384,13 @@ contextBridge.exposeInMainWorld('wmb', {
   saveDiscoveredSource: (input: { requestId: string; title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
   copyStudioVersionToProject: (input: { sourceProjectId: string; contentVersionId: string; title: string }) => ipcRenderer.invoke('studio:copy-version', input),
   saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number }) => ipcRenderer.invoke('studio:save-core', input),
+  saveStudioPlatform: (input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string }) => ipcRenderer.invoke('studio:save-platform', input),
+  listStudioAnnotations: (input: StudioDocumentScope & { includeResolved?: boolean }) => ipcRenderer.invoke('studio-annotations:list', input) as Promise<StudioAnnotation[]>,
+  createStudioAnnotation: (input: StudioDocumentScope & { body: string; startOffset: number; endOffset: number; note?: string | null }) => ipcRenderer.invoke('studio-annotations:create', input) as Promise<StudioCommandResult<StudioAnnotation>>,
+  updateStudioAnnotation: (input: { id: string; expectedRevision: number; note: string | null }) => ipcRenderer.invoke('studio-annotations:update', input) as Promise<StudioCommandResult<StudioAnnotation>>,
+  resolveStudioAnnotation: (input: { id: string; expectedRevision: number; reason: StudioAnnotationResolveReason }) => ipcRenderer.invoke('studio-annotations:resolve', input) as Promise<StudioCommandResult<StudioAnnotation>>,
+  reopenStudioAnnotation: (input: { id: string; expectedRevision: number; body: string }) => ipcRenderer.invoke('studio-annotations:reopen', input) as Promise<StudioCommandResult<StudioAnnotation>>,
+  reconcileStudioAnnotations: (input: StudioDocumentScope & { previousBody: string; nextBody: string; mode: StudioReconcileMode }) => ipcRenderer.invoke('studio-annotations:reconcile', input) as Promise<StudioCommandResult<StudioAnnotation[]>>,
   listStudioAssets: (projectId: string) => ipcRenderer.invoke('studio:list-assets', projectId),
   importStudioImage: (input: {
     projectId: string;

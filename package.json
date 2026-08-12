@@ -11,7 +11,7 @@
     "start": "electron-forge start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "check:capabilities": "node scripts/check-capability-registry.mjs",
+    "sync:design": "node scripts/sync-design-doc-from-foundation.mjs",
     "package": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
     "build": "node scripts/prepare-pi-runtime.mjs && electron-forge make",
     "publish": "node scripts/prepare-pi-runtime.mjs && electron-forge publish",

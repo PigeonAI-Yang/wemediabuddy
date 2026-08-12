@@ -16,7 +16,7 @@
 .onboarding-rail li.done { color: var(--muted); }
 .onboarding-rail li.done span { border-color: var(--success); color: var(--success); }
 .onboarding-rail small { color: var(--muted-low); }
-.onboarding-stage { position: relative; overflow: auto; padding: clamp(40px, 8vh, 92px) clamp(34px, 8vw, 128px); background: radial-gradient(circle at 70% 15%, var(--accent-faint), transparent 34%), var(--workspace-bg); }
+.onboarding-stage { position: relative; overflow: auto; padding: clamp(40px, 8vh, 92px) clamp(34px, 8vw, 128px); background: var(--workspace-bg); }
 .onboarding-card { width: min(780px, 100%); margin: 0 auto; }
 .onboarding-card h2 { margin: 15px 0 16px; font-size: clamp(30px, 4vw, 48px); line-height: 1.05; letter-spacing: -.045em; }
 .onboarding-lead, .onboarding-card > p { color: var(--muted); max-width: 660px; font-size: 15px; line-height: 1.7; }

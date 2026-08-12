@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deriveTodayRunView, isManagerNonterminal, mapTaskToStep } from '../src/renderer/today-run-view.ts';
+import { deriveTodayRunView, isManagerNonterminal, mapTaskToStep, projectManagerTaskForToday } from '../src/renderer/today-run-view.ts';
 
 const base = {
   task: null,
@@ -57,7 +57,8 @@ test('idle with only a historical plan labels it as recent and keeps today count
 test('current opportunity pool opens studio and offers rescan', () => {
   const view = deriveTodayRunView({ ...base, hasTodayPlan: true, opportunityCount: 2, sssCount: 1 });
   assert.equal(view.step, 'done');
-  assert.equal(view.headline, '当前有可批选题');
+  assert.equal(view.headline, '');
+  assert.equal(view.statusLine, '当前有可批选题');
   assert.equal(view.primaryCta.label, '去创作');
   assert.ok(view.secondaryCtas.some((c) => c.id === 'restart'));
   assert.equal(view.showOpportunityEmpty, false);
@@ -122,7 +123,8 @@ test('partial with opportunities presents ready state', () => {
     task: { id: 't2', status: 'partial', errorMessage: '部分渠道未完全成功' }
   });
   assert.equal(view.step, 'done');
-  assert.equal(view.headline, '当前有可批选题');
+  assert.equal(view.headline, '');
+  assert.equal(view.statusLine, '当前有可批选题');
   assert.equal(view.primaryCta.label, '去创作');
   assert.equal(view.showOpportunityEmpty, false);
 });
@@ -157,7 +159,8 @@ test('failed puts a user-facing error on command-bar detail', () => {
 test('done with opportunities opens studio; zero opportunities is empty-success', () => {
   const withOps = deriveTodayRunView({ ...base, hasTodayPlan: true, opportunityCount: 3, sssCount: 1, task: { status: 'succeeded' } });
   assert.equal(withOps.step, 'done');
-  assert.equal(withOps.headline, '当前有可批选题');
+  assert.equal(withOps.headline, '');
+  assert.equal(withOps.statusLine, '当前有可批选题');
   assert.equal(withOps.primaryCta.label, '去创作');
   assert.equal(withOps.showOpportunityEmpty, false);
 
@@ -309,4 +312,22 @@ test('isManagerNonterminal treats running and waiting_human as nonterminal, succ
   assert.equal(isManagerNonterminal({ status: 'running' }), true);
   assert.equal(isManagerNonterminal({ checkpoint: { status: 'waiting_human' } }), true);
   assert.equal(isManagerNonterminal({ status: 'succeeded' }), false);
+});
+
+test('waiting-human manager remains serially nonterminal but stops projecting active work', () => {
+  const manager = {
+    id: 'm1',
+    status: 'running',
+    checkpoint: { status: 'waiting_human', phase: 'report', summary: '方案已保存，等待确认' }
+  };
+  const child = { id: 'planner-1', status: 'succeeded', phase: 'completed', progress: { planned: 5, processed: 5 } };
+  const projected = projectManagerTaskForToday(manager, child);
+  assert.equal(isManagerNonterminal(manager), true, '主管串行锁保持');
+  assert.equal(projected.running, false, '无运行 child 时不得继续显示工作中');
+  assert.equal(projected.task.id, 'planner-1');
+  assert.equal(projected.task.status, 'succeeded');
+  const view = deriveTodayRunView({ ...base, task: projected.task, hasTodayPlan: true, opportunityCount: 4 });
+  assert.equal(view.step, 'done');
+  assert.equal(view.statusLine, '当前有可批选题');
+  assert.doesNotMatch(view.statusLine + view.headline, /正在评估|正在更新/);
 });

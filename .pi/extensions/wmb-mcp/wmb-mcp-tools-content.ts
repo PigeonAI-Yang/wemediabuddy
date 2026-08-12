@@ -105,7 +105,7 @@ const proposeTopicMaintenance: ToolDefinition = {
 
 const listTopicMaintenance: ToolDefinition = {
   name: 'wmb_list_topic_maintenance', label: '读取主题整理台账',
-  description: '只读主题整理提案台账。桌助用它呈报待批项；资料员用它核对状态。',
+  description: '只读主题整理提案台账。主管用它呈报待批项；资料员用它核对状态。',
   parameters: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' }, offset: { type: 'number' } }, additionalProperties: false },
   async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_list', { status: params.status, limit: params.limit, offset: params.offset })); }
 };

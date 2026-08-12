@@ -20,11 +20,13 @@ test('task grants expose the canonical internal business command IDs', () => {
     'content.create',
     'content.save_version',
     'intelligence_channels.proposal_apply',
+    'intelligence_channels.proposal_apply_safe',
     'knowledge.creative_brief_create',
     'knowledge.creative_brief_create_project',
     'knowledge.creative_brief_update',
     'knowledge.domain_create',
     'knowledge.domain_update',
+    'knowledge_flywheel.change_set_apply',
     'knowledge.record_batch',
     'knowledge.topic_maintenance_propose',
     'knowledge.topic_maintenance_approve',
@@ -32,14 +34,16 @@ test('task grants expose the canonical internal business command IDs', () => {
     'knowledge.topic_maintenance_reproposal_retry',
     'knowledge.suggestion_create',
     'plans.save',
+    'publication.snapshot_create',
     'reviews.save',
     'sources.upsert_batch',
     'sources.lane_gate',
     'sources.lane_restore',
-  'sources.update_status',
+    'sources.update_status',
     'x_lists.observation_start',
     'x_lists.observation_stop',
-    'x_lists.operation_execute'
+    'x_lists.operation_execute',
+    'x_lists.prepare'
   ]);
 });
 

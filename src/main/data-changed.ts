@@ -1,4 +1,7 @@
-export type DataChangedScope = 'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals';
+// WMB-5213：知识 scopes 扩展（设计 §9）。knowledge=知识对象；topics=主题/Wiki；canvas=画布布局写；
+// health=健康问题；receipt=知识更新回执。canvas/change/health 三模式与主题/Wiki 视图按这些 scope 订阅。
+export type DataChangedScope = 'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals'
+  | 'knowledge' | 'topics' | 'canvas' | 'health' | 'receipt';
 
 export type DataChangedEvent = {
   scopes: DataChangedScope[];

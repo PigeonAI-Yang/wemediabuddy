@@ -39,13 +39,6 @@ export type RoleRosterRow = {
 
 const ORDER: RoleId[] = ['desk', 'reporter', 'planner', 'writer', 'librarian'];
 
-/**
- * 桌助在班组投影中的展示面：桌助是协调入口，主管是主编本人。
- * agent-capabilities 注册表（ROLE_CATALOG.desk = 主管/主编席）是权限注册面，本任务禁止改动；
- * 这里在展示层覆盖 desk 行的模型/UI 可见标签，消除「主管/主编席」旧隐喻（WMB-5144 复审 P2）。
- */
-const DESK_ROSTER_FACE = { labelZh: '桌助', roomZh: '协调入口' } as const;
-
 function mapIntentToRole(intent: string | undefined | null): RoleId | null {
   if (!intent) return null;
   if (intent === 'daily_scan') return 'reporter';
@@ -230,7 +223,8 @@ export function buildRoleRoster(
   const dateMatches = (instance: CrewInstance): boolean => !businessDate || instance.businessDate === businessDate;
 
   return ORDER.map((roleId) => {
-    const meta = roleId === 'desk' ? DESK_ROSTER_FACE : ROLE_CATALOG[roleId];
+    // WMB-5182/5184：desk 行投影直接用 ROLE_CATALOG.desk（主管/主编席），展示层无覆盖。
+    const meta = ROLE_CATALOG[roleId];
     if (roleId === 'desk') return rowFromLegacy(roleId, meta, latestByRole.get('desk') ?? null, database);
     const role = roleId as EmployeeRole;
     const instances = projection.byRole[role].active.filter(dateMatches);

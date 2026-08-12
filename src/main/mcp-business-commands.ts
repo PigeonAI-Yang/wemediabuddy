@@ -15,6 +15,7 @@ import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
 import { saveReview } from './reviews.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { assertPublishingPlatforms } from './workspace-profiles.ts';
+import { recordCreativeBriefUsage } from './knowledge-usage-integration.ts';
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
 const actor = { type: 'external_agent' as const, id: 'mcp', label: 'External Agent' };
@@ -130,7 +131,9 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
       input: { ...fields, canvasId: canvas_id, nodeIds: node_ids, selectionMode: selection_mode, coreJudgment: core_judgment, whyNow: why_now, evidenceNodeIds: evidence_node_ids },
       boundIdentity: { canvasId: canvas_id }, entityType: 'creative_brief',
       execute: (database, normalized) => {
-        const data = createCreativeBrief(database, normalized) as { id: string; revision: number };
+        const data = createCreativeBrief(database, normalized) as { id: string; revision: number; contextNodeIds?: string[] };
+        // WMB-5215：简报与固定知识血缘同一事务（usage 失败整体回滚）。
+        recordCreativeBriefUsage(database, { briefId: data.id, contextNodeIds: data.contextNodeIds ?? [], reason: 'creative_brief_create' });
         return { data, entityId: data.id, afterRevision: data.revision, readback: data };
       }
     }));

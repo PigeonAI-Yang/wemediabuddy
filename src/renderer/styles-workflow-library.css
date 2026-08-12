@@ -84,9 +84,9 @@
 .library-source-confirm {
   margin: 0 0 16px;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, #c44 35%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
   border-radius: 12px;
-  background: color-mix(in srgb, #c44 8%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 .library-source-confirm p {
   margin: 0 0 12px;
@@ -95,9 +95,9 @@
   line-height: 1.55;
 }
 .library-source-confirm .primary-button.danger-button {
-  border-color: #c44;
-  background: #c44;
-  color: #fff !important;
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--accent-ink) !important;
 }
 .library-source-edit {
   display: grid;
@@ -124,12 +124,6 @@
   resize: vertical;
   min-height: 120px;
   line-height: 1.6;
-}
-.danger-button {
-  color: #c44 !important;
-}
-.danger-button:hover {
-  color: #a22 !important;
 }
 .library-watching-board {
   margin: 0 0 var(--page-space);
@@ -456,3 +450,223 @@
 .lane-restore-confirm p { margin: 0 0 10px; color: var(--ink); font-size: 13px; line-height: 1.55; }
 .lane-restore-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .lane-restore-actions button { min-height: 32px; }
+
+/* =====================================================================
+   WMB-5212 资料库知识面（原位改造）：资料/待处理/知识健康/移出 tabs、
+   Source Raw/质量/回执/Evidence/批注/健康 详情区、持久内联回执。
+   只读投影样式：不引入平行知识组件；沿用既有 design tokens。
+   ===================================================================== */
+
+/* 可访问性：仅屏幕阅读器可见的自动刷新宣布 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* tabs：键盘 tablist/tab 语义，与 proposal-tabs 同源 */
+.library-tabs { margin-bottom: 18px; }
+.library-tabs .proposal-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* 资料行内联知识面徽标（正文缓存/已消化/健康问题） */
+.lib-inline.green { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
+.lib-inline.amber { background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); }
+.lib-inline.gray { background: color-mix(in srgb, var(--muted-low) 15%, transparent); color: var(--muted); }
+.lib-knowledge-change {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 详情页知识区公共 */
+.library-detail-loading { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* 来源质量画像 */
+.library-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.quality-cell {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+}
+.quality-cell b { font-size: 13.5px; line-height: 1.4; }
+.quality-cell b.health-count { color: var(--amber); }
+.quality-cell small { color: var(--muted-low); font-size: 11.5px; }
+
+/* 持久内联摄取回执（可收起；details/summary 原生键盘） */
+.library-source-receipts details { margin-top: 8px; }
+.library-source-receipts summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 4px 0;
+}
+.library-source-receipts summary:hover { color: var(--ink); }
+.library-receipt-item {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-receipt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.receipt-trigger { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-soft); }
+.library-receipt-time { color: var(--muted-low); font-size: 11.5px; }
+.library-receipt-request { color: var(--muted-low); font-size: 11px; font-family: var(--font-mono, monospace); }
+.library-receipt-summary { margin: 8px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.library-receipt-counts { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.library-receipt-resolutions,
+.library-receipt-disputes,
+.library-receipt-failures {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.library-receipt-resolutions strong,
+.library-receipt-disputes strong,
+.library-receipt-failures strong { margin-right: 6px; color: var(--ink-soft); }
+.library-receipt-failures strong { color: var(--amber); }
+.library-receipt-topics { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.library-receipt-topics > span { color: var(--muted-low); font-size: 11.5px; }
+
+/* Evidence 贡献（只读：展示证据链与所支撑知识版本，不直接编辑 EvidenceLink） */
+.library-evidence-list { display: grid; gap: 10px; }
+.library-evidence-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.evidence-relation { font-weight: 650; }
+.evidence-relation.支持 { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
+.evidence-relation.反驳 { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+.evidence-relation.限定 { background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); }
+.evidence-nature { background: color-mix(in srgb, var(--muted-low) 14%, transparent); color: var(--muted); }
+.library-evidence-statement { margin: 9px 0 0; color: var(--ink); font-size: 13.5px; line-height: 1.6; }
+.library-evidence-excerpt {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.library-evidence-locator { margin: 6px 0 0; color: var(--muted-low); font-size: 11.5px; }
+
+/* 批注（只读投影；用户批注入口在 Pi/创作侧） */
+.library-annotation-list { display: grid; gap: 10px; }
+.library-annotation-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 5%, var(--surface));
+}
+.library-annotation-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.annotation-intent { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.library-annotation-time { color: var(--muted-low); font-size: 11.5px; }
+.library-annotation-quote {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.55;
+}
+.library-annotation-body { margin: 8px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+
+/* 健康问题（资料详情区与知识健康页共用） */
+.library-issue-list { display: grid; gap: 10px; }
+.library-issue-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-issue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.issue-severity {
+  border-radius: 99px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.issue-severity.critical { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.issue-severity.medium { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
+.issue-severity.low { background: color-mix(in srgb, var(--muted-low) 15%, transparent); color: var(--muted); }
+.issue-type { background: color-mix(in srgb, var(--muted-low) 14%, transparent); color: var(--muted); }
+.library-issue-affected { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.library-issue-suggestion { margin: 6px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.library-issue-resolution { margin: 6px 0 0; color: var(--success); font-size: 12px; line-height: 1.5; }
+.library-issue-time { color: var(--muted-low); font-size: 11.5px; }
+.library-issue-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+
+/* 待处理（复用 rediscovery 三池 + 最近摄取回执） */
+.pending-pools { display: grid; gap: var(--page-space); }
+.pending-pool {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px 16px 16px;
+}
+.pending-pool-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+.pending-pool-head h2 { margin: 0; font-size: 16px; }
+.pending-pool-head h2 span { margin-left: 6px; border-radius: 5px; background: var(--tag-bg); padding: 3px 8px; color: var(--muted); font-size: 12px; }
+.pending-pool-head p { margin: 0; color: var(--muted-low); font-size: 12px; line-height: 1.5; }
+.pending-pool-list { display: grid; gap: 8px; }
+.pending-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.pending-item-main { min-width: 0; flex: 1 1 auto; }
+.pending-item-main strong { display: block; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.pending-item-reason { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pending-item-change { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.pending-item-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+
+/* 知识健康页 */
+.health-section { min-width: 0; }
+.health-total { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.health-list { margin-top: 4px; }
+
+/* 窄屏：详情质量网格与动作区不横向溢出 */
+@media (max-width: 760px) {
+  .library-quality-grid { grid-template-columns: 1fr 1fr; }
+  .library-source-detail-head { flex-direction: column; align-items: stretch; }
+  .library-source-detail-actions { justify-content: flex-start; }
+  .health-total { margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .library-quality-grid { grid-template-columns: 1fr; }
+  .pending-pool-head { flex-direction: column; gap: 4px; }
+}

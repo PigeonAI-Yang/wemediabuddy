@@ -1,26 +1,40 @@
 {
-  "active_loop": "wmb-5160-topic-ledger-page",
-  "status": "complete",
-  "symptom": "主题首页顶部长期占用整块审批台账，异常恢复语义暴露给 Owner。",
+  "active_loop": "WMB-5226",
+  "status": "completed",
+  "symptom": "正式主题详情页未采用 Owner 批准的 HTML 结构，仍是七章节导航、散落空分区和旧页头。",
   "observation_packet": {
     "url": "http://127.0.0.1:27391/",
-    "viewport": "native Electron, DPR=1",
-    "user_action": "主题 → 整理台账 → 重新交给资料员 → 返回主题",
-    "expected": "首页仅保留同行入口；独立页批准、看历史并恢复失败重提",
-    "actual": "入口同行、独立页恢复 needs_user 到 pending、返回后首页无台账",
-    "screenshot": "J:/Users/yangda01/Temp/wmb-5160-topic-entry.png; J:/Users/yangda01/Temp/wmb-5160-ledger-page.png",
-    "console": "no renderer error",
-    "network_ws": "Owner IPC receipt ok; durable job readback pending attempts=0",
-    "dom_selector": ".topic-maintenance-entry; .topic-maintenance-page; [data-proposal-id]",
-    "computed_style_layout": "entry follows filters; no document overflow; DPR=1",
-    "state_store_snapshot": "needs_user -> pending; stable jobId; fresh runId"
+    "viewport": "1568x934",
+    "user_action": "进入主题，打开微 SaaS 主题详情",
+    "expected": "批准稿的工具行、20px 标题、四页签、当前认识主区、真实来源预览、最近变化",
+    "actual": "正式页面已显示四页签；概览含当前认识、2 条真实来源和最近变化；标题单行；Pi dock 保留",
+    "screenshot": "J:/Users/yangda01/Temp/omp-sshots-1554e0df3fbcb9b1.webp",
+    "console": "无 Vite overlay；页面交互可用",
+    "network_ws": "真实工作空间数据库与既有 read model",
+    "dom_selector": ".topic-layout-detail .topic-wiki-page",
+    "computed_style_layout": "标题20px/单行；body overflowX=0；唯一主CTA；四页签投影正常",
+    "state_store_snapshot": "真实 Topic/Wiki/receipt/source dossier 数据"
   },
-  "hypotheses": [
-    { "hypothesis": "台账应是主题页独立子页面而非首页卡片", "would_disprove": "独立入口增加操作距离却不能保留审批与历史", "result": "confirmed; same-row entry and complete ledger path passed" },
-    { "hypothesis": "失败恢复可复用现有 durable job", "would_disprove": "恢复会复活旧 proposal 或改变 jobId", "result": "confirmed; proposal stayed stale and jobId stayed stable" }
-  ],
-  "breakpoint": "renderer information architecture plus missing Owner resume adapter",
-  "owner_check": "正常批准仍一次点击生效；异常后台重提；首页无台账卡；独立页无内部语义或假按钮；历史不复活。",
+  "hypotheses": [],
+  "breakpoint": "component DOM/style projection",
+  "owner_check": {
+    "user_blocked_on": "resolved",
+    "now_usable": true,
+    "real_data_or_state": "真实来源与回执",
+    "loading_empty_error_states": "空认识、来源加载、compile/risk/error 原路径保留",
+    "v1_v2_baseline_preserved": true,
+    "regression_risk_checked": true,
+    "would_user_return_this": false
+  },
   "attempts": 1,
-  "last_gate": "Electron entry/subpage/resume/back PASS; full 685/685; typecheck/lightweight/capability/smoke PASS"
+  "last_gate": {
+    "focused": "13/13 pass",
+    "typecheck": "pass",
+    "electron": "pass",
+    "tabs": "4/4",
+    "source_rows": 2,
+    "overflow": 0,
+    "technical_copy": 0,
+    "primary_cta": 1
+  }
 }

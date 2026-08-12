@@ -16,6 +16,7 @@ import { TodayBlockers } from './today-blockers';
 import {
   deriveTodayRunView,
   isManagerNonterminal,
+  projectManagerTaskForToday,
   type DailyTaskSnapshot,
   type TodayBlockerAction,
   type TodaySecondaryId
@@ -167,28 +168,12 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
           const manager = projection?.managerTask;
           const child = projection?.legacyChild;
           if (manager && isManagerNonterminal(manager)) {
-            const summary = manager.checkpoint?.summary || manager.progress?.message || '主管任务进行中';
-            const runningChild = child?.status === 'running' ? child : null;
-            // 诚实投影：有运行中 child 用 child 的 phase/计数（determinate）；否则用 manager checkpoint 阶段。
-            // 主管未终态（含 waiting_human/report）恒为 running：不得因旧方案存在或 child 停止而降级 partial→idle。
-            const snapshot = {
-              id: runningChild?.id || manager.id,
-              intent: runningChild?.intent || 'page_agents',
-              status: 'running',
-              phase: runningChild?.phase || manager.checkpoint?.phase || 'manager',
-              progress: {
-                ...(runningChild?.progress || {}),
-                message: summary,
-                planned: runningChild?.progress?.planned,
-                processed: runningChild?.progress?.processed
-              },
-              events: runningChild?.events?.length ? runningChild.events : (summary ? [{ message: summary }] : []),
-              errorMessage: summary
-            } as DailyTaskSnapshot;
+            const managerProjection = projectManagerTaskForToday(manager, child);
+            const snapshot = managerProjection.task;
             setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(snapshot) ? prev : snapshot);
             startingRef.current = false;
-            setRunning(true);
-            writeTodayRunCache({ planDate, task: snapshot, running: true });
+            setRunning(managerProjection.running);
+            writeTodayRunCache({ planDate, task: snapshot, running: managerProjection.running });
             return;
           }
         } catch { /* fall through */ }
@@ -337,16 +322,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
           setRunning(data.task.status === 'running');
           setTask(data.task);
         } else if (data.managerTask) {
-          const nonterminal = isManagerNonterminal(data.managerTask);
-          setRunning(nonterminal);
-          setTask({
-            id: data.managerTask.id,
-            status: nonterminal ? 'running' : (data.managerTask.checkpoint?.status === 'waiting_human' ? 'partial' : data.managerTask.status),
-            phase: data.managerTask.checkpoint?.phase || 'manager',
-            progress: {},
-            events: [],
-            errorMessage: data.managerTask.checkpoint?.summary || '主管任务进行中 · 查看对话进度'
-          } as DailyTaskSnapshot);
+          const managerProjection = projectManagerTaskForToday(data.managerTask, null);
+          setRunning(managerProjection.running);
+          setTask(managerProjection.task);
         }
         refresh();
         return;
@@ -478,7 +456,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
       <div className="today-grid">
         <div className="today-opps">
           {primary ? <>
-            {xChannelAbsent ? <div className="pool-absent-banner" role="status"><span>X 渠道缺席：本次判断未包含 X 动态。</span><button type="button" onClick={() => openSettings?.('browser')}>重新验证浏览器</button></div> : null}
+            {xChannelAbsent ? <div className="pool-absent-banner" role="status"><span>X 未接入：本次判断未包含 X 动态。</span><button type="button" onClick={() => openSettings?.('browser')}>重新验证浏览器</button></div> : null}
             <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
             {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(item.id)} onDismiss={() => void dismissOpportunity(item.id)}/>)}</div>}
           </> : <section className="empty-state">

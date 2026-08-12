@@ -15,10 +15,10 @@ import {
   type ManagerTaskCheckpoint,
   type ManagerTaskView
 } from './manager-task.ts';
-import { getActiveDailyIntelligenceTask, getAgentTask, type AgentTask } from './agent-tasks.ts';
+import { getActiveDailyIntelligenceTask, getAgentTask, getLatestDailyIntelligenceTaskSince, type AgentTask } from './agent-tasks.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { shanghaiDate } from './ferment.ts';
-import { runDockManagerPrompt } from './ipc-pi-dock.ts';
+import { runDockManagerPrompt, markDockOrchestrationFailed } from './ipc-pi-dock.ts';
 
 export type DispatchManagerDailyInput = {
   businessDate: string;
@@ -38,6 +38,38 @@ export type DispatchManagerDailyResult = {
 
 function schedulerActor() {
   return { type: 'scheduler' as const, id: 'manager-dispatch', label: 'manager-dispatch' };
+}
+
+/**
+ * WMB-5178 §5/§10.1：今日情报编排生产者（Owner 触发 + 应用代写 + 派发到 Dock）。
+ * 返回完整安全字段（originLabel/title/goal/acceptance）供信封盖章；任一缺失由 builder 在派发前抛错。
+ */
+export function buildTodayIntelligenceDispatch(businessDate: string, managerTaskId: string): {
+  dispatchId: string;
+  message: string;
+  orchestration: { dispatchId: string; delivery: 'direct'; safe: { originLabel: string; title: string; goal: string; acceptance: string } };
+} {
+  const dispatchId = randomUUID();
+  const message = [
+    `请执行今日情报编排（${businessDate}）。`,
+    '验收：可信渠道回执 + 当日可批方案。',
+    '你是主管，编排方式由你选：',
+    '• 单项采集：wmb_run_daily_stage(stage=scan) 或 wmb_spawn_job(reporter)',
+    '• 单项策划：wmb_run_daily_stage(stage=judge) 或 wmb_spawn_job(planner)',
+    '• 一条龙：wmb_run_daily_stage(stage=full)',
+    '• 采完后续接策划：wmb_continue_after_scan（该续就调）',
+    '先 wmb_daily_readiness；工单终态等 JOB_EVENT 推送，不要 sleep/bash 轮询；必要时 wmb_get_job。',
+    `managerTaskId=${managerTaskId}`
+  ].join('\n');
+  return {
+    dispatchId,
+    message,
+    orchestration: {
+      dispatchId,
+      delivery: 'direct',
+      safe: { originLabel: '今日情报', title: '今日情报编排', goal: '采集并判读当日情报，产出可批方案', acceptance: '可信渠道回执 + 当日可批方案' }
+    }
+  };
 }
 
 async function appendManagerCardToDialog(dataRootPath: string, view: ManagerTaskView): Promise<void> {
@@ -243,23 +275,15 @@ export async function dispatchManagerDailyIntelligence(
   broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'manager.task_created' });
 
   // 真主管 Pi 回合：与手动发消息同一通道，由主管自己 wmb_spawn_job 派工。
-  // 不 await：按钮立刻返回；工具行/回复走 onPiEvent。
+  // 不 await：按钮立刻返回；工具行/回复走 onPiEvent。WMB-5178：经 canonical 信封显式盖章 + 完整安全字段。
+  const dispatch = buildTodayIntelligenceDispatch(businessDate, view.id);
   void runDockManagerPrompt({
-    message: [
-      `请执行今日情报编排（${businessDate}）。`,
-      '验收：可信渠道回执 + 当日可批方案。',
-      '你是桌助，编排方式由你选：',
-      '• 单项采集：wmb_run_daily_stage(stage=scan) 或 wmb_spawn_job(reporter)',
-      '• 单项策划：wmb_run_daily_stage(stage=judge) 或 wmb_spawn_job(planner)',
-      '• 一条龙：wmb_run_daily_stage(stage=full)',
-      '• 采完后续接策划：wmb_continue_after_scan（该续就调）',
-      '先 wmb_daily_readiness；工单终态等 JOB_EVENT 推送，不要 sleep/bash 轮询；必要时 wmb_get_job。',
-      `managerTaskId=${view.id}`
-    ].join('\n'),
+    message: dispatch.message,
     page: 'agents',
-    pageLabel: '班组 · 桌助',
+    pageLabel: '班组 · 主管',
     objectType: 'manager_task',
-    objectId: view.id
+    objectId: view.id,
+    orchestration: dispatch.orchestration
   }).catch(async (error) => {
     console.error('[manager-dispatch] dock manager prompt failed', error);
     try {
@@ -268,6 +292,8 @@ export async function dispatchManagerDailyIntelligence(
         requestId: randomUUID(),
         taskId: view.id
       });
+      // §8/§16-3 接受后失败：同 dispatchId 原地更新为「安排失败 + 人类可读错误」；接受前失败无行则 no-op。
+      await markDockOrchestrationFailed(dataRootPath, dispatch.dispatchId, error instanceof Error ? error.message : String(error));
       broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'manager.dock_failed' });
     } catch (failError) {
       console.error('[manager-dispatch] fail manager after dock error', failError);
@@ -293,7 +319,8 @@ export async function syncManagerTaskFromLegacyChild(
   if (!manager || !child) return manager;
   if (!(child.intent === 'daily_scan' || child.intent === 'daily_judge' || child.intent === 'daily_intelligence')) return manager;
 
-  const roleId = child.intent === 'daily_judge' ? 'planner' : 'reporter';
+  const plannerPhase = child.intent === 'daily_intelligence' && ['running_pi', 'judging_opportunities', 'synthesizing', 'validating', 'plan_ready', 'completed'].includes(child.phase);
+  const roleId = child.intent === 'daily_judge' || plannerPhase ? 'planner' : 'reporter';
   const childStatus =
     child.status === 'running' ? 'running'
       : child.status === 'succeeded' ? 'succeeded'
@@ -336,7 +363,7 @@ export async function syncManagerTaskFromLegacyChild(
   } else if (roleId === 'planner' && child.status === 'running') {
     phase = 'monitor_planner';
     status = 'running';
-  } else if (roleId === 'planner' && child.status === 'succeeded') {
+  } else if (roleId === 'planner' && (child.status === 'succeeded' || child.status === 'partial' || child.status === 'needs_user')) {
     phase = 'report';
     status = 'waiting_human';
   } else if (child.status === 'failed' || child.status === 'interrupted') {
@@ -347,6 +374,7 @@ export async function syncManagerTaskFromLegacyChild(
 
   const prev = manager.checkpoint;
   const nextSummary = status === 'waiting_human' ? `${summary} · 需要你回今日批准` : summary;
+  if (prev.status === status && prev.phase === phase && prev.summary === nextSummary && JSON.stringify(prev.children) === JSON.stringify(children)) return manager;
   const synced = await updateManagerTaskCheckpoint(runtime, manager.id, {
     status,
     phase,
@@ -437,6 +465,8 @@ export function readManagerProjection(runtime: ActiveWorkspaceRuntime, businessD
   legacyChild: AgentTask | null;
 } {
   const managerTask = getActiveManagerTask(runtime.database, businessDate);
-  const legacyChild = getActiveDailyIntelligenceTask(runtime.database, businessDate);
+  const legacyChild = managerTask
+    ? getLatestDailyIntelligenceTaskSince(runtime.database, businessDate, managerTask.createdAt)
+    : getActiveDailyIntelligenceTask(runtime.database, businessDate);
   return { managerTask, legacyChild };
 }

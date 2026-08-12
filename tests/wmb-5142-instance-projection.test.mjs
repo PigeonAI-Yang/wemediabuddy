@@ -8,7 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { JobPool } from '../src/main/job-pool.ts';
 import { JobSpawner, setActiveJobSpawner } from '../src/main/job-spawner.ts';
-import { readCrewInstanceProjection } from '../src/main/crew-instance-projection.ts';
+import { instanceProgressRatio, readCrewInstanceProjection } from '../src/main/crew-instance-projection.ts';
 import { buildRoleRoster } from '../src/main/role-roster.ts';
 import { getAgentTask } from '../src/main/agent-tasks.ts';
 import {
@@ -327,7 +327,7 @@ test('T5 重启历史可读 + 续派输入可建：jobId 指认、重建原 Role
       assert.equal(row.projectId, 'P11');
       const refs = getAgentTask(reopened.database, boundTaskId).contextRefs;
       const rebuilt = rebuildRoleJobRequest(refs);
-      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', businessDate: DATE }, '续派参数与 5141 合同一致');
+      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', writerTask: 'core_draft', businessDate: DATE }, '续派参数与 5141 合同一致');
       const spawner2 = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });
       const job2 = spawner2.spawn(rebuilt);
       const done = await spawner2.await(job2.id, 10_000);
@@ -458,8 +458,8 @@ test('T8 desk 不可 spawn、不出现在投影；roster 从投影驱动（同�
       const desk = rows.find((row) => row.roleId === 'desk');
       assert.equal(desk.instances.length, 0, 'desk 永不进员工投影');
       assert.equal(desk.summary, '当前无任务', 'desk 空态同样无「待命」文案');
-      assert.equal(desk.labelZh, '桌助', 'desk 行展示面为桌助（WMB-5144 P2：主管是主编本人）');
-      assert.equal(desk.roomZh, '协调入口', 'desk 行 room 为协调入口（不再显示主编席）');
+      assert.equal(desk.labelZh, '主管', 'desk 行展示面为主管（2026-08-10 主管授权翻转）');
+      assert.equal(desk.roomZh, '主编席', 'desk 行 room 为主编席（不再显示协调入口）');
     } finally {
       release();
     }
@@ -765,4 +765,34 @@ test('T15 重复 needs_user 卡关闭回归：同任务兄弟卡随目标同步 
     assert.equal(proj.history[0].status, 'cancelled');
     spawner.dispose();
   });
+});
+
+/** 任务状进度纯函数测试：直接构造 running AgentTask 切片（其余字段不影响 ratio 语义）。 */
+const runningTask = (progress, phase = null) => ({ status: 'running', phase, progress });
+
+test('T16 真实进度比例：仅 planned>0 时返回 clamp(processed/planned)', () => {
+  assert.equal(instanceProgressRatio(runningTask({ planned: 10, processed: 4 })), 0.4);
+  assert.equal(instanceProgressRatio(runningTask({ planned: 10, processed: 10 })), 1);
+  assert.equal(instanceProgressRatio(runningTask({ planned: 10, processed: 0 })), 0);
+  assert.equal(instanceProgressRatio(runningTask({ planned: 4, processed: 10 })), 1, '超量 processed 收敛到 1');
+  assert.equal(instanceProgressRatio(runningTask({ planned: 4, processed: -2 })), 0, '负 processed 收敛到 0');
+  assert.equal(instanceProgressRatio(runningTask({ planned: 0, processed: 0 })), null, 'planned=0 无真实比例');
+  assert.equal(instanceProgressRatio(runningTask({ planned: -1, processed: 3 })), null, '负 planned 视为无计划量');
+  assert.equal(instanceProgressRatio(runningTask({ processed: 3 })), null, '缺 planned 无真实比例');
+  assert.equal(instanceProgressRatio(runningTask({ planned: 10 })), 0, '缺 processed 按 0 计（已处理 0）');
+  assert.equal(instanceProgressRatio(runningTask({})), null, 'progress 为空对象无比例');
+  assert.equal(instanceProgressRatio(runningTask(null, null)), null, 'progress 缺省无比例');
+  assert.equal(instanceProgressRatio(null), null);
+});
+
+test('T17 不凭阶段/状态猜比例：phase 启发式与终态一律 null', () => {
+  // 修复前 judge/synth/scan 等 phase 会回退 0.62/0.28/0.15——现必须为 null（不确定态空轨）。
+  for (const phase of ['judging', 'synthesis', 'validating', 'running_pi', 'scan_channels', 'channel_fetch', 'unmapped_phase']) {
+    assert.equal(instanceProgressRatio(runningTask({}, phase)), null, `phase=${phase} 无计划量不得猜比例`);
+    assert.equal(instanceProgressRatio(runningTask({ planned: 8, processed: 2 }, phase)), 0.25, `phase=${phase} 有真实比例时正常返回`);
+  }
+  // 终态沿用真实语义：非 running 一律 null（终态卡由历史面呈现，不凭状态猜比例）。
+  for (const status of ['succeeded', 'partial', 'failed', 'cancelled', 'needs_user', 'waiting_resource']) {
+    assert.equal(instanceProgressRatio({ status, phase: 'judging', progress: { planned: 10, processed: 5 } }), null, `status=${status} 无比例`);
+  }
 });

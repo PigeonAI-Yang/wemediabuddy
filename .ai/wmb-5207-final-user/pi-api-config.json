@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "state": {
+    "activeId": "acceptance-profile",
+    "profiles": [
+      {
+        "id": "acceptance-profile",
+        "name": "Acceptance only",
+        "baseUrl": "http://127.0.0.1:9",
+        "model": "acceptance-model",
+        "api": "openai-responses",
+        "encryptedApiKey": "dW51c2VkLWFjY2VwdGFuY2Uta2V5"
+      }
+    ],
+    "fallbackOrder": []
+  }
+}

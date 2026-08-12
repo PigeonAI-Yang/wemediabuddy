@@ -186,6 +186,7 @@ export class JobSpawner {
       businessDate: spec.businessDate,
       planDate: spec.businessDate,
       projectId: spec.projectId,
+      writerTask: spec.writerTask,
       resourceLocks: spec.resourceLocks
     };
 

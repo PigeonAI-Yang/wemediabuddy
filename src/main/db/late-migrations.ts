@@ -591,5 +591,90 @@ export const lateMigrations = [
       );
       CREATE INDEX topic_maintenance_proposals_status ON topic_maintenance_proposals(status,created_at DESC,id DESC);
     `
+  },
+  {
+    version: 54,
+    sql: `
+      -- WMB-5171 / CAP-028: research intent (reporter evidence-supplement jobs).
+      -- Recreate via _new table (FK off in migrateDatabase) so task_grants/execution_grants keep valid REFERENCES agent_tasks.
+      CREATE TABLE agent_tasks_new (
+        id TEXT PRIMARY KEY,
+        intent TEXT NOT NULL CHECK (intent IN (
+          'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review', 'research',
+          'page_today', 'page_agents', 'page_discover', 'page_proposals', 'page_topic',
+          'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
+        )),
+        business_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted', 'needs_user')),
+        phase TEXT NOT NULL,
+        pi_session_id TEXT,
+        context_refs_json TEXT NOT NULL,
+        result_refs_json TEXT NOT NULL,
+        progress_json TEXT NOT NULL DEFAULT '{}',
+        checkpoint_json TEXT NOT NULL DEFAULT '{}',
+        events_json TEXT NOT NULL DEFAULT '[]',
+        control_action TEXT,
+        heartbeat_at TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      INSERT INTO agent_tasks_new SELECT * FROM agent_tasks;
+      DROP TABLE agent_tasks;
+      ALTER TABLE agent_tasks_new RENAME TO agent_tasks;
+      CREATE INDEX agent_tasks_intent_date_status ON agent_tasks(intent, business_date, status);
+      CREATE TABLE research_claims (
+        id                        TEXT PRIMARY KEY,
+        task_id                   TEXT NOT NULL,          -- agent_tasks.id (research task)
+        claim_key                 TEXT NOT NULL,
+        claim_text                TEXT NOT NULL,          -- frozen claim text, copied at spawn
+        claim_type                TEXT NOT NULL CHECK (claim_type IN ('fact','price','policy')),
+        status                    TEXT NOT NULL CHECK (status IN ('pending','supported','contradicted','unresolved','source_unavailable')),
+        verdict_reason            TEXT,
+        evidence_source_ids_json  TEXT NOT NULL DEFAULT '[]',
+        needs_time_excerpt        INTEGER NOT NULL DEFAULT 0,   -- price/policy ⇒ 1
+        verified_at               TEXT,
+        created_at                TEXT NOT NULL,
+        updated_at                TEXT NOT NULL,
+        UNIQUE (task_id, claim_key)
+      );
+      CREATE INDEX research_claims_task_status ON research_claims(task_id, status);
+    `
+  },
+  {
+    version: 55,
+    sql: `
+      -- WMB-5207: Studio 正文批注独立层（不进入正文/平台正文/发布载荷）。
+      -- scope 隔离：core 批注 platform 必须为 NULL；platform 批注必须有平台与平台版本 ID。
+      -- 重叠约束（开放批注区间不重叠）由应用层在事务内校验，SQL 仅保证区间基本合法。
+      CREATE TABLE studio_annotations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        document_kind TEXT NOT NULL CHECK (document_kind IN ('core', 'platform')),
+        document_id TEXT,
+        platform TEXT CHECK (platform IN ('x', 'xiaohongshu', 'wechat')),
+        start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+        end_offset INTEGER NOT NULL CHECK (end_offset >= 0),
+        quoted_text TEXT NOT NULL,
+        prefix_context TEXT NOT NULL DEFAULT '',
+        suffix_context TEXT NOT NULL DEFAULT '',
+        body_fingerprint TEXT NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL CHECK (status IN ('open', 'resolved')),
+        resolved_reason TEXT CHECK (resolved_reason IN ('edited', 'deleted', 'ambiguous', 'user_removed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        resolved_at TEXT,
+        revision INTEGER NOT NULL DEFAULT 1,
+        CHECK (start_offset < end_offset),
+        CHECK (
+          (document_kind = 'core' AND platform IS NULL)
+          OR (document_kind = 'platform' AND platform IS NOT NULL AND document_id IS NOT NULL)
+        )
+      );
+      CREATE INDEX studio_annotations_scope ON studio_annotations(project_id, document_kind, document_id, status);
+    `
   }
 ] as const;

@@ -9,6 +9,10 @@ type Props = {
 
 const OUT = 256;
 
+/** Canvas 无法直接用 CSS 变量，运行时读取 foundation token 的计算值 */
+const cssToken = (name: string): string =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 /** 圆形头像：选图 → 拖移缩放 → 裁切正方形 PNG → 保存 */
 export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -30,7 +34,7 @@ export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: P
     canvas.width = size;
     canvas.height = size;
     ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = '#1a1a1f';
+    ctx.fillStyle = cssToken('--surface');
     ctx.fillRect(0, 0, size, size);
     const iw = img.naturalWidth;
     const ih = img.naturalHeight;
@@ -50,7 +54,7 @@ export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: P
     // ring
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = cssToken('--border-strong') || cssToken('--border');
     ctx.lineWidth = 2;
     ctx.stroke();
   };
@@ -101,7 +105,7 @@ export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: P
       const dh = ih * base;
       const dx = (size - dw) / 2 + offset.x;
       const dy = (size - dh) / 2 + offset.y;
-      ex.fillStyle = '#111';
+      ex.fillStyle = cssToken('--surface');
       ex.fillRect(0, 0, size, size);
       ex.drawImage(img, dx, dy, dw, dh);
       const dataUrl = exportCanvas.toDataURL('image/png');

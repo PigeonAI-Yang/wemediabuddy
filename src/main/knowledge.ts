@@ -1,4 +1,5 @@
 import { broadcastDataChanged } from './data-changed.ts';
+import { listUpdateReceipts } from './knowledge-flywheel.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -334,6 +335,64 @@ export function getKnowledgeDomain(database:DatabaseSync,id:string,input:{limit?
   return {...domain,topics,total,limit,offset,hasMore:offset+topics.length<total};
 }
 
+function parseIdArrayJson(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * WMB-5214：冻结飞轮知识版本（Pi 查询读取面）。只返回真实存在且已落库的固定版本：
+ * Topic Wiki 当前版本 + 其采纳的 Note 版本 + 这些 Note 版本挂载的 Evidence（带 id）。
+ * Pi 的 Query 写回 manifest 只能引用本集合（服务端存在性 + basedOn ⊆ read 双校验）；
+ * 回答本身不是证据，综合候选的证据关系 derived_from 指向这里返回的版本 id。
+ */
+export function resolveFixedKnowledgeVersions(
+  database: DatabaseSync,
+  topicIds: readonly string[],
+  limit: number
+): { wikiPages: unknown[]; noteVersions: unknown[]; evidence: unknown[] } {
+  if (!topicIds.length) return { wikiPages: [], noteVersions: [], evidence: [] };
+  const placeholders = topicIds.map(() => '?').join(',');
+  const wikiPages = database.prepare(`
+    SELECT p.id AS pageId, p.page_type AS pageType, p.title, p.compile_status AS compileStatus,
+           p.subject_id AS subjectId, p.current_version_id AS currentVersionId,
+           pv.version_number AS versionNumber, pv.adopted_note_version_ids_json AS adoptedNoteVersionIds
+    FROM knowledge_wiki_pages p
+    LEFT JOIN knowledge_wiki_page_versions pv ON pv.id = p.current_version_id
+    WHERE p.lifecycle = 'active' AND p.subject_type = 'topic' AND p.subject_id IN (${placeholders})
+    ORDER BY p.updated_at DESC LIMIT ?
+  `).all(...topicIds, limit);
+  const adopted = new Set<string>();
+  for (const row of wikiPages as Array<{ adoptedNoteVersionIds?: string }>) {
+    for (const id of parseIdArrayJson(String(row.adoptedNoteVersionIds ?? '[]'))) adopted.add(id);
+  }
+  const noteVersionIds = [...adopted].slice(0, limit);
+  const noteVersions = noteVersionIds.length
+    ? database.prepare(`
+        SELECT nv.id AS versionId, nv.note_id AS noteId, n.kind AS kind, nv.title, nv.statement,
+               nv.conclusion_status AS conclusionStatus, nv.evidence_level AS evidenceLevel,
+               nv.applies_to AS appliesTo, nv.adopted_topic_ids_json AS adoptedTopicIds
+        FROM knowledge_note_versions nv JOIN knowledge_notes n ON n.id = nv.note_id
+        WHERE nv.id IN (${noteVersionIds.map(() => '?').join(',')})
+      `).all(...noteVersionIds)
+    : [];
+  const evidence = noteVersionIds.length
+    ? database.prepare(`
+        SELECT id, knowledge_note_version_id AS noteVersionId, evidence_object_type AS evidenceObjectType,
+               evidence_object_id AS evidenceObjectId, relation, source_nature AS sourceNature,
+               excerpt, locator
+        FROM knowledge_evidence_links
+        WHERE knowledge_note_version_id IN (${noteVersionIds.map(() => '?').join(',')})
+        ORDER BY created_at DESC LIMIT ?
+      `).all(...noteVersionIds, limit)
+    : [];
+  return { wikiPages, noteVersions, evidence };
+}
+
 export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: string; sourceId?: string; query?: string; limit?: number }) {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
   const topicIds = input.topicId ? [input.topicId] : input.sourceId
@@ -363,7 +422,9 @@ export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: s
   const reviewIds = (reviews as Array<{ id: string }>).map((r) => r.id);
   const findings = reviewIds.length ? database.prepare(`SELECT id,review_id AS reviewId,title,body,updated_at AS updatedAt FROM method_findings
     WHERE review_id IN (${reviewIds.map(() => '?').join(',')}) ORDER BY updated_at DESC LIMIT ?`).all(...reviewIds, limit) : [];
-  return { topics, sources, opportunities, projects, publications, metrics, reviews, findings };
+  // WMB-5214：冻结飞轮知识版本（Pi 读取面；QueryArtifact 写回据此引用固定版本，回答本身不是证据）。
+  const knowledge = resolveFixedKnowledgeVersions(database, topicIds, limit);
+  return { topics, sources, opportunities, projects, publications, metrics, reviews, findings, knowledge };
 }
 
 export const topicDossierCategories = ['sources','judgments','audience_demands','counter_evidence','content_history','metrics','reviews','method_findings'] as const;
@@ -418,12 +479,18 @@ export function getKnowledgeTopicDossier(database: DatabaseSync,input:{
 export function listRediscovery(database: DatabaseSync) {
   const unused = database.prepare(`SELECT s.id,s.title,s.priority,s.collected_at AS collectedAt,'高价值但尚未创作' AS reason FROM source_items s
     WHERE s.management_status!='archived' AND s.priority<=2 AND NOT EXISTS(SELECT 1 FROM content_project_sources c WHERE c.source_id=s.id)
-    ORDER BY s.priority,s.collected_at DESC LIMIT 20`).all();
+    ORDER BY s.priority,s.collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
   const watching = database.prepare(`SELECT id,title,priority,collected_at AS collectedAt,'持续观察' AS reason FROM source_items
-    WHERE management_status='watching' ORDER BY collected_at DESC LIMIT 20`).all();
+    WHERE management_status='watching' ORDER BY collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
   const pending = database.prepare(`SELECT id,title,priority,collected_at AS collectedAt,'待核验超过 7 天' AS reason FROM source_items
-    WHERE verification_status='pending' AND collected_at < datetime('now','-7 days') ORDER BY collected_at DESC LIMIT 20`).all();
-  return { unused, watching, pending };
+    WHERE verification_status='pending' AND collected_at < datetime('now','-7 days') ORDER BY collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
+  // WMB-5212：每项附加该 Source 最近一次知识回执（证据变化摘要；有界单条）。
+  const withReceipt = (items: Array<Record<string, unknown>>) => items.map((item) => {
+    const id = String(item.id);
+    const latest = listUpdateReceipts(database, { sourceId: id, limit: 1 }).items[0] ?? null;
+    return { ...item, latestReceipt: latest };
+  });
+  return { unused: withReceipt(unused), watching: withReceipt(watching), pending: withReceipt(pending) };
 }
 
 function normalizeTopicKey(value: string) { return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN'); }

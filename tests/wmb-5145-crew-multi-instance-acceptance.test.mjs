@@ -22,11 +22,12 @@ import {
   OBJECT_SCOPE_MISMATCH, buildJobObjectBoundary, rebuildRoleJobRequest
 } from '../src/main/role-job-registry.ts';
 import { ensureAutomaticTaskGrant, dispatchIssueTaskGrant, dispatchRevokeTaskGrant } from '../src/main/task-grants.ts';
+import { PRECISE_EXECUTION_COMMANDS } from '../src/main/execution-grants.ts';
 
 // —— 只读 registry 结构（A7/A10；A14 基线已抽至 wmb-5145-compatibility-invariants.mjs）——
 import {
   AGENT_CAPABILITIES, REDLINE_COMMANDS, ROLE_CATALOG,
-  roleHasPagePassThrough, roleReadProfiles, roleWriteCommands
+  roleReadProfiles, roleWriteCommands
 } from '../src/shared/agent-capabilities.ts';
 import { assertCompatibilityInvariants } from './wmb-5145-compatibility-invariants.mjs';
 
@@ -378,27 +379,33 @@ test('A6 并发 ≠ 角色配额：两记者占满容量；调 maxWorkers=4 第�
   });
 });
 
-// A7 桌助非主管工位：不可 spawn、不进员工投影、零 standing 写权、只读/编排工具
-test('A7 桌助非主管工位：spawn 拒绝、不进员工投影、零 standing 写权、工具只读/编排', async () => {
+// A7 主管非员工工位：spawn 拒绝、不进员工投影；standing = 全量内部写权（不含红线类别执行命令）；desk 行 = 主管/主编席
+// 2026-08-10 re-baseline（WMB-5185，approach A / EVAL-030 翻转）：desk 从「桌助/零 standing/页透传」翻转为「主管/主编席/全量 standing」；
+// `roleHasPagePassThrough`/`pageScopePassThrough` 已删除；spawn 拒绝与不进员工槽保留。
+test('A7 主管非员工工位：spawn 拒绝、不进员工投影；standing 全量内部写权、红线不可达；desk 行 = 主管/主编席', async () => {
   await withRuntime(async ({ runtime }) => {
     const spawner = new JobSpawner(runtime, { maxWorkers: 2, execute: async () => SUCCEEDED });
     assert.throws(() => spawner.spawn({ roleId: 'desk', brief: 'nope' }), (e) => e.code === 'ROLE_NOT_SPAWNABLE', 'spawn(roleId:desk) 拒绝');
     assert.equal(spawner.pool.activeEmployeeCount(), 0, 'desk 不占员工容量');
     const proj = projectionOf(spawner, runtime);
     assert.equal('desk' in proj.byRole, false, 'desk 不进员工投影（不计容量）');
-    assert.deepEqual([...roleWriteCommands('desk')], [], 'desk 无 standing 写权');
-    assert.equal(roleHasPagePassThrough('desk'), true, 'desk 仅页级透传');
-    const passThrough = AGENT_CAPABILITIES.filter((c) => c.pageScopePassThrough);
-    assert.equal(passThrough.length, 1, '页级透传唯一');
-    assert.equal(passThrough[0].id, 'cap.desk');
+    const deskWrite = roleWriteCommands('desk');
+    assert.ok(deskWrite.length > 0, 'desk（主管）standing 写权非空（全量内部命令）');
+    assert.ok(deskWrite.includes('plans.save') && deskWrite.includes('content.save_version') && deskWrite.includes('knowledge.topic_maintenance_approve'), '主管持跨页内部写命令（页间不中止，含内部审批）');
+    for (const command of REDLINE_COMMANDS) {
+      assert.equal(deskWrite.includes(command), false, `红线类别执行命令 ${command} 不入主管 standing`);
+    }
+    // WMB-5182 删除页透传特例（approach A：注册表声明全量 standing，不再页级透传）
     const deskCap = AGENT_CAPABILITIES.find((c) => c.id === 'cap.desk');
-    assert.deepEqual([...deskCap.commands], [], '桌助工具只读/编排，无 plans.save/content.* 业务写命令');
+    assert.equal(deskCap.pageScopePassThrough, undefined, 'pageScopePassThrough 已删除（approach A）');
+    assert.equal(deskCap.displayName, '主管全站写权');
     setActiveJobSpawner(spawner);
     try {
       const desk = buildRoleRoster(runtime.database, { businessDate: DATE }).find((r) => r.roleId === 'desk');
       assert.equal(desk.instances.length, 0, 'desk 永不进员工实例');
-      assert.equal(desk.labelZh, '桌助');
-      assert.equal(desk.roomZh, '协调入口');
+      assert.equal(desk.labelZh, '主管', 'desk 行 = 主管（EVAL-030 翻转）');
+      assert.equal(desk.roomZh, '主编席', 'desk 行 = 主编席（EVAL-030 翻转）');
+      assert.ok(desk.writeCommandCount > 0, 'desk 行写命令数 > 0（全量 standing）');
     } finally {
       setActiveJobSpawner(null);
       spawner.dispose();
@@ -504,11 +511,17 @@ test('A9 资源边界（对象级硬隔离）：跨项目写 BLOCKED + 审计 + 
 // A10 红线不变：发布/平台副作用命令对任何 grant 组合不可达；agentGrantable:false 能力不出现在任何覆盖面
 test('A10 红线不变：红线命令冻结且只属 agentGrantable:false；有效 grant + 匹配边界仍被 fail-closed 红线门拦死', async () => {
   await withRuntime(async ({ runtime, database }) => {
-    assert.deepEqual([...REDLINE_COMMANDS], ['x_lists.operation_execute', 'intelligence_channels.proposal_apply'], '红线命令冻结');
+    assert.deepEqual([...REDLINE_COMMANDS], ['publication.editor_prepare_execute', 'x_lists.operation_execute', 'intelligence_channels.proposal_apply'], '红线命令冻结（2026-08-10 三类别并集）');
     for (const command of REDLINE_COMMANDS) {
       const caps = AGENT_CAPABILITIES.filter((c) => c.commands.includes(command));
-      assert.ok(caps.length >= 1, `${command} 必须登记于能力面`);
-      assert.ok(caps.every((c) => c.agentGrantable === false), `${command} 只出现在 agentGrantable:false 能力`);
+      // 2026-08-10 三类别化：红线命令 = 类别最终动作并集。命令面红线（proposal_apply/operation_execute）
+      // 必须全部落在 agentGrantable:false 能力；无能力登记的（publication.editor_prepare_execute——外部浏览器
+      // 副作用，by design 仅精确执行命令面）必须登记于 PRECISE_EXECUTION_COMMANDS。任一红线命令都不得进入任何角色 standing。
+      if (caps.length > 0) {
+        assert.ok(caps.every((c) => c.agentGrantable === false), `${command} 只出现在 agentGrantable:false 能力`);
+      } else {
+        assert.equal(PRECISE_EXECUTION_COMMANDS.includes(command), true, `${command} 无能力登记时必须为精确执行命令（PRECISE_EXECUTION_COMMANDS）`);
+      }
       for (const role of Object.keys(ROLE_CATALOG)) {
         assert.equal(roleWriteCommands(role).includes(command), false, `${command} 不得出现在 ${role} standing 写权`);
       }
@@ -651,7 +664,7 @@ test('A13 历史可重建与一键续派：重启后从 context_refs_json 指认
       assert.ok(row.sessionFile, '会话文件 ref 完整指认');
       const refs = getAgentTask(reopened.database, taskId).contextRefs;
       const rebuilt = rebuildRoleJobRequest(refs);
-      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P13 初稿', projectId: 'P13', businessDate: DATE }, 'context_refs_json 重建原 RoleJobRequest');
+      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P13 初稿', projectId: 'P13', writerTask: 'core_draft', businessDate: DATE }, 'context_refs_json 重建原 RoleJobRequest');
       const uiInput = redispatchInput(row);
       assert.deepEqual(uiInput, rebuilt, 'UI 一键续派输入与持久重建一致');
       const spawner2 = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });

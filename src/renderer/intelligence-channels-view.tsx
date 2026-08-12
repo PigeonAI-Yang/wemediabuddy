@@ -124,7 +124,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
     const input = { module: source.module, sourceId: source.sourceId, expectedRevision: source.revision };
     if (action !== 'scan') {
       const proposalAction = action === 'remove' ? 'remove' : source.enabled ? 'disable' : 'enable';
-      const message = proposalAction === 'remove' ? '来源已加入待确认清单。历史资料会保留。' : `来源${proposalAction === 'enable' ? '启用' : '停用'}已加入待确认清单。`;
+      const message = proposalAction === 'remove' ? '来源已加入待确认清单。历史资料会保留。' : `已加入待确认清单（${proposalAction === 'enable' ? '启用' : '停用'}来源）。`;
       await prepareProposal([{ action: proposalAction, ...input }], message); return;
     }
     setBusy(`正在扫描 ${source.name}…`); setNote('');
@@ -178,7 +178,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
             <input type="radio" name="website-candidate" checked={selectedWebsite?.canonicalUrl === candidate.canonicalUrl} onChange={() => { setSelectedWebsite(candidate); setWebsiteTrial(null); }} />
             <span><strong>{candidate.name}</strong><small>{candidate.canonicalUrl}</small></span>
           </label>)}
-          <div className="channel-confirm-row"><button className="secondary-button" onClick={() => void trialWebsite()} disabled={!selectedWebsite || Boolean(busy)}>试读所选网站</button>{websiteTrial && <span data-state={websiteTrial.readable ? 'ready' : 'blocked'}>{websiteTrial.readable ? `可读：${websiteTrial.title}` : websiteTrial.errorMessage || '暂不可读'}</span>}{websiteTrial?.readable && <button className="primary-button" onClick={() => void confirmWebsite()} disabled={Boolean(busy)}>加入待确认清单</button>}</div>
+          <div className="channel-confirm-row"><button className="secondary-button" onClick={() => void trialWebsite()} disabled={!selectedWebsite || Boolean(busy)}>试读所选网站</button>{websiteTrial && <span data-state={websiteTrial.readable ? 'ready' : 'blocked'}>{websiteTrial.readable ? `可读：${websiteTrial.title}` : websiteTrial.errorMessage || '暂不可读'}</span>}{websiteTrial?.readable && <button className="secondary-button channel-confirm-cta" onClick={() => void confirmWebsite()} disabled={Boolean(busy)}>加入待确认清单</button>}</div>
         </div>}
       </section>
       <section className="channel-add-form" aria-labelledby="add-x-list-title">
@@ -190,7 +190,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
             <input type="radio" name="x-list-candidate" checked={selectedXListId === candidate.listId} onChange={() => setSelectedXListId(candidate.listId)} />
             <span><strong>{candidate.name}</strong><small>{candidate.accountKey} · {candidate.ownerHandle || '未知创建者'} · {candidate.canonicalUrl}</small></span>
           </label>)}
-          <div className="channel-confirm-row"><span>{xResolution.candidates.length > 1 ? '同名 List 已全部列出，请选择准确来源。' : '请确认这是要接入的 List。'}</span><button className="primary-button" onClick={() => void confirmXList()} disabled={!selectedXList || Boolean(busy)}>加入待确认清单</button></div>
+          <div className="channel-confirm-row"><span>{xResolution.candidates.length > 1 ? '同名 List 已全部列出，请选择准确来源。' : '请确认这是要接入的 List。'}</span><button className="secondary-button channel-confirm-cta" onClick={() => void confirmXList()} disabled={!selectedXList || Boolean(busy)}>加入待确认清单</button></div>
         </div>}
       </section>
     </div>
@@ -208,7 +208,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
         const trend = xTrends[source.sourceId]?.find((item) => item.viewsPerHour.status === 'value');
         const observation = observations[source.sourceId];
         return <article className="channel-source-row" key={source.sourceId}>
-          <div className="channel-source-main"><div className="channel-source-title"><span>{intelligenceModuleLabels[source.module]}</span><h3>{source.name}</h3><em data-state={source.status}>{sourceStatusLabels[source.status]}</em></div><button className="channel-url" onClick={() => void window.wmb.openExternal(source.canonicalUrl)}>{source.canonicalUrl}</button>{source.module === 'x_lists' && <small>{source.accountKey} · List {source.listId}{trend?.viewsPerHour.status === 'value' ? ` · 浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时 · ${trend.velocityChange.status === 'value' ? trend.velocityChange.snapshotIds.length : trend.viewsPerHour.snapshotIds.length} 个快照证据` : ''}</small>}</div>
+          <div className="channel-source-main"><div className="channel-source-title"><span>{intelligenceModuleLabels[source.module]}</span><h3>{source.name}</h3><em data-state={source.status}>{sourceStatusLabels[source.status]}</em></div><button className="channel-url" onClick={() => void window.wmb.openExternal(source.canonicalUrl)}>{source.canonicalUrl}</button>{source.module === 'x_lists' && <small>{source.accountKey} · List {source.listId}{trend?.viewsPerHour.status === 'value' ? ` · 浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时 · ${trend.velocityChange.status === 'value' ? trend.velocityChange.snapshotIds.length : trend.viewsPerHour.snapshotIds.length} 条观测记录` : ''}</small>}</div>
           <div className="channel-receipt">{receipt ? <><strong>{receiptStatusLabels[receipt.status]}</strong><span>{displayTime(receipt.checkedAt)} · 发现 {receipt.candidateCount}，入库 {receipt.savedCount}</span>{receipt.errorMessage ? <small>{receipt.errorMessage}</small> : null}</> : <span>尚未检查</span>}</div>
           <div className="channel-source-actions"><button className="secondary-button" onClick={() => void mutateSource(source, 'toggle')} disabled={Boolean(busy)}>{source.enabled ? '准备停用' : '准备启用'}</button><button className="secondary-button" onClick={() => void mutateSource(source, 'scan')} disabled={!source.enabled || Boolean(busy)}>立即扫描</button>{source.module === 'x_lists' && <button className="secondary-button" onClick={() => void (observation && observation.status !== 'stopped' ? stopObservation(source.sourceId) : observeXList(source))} disabled={!source.enabled || Boolean(busy)}>{observation && observation.status !== 'stopped' ? `停止观察 · ${observation.jobs.filter((job) => job.status === 'pending').length} 待执行` : '观察趋势'}</button>}<button className="channel-remove" onClick={() => void mutateSource(source, 'remove')} disabled={Boolean(busy)}>{source.module === 'x_lists' ? '准备移出' : '准备移除'}</button></div>
         </article>;

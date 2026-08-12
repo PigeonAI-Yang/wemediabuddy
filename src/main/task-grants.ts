@@ -1,9 +1,9 @@
 import { PAGE_TASK_GRANT_SCOPES, type PageTaskIntent } from '../shared/page-authority.ts';
-import { filterCommandsForRole, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
+import { AGENT_CAPABILITIES, deskStanding, deskStandingCommands, filterCommandsForRole, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
 import { roleWriteCommandsWithOverlays } from './capability-overlays.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { CommandDispatchError, createCommandEnvelope, type CommandActorV1, type CommandEnvelopeV1, type CommandReceiptV1 } from './command-dispatcher.ts';
+import { CommandDispatchError, commandInputHash, createCommandEnvelope, type CommandActorV1, type CommandEnvelopeV1, type CommandReceiptV1 } from './command-dispatcher.ts';
 import { getAgentTask } from './agent-tasks.ts';
 import {
   assertBoundaryCovers,
@@ -24,11 +24,13 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'content.create',
   'content.save_version',
   'intelligence_channels.proposal_apply',
+  'intelligence_channels.proposal_apply_safe',
   'knowledge.creative_brief_create',
   'knowledge.creative_brief_create_project',
   'knowledge.creative_brief_update',
   'knowledge.domain_create',
   'knowledge.domain_update',
+  'knowledge_flywheel.change_set_apply',
   'knowledge.record_batch',
   'knowledge.topic_maintenance_propose',
   'knowledge.topic_maintenance_approve',
@@ -36,6 +38,7 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'knowledge.topic_maintenance_reproposal_retry',
   'knowledge.suggestion_create',
   'plans.save',
+  'publication.snapshot_create',
   'reviews.save',
   'sources.upsert_batch',
   'sources.lane_gate',
@@ -43,8 +46,14 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'sources.update_status',
   'x_lists.observation_start',
   'x_lists.observation_stop',
-  'x_lists.operation_execute'
+  'x_lists.operation_execute',
+  'x_lists.prepare'
 ] as const);
+
+/** cap.topic_approval 命令族（注册表唯一真源；WMB-5183 §5/A4 执行面角色门，只读消费 5182 定义）。 */
+const TOPIC_APPROVAL_COMMANDS: ReadonlySet<string> = Object.freeze(new Set<string>(
+  AGENT_CAPABILITIES.find((cap) => cap.id === 'cap.topic_approval')?.commands ?? []
+));
 
 export type TaskGrantWorker = Readonly<{
   type: 'pi' | 'external_agent';
@@ -237,6 +246,10 @@ export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
     'plans.save',
     'sources.lane_gate'
   ]),
+  research: Object.freeze([
+    'agent_tasks.report_progress',
+    'sources.upsert_batch'
+  ]),
   studio_draft: Object.freeze([
     'agent_tasks.report_progress',
     'content.save_version'
@@ -269,10 +282,12 @@ export type TaskReadyGrantHook = (taskId: string) => Promise<string>;
 
 function roleForTaskIntent(intent: string | null | undefined): RoleId | null {
   if (!intent) return null;
-  // 仅扫/判/整理拆分强制角色：combined daily_intelligence 仍跟 caller/context，避免丢掉 reporter 专属写权。
+  // 仅扫/判/研究拆分强制角色（runner 拆分线程的固定角色）：combined daily_intelligence 仍跟 caller/context，
+  // 避免丢掉 reporter 专属写权。page_* 一律由显式任务 contextRefs.roleId / caller 解析（WMB-5185：
+  // 页 dock 恒为主管 desk，员工 page_library 工单经 contextRefs.roleId='librarian' 保持车道）。
   if (intent === 'daily_scan') return 'reporter';
   if (intent === 'daily_judge') return 'planner';
-  if (intent === 'page_library') return 'librarian';
+  if (intent === 'research') return 'reporter';
   return null;
 }
 
@@ -284,21 +299,27 @@ export async function ensureAutomaticTaskGrant(
 ): Promise<string> {
   const task = getAgentTask(runtime.database, taskId);
   if (!task || task.status !== 'running') throw new CommandDispatchError('TASK_NOT_ACTIVE', '无法为非运行中的任务绑定自动授权。');
-  const baseCommands = AUTOMATIC_TASK_GRANT_SCOPES[task.intent as keyof typeof AUTOMATIC_TASK_GRANT_SCOPES];
-  if (!baseCommands || baseCommands.length === 0) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '该任务 intent 无自动写权（只读页）。');
   // Intent 绑定角色优先：扫->判同进程时 caller 仍可能是 reporter，不能盖住 daily_judge/planner 写权。
   const intentRole = roleForTaskIntent(task.intent);
   const contextRole = typeof task.contextRefs?.roleId === 'string' && isRoleId(task.contextRefs.roleId) ? task.contextRefs.roleId : null;
   const callerRole = roleId && isRoleId(roleId) ? roleId : null;
   const resolvedRole = intentRole ?? contextRole ?? callerRole;
-  let allowedCommands = filterCommandsForRole(resolvedRole, baseCommands);
-  if (resolvedRole && resolvedRole !== 'desk') {
-    try {
-      const overlayAllowed = new Set(roleWriteCommandsWithOverlays(runtime.database, runtime.identity.workspaceId, resolvedRole));
-      for (const infra of ['agent_tasks.report_progress']) overlayAllowed.add(infra);
-      allowedCommands = allowedCommands.filter((command) => overlayAllowed.has(command));
-    } catch {
-      /* overlays table may be absent on old DBs mid-migration */
+  let allowedCommands: readonly string[];
+  if (resolvedRole === 'desk') {
+    // WMB-5182 §4.3 I2：主管签发基底 = standing 全量（不经 intent 收窄、跳过 overlays，A 子决策）。
+    allowedCommands = deskStandingCommands();
+  } else {
+    const baseCommands = AUTOMATIC_TASK_GRANT_SCOPES[task.intent as keyof typeof AUTOMATIC_TASK_GRANT_SCOPES];
+    if (!baseCommands || baseCommands.length === 0) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '该任务 intent 无自动写权（只读页）。');
+    allowedCommands = filterCommandsForRole(resolvedRole, baseCommands);
+    if (resolvedRole) {
+      try {
+        const overlayAllowed = new Set(roleWriteCommandsWithOverlays(runtime.database, runtime.identity.workspaceId, resolvedRole));
+        for (const infra of ['agent_tasks.report_progress']) overlayAllowed.add(infra);
+        allowedCommands = allowedCommands.filter((command) => overlayAllowed.has(command));
+      } catch {
+        /* overlays table may be absent on old DBs mid-migration */
+      }
     }
   }
   if (!allowedCommands.length) throw new CommandDispatchError('TASK_SCOPE_EMPTY', '角色过滤后无剩余写权。');
@@ -355,9 +376,9 @@ export function assertTaskGrantForEnvelope(
   isCurrentPiLease: (leaseId: string, taskId: string) => boolean
 ): void {
   if (envelope.actor.type !== 'pi' && envelope.actor.type !== 'external_agent') return;
-  if (envelope.command === 'knowledge.topic_maintenance_approve' || envelope.command === 'knowledge.topic_maintenance_reject') {
-    throw new CommandDispatchError('TASK_SCOPE_BROADENED', '该命令仅允许 Owner UI 执行。');
-  }
+  // WMB-5182 §5：topic approve/reject/reproposal_retry 重分类为主管内部审批——删除 Owner-UI 硬拦，
+  // 统一由 standing 集成员资格（cap.topic_approval 仅 {desk:true}）+ grant scope 校验把关；
+  // 员工/外部 Agent 因 grant 不含该命令仍零写拒绝（TASK_SCOPE_BROADENED）。
   if (!envelope.taskId || !envelope.grantId) throw new CommandDispatchError('TASK_GRANT_REQUIRED', 'Pi 或外部 Agent 写入必须携带 task grant。');
   const grant = getTaskGrant(database, envelope.grantId, now);
   if (!grant) throw new CommandDispatchError('TASK_GRANT_NOT_FOUND', 'Task grant 不存在。');
@@ -369,6 +390,17 @@ export function assertTaskGrantForEnvelope(
   if (!grant.allowedCommands.includes(envelope.command)) throw new CommandDispatchError('TASK_SCOPE_BROADENED', '命令超出 Task grant 范围。');
   if (!grant.workers.some((worker) => worker.type === envelope.actor.type && worker.id === envelope.actor.id)) {
     throw new CommandDispatchError('TASK_WORKER_MISMATCH', 'Worker 身份与 Task grant 不匹配。');
+  }
+  // WMB-5183 §5/A4：cap.topic_approval 仅绑定主管（{desk:true}）。即使 grant 被手工误含该命令，
+  // 员工角色任务与外部 Agent 也在写前被角色/执行边界拒绝（handler 未执行 → 零业务写，无 grant-free 路径）。
+  if (TOPIC_APPROVAL_COMMANDS.has(envelope.command)) {
+    const task = getAgentTask(database, envelope.taskId);
+    const taskRole = task
+      ? (roleForTaskIntent(task.intent) ?? (typeof task.contextRefs?.roleId === 'string' && isRoleId(task.contextRefs.roleId) ? task.contextRefs.roleId : null))
+      : null;
+    if (taskRole !== 'desk' || envelope.actor.type !== 'pi') {
+      throw new CommandDispatchError('TASK_SCOPE_BROADENED', '主题审批命令仅主管（desk）可执行，员工与外部 Agent 不代批。', { reason: 'ROLE_SCOPE_BLOCKED' });
+    }
   }
   requireRunningTask(database, envelope.taskId, envelope.workspaceId);
   // WMB-5141 §12.2.7 执行硬门：任务携带 spawn 合同时，命令对象必须落在任务持久边界内
@@ -439,4 +471,29 @@ function requireRunningTask(database: DatabaseSync, taskId: string, workspaceId:
   if (context.workspaceId !== workspaceId) {
     throw new CommandDispatchError('TASK_GRANT_STALE', 'Task 不属于当前 workspace。');
   }
+}
+
+/**
+ * WMB-5182 §4.8 写前 stale-scope 判定（窄派发边界）：主管会话的写请求命中「命令超出 Task grant 范围」
+ * 且命令 ∈ deskStanding → 旧证未换发（§4.7）或本页旧证过窄，需要恰一次重签后重放同一 envelope。
+ * 红线/基建类（expired/revoked/stale/worker 不匹配）与员工命令一律不触发（员工越界 = 语义不变拒绝）。
+ */
+export function shouldRefreshDeskStaleScope(database: DatabaseSync, envelope: CommandEnvelopeV1, now: Date): boolean {
+  if (envelope.actor.type !== 'pi' && envelope.actor.type !== 'external_agent') return false;
+  if (!envelope.taskId || !envelope.grantId) return false;
+  if (!deskStanding.has(envelope.command)) return false;
+  const grant = getTaskGrant(database, envelope.grantId, now);
+  if (!grant || grant.status !== 'active') return false;
+  if (grant.workspaceId !== envelope.workspaceId || grant.runtimeEpoch !== envelope.runtimeEpoch) return false;
+  if (grant.allowedCommands.includes(envelope.command)) return false;
+  const task = getAgentTask(database, envelope.taskId);
+  if (!task) return false;
+  const contextRole = typeof task.contextRefs?.roleId === 'string' && isRoleId(task.contextRefs.roleId) ? task.contextRefs.roleId : null;
+  return (roleForTaskIntent(task.intent) ?? contextRole) === 'desk';
+}
+
+/** 重签后把同一 envelope 改绑到新 grant（inputHash 覆盖 grantId，需重算；此前无任何已落收据，改绑安全）。 */
+export function rebindEnvelopeGrant<T>(envelope: CommandEnvelopeV1<T>, grantId: string): CommandEnvelopeV1<T> {
+  const next = { ...envelope, grantId };
+  return Object.freeze({ ...next, inputHash: commandInputHash(next) });
 }

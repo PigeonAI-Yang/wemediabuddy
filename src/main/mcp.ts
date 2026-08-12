@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
-import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
+import type { DatabaseSync } from 'node:sqlite';
+import { McpServer, createMcpHandler, type CallToolResult, type McpHttpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { getContentProject, listContentProjects } from './content.ts';
 import { migrateDatabase } from './db/migrations.ts';
@@ -15,34 +16,191 @@ import { getAgentTask } from './agent-tasks.ts';
 import { getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, topicDossierCategories } from './knowledge.ts';
 import { registerTopicMaintenanceReadMcp } from './mcp-topic-maintenance.ts';
 import { getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage } from './knowledge-canvas.ts';
-import { getXListOperation, listXListBindings, prepareXListOperation, type PrepareXListOperationInput } from './x-lists.ts';
-import { collectBoundXListTimeline } from './x-list-execution.ts';
-import { selectedXListBrowser as resolveSelectedXListBrowser } from './x-list-context.ts';
-import { readXListDetail, readXListIndex, readXListMembers, readXListTimeline } from './platforms/x-list-browser.ts';
-import { XListNeedsUserError } from './platforms/x-list-session.ts';
+import { registerXListTools } from './mcp-x-list.ts';
 import type { ActiveWorkspaceRuntime, WorkspaceRuntimeGate } from './workspace-runtime.ts';
 import { allowsAiOnlyRoutes } from './workspace-profiles.ts';
 import { registerWorkspaceApplicationMcp, type WorkspaceApplicationMcp } from './workspace-mcp.ts';
 import { registerIntelligenceChannelsMcp } from './intelligence-channel-mcp.ts';
-import { getXPostTrend, listXPostMetricSnapshots } from './x-post-metrics.ts';
-import { getXObservationSession, persistXObservationSessionStart, readXObservationSessionStart, stopXObservationSession } from './x-observation-jobs.ts';
+import { registerResearchWebMcp } from './research-web-read.ts';
 import { registerSourceMutationMcp } from './mcp-source-commands.ts';
 import { registerTaskGrantMcp } from './mcp-task-grants.ts';
-import { assertTaskGrantForEnvelope } from './task-grants.ts';
-import { createCommandEnvelope } from './command-dispatcher.ts';
 import { registerExecutionGrantMcp } from './mcp-execution-grants.ts';
 import { registerBusinessMutationMcp } from './mcp-business-commands.ts';
-import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
 import { registerJobToolsMcp } from './mcp-job-tools.ts';
 import { continueAfterScan, describeDailyReadiness, runManagerDailyStage } from './manager-orchestration.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { shanghaiDate } from './ferment.ts';
+import { roleReadTools } from '../shared/agent-capabilities.ts';
+import { recordRoleAuthorityBlocked } from './operations.ts';
 export type McpRuntime = { url: string; close: () => Promise<void> };
-const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
+
+/** MCP 统一文本结果形状（全部工具 handler 与读门拦截共用）。 */
+const text = (data: unknown): CallToolResult => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+
+/** WMB-5170 §6.2：后端 MCP 命令名 → 注册的 WMB 公开工具身份（确定性映射；未登记命令以自身为身份 → fail-closed）。 */
+const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
+  'context.get_workbench': 'wmb_get_workbench',
+  'agent_tasks.get': 'wmb_get_agent_task',
+  'task_grants.get': 'wmb_get_task_grant',
+  'task_grants.list': 'wmb_list_task_grants',
+  'agent_tasks.report_progress': 'wmb_report_agent_progress',
+  'sources.search': 'wmb_search_sources',
+  'sources.get': 'wmb_get_source',
+  'sources.upsert_batch': 'wmb_save_source',
+  'plans.save': 'wmb_save_plan',
+  'knowledge.get_context': 'wmb_get_knowledge_context',
+  'knowledge.suggestion_create': 'wmb_suggest_knowledge',
+  'sources.lane_gate': 'wmb_judge_sources',
+  'sources.lane_restore': 'wmb_restore_source',
+  'sources.update_status': 'wmb_update_source_status',
+  'knowledge.creative_brief_create': 'wmb_create_creative_brief',
+  'knowledge.creative_brief_update': 'wmb_update_creative_brief',
+  'knowledge.creative_brief_create_project': 'wmb_create_project_from_brief',
+  'knowledge.creative_brief_lineage_get': 'wmb_get_brief_lineage',
+  'knowledge.record_batch': 'wmb_record_knowledge',
+  'knowledge.topic_maintenance_propose': 'wmb_propose_topic_maintenance',
+  'knowledge.topic_maintenance_list': 'wmb_list_topic_maintenance',
+  'knowledge.topic_maintenance_get': 'wmb_get_topic_maintenance',
+  'content.save_version': 'wmb_save_core_version',
+  'content.create': 'wmb_create_content_project',
+  'content.get': 'wmb_get_content',
+  'content.list': 'wmb_list_content_projects',
+  'metrics.get': 'wmb_get_metrics',
+  'reviews.get': 'wmb_get_reviews',
+  'reviews.save': 'wmb_save_review',
+  'x_lists.read_index': 'wmb_read_x_list_index',
+  'x_lists.read_detail': 'wmb_read_x_list_detail',
+  'x_lists.read_members': 'wmb_read_x_list_members',
+  'x_lists.read_timeline': 'wmb_read_x_list_timeline',
+  'x_lists.list_bindings': 'wmb_list_x_list_bindings',
+  'x_lists.get_operation': 'wmb_get_x_list_operation',
+  'x_lists.prepare': 'wmb_prepare_x_list_operation',
+  'x_lists.members_add': 'wmb_add_x_list_members',
+  'x_lists.create': 'wmb_create_x_list',
+  'x_lists.members_remove': 'wmb_remove_x_list_members',
+  'x_lists.collect_timeline': 'wmb_collect_x_list_timeline',
+  'x_lists.post_metric_snapshots_list': 'wmb_list_x_post_metric_snapshots',
+  'x_lists.post_trend_get': 'wmb_get_x_post_trend',
+  'x_lists.observation_start': 'wmb_start_x_list_observation',
+  'x_lists.observation_get': 'wmb_get_x_list_observation',
+  'x_lists.observation_stop': 'wmb_stop_x_list_observation',
+  'agents.roster': 'wmb_list_agents_roster',
+  'jobs.list': 'wmb_list_jobs',
+  'jobs.get': 'wmb_get_job',
+  'jobs.spawn': 'wmb_spawn_job',
+  'jobs.cancel': 'wmb_cancel_job',
+  'jobs.message': 'wmb_message_job',
+  'jobs.messages': 'wmb_list_job_messages',
+  'daily.readiness': 'wmb_daily_readiness',
+  'daily.continue_after_scan': 'wmb_continue_after_scan',
+  'daily.run_stage': 'wmb_run_daily_stage',
+  'intelligence_channels.get': 'wmb_get_intelligence_channels',
+  'intelligence_channels.receipts_list': 'wmb_list_intelligence_channel_receipts',
+  'intelligence_channels.resolve_website': 'wmb_resolve_intelligence_website',
+  'intelligence_channels.trial_website': 'wmb_trial_intelligence_website',
+  'intelligence_channels.resolve_x_list': 'wmb_resolve_intelligence_x_list',
+  'intelligence_channels.proposals.prepare': 'wmb_prepare_intelligence_channel_changes',
+  'workspaces.list': 'wmb_list_workspaces',
+  'workspaces.get_current': 'wmb_get_current_workspace',
+  'workspaces.catalog': 'wmb_list_workspace_catalog',
+  'workspaces.proposals.prepare': 'wmb_prepare_workspace_profile',
+  'research.search_web': 'wmb_search_web',
+  'research.read_web_page': 'wmb_read_web_page',
+  'xhs_check_login_status': 'xhs_check_login_status',
+  'xhs_search_feeds': 'xhs_search_feeds',
+  'xhs_get_feed_detail': 'xhs_get_feed_detail',
+  'xhs_user_profile': 'xhs_user_profile'
+});
+
+/** WMB-5170 §6.2：research 会话读白名单 = roleReadTools('reporter') + 基础设施 + 唯一写回。 */
+const RESEARCH_READ_ALLOWED: ReadonlySet<string> = new Set([
+  ...roleReadTools('reporter'),
+  'wmb_get_agent_task',
+  'wmb_report_agent_progress',
+  'wmb_save_source'
+]);
+
+const RESEARCH_READ_BLOCK_CODE = 'READ_PROFILE_BLOCKED' as const;
+const RESEARCH_READ_BLOCK_REASON = 'RESEARCH_READ_WHITELIST' as const;
+
+/**
+ * WMB-5170 评审修复：客户端身份接缝只认 `_meta.{taskId, workerLeaseId}` 两个精确键
+ * （忽略调用方塞入的其余元数据）；任一键缺失/空 → 对应字段为 null（research 会话的
+ * lease 缺失即 fail closed，不再放行 taskId-only 旧通道）。
+ */
+function researchTaskMeta(ctx: unknown): Readonly<{ taskId: string | null; workerLeaseId: string | null }> {
+  const meta = (ctx as { mcpReq?: { _meta?: { taskId?: unknown; workerLeaseId?: unknown } } } | undefined)?.mcpReq?._meta;
+  const taskId = typeof meta?.taskId === 'string' && meta.taskId.trim() ? meta.taskId : null;
+  const workerLeaseId = typeof meta?.workerLeaseId === 'string' && meta.workerLeaseId.trim() ? meta.workerLeaseId : null;
+  return Object.freeze({ taskId, workerLeaseId });
+}
+
+/**
+ * WMB-5170 §6.2 读硬门（评审修复）：research 会话（taskId → agent_tasks.intent='research'）
+ * 必须携带当前运行时 `runtime.isCurrentWorkerLease(workerLeaseId, taskId)` 的活 lease——
+ * lease 缺失/过期/伪造一律 fail closed（READ_PROFILE_BLOCKED + role_authority_blocked 审计，
+ * reason 与白名单拦截同值，均在 handler 之前返回）；lease 有效才应用
+ * roleReadTools('reporter') + 基础设施 + wmb_save_source 白名单。无任务 / 非 research 返回 null（老路径零回归）。
+ */
+function researchReadGate(database: () => DatabaseSync, command: string, ctx: unknown, runtime?: ActiveWorkspaceRuntime): CallToolResult | null {
+  const { taskId, workerLeaseId } = researchTaskMeta(ctx);
+  if (!taskId) return null;
+  const db = database();
+  let intent: string | null = null;
+  try {
+    const row = db.prepare('SELECT intent FROM agent_tasks WHERE id = ?').get(taskId) as { intent?: string } | undefined;
+    intent = row?.intent ?? null;
+  } finally {
+    db.close();
+  }
+  if (intent !== 'research') return null;
+  const blocked = (): CallToolResult => {
+    const auditDb = database();
+    try {
+      recordRoleAuthorityBlocked(auditDb, { role: 'reporter', command, taskId, reason: RESEARCH_READ_BLOCK_REASON });
+    } finally {
+      auditDb.close();
+    }
+    return text({ ok: false, data: null, error: { code: RESEARCH_READ_BLOCK_CODE, message: '研究会话仅允许白名单读工具。', details: { reason: RESEARCH_READ_BLOCK_REASON } } });
+  };
+  if (!workerLeaseId || !runtime || !runtime.isCurrentWorkerLease(workerLeaseId, taskId)) return blocked();
+  const identity = WMB_TOOL_IDENTITY[command] ?? command;
+  if (RESEARCH_READ_ALLOWED.has(identity)) return null;
+  return blocked();
+}
+
 function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): McpServer {
   const server = new McpServer({ name: 'wemedia-buddy', version: '0.1.0' });
   const database = () => migrateDatabase(path.join(rootPath, 'wmb.db'));
-  const profileDatabase = database(); const aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase); profileDatabase.close();
+  // WMB-5170 §6.2：MCP 读工具 dispatch 预门——所有工具注册都经研究白名单检查（非 research 零回归）。
+  type RegisterTool = McpServer['registerTool'];
+  const registerTool = server.registerTool.bind(server) as RegisterTool;
+  (server as unknown as { registerTool: RegisterTool }).registerTool = ((name: string, config: Parameters<RegisterTool>[1], handler: Parameters<RegisterTool>[2]) => {
+    const gated = config.inputSchema
+      ? (args: unknown, ctx: unknown) => {
+          const blocked = researchReadGate(database, name, ctx, runtime);
+          if (blocked) return blocked;
+          return (handler as (a: unknown, c: unknown) => unknown)(args, ctx);
+        }
+      : (ctx: unknown) => {
+          const blocked = researchReadGate(database, name, ctx, runtime);
+          if (blocked) return blocked;
+          return (handler as (c: unknown) => unknown)(ctx);
+        };
+    return registerTool(name, config, gated as never);
+  }) as RegisterTool;
+  const profileDatabase = database();
+  let aiOnlyRoutes = false;
+  try {
+    aiOnlyRoutes = allowsAiOnlyRoutes(profileDatabase);
+  } catch (error) {
+    // requireWorkspaceProfile throws OFFICIAL_PACK_UNAVAILABLE only when the root has no
+    // effective workspace profile (fresh/unconfigured root) — fail-closed to no AI-only routes.
+    // Any other error is unexpected and must propagate, not be swallowed.
+    if ((error as { code?: string }).code !== 'OFFICIAL_PACK_UNAVAILABLE') throw error;
+  } finally {
+    profileDatabase.close();
+  }
 
   if (application) registerWorkspaceApplicationMcp(server, rootPath, application);
   if (application?.channelProposals) registerIntelligenceChannelsMcp(server, rootPath, application);
@@ -53,6 +211,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   registerTaskGrantMcp(server, database, runtime);
   registerExecutionGrantMcp(server, database, runtime);
   registerTopicMaintenanceReadMcp(server, database);
+  registerResearchWebMcp(server);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -102,178 +261,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     try { return text(getWireHealthLedger(db, { businessDate: business_date })); }
     finally { db.close(); }
   });
-  const selectedXListBrowser = async () => {
-    const db = database();
-    try {
-      const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
-      if (!workspaceId) throw Object.assign(new Error('当前工作空间身份缺失。'), { code: 'BROWSER_NEEDS_USER' });
-      const config = await resolveSelectedXListBrowser(db);
-      return { ...config, workspaceId };
-    } finally { db.close(); }
-  };
-  const xListResult = async <T>(work: () => Promise<T>) => {
-    try { return text(await work()); }
-    catch (error) { const explicit = (error as { code?: string })?.code; const code = explicit ?? (error instanceof XListNeedsUserError ? 'BROWSER_NEEDS_USER' : error instanceof Error && error.name === 'XListSupersededError' ? 'INVALID_STATE' : 'VALIDATION_ERROR'); return text({ ok: false, data: null, error: { code, message: error instanceof Error ? error.message : String(error), details: { state: code === 'BROWSER_NEEDS_USER' || code === 'ACCOUNT_MISMATCH' ? 'needs_user' : 'failed' } } }); }
-  };
-  const selectedXListAccount = async () => {
-    const config = await selectedXListBrowser();
-    const index = await readXListIndex(config);
-    return { config: { ...config, accountKey: index.accountKey }, accountKey: index.accountKey };
-  };
-  const prepareAgentXListOperation = async (input: PrepareXListOperationInput & { taskId: string; taskGrantId: string; workerLeaseId?: string }) => {
-    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
-    const actor = input.workerLeaseId
-      ? { type: 'pi' as const, id: 'pi', label: 'Pi worker' }
-      : { type: 'external_agent' as const, id: 'mcp', label: 'External Agent' };
-    const envelope = createCommandEnvelope({
-      workspaceId: runtime.identity.workspaceId,
-      runtimeEpoch: runtime.identity.runtimeEpoch,
-      command: 'x_lists.operation_execute',
-      requestId: input.requestId,
-      input,
-      boundIdentity: { accountKey: input.accountKey, kind: input.kind, listId: input.listId ?? null },
-      actor,
-      taskId: input.taskId,
-      workerLeaseId: input.workerLeaseId,
-      grantId: input.taskGrantId
-    });
-    return runtime.runAtomic(() => {
-      assertTaskGrantForEnvelope(runtime.database, envelope, new Date(), (leaseId, taskId) => runtime.isCurrentWorkerLease(leaseId, taskId));
-      return prepareXListOperation(runtime.database, { ...input, preparedActor: actor });
-    });
-  };
-  const accountMatches = (actual: string, expected: string) => actual.trim().toLowerCase() === expected.trim().toLowerCase();
-  server.registerTool('x_lists.read_index', {
-    description: '读取当前专用 X 登录账号可见的 List 索引（真实网页，不是仅本地绑定）。只读。后台静默浏览器，含拟人间隔。',
-    inputSchema: {}
-  }, async () => xListResult(async () => readXListIndex(await selectedXListBrowser())));
-  server.registerTool('x_lists.read_detail', {
-    description: '读取指定 X List 的详情。只读真实网页。后台静默浏览器，含拟人间隔。',
-    inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => xListResult(async () => readXListDetail(await selectedXListBrowser(), list_id)));
-  server.registerTool('x_lists.read_members', {
-    description: '读取指定 X List 当前可见成员。只读真实网页。后台静默浏览器，含拟人间隔。',
-    inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => xListResult(async () => readXListMembers(await selectedXListBrowser(), list_id)));
-  server.registerTool('x_lists.read_timeline', {
-    description: '读取指定 X List 当前可见动态，最多 50 条。只读真实网页。后台静默浏览器，含拟人间隔。',
-    inputSchema: { list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
-  }, async ({ list_id, limit }) => xListResult(async () => {
-    const { config } = await selectedXListAccount();
-    return readXListTimeline(config, list_id, limit ?? 50);
-  }));
-  server.registerTool('x_lists.list_bindings', {
-    description: '读取已绑定到 WMB 发现的 X List，不读取或操作 X 网页。',
-    inputSchema: { account_key: z.string().optional() }
-  }, async ({ account_key }) => xListResult(async () => { const db = database(); try { return listXListBindings(db, account_key); } finally { db.close(); } }));
-  server.registerTool('x_lists.get_operation', {
-    description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
-    inputSchema: { id: z.string() }
-  }, async ({ id }) => xListResult(async () => {
-    const { accountKey } = await selectedXListAccount();
-    const db = database();
-    try {
-      const operation = getXListOperation(db, id);
-      return operation && !accountMatches(operation.accountKey, accountKey)
-        ? { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与操作绑定账号不一致。' } }
-        : operation;
-    } finally { db.close(); }
-  }));
-  const agentXAuthoritySchema = {
-    task_id: z.string().min(1).describe('Owner签发且当前active的task grant所属任务。'),
-    grant_id: z.string().min(1).describe('允许x_lists.operation_execute的当前task grant。'),
-    worker_lease_id: z.string().min(1).optional().describe('Pi必须传当前worker lease；外部Agent省略。')
-  };
-  const prepareAgentX = async (input: PrepareXListOperationInput & { taskId: string; taskGrantId: string; workerLeaseId?: string }) => {
-    const { accountKey } = await selectedXListAccount();
-    if (!accountMatches(accountKey, input.accountKey)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与请求账号不一致。' } };
-    return prepareAgentXListOperation(input);
-  };
-  server.registerTool('x_lists.prepare', {
-    description: '准备精确 X List 操作。只写提议，不执行浏览器动作；Owner必须在 WMB UI 针对此冻结操作签发单用途授权并确认。',
-    inputSchema: { request_id: z.string(), account_key: z.string(), kind: z.enum(['create', 'update', 'delete', 'members_add', 'members_remove']), list_id: z.string().optional(),
-      name: z.string().optional(), description: z.string().optional(), is_private: z.boolean().optional(), handles: z.array(z.string()).optional(), ...agentXAuthoritySchema }
-  }, async ({ request_id, account_key, kind, list_id, name, description, is_private, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
-    prepareAgentX({ requestId: request_id, accountKey: account_key, kind, listId: list_id, name, description, isPrivate: is_private, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
-  server.registerTool('x_lists.members_add', {
-    description: '准备添加 X List 成员；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
-    inputSchema: { request_id: z.string(), account_key: z.string(), list_id: z.string(), handles: z.array(z.string()).min(1).max(100), ...agentXAuthoritySchema }
-  }, async ({ request_id, account_key, list_id, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
-    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'members_add', listId: list_id, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
-  server.registerTool('x_lists.create', {
-    description: '准备新建 X List；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
-    inputSchema: { request_id: z.string(), account_key: z.string(), name: z.string().min(1), description: z.string().optional(), is_private: z.boolean().optional(), ...agentXAuthoritySchema }
-  }, async ({ request_id, account_key, name, description, is_private, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
-    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'create', name, description, isPrivate: is_private, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
-  server.registerTool('x_lists.members_remove', {
-    description: '准备移除 X List 成员；不会执行平台写入。返回操作必须等待 Owner 在 WMB UI 精确确认。',
-    inputSchema: { request_id: z.string(), account_key: z.string(), list_id: z.string(), handles: z.array(z.string()).min(1).max(100), ...agentXAuthoritySchema }
-  }, async ({ request_id, account_key, list_id, handles, task_id, grant_id, worker_lease_id }) => xListResult(async () =>
-    prepareAgentX({ requestId: request_id, accountKey: account_key, kind: 'members_remove', listId: list_id, handles, taskId: task_id, taskGrantId: grant_id, workerLeaseId: worker_lease_id })));
-  server.registerTool('x_lists.collect_timeline', {
-    description: '采集当前根已启用 List 的有限最新动态到现有资料库。只操作当前根绑定，不含确认。',
-    inputSchema: { account_key: z.string(), list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
-  }, async ({ account_key, list_id, limit }) => xListResult(async () => {
-    const { config, accountKey } = await selectedXListAccount();
-    if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与绑定账号不一致。' } };
-    const db = database();
-    try { return await collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
-    finally { db.close(); }
-  }));
-  server.registerTool('x_lists.post_metric_snapshots_list', {
-    description: '读取当前根一个 X 资料的真实指标快照。只读，不访问 X 网页。',
-    inputSchema: { source_id: z.string(), limit: z.number().int().min(1).max(500).optional() }
-  }, async ({ source_id, limit }) => {
-    const db = database(); try { return text(listXPostMetricSnapshots(db, source_id, limit)); } finally { db.close(); }
-  });
-  server.registerTool('x_lists.post_trend_get', {
-    description: '按真实快照确定性读取浏览速度和速度变化；数据不足返回稳定原因，不返回热度分。',
-    inputSchema: { source_id: z.string() }
-  }, async ({ source_id }) => {
-    const db = database(); try { return text(getXPostTrend(db, source_id)); } finally { db.close(); }
-  });
-  server.registerTool('x_lists.observation_start', {
-    description: '显式开始当前根已启用 List 的有界趋势观察；只创建固定 15/60/180 分钟窗口。',
-    inputSchema: { request_id: z.string(), task_id: z.string(), grant_id: z.string(), worker_lease_id: z.string().optional(), binding_ids: z.array(z.string()).min(1).max(50) }
-  }, async ({ request_id, task_id, grant_id, worker_lease_id, binding_ids }) => xListResult(async () => {
-    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
-    const { config } = await selectedXListAccount();
-    const readResult = await readXObservationSessionStart(runtime.database, config, { requestId: request_id, bindingIds: binding_ids });
-    return dispatchBusinessCommand(runtime, {
-      command: 'x_lists.observation_start', requestId: request_id,
-      actor: { type: 'external_agent', id: 'mcp', label: 'External Agent' },
-      input: { bindingIds: binding_ids },
-      boundIdentity: { browserId: config.id, accountKey: config.accountKey ?? null, bindingIds: [...new Set(binding_ids)].sort() },
-      taskId: task_id, workerLeaseId: worker_lease_id, grantId: grant_id, entityType: 'x_observation_session',
-      execute: (database) => {
-        const read = requireCommandResultData(readResult);
-        const data = requireCommandResultData(persistXObservationSessionStart(database, config, read));
-        return { data, entityId: data.id, readback: data };
-      }
-    });
-  }));
-  server.registerTool('x_lists.observation_get', {
-    description: '读取一个有界 X List 趋势观察 session 及固定窗口状态。',
-    inputSchema: { session_id: z.string() }
-  }, async ({ session_id }) => {
-    const db = database(); try { return text(getXObservationSession(db, session_id)); } finally { db.close(); }
-  });
-  server.registerTool('x_lists.observation_stop', {
-    description: '停止一个有界 X List 趋势观察；当前迟到读取不得写入，剩余窗口不再运行。',
-    inputSchema: { request_id: z.string(), task_id: z.string(), grant_id: z.string(), worker_lease_id: z.string().optional(), session_id: z.string() }
-  }, async ({ request_id, task_id, grant_id, worker_lease_id, session_id }) => xListResult(async () => {
-    if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
-    return dispatchBusinessCommand(runtime, {
-      command: 'x_lists.observation_stop', requestId: request_id,
-      actor: { type: 'external_agent', id: 'mcp', label: 'External Agent' }, input: { sessionId: session_id },
-      boundIdentity: { sessionId: session_id }, taskId: task_id, workerLeaseId: worker_lease_id, grantId: grant_id,
-      entityType: 'x_observation_session',
-      execute: (database, normalized) => {
-        const data = stopXObservationSession(database, normalized.sessionId);
-        return { data, entityId: normalized.sessionId, readback: data };
-      }
-    });
-  }));
+  registerXListTools(server, database, runtime);
   server.registerTool('knowledge.get_context', {
     description: '按主题、资料或关键词读取历史资料、机会、内容、发布和最终复盘。',
     inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }
@@ -347,9 +335,9 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     } finally { db.close(); }
   });
   
-  // 桌助编排：读班组 / 派工 / 传话（desk manager tools）
+  // 主管编排：读班组 / 派工 / 传话（desk manager tools）
   server.registerTool('agents.roster', {
-    description: '读取固定角色班组投影状态（桌助/记者/策划/写手/资料员）与摘要进度。只读。',
+    description: '读取固定角色班组投影状态（主管/记者/策划/写手/资料员）与摘要进度。只读。',
     inputSchema: { business_date: z.string().optional() }
   }, async ({ business_date }) => {
     const db = database();
@@ -367,13 +355,13 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   if (runtime) {
     registerJobToolsMcp(server, runtime, database);
     server.registerTool('daily.readiness', {
-      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由桌助决定并调用 continue/run_stage/spawn。',
+      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由主管决定并调用 continue/run_stage/spawn。',
       inputSchema: { business_date: z.string().optional() }
     }, async ({ business_date }) => {
       return text(describeDailyReadiness(runtime, business_date || undefined));
     });
     server.registerTool('daily.continue_after_scan', {
-      description: '桌助工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
+      description: '主管工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
       inputSchema: { business_date: z.string().optional() }
     }, async ({ business_date }) => {
       const mcp = runtime.getMcp<McpRuntime>();
@@ -391,7 +379,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
       }
     });
     server.registerTool('daily.run_stage', {
-      description: '桌助启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由桌助选用，不是禁用。',
+      description: '主管启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由主管选用，不是禁用。',
       inputSchema: {
         stage: z.enum(['scan', 'judge', 'full']),
         business_date: z.string().optional(),
@@ -422,7 +410,10 @@ return server;
 }
 
 export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): Promise<McpRuntime> {
-  const handler = toNodeHandler(createMcpHandler(() => createServerFor(rootPath, application, runtime)));
+  // Keep the handler reference: its close() aborts in-flight modern exchanges and closes their
+  // per-request McpServer instances — the only total session release. toNodeHandler alone drops it.
+  const mcpHandler = createMcpHandler(() => createServerFor(rootPath, application, runtime));
+  const handler = toNodeHandler(mcpHandler);
   const http = createServer((request, response) => {
     if (request.url?.split('?')[0] !== '/mcp') { response.writeHead(404).end(); return; }
     void (gate ? gate.run(() => handler(request, response)) : handler(request, response)).catch((error: unknown) => {
@@ -433,10 +424,16 @@ export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, ap
   await new Promise<void>((resolve, reject) => { http.once('error', reject); http.listen(0, '127.0.0.1', resolve); });
   const address = http.address();
   if (!address || typeof address === 'string') throw new Error('MCP 服务未取得监听地址。');
-  return { url: `http://127.0.0.1:${address.port}/mcp`, close: () => close(http) };
+  return { url: `http://127.0.0.1:${address.port}/mcp`, close: () => closeMcp(mcpHandler, http) };
 }
 
-function close(http: Server): Promise<void> {
+/** Stop accepting traffic, then release in-flight MCP sessions and the HTTP server — both close even if one throws. */
+async function closeMcp(mcpHandler: McpHttpHandler, http: Server): Promise<void> {
   http.closeAllConnections();
-  return new Promise((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
+  const httpClosed = new Promise<void>((resolve, reject) => http.close((error) => (error ? reject(error) : resolve())));
+  try {
+    await mcpHandler.close();
+  } finally {
+    await httpClosed;
+  }
 }

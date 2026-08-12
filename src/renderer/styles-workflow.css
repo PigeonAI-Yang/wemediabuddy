@@ -143,14 +143,14 @@ button.page-command-stat { cursor: pointer; }
 .primary-button { border: 0; background: var(--accent); color: var(--accent-ink); }
 .primary-button:hover:not(:disabled) { background: var(--accent-hover); }
 .primary-button:active:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 82%, #000);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #000 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 82%, var(--overlay));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--overlay) 33%, transparent);
 }
 .secondary-button, .refresh-button, .sources-toggle, .wide-secondary { border: 1px solid var(--border-strong); background: var(--surface-raised); }
 .secondary-button:hover:not(:disabled), .refresh-button:hover:not(:disabled), .sources-toggle:hover:not(:disabled), .wide-secondary:hover:not(:disabled) { background: var(--surface-hover); }
 .secondary-button:active:not(:disabled), .refresh-button:active:not(:disabled), .sources-toggle:active:not(:disabled), .wide-secondary:active:not(:disabled) {
   background: color-mix(in srgb, var(--surface-hover) 70%, var(--border));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #000 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--overlay) 18%, transparent);
 }
 .icon-button { width: 38px; height: 38px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); cursor: pointer; }
 .icon-button:hover:not(:disabled) { background: var(--surface-hover); }
@@ -455,7 +455,7 @@ button.page-command-stat { cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-raised);
-  box-shadow: 0 10px 28px color-mix(in srgb, #000 28%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--overlay) 51%, transparent);
 }
 .today-command-diagnostics > summary {
   position: absolute;
@@ -514,8 +514,8 @@ button.page-command-stat { cursor: pointer; }
   font-style:normal;
   border-radius:999px;
   padding:2px 8px;
-  background:color-mix(in srgb, var(--amber, #d29922) 22%, transparent);
-  color:var(--amber, #f0b429);
+  background:color-mix(in srgb, var(--amber) 22%, transparent);
+  color:var(--amber);
   font-weight:700;
 }
 .intelligence-source-timer{
@@ -537,7 +537,7 @@ button.page-command-stat { cursor: pointer; }
   display:block;
   height:100%;
   border-radius:inherit;
-  background:linear-gradient(90deg, color-mix(in srgb, var(--amber) 78%, #fff0a6), var(--amber));
+  background:linear-gradient(90deg, color-mix(in srgb, var(--amber) 78%, var(--accent-ink)), var(--amber));
   box-shadow:0 0 12px color-mix(in srgb, var(--amber) 34%, transparent);
   transition:width 280ms ease;
 }
@@ -661,14 +661,14 @@ button.page-command-stat { cursor: pointer; }
   background:
     radial-gradient(600px 200px at 20% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
     var(--surface);
-  box-shadow: 0 12px 40px rgb(0 0 0 / 22%);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--overlay) 40%, transparent);
   cursor: pointer;
 }
 .opportunity-primary.selected {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: -3px;
-  box-shadow: inset 3px 0 0 var(--accent), 0 12px 40px rgb(0 0 0 / 22%);
+  box-shadow: inset 3px 0 0 var(--accent), 0 12px 40px color-mix(in srgb, var(--overlay) 40%, transparent);
 }
 .opportunity-check { display: none !important; }
 .opportunity-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
@@ -676,14 +676,20 @@ button.page-command-stat { cursor: pointer; }
 .opportunity-tags strong { position: relative; overflow: hidden; isolation: isolate; background: var(--accent); color: var(--accent-ink); }
 strong[data-grade="SSS"],
 strong[data-grade="S"] {
-  color: #3b2500;
-  background:
-    linear-gradient(135deg, #8a5a00 0%, #d4a017 18%, #ffe7a0 42%, #f0c14b 58%, #b8860b 78%, #7a4e00 100%);
+  color: var(--mark-ink);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--grade-sss) 88%, var(--mark-ink)) 0%,
+    color-mix(in srgb, var(--grade-sss) 72%, var(--accent-ink)) 42%,
+    color-mix(in srgb, var(--grade-sss) 94%, var(--mark-ink)) 100%);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent),
-    0 0 0 1px color-mix(in srgb, #f0c14b 45%, transparent),
-    0 0 14px color-mix(in srgb, #f0c14b 28%, transparent);
-  text-shadow: 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--grade-sss) 45%, transparent),
+    0 0 14px color-mix(in srgb, var(--grade-sss) 28%, transparent);
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--accent-ink) 35%, transparent);
+}
+:root[data-theme="light"] strong[data-grade="SSS"],
+:root[data-theme="light"] strong[data-grade="S"] {
+  color: var(--accent-ink);
 }
 strong[data-grade="SSS"]::after,
 strong[data-grade="S"]::after {
@@ -694,9 +700,9 @@ strong[data-grade="S"]::after {
     110deg,
     transparent 0%,
     transparent 38%,
-    color-mix(in srgb, #fff 15%, transparent) 46%,
-    color-mix(in srgb, #fff 78%, transparent) 50%,
-    color-mix(in srgb, #fff 15%, transparent) 54%,
+    color-mix(in srgb, var(--accent-ink) 15%, transparent) 46%,
+    color-mix(in srgb, var(--accent-ink) 78%, transparent) 50%,
+    color-mix(in srgb, var(--accent-ink) 15%, transparent) 54%,
     transparent 62%,
     transparent 100%
   );
@@ -708,40 +714,52 @@ strong[data-grade="S"]::after {
 strong[data-grade="SSS"] { animation: grade-glow-sss 2.4s ease-in-out infinite; }
 strong[data-grade="S"] { animation: grade-glow-s 3.2s ease-in-out infinite; }
 strong[data-grade="A"] {
-  color: #fff5f5;
-  background: linear-gradient(135deg, #8b1020 0%, #d61f35 42%, #ff5a6a 100%);
+  color: var(--accent-ink);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--grade-a) 58%, var(--mark-ink)) 0%,
+    var(--grade-a) 42%,
+    color-mix(in srgb, var(--grade-a) 84%, var(--accent-ink)) 100%);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent),
-    0 0 0 1px color-mix(in srgb, #ff4d63 40%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 28%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--grade-a) 40%, transparent);
 }
 strong[data-grade="B"] {
-  color: #f3f8ff;
-  background: linear-gradient(135deg, #123a7a 0%, #1f6feb 48%, #5aa2ff 100%);
+  color: var(--accent-ink);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--grade-b) 58%, var(--mark-ink)) 0%,
+    var(--grade-b) 48%,
+    color-mix(in srgb, var(--grade-b) 84%, var(--accent-ink)) 100%);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent),
-    0 0 0 1px color-mix(in srgb, #4d8dff 38%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 24%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--grade-b) 36%, transparent);
 }
 strong[data-grade="C"] {
-  color: #f2fff5;
-  background: linear-gradient(135deg, #0f5a2c 0%, #1f9d55 48%, #4fd68a 100%);
+  color: var(--mark-ink);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--grade-c) 78%, var(--mark-ink)) 0%,
+    var(--grade-c) 48%,
+    color-mix(in srgb, var(--grade-c) 90%, var(--accent-ink)) 100%);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
-    0 0 0 1px color-mix(in srgb, #3dce75 36%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--grade-c) 36%, transparent);
 }
-strong[data-grade="D"]{color:#edf3f8;background:linear-gradient(135deg,#354a5d,#526b80)}
-strong[data-grade="E"]{color:#f0f1f2;background:linear-gradient(135deg,#50555c,#6d737b)}
-strong[data-grade="F"]{color:#e7e7e7;background:linear-gradient(135deg,#666,#7b7b7b)}
+:root[data-theme="light"] strong[data-grade="C"] {
+  color: var(--accent-ink);
+}
+strong[data-grade="D"] { color: var(--accent-ink); background: color-mix(in srgb, var(--grade-c) 52%, var(--mark-ink)); }
+strong[data-grade="E"] { color: var(--accent-ink); background: color-mix(in srgb, var(--muted-low) 72%, var(--mark-ink)); }
+strong[data-grade="F"] { color: var(--accent-ink); background: color-mix(in srgb, var(--muted-low) 45%, var(--mark-ink)); }
 @keyframes grade-sheen {
   0% { transform: translateX(-75%) skewX(-18deg); }
   100% { transform: translateX(75%) skewX(-18deg); }
 }
 @keyframes grade-glow-s {
-  0%, 100% { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), 0 0 0 1px color-mix(in srgb, #f0c14b 40%, transparent), 0 0 10px color-mix(in srgb, #f0c14b 22%, transparent); }
-  50% { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 65%, transparent), 0 0 0 1px color-mix(in srgb, #ffe08a 55%, transparent), 0 0 18px color-mix(in srgb, #ffd76a 40%, transparent); }
+  0%, 100% { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 55%, transparent), 0 0 0 1px color-mix(in srgb, var(--grade-sss) 40%, transparent), 0 0 10px color-mix(in srgb, var(--grade-sss) 22%, transparent); }
+  50% { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 65%, transparent), 0 0 0 1px color-mix(in srgb, var(--grade-sss) 55%, transparent), 0 0 18px color-mix(in srgb, var(--grade-sss) 40%, transparent); }
 }
 @keyframes grade-glow-sss {
-  0%, 100% { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 60%, transparent), 0 0 0 1px color-mix(in srgb, #ffd76a 55%, transparent), 0 0 14px color-mix(in srgb, #ffcc4d 34%, transparent); }
-  50% { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 75%, transparent), 0 0 0 1px color-mix(in srgb, #ffe9a8 70%, transparent), 0 0 24px color-mix(in srgb, #ffd76a 55%, transparent); }
+  0%, 100% { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 60%, transparent), 0 0 0 1px color-mix(in srgb, var(--grade-sss) 55%, transparent), 0 0 14px color-mix(in srgb, var(--grade-sss) 34%, transparent); }
+  50% { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-ink) 75%, transparent), 0 0 0 1px color-mix(in srgb, var(--grade-sss) 70%, transparent), 0 0 24px color-mix(in srgb, var(--grade-sss) 55%, transparent); }
 }
 .opportunity-primary > h2 {
   flex: 0 0 auto;

@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
 import { AgentAvatarCropDialog } from './agent-avatar-crop';
+import { AgentsDetailDrawer } from './agents-detail-drawer';
 import { resolveDeskConflict } from './agents-roster-conflict';
 import {
   EMPLOYEE_ORDER,
   activeRoleSections,
-  headerCounts,
   redispatchInput,
+  sortInstancesForDisplay,
   statusWord,
   type CrewInstance,
   type CrewProjection,
-  type StatusFilter
+  type EmployeeRole
 } from './agents-instance-logic';
 import { ActiveRoleInstances, RoleHistoryList } from './agents-roster-instances';
 import { RoleOverviewRow } from './agents-roster-overview';
@@ -29,15 +30,15 @@ export function AgentsRosterView({
     maxWorkers: 2,
     deskSnapshot: null
   });
-  const [spawnRole, setSpawnRole] = useState<Exclude<RoleId, 'desk'>>('reporter');
-  const [spawnBrief, setSpawnBrief] = useState('执行一次例行检查并回报');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState<StatusFilter>('all');
   const [stale, setStale] = useState(false);
   const [tick, setTick] = useState(0);
   const [avatarByRole, setAvatarByRole] = useState<Partial<Record<RoleId, string>>>({});
   const [cropRole, setCropRole] = useState<RoleId | null>(null);
+  const [drawerRole, setDrawerRole] = useState<RoleId | null>(null);
+  const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
+  const focusReturn = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -110,34 +111,26 @@ export function AgentsRosterView({
     jobs: activeInstances
   });
 
-  const counts = headerCounts(projection?.summary ?? null);
-  const totalActive = projection?.summary?.active ?? 0;
-  const sections = useMemo(() => (projection ? activeRoleSections(projection, filter) : []), [projection, filter]);
+  const sections = useMemo(() => (projection ? activeRoleSections(projection, 'all') : []), [projection]);
   const historyRoles = useMemo(
     () => (projection ? EMPLOYEE_ORDER.filter((r) => projection.byRole[r].history.length > 0) : []),
     [projection]
   );
   void tick;
 
-  const scrollToRole = (roleId: string) => {
-    const target = document.querySelector<HTMLElement>(`.agents-active [data-role="${roleId}"]`);
-    if (!target) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  const openRoleDrawer = (roleId: RoleId) => {
+    if (document.activeElement instanceof HTMLElement) focusReturn.current = document.activeElement;
+    const roleKey: EmployeeRole | null = roleId === 'desk' ? null : (roleId as EmployeeRole);
+    const ordered = roleKey ? sortInstancesForDisplay(projection?.byRole[roleKey]?.active ?? []) : [];
+    setDrawerRole(roleId);
+    setDrawerJobId(ordered[0]?.jobId ?? null);
   };
 
-  const spawn = async () => {
-    setBusy(true);
-    setMessage('');
-    try {
-      const job = await window.wmb.jobsSpawn({ roleId: spawnRole, brief: spawnBrief });
-      setMessage(`已派单 ${job.id.slice(0, 8)}… → ${roleLabel(job.roleId)}（${statusWord(job.status)}）`);
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+  const closeDrawer = () => {
+    setDrawerRole(null);
+    setDrawerJobId(null);
+    focusReturn.current?.focus();
+    focusReturn.current = null;
   };
 
   const cancel = async (jobId: string) => {
@@ -171,16 +164,21 @@ export function AgentsRosterView({
   const copyJobId = async (jobId: string) => {
     try {
       await navigator.clipboard.writeText(jobId);
-      setMessage(`已复制 jobId ${jobId}`);
+      setMessage(`已复制任务编号 ${jobId}`);
     } catch {
-      setMessage(`jobId ${jobId}`);
+      setMessage(`任务编号 ${jobId}`);
     }
   };
 
   return (
     <section className="agents-roster" aria-label="智能体班组">
       <section className="agents-overview" aria-label="班组概览">
-        <h1 className="agents-overview-title">班组概览</h1>
+        <div className="agents-overview-head">
+          <span className="agents-overview-note">点击卡片查看运行明细</span>
+          {onOpenSettings ? (
+            <button type="button" className="agents-config-entry" onClick={() => onOpenSettings()}>角色与能力配置</button>
+          ) : null}
+        </div>
         <div className="agents-overview-grid">
           {projection === null ? (
             <p className="agents-overview-loading" role="status">正在读取班组状态…</p>
@@ -192,71 +190,38 @@ export function AgentsRosterView({
               deskOccupied={deskOccupied}
               deskConflict={deskConflict}
               projection={projection}
-              filter={filter}
               avatarByRole={avatarByRole}
-              onJump={scrollToRole}
-              onPickAvatar={setCropRole}
+              expanded={drawerRole === roleId}
+              onOpenRole={openRoleDrawer}
             />
           ))}
         </div>
       </section>
 
-      <section className="agents-team-card">
-        <header className="agents-control-strip">
-          <p className="agents-summary-line" role="group" aria-label="按实例状态筛选">
-            <button type="button" className={filter === 'running' ? 'active' : ''} aria-pressed={filter === 'running'} onClick={() => setFilter('running')}>工作中 {counts.running}</button>
-            <span className="agents-summary-sep">·</span>
-            <button type="button" className={filter === 'queued' ? 'active' : ''} aria-pressed={filter === 'queued'} onClick={() => setFilter('queued')}>排队 {counts.queued}</button>
-            <span className="agents-summary-sep">·</span>
-            <button type="button" className={filter === 'needs_user' ? 'active' : ''} aria-pressed={filter === 'needs_user'} onClick={() => setFilter('needs_user')}>等你批 {counts.needsUser}</button>
-            {filter !== 'all' ? <button type="button" className="agents-summary-reset" onClick={() => setFilter('all')}>显示全部 {totalActive}</button> : null}
-            <span className="agents-capacity">容量 {pool.maxWorkers}</span>
-          </p>
-          {onOpenSettings ? <button type="button" className="secondary-button" onClick={() => onOpenSettings()}>角色与 Skill 配置</button> : null}
-        </header>
+      {message ? <p className="agents-jobs-msg" role="status">{message}</p> : null}
 
-        {stale ? (
-          <div className="agents-stale-banner" role="status">
-            连接中断 · 数据停止更新
-            <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
-              重试
-            </button>
-          </div>
-        ) : null}
-
-        {deskConflict ? (
-          <div className="agents-callout danger seat-conflict" role="alert">
-            桌助受阻或员工工单正被资源占用 — 到桌助对话查看原因后可继续派工
-          </div>
-        ) : null}
-
-        <div className="agents-spawn-bar">
-          <label>
-            角色
-            <select value={spawnRole} onChange={(e) => setSpawnRole(e.target.value as Exclude<RoleId, 'desk'>)} disabled={busy}>
-              {EMPLOYEE_ORDER.map((r) => (
-                <option key={r} value={r}>{ROLE_CATALOG[r].labelZh}</option>
-              ))}
-            </select>
-          </label>
-          <label className="agents-spawn-brief">
-            简报
-            <input value={spawnBrief} onChange={(e) => setSpawnBrief(e.target.value)} disabled={busy} />
-          </label>
-          <button type="button" className="primary-button" disabled={busy || !spawnBrief.trim()} onClick={() => void spawn()}>
-            派单
+      {stale ? (
+        <div className="agents-stale-banner" role="status">
+          连接中断 · 数据停止更新
+          <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
+            重试
           </button>
-          {message ? <p className="agents-jobs-msg" role="status">{message}</p> : null}
         </div>
-      </section>
+      ) : null}
+
+      {deskConflict ? (
+        <div className="agents-callout danger seat-conflict" role="alert">
+          主管受阻，或员工任务正被资源占用 — 到主管对话查看原因后可继续派工
+        </div>
+      ) : null}
 
       {projection === null && !stale ? (
         <div className="agents-loading" role="status">正在读取班组状态…</div>
       ) : (
         <div className="agents-main">
-          <section className="agents-work-ledger" aria-label="活动实例与历史工单">
-            <section className="agents-active" aria-label="活动实例">
-              <h2 className="agents-zone-title">活动实例</h2>
+          <section className="agents-work-ledger" aria-label="进行中的任务与历史任务">
+            <section className="agents-active" aria-label="进行中的任务">
+              <h2 className="agents-zone-title">进行中的任务</h2>
               {sections.length > 0 ? sections.map((s) => (
                 <ActiveRoleInstances
                   key={s.roleId}
@@ -266,10 +231,10 @@ export function AgentsRosterView({
                   onRedispatch={redispatch}
                   onCancel={cancel}
                 />
-              )) : <p className="agents-filter-empty" role="status">{filter === 'all' ? '当前无活动实例' : '当前筛选无匹配实例'}</p>}
+              )) : <p className="agents-filter-empty" role="status">当前无进行中的任务</p>}
             </section>
-            {historyRoles.length > 0 ? <section className="agents-history-area" aria-label="历史工单">
-              <h2 className="agents-zone-title">历史工单</h2>
+            {historyRoles.length > 0 ? <section className="agents-history-area" aria-label="历史任务">
+              <h2 className="agents-zone-title">历史任务</h2>
               {historyRoles.map((roleId) => (
                 <RoleHistoryList
                   key={roleId}
@@ -285,10 +250,28 @@ export function AgentsRosterView({
         </div>
       )}
 
+      {drawerRole !== null && projection ? (
+        <>
+          <button type="button" className="drawer-backdrop open" aria-label="关闭运行明细" onClick={closeDrawer} />
+          <AgentsDetailDrawer
+            roleId={drawerRole}
+            projection={projection}
+            selectedJobId={drawerJobId}
+            deskRow={deskRow}
+            deskOccupied={deskOccupied}
+            deskConflict={deskConflict}
+            onSelectJobId={setDrawerJobId}
+            onClose={closeDrawer}
+            onCopyJobId={copyJobId}
+            onPickAvatar={setCropRole}
+          />
+        </>
+      ) : null}
+
       {cropRole ? (
         <AgentAvatarCropDialog
           roleId={cropRole}
-          roleLabel={cropRole === 'desk' ? (deskRow?.labelZh ?? '桌助') : ROLE_CATALOG[cropRole].labelZh}
+          roleLabel={cropRole === 'desk' ? (deskRow?.labelZh ?? ROLE_CATALOG.desk.labelZh) : ROLE_CATALOG[cropRole].labelZh}
           onClose={() => setCropRole(null)}
           onSaved={(url) => {
             setAvatarByRole((prev) => ({ ...prev, [cropRole]: url }));

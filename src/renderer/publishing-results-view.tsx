@@ -95,7 +95,7 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
           {platformEnabled && (operation?.state === 'unknown' || publication?.status === 'unknown') && publication?.platform !== 'wechat' && <button className="secondary-button" onClick={reconcile}>我已核对，确认未发布</button>}
         </div>
         <section className="timeline"><h3>状态时间线</h3>{selected.events.map((event, index) => <div className="tl-item" key={index}><span className={`tl-dot ${timelineDot(String(event.to_status))}`}/><div className="tl-text"><b>{publicationStatus(String(event.to_status))}</b><span className="faint">{event.created_at ? `${new Date(String(event.created_at)).toLocaleString('zh-CN')} · ` : ''}{String(event.reason || '')}</span></div></div>)}</section>
-      </article> : <div className="preview-placeholder"><span>最终内容预览</span><h2>尚未取得编辑器回读</h2><p>准备完成后，这里会原样显示标题、正文和媒体素材。</p></div>}
+      </article> : <div className="preview-placeholder"><span>最终内容预览</span><h2>尚未读取编辑器内容</h2><p>准备完成后，这里会原样显示标题、正文和媒体素材。</p></div>}
       {delivered.length > 0 && <>
         <p className="eyebrow delivered-title">已交付 · 最近</p>
         {delivered.map((item) => <article className={`pub-card pub-card-compact${item.publication.id === publication?.id ? ' selected' : ''}`} key={item.publication.id} onClick={() => onSelect(item.publication.id)}>
@@ -137,7 +137,7 @@ function publicationStatus(status: string): string {
   return ({ prepared: '已准备', awaiting_confirmation: '等待人工发布', published: '已发布', failed: '失败', needs_user: '需要接管', unknown: '待对账' } as Record<string, string>)[status] || status;
 }
 function operationStatus(status: string): string {
-  return ({ prepared: '待授权', execution_granted: '已授权', browser_leased: '浏览器已锁定', executing: '编辑器执行中', readback_pending: '等待回读', succeeded: '编辑器已准备', needs_user: '需要人工处理', unknown: '结果未知', failed: '失败' } as Record<string, string>)[status] || status;
+  return ({ prepared: '待授权', execution_granted: '已授权', browser_leased: '浏览器已锁定', executing: '编辑器执行中', readback_pending: '等待核对', succeeded: '编辑器已准备', needs_user: '需要人工处理', unknown: '结果未知', failed: '失败' } as Record<string, string>)[status] || status;
 }
 
 function timelineDot(status: string): string {

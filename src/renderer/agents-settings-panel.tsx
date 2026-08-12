@@ -5,7 +5,6 @@ type Cap = {
   displayName: string;
   description: string;
   defaultRoleBindings: Record<string, boolean | undefined>;
-  pageScopePassThrough?: boolean;
 };
 
 type Role = { roleId: string; labelZh: string; roomZh: string; skills?: readonly string[] };
@@ -31,7 +30,7 @@ export function AgentsSettingsPanel(): JSX.Element {
       window.wmb.jobsPoolStatus()
     ]);
     setRoles(summary.roles);
-    setCaps(summary.capabilities.filter((cap) => !cap.pageScopePassThrough));
+    setCaps(summary.capabilities);
     setOverlays(rows);
     setMaxWorkers(Math.max(1, Number(pool?.maxWorkers) || 2));
     setPoolRunning(Number(pool?.running) || 0);
@@ -90,7 +89,7 @@ export function AgentsSettingsPanel(): JSX.Element {
       <div className="agents-settings-controls">
         <label className="agents-settings-field">
           <span className="agents-settings-field-label">同时开工的员工数</span>
-          <span className="agents-settings-field-help">在跑 {poolRunning} · 排队 {poolQueued}</span>
+          <span className="agents-settings-field-help">工作中 {poolRunning} · 排队中 {poolQueued}</span>
           <select
             aria-label="同时开工的员工数"
             value={maxWorkers}
@@ -105,7 +104,7 @@ export function AgentsSettingsPanel(): JSX.Element {
 
         <div className="agents-settings-field agents-settings-field-static">
           <span className="agents-settings-field-label">主管（右侧 Pi）</span>
-          <span className="agents-settings-field-help">右侧 Pi，只调度不干活</span>
+          <span className="agents-settings-field-help">主管/主编负责全站任务与内部审批，不占员工名额</span>
           <strong className="agents-settings-static-value">固定 1 个</strong>
         </div>
       </div>
@@ -148,7 +147,7 @@ export function AgentsSettingsPanel(): JSX.Element {
                   })}
                 </ul>
               ) : (
-                <p className="agents-settings-empty">暂无默认可覆盖能力。</p>
+                <p className="agents-settings-empty">该角色暂无可配置的能力。</p>
               )}
             </article>
           );

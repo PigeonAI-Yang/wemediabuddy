@@ -24,6 +24,7 @@ import {
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
+import type { WriterTask } from './role-job-registry.ts';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -47,10 +48,13 @@ import {
 } from './agent-task-commands.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
+import { buildOrchestrationEnvelope } from '../shared/orchestration-envelope.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { runPiPromptWithFallback, startPiRuntimeWithFallback } from './pi-config-fallback.ts';
+import { preparePiExtension } from './pi-extension.ts';
+import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import type { ResolvedPiConfig } from './pi-config.ts';
 import { saveCurrentPlan } from './planning.ts';
 import { getToday } from './workbench.ts';
@@ -129,12 +133,8 @@ export function parseLaneGateOutput(sessionText: string): LaneGateOutput {
     seen.add(entry.sourceId);
     if (!entry.relevant) {
       if (!entry.reasonCode) throw new Error(`模型赛道判定缺 reasonCode：${entry.sourceId}`);
-      if (!(LANE_REASON_CODES as readonly string[]).includes(entry.reasonCode)) {
-        throw new Error(`模型赛道判定 reasonCode 不在词典内：${entry.reasonCode}`);
-      }
-      if (entry.reasonCode === 'official_source' || entry.reasonCode === 'editor_override' || entry.reasonCode === 'lane_relevant') {
-        throw new Error(`模型赛道判定不可使用系统 reasonCode：${entry.reasonCode}`);
-      }
+      if (!(LANE_REASON_CODES as readonly string[]).includes(entry.reasonCode)) throw new Error(`模型赛道判定 reasonCode 不在词典内：${entry.reasonCode}`);
+      if (entry.reasonCode === 'official_source' || entry.reasonCode === 'editor_override' || entry.reasonCode === 'lane_relevant') throw new Error(`模型赛道判定不可使用系统 reasonCode：${entry.reasonCode}`);
       if (!entry.reason?.trim()) throw new Error(`模型赛道判定 irrelevant 缺一句话 reason：${entry.sourceId}`);
     }
   }
@@ -306,7 +306,7 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
         '',
         '■ 第一关：赛道相关性判定（资料门，必须先做这一关）',
         `以下 ${options.gate.autoRelevantIds.length} 条增量资料已由系统按官方信源规则判定为赛道相关（Tier 0，无需你判定，四问可直接使用）：${options.gate.autoRelevantIds.join('、')}`,
-        `其余 ${options.gate.pendingIds.length} 条增量资料必须逐条判定赛道相关性：是当前赛道（「身份」块：服务「一个人 + AI 靠内容与产品活下去」的商业化成长素材，五维=认知/技能/表达/获客/产品化）的有效素材 → relevant:true；不是 → relevant:false + reasonCode + 一句话 reason。纯公告搬运、宏大行业综述、躺赚毒鸡汤、与五维无关的生活噪音 → irrelevant。reasonCode 只能从以下选择：${modelReasonCodes.join(' / ')}。`,
+        `其余 ${options.gate.pendingIds.length} 条增量资料必须逐条判定赛道相关性：是当前赛道（「身份」块：服务「面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人」的方向与真实项目素材，五维=时代认知/个人方向/AI 实践/公开验证/产品化）的有效素材 → relevant:true；不是 → relevant:false + reasonCode + 一句话 reason。纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺 → irrelevant。reasonCode 只能从以下选择：${modelReasonCodes.join(' / ')}。`,
         '先输出赛道判定 JSON 块（每条待判资料都必须出现且只出现一次，缺失或重复任何一条整轮失败）：',
         '```json',
         '{ "gate": [{ "sourceId": "简报「增量」块中的真实 id", "relevant": true }, { "sourceId": "…", "relevant": false, "reasonCode": "lifestyle_noise", "reason": "一句话原因" }] }',
@@ -329,9 +329,9 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     ...gateSection,
     '',
     '判断要求：',
-    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 个人商业化成长」。脱离身份的泛 AI 资讯、纯复述公告、无法验证的赚钱承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
-    '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（认知/技能/表达/获客/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事。答不出四问的线索不得写入方案。',
-    '2.5 structureGuidance 必须点名六栏目之一并套骨架：实验日志（目标→动作→AI插手→卡点→回执→无效步骤→下一步）/ 开发日志（今日一刀→回执→余味）/ 原则卡（判断→物证→边界→反例）/ 机会判断（为何现在→强观点→标题开头→来源）/ 周复盘（兑现→图景→追问→重复问题→需求信号→K/S/C）/ 变现实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
+    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。脱离身份的泛 AI 资讯、纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
+    '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
+    '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
     '3. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。',
     '3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。',
     '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。',
@@ -682,16 +682,17 @@ export async function startDailyIntelligence(input: {
               input.onRuntime?.(runtime);
             },
             run: async (runtime, nextConfig) => {
-              await runtime.promptUntilSettled(buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
+              const opportunityPrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
                 nativeSearch: nextConfig.nativeSearch === true,
                 gateRun
-              }), { timeoutMs: 10 * 60_000 });
+              });
+              // WMB-5178 §5：员工接收会话盖章（target=employee，行只进该员工会话文件，Dock 永不镜像）。
+              await runtime.promptUntilSettled(buildOrchestrationEnvelope({ dispatchId: `daily_judge:${gateTask.id}`, target: 'employee', delivery: 'direct', safe: { originLabel: '今日情报', title: '今日情报判读', goal: '判断当日增量资料，产出可批机会方案', acceptance: '渠道回执与当日可批方案' }, prompt: opportunityPrompt }), { timeoutMs: 10 * 60_000 });
             }
           });
           synthesis = prompted.runtime;
           activeConfig = prompted.config;
-          // 第一关（赛道相关性）先于四问：解析判定块 → 应用归档写路径（fail-closed：解析失败抛错，
-          // 零归档、水印不推进、下轮整批重判）；只有判相关/自动相关的资料进入四问方案。
+          // 第一关（赛道相关性）先于四问：解析判定块 → 应用归档写路径（fail-closed：解析失败抛错，零归档、水印不推进、下轮整批重判）；只有判相关/自动相关的资料进入四问方案。
           const sessionText = readAssistantTexts(await readFile(dailySessionFile, 'utf8'), sessionBaseline).join('\n');
           const gateApplied = await applyDailyLaneGate(dependency, gateTask, gateRun, sessionText, planRequestId, promptBuiltAt, input.workerLeaseId);
           const allowedSourceIds = gateRun.lane ? gateApplied.relevantIds : undefined;
@@ -761,17 +762,36 @@ export async function startDailyIntelligence(input: {
   } finally { close(); }
 }
 
-function draftPrompt(task: AgentTask, projectId: string, requestId: string): string {
+export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = ''): string {
+  if (writerTask === 'xiaohongshu_platform_version') {
+    return [
+      '执行 WeMediaBuddy Studio 小红书平台版本任务。',
+      `task_id=${task.id}`,
+      'intent=studio_draft',
+      `project_id=${projectId}`,
+      `brief=${brief}`,
+      `version_request_id=${requestId}`,
+      '要求：',
+      '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
+      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project，并读取最新核心版本。`,
+      '3. 如果项目没有核心版本，明确失败并停止；本任务禁止调用 wmb_save_core_version，禁止生成或改写核心稿。',
+      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：给出准确标题，正文自然可读；不虚构核心稿没有的事实。',
+      `5. 调用 wmb_save_platform_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，contentVersionId 必须是步骤2读到的最新核心版本 id，platform 必须是 xiaohongshu，format 必须是 text，title/body 为完整小红书版本。`,
+      `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认 xiaohongshu 平台版本已保存且关联正确的核心版本。`,
+      '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
+    ].join('\n');
+  }
   return [
-    '执行 WeMediaBuddy Studio 初稿任务。',
+    '执行 WeMediaBuddy Studio 核心初稿任务。',
     `task_id=${task.id}`,
     'intent=studio_draft',
     `project_id=${projectId}`,
     `version_request_id=${requestId}`,
     '要求：',
+    `brief=${brief}`,
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
     `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-    '3. 基于项目标题和关联资料，写一篇完整中文核心初稿正文。',
+    '3. 基于项目标题和关联资料，写一篇完整中文核心初稿正文；本任务禁止调用 wmb_save_platform_version。',
     `4. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为完整正文。`,
     `5. 再调用 wmb_get_content({ projectId: "${projectId}" }) 确认该项目已有核心版本正文。`,
     '6. 最后用简洁中文回复：已保存核心版本，并给出正文前两句。'
@@ -780,21 +800,24 @@ function draftPrompt(task: AgentTask, projectId: string, requestId: string): str
 
 export async function startStudioDraft(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string; projectId: string; mcpUrl: string;
+  writerTask?: WriterTask;
+  brief?: string;
   xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
   onTaskReady?: TaskReadyGrantHook;
-  /** 员工会话隔离：不传则回退 dock session（不推荐） */
+  /** 员工会话隔离：不传则用确定性 per-task 员工会话（studio-<taskId>.jsonl，与 Dock 会话同目录）；显式传入始终优先 */
   sessionFile?: string;
   /** WMB-5116：JobPool 新工单传入每 job 唯一 start request identity（如 `${jobId}:studio-draft:start`），
    *  避免同 date/project 新工单与既有工单共享确定性 identity 触发 REQUEST_REPLAY_CONFLICT。
    *  direct Studio 调用不传，保持确定性默认值以幂等重放同请求。 */
   startRequestId?: string;
 }): Promise<DailyIntelligenceRun> {
+  const writerTask = input.writerTask ?? 'core_draft';
   const { dependency, database, close } = mutationDependency(input);
   const lane = 'studio-draft';
   const startRequestId = input.startRequestId ?? `studio_draft:${input.businessDate}:${input.projectId}:start`;
   try {
-    const contextRefs = { projectId: input.projectId };
+    const contextRefs = { projectId: input.projectId, writerTask };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting;
     const conversation = await readPiConversation(input.dataRootPath);
@@ -804,13 +827,13 @@ export async function startStudioDraft(input: {
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const extensionPath = await preparePiExtension(layout.agentDir);
-    const requestId = agentRequestId(task.id, 'core_version');
+    const requestId = agentRequestId(task.id, writerTask === 'core_draft' ? 'core_version' : 'xiaohongshu_platform_version');
     await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
       await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
-        await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || layout.sessionFile), '-e', extensionPath,
+        await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || path.join(path.dirname(layout.sessionFile), `studio-${task.id}.jsonl`)), '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
       ], {
         ...process.env,
@@ -841,7 +864,17 @@ export async function startStudioDraft(input: {
           input.onRuntime?.(nextRuntime);
         },
         run: async (activeRuntime) => {
-          await activeRuntime.promptUntilSettled(draftPrompt(task, input.projectId, requestId), { timeoutMs: piPromptTimeoutMs() });
+          // WMB-5178 §5：员工接收会话盖章（Studio 写作任务，target=employee，Dock 永不镜像）。
+          const platformTask = writerTask === 'xiaohongshu_platform_version';
+          await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({
+            dispatchId: `studio_draft:${task.id}`,
+            target: 'employee',
+            delivery: 'direct',
+            safe: platformTask
+              ? { originLabel: 'Studio 小红书版本', title: '小红书平台版本', goal: '基于最新核心稿生成并保存小红书平台版本', acceptance: '小红书平台版本读回' }
+              : { originLabel: 'Studio 核心初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
+            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '')
+          }), { timeoutMs: piPromptTimeoutMs() });
         }
       });
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
@@ -859,7 +892,7 @@ export async function startStudioDraft(input: {
   } finally { close(); }
 }
 
-function reviewPrompt(task: AgentTask, publicationId: string, requestId: string): string {
+export function reviewPrompt(task: AgentTask, publicationId: string, requestId: string): string {
   return [
     '执行 WeMediaBuddy Results 复盘任务。',
     `task_id=${task.id}`,
@@ -937,7 +970,8 @@ export async function startResultsReview(input: {
           input.onRuntime?.(nextRuntime);
         },
         run: async (activeRuntime) => {
-          await activeRuntime.promptUntilSettled(reviewPrompt(task, input.publicationId, requestId), { timeoutMs: piPromptTimeoutMs() });
+          // WMB-5178 §5：员工接收会话盖章（Results 复盘，target=employee，Dock 永不镜像）。
+          await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({ dispatchId: `results_review:${task.id}`, target: 'employee', delivery: 'direct', safe: { originLabel: 'Results 复盘', title: '周期复盘', goal: '基于真实指标给出 Keep/Stop/Change 与方法结论', acceptance: 'final 复盘读回' }, prompt: reviewPrompt(task, input.publicationId, requestId) }), { timeoutMs: piPromptTimeoutMs() });
         }
       });
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
@@ -954,5 +988,3 @@ export async function startResultsReview(input: {
     }
   } finally { close(); }
 }
-import { preparePiExtension } from './pi-extension.ts';
-import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';

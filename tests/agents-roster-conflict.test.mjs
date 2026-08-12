@@ -69,7 +69,7 @@ test('roster view DOM gates: desk conflict callout + dot/word driven only by des
   // 冲突判定已委托纯函数（行为在 agents-roster-conflict.ts）。
   assert.match(source, /const deskConflict = resolveDeskConflict\(\{/);
 
-  // DOM 断言：危险 callout 由 deskConflict 驱动（主视图）；桌助状态点/词在概览组件（实例驱动视图不再有席位 DOM）。
+  // DOM 断言：危险 callout 由 deskConflict 驱动（主视图）；主管状态点/词在概览组件（实例驱动视图不再有席位 DOM）。
   assert.match(
     source,
     /\{deskConflict \? \([\s\S]*?agents-callout danger seat-conflict/,
@@ -81,7 +81,7 @@ test('roster view DOM gates: desk conflict callout + dot/word driven only by des
     'desk state dot shows danger blocked only when deskConflict'
   );
 
-  // 状态词文字同样以 deskConflict 优先：冲突（桌助 blocked 或员工工单资源占用）→「受阻」，
+  // 状态词文字同样以 deskConflict 优先：冲突（主管 blocked 或员工工单资源占用）→「受阻」，
   // 与红点/红字（status-blocked → var(--danger)）双编码一致，不再渲染红色「工作中」。
   assert.match(
     overview,
@@ -117,31 +117,30 @@ test('roster view DOM gates: WMB-5143 instance-driven view has no seat/slot term
   assert.match(source, /getAgentsRoster/);
 });
 
-test('roster view DOM gates: desk card head uses roster projection labels, no 主管/主编席 (WMB-5144 P2)', async () => {
+test('roster view DOM gates: desk card head uses roster projection labels with ROLE_CATALOG.desk fallback (WMB-5184)', async () => {
   const source = await readFile(new URL('../src/renderer/agents-roster-view.tsx', import.meta.url), 'utf8');
   const overview = await readFile(new URL('../src/renderer/agents-roster-overview.tsx', import.meta.url), 'utf8');
   const parts = await readFile(new URL('../src/renderer/agents-roster-parts.tsx', import.meta.url), 'utf8');
 
-  // 桌助卡头标签只来自 roster 投影行（labelZh/roomZh）；缺数据 fallback 为「桌助/协调入口」，
-  // 不得回落 ROLE_CATALOG.desk 的旧「主管/主编席」隐喻（PRODUCT C9.6：桌助是协调入口不是主管工位）。
+  // 主管卡头标签只来自 roster 投影行（labelZh/roomZh）；缺数据回落到 ROLE_CATALOG.desk（主管/主编席），
+  // 不得重建「桌助/协调入口」展示覆盖（2026-08-10 主管授权翻转：不留用户可见兼容别名）。
   assert.match(
     overview,
-    /roleId === 'desk' \? \{ labelZh: deskRow\?\.labelZh \?\? '桌助', roomZh: deskRow\?\.roomZh \?\? '协调入口' \} : ROLE_CATALOG\[roleId\]/,
-    'desk card head must resolve labelZh/roomZh from the roster row, falling back to 桌助/协调入口'
+    /roleId === 'desk' \? \{ labelZh: deskRow\?\.labelZh \?\? ROLE_CATALOG\.desk\.labelZh, roomZh: deskRow\?\.roomZh \?\? ROLE_CATALOG\.desk\.roomZh \} : ROLE_CATALOG\[roleId\]/,
+    'desk card head must resolve labelZh/roomZh from the roster row, falling back to ROLE_CATALOG.desk'
   );
 
-  // 用户可见文案：视图含「桌助/协调入口」投影标签，旧「主管/主编席」字面量整体消失。
-  assert.match(overview, /'桌助'/);
-  assert.match(overview, /'协调入口'/);
-  assert.doesNotMatch(source + overview + parts, /主管|主编席/, 'view must not carry the 主管/主编席 metaphor');
+  // 用户可见文案：视图 desk 行 = 主管/主编席；「桌助/协调入口」别名整体消失。
+  assert.match(overview, /ROLE_CATALOG\.desk\.labelZh/);
+  assert.doesNotMatch(source + overview + parts, /桌助|协调入口/, 'view must not carry the 桌助/协调入口 alias');
 
   // 员工角色卡头仍走 ROLE_CATALOG（纯展示，注册表零改动）。
   assert.match(overview, /: ROLE_CATALOG\[roleId\]/, 'employee heads must keep ROLE_CATALOG labels');
 
-  // 头像裁剪对话框的 desk 标签同样走投影行（点击桌助头像不得再出现「主管」）。
+  // 头像裁剪对话框的 desk 标签同样走投影行，回落到 ROLE_CATALOG.desk（主管）。
   assert.match(
     source,
-    /roleLabel=\{cropRole === 'desk' \? \(deskRow\?\.labelZh \?\? '桌助'\) : ROLE_CATALOG\[cropRole\]\.labelZh\}/,
-    'desk avatar crop dialog label must not be ROLE_CATALOG.desk'
+    /roleLabel=\{cropRole === 'desk' \? \(deskRow\?\.labelZh \?\? ROLE_CATALOG\.desk\.labelZh\) : ROLE_CATALOG\[cropRole\]\.labelZh\}/,
+    'desk avatar crop dialog label must fall back to ROLE_CATALOG.desk'
   );
 });

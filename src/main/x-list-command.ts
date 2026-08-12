@@ -8,6 +8,8 @@ import { readWorkspaceBrowserBinding } from './workspace-browser-binding.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 export const X_LIST_EXECUTION_COMMAND = 'x_lists.operation_execute';
+/** WMB-5183 §4.4 表 ③：X List 内部准备命令（MCP prepare 工具挂接 scope）——绑定主管；执行保持 precise Owner UI。 */
+export const X_LIST_PREPARE_COMMAND = 'x_lists.prepare';
 
 type ConfirmXListOperationInput = Readonly<{
   operationId: string;
@@ -77,14 +79,10 @@ export async function dispatchAcceptXListOperation(
     requestId,
     input: commandInput,
     boundIdentity,
-    actor,
-    taskId: operation.taskId ?? undefined,
-    grantId: operation.taskGrantId ?? undefined
+    actor
   });
   const issued = await dispatchIssueExecutionGrant(runtime, {
     requestId: `${operation.requestId}:grant:r${operation.revision}`,
-    taskId: operation.taskId ?? undefined,
-    taskGrantId: operation.taskGrantId ?? undefined,
     command: X_LIST_EXECUTION_COMMAND,
     inputHash: draft.inputHash,
     boundIdentity,
@@ -106,8 +104,6 @@ export async function dispatchAcceptXListOperation(
     input: commandInput,
     boundIdentity,
     actor,
-    taskId: operation.taskId ?? undefined,
-    grantId: operation.taskGrantId ?? undefined,
     executionGrantId: issued.data.id
   });
   return runtime.dispatchCommand(envelope, () => {
@@ -185,8 +181,6 @@ function exactReplayReceipt(
     },
     boundIdentity: priorEnvelope.boundIdentity,
     actor: priorEnvelope.actor,
-    taskId: operation.taskId ?? undefined,
-    grantId: operation.taskGrantId ?? undefined,
     executionGrantId: prior.executionGrantId ?? undefined
   });
   const receipt = JSON.parse(prior.receiptJson) as CommandReceiptV1<XListOperation>;

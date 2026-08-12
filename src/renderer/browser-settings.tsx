@@ -244,7 +244,7 @@ export function BrowserSettings({
           </button>
           <button
             type="button"
-            className="primary-button"
+            className="secondary-button"
             disabled={busy !== null || !settings.browserBinding || browserPlatforms.length === 0}
             onClick={() => void run(
               'verify',

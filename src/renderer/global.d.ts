@@ -20,7 +20,29 @@ import type { WmbSettingsSnapshot } from './wmb-settings-types';
 import type { CrewInstance, CrewProjection } from './agents-instance-logic';
 import type { OnboardingAiSaveInput, OnboardingAiTestRecord, OnboardingAiTestResult, OnboardingAiTestSettings, OnboardingStatus, OnboardingStep, OnboardingWorkspaceResult, PlatformCheckStatus } from '../main/onboarding';
 import type { UpdateState } from '../main/app-update';
-
+import type { OrchestrationData } from '../shared/orchestration-envelope';
+import type { PiChatMessage } from '../main/pi-conversation';
+import type { StudioAnnotation, StudioCommandResult, StudioDocumentScope } from '../shared/studio-annotations';
+import type {
+  KnowledgeAnnotationReadFilter, KnowledgeAnnotationRecord, KnowledgeChangeSetApplyInput, KnowledgeChangeSetApplyResult,
+  KnowledgeChangeSetReadFilter, KnowledgeChangeSetRecord, KnowledgeEntityReadFilter, KnowledgeEntityRecord,
+  KnowledgeEvidenceLinkRecord, KnowledgeEvidenceReadFilter, KnowledgeFreeNoteReadFilter, KnowledgeFreeNoteRecord,
+  KnowledgeHealthIssueReadFilter, KnowledgeHealthIssueRecord, KnowledgeNoteReadFilter, KnowledgeNoteRecord,
+  KnowledgeNoteVersionIdRead, KnowledgeNoteVersionReadFilter, KnowledgeNoteVersionRecord, KnowledgeObjectIdRead,
+  KnowledgeFlywheelListResult, KnowledgeQueryArtifactReadFilter, KnowledgeQueryArtifactRecord, KnowledgeQueryWritebackSummaryRecord, KnowledgeReceiptReadFilter, KnowledgeRelationReadFilter,
+  KnowledgeRelationRecord, KnowledgeRelationRegistryEntry, KnowledgeRelationRegistryReadFilter, KnowledgeRequestIdRead,
+  KnowledgeUpdateReceiptRecord, KnowledgeUsagePackageReadFilter, KnowledgeUsagePackageRecord, KnowledgeUsageRecordReadFilter,
+  KnowledgeUsageRecordRecord, KnowledgeWikiPageReadFilter, KnowledgeWikiPageRecord, KnowledgeWikiPageVersionReadFilter,
+  KnowledgeWikiPageVersionRecord
+} from '../shared/knowledge-flywheel';
+import type {
+  KnowledgeCanvasNodeDetail, KnowledgeCanvasNodeDetailInput, KnowledgeCanvasProjection,
+  KnowledgeCanvasProjectionInput, KnowledgeCanvasSelectionManifest, KnowledgeCanvasSelectionManifestInput
+} from '../shared/knowledge-canvas';
+import type {
+  KnowledgeDeepLinkInput, KnowledgeDeepLinkPayload, KnowledgeInboxPool, SourceKnowledgeDetail,
+  SourceKnowledgeDetailInput, TopicWikiDetail, TopicWikiDetailInput
+} from '../shared/knowledge-topic-library';
 type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 type XListCommand<T> = CommandResult<T>;
@@ -178,13 +200,13 @@ declare global {
       listTopicMaintenanceProposals(input?: { status?: string; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean }>;
       approveTopicMaintenanceProposal(input: { id: string; expectedRevision: number; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>;
       rejectTopicMaintenanceProposal(input: { id: string; expectedRevision: number; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>; resumeTopicMaintenanceReproposal(input: { id: string; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>;
-      listKnowledgeDomains(input?: {query?:string;status?:string;order?:'manual'|'recent'|'size';limit?:number;offset?:number}):Promise<{items:any[];total:number;limit:number;offset:number;hasMore:boolean}>;
-      getKnowledgeDomain(id:string,input?:{limit?:number;offset?:number}):Promise<any>;
-      createKnowledgeDomain(input:{title:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[]}):Promise<any>;
-      updateKnowledgeDomain(input:{id:string;expectedRevision:number;title?:string;description?:string;status?:'active'|'watching'|'dormant';topicIds?:string[];archived?:boolean}):Promise<any>;
       getKnowledgeContext(input: { topicId?: string; sourceId?: string; query?: string; limit?: number }): Promise<any>;
       getKnowledgeTopicDossier(input: { topicId: string; category?: string; limit?: number; offset?: number }): Promise<any>;
-      getRediscovery(): Promise<{ unused: any[]; watching: any[]; pending: any[] }>;
+      // WMB-5212：Topic Wiki 详情 / Source 知识详情 / 准确深链（类型见 src/shared/knowledge-topic-library.ts）。
+      getTopicWikiDetail(input: TopicWikiDetailInput): Promise<TopicWikiDetail>;
+      getSourceKnowledgeDetail(input: SourceKnowledgeDetailInput): Promise<SourceKnowledgeDetail>;
+      resolveKnowledgeDeepLink(input: KnowledgeDeepLinkInput): Promise<KnowledgeDeepLinkPayload>;
+      getRediscovery(): Promise<{ unused: KnowledgeInboxPool[]; watching: KnowledgeInboxPool[]; pending: KnowledgeInboxPool[] }>;
       listKnowledgeCanvases(): Promise<any[]>;
       createKnowledgeCanvas(input: { title: string; topicId?: string }): Promise<any>;
       getKnowledgeCanvas(id: string): Promise<any>;
@@ -195,6 +217,9 @@ declare global {
       createKnowledgeRelation(input: { canvasId: string; fromNodeId: string; toNodeId: string; relationType: string; label?: string }): Promise<any>;
       updateKnowledgeRelation(input: { id: string; expectedRevision: number; fromNodeId?:string; toNodeId?:string; relationType?: string; label?: string|null; hidden?: boolean; archived?: boolean }): Promise<any>;
       decideKnowledgeSuggestion(input:{requestId:string;id:string;expectedRevision:number;decision:'confirm'|'reject'}):Promise<any>;
+      getKnowledgeCanvasProjection(input: KnowledgeCanvasProjectionInput): Promise<KnowledgeCanvasProjection>;
+      getCanvasNodeDetail(input: KnowledgeCanvasNodeDetailInput): Promise<KnowledgeCanvasNodeDetail>;
+      validateKnowledgeSelectionManifest(input: KnowledgeCanvasSelectionManifestInput): Promise<KnowledgeCanvasSelectionManifest>;
       previewKnowledgeContextPackage(input:{canvasId:string;nodeIds:string[];excludedNodeIds?:string[];excludedRelationIds?:string[]}):Promise<any>;
       listKnowledgeContextPackages(input?:{query?:string;archived?:boolean;limit?:number;offset?:number}):Promise<any>;
       getKnowledgeContextPackage(id: string): Promise<any>;
@@ -225,7 +250,7 @@ declare global {
       deletePiSkill(name: string): Promise<{ name: string }>;
       getPiAuthorityStatus(): Promise<{ status: unknown; chipLabel: string; chipTone: 'write' | 'readonly' | 'prepare' } | null>;
       listPiCommands(): Promise<PiCommand[]>;
-      chatPi(message: string, delivery?: 'steer' | 'followUp'): Promise<{
+      chatPi(input: string | { message: string; delivery?: 'steer' | 'followUp'; orchestration?: { originLabel: string; title: string; goal: string; acceptance: string } }, delivery?: 'steer' | 'followUp'): Promise<{
         text: string;
         stopped: boolean;
         queued: boolean;
@@ -235,7 +260,7 @@ declare global {
           sessionFile: string;
           sessionId: string | null;
           createdAt: string;
-          messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+          messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
           updatedAt: string;
         } | null;
       }>;
@@ -249,7 +274,7 @@ declare global {
           sessionFile: string;
           sessionId: string | null;
           createdAt: string;
-          messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+          messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
           updatedAt: string;
         };
       }>;
@@ -259,13 +284,13 @@ declare global {
         sessionFile: string;
         sessionId: string | null;
         createdAt: string;
-        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
         updatedAt: string;
       }>;
       listPiConversations(): Promise<Array<{ id: string; title: string; preview: string; createdAt: string; updatedAt: string; active: boolean; archivedAt: string | null }>>;
       archivePiConversation(conversationId: string, archived: boolean): Promise<{
         id: string; title: string; sessionFile: string; sessionId: string | null; createdAt: string;
-        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
         updatedAt: string;
       }>;
       switchPiConversation(conversationId: string): Promise<{
@@ -274,7 +299,7 @@ declare global {
         sessionFile: string;
         sessionId: string | null;
         createdAt: string;
-        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
         updatedAt: string;
       }>;
       newPiConversation(): Promise<{
@@ -283,11 +308,11 @@ declare global {
         sessionFile: string;
         sessionId: string | null;
         createdAt: string;
-        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; createdAt?: string }>;
+        messages: Array<{ role: 'user' | 'assistant'; text: string; thinking?: string; entryId?: string; status?: 'streaming' | 'stopped' | 'failed'; kind?: 'system_event' | 'orchestration'; orchestration?: OrchestrationData; createdAt?: string }>;
         updatedAt: string;
       }>;
-      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[]; model?: string; profileName?: string }) => void): () => void;
-      onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals'>; reason?: string; at: string }) => void): () => void;
+      onPiEvent(listener: (event: { type: string; text?: string; thinking?: string; error?: string; streamKey?: string; toolName?: string; toolCallId?: string; toolArgs?: unknown; toolResult?: unknown; isError?: boolean; scope?: 'dock' | 'task'; source?: 'manager' | string; delivery?: 'steer' | 'followUp'; steering?: string[]; followUp?: string[]; action?: string; jobId?: string; roleId?: string; status?: string; waitReason?: string | null; model?: string; profileName?: string }) => void): () => void;
+      onDataChanged(listener: (event: { scopes: Array<'today' | 'publications' | 'library' | 'sources' | 'agent' | 'studio' | 'proposals' | 'knowledge' | 'topics' | 'canvas' | 'health' | 'receipt'>; reason?: string; at: string }) => void): () => void;
       startAgentTask(input: { intent: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate: string; contextRefs?: Record<string, unknown> }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       getAgentTask(input?: { id?: string; intent?: 'daily_intelligence' | 'studio_draft' | 'results_review'; businessDate?: string }): Promise<unknown>;
       agentRequestId(input: { taskId: string; logicalStep: string }): Promise<string>;
@@ -407,6 +432,7 @@ declare global {
       } | null>;
       getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; progressRatio: number | null; createdAt: string | null; updatedAt: string | null; finishedAt: string | null; writeCommandCount: number; instances: CrewInstance[] }>>;
       getCrewInstanceProjection(): Promise<CrewProjection>;
+      getAgentTaskTranscript(jobId: string): Promise<PiChatMessage[] | null>;
       listAgentAvatars?(): Promise<Array<{ roleId: string; assetId: string; url: string }>>;
       setAgentAvatar?(input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }): Promise<{ roleId: string; assetId: string; url: string; relativePath: string }>;
       clearAgentAvatar?(input: { roleId: string }): Promise<{ ok: boolean }>;
@@ -428,7 +454,7 @@ declare global {
       jobsMessages(jobId: string): Promise<Array<{ id: string; jobId: string; from: string; body: string; at: string }>>;
       jobsPoolStatus(): Promise<{ maxWorkers: number; running: number; queued: number; waitingResource: number; jobs: unknown[]; deskSnapshot: unknown; employeeSnapshots: unknown[] }>;
       jobsSetMaxWorkers(maxWorkers: number): Promise<{ maxWorkers: number }>;
-      getAgentsCapabilitySummary(): Promise<{ roles: Array<{ roleId: string; labelZh: string; roomZh: string; skills?: string[] }>; capabilities: Array<{ id: string; displayName: string; description: string; defaultRoleBindings: Record<string, boolean | undefined>; pageScopePassThrough?: boolean }> }>;
+      getAgentsCapabilitySummary(): Promise<{ roles: Array<{ roleId: string; labelZh: string; roomZh: string; skills?: string[] }>; capabilities: Array<{ id: string; displayName: string; description: string; defaultRoleBindings: Record<string, boolean | undefined> }> }>;
       listAgentsOverlays(): Promise<Array<{ workspaceId: string; roleId: string; capabilityId: string; enabled: boolean; updatedAt: string }>>;
       setAgentsOverlay(input: { roleId: string; capabilityId: string; enabled: boolean }): Promise<{ workspaceId: string; roleId: string; capabilityId: string; enabled: boolean; updatedAt: string }>;
       refreshFermenting(planDate: string): Promise<any>;
@@ -484,6 +510,7 @@ declare global {
         sourceProjectId: string; contentVersionId: string; title: string;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
       saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      saveStudioPlatform(input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string }): Promise<{ ok: boolean; data: { id: string; revision: number } | null; error: { code: string; message: string } | null }>;
       listStudioAssets(projectId: string): Promise<Array<{
         id: string;
         relativePath: string;
@@ -496,6 +523,49 @@ declare global {
         durationMs: number | null;
         createdAt: string;
       }>>;
+      // WMB-5210 M1 知识飞轮边界（通道/类型见 src/shared/knowledge-flywheel.ts；入参透传，main boundary 校验）。
+      submitKnowledgeChangeSet(input: KnowledgeChangeSetApplyInput): Promise<KnowledgeChangeSetApplyResult>;
+      listKnowledgeEntities(input?: KnowledgeEntityReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeEntityRecord>>;
+      getKnowledgeEntity(input: KnowledgeObjectIdRead): Promise<KnowledgeEntityRecord | null>;
+      listKnowledgeNotes(input?: KnowledgeNoteReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeNoteRecord>>;
+      getKnowledgeNote(input: KnowledgeObjectIdRead): Promise<KnowledgeNoteRecord | null>;
+      getKnowledgeNoteVersion(input: KnowledgeNoteVersionIdRead): Promise<KnowledgeNoteVersionRecord | null>;
+      listKnowledgeNoteVersions(input?: KnowledgeNoteVersionReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeNoteVersionRecord>>;
+      listWikiPages(input?: KnowledgeWikiPageReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeWikiPageRecord>>;
+      getWikiPage(input: KnowledgeObjectIdRead): Promise<KnowledgeWikiPageRecord | null>;
+      getWikiPageVersion(input: KnowledgeObjectIdRead): Promise<KnowledgeWikiPageVersionRecord | null>;
+      listWikiPageVersions(input?: KnowledgeWikiPageVersionReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeWikiPageVersionRecord>>;
+      listKnowledgeRelations(input?: KnowledgeRelationReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeRelationRecord>>;
+      getKnowledgeRelation(input: KnowledgeObjectIdRead): Promise<KnowledgeRelationRecord | null>;
+      listEvidenceLinks(input?: KnowledgeEvidenceReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeEvidenceLinkRecord>>;
+      listKnowledgeAnnotations(input?: KnowledgeAnnotationReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeAnnotationRecord>>;
+      getKnowledgeAnnotation(input: KnowledgeObjectIdRead): Promise<KnowledgeAnnotationRecord | null>;
+      listFreeNotes(input?: KnowledgeFreeNoteReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeFreeNoteRecord>>;
+      getFreeNote(input: KnowledgeObjectIdRead): Promise<KnowledgeFreeNoteRecord | null>;
+      getChangeSet(input: KnowledgeObjectIdRead): Promise<KnowledgeChangeSetRecord | null>;
+      listChangeSets(input?: KnowledgeChangeSetReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeChangeSetRecord>>;
+      getUpdateReceipt(input: KnowledgeObjectIdRead): Promise<KnowledgeUpdateReceiptRecord | null>;
+      getUpdateReceiptByRequest(input: KnowledgeRequestIdRead): Promise<KnowledgeUpdateReceiptRecord | null>;
+      listUpdateReceipts(input?: KnowledgeReceiptReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeUpdateReceiptRecord>>;
+      getQueryArtifact(input: KnowledgeObjectIdRead): Promise<KnowledgeQueryArtifactRecord | null>;
+      getQueryArtifactByRequest(input: KnowledgeRequestIdRead): Promise<KnowledgeQueryArtifactRecord | null>;
+      getQueryWritebackSummary(input: KnowledgeRequestIdRead): Promise<KnowledgeQueryWritebackSummaryRecord | null>;
+      listQueryArtifacts(input?: KnowledgeQueryArtifactReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeQueryArtifactRecord>>;
+      getHealthIssue(input: KnowledgeObjectIdRead): Promise<KnowledgeHealthIssueRecord | null>;
+      listHealthIssues(input?: KnowledgeHealthIssueReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeHealthIssueRecord>>;
+      listRelationRegistry(input?: KnowledgeRelationRegistryReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeRelationRegistryEntry>>;
+      // WMB-5215 M6 创作知识调用血缘（不可变 Usage Package/Record 只读面）
+      getKnowledgeUsagePackage(input: KnowledgeObjectIdRead): Promise<KnowledgeUsagePackageRecord | null>;
+      getKnowledgeUsagePackageByRequest(input: KnowledgeRequestIdRead): Promise<KnowledgeUsagePackageRecord | null>;
+      listKnowledgeUsagePackages(input?: KnowledgeUsagePackageReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeUsagePackageRecord>>;
+      getKnowledgeUsageRecord(input: KnowledgeObjectIdRead): Promise<KnowledgeUsageRecordRecord | null>;
+      listKnowledgeUsageRecords(input?: KnowledgeUsageRecordReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeUsageRecordRecord>>;
+      listStudioAnnotations(input: StudioDocumentScope & { includeResolved?: boolean }): Promise<StudioAnnotation[]>;
+      createStudioAnnotation(input: StudioDocumentScope & { body: string; startOffset: number; endOffset: number; note?: string | null }): Promise<StudioCommandResult<StudioAnnotation>>;
+      updateStudioAnnotation(input: { id: string; expectedRevision: number; note: string | null }): Promise<StudioCommandResult<StudioAnnotation>>;
+      resolveStudioAnnotation(input: { id: string; expectedRevision: number; reason: 'edited' | 'deleted' | 'ambiguous' | 'user_removed' }): Promise<StudioCommandResult<StudioAnnotation>>;
+      reopenStudioAnnotation(input: { id: string; expectedRevision: number; body: string }): Promise<StudioCommandResult<StudioAnnotation>>;
+      reconcileStudioAnnotations(input: StudioDocumentScope & { previousBody: string; nextBody: string; mode: 'incremental' | 'replacement' }): Promise<StudioCommandResult<StudioAnnotation[]>>;
       importStudioImage(input: {
         projectId: string;
         sourcePath?: string;

@@ -11,7 +11,7 @@ import { listSourceScanReceipts, type SourceScanReceipt } from './intelligence-c
 export type PageAgentIntent =
   | 'page_today' | 'page_agents' | 'page_discover' | 'page_proposals' | 'page_topic'
   | 'page_library' | 'page_canvas' | 'page_studio' | 'page_publish' | 'page_results';
-export type RunnerAgentIntent = 'daily_intelligence' | 'daily_scan' | 'daily_judge' | 'studio_draft' | 'results_review';
+export type RunnerAgentIntent = 'daily_intelligence' | 'daily_scan' | 'daily_judge' | 'studio_draft' | 'results_review' | 'research';
 export type AgentIntent = RunnerAgentIntent | PageAgentIntent;
 export type AgentTaskStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted' | 'needs_user';
 export type AgentTaskControl = 'skip_source' | 'save_partial' | 'cancel';
@@ -81,7 +81,7 @@ type AgentTaskRow = {
 };
 
 const intents: AgentIntent[] = [
-  'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review',
+  'daily_intelligence', 'daily_scan', 'daily_judge', 'studio_draft', 'results_review', 'research',
   'page_today', 'page_agents', 'page_discover', 'page_proposals', 'page_topic',
   'page_library', 'page_canvas', 'page_studio', 'page_publish', 'page_results'
 ];
@@ -136,6 +136,17 @@ export function getLatestDailyIntelligenceTask(database: DatabaseSync, businessD
   })[0] ?? null;
 }
 
+/** 读取主管任务启动后最新创建的扫判子任务，包含已结束任务，用于恢复漏写的终态 checkpoint。 */
+export function getLatestDailyIntelligenceTaskSince(database: DatabaseSync, businessDate: string, createdAt: string): AgentTask | null {
+  const row = database.prepare(
+    `SELECT id FROM agent_tasks
+     WHERE intent IN ('daily_scan', 'daily_judge', 'daily_intelligence')
+       AND business_date = ? AND created_at >= ?
+     ORDER BY created_at DESC, updated_at DESC LIMIT 1`
+  ).get(businessDate, createdAt) as { id?: string } | undefined;
+  return row?.id ? getAgentTask(database, row.id) : null;
+}
+
 function parseTask(row: AgentTaskRow): AgentTask {
   return {
     id: row.id,
@@ -178,10 +189,14 @@ function requireTask(database: DatabaseSync, id: string): AgentTask {
   if (!task) throw new Error(`Agent 任务不存在：${id}`);
   return task;
 }
-export function getActiveAgentTask(database: DatabaseSync, intent: AgentIntent, businessDate: string): AgentTask | null {
+export function getActiveAgentTask(database: DatabaseSync, intent: AgentIntent, businessDate: string, roleId?: string | null): AgentTask | null {
+  // WMB-5185：可选 roleId 选择器——page_* 任务按 (intent, businessDate, contextRefs.roleId) 幂等复用，
+  // 使页 dock（desk）与员工工单（writer/librarian/...）同页同日期并存时互不复用对方任务。
+  const roleFilter = roleId?.trim() || null;
   const row = database.prepare(`SELECT * FROM agent_tasks
     WHERE intent = ? AND business_date = ? AND status = 'running'
-    ORDER BY created_at DESC LIMIT 1`).get(intent, businessDate) as AgentTaskRow | undefined;
+      AND (? IS NULL OR json_extract(context_refs_json, '$.roleId') = ?)
+    ORDER BY created_at DESC LIMIT 1`).get(intent, businessDate, roleFilter, roleFilter) as AgentTaskRow | undefined;
   return row ? parseTask(row) : null;
 }
 
@@ -227,7 +242,14 @@ export function startAgentTask(
   if (!intents.includes(input.intent)) return failure<AgentTask>('VALIDATION_ERROR', '不支持的 Pi 意图。');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate)) return failure<AgentTask>('VALIDATION_ERROR', '业务日期必须是 YYYY-MM-DD。');
 
-  const active = getActiveAgentTask(database, input.intent, input.businessDate);
+  // WMB-5185：page_* 任务按进入方 contextRefs.roleId 幂等复用（dock=desk 与员工工单互不复用）；
+  // 非 page 意图（daily 族/studio_draft/results_review/research）保持原 (intent, businessDate) 复用。
+  const active = getActiveAgentTask(
+    database,
+    input.intent,
+    input.businessDate,
+    isPageAgentIntent(input.intent) ? (typeof input.contextRefs?.roleId === 'string' ? input.contextRefs.roleId : null) : undefined
+  );
   if (active) {
     recordOperation(database, {
       actorType: 'ui',
@@ -419,12 +441,12 @@ export function recoverInterruptedAgentTasks(database: DatabaseSync): number {
   const now = new Date().toISOString();
   database.prepare(`UPDATE agent_tasks SET phase = 'resume_pending',
     error_code = NULL, error_message = '应用重启，正在从检查点继续。', updated_at = ?
-    WHERE status = 'running' AND intent IN ('daily_intelligence','daily_scan','daily_judge')`).run(now);
+    WHERE status = 'running' AND intent IN ('daily_intelligence','daily_scan','daily_judge','research')`).run(now);
   const result = database.prepare(`UPDATE agent_tasks SET status = 'interrupted', phase = 'interrupted',
     error_code = COALESCE(error_code, 'INTERRUPTED'),
     error_message = COALESCE(error_message, '应用重启时任务仍在运行。'),
     updated_at = ?, finished_at = COALESCE(finished_at, ?)
-    WHERE status = 'running' AND intent NOT IN ('daily_intelligence','daily_scan','daily_judge')`).run(now, now);
+    WHERE status = 'running' AND intent NOT IN ('daily_intelligence','daily_scan','daily_judge','research')`).run(now, now);
   return Number(result.changes ?? 0);
 }
 
@@ -546,10 +568,15 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
 
 function validateStudioDraft(database: DatabaseSync, contextRefs: Record<string, unknown>): CommandResult<Record<string, unknown>> {
   const projectId = typeof contextRefs.projectId === 'string' ? contextRefs.projectId : null;
-  if (!projectId) return failure('VALIDATION_ERROR', '写初稿任务需要 projectId。');
+  if (!projectId) return failure('VALIDATION_ERROR', '写作任务需要 projectId。');
   const studio = getStudio(database);
   const project = studio.find((item) => item.id === projectId);
   if (!project) return failure('NOT_FOUND', '内容项目不存在。');
+  if (contextRefs.writerTask === 'xiaohongshu_platform_version') {
+    const latestPlatform = project.platforms.xiaohongshu?.[0];
+    if (!latestPlatform?.body?.trim()) return failure('VALIDATION_ERROR', '成功要求已保存小红书平台版本。');
+    return success({ projectId, platform: 'xiaohongshu', platformVersionId: latestPlatform.id });
+  }
   const latest = project.revisions[0];
   if (!latest?.body?.trim()) return failure('VALIDATION_ERROR', '成功要求已保存核心正文版本。');
   return success({ projectId, contentVersionId: latest.id, versionNumber: latest.number });

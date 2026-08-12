@@ -2,30 +2,37 @@ import { ipcMain } from 'electron';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireReceiptData } from './business-command.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import {
-  createKnowledgeDomain, getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains,
-  listKnowledgeTopics, listRediscovery, updateKnowledgeDomain
+  getKnowledgeContext, getKnowledgeTopicDossier,
+  listKnowledgeTopics, listRediscovery
 } from './knowledge.ts';
 import { decideTopicMaintenanceProposal, listTopicMaintenanceProposals } from './topic-maintenance.ts';
 import {
+  getSourceKnowledgeDetail, getTopicWikiDetail, resolveKnowledgeDeepLink
+} from './knowledge-topic-library.ts';
+import {
+  KNOWLEDGE_DEEP_LINK_IPC_CHANNEL, KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL, KNOWLEDGE_TOPIC_WIKI_DETAIL_IPC_CHANNEL
+} from '../shared/knowledge-topic-library.ts';
+import {
   addKnowledgeCanvasNode, createContentProjectFromBrief, createCreativeBrief, createKnowledgeCanvas, createKnowledgeRelation,
-  decideKnowledgeSuggestion, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage,
-  getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeCanvases, listKnowledgeContextPackages,
-  moveKnowledgeCanvasNodes, previewKnowledgeContextPackage, removeKnowledgeCanvasNode, updateCreativeBrief, updateKnowledgeCanvas,
-  updateKnowledgeRelation
+  decideKnowledgeSuggestion, getCanvasNodeDetail, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage,
+  getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeCanvasProjection, getKnowledgeContextPackage, listKnowledgeCanvases,
+  listKnowledgeContextPackages, moveKnowledgeCanvasNodes, previewKnowledgeContextPackage, removeKnowledgeCanvasNode,
+  updateCreativeBrief, updateKnowledgeCanvas, updateKnowledgeRelation, validateKnowledgeSelectionManifest
 } from './knowledge-canvas.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
 import { ensureJobsSpawner } from './ipc-jobs.ts';
 import { kickTopicReproposals, resumeTopicReproposal } from './topic-maintenance-reproposal.ts';
+import { recordCreativeBriefUsage } from './knowledge-usage-integration.ts';
 
 export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependencies): void {
   ipcMain.handle('knowledge:list-topics', (_event, input = {}) => readWorkspaceDatabase(dependencies,
     () => ({ items: [], total: 0, limit: 50, offset: 0, hasMore: false }), database => listKnowledgeTopics(database, input)));
-  ipcMain.handle('knowledge-domains:list', (_event, input = {}) => readWorkspaceDatabase(dependencies,
-    () => ({ items: [], total: 0, limit: 50, offset: 0, hasMore: false }), database => listKnowledgeDomains(database, input)));
-  ipcMain.handle('knowledge-domains:get', (_event, id: string, input = {}) => readWorkspaceDatabase(dependencies,
-    () => null, database => getKnowledgeDomain(database, id, input)));
   ipcMain.handle('knowledge:get-context', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeContext(database, input)));
   ipcMain.handle('knowledge:get-topic-dossier', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeTopicDossier(database, input)));
+  // WMB-5212：Topic Wiki 详情 / Source 知识详情 / 准确深链（只读投影；复用 v56/v57 与既有 dossier，不造表）。
+  ipcMain.handle(KNOWLEDGE_TOPIC_WIKI_DETAIL_IPC_CHANNEL, (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getTopicWikiDetail(database, input)));
+  ipcMain.handle(KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL, (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getSourceKnowledgeDetail(database, input)));
+  ipcMain.handle(KNOWLEDGE_DEEP_LINK_IPC_CHANNEL, (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => resolveKnowledgeDeepLink(database, input)));
   ipcMain.handle('knowledge:rediscovery', () => readWorkspaceDatabase(dependencies,
     () => ({ unused: [], watching: [], pending: [] }), database => listRediscovery(database)));
   ipcMain.handle('knowledge:topic-maintenance-proposals', (_event, input = {}) => readWorkspaceDatabase(dependencies,
@@ -52,6 +59,10 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
   });
   ipcMain.handle('knowledge-canvas:list', () => readWorkspaceDatabase(dependencies, () => [], database => listKnowledgeCanvases(database)));
   ipcMain.handle('knowledge-canvas:get', (_event, id: string) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeCanvas(database, id)));
+  // WMB-5213：三模式投影 / 节点详情深链 / selected-only 清单（只读；复用 v56 读模型，不造表）。
+  ipcMain.handle('knowledge-canvas:projection', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeCanvasProjection(database, input)));
+  ipcMain.handle('knowledge-canvas:detail', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getCanvasNodeDetail(database, input)));
+  ipcMain.handle('knowledge-context:selection-manifest', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => validateKnowledgeSelectionManifest(database, input)));
   ipcMain.handle('knowledge-context:preview-package', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => previewKnowledgeContextPackage(database, input)));
   ipcMain.handle('knowledge-context:list-packages', (_event, input = {}) => readWorkspaceDatabase(dependencies,
     () => ({ items: [], total: 0, limit: 50, offset: 0, hasMore: false }), database => listKnowledgeContextPackages(database, input)));
@@ -61,38 +72,25 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
   ipcMain.handle('knowledge-context:get-brief-for-context', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getCreativeBriefForContext(database, input)));
   ipcMain.handle('knowledge-context:get-brief-lineage', (_event, briefId: string) => readWorkspaceDatabase(dependencies, () => null, database => getCreativeBriefLineage(database, briefId)));
 
-  ipcMain.handle('knowledge-domains:create', async (_event, input) => {
-    const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
-    const receipt = await dispatchBusinessCommand(runtime, { command: 'knowledge.domain_create', requestId: freshRequestId(), actor: ownerUiActor,
-      input, boundIdentity: { entityType: 'knowledge_domain' }, entityType: 'knowledge_domain',
-      execute: (database, value) => { const data = createKnowledgeDomain(database, value, false); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
-    return requireReceiptData(receipt);
-  });
-  ipcMain.handle('knowledge-domains:update', async (_event, input) => {
-    const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
-    const receipt = await dispatchBusinessCommand(runtime, { command: 'knowledge.domain_update', requestId: freshRequestId(), actor: ownerUiActor,
-      input, boundIdentity: { entityType: 'knowledge_domain', entityId: input.id }, entityType: 'knowledge_domain',
-      execute: (database, value) => { const data = updateKnowledgeDomain(database, value, false); return { data, entityId: data.id, beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
-    return requireReceiptData(receipt);
-  });
-
-  const canvasMutation = (channel: string, entityType: string, execute: (database: any, input: any) => any) => {
+  const canvasMutation = (channel: string, entityType: string, reason: string, execute: (database: any, input: any) => any) => {
     ipcMain.handle(channel, async (_event, input) => {
       const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
       const receipt = await dispatchBusinessCommand(runtime, { command: channel, requestId: freshRequestId(), actor: ownerUiActor,
         input, boundIdentity: { entityType, entityId: input?.id ?? input?.canvasId }, entityType,
         execute: (database, value) => { const data = execute(database, value); return { data, entityId: data?.id ?? value?.id ?? value?.canvasId,
           beforeRevision: value?.expectedRevision, afterRevision: data?.revision, readback: data }; } });
+      // WMB-5213：画布布局写广播 canvas scope（订阅替代主轮询；画布节点只是引用与布局，非知识真源）。
+      if (receipt.ok) broadcastDataChanged({ scopes: ['canvas'], reason });
       return requireReceiptData(receipt);
     });
   };
-  canvasMutation('knowledge-canvas:create', 'knowledge_canvas', createKnowledgeCanvas);
-  canvasMutation('knowledge-canvas:update', 'knowledge_canvas', updateKnowledgeCanvas);
-  canvasMutation('knowledge-canvas:add-node', 'knowledge_canvas_node', addKnowledgeCanvasNode);
-  canvasMutation('knowledge-canvas:move-nodes', 'knowledge_canvas', (database, input) => moveKnowledgeCanvasNodes(database, input, false));
-  canvasMutation('knowledge-canvas:remove-node', 'knowledge_canvas_node', removeKnowledgeCanvasNode);
-  canvasMutation('knowledge-canvas:create-relation', 'knowledge_relation', createKnowledgeRelation);
-  canvasMutation('knowledge-canvas:update-relation', 'knowledge_relation', updateKnowledgeRelation);
+  canvasMutation('knowledge-canvas:create', 'knowledge_canvas', 'canvas.create', createKnowledgeCanvas);
+  canvasMutation('knowledge-canvas:update', 'knowledge_canvas', 'canvas.update', updateKnowledgeCanvas);
+  canvasMutation('knowledge-canvas:add-node', 'knowledge_canvas_node', 'canvas.add_node', addKnowledgeCanvasNode);
+  canvasMutation('knowledge-canvas:move-nodes', 'knowledge_canvas', 'canvas.move_nodes', (database, input) => moveKnowledgeCanvasNodes(database, input, false));
+  canvasMutation('knowledge-canvas:remove-node', 'knowledge_canvas_node', 'canvas.remove_node', removeKnowledgeCanvasNode);
+  canvasMutation('knowledge-canvas:create-relation', 'knowledge_relation', 'canvas.relation.create', createKnowledgeRelation);
+  canvasMutation('knowledge-canvas:update-relation', 'knowledge_relation', 'canvas.relation.update', updateKnowledgeRelation);
 
   ipcMain.handle('knowledge-canvas:decide-suggestion', async (_event, input) => {
     const runtime = await runtimeForNullableMutation(dependencies); if (!runtime) return null;
@@ -101,6 +99,7 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
       boundIdentity: { entityType: 'knowledge_suggestion', entityId: input.id }, entityType: 'knowledge_suggestion',
       execute: (database, value) => { const data = decideKnowledgeSuggestion(database, value); return { data, entityId: data.id,
         beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['canvas'], reason: 'canvas.suggestion_decide' });
     return receiptAsCommandResult(receipt);
   });
   ipcMain.handle('knowledge-context:create-brief', async (_event, input) => {
@@ -108,7 +107,10 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
     const { requestId, ...commandInput } = input;
     const receipt = await dispatchBusinessCommand(runtime, { command: 'knowledge.creative_brief_create', requestId, actor: ownerUiActor,
       input: commandInput, boundIdentity: { entityType: 'creative_brief' }, entityType: 'creative_brief',
-      execute: (database, value) => { const data = createCreativeBrief(database, value); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
+      execute: (database, value) => { const data = createCreativeBrief(database, value) as { id: string; revision: number; contextNodeIds?: string[] };
+        // WMB-5215：简报与固定知识血缘同一事务（usage 失败整体回滚）。
+        recordCreativeBriefUsage(database, { briefId: data.id, contextNodeIds: data.contextNodeIds ?? [], reason: 'creative_brief_create' });
+        return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
     return receiptAsCommandResult(receipt);
   });
   ipcMain.handle('knowledge-context:update-brief', async (_event, input) => {

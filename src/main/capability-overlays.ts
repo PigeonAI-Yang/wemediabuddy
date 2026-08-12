@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import {
   AGENT_CAPABILITIES,
+  deskStandingCommands,
   isRoleId,
   listCapabilitiesForRole,
   roleWriteCommands,
@@ -60,12 +61,13 @@ export function setCapabilityOverlay(
   database: DatabaseSync,
   input: { workspaceId: string; roleId: RoleId; capabilityId: AgentCapabilityId; enabled: boolean }
 ): CapabilityOverlayRow {
+  // WMB-5182 A 子决策：主管 standing 全量由注册表单一真源派生，v1 不参与 overlays，显式拒绝。
+  if (input.roleId === 'desk') {
+    throw Object.assign(new Error('主管能力不可覆盖。'), { code: 'CAPABILITY_NOT_OVERRIDABLE' });
+  }
   const cap = AGENT_CAPABILITIES.find((item) => item.id === input.capabilityId);
   if (!cap || !cap.agentGrantable) {
     throw Object.assign(new Error('红线能力不可覆盖。'), { code: 'CAPABILITY_NOT_GRANTABLE' });
-  }
-  if (cap.pageScopePassThrough) {
-    throw Object.assign(new Error('桌助透传能力不可覆盖。'), { code: 'CAPABILITY_NOT_OVERRIDABLE' });
   }
   ensureCapabilityOverlaysTable(database);
   const now = new Date().toISOString();
@@ -78,7 +80,8 @@ export function setCapabilityOverlay(
 
 /** Standing write commands after applying workspace overlays. */
 export function roleWriteCommandsWithOverlays(database: DatabaseSync, workspaceId: string, roleId: RoleId): string[] {
-  if (roleId === 'desk') return [];
+  // 主管：standing 全量（overlays 对 desk 显式拒绝；A 子决策）。
+  if (roleId === 'desk') return [...deskStandingCommands()];
   const overlays = listCapabilityOverlays(database, workspaceId);
   const disabled = new Set(
     overlays.filter((row) => row.roleId === roleId && !row.enabled).map((row) => row.capabilityId)

@@ -6,6 +6,7 @@ import { startWorkspaceDailyIntelligence } from './workspace-intelligence.ts';
 import { ensureAutomaticTaskGrant } from './task-grants.ts';
 import { broadcastPiEvent } from './app-window.ts';
 import { releaseDailyStageLock, tryAcquireDailyStageLock } from './daily-stage-lock.ts';
+import { syncManagerTaskFromLegacyChild } from './manager-dispatch.ts';
 
 export type DailyStage = 'scan' | 'judge' | 'full';
 
@@ -76,6 +77,11 @@ export async function runManagerDailyStage(input: {
     });
 
     const task = result.task;
+    try {
+      await syncManagerTaskFromLegacyChild(input.runtime, businessDate, task);
+    } catch (error) {
+      console.error('[manager-orchestration] manager checkpoint sync failed', error);
+    }
     const ok =
       task.status === 'succeeded'
       || task.status === 'needs_user'
@@ -163,7 +169,7 @@ export async function continueAfterScan(input: {
     businessDate,
     from,
     result,
-    message: `已按桌助指令续接策划（from ${from.intent}/${from.phase}）。${result.message}`
+    message: `已按主管指令续接策划（from ${from.intent}/${from.phase}）。${result.message}`
   };
 }
 

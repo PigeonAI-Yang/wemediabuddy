@@ -235,7 +235,6 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
         <div className="page-command-copy">
           <div className="page-command-title-row">
             <h1>选题台账</h1>
-            <p>全量决策记录：今日可批、待处理、已采纳、已否掉与已过期。</p>
           </div>
           <div className="page-command-stats" aria-label="台账计数">
             <div className="page-command-stat"><strong>{counts.today ?? 0}</strong><span>今日可批</span></div>
@@ -268,8 +267,8 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
       <div className="proposal-batch-bar" role="region" aria-label="批量操作">
         <span>已勾选 {checkedIds.length} 条</span>
         <div className="proposal-batch-actions">
-          {openTab ? <button type="button" className="secondary-button" disabled={batchBusy} onClick={() => void batchDismiss()}>批量否掉</button> : null}
-          {tab === 'dismissed' ? <button type="button" className="secondary-button" disabled={batchBusy} onClick={() => void batchRestore()}>批量恢复</button> : null}
+          {openTab ? <button type="button" className="primary-button danger-button" disabled={batchBusy} onClick={() => void batchDismiss()}>批量否掉</button> : null}
+          {tab === 'dismissed' ? <button type="button" className="primary-button" disabled={batchBusy} onClick={() => void batchRestore()}>批量恢复</button> : null}
           <button type="button" className="text-button" disabled={batchBusy} onClick={() => setCheckedIds([])}>清除勾选</button>
         </div>
       </div>
@@ -280,7 +279,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
       : items.length === 0 ? <section className="empty-state proposal-empty">
           <h2>{emptyCopy[tab].title}</h2>
           <p>{emptyCopy[tab].body}</p>
-          {emptyCopy[tab].action ? <button type="button" onClick={emptyCopy[tab].action?.onClick}>{emptyCopy[tab].action.label}</button> : null}
+          {emptyCopy[tab].action ? <button type="button" className="primary-button" onClick={emptyCopy[tab].action?.onClick}>{emptyCopy[tab].action.label}</button> : null}
         </section>
       : openTab ? <div className="proposal-list proposal-open-list" onClick={(event) => {
           const target = event.target as HTMLElement;

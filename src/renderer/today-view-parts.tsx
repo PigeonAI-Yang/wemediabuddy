@@ -206,10 +206,10 @@ export function SourceList({ sources, sourceDate, planDate, open, close, openLib
 }
 
 
-export function CreateIconButton({ onClick, primary }: { onClick: () => void; primary?: boolean }): React.JSX.Element {
+export function CreateIconButton({ onClick }: { onClick: () => void }): React.JSX.Element {
   return <button
     type="button"
-    className={`icon-action-button create-action${primary ? ' primary' : ''}`}
+    className="icon-action-button create-action"
     aria-label="开始创作"
     title="开始创作"
     onClick={(event) => { event.stopPropagation(); onClick(); }}
@@ -265,10 +265,10 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
     : '时间未知';
   const badgePills = badges?.length ? badges.map((badge) => <span key={badge.kind} className={`pill ${poolBadgeClass(badge)}`}>{badge.text}</span>) : null;
   const dismissButton = onDismiss ? <DismissIconButton onClick={onDismiss} dismissLabel={dismissLabel} /> : null;
-  const actionCluster = (primaryCreate = false) => (
+  const actionCluster = () => (
     <div className="opp-actions" onClick={(event) => event.stopPropagation()}>
       {dismissButton}
-      <CreateIconButton primary={primaryCreate} onClick={() => onCreate(item)}/>
+      <CreateIconButton onClick={() => onCreate(item)}/>
     </div>
   );
   if (!primary) return <article data-opportunity-card className={`opp-row${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
@@ -284,7 +284,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
       </div>
     </div>
 
-    {actionCluster(false)}
+    {actionCluster()}
   </article>;
   return <article data-opportunity-card className={`opportunity-primary hero-card${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
 
@@ -316,7 +316,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
       <span className="pill gray">形式：{item.formats.map((value) => formatNames[value] || value).join('、')}</span>
       <span className="pill gray">引用资料 ×{item.sourceIds.length}</span>
       {trendText && <span className="pill violet" title={trendTitle}>{trendText}</span>}
-      {actionCluster(true)}
+      {actionCluster()}
     </footer>
   </article>;
 }

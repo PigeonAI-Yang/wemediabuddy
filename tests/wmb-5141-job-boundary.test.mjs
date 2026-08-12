@@ -95,6 +95,52 @@ test('T1 续派合同：四角色 context_refs 字段 + 一键续派重建', () 
   }
 });
 
+// T1b WMB-5170 research 变体：完整 research 块 + projectId 持久化进 context_refs，一键续派重建精确 research 工单；reporter 老路径零改动
+test('T1b research 变体：research 块 + projectId 持久化并重建 research 工单（reporter 老路径不变）', () => {
+  const request = {
+    roleId: 'reporter',
+    brief: '研究 GLM 5.2 官方是否涨价',
+    businessDate: '2026-08-10',
+    projectId: 'project-parent-1',
+    research: {
+      gapId: 'research-abc',
+      parentJobId: 'job-parent-1',
+      parentTaskId: 'task-parent-1',
+      parentRoleId: 'writer',
+      requiredClaims: [
+        { key: 'glm52_official_price_rise', text: 'GLM 5.2 官方在 OpenRouter 涨价', type: 'price' },
+        { key: 'glm52_safety_policy', text: 'GLM 5.2 官方安全政策', type: 'policy' }
+      ],
+      budget: { timeMinutes: 12, minValidSources: 15, maxCandidates: 40, maxParallelFetches: 3, maxRounds: 1 },
+      channels: ['web', 'x', 'xhs']
+    }
+  };
+  const boundary = buildJobObjectBoundary(request, request.businessDate);
+  assert.equal(boundary.projectId, 'project-parent-1', 'research 边界必须携带 projectId');
+  const refs = buildJobContextRefs({ jobId: 'job-research-1', request, boundary });
+  assert.equal(refs.projectId, 'project-parent-1');
+  assert.deepEqual(refs.research, request.research, 'research 块全量持久化');
+  const rebuilt = rebuildRoleJobRequest(refs);
+  assert.ok(rebuilt, 'research 工单必须可重建');
+  assert.equal(rebuilt.roleId, 'reporter');
+  assert.equal(rebuilt.brief, request.brief);
+  assert.equal(rebuilt.businessDate, request.businessDate);
+  assert.equal(rebuilt.projectId, 'project-parent-1');
+  const original = parseRoleJobRequest(request);
+  assert.deepEqual(rebuilt.research, original.research, '重建 research 块与校验原值逐字段等价');
+  assert.deepEqual(buildJobObjectBoundary(rebuilt, request.businessDate), boundary, '重建边界与持久边界一致');
+  assert.equal(readJobContractFromRefs(refs)?.jobId, 'job-research-1');
+  // reporter 老路径（无 research）不产生 research refs / projectId。
+  const plain = parseRoleJobRequest({ roleId: 'reporter', brief: '扫', businessDate: '2026-08-09', channelIds: ['c1'], sourceFeedIds: ['feed-1'] });
+  const plainRefs = buildJobContextRefs({ jobId: 'job-plain', request: plain, boundary: buildJobObjectBoundary(plain, '2026-08-09') });
+  assert.equal('research' in plainRefs, false, '老 reporter 路径不得产生 research refs');
+  assert.equal(plainRefs.projectId, undefined, '老 reporter 路径不得持久化 projectId');
+  // 损坏 research refs → 重建 fail closed（null）。
+  assert.equal(rebuildRoleJobRequest({ ...refs, research: { ...refs.research, channels: [] } }), null);
+  assert.equal(rebuildRoleJobRequest({ ...refs, research: { ...refs.research, requiredClaims: [] } }), null);
+  assert.equal(rebuildRoleJobRequest({ ...refs, research: 'not-an-object' }), null);
+});
+
 // T2 边界标准化 + 命令提取 + 纯校验器（同界/越界/缺失/角色掩码）
 test('T2 对象边界标准化：sourceIds 去重排序、scope 语义、校验器 fail closed', () => {
   assert.deepEqual(normalizeSourceIds([' b ', 'a', 'a', null, 42, '']), ['a', 'b']);
@@ -499,7 +545,7 @@ test('T11 重启可重建：context_refs_json 跨重启完整指认并重建原�
     try {
       const started = await dispatchStartAgentTask(runtime, { intent: 'studio_draft', businessDate: '2026-08-09', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: scheduler, requestId: 't11-start' });
       taskId = started.task.id;
-      const request = { roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', businessDate: '2026-08-09' };
+      const request = { roleId: 'writer', brief: '基于核心稿写小红书版', projectId: 'P11', writerTask: 'xiaohongshu_platform_version', businessDate: '2026-08-09' };
       await bindJobContract(runtime, taskId, request, '2026-08-09');
       persistedJobId = getAgentTask(runtime.database, taskId).contextRefs.jobId;
       assert.ok(persistedJobId.startsWith('job-'));
@@ -510,7 +556,7 @@ test('T11 重启可重建：context_refs_json 跨重启完整指认并重建原�
     try {
       assert.equal(readJobContract(reopened.database, taskId).jobId, persistedJobId);
       const rebuilt = rebuildRoleJobRequest(getAgentTask(reopened.database, taskId).contextRefs);
-      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', businessDate: '2026-08-09' });
+      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '基于核心稿写小红书版', projectId: 'P11', writerTask: 'xiaohongshu_platform_version', businessDate: '2026-08-09' });
       assert.deepEqual(buildJobObjectBoundary(rebuilt, '2026-08-09'), readJobContract(reopened.database, taskId).boundary, '重建边界与持久边界一致');
       const spawner = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });
       const job = spawner.spawn(rebuilt);

@@ -17,8 +17,11 @@ import {
   readbackContentVersion,
   readbackLibraryMutation,
   readbackPlansRevision,
-  readbackScanPhase
+  readbackScanPhase,
+  readbackXiaohongshuPlatformVersion
 } from '../src/main/role-job-registry.ts';
+import { draftPrompt } from '../src/main/agent-runner.ts';
+import { completeAgentTask, startAgentTask } from '../src/main/agent-tasks.ts';
 
 test('default maxWorkers is 2 and three FIFO jobs leave the third queued', () => {
   assert.equal(DEFAULT_MAX_WORKERS, 2);
@@ -198,6 +201,11 @@ test('spawn input validation: intent/planDate/unknown keys rejected at runtime',
   const ok = parseRoleJobRequest({ roleId: 'reporter', brief: '扫', businessDate: '2026-08-08', channelIds: ['c1', 'c2'] });
   assert.equal(ok.roleId, 'reporter');
   assert.deepEqual(ok.channelIds, ['c1', 'c2']);
+  const coreWriter = parseRoleJobRequest({ roleId: 'writer', brief: '写核心稿', projectId: 'p1', writerTask: 'core_draft' });
+  assert.equal(coreWriter.writerTask, 'core_draft');
+  const xhsWriter = parseRoleJobRequest({ roleId: 'writer', brief: '写小红书版', projectId: 'p1', writerTask: 'xiaohongshu_platform_version' });
+  assert.equal(xhsWriter.writerTask, 'xiaohongshu_platform_version');
+  assert.throws(() => parseRoleJobRequest({ roleId: 'writer', brief: '错误任务', projectId: 'p1', writerTask: 'platform' }), { code: JOB_ERROR_CODES.VALIDATION_ERROR });
 });
 
 test('L1-2 derivation table: four roles map to locked intents and resource lock keys', () => {
@@ -215,6 +223,18 @@ test('L1-2 derivation table: four roles map to locked intents and resource lock 
   assert.equal(spec.intent, 'studio_draft');
   assert.equal(spec.policy, 'draft');
   assert.deepEqual(spec.resourceLocks, ['project:ws:p1']);
+  const xhsSpec = deriveRoleJobSpec({ roleId: 'writer', brief: 'xhs', projectId: 'p1', writerTask: 'xiaohongshu_platform_version' }, 'ws');
+  assert.equal(xhsSpec.writerTask, 'xiaohongshu_platform_version');
+  assert.equal(xhsSpec.readback, 'xiaohongshu_platform_version');
+  const corePrompt = draftPrompt({ id: 'task-core' }, 'p1', 'req-core', 'core_draft', '基于项目资料写核心稿');
+  assert.match(corePrompt, /wmb_save_core_version/);
+  assert.match(corePrompt, /禁止调用 wmb_save_platform_version/);
+  assert.match(corePrompt, /brief=基于项目资料写核心稿/);
+  const xhsPrompt = draftPrompt({ id: 'task-xhs' }, 'p1', 'req-xhs', 'xiaohongshu_platform_version', '基于现有 WMB 核心稿生成小红书平台版本');
+  assert.match(xhsPrompt, /wmb_save_platform_version/);
+  assert.match(xhsPrompt, /platform 必须是 xiaohongshu/);
+  assert.match(xhsPrompt, /禁止调用 wmb_save_core_version/);
+  assert.match(xhsPrompt, /brief=基于现有 WMB 核心稿生成小红书平台版本/);
 });
 
 function openDatabase(directory) {
@@ -256,6 +276,25 @@ test('L0-6 readback rules: scan phase / plans revision / content version / libra
     assert.equal(readbackContentVersion(db, 'proj-1'), null, 'no core version yet');
     db.prepare("INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES ('ver-1', 'proj-1', '正文', 1, ?)").run(now);
     assert.deepEqual(readbackContentVersion(db, 'proj-1'), { kind: 'content_version', projectId: 'proj-1', versionId: 'ver-1' });
+    const xhsTask = startAgentTask(db, {
+      intent: 'studio_draft',
+      businessDate: '2026-08-12',
+      contextRefs: { projectId: 'proj-1', writerTask: 'xiaohongshu_platform_version' }
+    });
+    assert.equal(xhsTask.ok, true);
+    const missingPlatform = completeAgentTask(db, xhsTask.data.id);
+    assert.equal(missingPlatform.ok, false);
+    assert.match(missingPlatform.error.message, /小红书平台版本/);
+    assert.equal(readbackXiaohongshuPlatformVersion(db, 'proj-1'), null);
+    db.prepare(`INSERT INTO platform_versions
+      (id, project_id, content_version_id, platform, format, body, asset_ids_json, created_at, updated_at, revision)
+      VALUES ('pv-xhs-1', 'proj-1', 'ver-1', 'xiaohongshu', 'text', '小红书正文', '[]', ?, ?, 1)`).run(now, now);
+    assert.deepEqual(readbackXiaohongshuPlatformVersion(db, 'proj-1'), {
+      kind: 'xiaohongshu_platform_version', projectId: 'proj-1', versionId: 'pv-xhs-1', contentVersionId: 'ver-1'
+    });
+    const completedPlatform = completeAgentTask(db, xhsTask.data.id);
+    assert.equal(completedPlatform.ok, true);
+    assert.equal(completedPlatform.data.status, 'succeeded');
 
     // librarian（WMB-5121 结构化 no-op）：收据>=1 → sources_mutated；零收据仅认末条最后 ```json {"wmb_noop":true} 围栏 → noop_confirmed；
     // 存量自然语言 no-op（无围栏）/静默无写 → 保守 null（JOB_READBACK_MISSING，不得假成功）

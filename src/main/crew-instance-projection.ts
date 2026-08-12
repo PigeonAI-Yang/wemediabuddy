@@ -43,6 +43,7 @@ export type CrewInstance = Readonly<{
   piSessionId: string | null;
   businessDate: string | null;
   projectId: string | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
   error: string | null;
   /** 终态稳定 code（failed/needs_user 取自 agent_task.errorCode；succeeded 无持久 code）。 */
   code: string | null;
@@ -108,12 +109,9 @@ export function instanceProgressRatio(task: AgentTask | null): number | null {
   if (!task || task.status !== 'running') return null;
   const p = task.progress || {};
   const planned = Number(p.planned ?? 0);
+  if (!(planned > 0)) return null; // 无真实计划量：不确定态（空轨），不得凭阶段猜比例
   const processed = Number(p.processed ?? 0);
-  if (planned > 0) return Math.max(0, Math.min(1, processed / planned));
-  const phase = String(task.phase || '');
-  if (/judg|synth|validat|running_pi/i.test(phase)) return 0.62;
-  if (/scan|channel/i.test(phase)) return 0.28;
-  return 0.15;
+  return Math.max(0, Math.min(1, processed / planned));
 }
 
 /** 会话文件命名约定（设计 §7.4）：`job-<jobId>.jsonl`，多实例天然隔离、续跑 baseline。 */
@@ -212,6 +210,7 @@ function instanceFromPool(
     piSessionId: task?.piSessionId ?? null,
     businessDate: rec.businessDate,
     projectId: rec.projectId,
+    writerTask: rec.writerTask,
     error: rec.error,
     code: rec.report?.code ?? null,
     queuedAt: rec.queuedAt,
@@ -239,6 +238,7 @@ function instanceFromTask(task: AgentTask, contract: JobContract, status: CrewIn
     piSessionId: task.piSessionId,
     businessDate: contract.boundary.businessDate ?? task.businessDate ?? null,
     projectId: contract.boundary.projectId,
+    writerTask: task.contextRefs.writerTask === 'xiaohongshu_platform_version' ? 'xiaohongshu_platform_version' : contract.roleId === 'writer' ? 'core_draft' : null,
     error: task.errorMessage,
     code: task.errorCode,
     queuedAt: task.createdAt,

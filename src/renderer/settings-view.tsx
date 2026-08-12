@@ -151,7 +151,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     { id: 'browser', label: '浏览器与账号', icon: '◎' },
     { id: 'channels', label: '情报渠道', icon: '⌁' },
     { id: 'lists', label: 'X Lists', icon: '≡' },
-    { id: 'agent', label: 'Agent 接入', icon: '↔' },
+    { id: 'agent', label: '智能体接入', icon: '↔' },
     { id: 'diagnostics', label: '系统诊断', icon: '⌁' }
   ];
   const headings: Record<SettingsSection, { title: string; description: string }> = {
@@ -162,7 +162,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     browser: { title: '浏览器与账号', description: '' },
     channels: { title: '情报渠道', description: '' },
     lists: { title: 'X Lists', description: '' },
-    agent: { title: 'Agent 与角色', description: '' },
+    agent: { title: '智能体与角色', description: '' },
     diagnostics: { title: '系统诊断', description: '' },
     about: { title: '关于 WMB', description: '' }
   };
@@ -265,10 +265,10 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           {!workspaces.workspaces.some((workspace) => workspace.displayName === '英国生活') && <div className="settings-row"><div><h3>英国生活官方工作空间</h3></div><button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.createUkWorkspace().then(() => window.wmb.listWorkspaces()).then(setWorkspaces).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>创建 UK 工作空间</button></div>}
           {workspaceNote && <p className="settings-note error">{workspaceNote}</p>}
           {settings && <>
-            <div className="settings-row"><div><h3>数据库</h3><p>wmb.db · {formatBytes(settings.usage.database)} · 迁移 v{settings.counts.migrations}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
-            <div className="settings-row"><div><h3>素材目录</h3><p>assets/ · {formatBytes(settings.usage.assets)} · SHA-256 去重</p></div></div>
-            <div className="settings-row"><div><h3>当前绑定 installation profile</h3><p>{settings.paths.boundBrowserProfile || '尚未绑定'} · {formatBytes(settings.usage.boundBrowserProfile)}</p></div></div>
-            <div className="settings-row"><div><h3>Legacy root browser-profile（只读保留）</h3><p>{settings.paths.legacyBrowserProfile} · {formatBytes(settings.usage.legacyBrowserProfile)}</p></div></div>
+            <div className="settings-row"><div><h3>数据库</h3><p>wmb.db · {formatBytes(settings.usage.database)} · 数据库版本 v{settings.counts.migrations}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
+            <div className="settings-row"><div><h3>素材目录</h3><p>assets/ · {formatBytes(settings.usage.assets)} · 内容指纹去重</p></div></div>
+            <div className="settings-row"><div><h3>当前绑定浏览器档案</h3><p>{settings.paths.boundBrowserProfile || '尚未绑定'} · {formatBytes(settings.usage.boundBrowserProfile)}</p></div></div>
+            <div className="settings-row"><div><h3>旧版浏览器档案（只读保留）</h3><p>{settings.paths.legacyBrowserProfile} · {formatBytes(settings.usage.legacyBrowserProfile)}</p></div></div>
           </>}
           <div className="settings-row"><div><h3>日志</h3><p>logs/ · {settings ? formatBytes(settings.usage.logs) : '—'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}

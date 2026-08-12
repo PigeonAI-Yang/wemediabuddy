@@ -1,4 +1,4 @@
-/* Agents page: 班组概览 → 紧凑状态/派单 → 活动与历史工单。 */
+/* Agents page: 班组概览（五角色高卡 + 运行明细抽屉）→ 活动实例与历史工单。 */
 
 .agents-roster {
   --agents-callout-danger-bg: color-mix(in srgb, var(--danger) 8%, var(--surface));
@@ -16,32 +16,7 @@
   overflow: hidden;
 }
 
-/* 状态与派单共用一个紧凑控制面。 */
-.agents-team-card {
-  flex: 0 0 auto;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface-raised);
-}
-.agents-control-strip {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
-}
-.agents-control-strip > .secondary-button {
-  flex: none;
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-.agents-team-card > .agents-stale-banner,
-.agents-team-card > .seat-conflict { margin: 0 12px; }
+/* 手动派单控制面已随 WMB-5195 整块移除（工作计数/筛选/容量不迁移）。 */
 
 .agents-stale-banner {
   flex: 0 0 auto;
@@ -55,50 +30,6 @@
   background: var(--amber-soft);
   color: var(--ink);
   font-size: 13px;
-}
-
-/* ---- 页头摘要（工作中/排队/等你批 + 容量，全部来自投影 API，可点过滤） ---- */
-.agents-summary-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-.agents-summary-line button {
-  border: 0;
-  background: transparent;
-  color: var(--ink-soft, var(--ink));
-  font: inherit;
-  font-weight: 650;
-  padding: 2px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.agents-summary-line button:hover:not(:disabled) {
-  color: var(--ink);
-  background: var(--surface-hover, color-mix(in srgb, var(--surface) 80%, var(--border)));
-}
-.agents-summary-line button.active {
-  color: var(--accent-soft, var(--accent));
-  background: var(--accent-faint);
-}
-.agents-summary-line button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.agents-summary-sep { color: var(--muted-low); }
-.agents-summary-reset { color: var(--muted) !important; }
-.agents-capacity {
-  margin-left: 6px;
-  padding: 1px 9px;
-  border: 1px solid var(--border-strong, var(--border));
-  border-radius: 999px;
-  font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
 }
 
 .agents-loading {
@@ -155,58 +86,11 @@
   min-width: 0;
 }
 
-/* ---- 派单条（沿用全局 primary/secondary 按钮） ---- */
-.agents-spawn-bar {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  align-items: end;
-  padding: 9px 10px 10px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-}
-.agents-spawn-bar label {
-  display: grid;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--muted);
-}
-.agents-spawn-brief {
-  flex: 1 1 180px;
-}
-.agents-spawn-bar input,
-.agents-spawn-bar select {
-  min-height: 34px;
-  border-radius: 7px;
-  border: 1px solid var(--border-strong, var(--border));
-  background: var(--surface-raised, var(--surface));
-  color: var(--ink);
-  padding: 0 12px;
-  font: inherit;
-}
-.agents-spawn-bar > .primary-button {
-  min-height: 34px;
-  padding: 0 14px;
-}
-.agents-spawn-bar input:focus-visible,
-.agents-spawn-bar select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 .agents-jobs-msg {
   margin: 0;
-  width: 100%;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
-}
-@media (max-width: 760px) {
-  .agents-control-strip { align-items: stretch; flex-direction: column; }
-  .agents-control-strip > .secondary-button { align-self: flex-start; }
 }
 
 .agents-row-action {
@@ -227,9 +111,19 @@
   opacity: 0.45;
   cursor: default;
 }
+/* 续派属于每条历史任务的次级动作；避免列表同时出现多枚紫实色按钮。 */
 .agents-row-action.strong {
-  color: var(--accent-soft, var(--accent));
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
   font-weight: 700;
+  padding: 3px 11px;
+  border-radius: 7px;
+}
+.agents-row-action.strong:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 
 /* 进度条（沿用既有视觉语言） */
@@ -244,15 +138,31 @@
   height: 100%;
   width: calc(var(--progress, 0) * 100%);
   border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #888), var(--accent));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, var(--muted-low)), var(--accent));
   transition: width 240ms ease;
 }
-.agents-work-progress:not([style*="--progress: 0"]) > i {
+.agents-work-progress[style*="--progress"]:not([style*="--progress: 0"]) > i {
   min-width: 8%;
+}
+/* 不确定态：running 且无真实 processed/planned（WMB-5195），扫动轨 + 不显示数字百分比。 */
+.agents-work-progress.indeterminate > i {
+  width: 38%;
+  min-width: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: agents-progress-sweep 1.3s ease-in-out infinite;
+}
+@keyframes agents-progress-sweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(370%); }
 }
 @media (prefers-reduced-motion: reduce) {
   .agents-work-progress > i {
     transition: none;
+  }
+  .agents-work-progress.indeterminate > i {
+    animation: none;
+    width: 30%;
+    opacity: 0.55;
   }
 }
 
@@ -263,6 +173,507 @@
   line-height: 1.45;
 }
 
+/* ---- 运行明细抽屉（WMB-5195：复用 sources-panel/drawer-backdrop 既有视觉语言） ---- */
+.agents-detail-panel {
+  padding: 34px 18px 18px;
+  gap: 10px;
+}
+.agents-detail-head {
+  flex: none;
+}
+.agents-detail-head h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.agents-detail-head h2 small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agents-detail-avatar-edit {
+  align-self: flex-start;
+  border: 1px solid var(--border-strong, var(--border));
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.agents-detail-avatar-edit:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.agents-detail-avatar-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agents-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-right: 4px;
+}
+.agents-detail-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.agents-detail-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agents-detail-switch-item {
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.agents-detail-switch-item:hover:not(:disabled) {
+  color: var(--ink);
+}
+.agents-detail-switch-item.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--accent-faint);
+  color: var(--accent-soft, var(--ink));
+}
+.agents-detail-switch-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agents-detail-instance {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+.agents-detail-instance-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.agents-detail-instance-head .agents-row-action {
+  margin-left: auto;
+}
+.agents-detail-instance-name {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-detail-jobid {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.agents-detail-brief {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.agents-detail-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.agents-detail-progress .agents-work-progress {
+  display: block;
+}
+.agents-detail-pct {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.agents-detail-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.agents-detail-meta-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.agents-detail-meta-row > span:first-child {
+  flex: none;
+  color: var(--muted-low);
+  width: 5.5em;
+}
+.agents-detail-meta-row > span:last-child,
+.agents-detail-meta-row > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.agents-detail-error {
+  color: var(--danger);
+}
+.agents-detail-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.agents-detail-section h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border-soft, var(--border));
+  padding-bottom: 4px;
+}
+.agents-detail-events,
+.agents-detail-msgs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.agents-detail-events li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft, var(--ink));
+}
+.agents-detail-events time {
+  color: var(--muted-low);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agents-detail-msgs li {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+}
+.agents-detail-msg-from {
+  color: var(--accent-soft, var(--accent));
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.agents-detail-msg-body {
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.agents-detail-msgs time {
+  color: var(--muted-low);
+  font-size: 11px;
+}
+.agents-detail-transcript {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 10px;
+  background: var(--surface);
+}
+.agents-detail-bubble {
+  min-width: 0;
+  margin: 0;
+  padding: 12px 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.agents-detail-bubble + .agents-detail-bubble {
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.agents-detail-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+.agents-detail-entry-type {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.agents-detail-entry-state {
+  color: var(--muted-low);
+  font-size: 11px;
+  font-weight: 650;
+}
+.agents-detail-entry-body {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agents-detail-entry.user {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.agents-detail-entry.user .agents-detail-entry-type {
+  color: var(--accent-soft, var(--accent));
+}
+.agents-detail-entry.user .agents-detail-entry-body {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.agents-detail-expandable {
+  min-width: 0;
+  margin: 0;
+}
+.agents-detail-expandable > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  list-style: none;
+  cursor: pointer;
+}
+.agents-detail-expandable > summary::-webkit-details-marker {
+  display: none;
+}
+.agents-detail-expandable > summary::after {
+  content: '›';
+  color: var(--muted);
+  font-size: 15px;
+  transition: transform 180ms ease-out;
+}
+.agents-detail-expandable[open] > summary::after {
+  transform: rotate(90deg);
+}
+.agents-detail-entry.user .agents-detail-expandable .agents-detail-entry-summary {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.agents-detail-expandable[open] > .agents-detail-entry-body {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.agents-detail-entry.system-event {
+  padding: 0;
+  color: var(--ink-soft, var(--ink));
+  background: color-mix(in srgb, var(--info) 6%, var(--surface));
+}
+.agents-detail-entry.system-event > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  list-style: none;
+  cursor: pointer;
+}
+.agents-detail-entry.system-event > summary::-webkit-details-marker {
+  display: none;
+}
+.agents-detail-entry.system-event > summary::after {
+  content: '›';
+  color: var(--muted);
+  font-size: 15px;
+  transition: transform 180ms ease-out;
+}
+.agents-detail-entry.system-event[open] > summary::after {
+  transform: rotate(90deg);
+}
+.agents-detail-entry.system-event .agents-detail-entry-type {
+  color: var(--info);
+}
+.agents-detail-entry-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-soft, var(--ink));
+  font-size: 12.25px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-detail-entry.system-event > .agents-detail-entry-body {
+  margin: 0 10px 10px;
+  padding: 9px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+.agents-detail-entry-body.technical {
+  color: var(--ink-soft, var(--ink));
+  font: 11.5px/1.55 var(--mono);
+  word-break: break-word;
+}
+.agents-detail-entry.orchestration {
+  background: var(--surface-raised);
+}
+.agents-detail-entry.orchestration .agents-detail-entry-type {
+  color: var(--info);
+}
+.agents-detail-entry.orchestration.failed .agents-detail-entry-type,
+.agents-detail-entry.orchestration.failed .agents-detail-entry-state {
+  color: var(--danger);
+}
+.agents-detail-requirements {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  color: var(--ink-soft, var(--ink));
+  font-size: 12px;
+}
+.agents-detail-requirements > div {
+  display: grid;
+  grid-template-columns: 3em minmax(0, 1fr);
+  gap: 7px;
+}
+.agents-detail-requirements dt {
+  color: var(--muted-low);
+}
+.agents-detail-requirements dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.agents-detail-raw-record {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.agents-detail-raw-record > summary {
+  cursor: pointer;
+}
+.agents-detail-raw-record pre {
+  overflow: auto;
+  margin: 7px 0 0;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink-soft, var(--ink));
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11.5px/1.5 var(--mono);
+}
+.agents-detail-entry.assistant {
+  color: var(--ink-soft, var(--ink));
+  background: var(--surface);
+}
+.agents-detail-entry.assistant.streaming {
+  background: color-mix(in srgb, var(--status-running) 5%, var(--surface));
+}
+.agents-detail-entry.assistant.failed .agents-detail-entry-state {
+  color: var(--danger);
+}
+.agents-detail-segments {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+.agents-detail-segment {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+.agents-detail-segment-kind {
+  padding-top: 2px;
+  color: var(--muted-low);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.agents-detail-segment.response .agents-detail-segment-kind {
+  color: var(--accent-soft, var(--accent));
+}
+.agents-detail-segment.thinking .agents-detail-segment-kind {
+  color: var(--muted);
+}
+.agents-detail-segment.tool {
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+.agents-detail-segment.tool .agents-detail-segment-kind {
+  color: var(--info);
+}
+.agents-detail-segment.tool.failed .agents-detail-segment-kind {
+  color: var(--danger);
+}
+.agents-detail-segment.tool .pi-tool-line {
+  min-width: 0;
+  border: 0;
+}
+.agents-detail-segment.tool .pi-tool-line > summary {
+  padding: 0;
+  color: var(--ink-soft, var(--ink));
+  font-size: 11.75px;
+}
+.agents-detail-segment.tool .pi-tool-detail {
+  padding-bottom: 0;
+}
+.agents-detail-segment.thinking .pi-thinking-line > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: 12.25px;
+  line-height: 1.5;
+}
+.agents-detail-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agents-detail-thinking {
+  padding-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.agents-detail-entry.system-event > summary:focus-visible,
+.agents-detail-raw-record > summary:focus-visible,
+.agents-detail-segment .pi-thinking-line > summary:focus-visible,
+.agents-detail-segment .pi-tool-line > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agents-detail-entry.system-event > summary::after {
+    transition: none;
+  }
+}
+
 /* avatar crop modal */
 .agent-avatar-modal {
   position: fixed;
@@ -270,7 +681,7 @@
   z-index: 80;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, #000 55%, transparent);
+  background: var(--overlay);
   padding: 20px;
 }
 .agent-avatar-dialog {
@@ -281,7 +692,7 @@
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--panel-bg, var(--surface));
-  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
+  box-shadow: 0 18px 50px var(--overlay);
 }
 .agent-avatar-dialog header {
   display: flex;
@@ -305,7 +716,7 @@
   border: 1px solid var(--border-strong, var(--border));
   cursor: grab;
   touch-action: none;
-  background: #111;
+  background: var(--canvas-bg);
 }
 .agent-avatar-file,
 .agent-avatar-zoom {

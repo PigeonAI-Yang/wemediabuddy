@@ -10,6 +10,7 @@ import { updateKnowledgeSource } from '../src/main/knowledge.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { piTaskAuthorityPrompt } from '../src/main/pi-operator-skill.ts';
 import { upsertSource } from '../src/main/sources.ts';
+import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 test('daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-runner-'));
@@ -37,6 +38,15 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /为什么是现在/);
     assert.match(prompt, /五维/);
     assert.match(prompt, /六栏目/);
+    // 新身份：普通人的方向与真实项目（旧技术创作者/独立开发者身份与旧五维六栏目彻底退出运行时提示词）
+    assert.match(prompt, /面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人/);
+    for (const dimension of ['时代认知', '个人方向', 'AI 实践', '公开验证', '产品化']) assert.match(prompt, new RegExp(dimension), `missing dimension ${dimension}`);
+    for (const column of ['迷茫诊断', '经典方法', 'AI 实战', '项目日志', '方向判断', '商业化实验']) assert.match(prompt, new RegExp(column), `missing column ${column}`);
+    assert.doesNotMatch(prompt, /内容→信任→付费/);
+    assert.doesNotMatch(prompt, /认知\/技能\/表达/);
+    assert.doesNotMatch(prompt, /实验日志/);
+    assert.doesNotMatch(prompt, /原则卡/);
+    // 旧运营安全门保持不变
     assert.match(prompt, /仅可调用 wmb_get_knowledge_context/);
     assert.match(prompt, /尤其禁止 wmb_get_workbench/);
     assert.match(prompt, /收尾只输出一个 ```json 代码块/);
@@ -62,6 +72,15 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const withoutSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: false });
     assert.match(withoutSearch, /未开启自带搜索/);
     assert.doesNotMatch(withoutSearch, /模型自带的联网搜索补充证据/);
+
+    // 赛道门（Tier 1 判定）提示词沿用新身份与降权口径；旧「宏大综述/躺赚毒鸡汤」措辞不再出现
+    ensureOfficialWorkspaceProfile(database, 'official.ai');
+    const gated = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
+    assert.match(gated, /第一关：赛道相关性判定/);
+    assert.match(gated, /五维=时代认知\/个人方向\/AI 实践\/公开验证\/产品化/);
+    assert.match(gated, /纯模型公告、无普通人行动意义的参数\/价格新闻/);
+    assert.doesNotMatch(gated, /宏大行业综述/);
+    assert.doesNotMatch(gated, /躺赚毒鸡汤/);
 
     const requested = requestAgentTaskControl(database, started.data.id, 'cancel');
     assert.equal(requested.ok, true);

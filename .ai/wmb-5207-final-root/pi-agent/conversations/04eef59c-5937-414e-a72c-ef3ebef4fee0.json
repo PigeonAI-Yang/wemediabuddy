@@ -1,0 +1,44 @@
+{
+  "id": "04eef59c-5937-414e-a72c-ef3ebef4fee0",
+  "title": "请检查当前批注",
+  "sessionFile": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-5207-final-root\\pi-agent\\sessions\\04eef59c-5937-414e-a72c-ef3ebef4fee0.jsonl",
+  "sessionId": null,
+  "messages": [
+    {
+      "role": "user",
+      "text": "请检查当前批注",
+      "createdAt": "2026-08-12T03:38:20.595Z"
+    },
+    {
+      "role": "assistant",
+      "text": "Error while decrypting the ciphertext provided to safeStorage.decryptString. Ciphertext does not appear to be encrypted.",
+      "segments": [
+        {
+          "kind": "text",
+          "text": "Error while decrypting the ciphertext provided to safeStorage.decryptString. Ciphertext does not appear to be encrypted."
+        }
+      ],
+      "status": "failed",
+      "createdAt": "2026-08-12T03:38:20.595Z"
+    },
+    {
+      "role": "user",
+      "text": "请检查当前批注",
+      "createdAt": "2026-08-12T03:41:00.394Z"
+    },
+    {
+      "role": "assistant",
+      "text": "当前 Pi worker lease 尚未释放。",
+      "segments": [
+        {
+          "kind": "text",
+          "text": "当前 Pi worker lease 尚未释放。"
+        }
+      ],
+      "status": "failed",
+      "createdAt": "2026-08-12T03:41:00.394Z"
+    }
+  ],
+  "createdAt": "2026-08-12T03:31:23.829Z",
+  "updatedAt": "2026-08-12T03:41:00.406Z"
+}

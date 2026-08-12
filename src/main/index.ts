@@ -24,6 +24,7 @@ import {
   isDailyIntelligenceFamily,
   type AgentIntent
 } from './agent-tasks';
+import { dispatchReapOrphanedPageTasks } from './page-task-orphan.ts';
 import {
   dispatchCancelAgentTask,
   dispatchCompleteAgentTask,
@@ -35,8 +36,7 @@ import {
   dispatchStartAgentTask,
   dispatchUpdateAgentTaskPhase
 } from './agent-task-commands.ts';
-import { dispatchManagerDailyIntelligence, syncManagerTaskFromLegacyChild } from './manager-dispatch.ts';
-import { getActiveManagerTask } from './manager-task.ts';
+import { dispatchManagerDailyIntelligence, readManagerProjection, syncManagerTaskFromLegacyChild } from './manager-dispatch.ts';
 import { createDataRootSelection } from './data-root-selection';
 import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspaceIpcGate, RUNTIME_MANAGING_IPC_CHANNELS, type WorkspaceRuntimeLease } from './workspace-runtime';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
@@ -57,7 +57,6 @@ import { dispatchRecoverRunningMetricJobs, dispatchSchedulePublishedPublicationM
 import { ensureAutomaticTaskGrant } from './task-grants.ts';
 import { registerExecutionGrantIpc } from './ipc-execution-grants';
 import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './app-window';
-import { visiblePiPrompt } from './pi-persistence';
 import { registerSettingsConfigIpc } from './ipc-settings-config';
 import { registerPiDockIpc } from './ipc-pi-dock';
 import { registerXListIpc } from './ipc-x-lists'; import { dispatchRecoverOrphanedXListOperations } from './x-list-business-command'; import { activeXListOperationIds } from './x-list-execution'; import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
@@ -65,6 +64,8 @@ import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals'; import { createWorkspaceConfirmation } from './workspace-confirmation';
 import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session'; import { createBrowserProfileOwner } from './browser-profile-owner';
+import { KnowledgeLintScheduler, registerKnowledgeChangeSetLintTrigger } from './knowledge-health';
+import { runLegacyKnowledgeInitAtStartup } from './legacy-knowledge-init';
 import { handleSquirrelLifecycle } from './squirrel-lifecycle';
 import { createDesktopLifecycle } from './desktop-lifecycle';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
@@ -85,15 +86,12 @@ const dailyRuns = new Map<string, Promise<unknown>>();
 function dailyRunKey(rootPath: string, businessDate: string): string {
   return `${rootPath}\u0000${businessDate}`;
 }
-const dailyControlInflight = new Map<string, Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Readonly<Record<string, unknown>> } | null }>>();
-let activeRuntime: ActiveWorkspaceRuntime | null = null;
+const dailyControlInflight = new Map<string, Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Readonly<Record<string, unknown>> } | null }>>(); let activeRuntime: ActiveWorkspaceRuntime | null = null;
 installActiveWorkspaceIpcGate(ipcMain, () => activeRuntime, [...RUNTIME_MANAGING_IPC_CHANNELS]);
 const workspaceProposals = new WorkspaceProposalStore(); const channelProposals = new IntelligenceChannelProposalStore();
 const currentMcp = () => activeRuntime?.getMcp<McpRuntime>() ?? null; const currentXhs = () => activeRuntime?.getXhs<XhsMcpRuntime>() ?? null;
-const currentBrowser = () => activeRuntime?.getBrowser<BrowserRuntime>() ?? null;
-const currentPi = () => activeRuntime?.getWorker<PiRpcSupervisor>() ?? null;
-let lastEnsuredPiProfileId: string | null = null;
-const ownerUiActor = { type: 'owner_ui' as const, id: 'renderer', label: 'Owner UI' };
+const currentBrowser = () => activeRuntime?.getBrowser<BrowserRuntime>() ?? null; const currentPi = () => activeRuntime?.getWorker<PiRpcSupervisor>() ?? null;
+let lastEnsuredPiProfileId: string | null = null; const ownerUiActor = { type: 'owner_ui' as const, id: 'renderer', label: 'Owner UI' };
 async function uiCommandResult<T>(work: () => Promise<T>): Promise<{ ok: true; data: T; error: null } | { ok: false; data: null; error: { code: string; message: string; details?: Readonly<Record<string, unknown>> } }> {
   try { return { ok: true, data: await work(), error: null }; }
   catch (error) {
@@ -181,8 +179,7 @@ async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable
           ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: WMB_VISION_MODEL, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
         }, (event) => {
           runtime.guardLease(lease, () => {
-            const dockEvent = event.type === 'queue_update' ? { ...event, steering: Array.isArray(event.steering) ? event.steering.map((text) => visiblePiPrompt(String(text))) : [], followUp: Array.isArray(event.followUp) ? event.followUp.map((text) => visiblePiPrompt(String(text))) : [] } : event;
-            broadcastPiRuntimeProgress(dockEvent, 'dock');
+            broadcastPiRuntimeProgress(event, 'dock');
             if (event.type === 'wmb_process_crashed') {
               broadcastPiEvent({ type: 'failed', error: String(event.error ?? 'Pi 进程已退出，可重新发送。'), scope: 'dock' });
               runtime.releaseWorker(lease);
@@ -371,23 +368,38 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     scanSchedulerRef?.stop();
     scanSchedulerRef = scanScheduler;
     scanScheduler.start();
+    // WMB-5216：统一 ChangeSet 提交后局部 Lint 触发注册 + 周期 Lint 走既有 jobs 表驱动。
+    registerKnowledgeChangeSetLintTrigger();
+    // WMB-5217：历史初始化（经 CommandDispatcher 授权写；幂等续跑；失败不阻断启动）。
+    void runLegacyKnowledgeInitAtStartup(runtime).catch((error) => {
+      console.error('[knowledge-init] startup legacy init failed', error);
+    });
+    lintSchedulerRef?.stop();
+    lintSchedulerRef = new KnowledgeLintScheduler({ runtime, isCurrent: () => activeRuntime === runtime && runtime.isActive });
+    lintSchedulerRef.start();
     if (orphanSweepTimer) clearInterval(orphanSweepTimer);
     orphanSweepTimer = setInterval(() => { void sweepOrphanDailyTasks('interval'); }, 60_000);
   } catch (error) {
     scanSchedulerRef?.stop();
     scanSchedulerRef = null;
+    lintSchedulerRef?.stop();
+    lintSchedulerRef = null;
     if (activeRuntime === runtime) activeRuntime = null;
     await runtime.stop({ drain: false }).catch(() => {});
     throw error;
   }
 }
-let scanSchedulerRef: DailyScanScheduler | null = null;
-let orphanSweepTimer: ReturnType<typeof setInterval> | null = null, stopTopicReproposalScheduler: (() => void) | null = null;
-
+type TimerHandle = ReturnType<typeof setInterval>;
+let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null;
 async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
   const dataRootPath = runtime?.identity.rootPath;
   if (!runtime || !dataRootPath) return;
+  try {
+    await dispatchReapOrphanedPageTasks(runtime, (taskId) => runtime.getWorkerSnapshots().some((worker) => worker.taskId === taskId));
+  } catch (error) {
+    console.error('[page-orphan-sweeper]', reason, error);
+  }
   try {
     const today = shanghaiDate();
     const orphanKey = dailyRunKey(dataRootPath, today);
@@ -465,7 +477,6 @@ async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
     console.error('[daily-orphan-sweeper]', reason, error);
   }
 }
-
 const browserRegistryPath = path.join(app.getPath('userData'), 'browser-config.json');
 configureBrowserProfileRegistryPath(browserRegistryPath);
 openBrowserProfileRegistry(browserRegistryPath);
@@ -478,7 +489,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -498,7 +509,7 @@ const desktopLifecycle = createDesktopLifecycle({
   defaultBrowserProfileId,
   getActiveRuntime: () => activeRuntime,
   clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
-  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; },
+  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; },
   abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
   setShuttingDown: (value) => { shuttingDown = value; },
   restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,
@@ -690,16 +701,14 @@ app.whenReady().then(async () => {
     const runtime = activeRuntime;
     if (!runtime) return null;
     const businessDate = input?.businessDate?.trim() || shanghaiDate();
-    const managerTask = getActiveManagerTask(runtime.database, businessDate);
-    const legacyChild = getActiveDailyIntelligenceTask(runtime.database, businessDate);
-    return { managerTask, legacyChild };
+    return readManagerProjection(runtime, businessDate);
   });
 
   ipcMain.handle('agent:sync-manager-task', async (_event, input: { businessDate?: string } = {}) => {
     const runtime = activeRuntime;
     if (!runtime) return null;
     const businessDate = input?.businessDate?.trim() || shanghaiDate();
-    const legacyChild = getActiveDailyIntelligenceTask(runtime.database, businessDate);
+    const legacyChild = readManagerProjection(runtime, businessDate).legacyChild;
     const synced = await syncManagerTaskFromLegacyChild(runtime, businessDate, legacyChild);
     if (legacyChild) broadcastPiEvent({ type: 'agent_task', task: legacyChild });
     if (synced) broadcastPiEvent({ type: 'manager_task', action: 'sync', focusDialog: false, task: synced });

@@ -4,9 +4,10 @@ import { execFile, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import type { IpcMain } from 'electron';
 import { CommandDispatcher, type CommandEnvelopeV1, type CommandHandlerResult, type CommandReceiptV1 } from './command-dispatcher.ts';
-import { assertTaskGrantForEnvelope } from './task-grants.ts';
+import { assertTaskGrantForEnvelope, ensureAutomaticTaskGrant, rebindEnvelopeGrant, shouldRefreshDeskStaleScope } from './task-grants.ts';
 import { assertExecutionGrantForEnvelope } from './execution-grants.ts';
 import { installWorkspaceWriteGuard } from './db/write-guard.ts';
+import { recordRoleAuthorityBlocked } from './operations.ts';
 import { MAX_WORKER_LEASES, MAX_EMPLOYEE_LEASES } from './worker-limits.ts';
 export { MAX_WORKER_LEASES, MAX_EMPLOYEE_LEASES } from './worker-limits.ts';
 
@@ -169,10 +170,33 @@ export class ActiveWorkspaceRuntime {
   }
 
   dispatchCommand<T>(envelope: CommandEnvelopeV1, handler: () => CommandHandlerResult<T>): Promise<CommandReceiptV1<T>> {
-    return this.runAtomic(() => {
+    return this.runAtomic(async () => {
       this.writeAuthorizationDepth += 1;
       try {
-        return this.dispatcher.dispatch(envelope, handler);
+        // WMB-5182 §4.8：写前恰一次 stale-scope 重签。拦截发生在任何业务写之前（被拒 envelope 从未产生写）；
+        // 命中 deskStanding 且不在当前 grant → 重跑 ensureAutomaticTaskGrant(desk)（sameCommandSet 变化 → revoke+reissue）
+        // 并把同一 envelope 改绑新 grant 恰一次重放；二次失败 → 收据落库 + role_authority_blocked 审计，会话与任务存活。
+        // 禁止循环（重签后命令必在新证内，不再触发）、禁止静默吞掉（收据/审计双留痕）、禁止绕行（无 grant-free 写）。
+        let target = envelope;
+        const staleScope = shouldRefreshDeskStaleScope(this.database, envelope, new Date());
+        if (staleScope) {
+          try {
+            const grantId = await ensureAutomaticTaskGrant(this, envelope.taskId as string, new Date(), 'desk');
+            if (grantId && grantId !== envelope.grantId) target = rebindEnvelopeGrant(envelope, grantId);
+          } catch {
+            // 重签失败（注册缺口/任务已终态）：原信封仍按原 grant 派发 → 错误收据落库（fail-closed，零业务写）。
+          }
+        }
+        const receipt = this.dispatcher.dispatch(target, handler);
+        if (staleScope && !receipt.ok && receipt.error?.code === 'TASK_SCOPE_BROADENED') {
+          recordRoleAuthorityBlocked(this.database, {
+            role: 'desk',
+            command: envelope.command,
+            taskId: envelope.taskId ?? '',
+            reason: 'TASK_SCOPE_BROADENED'
+          });
+        }
+        return receipt;
       } finally {
         try { installWorkspaceWriteGuard(this.database, this.isWriteAuthorized); }
         finally { this.writeAuthorizationDepth -= 1; }

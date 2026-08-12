@@ -3,7 +3,7 @@ import { callTool, textResult, type ToolDefinition } from './wmb-mcp-client.ts';
 const listRoster: ToolDefinition = {
   name: 'wmb_list_agents_roster',
   label: '读取班组投影',
-  description: '读取班组投影：桌助/记者/策划/写手/资料员的活动状态与进度摘要。桌助协调用。只读。',
+  description: '读取班组投影：主管/记者/策划/写手/资料员的活动状态与进度摘要。主管协调用。只读。',
   parameters: {
     type: 'object',
     properties: { businessDate: { type: 'string' } },
@@ -19,7 +19,7 @@ const listRoster: ToolDefinition = {
 const listJobs: ToolDefinition = {
   name: 'wmb_list_jobs',
   label: '列出员工工单',
-  description: '列出工单池排队/执行/终态，含运行句柄。桌助读进度用。只读。',
+  description: '列出工单池排队/执行/终态，含运行句柄。主管读进度用。只读。',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   async execute() {
     return textResult(await callTool('jobs.list', {}));
@@ -43,8 +43,8 @@ const getJob: ToolDefinition = {
 
 const spawnJob: ToolDefinition = {
   name: 'wmb_spawn_job',
-  label: '桌助派工',
-  description: '向记者/策划/写手/资料员派有界工单。不可派工给桌助自己。只传角色与业务参数（系统按角色自动选择固定工作流）：写手必须带 projectId；资料员为真实执行任务，无可整理内容时会回报 no-op 确认。派单后等系统 JOB_EVENT 终态推送（含 code/message/readback）再汇报；不要 sleep+bash 轮询 session。必要时才 wmb_get_job 看 monitor.task。',
+  label: '主管派工',
+  description: '向记者/策划/写手/资料员派有界工单。不可派工给主管自己。写手必须带 projectId，并用 writerTask 明确选择任务：core_draft 只写核心初稿，xiaohongshu_platform_version 只基于现有核心稿生成小红书平台版本；资料员为真实执行任务，无可整理内容时会回报 no-op 确认。派单后等系统 JOB_EVENT 终态推送（含 code/message/readback）再汇报；不要 sleep+bash 轮询 session。必要时才 wmb_get_job 看 monitor.task。',
   parameters: {
     type: 'object',
     properties: {
@@ -54,6 +54,7 @@ const spawnJob: ToolDefinition = {
       channelIds: { type: 'array', items: { type: 'string' }, description: 'reporter 可选：限定扫描渠道' },
       sourceFeedIds: { type: 'array', items: { type: 'string' }, description: 'reporter 可选：限定信息源' },
       projectId: { type: 'string', description: '写手必填：创作项目 id' },
+      writerTask: { type: 'string', enum: ['core_draft', 'xiaohongshu_platform_version'], description: 'writer 必填：core_draft | xiaohongshu_platform_version' },
       sourceIds: { type: 'array', items: { type: 'string' }, description: 'librarian 可选：限定资料 id' },
       scope: { type: 'string', description: 'librarian 可选：workspace（整工作空间维护）' }
     },
@@ -68,6 +69,7 @@ const spawnJob: ToolDefinition = {
       channel_ids: Array.isArray(params.channelIds) ? params.channelIds.map(String) : undefined,
       source_feed_ids: Array.isArray(params.sourceFeedIds) ? params.sourceFeedIds.map(String) : undefined,
       project_id: params.projectId ? String(params.projectId) : undefined,
+      writer_task: params.writerTask ? String(params.writerTask) : undefined,
       source_ids: Array.isArray(params.sourceIds) ? params.sourceIds.map(String) : undefined,
       scope: params.scope ? String(params.scope) : undefined
     }));
@@ -77,7 +79,7 @@ const spawnJob: ToolDefinition = {
 const cancelJob: ToolDefinition = {
   name: 'wmb_cancel_job',
   label: '取消工单',
-  description: '桌助取消员工工单。',
+  description: '主管取消员工工单。',
   parameters: {
     type: 'object',
     properties: { jobId: { type: 'string' } },
@@ -92,7 +94,7 @@ const cancelJob: ToolDefinition = {
 const messageJob: ToolDefinition = {
   name: 'wmb_message_job',
   label: '给工单留言',
-  description: '桌助向指定工单传话。员工执行上下文可见；running 时写入 task 进度（[主管] 前缀）。',
+  description: '主管向指定工单传话。员工执行上下文可见；running 时写入 task 进度（[主管] 前缀）。',
   parameters: {
     type: 'object',
     properties: {
@@ -113,7 +115,7 @@ const messageJob: ToolDefinition = {
 const listJobMessages: ToolDefinition = {
   name: 'wmb_list_job_messages',
   label: '读取工单留言',
-  description: '读取桌助给某工单的留言列表。只读。',
+  description: '读取主管给某工单的留言列表。只读。',
   parameters: {
     type: 'object',
     properties: { jobId: { type: 'string' } },
@@ -145,7 +147,7 @@ const dailyReadiness: ToolDefinition = {
 const continueAfterScan: ToolDefinition = {
   name: 'wmb_continue_after_scan',
   label: '扫描后续接策划',
-  description: '桌助选用的自动续接工具：扫描完成后调用它，系统按编排把策划接上。若你只要单项采集、不要策划，就不要调用。',
+  description: '主管选用的自动续接工具：扫描完成后调用它，系统按编排把策划接上。若你只要单项采集、不要策划，就不要调用。',
   parameters: {
     type: 'object',
     properties: { businessDate: { type: 'string' } },
@@ -160,8 +162,8 @@ const continueAfterScan: ToolDefinition = {
 
 const runDailyStage: ToolDefinition = {
   name: 'wmb_run_daily_stage',
-  label: '桌助启动今日阶段',
-  description: '桌助选用的阶段编排工具：scan=单项采集，judge=单项策划，full=一条龙。需要哪种编排就调哪种；不是禁用自动编排。',
+  label: '主管启动今日阶段',
+  description: '主管选用的阶段编排工具：scan=单项采集，judge=单项策划，full=一条龙。需要哪种编排就调哪种；不是禁用自动编排。',
   parameters: {
     type: 'object',
     properties: {

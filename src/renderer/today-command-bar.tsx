@@ -71,7 +71,7 @@ export function TodayCommandBar(props: {
         ) : (
           <>
             <div className="today-command-copy">
-              <p className="today-command-line">{view.headline}</p>
+              {view.headline ? <p className="today-command-line">{view.headline}</p> : null}
               {view.detail ? <p className="today-command-detail">{view.detail}</p> : null}
               {view.stats && view.stats.length > 0 ? (
                 <div className="today-command-stats" aria-label="今日指标">

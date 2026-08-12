@@ -3,8 +3,8 @@ import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { PublisherGithub } from '@electron-forge/publisher-github';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import path from 'node:path';
-const releaseOutDir = process.env.WMB_OUT_DIR || (process.platform === 'win32' ? path.join(path.parse(process.cwd()).root, 'wmb-out') : 'out');
 
+const releaseOutDir = process.env.WMB_OUT_DIR || (process.platform === 'win32' ? path.join(path.parse(process.cwd()).root, 'wmb-out') : 'out');
 const certificateFile = process.env.WMB_WINDOWS_CERTIFICATE_FILE?.trim();
 const certificatePassword = process.env.WMB_WINDOWS_CERTIFICATE_PASSWORD;
 const windowsSign = certificateFile && certificatePassword
@@ -44,7 +44,7 @@ const config: ForgeConfig = {
       ],
       renderer: [{ name: 'main_window', config: 'vite.renderer.config.ts' }]
     })
-  ]
+  ],
 };
 
 export default config;

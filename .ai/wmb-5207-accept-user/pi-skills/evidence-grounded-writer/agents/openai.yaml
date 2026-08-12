@@ -1,0 +1,4 @@
+interface:
+  display_name: "可信内容写作"
+  short_description: "为事实内容核查主张、补足证据并生成高信息密度发布成稿"
+  default_prompt: "Use $evidence-grounded-writer to research, verify, and write this factual topic as a substantial publishable draft."

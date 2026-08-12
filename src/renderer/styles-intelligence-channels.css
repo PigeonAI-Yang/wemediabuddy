@@ -30,7 +30,7 @@
 .channel-confirm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .channel-confirm-row > span[data-state="ready"] { color: var(--success); }
 .channel-confirm-row > span[data-state="blocked"] { color: var(--amber); }
-.channel-confirm-row .primary-button { margin-left: auto; }
+.channel-confirm-row .channel-confirm-cta { margin-left: auto; }
 .channel-source-list { border-top: 1px solid var(--border); }
 .channel-source-list > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 2px 12px; }
 .channel-source-list > div { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
@@ -78,6 +78,6 @@
   .channel-readiness { grid-template-columns: 1fr; }
   .channel-source-row { grid-template-columns: 1fr; gap: 12px; }
   .channel-source-actions { grid-column: auto; grid-row: auto; justify-content: flex-start; }
-  .channel-confirm-row .primary-button { margin-left: 0; }
+  .channel-confirm-row .channel-confirm-cta { margin-left: 0; }
   .channel-proposal { align-items: stretch; flex-direction: column; }
 }

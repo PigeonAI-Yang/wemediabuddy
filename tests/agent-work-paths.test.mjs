@@ -16,17 +16,33 @@ import { getAgentTask } from '../src/main/agent-tasks.ts';
 import {
   dispatchStartAgentTask,
   dispatchCancelAgentTask,
+  dispatchCompleteAgentTask,
   dispatchReportAgentTaskProgress,
   dispatchUpdateAgentTaskPhase
 } from '../src/main/agent-task-commands.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { JobSpawner } from '../src/main/job-spawner.ts';
 import { deriveIntentForRole } from '../src/main/role-job-registry.ts';
-import { ensureAutomaticTaskGrant, AUTOMATIC_TASK_GRANT_SCOPES } from '../src/main/task-grants.ts';
-import { filterCommandsForRole, roleWriteCommands, ROLE_CATALOG } from '../src/shared/agent-capabilities.ts';
+import {
+  AUTOMATIC_TASK_GRANT_SCOPES,
+  dispatchIssueTaskGrant,
+  ensureAutomaticTaskGrant,
+  getTaskGrant,
+  listTaskGrants
+} from '../src/main/task-grants.ts';
+import { deskStandingCommands, filterCommandsForRole, roleWriteCommands, ROLE_CATALOG } from '../src/shared/agent-capabilities.ts';
+import { createCommandEnvelope } from '../src/main/command-dispatcher.ts';
 import { buildRoleRoster } from '../src/main/role-roster.ts';
 import { decideDailyStartGate } from '../src/main/daily-start-gate.ts';
 import { createContentProject } from '../src/main/content.ts';
+import { dispatchConfirmIntelligenceChannelProposalSafe } from '../src/main/intelligence-channel-command.ts';
+import { readChannelProposalContext } from '../src/main/intelligence-channel-confirmation.ts';
+import { IntelligenceChannelProposalStore, channelProposalBinding } from '../src/main/intelligence-channel-proposals.ts';
+import { readIntelligenceChannelsSummary } from '../src/main/intelligence-channels.ts';
+import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
+import { readManagerProjection, syncManagerTaskFromLegacyChild, updateManagerTaskCheckpoint } from '../src/main/manager-dispatch.ts';
+import { saveCurrentPlan } from '../src/main/planning.ts';
+import { dispatchBusinessCommand } from '../src/main/business-command.ts';
 
 const ROLES = /** @type {const} */ (['reporter', 'planner', 'writer', 'librarian']);
 
@@ -79,11 +95,11 @@ test('0 catalog has five agents with rooms', () => {
   assert.equal(ROLE_CATALOG.librarian.labelZh, '资料员');
 });
 
-test('1 desk: exclusive seat, page_today start/cancel, zero standing writes', async () => {
+test('1 desk: exclusive seat, page_today start/cancel, full standing grant (A5)', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'wmb-desk-'));
   const runtime = openRuntime(directory);
   try {
-    assert.equal(roleWriteCommands('desk').length, 0);
+    assert.deepEqual([...roleWriteCommands('desk')].sort(), deskStandingCommands(), 'desk standing = full internal set');
 
     const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
     assert.equal(runtime.getWorkerSnapshot()?.purpose, 'desk');
@@ -101,6 +117,12 @@ test('1 desk: exclusive seat, page_today start/cancel, zero standing writes', as
     assert.equal(started.task.status, 'running');
     assert.equal(started.task.intent, 'page_today');
     runtime.bindWorkerTask(desk, started.task.id);
+
+    // 主管签发基底 = standing 全量：页收窄不再截断（page_today 页 scope 不含 approve/review，standing 含）。
+    const { commands } = await grantCommands(runtime, started.task.id, 'desk');
+    assert.deepEqual([...commands].sort(), deskStandingCommands(), 'desk page grant covers full standing');
+    assert.ok(commands.includes('plans.save'));
+    assert.ok(commands.includes('knowledge.topic_maintenance_approve'));
 
     const cancelled = await cancelTask(runtime, started.task.id, desk.leaseId);
     assert.equal(cancelled.status, 'cancelled');
@@ -364,7 +386,7 @@ test('7 permission matrix foreign writes blocked', () => {
   assert.equal(reporter.includes('plans.save'), false);
   assert.ok(planner.includes('plans.save'));
   assert.equal(writer.includes('plans.save'), false);
-  assert.equal(roleWriteCommands('desk').length, 0);
+  assert.deepEqual([...roleWriteCommands('desk')].sort(), deskStandingCommands(), 'desk standing full while employees stay page∩role');
 });
 
 test('8 all four employees spawn to terminal via JobSpawner', async () => {
@@ -445,6 +467,359 @@ test('9 getLatestDailyIntelligenceTask prefers succeeded over later cancelled', 
     assert.equal(latest?.status, 'succeeded');
   } finally {
     database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('10 A2 supervisor cross-page full grant; employee publish page stays readonly', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-a2-'));
+  const runtime = openRuntime(directory);
+  try {
+    const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    // 发布页（writeScope=null）：主管跳过只读分支，签发全量 standing grant。
+    const published = await startTask(runtime, {
+      intent: 'page_publish',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'desk', page: 'publish' }
+    }, desk.leaseId);
+    assert.equal(published.task.status, 'running');
+    runtime.bindWorkerTask(desk, published.task.id);
+    const { commands } = await grantCommands(runtime, published.task.id, 'desk');
+    assert.deepEqual([...commands].sort(), deskStandingCommands(), 'publish page desk grant = full standing');
+    await cancelTask(runtime, published.task.id, desk.leaseId);
+    runtime.releaseWorker(desk);
+
+    // 智能体页（agents）对主管同样签发全量（页 scope 不含 plans.save，standing 含）。
+    const desk2 = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    const agents = await startTask(runtime, {
+      intent: 'page_agents',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'desk', page: 'agents' }
+    }, desk2.leaseId);
+    runtime.bindWorkerTask(desk2, agents.task.id);
+    const agentsGrant = await grantCommands(runtime, agents.task.id, 'desk');
+    assert.ok(agentsGrant.commands.includes('plans.save'), 'desk grant not narrowed by page scope');
+    assert.ok(agentsGrant.commands.includes('knowledge.topic_maintenance_approve'));
+    await cancelTask(runtime, agents.task.id, desk2.leaseId);
+    runtime.releaseWorker(desk2);
+
+    // 员工绑定发布页 intent：baseCommands 为空 → TASK_SCOPE_EMPTY（员工发布页仍只读，A2 回归）。
+    const emp = runtime.acquireWorkerLease(null, 'writer', 'employee');
+    const empTask = await startTask(runtime, {
+      intent: 'page_publish',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'writer', page: 'publish' }
+    }, emp.leaseId);
+    runtime.bindWorkerTask(emp, empTask.task.id);
+    await assert.rejects(
+      () => ensureAutomaticTaskGrant(runtime, empTask.task.id, new Date(), 'writer'),
+      (error) => error.code === 'TASK_SCOPE_EMPTY',
+      'employee publish page grant must be refused'
+    );
+    await cancelTask(runtime, empTask.task.id, emp.leaseId);
+    runtime.releaseWorker(emp);
+  } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('11 A6 desk stale-scope write refreshes exactly once, replay succeeds (no loop, no duplicate write)', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-a6-'));
+  const runtime = openRuntime(directory);
+  try {
+    const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    const started = await startTask(runtime, {
+      intent: 'page_today',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'desk', page: 'today' }
+    }, desk.leaseId);
+    runtime.bindWorkerTask(desk, started.task.id);
+
+    // 构造旧证：手工签发仅含基建命令的窄 grant（同 AUTOMATIC_TASK_GRANT_WORKERS 绑定 pi+mcp）。
+    const narrow = await dispatchIssueTaskGrant(runtime, {
+      requestId: randomUUID(),
+      taskId: started.task.id,
+      ownerGoal: '窄证模拟旧证未换发',
+      allowedCommands: ['agent_tasks.report_progress'],
+      workers: [{ type: 'pi', id: 'pi' }, { type: 'external_agent', id: 'mcp' }],
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(narrow.ok, true);
+
+    let handlerCalls = 0;
+    const envelope = createCommandEnvelope({
+      workspaceId: runtime.identity.workspaceId,
+      runtimeEpoch: runtime.identity.runtimeEpoch,
+      command: 'knowledge.record_batch',
+      requestId: 'a6-stale-scope-write',
+      input: { items: [] },
+      boundIdentity: { entityType: 'knowledge_batch' },
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: started.task.id,
+      workerLeaseId: desk.leaseId,
+      grantId: narrow.data.id
+    });
+    const receipt = await runtime.dispatchCommand(envelope, () => {
+      handlerCalls += 1;
+      return { data: { ok: true }, entityType: 'knowledge_batch' };
+    });
+    assert.equal(receipt.ok, true, JSON.stringify(receipt.error ?? null));
+    assert.equal(handlerCalls, 1, 'exactly one business write — no recursive retry, no duplicate write');
+
+    // 旧窄证已撤销，新 active grant = deskStanding（sameCommandSet 换发）。
+    const oldGrant = getTaskGrant(runtime.database, narrow.data.id);
+    assert.equal(oldGrant.status, 'revoked', 'old narrow grant must be revoked by sameCommandSet renewal');
+    const active = listTaskGrants(runtime.database, started.task.id, new Date(), runtime.identity)
+      .find((grant) => grant.status === 'active');
+    assert.ok(active, 'renewed active grant exists');
+    assert.deepEqual([...active.allowedCommands].sort(), deskStandingCommands(), 'renewed grant = deskStanding');
+
+    // 同 requestId 以换发后 grant 重放 → 幂等返回同一成功收据（无重复业务写）。
+    const replayEnvelope = createCommandEnvelope({
+      workspaceId: runtime.identity.workspaceId,
+      runtimeEpoch: runtime.identity.runtimeEpoch,
+      command: 'knowledge.record_batch',
+      requestId: 'a6-stale-scope-write',
+      input: { items: [] },
+      boundIdentity: { entityType: 'knowledge_batch' },
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: started.task.id,
+      workerLeaseId: desk.leaseId,
+      grantId: active.id
+    });
+    const replay = await runtime.dispatchCommand(replayEnvelope, () => {
+      handlerCalls += 1;
+      return { data: { ok: true }, entityType: 'knowledge_batch' };
+    });
+    assert.equal(replay.ok, true);
+    assert.deepEqual(replay, receipt);
+    assert.equal(handlerCalls, 1, 'idempotent replay must not re-run the handler');
+
+    await cancelTask(runtime, started.task.id, desk.leaseId);
+    runtime.releaseWorker(desk);
+  } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('12 A6 redline and employee writes never trigger the stale-scope refresh', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-a6b-'));
+  const runtime = openRuntime(directory);
+  try {
+    const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    const started = await startTask(runtime, {
+      intent: 'page_today',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'desk', page: 'today' }
+    }, desk.leaseId);
+    runtime.bindWorkerTask(desk, started.task.id);
+
+    // 红线命令（x_lists.operation_execute）即使站在 desk 上也不触发重签 → 原样拒绝，grant 不被换发。
+    const narrow = await dispatchIssueTaskGrant(runtime, {
+      requestId: randomUUID(),
+      taskId: started.task.id,
+      ownerGoal: '窄证',
+      allowedCommands: ['agent_tasks.report_progress'],
+      workers: [{ type: 'pi', id: 'pi' }, { type: 'external_agent', id: 'mcp' }],
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(narrow.ok, true);
+    const redline = await runtime.dispatchCommand(createCommandEnvelope({
+      workspaceId: runtime.identity.workspaceId,
+      runtimeEpoch: runtime.identity.runtimeEpoch,
+      command: 'x_lists.operation_execute',
+      requestId: 'a6-redline-write',
+      input: {},
+      boundIdentity: {},
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: started.task.id,
+      workerLeaseId: desk.leaseId,
+      grantId: narrow.data.id
+    }), () => { throw new Error('HANDLER_MUST_NOT_RUN'); });
+    assert.equal(redline.ok, false);
+    assert.equal(redline.error.code, 'TASK_SCOPE_BROADENED', 'redline never enters any grant');
+    assert.equal(getTaskGrant(runtime.database, narrow.data.id).status, 'active', 'redline must not trigger renewal');
+
+    await cancelTask(runtime, started.task.id, desk.leaseId);
+    runtime.releaseWorker(desk);
+
+    // 员工越界命令（planner 持 plans.save，写 content.save_version 不在其 grant）→ 原样拒绝，不重签。
+    const plannerLease = runtime.acquireWorkerLease(null, 'planner', 'employee');
+    const plannerTask = await startTask(runtime, {
+      intent: 'page_today',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'planner', page: 'today' }
+    }, plannerLease.leaseId);
+    runtime.bindWorkerTask(plannerLease, plannerTask.task.id);
+    const { grantId } = await grantCommands(runtime, plannerTask.task.id, 'planner');
+    const employeeWrite = await runtime.dispatchCommand(createCommandEnvelope({
+      workspaceId: runtime.identity.workspaceId,
+      runtimeEpoch: runtime.identity.runtimeEpoch,
+      command: 'content.save_version',
+      requestId: 'a6-employee-out-of-scope',
+      input: {},
+      boundIdentity: {},
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: plannerTask.task.id,
+      workerLeaseId: plannerLease.leaseId,
+      grantId
+    }), () => { throw new Error('HANDLER_MUST_NOT_RUN'); });
+    assert.equal(employeeWrite.ok, false);
+    assert.equal(employeeWrite.error.code, 'TASK_SCOPE_BROADENED', 'employee out-of-role write stays rejected');
+    assert.equal(
+      listTaskGrants(runtime.database, plannerTask.task.id, new Date(), runtime.identity).filter((g) => g.status === 'active').length,
+      1,
+      'employee write must not trigger renewal'
+    );
+    await cancelTask(runtime, plannerTask.task.id, plannerLease.leaseId);
+    runtime.releaseWorker(plannerLease);
+  } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('13 WMB-5183 channel safe-apply: desk applies add/enable/disable with readback; remove proposal denied pre-mutation', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-5183-channel-'));
+  const seedDb = migrateDatabase(path.join(directory, 'wmb.db'));
+  const now = new Date().toISOString();
+  seedDb.prepare(
+    "INSERT OR REPLACE INTO app_meta(key, value, created_at, updated_at, revision) VALUES(?, ?, ?, ?, 1)"
+  ).run('workspace_id', `ws-${path.basename(directory)}`, now, now);
+  ensureOfficialWorkspaceProfile(seedDb, 'official.ai');
+  seedDb.close();
+  const runtime = ActiveWorkspaceRuntime.open(directory);
+  try {
+    const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    const started = await startTask(runtime, {
+      intent: 'page_publish',
+      businessDate: '2026-08-08',
+      contextRefs: { roleId: 'desk', page: 'publish' }
+    }, desk.leaseId);
+    assert.equal(started.task.status, 'running');
+    runtime.bindWorkerTask(desk, started.task.id);
+    const { grantId } = await grantCommands(runtime, started.task.id, 'desk');
+    const grant = getTaskGrant(runtime.database, grantId);
+    assert.ok(grant.allowedCommands.includes('intelligence_channels.proposal_apply_safe'), 'safe-apply is desk standing');
+    assert.equal(grant.allowedCommands.includes('intelligence_channels.proposal_apply'), false, 'precise apply never enters any grant');
+
+    // 安全应用（add 官网）：主管执行成功且完整读回。
+    const candidate = { inputText: 'Example', name: 'Example', url: 'https://example.com/', canonicalUrl: 'https://example.com/', origin: 'direct' };
+    const trial = { title: 'Example', url: 'https://example.com/', requestedUrl: 'https://example.com/', readable: true, itemCount: 0 };
+    const store = new IntelligenceChannelProposalStore();
+    const proposal = store.prepare({
+      requestId: 'wmb5183-safe-add',
+      changes: [{ action: 'add', module: 'official_web', inputText: 'Example', candidate, trialRead: trial }]
+    }, readChannelProposalContext(runtime.database));
+    const receipt = await dispatchConfirmIntelligenceChannelProposalSafe(runtime, {
+      store,
+      binding: channelProposalBinding(proposal),
+      trialWebsite: async () => trial,
+      taskId: started.task.id,
+      taskGrantId: grantId,
+      workerLeaseId: desk.leaseId
+    });
+    assert.equal(receipt.ok, true, JSON.stringify(receipt.error ?? null));
+    assert.equal(receipt.command, 'intelligence_channels.proposal_apply_safe');
+    assert.equal(receipt.actor.type, 'pi');
+    assert.equal(receipt.data.applied, 1);
+    assert.deepEqual(receipt.readback, { proposalId: proposal.id, normalizedHash: proposal.normalizedHash, state: 'applied', applied: 1 });
+    assert.equal(runtime.database.prepare('SELECT COUNT(*) AS count FROM website_sources').get().count, 1);
+    assert.equal(receipt.executionGrantId, null, 'safe-apply needs no precise execution grant');
+
+    // 含 remove 的提案 → 主管信封在业务写前拒绝（REDLINE_REQUIRED），零业务写、无 precise grant。
+    const summary = readIntelligenceChannelsSummary(runtime.database);
+    const added = summary.sources.find((source) => source.module === 'official_web');
+    assert.ok(added, 'added website source present');
+    const removeStore = new IntelligenceChannelProposalStore();
+    const removeProposal = removeStore.prepare({
+      requestId: 'wmb5183-remove',
+      changes: [{ action: 'remove', module: 'official_web', sourceId: added.sourceId, expectedRevision: added.revision }]
+    }, readChannelProposalContext(runtime.database));
+    const before = runtime.database.prepare('SELECT COUNT(*) AS count FROM website_sources').get().count;
+    const denied = await dispatchConfirmIntelligenceChannelProposalSafe(runtime, {
+      store: removeStore,
+      binding: channelProposalBinding(removeProposal),
+      trialWebsite: async () => trial,
+      taskId: started.task.id,
+      taskGrantId: grantId,
+      workerLeaseId: desk.leaseId
+    });
+    assert.equal(denied.ok, false);
+    assert.equal(denied.error.code, 'REDLINE_REQUIRED');
+    assert.equal(denied.sideEffectState, 'not_started');
+    assert.equal(runtime.database.prepare('SELECT COUNT(*) AS count FROM website_sources').get().count, before, 'remove proposal must not mutate');
+    assert.equal(
+      runtime.database.prepare("SELECT COUNT(*) AS count FROM execution_grants").get().count, 0,
+      'no precise execution grant issued for denied remove'
+    );
+
+    await cancelTask(runtime, started.task.id, desk.leaseId);
+    runtime.releaseWorker(desk);
+  } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('14 terminal planner recovery stops stale manager work projection idempotently', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-manager-terminal-'));
+  const businessDate = '2026-08-11';
+  const runtime = openRuntime(directory);
+  try {
+    const manager = await startTask(runtime, {
+      intent: 'page_agents',
+      businessDate,
+      contextRefs: { roleId: 'desk', manager: true }
+    });
+    await updateManagerTaskCheckpoint(runtime, manager.task.id, {
+      status: 'running',
+      phase: 'monitor_planner',
+      summary: '策划生成方案中'
+    });
+
+    const planner = await startTask(runtime, {
+      intent: 'daily_judge',
+      businessDate,
+      contextRefs: { roleId: 'planner' }
+    });
+    const plannerLease = runtime.acquireWorkerLease(planner.task.id, 'planner', 'employee');
+    runtime.bindWorkerTask(plannerLease, planner.task.id);
+    const plannerGrantId = await ensureAutomaticTaskGrant(runtime, planner.task.id, new Date(), 'planner');
+    const planInput = { planDate: businessDate, timezone: 'Asia/Shanghai', summary: '测试方案', items: [] };
+    const planReceipt = await dispatchBusinessCommand(runtime, {
+      command: 'plans.save',
+      requestId: `test:plan:${planner.task.id}`,
+      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
+      taskId: planner.task.id,
+      workerLeaseId: plannerLease.leaseId,
+      grantId: plannerGrantId,
+      input: planInput,
+      boundIdentity: { planDate: businessDate },
+      entityType: 'plan',
+      execute: (database, value) => {
+        const data = saveCurrentPlan(database, value, false);
+        return { data, entityId: data.id, afterRevision: data.revision, readback: data };
+      }
+    });
+    assert.equal(planReceipt.ok, true, JSON.stringify(planReceipt.error ?? null));
+    await dispatchCompleteAgentTask(runtime, planner.task.id, { ...actor('complete-planner'), taskId: planner.task.id });
+    runtime.releaseWorker(plannerLease);
+
+    const projection = readManagerProjection(runtime, businessDate);
+    assert.equal(projection.legacyChild?.id, planner.task.id, '终态 child 仍能按 manager 创建时间恢复');
+    assert.equal(projection.legacyChild?.status, 'partial', '缺少渠道收据时仍是已结束 child');
+    const synced = await syncManagerTaskFromLegacyChild(runtime, businessDate, projection.legacyChild);
+    assert.equal(synced?.checkpoint.status, 'waiting_human');
+    assert.equal(synced?.checkpoint.phase, 'report');
+    assert.equal(synced?.checkpoint.children.find((child) => child.roleId === 'planner')?.status, 'succeeded');
+
+    const repeated = await syncManagerTaskFromLegacyChild(runtime, businessDate, projection.legacyChild);
+    assert.equal(repeated?.updatedAt, synced?.updatedAt, '相同终态重复刷新不得续写 manager');
+  } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
     rmSync(directory, { recursive: true, force: true });
   }
 });

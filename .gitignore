@@ -4,24 +4,3 @@ out/
 .vite/
 /data/
 .wmb-*.log
-
-# Local Electron/Chromium acceptance profile. Keep adjacent screenshots/scripts.
-.ai/wmb-1301-headless/blob_storage/
-.ai/wmb-1301-headless/Cache/
-.ai/wmb-1301-headless/Code Cache/
-.ai/wmb-1301-headless/DawnGraphiteCache/
-.ai/wmb-1301-headless/DawnWebGPUCache/
-.ai/wmb-1301-headless/Dictionaries/
-.ai/wmb-1301-headless/GPUCache/
-.ai/wmb-1301-headless/Local Storage/
-.ai/wmb-1301-headless/Network/
-.ai/wmb-1301-headless/Session Storage/
-.ai/wmb-1301-headless/Shared Dictionary/
-.ai/wmb-1301-headless/DIPS*
-.ai/wmb-1301-headless/DevToolsActivePort
-.ai/wmb-1301-headless/Local State
-.ai/wmb-1301-headless/Preferences
-.ai/wmb-1301-headless/SharedStorage*
-.ai/wmb-1301-headless/data-root.json
-.ai/**/*.log
-.ai/**/*.err.log

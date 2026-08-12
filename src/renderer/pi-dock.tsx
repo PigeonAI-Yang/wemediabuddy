@@ -1,11 +1,18 @@
 import { pageAuthoritySpec } from '../shared/page-authority';
+import { ORCHESTRATION_SAFE_FIELDS, type OrchestrationSafeFields } from '../shared/orchestration-envelope';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
-import { buildPiContextPayload, describePiContextChip } from './pi-context-payload';
+import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge } from './pi-context-payload';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 import { PiComposer } from './pi-composer';
 import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
-import { appendPiStream, finishPiTool, piErrorMessage, piToolActivity, streamingToolSegment } from './pi-dock-utils';
+import { appendPiStream, createPiLocalQueueItem, finishPiTool, mergePiConversationWithLive, piErrorMessage, piJobEventNotice, piToolActivity, prunePiLocalQueue, reconcilePiLocalQueue, streamingToolSegment, upsertPiJobNotice, type PiLocalQueueItem } from './pi-dock-utils';
+/** WMB-5178：chatPi 编排派发结果（消费面类型；编排输入携带安全字段，dispatchId 由主进程生成）。 */
+type OrchestratedChatPiResult = {
+  queued: boolean;
+  stopped: boolean;
+  conversation: { id: string; messages: PiDockMessage[] } | null;
+};
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
   toggle: () => void;
@@ -17,6 +24,10 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const [draftSeed, setDraftSeed] = useState<string | null>(null);
   const [messages, setMessages] = useState<PiDockMessage[]>([]);
   const [nativeQueue, setNativeQueue] = useState<PiNativeQueue>({ steering: [], followUp: [] });
+  /** WMB-5204：忙时人工消息的 renderer 本地气泡与投递状态（瞬态，绝不持久化）。 */
+  const [localQueue, setLocalQueue] = useState<PiLocalQueueItem[]>([]);
+  /** 主进程工单生命周期的即时可见反馈；与 Pi 原生消息流分离，避免截断 tool-result。 */
+  const [jobNotices, setJobNotices] = useState<PiDockMessage[]>([]);
   const [sessions, setSessions] = useState<PiSessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
@@ -30,6 +41,10 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const [forkAction, setForkAction] = useState<{ entryId: string; retry: boolean } | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
   const busy = piTurnActive;
+  useEffect(() => {
+    setLocalQueue((items) => prunePiLocalQueue(messages, items));
+  }, [messages]);
+
 
   useEffect(() => {
     const onFocusManager = () => {
@@ -39,10 +54,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         conversationTouched.current = false;
         setMessages(conversation.messages ?? []);
         setActiveSessionId(conversation.id || null);
-        requestAnimationFrame(() => {
-          const el = conversationRef.current;
-          if (el) el.scrollTop = el.scrollHeight;
-        });
+        requestAnimationFrame(() => { const el = conversationRef.current; if (el) el.scrollTop = el.scrollHeight; });
       }).catch(() => {});
     };
     window.addEventListener('wmb:focus-manager-dialog', onFocusManager as EventListener);
@@ -97,42 +109,20 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [sessionMenuOpen]);
-  const showToast = (text: string) => {
-    setToast(text);
-    window.setTimeout(() => setToast(''), 1400);
-  };
+  const showToast = (text: string) => { setToast(text); window.setTimeout(() => setToast(''), 1400); };
 
   useEffect(() => {
     if (!window.wmb.onDataChanged) return;
     return window.wmb.onDataChanged((event) => {
       if (!event?.scopes?.includes('agent')) return;
       if (event.reason && !String(event.reason).startsWith('manager.')) return;
-      // 主管回合中的原生 tool/subagent 行只在内存事件流里；全量 reload 会抹掉。
+      // 任意尚未持久化的 streaming thinking/text/tool 都由内存事件流权威保留；
+      // 磁盘只替换更早消息，不能让后台 agent 刷新收走正在输出的正文。
       void window.wmb.getPiConversation().then((conversation) => {
         conversationTouched.current = false;
-        setMessages((current) => {
-          const live = current[current.length - 1];
-          const liveHasTools = Boolean(
-            live?.role === 'assistant'
-            && live.status === 'streaming'
-            && live.segments?.some((segment) => segment.kind === 'tool')
-          );
-          if (liveHasTools) {
-            const disk = conversation.messages ?? [];
-            // 保留当前 streaming 助手（含 tool-line），替换更早消息
-            if (disk.length === 0) return current;
-            const diskWithoutTrailingStreaming = disk[disk.length - 1]?.role === 'assistant' && disk[disk.length - 1]?.status === 'streaming'
-              ? disk.slice(0, -1)
-              : disk;
-            return [...diskWithoutTrailingStreaming, live];
-          }
-          return conversation.messages ?? current;
-        });
+        setMessages((current) => mergePiConversationWithLive(conversation.messages ?? [], current));
         setActiveSessionId(conversation.id || null);
-        requestAnimationFrame(() => {
-          const el = conversationRef.current;
-          if (el) el.scrollTop = el.scrollHeight;
-        });
+        requestAnimationFrame(() => { const el = conversationRef.current; if (el) el.scrollTop = el.scrollHeight; });
       }).catch(() => {});
     });
   }, []);
@@ -155,6 +145,14 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
     if (event.scope !== 'dock') return;
     const managerSource = event.source === 'manager';
+    if (event.type === 'job_event') {
+      const notice = piJobEventNotice(event, new Date().toISOString());
+      if (notice) {
+        setJobNotices((items) => upsertPiJobNotice(items, notice));
+        setStatusText(notice.text);
+      }
+      return;
+    }
     if (event.type === 'starting') {
       if (managerSource) {
         setStatusText(event.text || '主管编排中');
@@ -189,7 +187,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       return;
     }
     if (event.type === 'queue') {
-      setNativeQueue({ steering: event.steering ?? [], followUp: event.followUp ?? [] });
+      const steering = event.steering ?? [];
+      const followUp = event.followUp ?? [];
+      const queue = { steering, followUp };
+      setNativeQueue(queue);
+      // WMB-5204：native 确认只升级本地用户气泡状态，正文留在主时间线等待 canonical 接管。
+      setLocalQueue((items) => reconcilePiLocalQueue(queue, items));
       return;
     }
     if (event.type === 'queued') {
@@ -356,6 +359,8 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   };
 
   const contextChip = useMemo(() => describePiContextChip(context), [context]);
+  /** WMB-5207：发送时实际带入的批注数（与 payload 同一确定性预算函数，保证徽标与快照一致）。 */
+  const annotationBadge = useMemo(() => resolveStudioAnnotationBadge(context), [context]);
   const pageSpec = useMemo(() => pageAuthoritySpec(context.page), [context.page]);
   const [authorityChip, setAuthorityChip] = useState(pageSpec?.chipLabel ?? '—');
   const [authorityTone, setAuthorityTone] = useState<'write' | 'readonly' | 'prepare'>(pageSpec?.chipTone ?? 'readonly');
@@ -380,38 +385,55 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const buildPayload = (text: string, directContext?: { scope: string; items: Array<{ nodeId: string }>; relations: Array<{ id: string }>; estimatedCharacters: number }) =>
     buildPiContextPayload(context, text, directContext);
 
-  const sendText = async (text: string, delivery?: 'steer' | 'followUp') => {
+  const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields) => {
     const value = text.trim();
     if (!value) return;
+    // §7.1：编排派发前安全字段前置校验——任一缺失/为空即失败，该次任务不发送。
+    if (orchestration && !ORCHESTRATION_SAFE_FIELDS.every((field) => orchestration[field]?.trim())) {
+      showToast('任务信息不完整，未发送');
+      return;
+    }
     // 只有真 Pi 回合才走 steer/followUp 队列；主管投影 busy 假象不得吞消息。
     const queued = piTurnActive;
+    // WMB-5204：忙时人工输入立即投影为主时间线用户气泡；本地项只承载投递状态，不写入会话快照。
+    let localId: string | undefined;
+    if (queued && !orchestration) {
+      const item = createPiLocalQueueItem(value, delivery ?? 'steer');
+      localId = item.localId;
+      setLocalQueue((items) => [...items, item]);
+    }
     if (!queued) {
       conversationTouched.current = true;
       const stamped = new Date().toISOString();
       setPiTurnActive(true);
-      setMessages((items) => {
-        const next = items.slice();
-        const last = next[next.length - 1];
-        // 结束仍 streaming 的主管投影气泡，避免把用户话挂在假回合上
-        if (last?.role === 'assistant' && last.status === 'streaming') {
-          next[next.length - 1] = {
-            ...last,
-            status: undefined,
-            text: last.text || '（后台编排继续，你可直接对话）'
-          };
-        }
-        next.push({ role: 'user', text: value, createdAt: stamped });
-        next.push({ role: 'assistant', text: '', status: 'streaming', createdAt: stamped });
-        return next;
-      });
-      setPhase('starting'); setStatusText('正在连接 Pi');
+      if (!orchestration) {
+        setMessages((items) => {
+          const next = items.slice();
+          const last = next[next.length - 1];
+          // 结束仍 streaming 的主管投影气泡，避免把用户话挂在假回合上
+          if (last?.role === 'assistant' && last.status === 'streaming') {
+            next[next.length - 1] = {
+              ...last,
+              status: undefined,
+              text: last.text || '（后台编排继续，你可直接对话）'
+            };
+          }
+          next.push({ role: 'user', text: value, createdAt: stamped });
+          next.push({ role: 'assistant', text: '', status: 'streaming', createdAt: stamped });
+          return next;
+        });
+      }
+      setPhase('starting'); setStatusText(orchestration ? '正在安排主管' : '正在连接 Pi');
     }
     try {
       const directContext = context.contextSelection?.nodeIds.length
         ? await window.wmb.previewKnowledgeContextPackage({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
         : undefined;
-      const result = await window.wmb.chatPi(buildPayload(value, directContext), queued ? (delivery ?? 'steer') : undefined);
+      const chatInput = orchestration ? { message: buildPayload(value, directContext), orchestration } : buildPayload(value, directContext);
+      const result = await window.wmb.chatPi(chatInput, queued ? (delivery ?? 'steer') : undefined);
       if (result.queued) return;
+      // 忙时提交未被排队：消息已进会话/被直接处理，移除对应本地反馈项
+      if (localId) setLocalQueue((items) => items.filter((item) => item.localId !== localId));
       if (result.conversation) {
         setMessages(result.conversation.messages);
         setActiveSessionId(result.conversation.id || null);
@@ -422,7 +444,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       void refreshSessions();
     } catch (error) {
       const message = piErrorMessage(error);
-      if (queued) { showToast(message); return; }
+      if (queued) {
+        // WMB-5189：steer 派发被拒 → 本地项明确 failed + 既有 toast
+        if (localId) setLocalQueue((items) => items.map((item) => item.localId === localId ? { ...item, status: 'failed' as const } : item));
+        showToast(message);
+        return;
+      }
       setPiTurnActive(false);
       setPhase('failed'); setStatusText('失败');
       setMessages((items) => {
@@ -436,25 +463,23 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   };
 
   const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp') => {
-    const value = text.trim();
-    if (!value) return;
-    await sendText(value, delivery);
+    await sendText(text, delivery);
   }, [piTurnActive, configured, context]);
   useEffect(() => {
-    const generate = (event: Event) => void sendText((event as CustomEvent<string>).detail);
+    const generate = (event: Event) => {
+      const detail = (event as CustomEvent<string | { prompt: string; orchestration?: OrchestrationSafeFields }>).detail;
+      if (typeof detail === 'string') { void sendText(detail); return; }
+      if (detail?.orchestration) void sendText(detail.prompt, undefined, detail.orchestration);
+      else void sendText(detail.prompt ?? '');
+    };
     window.addEventListener('wmb-pi-generate', generate);
     return () => window.removeEventListener('wmb-pi-generate', generate);
   });
   const stop = useCallback(async () => {
     try {
       const result = await window.wmb.stopPi();
-      if (result.stopped) {
-        setStatusText('正在停止');
-      } else if (!piTurnActive) {
-        // 没有真 Pi 回合时，允许用户把投影态收成可继续对话
-        setPhase('idle');
-        setStatusText(configured ? '已配置' : '等待配置');
-      }
+      if (result.stopped) setStatusText('正在停止');
+      else if (!piTurnActive) setPhase('idle'), setStatusText(configured ? '已配置' : '等待配置'); // 无真回合时收投影态
     } catch (error) {
       showToast(error instanceof Error ? error.message : '停止失败');
     }
@@ -464,7 +489,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     conversationTouched.current = true;
     const conversation = await window.wmb.newPiConversation();
     setMessages(conversation.messages ?? []);
-    setNativeQueue({ steering: [], followUp: [] });
+    setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
     setActiveSessionId(conversation.id || null);
     setPhase('idle');
     setStatusText(configured ? '新会话' : '等待配置');
@@ -472,15 +497,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     await refreshSessions();
   };
   const openSession = async (conversationId: string) => {
-    if (!conversationId || conversationId === activeSessionId) {
-      setSessionMenuOpen(false);
-      return;
-    }
+    if (!conversationId || conversationId === activeSessionId) { setSessionMenuOpen(false); return; }
     if (busy) await stop();
     conversationTouched.current = true;
     const conversation = await window.wmb.switchPiConversation(conversationId);
     setMessages(conversation.messages ?? []);
-    setNativeQueue({ steering: [], followUp: [] });
+    setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
     setActiveSessionId(conversation.id || conversationId);
     setPhase('idle');
     setStatusText(configured ? '已切换会话' : '等待配置');
@@ -490,7 +512,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const archiveSession = async (conversationId: string, archived: boolean) => { if (busy) { showToast('Pi 正在回复，完成或停止后再归档'); return; }
     try {
       conversationTouched.current = true; const selected = await window.wmb.archivePiConversation(conversationId, archived);
-      if (archived && conversationId === activeSessionId) { setMessages(selected.messages ?? []); setNativeQueue({ steering: [], followUp: [] }); setActiveSessionId(selected.id || null);
+      if (archived && conversationId === activeSessionId) { setMessages(selected.messages ?? []); setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]); setActiveSessionId(selected.id || null);
         setPhase('idle'); setStatusText(configured ? '已切换会话' : '等待配置');
       }
       await refreshSessions(); showToast(archived ? '会话已归档' : '会话已恢复');
@@ -507,21 +529,20 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const forkMessage = async (entryId: string, retry: boolean) => {
     if (busy || forkActionRef.current) return;
     forkActionRef.current = true; setForkAction({ entryId, retry });
-    setStatusText(retry ? '正在重新发送' : '正在创建分支');
+    setStatusText(retry ? '正在重新发送' : '正在创建新对话');
     conversationTouched.current = true;
     try {
       const forked = await window.wmb.forkPiConversation(entryId);
-      if (forked.cancelled) { showToast('Pi 未创建分支'); setStatusText(configured ? '已配置' : '等待配置'); return; }
+      if (forked.cancelled) { showToast('未能创建新对话'); setStatusText(configured ? '已配置' : '等待配置'); return; }
       setMessages(forked.conversation.messages);
-      setNativeQueue({ steering: [], followUp: [] });
+      setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
       setActiveSessionId(forked.conversation.id || null);
-      setPhase('idle');
-      setStatusText(configured ? '已创建 Pi 分支' : '等待配置');
+      setPhase('idle'); setStatusText(configured ? '已创建新对话' : '等待配置');
       await refreshSessions();
       if (retry) await sendText(forked.text);
       else setDraftSeed(forked.text);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Pi 分叉失败');
+      showToast(error instanceof Error ? error.message : '创建新对话失败');
       setStatusText(configured ? '已配置' : '等待配置');
     } finally {
       forkActionRef.current = false; setForkAction(null);
@@ -545,13 +566,16 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       />
       <PiDockTranscript
         messages={messages}
+        jobNotices={jobNotices}
         queue={nativeQueue}
+        localQueue={localQueue}
         busy={busy || Boolean(forkAction)}
         pendingAction={forkAction}
         configured={configured}
         connecting={phase === 'starting'}
         statusText={statusText}
         conversationRef={conversationRef}
+        conversationId={activeSessionId}
         onCopy={(text) => void copyMessage(text)}
         onFork={(entryId) => void forkMessage(entryId, false)}
         onRetry={(entryId) => void forkMessage(entryId, true)}
@@ -562,6 +586,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         phase={phase}
         draftSeed={draftSeed}
         onDraftSeedConsumed={() => setDraftSeed(null)}
+        annotationBadge={annotationBadge}
         onSend={(text, delivery) => { void send(text, delivery); }}
         onStop={() => { void stop(); }}
         modelLabel={modelLabel}

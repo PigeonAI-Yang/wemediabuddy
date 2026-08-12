@@ -3,7 +3,8 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
-import { coalescePiMessages, filterPiNativeQueueMessages, isPiConversationNearBottom, isPiOrchestration, isPiSystemEvent, mergePiJobNotices, mergePiLocalQueueMessages, nextPiConversationFollowing, piLocalQueueEntryId, piMessageSegments, piRetryable, piThinkingSummary, presentPiNativeQueueMessage, type PiLocalQueueItem } from './pi-dock-utils';
+import { knowledgeQueryWritebackRequestId, type KnowledgeQueryWritebackSummaryRecord } from '../shared/knowledge-flywheel';
+import { coalescePiMessages, filterPiNativeQueueMessages, isPiConversationNearBottom, isPiOrchestration, isPiSystemEvent, mergePiJobNotices, mergePiLocalQueueMessages, nextPiConversationFollowing, piKnowledgeQuestionBefore, piKnowledgeRiskKindLabel, piKnowledgeShortId, piKnowledgeWriteBackDecisionLabel, piLocalQueueEntryId, piMessageSegments, piRetryable, piThinkingSummary, presentPiNativeQueueMessage, type PiLocalQueueItem } from './pi-dock-utils';
 import { isValidOrchestrationData, type OrchestrationData } from '../shared/orchestration-envelope';
 import { WmbCreatureMark } from './wmb-brand-mark';
 import { WmbCreatureMotionAsset, type WmbCreatureMotionAction } from './wmb-creature-motion-asset';
@@ -76,6 +77,92 @@ function orchestrationStatusLabel(data: OrchestrationData): string {
   return data.delivery === 'direct' ? '已安排主管' : '已加入主管队列';
 }
 
+/** WMB-5214：每轮 Query 写回摘要的 renderer 侧只读缓存（key=requestId；防重复 IPC）。 */
+const piKnowledgeSummaryCache = new Map<string, KnowledgeQueryWritebackSummaryRecord | null>();
+
+/** WMB-5214：拉取该轮问答的知识使用与沉淀摘要；缓存缺省时发起一次只读 IPC。 */
+function usePiKnowledgeSummary(requestId: string | null): KnowledgeQueryWritebackSummaryRecord | null {
+  const [summary, setSummary] = useState<KnowledgeQueryWritebackSummaryRecord | null>(() => (requestId ? (piKnowledgeSummaryCache.get(requestId) ?? null) : null));
+  useEffect(() => {
+    if (!requestId) { setSummary(null); return; }
+    if (piKnowledgeSummaryCache.has(requestId)) { setSummary(piKnowledgeSummaryCache.get(requestId) ?? null); return; }
+    let cancelled = false;
+    const fetchSummary = window.wmb.getQueryWritebackSummary;
+    if (typeof fetchSummary !== 'function') { piKnowledgeSummaryCache.set(requestId, null); setSummary(null); return; }
+    fetchSummary({ requestId }).then((value) => {
+      if (cancelled) return;
+      piKnowledgeSummaryCache.set(requestId, value);
+      setSummary(value);
+    }).catch(() => {
+      if (cancelled) return;
+      piKnowledgeSummaryCache.set(requestId, null);
+      setSummary(null);
+    });
+    return () => { cancelled = true; };
+  }, [requestId]);
+  return summary;
+}
+
+const QUERY_USED_GROUPS: ReadonlyArray<{ key: 'readWikiVersionIds' | 'readNoteVersionIds' | 'readEvidenceIds'; label: string }> = Object.freeze([
+  { key: 'readWikiVersionIds', label: 'Wiki' },
+  { key: 'readNoteVersionIds', label: '知识' },
+  { key: 'readEvidenceIds', label: '来源' }
+]);
+
+/**
+ * WMB-5214：assistant 回答下方的“知识使用与沉淀”折叠面板。
+ * 只展示本轮固定读取版本的入口、风险、写回决策/未写回原因与回执/变更入口；
+ * 绝不混入 tool JSON，也绝不把回答正文/内部候选当作证据。
+ */
+function PiKnowledgePanel({ conversationId, question }: { conversationId: string | null; question: string | null }): React.JSX.Element | null {
+  const requestId = conversationId && question ? knowledgeQueryWritebackRequestId(conversationId, question) : null;
+  const summary = usePiKnowledgeSummary(requestId);
+  const artifact = summary?.artifact ?? null;
+  if (!artifact) return null;
+  const decision = artifact.writeBackDecision;
+  const writtenBack = decision === 'created' || decision === 'updated';
+  const riskFlags = summary?.riskFlags ?? [];
+  const receipt = summary?.receipt ?? null;
+  const used = QUERY_USED_GROUPS.map((group) => ({ label: group.label, ids: artifact[group.key] ?? [] })).filter((item) => item.ids.length > 0);
+  const receiptEntryId = receipt?.changeSetId ?? artifact.changeSetId;
+  return (
+    <details className={`pi-knowledge-panel${writtenBack ? ' written-back' : ' not-written-back'}`} data-decision={decision} aria-label={`知识使用与沉淀：${writtenBack ? '已沉淀' : '未写回'}`}>
+      <summary>
+        <span className="pi-knowledge-panel-title">知识使用与沉淀</span>
+        <span className={`pi-knowledge-panel-badge${writtenBack ? ' ok' : ''}`}>{writtenBack ? '已沉淀' : '未写回'}</span>
+      </summary>
+      <div className="pi-knowledge-panel-body">
+        {used.length > 0 && <section className="pi-knowledge-used" aria-label="本次使用的知识">
+          <h4>本次使用</h4>
+          <ul className="pi-knowledge-used-list">
+            {used.map((group) => <li key={group.label} className="pi-knowledge-used-group">
+              <b>{group.label} {group.ids.length}</b>
+              <span className="pi-knowledge-used-ids">{group.ids.map(piKnowledgeShortId).join(' · ')}</span>
+            </li>)}
+          </ul>
+        </section>}
+        {riskFlags.length > 0 && <section className="pi-knowledge-risks" aria-label="知识风险">
+          <h4>风险</h4>
+          <ul className="pi-knowledge-risk-list">
+            {riskFlags.map((flag, index) => <li key={`${flag.kind}-${flag.versionId ?? index}`} className={`pi-risk-chip ${flag.kind}`} title={flag.note ?? undefined}>
+              {piKnowledgeRiskKindLabel(flag.kind)}{flag.note ? <span className="pi-risk-note">：{flag.note}</span> : null}
+            </li>)}
+          </ul>
+        </section>}
+        <section className="pi-knowledge-writeback" aria-label={writtenBack ? '本次沉淀' : '未写回原因'}>
+          <h4>{writtenBack ? '本次沉淀' : '未写回原因'}</h4>
+          <p className="pi-knowledge-decision">{piKnowledgeWriteBackDecisionLabel(decision)}</p>
+          {!writtenBack && artifact.skipReason && <p className="pi-knowledge-skip-reason">{artifact.skipReason}</p>}
+          {receipt && <div className="pi-knowledge-receipt">
+            <p className="pi-knowledge-receipt-summary">{receipt.summary}</p>
+            {receiptEntryId && <p className="pi-knowledge-receipt-entry">回执 {piKnowledgeShortId(receipt.id)} · 变更 {piKnowledgeShortId(receiptEntryId)}</p>}
+          </div>}
+        </section>
+      </div>
+    </details>
+  );
+}
+
 function PiOrchestrationRow({ message }: { message: PiChatMessage }): React.JSX.Element | null {
   const data = message.orchestration;
   if (!data || !isValidOrchestrationData(data)) return null;
@@ -120,6 +207,7 @@ export function PiDockTranscript({
   connecting,
   statusText,
   conversationRef,
+  conversationId,
   onCopy,
   onFork,
   onRetry
@@ -134,6 +222,8 @@ export function PiDockTranscript({
   connecting: boolean;
   statusText: string;
   conversationRef: RefObject<HTMLDivElement | null>;
+  /** WMB-5214：Pi 会话 snapshot id，派生 Query 写回 requestId 的唯一会话键。 */
+  conversationId?: string | null;
   onCopy: (text: string) => void;
   onFork: (entryId: string) => void;
   onRetry: (entryId: string) => void;
@@ -239,6 +329,7 @@ export function PiDockTranscript({
                       : segments.length
                         ? <div className={`assistant pi-bubble${message.status ? ` ${message.status}` : ''}`}><PiAssistantSegments segments={segments} streaming={message.status === 'streaming'} /></div>
                         : null}
+                    {!activityOnly && message.status !== 'streaming' && <PiKnowledgePanel conversationId={conversationId ?? null} question={piKnowledgeQuestionBefore(displayMessages, index)} />}
                   </>
                 : <p className="user pi-bubble">{message.text}</p>}
             {!activityOnly && <div className="pi-bubble-meta">
@@ -249,10 +340,10 @@ export function PiDockTranscript({
                 <button type="button" title="复制" aria-label="复制" disabled={!showActions} onClick={() => onCopy(segments.map(segmentText).join('\n\n'))}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"/></svg>
                 </button>
-                {message.role === 'user' && message.entryId && !localItem && <button type="button" className={forkPending ? 'pending' : undefined} title={forkPending ? '正在创建分支' : '按 Pi 原生分叉撤回'} aria-label="按 Pi 原生分叉撤回" aria-busy={forkPending || undefined} disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
+                {message.role === 'user' && message.entryId && !localItem && <button type="button" className={forkPending ? 'pending' : undefined} title={forkPending ? '正在创建新对话' : '从此消息新建对话'} aria-label="从此消息新建对话" aria-busy={forkPending || undefined} disabled={!showActions || busy} onClick={() => onFork(message.entryId!)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-3"/></svg>
                 </button>}
-                {retryId && <button type="button" className={retryPending ? 'pending' : undefined} title={retryPending ? '正在重新发送' : '按 Pi 原生分叉重发'} aria-label="按 Pi 原生分叉重发" aria-busy={retryPending || undefined} disabled={!showActions || busy || !configured} onClick={() => onRetry(retryId)}>
+                {retryId && <button type="button" className={retryPending ? 'pending' : undefined} title={retryPending ? '正在重新发送' : '重新发送这条消息'} aria-label="重新发送这条消息" aria-busy={retryPending || undefined} disabled={!showActions || busy || !configured} onClick={() => onRetry(retryId)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
                 </button>}
               </div>}
@@ -260,8 +351,8 @@ export function PiDockTranscript({
           </div>
         );
     }) : <p className="pi-empty">{configured ? '现在可以直接和我对话。' : '请先在设置中填写 Pi API。'}</p>}
-    {(visibleSteering.length || visibleFollowUp.length) > 0 && <section className="pi-native-queue" aria-label="Pi 原生消息队列" aria-live="polite">
-      <header><strong>Pi 队列</strong><small>原生</small></header>
+    {(visibleSteering.length || visibleFollowUp.length) > 0 && <section className="pi-native-queue" aria-label="Pi 消息队列" aria-live="polite">
+      <header><strong>Pi 队列</strong></header>
       <ol>
         {visibleSteering.map((message, index) => {
           const item = presentPiNativeQueueMessage(message, 'steer');

@@ -8,6 +8,7 @@ import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, startAg
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { applyKnowledgeChangeSet } from '../src/main/knowledge-flywheel.ts';
 import { openBrowserProfileRegistry } from '../src/main/browser-config.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
@@ -142,6 +143,38 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     assert.equal(occupiedRead.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get(), undefined);
     assert.equal(readWorkspaceProfile(occupiedRead), null);
     occupiedRead.close();
+    assert.equal((await readWorkspaceRegistry(registryPath)).workspaces.length, registryCount);
+  } finally { await rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+});
+
+test('candidate root with real knowledge rows cannot become a new workspace', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-knowledge-'));
+  const userData = path.join(parent, 'user-data');
+  const registryPath = path.join(userData, 'workspace-registry.json');
+  const defaultProfileId = openBrowserProfileRegistry(path.join(userData, 'browser-config.json')).defaultProfileId;
+  const root = await openDataRoot(path.join(parent, 'knowledge-root'));
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  try {
+    // 真实 knowledge 数据：经 ChangeSet 原子写入一条 Note（空 v56 只有关系目录种子行，不算业务数据）
+    database.prepare("INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('workspace_id', ?, ?, ?, 1)").run('knowledge-root', new Date().toISOString(), new Date().toISOString());
+    const applied = applyKnowledgeChangeSet(database, { workspaceId: 'knowledge-root', requestId: 'knowledge-row-block', reason: '阻断测试', triggerSource: 'lint', resolutionMode: 'replaced_current', createdBy: 'system' }, {
+      notes: [{ id: 'note-block', scope: 'global', kind: 'claim', canonicalKey: 'note-block-key', title: '既有知识', version: { title: '既有知识', statement: '真实知识数据', conclusionStatus: 'unverified', evidenceLevel: 'none', changeType: 'created', changeReason: '阻断测试' } }]
+    });
+    assert.equal(applied.replay, false);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM knowledge_notes').get().n, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM knowledge_change_sets').get().n, 1);
+  } finally { database.close(); }
+  const store = new WorkspaceProposalStore(() => true);
+  const proposal = store.prepare({ ...proposalInput('knowledge-occupied'), displayName: '不应创建' }, { workspaceId: null, currentProfile: null });
+  const registryCount = (await readWorkspaceRegistry(registryPath)).workspaces.length;
+  try {
+    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: root.path, profile: proposal.profile, defaultProfileId }), { code: 'VALIDATION_ERROR' });
+    const untouched = new DatabaseSync(path.join(root.path, 'wmb.db'), { readOnly: true });
+    try {
+      assert.equal(untouched.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get().value, 'knowledge-root');
+      assert.equal(untouched.prepare('SELECT COUNT(*) AS n FROM knowledge_notes').get().n, 1);
+      assert.equal(readWorkspaceProfile(untouched), null);
+    } finally { untouched.close(); }
     assert.equal((await readWorkspaceRegistry(registryPath)).workspaces.length, registryCount);
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });

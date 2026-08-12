@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WeMediaBuddy · Living Style Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Machine SSOT: open this file from the repo so the relative path resolves under file:// -->
+  <link rel="stylesheet" href="../../src/renderer/styles-foundation.css" />
+  <style>
+    /* Guide chrome — overrides app shell constraints from foundation */
+    html, body {
+      min-width: 0 !important;
+      overflow: auto !important;
+      height: auto !important;
+      background: var(--app-bg);
+      color: var(--ink);
+      font-family: var(--font-sans);
+    }
+    .lsg {
+      --lsg-max: 1080px;
+      --lsg-gutter: clamp(20px, 4vw, 40px);
+      max-width: var(--lsg-max);
+      margin: 0 auto;
+      padding: 28px var(--lsg-gutter) 80px;
+    }
+    .lsg-top {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 0 calc(-1 * var(--lsg-gutter)) 28px;
+      padding: 14px var(--lsg-gutter);
+      background: color-mix(in srgb, var(--topbar-bg) 92%, transparent);
+      border-bottom: 1px solid var(--border-soft);
+      backdrop-filter: blur(12px);
+    }
+    .lsg-brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .lsg-brand strong {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .lsg-brand span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .lsg-toggle {
+      height: 34px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .lsg-toggle:hover { background: var(--surface-hover); }
+    .authority {
+      display: grid;
+      gap: 10px;
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background:
+        linear-gradient(135deg, var(--accent-faint), transparent 42%),
+        var(--panel-bg);
+    }
+    .authority h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+    }
+    .authority p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
+    .authority code, .lsg code {
+      font-family: var(--mono);
+      font-size: 0.9em;
+      color: var(--accent-soft);
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: var(--tag-bg);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .chip.accent { color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+    section.lsg-sec { margin-top: 40px; }
+    section.lsg-sec > h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted-low);
+      font-weight: 650;
+    }
+    section.lsg-sec > .lede {
+      margin: 0 0 18px;
+      color: var(--ink-soft);
+      font-size: 15px;
+      max-width: 62ch;
+    }
+    .north {
+      padding: 22px 24px;
+      border-left: 3px solid var(--accent);
+      background: var(--surface);
+      border-radius: 0 12px 12px 0;
+    }
+    .north strong { display: block; font-size: 20px; letter-spacing: -0.02em; margin-bottom: 8px; }
+    .north p { margin: 0; color: var(--ink-soft); line-height: 1.55; }
+    .swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .swatch {
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .swatch .chip-color {
+      height: 64px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .swatch .meta { padding: 10px 10px 12px; }
+    .swatch .meta b { display: block; font-size: 12px; font-weight: 650; }
+    .swatch .meta span {
+      display: block;
+      margin-top: 2px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .type-stack { display: grid; gap: 14px; }
+    .type-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      background: var(--surface);
+      align-items: baseline;
+    }
+    .type-row .label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .type-display { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.16; }
+    .type-title { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; }
+    .type-body { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+    .type-mono { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+    .chrome-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .chrome-card {
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-bg);
+    }
+    .chrome-card h3 { margin: 0 0 6px; font-size: 14px; }
+    .chrome-card p { margin: 0; color: var(--muted); font-size: 13px; }
+    .bar-demo {
+      margin-top: 12px;
+      height: var(--topbar-height);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--topbar-bg);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .comp-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .btn-primary {
+      height: 36px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 650;
+      font-size: 13px;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-raised);
+      color: var(--ink);
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .tag {
+      display: inline-flex;
+      height: 24px;
+      padding: 0 8px;
+      align-items: center;
+      border-radius: 6px;
+      background: var(--tag-bg);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .tag.warn { background: var(--amber-soft); color: var(--amber); }
+    .tag.ok { background: var(--success-soft); color: var(--success); }
+    .tag.bad { background: var(--danger-soft); color: var(--danger); }
+    .dodont {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 720px) { .dodont { grid-template-columns: 1fr; } }
+    .do, .dont {
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+    }
+    .do h3, .dont h3 { margin: 0 0 8px; font-size: 14px; }
+    .do h3 { color: var(--success); }
+    .dont h3 { color: var(--danger); }
+    .do ul, .dont ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; }
+    .protocol {
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-bg);
+    }
+    .protocol ol { margin: 10px 0 0; padding-left: 20px; color: var(--ink-soft); line-height: 1.6; }
+    .protocol li { margin: 4px 0; }
+    .note {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--accent-faint);
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="lsg">
+    <div class="lsg-top">
+      <div class="lsg-brand">
+        <strong>WeMediaBuddy · Living Style Guide</strong>
+        <span>Tokens live in styles-foundation.css — this page only renders them</span>
+      </div>
+      <button type="button" class="lsg-toggle" id="themeToggle" aria-pressed="false">切换白昼</button>
+    </div>
+
+    <div class="authority" id="authority">
+      <h1>Authority</h1>
+      <p>
+        机器 SSOT：<code>src/renderer/styles-foundation.css</code>（墨夜 · Inter · accent <code>#8b7cff</code> · topbar <code>56px</code>）。
+        人类可读面：本页（由 foundation CSS 变量渲染）。
+        <code>DESIGN.md</code> 只作叙事，token 由脚本从 foundation 同步。
+      </p>
+      <p>
+        Oh My Pi 入口 = <code>CLAUDE.md</code>。防漂移靠 <strong>CLAUDE.md + token drift test</strong>；
+        另有 <code>AGENTS.md</code> 与 <code>.cursor/rules/design-authority.mdc</code> 镜像同一套规则（非独立真相）。
+        <code>prototype/</code> 与 <code>.impeccable/design.json</code> 不是执行真相；冲突时 foundation 胜出。
+      </p>
+      <div class="chip-row">
+        <span class="chip accent">SSOT · foundation</span>
+        <span class="chip">Oh My Pi · CLAUDE.md</span>
+        <span class="chip">gate · design-tokens-drift</span>
+        <span class="chip">synced · DESIGN.md</span>
+      </div>
+      <div class="note">
+        若 <code>file://</code> 下样式未加载，确认从仓库打开本文件，使相对路径
+        <code>../../src/renderer/styles-foundation.css</code> 可解析。
+      </div>
+    </div>
+
+    <section class="lsg-sec" id="north-star">
+      <h2>North Star</h2>
+      <p class="lede">私人主编台 — 每个表面服务一个决策：今天讲什么，为什么值得讲。</p>
+      <div class="north">
+        <strong>墨夜编辑台</strong>
+        <p>高密度、克制、可追溯。紫罗兰只给每屏一个主操作；琥珀标记需要人类处理的事项。系统状态默认退场。</p>
+      </div>
+    </section>
+
+    <section class="lsg-sec" id="color">
+      <h2>Color</h2>
+      <p class="lede">色板全部来自 foundation 变量。页面 CSS 禁止另起一套 hex。</p>
+      <div class="swatch-grid" id="swatches"></div>
+    </section>
+
+    <section class="lsg-sec" id="typography">
+      <h2>Typography</h2>
+      <p class="lede">正文栈：Inter + 中文回落。等宽：JetBrains Mono。</p>
+      <div class="type-stack">
+        <div class="type-row"><div class="label">Display</div><div class="type-display">今日选题</div></div>
+        <div class="type-row"><div class="label">Title</div><div class="type-title">把判断放在同一条可追溯链路</div></div>
+        <div class="type-row"><div class="label">Body</div><div class="type-body">界面服务于高频决策：用户今天应该讲什么，以及为什么值得讲。次级信息弱化而不消失。</div></div>
+        <div class="type-row"><div class="label">Mono</div><div class="type-mono">--accent: #8b7cff · --topbar-height: 56px</div></div>
+      </div>
+    </section>
+
+    <section class="lsg-sec" id="space">
+      <h2>Space &amp; chrome</h2>
+      <p class="lede">顶栏高度与页面边距由 foundation 锁定；不要在页面里另写魔法数字。</p>
+      <div class="chrome-grid">
+        <div class="chrome-card">
+          <h3>Topbar</h3>
+          <p><code>--topbar-height</code></p>
+          <div class="bar-demo">56px chrome</div>
+        </div>
+        <div class="chrome-card">
+          <h3>Page space</h3>
+          <p><code>--page-space: 16px</code></p>
+        </div>
+        <div class="chrome-card">
+          <h3>Surfaces</h3>
+          <p><code>--app-bg</code> → <code>--panel-bg</code> → <code>--surface</code> → <code>--surface-raised</code></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="lsg-sec" id="components">
+      <h2>Components</h2>
+      <p class="lede">主按钮用 accent；语义色只表达状态，不抢主操作。</p>
+      <div class="comp-row">
+        <button type="button" class="btn-primary">主操作</button>
+        <button type="button" class="btn-secondary">次要</button>
+        <span class="tag">默认</span>
+        <span class="tag warn">待处理</span>
+        <span class="tag ok">成功</span>
+        <span class="tag bad">危险</span>
+      </div>
+    </section>
+
+    <section class="lsg-sec" id="dodont">
+      <h2>Do / Don't</h2>
+      <div class="dodont">
+        <div class="do">
+          <h3>Do</h3>
+          <ul>
+            <li>用 <code>var(--token)</code> 引用 foundation</li>
+            <li>先打开本页或读 <code>CLAUDE.md</code> 再改 UI</li>
+            <li>改完跑 <code>design-tokens-drift</code> 测试</li>
+            <li>冲突时以 foundation 为准</li>
+          </ul>
+        </div>
+        <div class="dont">
+          <h3>Don't</h3>
+          <ul>
+            <li>在页面 CSS / TSX 里发明新的品牌 hex</li>
+            <li>把 <code>prototype/</code> 或 <code>.impeccable/design.json</code> 当 SSOT</li>
+            <li>未问 owner 就改 accent / Inter / topbar / 核心色阶</li>
+            <li>扩大 hex allowlist（只允许收缩）</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="lsg-sec" id="protocol">
+      <h2>Change protocol</h2>
+      <div class="protocol">
+        <p style="margin:0;color:var(--ink-soft);font-size:14px;">品牌级 token 变更必须先问 owner。批准后：</p>
+        <ol>
+          <li>只改 <code>src/renderer/styles-foundation.css</code></li>
+          <li>运行 <code>node scripts/sync-design-doc-from-foundation.mjs</code></li>
+          <li>刷新本 living style guide，目检 dark / light</li>
+          <li>运行 <code>node --test tests/design-tokens-drift.test.mjs</code></li>
+          <li>Phase 3：把页面 CSS 中的存量硬编码迁回变量，并收缩 allowlist</li>
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+    function syncToggle() {
+      const light = root.getAttribute('data-theme') === 'light';
+      toggle.textContent = light ? '切换墨夜' : '切换白昼';
+      toggle.setAttribute('aria-pressed', light ? 'true' : 'false');
+      paintSwatches();
+    }
+    toggle.addEventListener('click', () => {
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+      syncToggle();
+    });
+
+    const SWATCHES = [
+      ['--app-bg', 'App BG'],
+      ['--panel-bg', 'Panel'],
+      ['--surface', 'Surface'],
+      ['--surface-raised', 'Raised'],
+      ['--ink', 'Ink'],
+      ['--muted', 'Muted'],
+      ['--border', 'Border'],
+      ['--accent', 'Accent'],
+      ['--accent-hover', 'Accent hover'],
+      ['--amber', 'Amber'],
+      ['--success', 'Success'],
+      ['--danger', 'Danger'],
+      ['--link', 'Link'],
+      ['--pf-xhs', 'XHS'],
+      ['--pf-wx', 'WeChat']
+    ];
+
+    function paintSwatches() {
+      const host = document.getElementById('swatches');
+      const styles = getComputedStyle(root);
+      host.innerHTML = SWATCHES.map(([token, name]) => {
+        const value = styles.getPropertyValue(token).trim() || '(missing)';
+        return `<div class="swatch"><div class="chip-color" style="background:var(${token})"></div><div class="meta"><b>${name}</b><span>${token}<br>${value}</span></div></div>`;
+      }).join('');
+    }
+    syncToggle();
+  </script>
+</body>
+</html>

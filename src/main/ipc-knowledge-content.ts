@@ -17,10 +17,15 @@ import {
 } from './ipc-business-context.ts';
 import { registerKnowledgeBusinessIpc } from './ipc-knowledge-business.ts';
 import { registerTodayStudioBusinessIpc } from './ipc-today-studio-business.ts';
+import { registerStudioAnnotationIpc } from './ipc-studio-annotations.ts';
+import { registerKnowledgeFlywheelIpc } from './ipc-knowledge-flywheel.ts';
+import { runLocalLint } from './knowledge-health.ts';
 
 export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencies): void {
   registerKnowledgeBusinessIpc(dependencies);
   registerTodayStudioBusinessIpc(dependencies);
+  registerStudioAnnotationIpc(dependencies);
+  registerKnowledgeFlywheelIpc(dependencies);
 
   ipcMain.handle('rankings:get-cached', () => readWorkspaceDatabase(dependencies, () => null, database => {
     assertAiOnlyRoute(database, 'ai.library.rankings'); return readRankingCache(database);
@@ -56,7 +61,31 @@ export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencie
       input, boundIdentity: { entityType: 'source_item', entityId: input.id }, entityType: 'source_item',
       execute: (database, value) => { const data = deleteKnowledgeSource(database, value, false, false); return { data, entityId: data.id,
         beforeRevision: value.expectedRevision, sideEffectState: 'deleted' }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' }); return data;
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+    // WMB-5216：源删除会产生坏证据引用/坏关系端点 —— 删除成功后对有界受影响对象跑局部 Lint
+    // （独立命令：lint 失败只影响 lint 自身，绝不回滚已成功的删除；可观察、周期 Lint 可兜底重试）。
+    if (runtime.isActive) {
+      try {
+        await dispatchBusinessCommand(runtime, {
+          command: 'knowledge_lint.local_source_delete', requestId: `knowledge-lint:delete:${input.id}:${Date.now()}`,
+          actor: { type: 'scheduler', id: 'knowledge-lint', label: 'knowledge-lint' },
+          input: { sourceId: input.id }, boundIdentity: { entityType: 'source_item', entityId: input.id }, entityType: 'knowledge_lint_job',
+          execute: (database) => {
+            const lint = runLocalLint(database, {
+              requestId: `lint:local:source-delete:${input.id}`,
+              workspaceId: runtime.identity.workspaceId,
+              reason: `Source ${input.id} 删除后局部 Lint`,
+              scope: 'global',
+              affectedObjects: [{ objectType: 'source', objectId: input.id }]
+            });
+            return { data: lint, entityId: input.id };
+          }
+        });
+      } catch (lintError) {
+        console.error('[knowledge-lint] source-delete local lint failed', lintError);
+      }
+    }
+    return data;
   });
   ipcMain.handle('knowledge:list-watching', (_event, input: { limit?: number } = {}) => readWorkspaceDatabase(dependencies,
     () => [], database => listWatchingSources(database, input?.limit ?? 30)));

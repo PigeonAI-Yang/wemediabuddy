@@ -115,10 +115,10 @@ export function TodaySourceDetail({ detailSource, detailBody, detailBodyLoading,
         </section>
         <section>
           <div className="source-detail-body-head">
-            <h3>正文缓存</h3>
+            <h3>正文内容</h3>
             <span className="source-detail-body-status">
               {detailBodyLoading ? '处理中…'
-                : detailBody?.status === 'ready' ? `已缓存 ${detailBody.extractedChars} 字`
+                : detailBody?.status === 'ready' ? `已抓取 ${detailBody.extractedChars} 字`
                 : detailBody?.status === 'failed' ? '抓取失败'
                 : detailBody?.status === 'empty' ? '无正文'
                 : '尚未抓取'}
@@ -133,7 +133,7 @@ export function TodaySourceDetail({ detailSource, detailBody, detailBodyLoading,
       </div>
       <div className="source-detail-actions">
         <button
-          className={selectedSources.some((item) => item.id === detailSource.id) ? 'secondary-button' : 'primary-button'}
+          className="secondary-button"
           onClick={() => toggleSourceSelection(detailSource)}
           disabled={!selectedSources.some((item) => item.id === detailSource.id) && selectedSources.length >= MAX_SELECTED_SOURCES}
         >

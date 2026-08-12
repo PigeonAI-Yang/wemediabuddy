@@ -31,7 +31,7 @@ export function XListOperationTray(): React.JSX.Element | null {
     if (operation?.state !== 'prepared' || operation.phase === 'awaiting_confirmation') return;
     const key = `${operation.id}:${operation.revision}`;
     if (arming.current === key) return;
-    arming.current = key; setBusy(true); setNote('正在核对账号、List 和精确变更…');
+    arming.current = key; setBusy(true); setNote('正在核对账号、List 和本次变更…');
     void window.wmb.armXListOperation({ operationId: operation.id, expectedRevision: operation.revision }).then((result) => {
       if (result.ok) { setOperation(result.data); setNote('核对完成，等待一次确认。'); }
       else setNote(result.error.message);
@@ -54,7 +54,7 @@ export function XListOperationTray(): React.JSX.Element | null {
   };
   const stop = async () => {
     const result = await window.wmb.stopXListOperation({ operationId: operation.id, expectedRevision: operation.revision });
-    if (result.ok) { setOperation(result.data); setNote('将在当前页面动作完成后停止。'); }
+    if (result.ok) { setOperation(result.data); setNote('将在当前页面的操作完成后停止。'); }
     else setNote(result.error.message);
   };
 
@@ -66,7 +66,7 @@ export function XListOperationTray(): React.JSX.Element | null {
     {operation.state === 'execution_granted' && <p>确认已提交 · 正在等待浏览器接管</p>}
     {operation.state === 'browser_leased' && <p>浏览器已接管 · 正在等待执行开始</p>}
     {operation.state === 'running' && <p>后台执行中 · 已处理 {done}/{operation.items.length}</p>}
-    {terminal.has(operation.state) && <p>执行结束 · 成功或无需变更 {operation.items.filter((item) => ['succeeded', 'already_present', 'already_absent'].includes(item.state)).length} · 异常 {operation.items.filter((item) => ['failed', 'needs_user', 'unknown'].includes(item.state)).length}</p>}
+    {terminal.has(operation.state) && <p>执行结束 · 成功 {operation.items.filter((item) => ['succeeded', 'already_present', 'already_absent'].includes(item.state)).length} · 异常 {operation.items.filter((item) => ['failed', 'needs_user', 'unknown'].includes(item.state)).length}</p>}
     {operation.errorMessage && <p className="x-list-operation-error">{operation.errorMessage}</p>}
     {note && <small>{note}</small>}
     <div className="x-list-operation-actions">{canConfirm && <button disabled={busy} onClick={() => void confirm()}>确认执行</button>}{operation.state === 'running' && <button disabled={busy} onClick={() => void stop()}>停止后续成员</button>}</div>

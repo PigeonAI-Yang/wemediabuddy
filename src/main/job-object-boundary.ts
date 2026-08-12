@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { CommandDispatchError } from './command-dispatcher.ts';
 import type { EmployeeRole } from './job-pool.ts';
-import type { RoleJobRequest } from './role-job-registry.ts';
+import type { ResearchBudget, ResearchGap, ResearchRequiredClaim, RoleJobRequest } from './role-job-registry.ts';
 
 /**
  * WMB-5141 工单对象边界（设计 §8.1：锁键是什么，写权对象就是什么）。
@@ -58,8 +58,11 @@ const EMPTY_BOUNDARY: JobObjectBoundary = Object.freeze({ businessDate: null, pr
 export function buildJobObjectBoundary(request: RoleJobRequest, businessDate?: string | null): JobObjectBoundary {
   const date = businessDate ?? null;
   if (request.roleId === 'reporter') {
+    // WMB-5170 research 变体：boundary 携带 projectId（context_refs 持久化与 research 工单重建需要）；
+    // 普通 reporter 老路径 projectId 恒 null。
     return Object.freeze({
-      businessDate: date, projectId: null,
+      businessDate: date,
+      projectId: 'research' in request ? (request.projectId ?? null) : null,
       sourceIds: normalizeSourceIds(request.channelIds ?? []),
       feedIds: normalizeSourceIds(request.sourceFeedIds ?? []),
       scope: null
@@ -96,6 +99,21 @@ export function buildJobContextRefs(input: { jobId: string; request: RoleJobRequ
   if (input.boundary.sourceIds.length) refs.sourceIds = [...input.boundary.sourceIds];
   if (input.boundary.feedIds.length) refs.sourceFeedIds = [...input.boundary.feedIds];
   if (input.boundary.scope) refs.scope = input.boundary.scope;
+  if (input.request.roleId === 'writer') refs.writerTask = input.request.writerTask;
+  // WMB-5170 research 变体：完整持久化已校验 research 块（重建精确 research 工单需要；
+  // 深拷贝为普通对象，JSON 序列化后无共享冻结引用）。
+  if ('research' in input.request) {
+    const gap = input.request.research;
+    refs.research = {
+      gapId: gap.gapId,
+      parentJobId: gap.parentJobId,
+      parentTaskId: gap.parentTaskId,
+      parentRoleId: gap.parentRoleId,
+      requiredClaims: gap.requiredClaims.map((claim) => ({ key: claim.key, text: claim.text, type: claim.type })),
+      budget: { ...gap.budget },
+      channels: [...gap.channels]
+    };
+  }
   return refs;
 }
 
@@ -125,6 +143,61 @@ export function readJobContract(database: DatabaseSync, taskId: string): JobCont
 }
 
 /**
+ * 从 context_refs 重建已校验 ResearchGap（字段缺失/非法 → null，续派方须重新提供输入；
+ * 与 parseResearchGap 同语义的 fail-closed 值对象重建）。
+ */
+function researchGapFromRefs(value: unknown): ResearchGap | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const gapId = stringField(record, 'gapId');
+  const parentJobId = stringField(record, 'parentJobId');
+  const parentTaskId = stringField(record, 'parentTaskId');
+  const parentRoleId = record.parentRoleId;
+  if (!gapId || !parentJobId || !parentTaskId) return null;
+  if (parentRoleId !== 'writer' && parentRoleId !== 'planner' && parentRoleId !== 'librarian') return null;
+  if (!Array.isArray(record.requiredClaims) || record.requiredClaims.length === 0) return null;
+  const requiredClaims: ResearchRequiredClaim[] = [];
+  for (const item of record.requiredClaims) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const claim = item as Record<string, unknown>;
+    const key = stringField(claim, 'key');
+    const text = stringField(claim, 'text');
+    if (!key || !text || (claim.type !== 'fact' && claim.type !== 'price' && claim.type !== 'policy')) return null;
+    requiredClaims.push(Object.freeze({ key, text, type: claim.type }));
+  }
+  const budget = record.budget;
+  if (!budget || typeof budget !== 'object' || Array.isArray(budget)) return null;
+  const budgetRecord = budget as Record<string, unknown>;
+  const budgetValues: Record<'timeMinutes' | 'minValidSources' | 'maxCandidates' | 'maxParallelFetches' | 'maxRounds', number> = {
+    timeMinutes: 0,
+    minValidSources: 0,
+    maxCandidates: 0,
+    maxParallelFetches: 0,
+    maxRounds: 0
+  };
+  for (const key of ['timeMinutes', 'minValidSources', 'maxCandidates', 'maxParallelFetches', 'maxRounds'] as const) {
+    const n = budgetRecord[key];
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null;
+    budgetValues[key] = n;
+  }
+  if (!Array.isArray(record.channels) || record.channels.length === 0) return null;
+  const channels: Array<'web' | 'x' | 'xhs'> = [];
+  for (const channel of record.channels) {
+    if (channel !== 'web' && channel !== 'x' && channel !== 'xhs') return null;
+    channels.push(channel);
+  }
+  return Object.freeze({
+    gapId,
+    parentJobId,
+    parentTaskId,
+    parentRoleId,
+    requiredClaims: Object.freeze(requiredClaims),
+    budget: Object.freeze(budgetValues),
+    channels: Object.freeze(channels)
+  });
+}
+
+/**
  * 一键续派：从 context_refs_json 重建原 RoleJobRequest（jobId/roleId/brief/边界参数）。
  * 字段缺失（如 writer 无 projectId）返回 null——续派方须重新提供输入。
  */
@@ -135,9 +208,25 @@ export function rebuildRoleJobRequest(refs: Record<string, unknown>): RoleJobReq
   const businessDate = contract.boundary.businessDate;
   if (contract.roleId === 'writer') {
     if (!contract.boundary.projectId) return null;
-    return Object.freeze({ roleId: 'writer', brief, projectId: contract.boundary.projectId, businessDate });
+    const writerTask = refs.writerTask ?? 'core_draft';
+    if (writerTask !== 'core_draft' && writerTask !== 'xiaohongshu_platform_version') return null;
+    return Object.freeze({ roleId: 'writer', brief, projectId: contract.boundary.projectId, writerTask, businessDate });
   }
   if (contract.roleId === 'reporter') {
+    // WMB-5170 research 变体：refs.research 存在 → 重建精确 research 工单（含 projectId）；
+    // 损坏 research refs fail closed（null），绝不静默降级为普通 reporter；无 research 键走老路径。
+    const hasResearchRef = 'research' in refs;
+    if (hasResearchRef) {
+      const research = researchGapFromRefs(refs.research);
+      if (!research) return null;
+      return Object.freeze({
+        roleId: 'reporter',
+        brief,
+        businessDate,
+        projectId: contract.boundary.projectId,
+        research
+      });
+    }
     const sourceFeedIds = Array.isArray(refs.sourceFeedIds)
       ? refs.sourceFeedIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
       : [];

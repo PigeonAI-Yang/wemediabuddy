@@ -16,7 +16,7 @@ const { dispatchCancelAgentTask, dispatchStartAgentTask } = await import('../src
 const { dispatchBusinessCommand } = await import('../src/main/business-command.ts');
 const { writeJobContractRefs } = await import('../src/main/generic-employee-runner.ts');
 const { buildJobObjectBoundary } = await import('../src/main/role-job-registry.ts');
-const { dispatchIssueTaskGrant } = await import('../src/main/task-grants.ts');
+const { dispatchIssueTaskGrant, ensureAutomaticTaskGrant } = await import('../src/main/task-grants.ts');
 const { ActiveWorkspaceRuntime } = await import('../src/main/workspace-runtime.ts');
 const { ensureOfficialWorkspaceProfile } = await import('../src/main/workspace-profiles.ts');
 const { JobSpawner } = await import('../src/main/job-spawner.ts');
@@ -48,10 +48,10 @@ async function withReproposalRuntime(work) {
     await work(runtime, ids, stale);
   } finally { if (runtime?.isActive) await runtime.stop({ drain: false }).catch(() => {}); await rm(root, { recursive: true, force: true }); }
 }
-async function boundTask(runtime, request) {
-  const started = await dispatchStartAgentTask(runtime, { intent: 'page_library', businessDate: '2026-08-10', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID() });
-  await writeJobContractRefs(runtime, started.task.id, { jobId: `job-${randomUUID()}`, request, boundary: buildJobObjectBoundary(request, null) });
-  const issued = await dispatchIssueTaskGrant(runtime, { requestId: randomUUID(), taskId: started.task.id, ownerGoal: request.brief, allowedCommands: ['knowledge.topic_maintenance_propose', 'knowledge.topic_maintenance_approve'], workers: [{ type: 'external_agent', id: 'mcp' }], relevantContext: {}, expiresAt: new Date(Date.now() + 60_000).toISOString() });
+async function boundTask(runtime, request, intent = 'page_library', businessDate = null) {
+  const started = await dispatchStartAgentTask(runtime, { intent, businessDate: '2026-08-10', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID() });
+  await writeJobContractRefs(runtime, started.task.id, { jobId: `job-${randomUUID()}`, request, boundary: buildJobObjectBoundary(request, businessDate) });
+  const issued = await dispatchIssueTaskGrant(runtime, { requestId: randomUUID(), taskId: started.task.id, ownerGoal: request.brief, allowedCommands: ['knowledge.topic_maintenance_propose', 'knowledge.topic_maintenance_approve', 'knowledge.topic_maintenance_reject'], workers: [{ type: 'external_agent', id: 'mcp' }], relevantContext: {}, expiresAt: new Date(Date.now() + 60_000).toISOString() });
   assert.equal(issued.ok, true); return { taskId: started.task.id, grantId: issued.data.id };
 }
 function seed(db) {
@@ -202,28 +202,70 @@ test('WMB-5150: savepoint rolls back an interrupted batch', async () => withDb((
   assert.equal(db.prepare('SELECT status FROM topic_maintenance_proposals WHERE id=?').get(proposal.id).status, 'proposed');
 }));
 
-test('WMB-5150: dispatcher enforces librarian object scope, Owner replay, and Agent decision redline', async () => withRuntime(async (runtime, ids) => {
+test('WMB-5150: dispatcher enforces librarian object scope, supervisor-only approval, and zero-write agent denials', async () => withRuntime(async (runtime, ids) => {
+  // —— 1) 资料员对象级硬隔离：越界合并提案在 handler 之前被拒（零业务写）——
   const scoped = await boundTask(runtime, { roleId: 'librarian', brief: '整理指定资料', sourceIds: [ids.source] });
   const blocked = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_propose', requestId: randomUUID(), actor: { type: 'external_agent', id: 'mcp' }, taskId: scoped.taskId, grantId: scoped.grantId, input: { title: '越界合并', reason: 'blocked', changes: [{ kind: 'merge', retainedTopicId: ids.keep, mergedTopicId: ids.old }] }, boundIdentity: { entityType: 'topic_maintenance_proposal' }, entityType: 'topic_maintenance_proposal', execute: () => { throw new Error('HANDLER_MUST_NOT_RUN'); } });
   assert.equal(blocked.ok, false); assert.equal(blocked.error.code, 'TASK_SCOPE_BROADENED'); assert.equal(blocked.error.details.reason, 'OBJECT_SCOPE_MISMATCH');
   await dispatchCancelAgentTask(runtime, scoped.taskId, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID() });
 
+  // —— 2) 资料员 workspace 工单：可 propose，但 approve/reject 被角色/执行边界拒绝（零业务写）——
   const workspace = await boundTask(runtime, { roleId: 'librarian', brief: '整理全库', scope: 'workspace' });
   const proposed = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_propose', requestId: 'proposal-create', actor: { type: 'external_agent', id: 'mcp' }, taskId: workspace.taskId, grantId: workspace.grantId, input: { title: '合并重复主题', reason: 'duplicate', changes: [{ kind: 'merge', retainedTopicId: ids.keep, mergedTopicId: ids.old }] }, boundIdentity: { entityType: 'topic_maintenance_proposal' }, entityType: 'topic_maintenance_proposal', execute: (database, input) => { const data = createTopicMaintenanceProposal(database, { ...input, taskId: workspace.taskId }); return { data, entityId: data.id, readback: data }; } });
-  assert.equal(proposed.ok, true);
-  const denied = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_approve', requestId: 'agent-approve', actor: { type: 'external_agent', id: 'mcp' }, taskId: workspace.taskId, grantId: workspace.grantId, input: { id: proposed.data.id, expectedRevision: 1, decision: 'approve' }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: () => { throw new Error('HANDLER_MUST_NOT_RUN'); } });
-  assert.equal(denied.ok, false); assert.equal(denied.error.code, 'TASK_SCOPE_BROADENED');
-  const approve = () => dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_approve', requestId: 'owner-approve', actor: { type: 'owner_ui', id: 'renderer' }, input: { id: proposed.data.id, expectedRevision: 1, decision: 'approve' }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: (database, input) => { const data = decideTopicMaintenanceProposal(database, input); return { data, entityId: data.id, readback: data }; } });
-  const first = await approve(), replay = await approve(); assert.equal(first.ok, true); assert.deepEqual(replay, first);
+  assert.equal(proposed.ok, true, JSON.stringify(proposed.error ?? null));
+  // 手工 grant 即使（错误地）包含 approve/reject：员工任务 + 外部 Agent 仍在 handler 之前被拒（TASK_SCOPE_BROADENED + ROLE_SCOPE_BLOCKED）。
+  const agentAttempt = (command, requestId, decision) => dispatchBusinessCommand(runtime, { command, requestId, actor: { type: 'external_agent', id: 'mcp' }, taskId: workspace.taskId, grantId: workspace.grantId, input: { id: proposed.data.id, expectedRevision: proposed.data.revision, decision }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: () => { throw new Error('HANDLER_MUST_NOT_RUN'); } });
+  for (const [command, requestId, decision] of [['knowledge.topic_maintenance_approve', 'agent-approve', 'approve'], ['knowledge.topic_maintenance_reject', 'agent-reject', 'reject']]) {
+    const denied = await agentAttempt(command, requestId, decision);
+    assert.equal(denied.ok, false); assert.equal(denied.error.code, 'TASK_SCOPE_BROADENED'); assert.equal(denied.error.details.reason, 'ROLE_SCOPE_BLOCKED');
+  }
+  // 零业务写：提案仍 proposed、无归档主题、正式关系零迁移、无 reproposal outbox。
+  assert.equal(runtime.database.prepare('SELECT status FROM topic_maintenance_proposals WHERE id=?').get(proposed.data.id).status, 'proposed');
+  assert.equal(runtime.database.prepare('SELECT count(*) count FROM topics WHERE status=?').get('archived').count, 0);
+  assert.equal(runtime.database.prepare('SELECT topic_id id FROM topic_source_links WHERE source_id=?').get(ids.source).id, ids.old);
+  assert.equal(runtime.database.prepare('SELECT topic_id id FROM plan_items WHERE id=?').get(ids.item).id, ids.old);
+  await dispatchCancelAgentTask(runtime, workspace.taskId, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID() });
+
+  // —— 3) 策划工单同样不可代批（角色边界拒绝，零业务写）——
+  const planner = await boundTask(runtime, { roleId: 'planner', brief: '选题整理', businessDate: '2026-08-10' }, 'daily_judge', '2026-08-10');
+  const plannerDenied = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_approve', requestId: 'planner-approve', actor: { type: 'external_agent', id: 'mcp' }, taskId: planner.taskId, grantId: planner.grantId, input: { id: proposed.data.id, expectedRevision: proposed.data.revision, decision: 'approve' }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: () => { throw new Error('HANDLER_MUST_NOT_RUN'); } });
+  assert.equal(plannerDenied.ok, false); assert.equal(plannerDenied.error.code, 'TASK_SCOPE_BROADENED'); assert.equal(plannerDenied.error.details.reason, 'ROLE_SCOPE_BLOCKED');
+  assert.equal(runtime.database.prepare('SELECT status FROM topic_maintenance_proposals WHERE id=?').get(proposed.data.id).status, 'proposed');
+  await dispatchCancelAgentTask(runtime, planner.taskId, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID() });
+
+  // —— 4) 主管（desk Pi 会话）：应用已批准提案 → 单事务整批生效 + 完整读回；外部 Agent 持主管 grant 仍拒绝；重放幂等 ——
+  const desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+  const started = await dispatchStartAgentTask(runtime, { intent: 'page_today', businessDate: '2026-08-10', contextRefs: { workspaceId: runtime.identity.workspaceId, roleId: 'desk', page: 'today' } }, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID(), workerLeaseId: desk.leaseId });
+  runtime.bindWorkerTask(desk, started.task.id);
+  const grantId = await ensureAutomaticTaskGrant(runtime, started.task.id, new Date(), 'desk');
+  const mcpOnDesk = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_approve', requestId: 'mcp-on-desk-approve', actor: { type: 'external_agent', id: 'mcp' }, taskId: started.task.id, grantId, workerLeaseId: desk.leaseId, input: { id: proposed.data.id, expectedRevision: proposed.data.revision, decision: 'approve' }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: () => { throw new Error('HANDLER_MUST_NOT_RUN'); } });
+  assert.equal(mcpOnDesk.ok, false); assert.equal(mcpOnDesk.error.code, 'TASK_SCOPE_BROADENED'); assert.equal(mcpOnDesk.error.details.reason, 'ROLE_SCOPE_BLOCKED');
+  assert.equal(runtime.database.prepare('SELECT status FROM topic_maintenance_proposals WHERE id=?').get(proposed.data.id).status, 'proposed');
+  const approve = () => dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_approve', requestId: 'supervisor-approve', actor: { type: 'pi', id: 'pi', label: 'Pi worker' }, taskId: started.task.id, workerLeaseId: desk.leaseId, grantId, input: { id: proposed.data.id, expectedRevision: proposed.data.revision, decision: 'approve' }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: proposed.data.id }, entityType: 'topic_maintenance_proposal', execute: (database, input) => { const data = decideTopicMaintenanceProposal(database, input); return { data, entityId: data.id, beforeRevision: input.expectedRevision, afterRevision: data.revision, readback: data }; } });
+  const approved = await approve();
+  assert.equal(approved.ok, true, JSON.stringify(approved.error ?? null));
+  assert.equal(approved.data.status, 'approved');
+  assert.equal(approved.readback.status, 'approved');
+  assert.equal(approved.revisions.before, proposed.data.revision); assert.equal(approved.revisions.after, proposed.data.revision + 1);
+  assert.equal(runtime.database.prepare('SELECT status FROM topics WHERE id=?').get(ids.old).status, 'archived');
+  assert.equal(runtime.database.prepare('SELECT topic_id id FROM topic_source_links WHERE source_id=?').get(ids.source).id, ids.keep);
+  assert.equal(runtime.database.prepare('SELECT topic_id id FROM plan_items WHERE id=?').get(ids.item).id, ids.keep);
+  assert.equal(runtime.database.prepare('SELECT topic_id id FROM content_projects WHERE id=?').get(ids.project).id, ids.keep);
+  const replay = await approve();
+  assert.deepEqual(replay, approved);
+  await dispatchCancelAgentTask(runtime, started.task.id, { actor: { type: 'scheduler', id: 'test' }, requestId: randomUUID(), workerLeaseId: desk.leaseId });
+  runtime.releaseWorker(desk);
 }));
 
-test('WMB-5150: only librarian receives proposal write, never Owner decision commands', () => {
+test('WMB-5150: librarian proposes; supervisor alone decides; employees never hold decision commands', () => {
   const librarian = roleWriteCommands('librarian');
   assert.ok(librarian.includes('knowledge.topic_maintenance_propose'));
-  for (const role of ['desk', 'planner', 'librarian']) {
-    const commands = roleWriteCommands(role);
-    assert.equal(commands.includes('knowledge.topic_maintenance_approve'), false);
-    assert.equal(commands.includes('knowledge.topic_maintenance_reject'), false);
+  // WMB-5182 §5 翻转：topic approve/reject/reproposal_retry 归主管（desk），员工（含资料员）零绑定。
+  for (const command of ['knowledge.topic_maintenance_approve', 'knowledge.topic_maintenance_reject', 'knowledge.topic_maintenance_reproposal_retry']) {
+    assert.ok(roleWriteCommands('desk').includes(command), `desk standing includes ${command}`);
+    for (const role of ['planner', 'librarian', 'writer', 'reporter']) {
+      assert.equal(roleWriteCommands(role).includes(command), false, `${role} must not hold ${command}`);
+    }
   }
 });
 

@@ -4,7 +4,9 @@ import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installPiOperatorSkill, installPiWorkspaceLaneSkill } from './pi-operator-skill.ts';
 import type { PiMessageSegment } from '../shared/pi-message.ts';
+import { isValidOrchestrationData, type OrchestrationData } from '../shared/orchestration-envelope.ts';
 import { messagesFromPiEntries } from './pi-transcript-projection.ts';
+import { reconcileOrchestrationRows } from './pi-orchestration-store.ts';
 
 export type PiChatMessage = {
   role: 'user' | 'assistant';
@@ -13,6 +15,8 @@ export type PiChatMessage = {
   segments?: PiMessageSegment[];
   entryId?: string;
   status?: 'streaming' | 'stopped' | 'failed';
+  kind?: 'system_event' | 'orchestration';
+  orchestration?: OrchestrationData;
   createdAt?: string;
 };
 
@@ -89,6 +93,11 @@ function normalizeMessage(message: PiChatMessage, fallbackCreatedAt?: string): P
     ...(Array.isArray(message.segments) && message.segments.length ? { segments: message.segments } : {}),
     ...(message.entryId ? { entryId: message.entryId } : {}),
     ...(message.status ? { status: message.status } : {}),
+    ...(message.kind === 'orchestration' && isValidOrchestrationData(message.orchestration)
+      ? { kind: 'orchestration' as const, orchestration: message.orchestration }
+      : message.kind === 'system_event'
+        ? { kind: 'system_event' as const }
+        : {}),
     ...(message.createdAt || fallbackCreatedAt ? { createdAt: message.createdAt ?? fallbackCreatedAt } : {})
   };
 }
@@ -106,22 +115,6 @@ function previewFromMessages(messages: PiChatMessage[]): string {
     if (text) return text.length > 48 ? `${text.slice(0, 48)}…` : text;
   }
   return '暂无消息';
-}
-
-function visibleMessageSize(messages: PiChatMessage[]): number {
-  return messages.reduce((total, message) => total + message.text.length + (message.thinking?.length ?? 0)
-    + (message.segments ?? []).reduce((sum, segment) => sum + segment.text.length, 0), 0);
-}
-
-function preferProjectedMessages(stored: PiChatMessage[], projected: PiChatMessage[]): boolean {
-  const storedUsers = stored.filter((message) => message.role === 'user');
-  const projectedUsers = projected.filter((message) => message.role === 'user');
-  if (projectedUsers.length !== storedUsers.length) return projectedUsers.length > storedUsers.length;
-  if (projectedUsers.at(-1)?.text !== storedUsers.at(-1)?.text) return false;
-  const storedSize = visibleMessageSize(stored);
-  const projectedSize = visibleMessageSize(projected);
-  if (projectedSize !== storedSize) return projectedSize > storedSize;
-  return !stored.some((message) => message.segments?.length) && projected.some((message) => message.segments?.length);
 }
 
 function recoverInterruptedTurn(messages: PiChatMessage[]): PiChatMessage[] {
@@ -194,7 +187,7 @@ async function readConversationFile(dataRootPath: string, id: string, options: {
       try {
         const entries = (await readFile(raw.sessionFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as unknown);
         const projected = messagesFromPiEntries(entries);
-        if (projected.length && preferProjectedMessages(messages, projected)) messages = projected;
+        if (projected.length) messages = reconcileOrchestrationRows(messages, projected);
       } catch { /* keep the stored snapshot when the Pi session is unavailable */ }
     }
     if (options.recoverInterrupted) messages = recoverInterruptedTurn(messages);

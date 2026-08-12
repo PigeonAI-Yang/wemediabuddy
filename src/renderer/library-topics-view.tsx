@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { workspaceStorageKey } from './workspace-storage'; import { TopicMaintenanceLedger } from './topic-maintenance-ledger.tsx';
+import { severityLabel } from './knowledge-canvas-projection';
+import type {
+  KnowledgeCompileStatus,
+  KnowledgeHealthIssueRecord,
+  KnowledgeUpdateReceiptRecord,
+  KnowledgeUsageRecordRecord,
+  KnowledgeWikiPageRecord,
+  KnowledgeWikiPageVersionRecord
+} from '../shared/knowledge-flywheel';
+import type {
+  TopicWikiBody,
+  TopicWikiDetail,
+  TopicWikiDossierCounts,
+  TopicWikiKeyConclusion,
+  TopicEvidenceEntry
+} from '../shared/knowledge-topic-library';
 export type LibraryTopicPiContext = { id: string; title: string } | null;
 
 type TopicStatus = 'active' | 'watching' | 'dormant' | string;
@@ -150,6 +166,187 @@ const STATUS_FILTERS: Array<{ id: TopicStatusFilter; label: string }> = [
 ];
 
 const OPEN_TOPIC_EVENT = 'wmb-open-library-topic';
+
+// WMB-5212 M3：Topic Wiki 默认详情（Wiki-first 原位改造，设计 existing-knowledge-surfaces §3.2）。
+// 顺序即详情页段落顺序：当前认识 → 最近变化 → 证据 → 创作影响 → 待研究 → 完整档案 → 版本。
+const WIKI_SECTION_ORDER = ['current', 'changes', 'evidence', 'impact', 'research', 'dossier', 'versions'] as const;
+type WikiSectionId = (typeof WIKI_SECTION_ORDER)[number];
+
+const WIKI_SECTION_LABELS: Record<WikiSectionId, string> = {
+  current: '当前认识',
+  changes: '最近变化',
+  evidence: '证据',
+  impact: '创作影响',
+  research: '待研究',
+  dossier: '完整档案',
+  versions: '版本',
+};
+
+// WMB-5226：四产品页签（概览/资料/变化/版本）替代七章节 sticky 导航。
+// 七段章节 DOM 全部保留，仅按页签投影显隐；键盘 1–7 与深链接仍直达章节。
+const WIKI_TAB_ORDER = ['overview', 'sources', 'changes', 'versions'] as const;
+type WikiTabId = (typeof WIKI_TAB_ORDER)[number];
+
+const WIKI_TAB_LABELS: Record<WikiTabId, string> = {
+  overview: '概览',
+  sources: '资料',
+  changes: '变化',
+  versions: '版本',
+};
+
+// 键盘/深链接：章节 → 所属页签（跨页签跳转时先切页签再滚动）。
+const WIKI_SECTION_TAB: Record<WikiSectionId, WikiTabId> = {
+  current: 'overview',
+  changes: 'changes',
+  evidence: 'sources',
+  impact: 'sources',
+  research: 'sources',
+  dossier: 'sources',
+  versions: 'versions',
+};
+
+const WIKI_DETAIL_LIMITS = {
+  versionsLimit: 30,
+  receiptsLimit: 10,
+  evidenceLimit: 30,
+  questionsLimit: 30,
+  healthLimit: 20,
+  usageLimit: 20,
+} as const;
+
+const COMPILE_STATUS_LABELS: Record<string, string> = {
+  current: '已编译',
+  stale: '待重编译',
+  compiling: '编译中',
+  failed: '编译失败',
+};
+
+const CONCLUSION_STATUS_LABELS: Record<string, string> = {
+  unverified: '未核验',
+  supported: '已支持',
+  disputed: '有争议',
+  contradicted: '已反驳',
+  superseded: '已替代',
+  not_applicable: '不适用',
+  inference: '推断',
+};
+
+const CONCLUSION_STATUS_CLASS: Record<string, string> = {
+  supported: 'ok',
+  disputed: 'warn',
+  contradicted: 'danger',
+  superseded: 'gray',
+  inference: 'info',
+};
+
+const EVIDENCE_LEVEL_LABELS: Record<string, string> = {
+  none: '无证据',
+  single: '单源',
+  corroborated: '多源印证',
+  primary: '一手',
+  outcome_observed: '结果观察',
+  mixed: '混合',
+  insufficient: '不足',
+};
+
+const EVIDENCE_RELATION_LABELS: Record<string, string> = {
+  supports: '支持',
+  contradicts: '反驳',
+  qualifies: '限定',
+  derived_from: '派生',
+};
+
+const SOURCE_NATURE_LABELS: Record<string, string> = {
+  primary_source: '一手来源',
+  secondary_source: '二手来源',
+  user_statement: '用户陈述',
+  user_experience: '用户经验',
+  business_record: '业务记录',
+  performance_observation: '表现观察',
+  review: '复盘',
+  derived_knowledge: '派生知识',
+  ai_inference: 'AI 推断',
+};
+
+const USAGE_KIND_LABELS: Record<string, string> = {
+  quoted: '引用',
+  paraphrased: '转述',
+  reasoning_basis: '推理依据',
+  structure_pattern: '结构模式',
+  avoided_due_to_risk: '因风险规避',
+  rejected_by_user: '被用户拒绝',
+  consulted: '仅参考',
+};
+
+const USAGE_OUTPUT_LABELS: Record<string, string> = {
+  source_item: '资料',
+  topic_proposal: '选题提案',
+  creative_brief: '创作简报',
+  plan_item: '计划项',
+  content_version: '内容版本',
+  platform_version: '平台版本',
+  review: '复盘',
+  publication: '发布',
+};
+
+const RISK_KIND_LABELS: Record<string, string> = {
+  disputed: '有争议',
+  contradicted: '已反驳',
+  inference: '推断',
+  stale: '已过期',
+  unverified: '未核验',
+  scope_mismatch: '范围不符',
+};
+
+const HEALTH_TYPE_LABELS: Record<string, string> = {
+  stale_claim: '过期结论',
+  unresolved_contradiction: '未决矛盾',
+  unsupported_claim: '无支撑结论',
+  duplicate_entity: '重复实体',
+  duplicate_knowledge: '重复知识',
+  orphan_knowledge: '孤立知识',
+  missing_wiki_page: '缺少 Wiki 页',
+  stale_wiki_page: 'Wiki 已过期',
+  broken_reference: '失效引用',
+  unreturned_review: '复盘未回流',
+  underperforming_method: '方法表现不佳',
+  overgeneralized_global: '过度泛化',
+  unanswered_high_value_question: '高价值问题未答',
+};
+
+const HEALTH_STATUS_LABELS: Record<string, string> = {
+  open: '未解决',
+  repairing: '修复中',
+  resolved: '已解决',
+  accepted_risk: '接受风险',
+  false_positive: '误报',
+};
+
+const RECEIPT_TRIGGER_LABELS: Record<string, string> = {
+  ingest: '资料更新',
+  query: 'Pi 对话',
+  lint: '知识检查',
+  creation: '创作回流',
+  review: '复盘回流',
+  migration: '档案初始化',
+};
+
+const RECEIPT_COUNT_LABELS: Record<string, string> = {
+  entitiesCreated: '新建实体',
+  entitiesMatched: '匹配实体',
+  notesCreated: '新增知识',
+  notesUpdated: '更新知识',
+  notesSkippedLowValue: '跳过低价值',
+  noteVersionsCreated: '新增版本',
+  evidenceLinks: '证据链',
+  wikiPagesCompiled: '更新主题',
+  restatements: '纯复述',
+  skippedRepetition: '跳过复述',
+  skippedLowValue: '跳过低价值',
+  skippedTransient: '跳过瞬时',
+  freeNotesCaptured: '自由记录',
+  usageRecords: '使用记录',
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -324,6 +521,292 @@ function normalizeKnowledgeContext(raw: unknown): KnowledgeContextPage {
   return { opportunities };
 }
 
+function normalizeWikiPageRecord(raw: unknown): KnowledgeWikiPageRecord | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  const canonicalKey = asString(record.canonicalKey);
+  if (!id || !canonicalKey) return null;
+  return {
+    id,
+    scope: asString(record.scope) ?? 'global',
+    pageType: asString(record.pageType) ?? 'topic',
+    canonicalKey,
+    title: asString(record.title) ?? canonicalKey,
+    subjectType: asString(record.subjectType) ?? null,
+    subjectId: asString(record.subjectId) ?? null,
+    lifecycle: asString(record.lifecycle) ?? 'active',
+    mergedIntoPageId: asString(record.mergedIntoPageId) ?? null,
+    supersededByPageId: asString(record.supersededByPageId) ?? null,
+    compileStatus: (asString(record.compileStatus) ?? 'current') as KnowledgeCompileStatus,
+    compileNote: asString(record.compileNote) ?? null,
+    currentVersionId: asString(record.currentVersionId) ?? null,
+    revision: asNumber(record.revision) ?? 1,
+    createdAt: asString(record.createdAt) ?? '',
+    updatedAt: asString(record.updatedAt) ?? '',
+    archivedAt: asString(record.archivedAt) ?? null,
+  } as KnowledgeWikiPageRecord;
+}
+
+function normalizeWikiPageVersionRecord(raw: unknown): KnowledgeWikiPageVersionRecord | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  const pageId = asString(record.pageId);
+  if (!id || !pageId) return null;
+  return {
+    id,
+    pageId,
+    versionNumber: asNumber(record.versionNumber) ?? 1,
+    title: asString(record.title) ?? '',
+    body: record.body ?? null,
+    adoptedNoteVersionIds: Array.isArray(record.adoptedNoteVersionIds)
+      ? record.adoptedNoteVersionIds.map(String).filter(Boolean)
+      : [],
+    businessObjectRefs: Array.isArray(record.businessObjectRefs)
+      ? record.businessObjectRefs
+      : [],
+    flags: Array.isArray(record.flags) ? record.flags.map(String) : [],
+    changeSummary: asString(record.changeSummary) ?? '',
+    readableDiff: asString(record.readableDiff) ?? '',
+    compileReason: asString(record.compileReason) ?? '',
+    creatorNature: asString(record.creatorNature) ?? 'system',
+    changeSetId: asString(record.changeSetId) ?? '',
+    restoredFromVersionId: asString(record.restoredFromVersionId) ?? null,
+    createdAt: asString(record.createdAt) ?? '',
+  } as KnowledgeWikiPageVersionRecord;
+}
+
+function normalizeKeyConclusion(raw: unknown): TopicWikiKeyConclusion | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const statement = asString(record.statement);
+  if (!statement) return null;
+  return {
+    noteId: asString(record.noteId) ?? '',
+    statement,
+    conclusionStatus: asString(record.conclusionStatus) ?? 'unverified',
+    evidenceLevel: asString(record.evidenceLevel) ?? 'none',
+    appliesTo: asString(record.appliesTo) ?? null,
+    changeType: asString(record.changeType) ?? 'created',
+    kind: asString(record.kind) ?? 'claim',
+  } as TopicWikiKeyConclusion;
+}
+
+function normalizeTopicWikiBody(raw: unknown): TopicWikiBody | null {
+  const record = asRecord(raw);
+  if (!record || record.kind !== 'topic-wiki') return null;
+  const keyConclusions = Array.isArray(record.keyConclusions)
+    ? record.keyConclusions.map(normalizeKeyConclusion).filter((item): item is TopicWikiKeyConclusion => item !== null)
+    : [];
+  const retainedDisputes = Array.isArray(record.retainedDisputes)
+    ? record.retainedDisputes.map(normalizeKeyConclusion).filter((item): item is TopicWikiKeyConclusion => item !== null)
+    : [];
+  return {
+    kind: 'topic-wiki',
+    title: asString(record.title) ?? '',
+    summary: asString(record.summary) ?? '',
+    asOf: asString(record.asOf) ?? '',
+    scope: asString(record.scope) ?? 'global',
+    topicId: asString(record.topicId) ?? '',
+    compiledSourceIds: Array.isArray(record.compiledSourceIds) ? record.compiledSourceIds.map(String) : [],
+    sourceRevision: asNumber(record.sourceRevision) ?? 0,
+    keyConclusions,
+    retainedDisputes,
+    pendingQuestions: Array.isArray(record.pendingQuestions) ? record.pendingQuestions.map(String).filter(Boolean) : [],
+    recentChanges: Array.isArray(record.recentChanges) ? record.recentChanges : [],
+    versionCount: asNumber(record.versionCount) ?? 0,
+  } as TopicWikiBody;
+}
+
+function normalizeEvidenceEntry(raw: unknown): TopicEvidenceEntry | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  const knowledgeNoteVersionId = asString(record.knowledgeNoteVersionId);
+  if (!id || !knowledgeNoteVersionId) return null;
+  return {
+    id,
+    knowledgeNoteVersionId,
+    evidenceObjectType: asString(record.evidenceObjectType) ?? 'source',
+    evidenceObjectId: asString(record.evidenceObjectId) ?? '',
+    relation: asString(record.relation) ?? 'supports',
+    sourceNature: asString(record.sourceNature) ?? 'secondary_source',
+    excerpt: asString(record.excerpt) ?? null,
+    locator: asString(record.locator) ?? null,
+    observedAt: asString(record.observedAt) ?? null,
+    creatorNature: asString(record.creatorNature) ?? 'system',
+    changeSetId: asString(record.changeSetId) ?? '',
+    createdAt: asString(record.createdAt) ?? '',
+    noteStatement: asString(record.noteStatement) ?? '',
+    noteConclusionStatus: asString(record.noteConclusionStatus) ?? 'unverified',
+  } as TopicEvidenceEntry;
+}
+
+function normalizeUsageRecord(raw: unknown): KnowledgeUsageRecordRecord | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    scope: asString(record.scope) ?? 'global',
+    workspaceId: asString(record.workspaceId) ?? '',
+    packageId: asString(record.packageId) ?? '',
+    outputObjectType: asString(record.outputObjectType) ?? 'content_version',
+    outputObjectId: asString(record.outputObjectId) ?? '',
+    knowledgeVersionId: asString(record.knowledgeVersionId) ?? '',
+    knowledgeVersionKind: asString(record.knowledgeVersionKind) === 'note' ? 'note' : 'wiki_page',
+    usageKind: asString(record.usageKind) ?? 'consulted',
+    used: Boolean(record.used),
+    locator: asString(record.locator) ?? null,
+    reason: asString(record.reason) ?? '',
+    actor: asString(record.actor) ?? '',
+    evidenceId: asString(record.evidenceId) ?? null,
+    createdBy: asString(record.createdBy) ?? 'system',
+    createdAt: asString(record.createdAt) ?? '',
+  } as KnowledgeUsageRecordRecord;
+}
+
+function normalizeHealthIssueRecord(raw: unknown): KnowledgeHealthIssueRecord | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    scope: asString(record.scope) ?? 'global',
+    issueType: asString(record.issueType) ?? 'unsupported_claim',
+    affectedObjectType: asString(record.affectedObjectType) ?? null,
+    affectedObjectId: asString(record.affectedObjectId) ?? null,
+    severity: asString(record.severity) ?? 'low',
+    evidence: asRecord(record.evidence) ?? {},
+    suggestedAction: asString(record.suggestedAction) ?? '',
+    status: asString(record.status) ?? 'open',
+    resolutionNote: asString(record.resolutionNote) ?? null,
+    resolvedChangeSetId: asString(record.resolvedChangeSetId) ?? null,
+    detectedAt: asString(record.detectedAt) ?? '',
+    updatedAt: asString(record.updatedAt) ?? '',
+    resolvedAt: asString(record.resolvedAt) ?? null,
+    revision: asNumber(record.revision) ?? 1,
+  } as KnowledgeHealthIssueRecord;
+}
+
+function normalizeReceiptRecord(raw: unknown): KnowledgeUpdateReceiptRecord | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const id = asString(record.id);
+  if (!id) return null;
+  // 运行期 affected* / wikiPageVersions / autoResolutions / retainedDisputes / failures 为 string[]
+  // （main mapReceiptRow parseJsonArray），与共享类型声明（record[]）存在既有出入：渲染端按 string[]
+  // 归一化，仅返回类型按共享契约收窄（不做多余 JSON 猜测）。
+  return {
+    id,
+    workspaceId: asString(record.workspaceId) ?? '',
+    changeSetId: asString(record.changeSetId) ?? '',
+    triggerType: asString(record.triggerType) ?? 'ingest',
+    requestId: asString(record.requestId) ?? '',
+    summary: asString(record.summary) ?? '',
+    counts: Object.fromEntries(Object.entries(asRecord(record.counts) ?? {}).map(([key, value]) => [key, asNumber(value) ?? 0])),
+    affectedTopics: Array.isArray(record.affectedTopics) ? record.affectedTopics.map(String) : [],
+    affectedEntities: Array.isArray(record.affectedEntities) ? record.affectedEntities.map(String) : [],
+    affectedMethods: Array.isArray(record.affectedMethods) ? record.affectedMethods.map(String) : [],
+    affectedSyntheses: Array.isArray(record.affectedSyntheses) ? record.affectedSyntheses.map(String) : [],
+    wikiPageVersions: Array.isArray(record.wikiPageVersions) ? record.wikiPageVersions.map(String) : [],
+    impact: asRecord(record.impact) ?? {},
+    autoResolutions: Array.isArray(record.autoResolutions) ? record.autoResolutions.map(String) : [],
+    retainedDisputes: Array.isArray(record.retainedDisputes) ? record.retainedDisputes.map(String) : [],
+    failures: Array.isArray(record.failures) ? record.failures.map(String) : [],
+    createdBy: asString(record.createdBy) ?? 'system',
+    createdAt: asString(record.createdAt) ?? '',
+  } as unknown as KnowledgeUpdateReceiptRecord;
+}
+
+function normalizeListPage<T>(
+  raw: unknown,
+  normalizeItem: (item: unknown) => T | null,
+): { items: T[]; total: number; limit: number; offset: number; hasMore: boolean } {
+  const record = asRecord(raw);
+  const rawItems = record && Array.isArray(record.items) ? record.items : [];
+  const items = rawItems.map(normalizeItem).filter((item): item is T => item !== null);
+  return {
+    items,
+    total: asNumber(record?.total) ?? items.length,
+    limit: asNumber(record?.limit) ?? items.length,
+    offset: asNumber(record?.offset) ?? 0,
+    hasMore: typeof record?.hasMore === 'boolean' ? record.hasMore : offsetAndTotal(record, items.length),
+  };
+}
+
+function offsetAndTotal(record: Record<string, unknown> | null | undefined, itemsLength: number): boolean {
+  if (!record) return false;
+  const offset = asNumber(record.offset) ?? 0;
+  const total = asNumber(record.total) ?? itemsLength;
+  return offset + itemsLength < total;
+}
+
+function normalizeTopicWikiDetail(raw: unknown): TopicWikiDetail | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const topicId = asString(record.topicId);
+  if (!topicId) return null;
+  const topicRecord = asRecord(record.topic);
+  const wikiRecord = asRecord(record.wiki);
+  const wikiPage = wikiRecord ? normalizeWikiPageRecord(wikiRecord.page) : null;
+  const wikiCurrent = wikiRecord ? normalizeWikiPageVersionRecord(wikiRecord.current) : null;
+  const wikiBody = wikiRecord ? normalizeTopicWikiBody(wikiRecord.body) : null;
+  const risksRecord = asRecord(record.risks) ?? {};
+  const dossierRecord = asRecord(record.dossierCounts) ?? {};
+  return {
+    topicId,
+    topic: topicRecord ? {
+      id: asString(topicRecord.id) ?? topicId,
+      title: asString(topicRecord.title) ?? '',
+      canonicalKey: asString(topicRecord.canonicalKey) ?? null,
+      kind: asString(topicRecord.kind) ?? null,
+      summary: asString(topicRecord.summary) ?? null,
+      status: asString(topicRecord.status) ?? 'active',
+      firstSeenAt: asString(topicRecord.firstSeenAt) ?? '',
+      lastSeenAt: asString(topicRecord.lastSeenAt) ?? '',
+      revision: asNumber(topicRecord.revision) ?? 1,
+      sourceCount: asNumber(topicRecord.sourceCount) ?? 0,
+      opportunityCount: asNumber(topicRecord.opportunityCount) ?? 0,
+      contentCount: asNumber(topicRecord.contentCount) ?? 0,
+      publicationCount: asNumber(topicRecord.publicationCount) ?? 0,
+    } : null,
+    wiki: wikiRecord ? {
+      page: wikiPage,
+      current: wikiCurrent,
+      body: wikiBody,
+      compileStatus: (asString(wikiRecord.compileStatus) ?? null) as KnowledgeCompileStatus | null,
+      compileNote: asString(wikiRecord.compileNote) ?? null,
+    } : null,
+    versions: normalizeListPage(record.versions, normalizeWikiPageVersionRecord),
+    receipts: normalizeListPage(record.receipts, normalizeReceiptRecord),
+    evidence: normalizeListPage(record.evidence, normalizeEvidenceEntry),
+    questions: Array.isArray(record.questions) ? record.questions.map(String).filter(Boolean) : [],
+    creationImpact: normalizeListPage(record.creationImpact, normalizeUsageRecord),
+    healthIssues: normalizeListPage(record.healthIssues, normalizeHealthIssueRecord),
+    dossierCounts: {
+      sources: asNumber(dossierRecord.sources) ?? 0,
+      judgments: asNumber(dossierRecord.judgments) ?? 0,
+      audience_demands: asNumber(dossierRecord.audience_demands) ?? 0,
+      counter_evidence: asNumber(dossierRecord.counter_evidence) ?? 0,
+      content_history: asNumber(dossierRecord.content_history) ?? 0,
+      metrics: asNumber(dossierRecord.metrics) ?? 0,
+      reviews: asNumber(dossierRecord.reviews) ?? 0,
+      method_findings: asNumber(dossierRecord.method_findings) ?? 0,
+    } as TopicWikiDossierCounts,
+    risks: {
+      disputed: asNumber(risksRecord.disputed) ?? 0,
+      contradicted: asNumber(risksRecord.contradicted) ?? 0,
+      inference: asNumber(risksRecord.inference) ?? 0,
+      stale: Boolean(risksRecord.stale),
+      failed: Boolean(risksRecord.failed),
+    },
+  } as TopicWikiDetail;
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error || '未知错误');
@@ -340,6 +823,37 @@ function topicStatusClass(status?: string | null): string {
   if (status === 'watching') return 'amber';
   if (status === 'dormant' || status === 'archived') return 'gray';
   return 'green';
+}
+
+function changeTypeLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    created: '新增',
+    strengthened: '强化',
+    weakened: '削弱',
+    contradicted: '冲突',
+    qualified: '限域',
+    superseded: '替代',
+    merged: '合并',
+    promoted: '晋升',
+    archived: '归档',
+    rejected: '排除',
+    restored: '恢复',
+    recompiled: '重编译',
+  };
+  return labels[value ?? ''] ?? value ?? '变化';
+}
+
+function kindLabel(value?: string | null): string {
+  const labels: Record<string, string> = {
+    claim: '主张',
+    insight: '洞察',
+    concept: '概念',
+    case: '案例',
+    method: '方法',
+    question: '问题',
+    creative_pattern: '创作模式',
+  };
+  return labels[value ?? ''] ?? value ?? '知识';
 }
 
 function verificationLabel(value?: string | null): string {
@@ -468,6 +982,7 @@ export function LibraryTopicsView(props: {
   const [listError, setListError] = useState<string | null>(null);
   const [listHasMore, setListHasMore] = useState(false);
   const [listTotal, setListTotal] = useState(0);
+  const [listReloadToken, setListReloadToken] = useState(0);
   const [topicQuery, setTopicQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TopicStatusFilter>('all'); const [maintenanceOpen, setMaintenanceOpen] = useState(false);
@@ -479,6 +994,14 @@ export function LibraryTopicsView(props: {
   const [deepMode, setDeepMode] = useState(false);
   const [deepCategory, setDeepCategory] = useState<DossierCategory | ''>('');
   const [deepReloadToken, setDeepReloadToken] = useState(0);
+  // WMB-5212 M3：Topic Wiki 详情（Wiki-first 默认；dossier 兜底仍可达）。
+  const [wikiDetail, setWikiDetail] = useState<TopicWikiDetail | null>(null);
+  const [wikiError, setWikiError] = useState<string | null>(null);
+  const [wikiReloadToken, setWikiReloadToken] = useState(0);
+  const [wikiTab, setWikiTab] = useState<WikiTabId>('overview');
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const wikiLoadSeq = useRef(0);
   const [canvasBusy, setCanvasBusy] = useState(false);
   const [canvasMessage, setCanvasMessage] = useState<string | null>(null);
   const [sourceActionError, setSourceActionError] = useState<string | null>(null);
@@ -584,6 +1107,11 @@ export function LibraryTopicsView(props: {
     setDeepTotal(0);
     setExpandedReviews({});
     setCanvasMessage(null);
+    setWikiDetail(null);
+    setWikiError(null);
+    setWikiTab('overview');
+    setRestoringVersionId(null);
+    setRestoreMessage(null);
   }, []);
 
   const selectTopic = useCallback((topicId: string | null, title?: string | null) => {
@@ -691,8 +1219,8 @@ export function LibraryTopicsView(props: {
   }, [debouncedQuery, emitContext, selectTopic, statusFilter]);
 
   useEffect(() => {
-    void loadTopicList();
-  }, [debouncedQuery, statusFilter, loadTopicList]);
+    void loadTopicList({ preferId: selectedTopicIdRef.current ?? undefined });
+  }, [debouncedQuery, statusFilter, listReloadToken, loadTopicList]);
 
   useEffect(() => {
     const topicId = asString(initialTopicId);
@@ -730,16 +1258,15 @@ export function LibraryTopicsView(props: {
             window.wmb.getKnowledgeTopicDossier({ topicId, category: 'method_findings', limit: 20, offset: 0 }),
             // Preload content projects so 「去创作」 works from the default tab.
             window.wmb.getKnowledgeTopicDossier({ topicId, category: 'content_history', limit: 20, offset: 0 }),
+            // WMB-5226：概览「已有资料」预览始终需要真实来源（不依赖宽布局）。
+            window.wmb.getKnowledgeTopicDossier({ topicId, category: 'sources', limit: 12, offset: 0 }),
           ];
-          if (wideLayout) {
-            requests.push(window.wmb.getKnowledgeTopicDossier({ topicId, category: 'sources', limit: 12, offset: 0 }));
-          }
           const [judgmentsPageRaw, methodsPageRaw, contentPageRaw, sourcesPreviewRaw] = await Promise.all(requests);
           if (cancelled || seq !== segmentLoadSeq.current || selectedTopicIdRef.current !== topicId) return;
           const judgmentsPage = normalizeDossierPage(judgmentsPageRaw);
           const methodsPage = normalizeDossierPage(methodsPageRaw);
           const contentPage = normalizeDossierPage(contentPageRaw);
-          const previewPage = sourcesPreviewRaw !== undefined ? normalizeDossierPage(sourcesPreviewRaw) : null;
+          const previewPage = normalizeDossierPage(sourcesPreviewRaw);
           if (!judgmentsPage) throw new Error('主题档案读取失败');
           setHeaderTopic(judgmentsPage.topic);
           setCounts(judgmentsPage.counts);
@@ -864,6 +1391,72 @@ export function LibraryTopicsView(props: {
     };
   }, [selectedTopicId, deepMode, deepCategory, deepReloadToken, emitContext]);
 
+  // WMB-5212 M3：Topic Wiki 详情加载（Wiki-first 默认；dossier 仍可深查）。
+  useEffect(() => {
+    if (!selectedTopicId || deepMode) {
+      if (!selectedTopicId) {
+        setWikiError(null);
+      }
+      return;
+    }
+
+    const topicId = selectedTopicId;
+    const seq = ++wikiLoadSeq.current;
+    let cancelled = false;
+
+    const run = async () => {
+      setWikiError(null);
+      try {
+        const raw = await window.wmb.getTopicWikiDetail({ topicId, ...WIKI_DETAIL_LIMITS });
+        if (cancelled || seq !== wikiLoadSeq.current || selectedTopicIdRef.current !== topicId) return;
+        const detail = normalizeTopicWikiDetail(raw);
+        if (!detail || detail.topicId !== topicId) return;
+        setWikiDetail(detail);
+        if (detail.topic) {
+          setHeaderTopic({
+            id: detail.topic.id,
+            title: detail.topic.title,
+            summary: detail.topic.summary,
+            status: detail.topic.status,
+            firstSeenAt: detail.topic.firstSeenAt,
+            lastSeenAt: detail.topic.lastSeenAt,
+            revision: detail.topic.revision,
+          });
+          if (detail.dossierCounts) setCounts({ ...EMPTY_COUNTS, ...detail.dossierCounts });
+          emitContext(detail.topic.id, detail.topic.title);
+        }
+      } catch (error) {
+        if (cancelled || seq !== wikiLoadSeq.current || selectedTopicIdRef.current !== topicId) return;
+        setWikiError(errorMessage(error));
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTopicId, deepMode, wikiReloadToken, emitContext]);
+
+  // WMB-5212：dataChanged 订阅（topics/knowledge/receipt scope）替代手动刷新主路径；
+  // 刷新 Wiki 详情与列表但保留当前选择（设计 §2.5 / §9）。
+  useEffect(() => {
+    if (typeof window.wmb.onDataChanged !== 'function') return;
+    const refresh = (event: { scopes: string[] }) => {
+      const scopes = event.scopes ?? [];
+      const touches = scopes.some((scope) => scope === 'topics' || scope === 'knowledge' || scope === 'receipt' || scope === 'library');
+      if (!touches) return;
+      // 主题/Wiki 数据变化：列表始终刷新（保留当前选择）；已开详情时同步刷新各投影。
+      setListReloadToken((value) => value + 1);
+      if (selectedTopicIdRef.current) {
+        setWikiReloadToken((value) => value + 1);
+        setSegmentReloadToken((value) => value + 1);
+        setDeepReloadToken((value) => value + 1);
+      }
+    };
+    const unsubscribe = window.wmb.onDataChanged(refresh);
+    return () => unsubscribe?.();
+  }, []);
+
   useEffect(() => {
     const onOpenTopic = (event: Event) => {
       const custom = event as CustomEvent<{ topicId?: string }>;
@@ -920,6 +1513,35 @@ export function LibraryTopicsView(props: {
     setFocusedTopicId(next.id);
   }, [focusedTopicId, topics]);
 
+  // WMB-5212 M3：Wiki 默认详情状态推导 + 章节直达（供键盘/章节导航共用）。
+  // failed/stale 编译状态横幅始终可见；hasCurrentKnowledge 只在有摘要、结论或争议时展示正文。
+  const wikiPage = wikiDetail?.wiki?.page ?? null;
+  const wikiCurrent = wikiDetail?.wiki?.current ?? null;
+  const wikiBody = wikiDetail?.wiki?.body ?? null;
+  const hasCurrentKnowledge = Boolean(
+    wikiBody
+    && ((wikiBody.summary && wikiBody.summary !== '暂无综合摘要。')
+      || wikiBody.keyConclusions?.length
+      || wikiBody.retainedDisputes?.length)
+  );
+  const showWikiPage = Boolean(wikiDetail?.wiki);
+  const wikiRisks = wikiDetail?.risks ?? null;
+  const wikiCompileStatus = wikiDetail?.wiki?.compileStatus ?? null;
+
+  const scrollToWikiSection = useCallback((section: WikiSectionId) => {
+    // 跨页签章节：先切到所属页签，等渲染完成后再滚动定位（DOM 章节始终保留）。
+    setWikiTab(WIKI_SECTION_TAB[section]);
+    const reduceMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(`topic-wiki-${section}`);
+      if (target) {
+        target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+        target.focus({ preventScroll: true });
+      }
+    });
+  }, []);
+
   const onGridKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
       event.preventDefault();
@@ -945,6 +1567,14 @@ export function LibraryTopicsView(props: {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
       return;
     }
+    // Wiki 默认详情：数字键 1–7 直达章节（当前认识→版本）。
+    const wikiKey = Number(event.key);
+    const wikiIndex = Number.isInteger(wikiKey) && wikiKey >= 1 && wikiKey <= WIKI_SECTION_ORDER.length ? wikiKey - 1 : -1;
+    if (wikiIndex >= 0 && showWikiPage && !deepMode) {
+      event.preventDefault();
+      scrollToWikiSection(WIKI_SECTION_ORDER[wikiIndex]);
+      return;
+    }
     if (event.key === '1') {
       event.preventDefault();
       setDeepMode(false);
@@ -962,7 +1592,7 @@ export function LibraryTopicsView(props: {
       setDeepMode(false);
       setSegment('outcomes');
     }
-  }, []);
+  }, [deepMode, showWikiPage, scrollToWikiSection]);
 
   const loadMoreTopics = useCallback(() => {
     if (listLoading || listLoadingMore || !listHasMore) return;
@@ -1113,9 +1743,55 @@ export function LibraryTopicsView(props: {
       '不要空泛综述，优先可马上开写的切口。'
     ].join('');
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('wmb-pi-generate', { detail: prompt }));
+      window.dispatchEvent(new CustomEvent('wmb-pi-generate', { detail: { prompt, orchestration: { originLabel: '资料库', title: '请 Pi 出选题', goal: '基于主题档案产出可执行选题方案', acceptance: '1–3 条可执行选题方案' } } }));
     }, 0);
   }, [displayTopic, emitContext, onOpenPi]);
+
+  // WMB-5212：Wiki 版本恢复 = 既有 ChangeSet 写路径追加新版本（契约 §15.2；设计 §2.7 明确会生成新版本）。
+  const restoreWikiVersion = useCallback(async (version: KnowledgeWikiPageVersionRecord) => {
+    const page = wikiDetail?.wiki?.page;
+    if (!page || !selectedTopicId || restoringVersionId) return;
+    if (!window.confirm(`恢复会生成一个以 V${version.versionNumber} 内容为基础的新版本（不覆盖历史）。确定恢复？`)) return;
+    setRestoringVersionId(version.id);
+    setRestoreMessage(null);
+    try {
+      const result = await window.wmb.submitKnowledgeChangeSet({
+        requestId: `wiki-restore:${page.id}:${version.id}:${Date.now()}`,
+        reason: `恢复主题 Wiki 到 V${version.versionNumber}（用户操作）`,
+        triggerSource: 'user',
+        resolutionMode: 'manual_correction',
+        createdBy: 'user',
+        input: {
+          wikiPages: [{
+            id: page.id,
+            scope: page.scope,
+            pageType: 'topic',
+            canonicalKey: page.canonicalKey,
+            title: version.title || page.title,
+            subjectType: 'topic',
+            subjectId: selectedTopicId,
+            beforeRevision: page.revision,
+            version: {
+              restoreFromVersionId: version.id,
+              changeSummary: `恢复至 V${version.versionNumber}`,
+              compileReason: 'user-restore',
+              body: {},
+            },
+          }],
+        },
+      });
+      if (!result.ok) throw new Error(result.error?.message ?? '恢复失败');
+      setRestoreMessage(`已生成新版本（基于 V${version.versionNumber}）。`);
+      setWikiReloadToken((value) => value + 1);
+      setSegmentReloadToken((value) => value + 1);
+      setDeepReloadToken((value) => value + 1);
+      setListReloadToken((value) => value + 1);
+    } catch (error) {
+      setRestoreMessage(`恢复失败：${errorMessage(error)}`);
+    } finally {
+      setRestoringVersionId(null);
+    }
+  }, [restoringVersionId, selectedTopicId, wikiDetail]);
 
   const renderSourceCard = (item: DossierItem, forceContradicting = false) => {
     const relation = item.metadata?.relation ?? (forceContradicting ? 'contradicting' : null);
@@ -1272,6 +1948,291 @@ export function LibraryTopicsView(props: {
     </article>;
   };
 
+  // ===== WMB-5212 M3：Topic Wiki 详情渲染（Wiki-first 默认） =====
+  const renderKeyConclusion = (item: TopicWikiKeyConclusion, index: number) => {
+    const status = item.conclusionStatus || 'unverified';
+    const statusClass = CONCLUSION_STATUS_CLASS[status] ?? 'gray';
+    const level = EVIDENCE_LEVEL_LABELS[item.evidenceLevel] ?? item.evidenceLevel;
+    return <article key={`${item.noteId}-${index}`} className="library-topic-card topic-wiki-conclusion">
+      <header>
+        <strong>{item.statement || '（无表述）'}</strong>
+        <div className="library-topic-card-badges">
+          <span className={`library-topic-badge status-${statusClass}`} data-status={status}>{CONCLUSION_STATUS_LABELS[status] ?? status}</span>
+          {item.changeType && item.changeType !== 'created' ? <span className="library-topic-badge">{changeTypeLabel(item.changeType)}</span> : null}
+        </div>
+      </header>
+      <div className="library-topic-card-meta">
+        <span>证据 {level}</span>
+        {item.appliesTo ? <span>适用 {item.appliesTo}</span> : null}
+        <span>{kindLabel(item.kind)}</span>
+      </div>
+    </article>;
+  };
+
+  const renderWikiEvidence = (entry: TopicEvidenceEntry) => {
+    const relation = EVIDENCE_RELATION_LABELS[entry.relation] ?? entry.relation;
+    const contradicting = entry.relation === 'contradicts';
+    return <article key={entry.id} className={`library-topic-card${contradicting ? ' contradicting' : ''}`}>
+      <header>
+        <strong>{entry.noteStatement || '（无表述）'}</strong>
+        <div className="library-topic-card-badges">
+          <span className={`library-topic-badge${contradicting ? ' danger' : ''}`}>{relation}</span>
+          <time>{formatWhen(entry.createdAt)}</time>
+        </div>
+      </header>
+      {entry.excerpt ? <p>{entry.excerpt}</p> : null}
+      <div className="library-topic-card-meta">
+        <span>{SOURCE_NATURE_LABELS[entry.sourceNature] ?? entry.sourceNature}</span>
+        <span>{CONCLUSION_STATUS_LABELS[entry.noteConclusionStatus] ?? entry.noteConclusionStatus}</span>
+        {entry.locator ? <span>定位 {entry.locator}</span> : null}
+      </div>
+    </article>;
+  };
+
+  const renderWikiReceipt = (receipt: KnowledgeUpdateReceiptRecord) => {
+    const impact = asRecord(receipt.impact) ?? {};
+    const sourceId = asString(impact.sourceId);
+    const countEntries = Object.entries(receipt.counts ?? {}).filter(([key, value]) => Number(value) > 0 && key in RECEIPT_COUNT_LABELS);
+    const triggerLabel = RECEIPT_TRIGGER_LABELS[receipt.triggerType] ?? receipt.triggerType;
+    const isMigration = receipt.triggerType === 'migration';
+    const visibleSummary = isMigration ? '已建立主题档案，后续资料会自动沉淀为当前认识。' : (receipt.summary || '知识已更新');
+    return <article key={receipt.id} className="library-topic-card">
+      <header>
+        <strong>{visibleSummary}</strong>
+        <time>{formatWhen(receipt.createdAt)}</time>
+      </header>
+      <div className="library-topic-card-meta">
+        <span>{triggerLabel}</span>
+        {countEntries.map(([key, value]) => {
+          const label = RECEIPT_COUNT_LABELS[key] ?? key;
+          return <span key={key}>{label} {value}</span>;
+        })}
+      </div>
+      {sourceId ? <div className="library-panel-actions"><span>来源 {sourceId}</span></div> : null}
+    </article>;
+  };
+
+  const renderWikiUsage = (record: KnowledgeUsageRecordRecord) => {
+    const usageLabel = USAGE_KIND_LABELS[record.usageKind] ?? record.usageKind;
+    const outputLabel = USAGE_OUTPUT_LABELS[record.outputObjectType] ?? record.outputObjectType;
+    return <article key={record.id} className="library-topic-card">
+      <header>
+        <strong>{outputLabel} · {record.used ? '已采用' : '仅参考'}</strong>
+        <div className="library-topic-card-badges">
+          <span className="library-topic-badge">{usageLabel}</span>
+          <time>{formatWhen(record.createdAt)}</time>
+        </div>
+      </header>
+      <p>{record.reason || '（无原因说明）'}</p>
+    </article>;
+  };
+
+  const renderWikiHealth = (issue: KnowledgeHealthIssueRecord) => {
+    return <article key={issue.id} className="library-topic-card">
+      <header>
+        <strong>{HEALTH_TYPE_LABELS[issue.issueType] ?? issue.issueType}</strong>
+        <div className="library-topic-card-badges">
+          <span className={`library-topic-badge severity-${issue.severity}`}>{severityLabel(issue.severity)}</span>
+          <span className="library-topic-badge">{HEALTH_STATUS_LABELS[issue.status] ?? issue.status}</span>
+          <time>{formatWhen(issue.detectedAt)}</time>
+        </div>
+      </header>
+      {issue.suggestedAction ? <p>{issue.suggestedAction}</p> : null}
+    </article>;
+  };
+
+  const renderWikiVersion = (version: KnowledgeWikiPageVersionRecord, isCurrent: boolean) => {
+    const isMigration = version.compileReason?.includes('migration') || version.changeSummary?.includes('历史初始化') || version.readableDiff?.includes('derived-from-legacy');
+    const visibleSummary = isMigration ? '主题档案已建立，等待资料编译出第一版当前认识。' : (version.changeSummary || version.compileReason || '未记录变更说明');
+    return <article key={version.id} className={`library-topic-card topic-wiki-version${isCurrent ? ' current' : ''}`}>
+      <header>
+        <strong><span className="topic-wiki-version-num">V{version.versionNumber}</span>{isMigration ? '主题档案初始化' : (version.title || '主题认识')}</strong>
+        <div className="library-topic-card-badges">
+          {isCurrent ? <span className="library-topic-badge">当前</span> : null}
+          <time>{formatWhen(version.createdAt)}</time>
+        </div>
+      </header>
+      {!isMigration && version.readableDiff ? <details className="topic-wiki-diff">
+        <summary>查看差异</summary>
+        <pre>{version.readableDiff}</pre>
+      </details> : null}
+      {!isCurrent ? <div className="library-panel-actions">
+        <button
+          type="button"
+          className="text-button"
+          disabled={restoringVersionId !== null}
+          onClick={() => void restoreWikiVersion(version)}
+        >{restoringVersionId === version.id ? '恢复中…' : '恢复此版本'}</button>
+        <span>恢复会生成新版本</span>
+      </div> : null}
+    </article>;
+  };
+
+  const renderWikiPage = () => {
+    if (!wikiDetail) return null;
+    const dossier = wikiDetail.dossierCounts;
+    const evidenceEmpty = !wikiDetail.evidence.items.length;
+    const impactEmpty = !wikiDetail.creationImpact.items.length;
+    const researchEmpty = !wikiDetail.questions.length && !wikiDetail.healthIssues.items.length;
+    const secondaryEmpty = evidenceEmpty && impactEmpty && researchEmpty;
+    const receipts = wikiDetail.receipts.items;
+    const sourceTotalCount = counts.sources ?? 0;
+    const openDeepSources = () => { setDeepMode(true); setDeepCategory('sources'); };
+    return <div className="topic-wiki-page" data-compile-status={wikiCompileStatus ?? 'none'} data-wiki-tab={wikiTab}>
+      <nav className="topic-wiki-tabs" aria-label="主题内容">
+        {WIKI_TAB_ORDER.map((tab) => <button
+          key={tab}
+          type="button"
+          className={wikiTab === tab ? 'active' : ''}
+          aria-pressed={wikiTab === tab}
+          onClick={() => setWikiTab(tab)}
+        >{WIKI_TAB_LABELS[tab]}{tab === 'overview' ? null : <span>{tab === 'sources' ? (counts.sources ?? 0) : tab === 'changes' ? wikiDetail.receipts.total : wikiDetail.versions.total}</span>}</button>)}
+      </nav>
+
+      {wikiCompileStatus && wikiCompileStatus !== 'current' ? <div className={`topic-wiki-compile-banner ${wikiCompileStatus}`} role="status">
+        <strong>{COMPILE_STATUS_LABELS[wikiCompileStatus] ?? wikiCompileStatus}</strong>
+        {wikiDetail.wiki?.compileNote ? <span>{wikiDetail.wiki.compileNote}</span> : null}
+      </div> : null}
+
+      {wikiRisks && (wikiRisks.disputed > 0 || wikiRisks.inference > 0 || wikiRisks.contradicted > 0 || wikiRisks.stale || wikiRisks.failed) ? <div className="topic-wiki-risks" aria-label="知识风险">
+        {wikiRisks.disputed > 0 ? <span className="library-topic-badge warn">{RISK_KIND_LABELS.disputed} {wikiRisks.disputed}</span> : null}
+        {wikiRisks.contradicted > 0 ? <span className="library-topic-badge danger">{RISK_KIND_LABELS.contradicted} {wikiRisks.contradicted}</span> : null}
+        {wikiRisks.inference > 0 ? <span className="library-topic-badge info">{RISK_KIND_LABELS.inference} {wikiRisks.inference}</span> : null}
+        {wikiRisks.stale ? <span className="library-topic-badge">{RISK_KIND_LABELS.stale}</span> : null}
+        {wikiRisks.failed ? <span className="library-topic-badge danger">编译失败</span> : null}
+      </div> : null}
+
+      <section id="topic-wiki-current" data-wiki-tab="overview" className={`topic-wiki-section topic-wiki-primary${hasCurrentKnowledge ? '' : ' is-empty'}`} aria-labelledby="topic-wiki-current-title" tabIndex={-1}>
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-current-title">当前认识</h3>
+          {wikiBody?.asOf ? <span>截至 {formatWhen(wikiBody.asOf)}</span> : null}
+        </div>
+        {hasCurrentKnowledge ? <>
+          {wikiBody?.summary && wikiBody.summary !== '暂无综合摘要。' ? <p className="topic-wiki-summary">{wikiBody.summary}</p> : null}
+          {(wikiBody?.keyConclusions ?? []).length ? <div className="library-topic-cards">
+            {(wikiBody?.keyConclusions ?? []).map((item, index) => renderKeyConclusion(item, index))}
+          </div> : null}
+          {(wikiBody?.retainedDisputes ?? []).length ? <section className="library-topic-secondary" aria-label="未解决争议">
+            <h4>未解决争议</h4>
+            <p className="library-topic-secondary-note">这些主张仍在对抗中，未自动裁决。</p>
+            <div className="library-topic-cards">
+              {(wikiBody?.retainedDisputes ?? []).map((item, index) => renderKeyConclusion(item, index))}
+            </div>
+          </section> : null}
+        </> : <div className="topic-wiki-empty">
+          <span className="empty-mark" aria-hidden="true">◔</span>
+          <strong className="topic-wiki-empty-title">还没有形成可复用的认识</strong>
+          <p className="topic-wiki-empty-text">已有资料仍在档案中。继续保存可靠来源，Pi 会把其中可验证、可复用的部分编译到这里。</p>
+          <button type="button" className="secondary-button" onClick={() => setDeepMode(true)}>查看已有资料</button>
+        </div>}
+      </section>
+
+      {sourceTotalCount > 0 ? <section className="topic-wiki-section topic-wiki-sources-preview" data-wiki-tab="overview" aria-labelledby="topic-wiki-sources-title">
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-sources-title">已有资料</h3>
+          <button type="button" className="text-button" onClick={openDeepSources}>查看全部 {sourceTotalCount} 份</button>
+        </div>
+        {sourcesPreview.length ? <div className="topic-wiki-source-list">
+          {sourcesPreview.slice(0, 2).map((item) => <article key={itemKey(item)} className="topic-wiki-source-row">
+            <span className="topic-wiki-source-badge" aria-hidden="true">◆</span>
+            <div className="topic-wiki-source-body">
+              <div className="topic-wiki-source-title">{item.title}</div>
+              {item.body ? <div className="topic-wiki-source-summary">{item.body}</div> : null}
+              <div className="topic-wiki-source-meta">{formatWhen(item.occurredAt)} · 已归入本主题</div>
+            </div>
+            <span className={`topic-wiki-source-type${item.metadata?.relation === 'primary' ? ' primary' : ''}`}>{relationLabel(item.metadata?.relation)}</span>
+          </article>)}
+        </div> : <p className="library-panel-empty">资料正在整理中。</p>}
+        {sourcesPreview.length > 2 ? <div className="topic-wiki-source-more">
+          <button type="button" className="text-button" onClick={openDeepSources}>展开剩余 {sourcesPreview.length - 2} 份资料</button>
+        </div> : null}
+      </section> : null}
+
+      {receipts.length ? <section className="topic-wiki-section topic-wiki-changes topic-wiki-recent" data-wiki-tab="overview" aria-labelledby="topic-wiki-recent-title">
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-recent-title">最近变化</h3>
+          <button type="button" className="text-button" onClick={() => setWikiTab('changes')}>查看全部</button>
+        </div>
+        <div className="library-topic-cards">
+          {receipts.slice(0, 3).map((receipt) => renderWikiReceipt(receipt))}
+        </div>
+      </section> : null}
+
+      <section id="topic-wiki-changes" data-wiki-tab="changes" className="topic-wiki-section topic-wiki-changes" aria-labelledby="topic-wiki-changes-title" tabIndex={-1}>
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-changes-title">最近变化</h3>
+          <span>{wikiDetail.receipts.total} 次更新</span>
+        </div>
+        {receipts.length ? <div className="library-topic-cards">
+          {receipts.map((receipt) => renderWikiReceipt(receipt))}
+        </div> : <p className="library-panel-empty">最近还没有知识变化。</p>}
+      </section>
+
+      <div className="topic-wiki-secondary" data-wiki-tab="sources" aria-label="知识储备">
+        {secondaryEmpty ? <p className="topic-wiki-secondary-empty">知识仍在积累：证据、创作影响与待研究会在情报回流后出现。</p> : null}
+        <section id="topic-wiki-evidence" className="topic-wiki-section topic-wiki-compact" aria-labelledby="topic-wiki-evidence-title" tabIndex={-1}>
+          <div className="library-topic-section-head">
+            <h3 id="topic-wiki-evidence-title">证据</h3>
+            <span>{wikiDetail.evidence.total} 条</span>
+          </div>
+          {wikiDetail.evidence.items.length ? <div className="library-topic-cards">
+            {wikiDetail.evidence.items.map((entry) => renderWikiEvidence(entry))}
+          </div> : !secondaryEmpty ? <p className="library-panel-empty">暂无证据条目。</p> : null}
+        </section>
+
+        <section id="topic-wiki-impact" className="topic-wiki-section topic-wiki-compact" aria-labelledby="topic-wiki-impact-title" tabIndex={-1}>
+          <div className="library-topic-section-head">
+            <h3 id="topic-wiki-impact-title">创作影响</h3>
+            <span>{wikiDetail.creationImpact.total} 条</span>
+          </div>
+          {wikiDetail.creationImpact.items.length ? <div className="library-topic-cards">
+            {wikiDetail.creationImpact.items.map((record) => renderWikiUsage(record))}
+          </div> : !secondaryEmpty ? <p className="library-panel-empty">暂无创作调用记录（创作采用知识后出现）。</p> : null}
+        </section>
+
+        <section id="topic-wiki-research" className="topic-wiki-section topic-wiki-compact" aria-labelledby="topic-wiki-research-title" tabIndex={-1}>
+          <div className="library-topic-section-head">
+            <h3 id="topic-wiki-research-title">待研究</h3>
+            <span>{wikiDetail.questions.length + wikiDetail.healthIssues.total} 项</span>
+          </div>
+          {wikiDetail.questions.length ? <div className="library-topic-cards">
+            {wikiDetail.questions.map((question, index) => <article key={`q-${index}`} className="library-topic-card">
+              <p>{question}</p>
+            </article>)}
+          </div> : null}
+          {wikiDetail.healthIssues.items.length ? <div className="library-topic-cards">
+            {wikiDetail.healthIssues.items.map((issue) => renderWikiHealth(issue))}
+          </div> : null}
+          {!wikiDetail.questions.length && !wikiDetail.healthIssues.items.length && !secondaryEmpty ? <p className="library-panel-empty">暂无待研究问题。</p> : null}
+        </section>
+
+        <section id="topic-wiki-dossier" className="topic-wiki-section topic-wiki-compact topic-wiki-dossier" aria-labelledby="topic-wiki-dossier-title" tabIndex={-1}>
+          <div className="library-topic-section-head">
+            <h3 id="topic-wiki-dossier-title">完整档案</h3>
+            <span>八类档案</span>
+          </div>
+          {dossier && Object.values(dossier).some((count) => count > 0) ? <div className="topic-wiki-dossier-counts" aria-label="档案分类计数">
+            {DOSSIER_CATEGORY_ORDER.map((category) => <span key={category} className="library-topic-badge">{DOSSIER_LABELS[category]} {dossier[category] ?? 0}</span>)}
+          </div> : <p className="library-panel-empty">档案会在资料入库后建立。</p>}
+          <div className="library-panel-actions">
+            <button type="button" className="text-button" onClick={() => { setDeepMode(true); setDeepCategory(''); }}>打开完整档案</button>
+          </div>
+        </section>
+      </div>
+
+      <section id="topic-wiki-versions" data-wiki-tab="versions" className="topic-wiki-section topic-wiki-compact topic-wiki-versions" aria-labelledby="topic-wiki-versions-title" tabIndex={-1}>
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-versions-title">版本</h3>
+          <span>{wikiDetail.versions.total} 个版本</span>
+        </div>
+        {wikiDetail.versions.items.length ? <div className="library-topic-cards">
+          {wikiDetail.versions.items.map((version) => renderWikiVersion(version, version.id === wikiPage?.currentVersionId))}
+        </div> : <p className="library-panel-empty">暂无版本记录。</p>}
+        {restoreMessage ? <p className="library-topic-action-note" role="status">{restoreMessage}</p> : null}
+      </section>
+    </div>;
+  };
+
   const homeView = (
     <div className="topic-home" aria-label="主题首页">
       <div className="topic-home-toolbar library-topic-list-toolbar">
@@ -1367,14 +2328,6 @@ export function LibraryTopicsView(props: {
           <div className="topic-object-head-bar">
             <button type="button" className="topic-back-button" onClick={backToGrid}>← 主题</button>
             <div className="library-topic-head-actions topic-object-head-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!piConfigured}
-                title={!piConfigured ? '请先配置 Pi' : '基于当前主题让 Pi 出选题方案'}
-                onClick={askPiBrief}
-              >让 Pi 出选题方案</button>
-              <button type="button" onClick={goCreate}>去创作</button>
               <details className="topic-more">
                 <summary>更多</summary>
                 <div className="topic-more-menu">
@@ -1383,6 +2336,7 @@ export function LibraryTopicsView(props: {
                   ) : (
                     <button type="button" onClick={() => { setDeepMode(true); setDeepCategory(''); }}>完整档案</button>
                   )}
+                  <button type="button" onClick={goCreate}>去创作</button>
                   {onOpenCanvas ? <button
                     type="button"
                     disabled={canvasBusy}
@@ -1390,6 +2344,13 @@ export function LibraryTopicsView(props: {
                   >{canvasBusy ? '处理中…' : '放画布'}</button> : null}
                 </div>
               </details>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!piConfigured}
+                title={!piConfigured ? '请先配置 Pi' : '基于当前主题让 Pi 出选题方案'}
+                onClick={askPiBrief}
+              >让 Pi 出选题方案</button>
             </div>
           </div>
           <div className="library-topic-title-row">
@@ -1442,7 +2403,14 @@ export function LibraryTopicsView(props: {
                   </div> : null}
                 </>}
           </div>
-        </> : <>
+        </> : !wikiDetail && wikiError ? <div className="library-topic-error" role="alert">
+            <strong>主题加载失败</strong>
+            <p>{wikiError}</p>
+            <button type="button" onClick={() => setWikiReloadToken((value) => value + 1)}>重试</button>
+          </div>
+          : !wikiDetail ? <p className="library-panel-empty">正在加载主题…</p>
+          : showWikiPage ? renderWikiPage() : <>
+          <p className="library-topic-action-note">主题认识尚未生成：继续保存资料后，Pi 会在这里汇总出当前认识。以下为现有档案。</p>
           <nav className="topic-work-tabs" aria-label="主题工作分段">
             <button type="button" className={segment === 'judgments' ? 'active' : ''} onClick={() => setSegment('judgments')}>
               判断 <span>{counts.judgments}</span>

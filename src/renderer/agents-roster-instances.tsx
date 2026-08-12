@@ -54,7 +54,7 @@ export function InstanceCard({
       {detail ? <p className="agents-instance-detail">{detail}</p> : null}
       <div className="agents-instance-meta">
         <span className="agents-job-stamp">
-          {stampLine(inst.status === 'running' ? '开始' : '入队', inst.status === 'running' ? inst.startedAt : inst.queuedAt)}
+          {stampLine(inst.status === 'running' ? '开始' : '排队', inst.status === 'running' ? inst.startedAt : inst.queuedAt)}
         </span>
         <span className="agents-job-stamp">{timing.prefix} {timing.label}</span>
         {inst.intent ? <span className="agents-job-intent">{inst.intent}</span> : null}
@@ -62,7 +62,7 @@ export function InstanceCard({
       </div>
       <footer className="agents-instance-actions">
         <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCopyJobId(inst.jobId)}>
-          复制 jobId
+          复制任务编号
         </button>
         {inst.status === 'needs_user' ? (
           <>
@@ -105,7 +105,7 @@ export function ActiveRoleInstances({
         <h3 id={`agents-role-${roleId}-active`} className="agents-role-title">{meta.labelZh}</h3>
         {section.total ? <span className="agents-role-count">{section.total}</span> : null}
       </header>
-      <ul className="agents-instance-list" aria-label={`${meta.labelZh}活动实例`}>
+      <ul className="agents-instance-list" aria-label={`${meta.labelZh}任务列表`}>
         {section.visible.map((inst) => (
           <InstanceCard key={inst.jobId} inst={inst} busy={busy} onCopyJobId={onCopyJobId} onRedispatch={onRedispatch} onCancel={onCancel} />
         ))}
@@ -143,7 +143,7 @@ export function RoleHistoryList({
             <span className="agents-history-brief" title={h.brief}>{h.brief}</span>
             <span className="agents-history-actions">
               <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCopyJobId(h.jobId)}>
-                复制 jobId
+                复制任务编号
               </button>
               <button type="button" className="agents-row-action strong" disabled={busy} onClick={() => void onRedispatch(h)}>
                 续派

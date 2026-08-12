@@ -48,12 +48,12 @@
 .rc-medline { stroke: var(--accent-hover); stroke-width: 2; }
 .rc-medline.strong { stroke-width: 2.5; }
 .rc-meddot { fill: var(--accent-hover); }
-.rc-band90 { fill: rgb(139 124 255 / 7%); }
-.rc-band75 { fill: rgb(139 124 255 / 17%); }
-.rc-band90.faint { fill: rgb(139 124 255 / 5%); }
-.rc-band75.faint { fill: rgb(139 124 255 / 11%); }
-.rc-band-p75 { background: rgb(139 124 255 / 30%); height: 8px; }
-.rc-band-p90 { background: rgb(139 124 255 / 14%); height: 8px; }
+.rc-band90 { fill: color-mix(in srgb, var(--accent) 7%, transparent); }
+.rc-band75 { fill: color-mix(in srgb, var(--accent) 17%, transparent); }
+.rc-band90.faint { fill: color-mix(in srgb, var(--accent) 5%, transparent); }
+.rc-band75.faint { fill: color-mix(in srgb, var(--accent) 11%, transparent); }
+.rc-band-p75 { background: color-mix(in srgb, var(--accent) 30%, transparent); height: 8px; }
+.rc-band-p90 { background: color-mix(in srgb, var(--accent) 14%, transparent); height: 8px; }
 .rc-endlabel { font-size: 10.5px; }
 .rc-vlabel { fill: var(--muted); }
 .rc-hitzone { fill: transparent; cursor: crosshair; }
@@ -66,7 +66,7 @@
 .rc-tabs-mini button.on { background: var(--accent-faint); color: var(--accent-soft); }
 .rc-opts-note { color: var(--muted-low); font-size: 12px; }
 .rc-empty { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
-.rc-tooltip { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 12px 40px rgb(0 0 0 / 55%); padding: 9px 12px; font-size: 12px; max-width: 300px; }
+.rc-tooltip { position: fixed; z-index: 50; pointer-events: none; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 12px 40px var(--overlay); padding: 9px 12px; font-size: 12px; max-width: 300px; }
 .rc-tooltip b { display: block; font-size: 12.5px; margin-bottom: 2px; }
 .rc-tooltip span { color: var(--muted); font-family: var(--mono); font-size: 11px; }
 /* 热图 */
@@ -114,10 +114,24 @@
 .rl-action-item .meta .loop-ok { color: var(--accent-soft); }
 /* 待复盘 */
 .rl-pending-list { display: grid; gap: 8px; }
-.rl-pending-row { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); padding: 9px 13px; }
+.rl-pending-row { display: flex; align-items: center; gap: 12px; border: 0; border-radius: 10px; background: var(--surface-raised); padding: 9px 13px; }
 .rl-pending-row .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; cursor: pointer; }
 .rl-pending-row .ttl:hover { color: var(--accent-soft); }
 .rl-pending-row .meta { color: var(--muted-low); font-size: 11px; font-family: var(--mono); flex: none; }
+/* 知识健康 · 结果回流（WMB-5216：只读投影同一 issue identity；无额外路由） */
+.rl-health { margin-bottom: 16px; }
+.rl-health-count { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.rl-health-note { margin: 0 0 8px; color: var(--accent-soft); font-size: 12px; }
+.rl-health-loading { margin: 0; color: var(--muted); font-size: 12.5px; }
+.rl-health-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--danger); border-radius: 10px; background: color-mix(in srgb, var(--danger) 8%, transparent); padding: 10px 13px; }
+.rl-health-error p { margin: 0; color: var(--danger); font-size: 12.5px; }
+.rl-health-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.rl-health-item { border: 0; border-radius: 10px; background: var(--surface-raised); padding: 10px 13px; }
+.rl-health-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rl-health-affected { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.rl-health-summary { margin: 5px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.rl-health-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.rl-health-meta { color: var(--muted-low); font-size: 11px; font-family: var(--mono); }
 @media (max-width: 1279px) {
   .rl-grid { grid-template-columns: 1fr; }
   .rl-hero-points { grid-template-columns: 1fr; }

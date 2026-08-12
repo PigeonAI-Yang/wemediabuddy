@@ -5,6 +5,7 @@ import type { PiRpcSupervisor } from './pi-runtime.ts';
 import { readPiConversation, writePiConversation } from './pi-conversation.ts';
 import { syncManagerTaskFromJob } from './manager-dispatch.ts';
 import type { RoleJobReportV1 } from './role-job-registry.ts';
+import { buildJobEventEnvelope } from '../shared/job-event-envelope.ts';
 
 let deskPiGetter: () => PiRpcSupervisor | null = () => null;
 let runtimeGetter: () => ActiveWorkspaceRuntime | null = () => null;
@@ -154,10 +155,7 @@ export async function notifyDeskJobEvent(input: {
 
   const pi = input.getPi?.() ?? deskPiGetter();
   const dataRootPath = runtime?.identity.rootPath;
-  const wrapped =
-    `[WMB_CONTEXT]\npage=agents\npageLabel=班组 · 工单通知\nobjectType=job\nobjectId=${input.job.id}\n` +
-    `contextRule=这是系统推送的员工工单终态通知，不是用户闲聊。根据 JOB_EVENT 向用户汇报并做验收/下一步，不要 sleep 轮询。\n` +
-    `[USER_MESSAGE]\n${text}`;
+  const wrapped = buildJobEventEnvelope({ objectId: input.job.id, text });
 
   try {
     if (pi?.isActive) {
@@ -188,7 +186,7 @@ export async function notifyDeskJobEvent(input: {
       sessionId: current.sessionId,
       messages: [
         ...current.messages,
-        { role: 'user', text: visibleJobNotice(text), createdAt },
+        { role: 'user', text: visibleJobNotice(text), createdAt, kind: 'system_event' },
         {
           role: 'assistant',
           text: '（系统）员工工单已有终态。打开对话后我会据此汇报；也可让我立即验收。',

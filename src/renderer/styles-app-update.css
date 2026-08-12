@@ -1,7 +1,7 @@
 .app-update-block { display: grid; }
 .update-progress { height: 4px; margin: -1px 18px 12px; overflow: hidden; border-radius: 999px; background: var(--border-soft); }
 .update-progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 180ms ease; }
-.update-decision { align-items: flex-start; border-left: 3px solid var(--accent); background: var(--accent-faint); }
+.update-decision { align-items: flex-start; }
 .update-decision .settings-row-actions { flex-wrap: wrap; justify-content: flex-end; }
 .update-error { border-left: 3px solid var(--danger); background: var(--danger-soft); }
 .update-error p { max-width: 680px; overflow-wrap: anywhere; }
@@ -18,7 +18,7 @@
   justify-content: space-between;
   gap: 20px;
   min-height: 54px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-raised);
   padding: 10px 12px 10px 16px;

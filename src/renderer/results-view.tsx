@@ -5,6 +5,7 @@ import { BandsChart, DrillView, Heatmap, ScatterChart, median } from './results-
 import type { MetricSnapshotRow, PostPoint, PostView } from './results-charts';
 import { ActionsPanel, HeroPanel, PendingPanel } from './results-panels';
 import type { ActionColumns, PatternCard } from './results-panels';
+import { ResultsHealthPanel } from './results-health.tsx';
 
 type ReviewRow = Awaited<ReturnType<typeof window.wmb.listReviews>>[number];
 type BacklinkRow = Awaited<ReturnType<typeof window.wmb.listReviewBacklinks>>[number];
@@ -178,7 +179,9 @@ export function ResultsView({ publications, planDate, enabledPlatforms, onFocusC
   const findingCount = reviews.reduce((s, r) => s + r.findings.length, 0);
   const pending = posts.filter((p) => p.daysAgo >= 3 && !p.reviewed).sort((a, b) => (b.v24 ?? 0) - (a.v24 ?? 0));
 
-  const discuss = (prompt: string) => window.dispatchEvent(new CustomEvent('wmb-pi-generate', { detail: prompt }));
+  const discuss = (prompt: string) => window.dispatchEvent(new CustomEvent('wmb-pi-generate', {
+    detail: { prompt, orchestration: { originLabel: 'Results', title: '和 Pi 讨论本周期', goal: '基于本周期指标快照与复盘记录产出周期判断', acceptance: '3 条判断 + keep/stop/change 行动' } }
+  }));
   const reviewOne = async (post: PostView) => {
     if (busy) return;
     if (!post.points.length) { setStatusText('没有指标快照时不能让 Pi 做数据驱动复盘。'); return; }
@@ -298,6 +301,7 @@ export function ResultsView({ publications, planDate, enabledPlatforms, onFocusC
         </section>
       </div>
       <ActionsPanel columns={actionColumns}/>
+      <ResultsHealthPanel publications={posts} reviews={reviews} snapshots={snapshots} onOpenPublication={(publicationId) => setSelectedId(publicationId)}/>
       <PendingPanel posts={pending} busy={busy} onOpen={(post) => setSelectedId(post.id)} onReviewOne={(post) => void reviewOne(post)} onReviewAll={() => void reviewAll()}/>
     </>}
   </section>;

@@ -170,8 +170,8 @@ async function captureFiles(repoPath, relativePaths, packagePath) {
 export async function createBaseline({ rootPath, repoPath, packagePath, preTask, ignoredPaths = [] }) {
   const root = await captureDataRoot(rootPath);
   const acceptance = await captureFiles(repoPath, [
-    'scripts/check.ps1', 'scripts/workspace-baseline.mjs', 'tests/workspace-baseline.test.mjs',
-    'package.json', 'package-lock.json', '.ai/evals/README.md'
+    'scripts/workspace-baseline.mjs', 'tests/workspace-baseline.test.mjs',
+    'package.json', 'package-lock.json'
   ], packagePath);
   return {
     schema: 'wmb.workspace-baseline.v1',

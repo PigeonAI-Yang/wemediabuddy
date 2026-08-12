@@ -32,6 +32,7 @@ export type JobRecord = Readonly<{
   businessDate: string | null;
   planDate: string | null;
   projectId: string | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
   /** 角色专属资源锁键（§8.1），submit 时由注册表派生；池晋升时按此键做泊车重检。 */
   resourceLocks: readonly string[];
   status: JobStatus;
@@ -53,6 +54,7 @@ export type JobInput = Readonly<{
   businessDate?: string | null;
   planDate?: string | null;
   projectId?: string | null;
+  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null;
   resourceLocks?: readonly string[];
 }>;
 
@@ -134,6 +136,7 @@ export class JobPool {
       businessDate: input.businessDate ?? null,
       planDate: input.planDate ?? null,
       projectId: input.projectId ?? null,
+      writerTask: input.writerTask ?? null,
       resourceLocks: Object.freeze([...(input.resourceLocks ?? [])]),
       status: 'queued',
       waitReason: null,

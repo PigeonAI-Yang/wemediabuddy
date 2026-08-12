@@ -1,7 +1,7 @@
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 
-export type View = 'today' | 'agents' | 'discover' | 'proposals' | 'knowledge' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
-export const views: View[] = ['today', 'agents', 'discover', 'proposals', 'knowledge', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
+export type View = 'today' | 'agents' | 'discover' | 'proposals' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
+export const views: View[] = ['today', 'agents', 'discover', 'proposals', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
 export type Theme = 'dark' | 'light';
 export type RankingContextItem = { rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string; boardId: string; boardLabel: string };
 export type RankingContext = {
@@ -30,6 +30,31 @@ export type XListPiContext = {
   /** Total posts loaded in UI (same as visiblePosts.length after fix; kept explicit for chip honesty). */
   loadedCount: number;
 };
+/** WMB-5207：Studio 当前可编辑文档种类。 */
+export type StudioDocumentKind = 'core' | 'platform';
+/** WMB-5207：可批注的平台版本。 */
+export type StudioPlatformId = 'x' | 'xiaohongshu' | 'wechat';
+/** WMB-5207：Studio 通过 page focus 发布的当前可编辑工作稿快照。 */
+export type PiStudioDocument = {
+  projectId: string;
+  documentKind: StudioDocumentKind;
+  documentId: string | null;
+  platform: StudioPlatformId | null;
+  title: string;
+  currentBody: string;
+  bodyFingerprint: string;
+  dirty: boolean;
+};
+/** WMB-5207：随工作稿带入 Pi 的开放批注（用户标注，非修改授权）。prefix/suffix 为 Data 契约的稳定邻近锚点，恒为 string。 */
+export type PiStudioOpenAnnotation = {
+  id: string;
+  startOffset: number;
+  endOffset: number;
+  quotedText: string;
+  prefixContext: string;
+  suffixContext: string;
+  note: string | null;
+};
 export type PiFocusObject = {
   type: string;
   id: string;
@@ -40,6 +65,10 @@ export type PiFocusObject = {
   bodyExcerpt?: string | null;
   bodyChars?: number;
   meta?: Record<string, unknown>;
+  /** WMB-5207：Studio 当前可编辑工作稿；仅用户在创作页显式发送消息时序列化。 */
+  studioDocument?: PiStudioDocument | null;
+  /** WMB-5207：当前工作稿上的开放批注；只作上下文，不构成授权。 */
+  openAnnotations?: PiStudioOpenAnnotation[] | null;
 };
 export type PiContextRef = {
   page: View;

@@ -120,6 +120,46 @@ const getSource: ToolDefinition = {
   }
 };
 
+/**
+ * WMB-5172 / CAP-028 §6.4：wmb_save_source 证据写回载荷构造（纯函数，测试可注入）。
+ * 扩展可选字段 publishedAt / excerpt / clientLabel（非研究任务不强制）：
+ * - clientLabel='WMB research' 标记研究写回 → categories 标「研究补料」、author 必填、
+ *   执行信封（taskId/grantId/workerLeaseId/requestId）必全（precise:false 仅免 Owner UI 型确认，
+ *   不豁免既有交集约束）；其余调用保持既有语义零改动。
+ * - excerpt 折入 evidence JSON（`{"excerpt": "<verbatim>"}`，既有 source_items.evidence 字段承载）。
+ * - 无 feedId 通道：研究证据禁止挂渠道 feed（对象边界断言放行路径）。
+ */
+export function buildSaveSourcePayload(params: Record<string, unknown>): Record<string, unknown> {
+  const research = params.clientLabel === 'WMB research';
+  const author = params.author ? String(params.author) : undefined;
+  if (research) {
+    if (!author) throw new Error('RESEARCH_EVIDENCE_FIELDS_REQUIRED: 研究证据必须携带 title/originalUrl/summary/author 四项可核验字段。');
+    if (!String(params.requestId ?? '').trim() || !String(params.taskId ?? '').trim()
+      || !String(params.grantId ?? '').trim() || !String(params.workerLeaseId ?? '').trim()) {
+      throw new Error('RESEARCH_ENVELOPE_REQUIRED: 研究写回必须携带完整执行信封（taskId/grantId/workerLeaseId/requestId）。');
+    }
+  }
+  const excerpt = params.excerpt ? String(params.excerpt) : undefined;
+  return {
+    request_id: String(params.requestId ?? ''),
+    task_id: String(params.taskId ?? ''),
+    grant_id: String(params.grantId ?? ''),
+    worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined,
+    items: [{
+      title: String(params.title ?? ''),
+      originalUrl: String(params.originalUrl ?? ''),
+      summary: String(params.summary ?? ''),
+      author,
+      publishedAt: params.publishedAt ? String(params.publishedAt) : undefined,
+      evidence: excerpt ? JSON.stringify({ excerpt }) : undefined,
+      categories: research ? ['研究补料'] : ['Pi 协作'],
+      keywords: research ? ['research'] : ['Pi', 'WMB', 'MCP'],
+      priority: 1,
+      clientLabel: params.clientLabel ? String(params.clientLabel) : 'WMB built-in Pi'
+    }]
+  };
+}
+
 const saveSource: ToolDefinition = {
   name: 'wmb_save_source',
   label: '保存 WMB 资料',
@@ -134,29 +174,16 @@ const saveSource: ToolDefinition = {
       author: { type: 'string' },
       taskId: { type: 'string' },
       grantId: { type: 'string' },
-      workerLeaseId: { type: 'string' }
+      workerLeaseId: { type: 'string' },
+      publishedAt: { type: 'string' },
+      excerpt: { type: 'string' },
+      clientLabel: { type: 'string' }
     },
     required: ['requestId', 'taskId', 'grantId', 'workerLeaseId', 'title', 'originalUrl', 'summary'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
-    const result = await callTool('sources.upsert_batch', {
-      request_id: String(params.requestId ?? ''),
-      task_id: String(params.taskId ?? ''),
-      grant_id: String(params.grantId ?? ''),
-      worker_lease_id: String(params.workerLeaseId ?? ''),
-      items: [{
-        title: String(params.title ?? ''),
-        originalUrl: String(params.originalUrl ?? ''),
-        summary: String(params.summary ?? ''),
-        author: params.author ? String(params.author) : undefined,
-        categories: ['Pi 协作'],
-        keywords: ['Pi', 'WMB', 'MCP'],
-        priority: 1,
-        clientLabel: 'WMB built-in Pi'
-      }]
-    });
-    return textResult(result);
+    return textResult(await callTool('sources.upsert_batch', buildSaveSourcePayload(params)));
   }
 };
 

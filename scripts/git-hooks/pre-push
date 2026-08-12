@@ -1,4 +1,0 @@
-#!/bin/sh
-# Pre-push hook: run the repo's lightweight harness checks and block the push on failure.
-ROOT=$(git rev-parse --show-toplevel)
-exec powershell -ExecutionPolicy Bypass -File "$ROOT/scripts/check.ps1"

@@ -1,8 +1,9 @@
 # 角色编制 × 授权能力注册表 系统设计（canonical）
 
 - 日期：2026-08-07（v2：合并 Main Agent 可扩展性方案与 Owner 四项新关切，由 Designer 统稿）
+- **2026-08-10 主管授权翻转修订（legislative）**：依 `docs/spark/2026-08-10-supervisor-authority-design.md` §8（Owner lock 2026-08-10 全 10 项确认），本文件下列条款翻转——§4.3（standing/page 表主管行）、§5.3（cap.desk 行）、§5.4 检查 6、§5.5（主管不参与 overlays）、§5.6（页作用域声明删除）、§5.8（注册规程默认绑定主管）、§6.1（写矩阵桌助列 → ✓ standing）、§8.2（零回归承诺）、§9 反模式 13、§10 L6/L15、§11 P0.6。**主管（desk）是软件内主管/主编席，持全站内部 standing 写权（全部 grantable 业务能力命令 ∪ INFRA，含内部准备命令，不含三类红线执行命令）**；红线恰三类（最终平台发布、硬删执行、外部平台变更执行），最终动作仅人类 UI 新鲜确认。历史锁定文本保留，本修订以显式注记叠加；旧「桌助无 standing 写权/协调入口」表述仅作历史引证，不再构成现行规范。
 - 作者：RoleSystemDesigner（Designer 主导最终行文；吸收 RolePermDesigner 初稿与 Main Agent 架构方案）
-- 状态：待 Owner 锁定（§10）
+- 状态：Owner locked（§10；2026-08-10 主管授权翻转已并入）
 - **本文件 = 唯一 canonical**。它吸收并取代：
   - 同路径 v1 初稿（固定角色 + 权限信息架构）；
   - Main Agent 的「Role/Lane/Capability/Grant 四层 + 智能体页 + 分期」方案（本任务要求强制整合）；
@@ -16,7 +17,7 @@
 
 1. **四层架构**：`L0 角色编制`（跨赛道稳定）→ `L1 赛道包 Lane pack`（技能/信源/受众，**零权限**）→ `L2 授权能力注册表 Capability registry`（**新写能力的唯一扩展点**）→ `L3 授权运行时 Grant runtime`（TaskGrant/PageGrant/PreciseGrant 签发 + 角色投影 API）。换赛道只换 L1；角色、注册表、授权矩阵一行不改。
 2. **编制 = 5 个固定角色**：桌助（主编席）、记者（前线）、策划（策划组·兼复盘）、写手（写字间）、资料员（资料室）。编制锚定「劳动分工类型」，不锚定「劳动对象」→ 赛道变化天然不触发编制变更（§3.4）。不复盘岗、不设发布岗、不设观察岗。
-3. **权限 = 注册表投影，不是手写表**。`RoleWrite[role]` = 该角色启用的 Capability 的命令并集；`RoleRead[role]` = 读面并集；`GrantScope` 按任务/页签发，三者在运行时取交集，PreciseGate 拦平台副作用。桌助 = 页级作用域角色，其「页 scope 透传」是**注册表里的显式声明**（§5.6），不是疏漏。
+3. **权限 = 注册表投影，不是手写表**。`RoleWrite[role]` = 该角色启用的 Capability 的命令并集；`RoleRead[role]` = 读面并集；`GrantScope` 按任务/页签发，三者在运行时取交集，PreciseGate 拦平台副作用。**主管（desk）= 软件内主管/主编席，standing 全量内部写权（2026-08-10 翻转，§5.6）**；红线恰三类（最终发布、硬删执行、外部平台变更执行）最终动作仅人类 UI 新鲜确认。
 4. **写手对资料库 = 只读借阅**；**资料员 = 只整理，不是选题决策者/主笔/复盘者**；**任何角色（含桌助）不能最终发布、不能硬删资料、不能碰平台副作用**——这三类是注册表中的 `agentGrantable:false` 红线能力，永不出现在任何开关面（§5.5/§10 L15）。
 5. **智能体（班组）页 = 一级导航**：roster（谁在干什么）+ 进度 + 详情 + 设置跳转；**今日只留一行值班条**（知情投影，点「查看全部」进智能体页）。班组抽屉方案废弃（被整页取代）。页面只读运行面，**所有可配置项在设置·角色管理**。
 6. **防假开关纪律**：未完成 P0（注册表 + 角色过滤 + 只读班组页）之前，**不做任何可配置的权限/角色 UI**——开关只写 `capability_overlays` 覆盖表，且由同一份投影 API 同时驱动「强制执行」与「界面显示」；`agentGrantable:false` 的能力在 UI 上根本渲染不出来（§11.4）。
@@ -158,7 +159,7 @@ L3 授权运行时 Grant runtime      —— 真相与强制执行
 ```
 effectiveWrite(role, context) =
       GrantScope(context)                       // task-bound standing scope 或 page-bound dock scope
-    ∩ commandsOf(enabledCaps(role))             // 注册表投影；桌助 = 页 scope 透传（显式声明，§5.6）
+    ∩ commandsOf(enabledCaps(role))             // 注册表投影；主管（desk）= standing 全量内部命令（§5.6，2026-08-10 翻转）
     ∩ PreciseGate(side-effect?)                 // x_lists.operation_execute / proposal_apply / 发布准备 → 仅 Precise
 
 effectiveRead(role) = ∪ readProfiles(enabledCaps(role))   // 实体级读面；MCP 读 fail-closed + 上下文注入过滤
@@ -169,7 +170,7 @@ effectiveRead(role) = ∪ readProfiles(enabledCaps(role))   // 实体级读面�
 | 层 | 现状机制 | 角色层/注册表如何叠加 |
 | --- | --- | --- |
 | **TaskGrantV1**（任务级命令白名单） | `ensureAutomaticTaskGrant` 按 intent 查 `AUTOMATIC_TASK_GRANT_SCOPES` 签发，4h 过期；`assertTaskGrantForEnvelope` 在 dispatcher 入口强校验（`task-grants.ts`） | 签发时 `allowedCommands := intent 基础 scope ∩ commandsOf(enabledCaps(role))`；`sameCommandSet` 判定命令集变化自动 revoke+reissue 机制**原样复用**（角色切换 = 命令集变化 → 自动换发）；intent→neededCaps 映射登记在注册表（§5.3） |
-| **PageGrant**（页级 dock 最小写权） | `PAGE_TASK_GRANT_SCOPES` 9 页静态表（`src/shared/page-authority.ts`），`ensurePageAuthority` 签发 | dialog 中 `allowedCommands := PAGE_TASK_GRANT_SCOPES[view] ∩ commandsOf(enabledCaps(role))`；桌助 = 透传（= 现状行为，零回归） |
+| **PageGrant**（页级 dock 最小写权） | `PAGE_TASK_GRANT_SCOPES` 9 页静态表（`src/shared/page-authority.ts`），`ensurePageAuthority` 签发 | dialog 中 `allowedCommands := PAGE_TASK_GRANT_SCOPES[view] ∩ commandsOf(enabledCaps(role))`；**主管（desk）例外（2026-08-10 翻转）**：绑定主管的页 dock 签发全量内部 grant（跳过页 writeScope 收窄）；员工保持页 ∩ standing（= 现状行为，零回归） |
 | **PreciseExecutionGrant**（平台副作用） | `x_lists.operation_execute` / `intelligence_channels.proposal_apply` / 发布执行永不进自动 scope，仅 Owner UI 对冻结操作签发（`execution-grants.ts`、pi-page-authority 设计 §6） | 注册表中这三类 = `precise:true` 且 `agentGrantable:false` 的红线能力；任何角色 standing/page scope 都不含这些命令；角色层不新增 Precise 通道，也不替 Owner 代签 |
 
 **兜底校验（envelope 入口，防角色伪造/复用旧证）**：在 `assertTaskGrantForEnvelope` 同一断言点追加一步——由 `envelope.workerLeaseId` 解析 lease 绑定的 `roleId`，断言 `envelope.command ∈ commandsOf(enabledCaps(roleId))`。理由：
@@ -182,13 +183,13 @@ effectiveRead(role) = ∪ readProfiles(enabledCaps(role))   // 实体级读面�
 
 | | **standing scope（岗位常备）** | **page scope（页上对话）** |
 | --- | --- | --- |
-| 谁有 | 固定角色（记者/策划/写手/资料员） | 所有人（含桌助） |
+| 谁有 | 固定角色（主管/记者/策划/写手/资料员） | 所有人（含主管） |
 | 何时生效 | 角色任务运行（后台 runner / 派工任务） | 用户在某页打开 dock 对话 |
 | 来源 | intent → 注册表登记的命令集（§5.3 grantKinds.task） | `PAGE_TASK_GRANT_SCOPES[view]` ∩ 注册表投影 |
-| 桌助 | **无 standing 写权**（桌助只答、只呈报、只读；要写必须靠页级 grant 或派工） | 继承页 scope（透传） |
-| 角色交叉 | 不适用（任务属于谁就是谁） | 固定角色 = 页 scope ∩ 自身能力命令 → **离开自己科室的页即只读** |
+| **主管（desk）** | **standing 全量内部写权**（`commandsCoveredByGrantableCapabilities() ∪ INFRA_GRANT_COMMANDS`，含内部准备命令与内部审批命令，不含三类红线执行命令） | 任一页 dock（含发布页、智能体页）绑定主管时签发全量内部 grant（跳过页 writeScope 收窄，2026-08-10 翻转） |
+| 员工（记者/策划/写手/资料员） | 角色 standing（页 writeScope ∩ 角色 standing，发布页仍只读） | 固定角色 = 页 scope ∩ 自身能力命令 → **离开自己科室的页即只读** |
 
-这条区分直接回答：**「桌助会不会太大？」不会——它没有任何 standing 写权；「固定角色会不会在别页乱写？」不会——PageGrant ∩ 能力投影双收窄。**
+这条区分直接回答：**「主管会不会太大？」不会——它只持全站内部写权（红线三类执行命令永不入内，Precise Gate + Owner UI 保留）；「固定角色会不会在别页乱写？」不会——PageGrant ∩ 能力投影双收窄（员工，2026-08-10 主管授权翻转）。**
 
 ### 4.4 intent 拆分：扫判分家（P3 的解法）
 
@@ -262,7 +263,7 @@ interface AgentCapability {
   };
   precise: boolean;                 // true = 平台副作用，运行时必须 PreciseGate（红线类）
   agentGrantable: boolean;          // false = 红线能力，永不出现在覆盖开关面、永不绑定 Agent
-  pageScopePassThrough?: boolean;   // 仅桌助：页 scope 透传（§5.6）
+  pageScopePassThrough?: boolean;   // 已废弃（2026-08-10 翻转：删除；主管 standing 全量内部，§5.6）
   owner: string;                    // 该能力的功能负责人（新增功能评审联系人）
   since: string;                    // 注册版本
 }
@@ -280,9 +281,9 @@ interface TaskIntentMap {           // intent → 所需能力（grantKinds 反�
 **投影（只读推导，禁止手写）**：
 
 ```
-RoleWrite[role]  = ∪ commands(role 启用且 agentGrantable 的能力)          // 桌助除外（透传声明）
-RoleRead[role]   = ∪ readProfiles(role 启用的能力) ∪ 桌助全读面(设置除外)
-enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆盖后
+RoleWrite[role]  = ∪ commands(role 启用且 agentGrantable 的能力)          // 主管（desk）除外：全量内部（§5.6）
+RoleRead[role]   = ∪ readProfiles(role 启用的能力) ∪ 主管全读面(设置除外)
+enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆盖后（主管 v1 不参与 overlays）
 ```
 
 ### 5.3 初始注册表（v1，9 项：7 业务能力 + 2 类红线占位）
@@ -296,7 +297,7 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 | `cap.knowledge_curate` | 知识/主题归纳 | `knowledge.record_batch`、`knowledge.domain_create/update`、`knowledge.creative_brief_*` | knowledge、canvas | 策划 ✓ | task: daily_judge；page: topic、canvas |
 | `cap.write` | 写作 | `content.create`、`content.save_version` | sources(借)、knowledge(借)、plans(已批简报)、content(自有+历史)、reviews(反馈) | 写手 ✓ | task: studio_draft；page: studio |
 | `cap.review` | 复盘 | `reviews.save` | metrics、reviews、content(防重) | 策划 ✓ | task: results_review；page: results |
-| `cap.desk` | 桌助知答 | ∅（**pageScopePassThrough: true**） | 全实体（settings 除外） | 桌助 ✓ | page: 全部 |
+| `cap.desk` | 主管/主编席（软件内主管） | 全量内部命令（standing：`commandsCoveredByGrantableCapabilities() ∪ INFRA_GRANT_COMMANDS`，含内部准备命令；不含红线类别执行命令；2026-08-10 翻转） | 全实体（settings 除外） | 主管 ✓ | page: 全部（签发全量内部 grant）；task: 全部 |
 | `cap.publish_prep` / `cap.hard_delete` / `cap.platform_mutation` | 发布准备/硬删/平台副作用 | 发布执行、`deleteKnowledgeSource`、`x_lists.operation_execute`、`intelligence_channels.proposal_apply` | — | **无**（agentGrantable:false, precise:true） | 仅 Precise + Owner UI |
 
 **读法**（对应 §6 矩阵，矩阵只是本表的展示投影）：
@@ -313,19 +314,21 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
   3. **红线负断言**：红线/Precise 命令（发布执行、`deleteKnowledgeSource`、`x_lists.operation_execute`、`proposal_apply`）不得出现在任何 standing/page 自动 scope；且 `agentGrantable:false` 能力不得有默认角色绑定；
   4. **L1 纯净**：Lane pack 结构（未来实现）不得包含任何命令名/角色绑定字段；
   5. **页面一致性**：`PAGE_TASK_GRANT_SCOPES` 中每个命令必须被 ≥1 能力声明为 page grantKind（或显式标记 page-only 工具）；
-  6. **桌助唯一性**：`pageScopePassThrough:true` 只允许出现在 `cap.desk`（防止未来角色复制透传 → 全能角色）。
+  6. **主管唯一性（2026-08-10 翻转）**：`pageScopePassThrough` 已删除；`roleWriteCommands('desk')` = 全量内部命令（standing），且与红线类别执行命令集交集为空（负断言）——红线执行命令（最终发布点击、`publication.editor_prepare_execute`、硬删执行、`x_lists.operation_execute`、`intelligence_channels.proposal_apply` remove 路径）对任何 standing/page scope 不可达。
 
 ### 5.5 覆盖表（capability_overlays）——Owner 唯一可改的权限面
 
 - 新表（workspace 级）：`capability_overlays(workspace_id, role_id, capability_id, enabled, updated_at)`。**这是本设计唯一新增的持久化**；`agent_tasks`/`task_grants`/`execution_grants` 结构不动（§8.2）。
 - 语义：默认绑定（静态）← 覆盖（动态）；`enabled=false` = 该角色在该工作空间停用此能力。停用即刻生效于签发（同一投影 API 驱动强制执行与界面显示）。
 - **红线不可覆盖**：`agentGrantable:false` 的能力不进覆盖表可写面——UI 层、IPC 层、DB 约束三层都拒绝（假开关的物理消灭，§9 反模式 1）。
+- **主管 v1 不参与 overlays（2026-08-10 A 子决策）**：`setCapabilityOverlay` 显式拒绝 `roleId === 'desk'`，设置面板不出现主管能力开关（替代原 `pageScopePassThrough` 守卫的防暴露作用）。
 - 变更审计：每次 overlay 写入记流水（谁、哪角色、哪能力、何时），设置页可查「当前覆盖 vs 默认差异」。
 
-### 5.6 桌助 = 页级作用域角色（显式声明，不是疏漏）
+### 5.6 主管 = 全站内部 standing 写权持有者（注册表声明，2026-08-10 翻转）
 
-- `cap.desk` 无 commands，但带 `pageScopePassThrough:true` → 页级签发时透传（现状行为逐字节不变，零回归）；standing 任务不存在桌助身份（桌助无 standing 写权）。
-- 设计意图：桌助是「主编所在页的助手」，它的权限形状 = 页，与固定角色的「能力形状」本质不同；这个区别必须显式声明在注册表，并由 CI 唯一性检查保护（§5.4 检查 6），防止未来有人复制透传造出全能角色。
+- `cap.desk` 的 standing = `commandsCoveredByGrantableCapabilities() ∪ INFRA_GRANT_COMMANDS`（全量内部命令，含内部准备命令与内部审批命令）；`pageScopePassThrough` 已删除，`roleWriteCommands('desk')` 不再返回空集。
+- 设计意图：主管是「软件内的主管」（主编席），它的权限形状 = 全站内部 standing，与员工的「能力形状 ∩ 页 writeScope」本质不同；红线三类（最终发布、硬删执行、外部平台变更执行）最终动作永不入任何 standing/page scope，由 Precise Gate + Owner UI 新鲜确认（§10 L15）。
+- CI 检查 6（§5.4）从「透传唯一性」改为「主管 standing 全量 + 红线负断言」，防止红线执行命令漂移进任何角色。
 
 ### 5.7 后端真相与投影 API（P10 的直接回答）
 
@@ -340,10 +343,11 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 ```
 新增写能力步骤（P0 后强制）：
 1. 在 agent-capabilities.ts 注册新能力：commands + readProfiles + defaultRoleBindings + grantKinds + precise/agentGrantable；
-2. 若涉及新任务 intent：在 TaskIntentMap 登记 neededCaps；若涉及页：登记 page grantKind；
-3. 跑 npm run check:capabilities + typecheck（CI 必过）；
-4. 功能评审时顺带评审能力绑定（默认给谁、为什么、红线判定）；
-5. 注册后自动生效：签发、envelope、智能体页摘要、chip、审计——无需 UI 侧手写。
+2. **默认绑定主管（2026-08-10 翻转）**：任何新的内部写命令登记时 `defaultRoleBindings` 默认含 `desk:true`（主管是全站内部写权持有者）；员工绑定按劳动分工评审；仅红线类别执行命令例外（不绑定主管，`agentGrantable:false`、`precise:true`、零绑定）；内部准备命令默认绑定主管；
+3. 若涉及新任务 intent：在 TaskIntentMap 登记 neededCaps；若涉及页：登记 page grantKind；
+4. 跑 npm run check:capabilities + typecheck（CI 必过）；
+5. 功能评审时顺带评审能力绑定（默认给谁、为什么、红线判定）；
+6. 注册后自动生效：签发、envelope、智能体页摘要、chip、审计——无需 UI 侧手写。
 禁止路径：直接往 AUTOMATIC_TASK_GRANT_SCOPES / PAGE_TASK_GRANT_SCOPES 加命令而不注册（CI 检查 1/5 拦）。
 ```
 
@@ -355,24 +359,24 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 
 命令全集 = `TASK_INTERNAL_COMMANDS`（`task-grants.ts`）。平台副作用（发布执行 / `x_lists.operation_execute` / `proposal_apply` / `deleteKnowledgeSource`）**不进任何角色 standing/page scope**，仅 Precise + Owner UI，故下表不列（红线，§10 L15）。`agent_tasks.report_progress` 全员常备（审计面），省略。
 
-| 命令 | 桌助 | 记者 | 策划 | 写手 | 资料员 | 备注 |
+| 命令 | 主管（desk） | 记者 | 策划 | 写手 | 资料员 | 备注 |
 | --- | :-: | :-: | :-: | :-: | :-: | --- |
-| `sources.upsert_batch`（存料） | 页内 | **✓ standing** | ✗ | ✗ | ✗ | 采集=记者专属（cap.collect） |
-| `x_lists.observation_start/stop`（有界观察） | 页内 | **✓ standing** | ✗ | ✗ | ✗ | 观察归采集面（cap.collect，与 3A 一致） |
-| `sources.lane_gate`（判定/归档） | 页内 | ✗ | **✓ standing** | ✗ | **✓ standing** | 策划=相关性判定（cap.lane_judge）；资料员=移出归档（cap.library_organize） |
-| `sources.lane_restore`（恢复） | 页内 | ✗ | ✗ | ✗ | **✓ standing** | 恢复=库房操作（cap.library_organize）；策划误判后纠正走资料员或 Owner UI |
-| `sources.update_status`（状态） | 页内 | ✗ | ✗ | ✗ | **✓ standing** | 纯状态更新，资料员专属 |
-| `plans.save`（选题/机会池） | 页内(今日) | ✗ | **✓ standing** | ✗ | ✗ | **选题决策权 = 策划**（cap.topic_decide）；写手/资料员/记者永不碰 |
-| `knowledge.record_batch`（挂知识/主题） | 页内 | ✗ | **✓ standing** | ✗ | **✓ standing** | 策划=归纳沉淀（cap.knowledge_curate）；资料员=挂主题（cap.library_organize） |
-| `knowledge.suggestion_create` | 页内 | ✗ | **✓ standing** | ✗ | ✗ | 建议=策划（cap.topic_decide） |
-| `knowledge.domain_create/update`（域管理） | 页内 | ✗ | **✓ standing** | ✗ | ✗ | 主题架构=策划（cap.knowledge_curate） |
-| `knowledge.creative_brief_*`（简报/立项） | 页内 | ✗ | **✓ standing** | ✗ | ✗ | 简报深化=策划 |
-| `content.create`（立项开写） | 页内 | ✗ | ✗ | **✓ standing** | ✗ | 写手经已批选题开项目（cap.write） |
-| `content.save_version`（写正文） | 页内 | ✗ | ✗ | **✓ standing** | ✗ | **写作权 = 写手独占** |
-| `reviews.save`（复盘） | 页内 | ✗ | **✓ standing** | ✗ | ✗ | 复盘兼策划（cap.review） |
+| `sources.upsert_batch`（存料） | ✓ standing | **✓ standing** | ✗ | ✗ | ✗ | 采集=记者专属（cap.collect）；主管=全站内部（2026-08-10 翻转） |
+| `x_lists.observation_start/stop`（有界观察） | ✓ standing | **✓ standing** | ✗ | ✗ | ✗ | 观察归采集面（cap.collect，与 3A 一致） |
+| `sources.lane_gate`（判定/归档） | ✓ standing | ✗ | **✓ standing** | ✗ | **✓ standing** | 策划=相关性判定（cap.lane_judge）；资料员=移出归档（cap.library_organize） |
+| `sources.lane_restore`（恢复） | ✓ standing | ✗ | ✗ | ✗ | **✓ standing** | 恢复=库房操作（cap.library_organize）；策划误判后纠正走资料员或 Owner UI |
+| `sources.update_status`（状态） | ✓ standing | ✗ | ✗ | ✗ | **✓ standing** | 纯状态更新，资料员专属 |
+| `plans.save`（选题/机会池） | ✓ standing | ✗ | **✓ standing** | ✗ | ✗ | **选题决策权 = 策划**（cap.topic_decide）；写手/资料员/记者永不碰 |
+| `knowledge.record_batch`（挂知识/主题） | ✓ standing | ✗ | **✓ standing** | ✗ | **✓ standing** | 策划=归纳沉淀（cap.knowledge_curate）；资料员=挂主题（cap.library_organize） |
+| `knowledge.suggestion_create` | ✓ standing | ✗ | **✓ standing** | ✗ | ✗ | 建议=策划（cap.topic_decide） |
+| `knowledge.domain_create/update`（域管理） | ✓ standing | ✗ | **✓ standing** | ✗ | ✗ | 主题架构=策划（cap.knowledge_curate） |
+| `knowledge.creative_brief_*`（简报/立项） | ✓ standing | ✗ | **✓ standing** | ✗ | ✗ | 简报深化=策划 |
+| `content.create`（立项开写） | ✓ standing | ✗ | ✗ | **✓ standing** | ✗ | 写手经已批选题开项目（cap.write） |
+| `content.save_version`（写正文） | ✓ standing | ✗ | ✗ | **✓ standing** | ✗ | **写作权 = 写手独占** |
+| `reviews.save`（复盘） | ✓ standing | ✗ | **✓ standing** | ✗ | ✗ | 复盘兼策划（cap.review） |
 
 **读法**：
-- 「页内」= 桌助在**用户当前所在页**的 PageGrant 内可用（今日页含 `plans.save/lane_gate/upsert_batch` 等；创作页含 `content.*`）。桌助没有任何 standing 权。
+- 「✓ standing」= 主管（desk）持**全站内部 standing 写权**（全部 grantable 业务能力命令 ∪ INFRA，含内部准备命令，不含红线类别执行命令；2026-08-10 翻转）。主管在任意页 dock 绑定即签发全量内部 grant，跨页可用。
 - 固定角色在 dialog 中 = 页 scope ∩ 自身能力命令；例：写手在创作页 = `content.*` ✓；写手在资料库页 = ∅（只读）；策划在创作页 = 只读。
 - 每条 grant 的 `relevantContext` 记 `{intent, role, page, objectId}`，审计可回答「谁、在哪、凭什么」。（字段现成，`task-grants.ts` 已扩展过 page/objectId。）
 
@@ -466,7 +470,7 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 | 既有机制 | 现状 | 注册表/角色层如何叠加 | 改动面 |
 | --- | --- | --- | --- |
 | **TaskGrant**（`task-grants.ts`） | intent→命令集静态查表；4h 过期；`sameCommandSet` 自动 revoke+reissue；envelope 强校验 | 签发时 `allowedCommands := 基础 scope ∩ commandsOf(enabledCaps(role))`；intent 的 neededCaps 登记注册表（§5.3） | 签发点 + 注册表；表结构不动 |
-| **PageGrant**（`page-authority.ts`） | 9 页静态 scope + `ensurePageAuthority` | dialog 中 `∩ commandsOf(enabledCaps(role))`；桌助透传 | 签发点；静态表不动（它仍是「本页允许什么」） |
+| **PageGrant**（`page-authority.ts`） | 9 页静态 scope + `ensurePageAuthority` | dialog 中 `∩ commandsOf(enabledCaps(role))`；**主管（desk）= standing 全量内部（跳过页收窄，2026-08-10 翻转）** | 签发点；静态表不动（它仍是「本页允许什么」） |
 | **PreciseExecutionGrant**（`execution-grants.ts`） | 平台副作用仅 Precise + Owner UI | 红线能力 `agentGrantable:false` 永不出现在 standing/page/覆盖面；角色层不新增 Precise 通道 | 注册表登记；逻辑不动 |
 | **agent_tasks** | 任务表；worker 单 lease（`workspace-runtime.ts`） | **表结构不动**；roleId 进 lease/context（P0）；任务 intent 查 TaskIntentMap 得 neededCaps（P1） | 语义层；P1 worker 池化 |
 | **capability_overlays（新）** | — | Owner 唯一可改权限面；workspace 级；红线能力不可覆盖 | 唯一新增持久化 |
@@ -474,7 +478,7 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 ### 8.2 明确承诺
 
 - **不改** `agent_tasks` / `task_grants` / `execution_grants` 表结构；roleId 只进 lease/context（审计需要可加 role 索引，P2）。
-- **不改** `AUTOMATIC_TASK_GRANT_SCOPES` / `PAGE_TASK_GRANT_SCOPES` 的表语义（「intent/页允许什么」不变），只在签发处加注册表投影收窄——这是零回归的关键（默认桌助透传 = 现状逐字节不变）。
+- **不改** `AUTOMATIC_TASK_GRANT_SCOPES` / `PAGE_TASK_GRANT_SCOPES` 的表语义（「intent/页允许什么」不变），只在签发处加注册表投影收窄——这是员工零回归的关键；**主管（desk）例外（2026-08-10 翻转）**：主管签发基底 = standing 全量内部命令（不经 intent/页收窄），员工签发仍 = 页 writeScope ∩ 角色 standing（零回归）。
 - **唯一新增持久化** = `capability_overlays`（§5.5）。
 
 ### 8.3 迁移路径（从 v1 静态表到注册表投影）
@@ -501,7 +505,7 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 | 10 | **跨角色旧证复用**（换收件人后旧 grant 继续写） | rebind 换 taskId → `isCurrentWorkerLease` 拦；role 兜底第二道；4h 过期回收（2A）三重收敛 |
 | 11 | **过度收窄打断主流程**（写手写作中要存一条来源，被拦） | 存料=记者，**UI 存料按钮不拦**（owner_ui 不受角色门限）；Agent 收到拦截给「交给记者」指引而非绕行 |
 | 12 | **读档的假安全感** | §6.3 诚实声明；不因「有读档」放松 grant 纪律 |
-| 13 | **桌助漂移成全能角色** | 桌助 standing 写权 = ∅；透传是显式声明 + CI 唯一性检查（§5.6）；值班条不显示「权限合计」式宣传 |
+| 13 | **红线漂移成内部可写（2026-08-10 翻转）** | 红线三类（最终发布、硬删执行、外部平台变更执行）最终动作永不入任何 standing/page scope（CI 检查 6 负断言 + §10 L15）；主管 standing 全量内部但红线不可达；值班条不显示「权限合计」式宣传 |
 | 14 | **Skill 悄悄带权**（给角色配 Skill 时塞进工具白名单） | Skill 清单在设置页管理；Skill 内容不得注册新命令（CI 检查 1 兜底） |
 | 15 | **并发 grant 竞态**（角色并行后同任务双 grant） | `dispatchIssueTaskGrant` active 单张校验现成；P2 补并发矩阵测试 |
 | 16 | **拦截文案恐吓化** | 文案模板全部以「可操作指引」收尾；权限是默认正确的，拦截是异常（PRODUCT.md 设计原则 5） |
@@ -518,9 +522,9 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 | L1 | **编制 = 5 角色**：桌助 / 记者 / 策划（兼复盘）/ 写手 / 资料员；发布不设角色 | ☐ | 复盘并岗、发布不设岗、观察归记者；新角色需过周常工作双测试（§3.3） |
 | L2 | **写手对资料库只读借阅**：读全量，无任何 lane/组织命令 | ☐ | 借 ≠ 管；整理一律资料员或 Owner UI |
 | L3 | **资料员边界**：持 归档/恢复/状态/挂主题；无 `plans.save`/`content.*`/`reviews.save` | ☐ | 不是选题决策者、不是主笔、不复盘 |
-| L4 | **选题决策权 = 策划**：`plans.save` 仅策划（standing）+ 桌助页内；写手/资料员/记者永不持有 | ☐ | Writer 不是 topic decider（Owner 明示） |
+| L4 | **选题决策权 = 策划**：`plans.save` 仅策划（standing）+ 主管（desk，全站内部 standing，2026-08-10 翻转）；写手/资料员/记者永不持有 | ☐ | Writer 不是 topic decider（Owner 明示） |
 | L5 | **记者边界**：持 `upsert_batch`+观察；无 `lane_gate`/`plans.save` | ☐ | 采与判分家（P3 根治） |
-| L6 | **桌助 = 页级作用域角色**：standing 写权 ∅，页 scope 透传为显式注册表声明；默认收件人 | ☐ | 桌助不成为全能；现状行为零回归 |
+| L6 | **主管（desk）= 软件内主管 / 主编席（2026-08-10 翻转）**：standing 全量内部写权（`commandsCoveredByGrantableCapabilities() ∪ INFRA_GRANT_COMMANDS`，含内部准备命令与内部审批，不含三类红线执行命令）；任意页 dock 绑定即签发全量内部 grant；默认收件人；不进员工槽 | ☐ | 主管是全站内部写权持有者；红线三类仅人类 UI 新鲜确认 |
 
 ### B. 授权模型
 
@@ -544,7 +548,7 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 
 | # | 锁定项 | 决策（yes/no） | 含义 |
 | --- | --- | --- | --- |
-| L15 | **发布/硬删红线**：任何角色（含桌助）不能最终发布（平台人工点击，REQ-007）、不能硬删（Owner UI only，1A）、不能平台副作用（仅 Precise + Owner UI） | ☐ | 全角色统一红线 |
+| L15 | **红线恰三类（类别，2026-08-10 翻转）**：任何角色（含主管）不能最终发布（平台人工点击，REQ-007）、不能硬删执行（Owner UI only，1A）、不能外部平台变更执行（仅 Precise + Owner UI 新鲜确认）；主管可**准备**不可逆/外部动作（内部准备命令），最终动作仅人类 UI | ☐ | 全角色统一红线；红线是类别不是命令清单 |
 | L16 | **一级「智能体（班组）」页**：roster + 进度 + 详情 + 派工入口 + 设置跳转；今日保留一行值班条（知情投影）；班组抽屉方案废弃 | ☐ | Owner 关切 3；修订兄弟设计「不新增一级导航页」决策 |
 | L17 | **智能体页 = 只读运行面**：可配置项（Skill/预设/启停/Cap 开关）一律在设置·角色管理；「未做 P0 前零可配置权限 UI」纪律 | ☐ | 防假开关 + 防配置大屏 |
 | L18 | **单跳派工、禁止自动多跳**；跨角色动作 = 主编派工 | ☐ | 无编排图 |
@@ -557,10 +561,10 @@ enabledCaps(role, workspace) = 默认绑定 → 应用 capability_overlays 覆�
 
 1. `src/shared/agent-capabilities.ts`：注册表 v1（§5.3 九项）+ RoleCatalog + TaskIntentMap；v1 的 `RoleWrite/RoleRead` 静态表内容搬入默认绑定（矩阵不变，来源换投影）；
 2. `scripts/check-capability-registry.mjs` 落地并挂入 `typecheck` 前置链/CI（§5.4 六项检查）；**P0 起「未注册新命令 = 构建失败」生效**；
-3. lease 加 `roleId`（acquire 传参，immutable）；grant 签发过滤：standing scope / page scope 均 `∩ commandsOf(enabledCaps(role))`；envelope 兜底断言（与 `assertTaskGrantForEnvelope` 同点）；桌助透传 = 现状零回归；
+3. lease 加 `roleId`（acquire 传参，immutable）；grant 签发过滤：standing scope / page scope 均 `∩ commandsOf(enabledCaps(role))`（**主管（desk）签发基底 = standing 全量内部命令，2026-08-10 翻转**）；envelope 兜底断言（与 `assertTaskGrantForEnvelope` 同点）；员工页授权 = 现状零回归；
 4. **智能体页只读版**：一级导航 `agents` view + `pi:roster-status`（roster + 状态 + 正在做 + blocker）；值班条「查看全部」跳本页；**无派工、无详情流水、无任何开关**；
 5. 越权可见性：五类拦截原因 + chip 双段 + BLOCKED/toast + 审计流水（复用 `pi:authority-status`/`injectAuthority` 管道）；
-6. 回归：默认桌助下全部现有 dock 用例（today/library/studio/publish）逐项与现状一致。
+6. 回归：主管 standing 全量签发后，员工页授权/页∩standing 行为与现状一致；发布页对员工仍只读、对主管签发全量 grant（2026-08-10 翻转）。
 
 ### P1 —— 扫判分家 + 详情页 + 并行 worker + 读门
 

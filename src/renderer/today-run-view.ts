@@ -172,6 +172,50 @@ export function isManagerNonterminal(view: {
   return cp === 'accepted' || cp === 'running' || cp === 'reporting' || cp === 'waiting_human';
 }
 
+export function projectManagerTaskForToday(
+  manager: {
+    id: string;
+    status?: string | null;
+    progress?: DailyTaskSnapshot['progress'];
+    checkpoint?: { status?: string | null; phase?: string | null; summary?: string | null } | null;
+  },
+  child: (DailyTaskSnapshot & { intent?: string }) | null | undefined
+): { task: DailyTaskSnapshot; running: boolean } {
+  const summary = manager.checkpoint?.summary || manager.progress?.message || '主管任务进行中';
+  const runningChild = child?.status === 'running' ? child : null;
+  if (manager.checkpoint?.status === 'waiting_human' && !runningChild) {
+    return {
+      task: child?.status
+        ? child
+        : {
+            id: manager.id,
+            status: 'succeeded',
+            phase: 'completed',
+            progress: { message: summary },
+            events: summary ? [{ message: summary }] : [],
+            errorMessage: summary
+          },
+      running: false
+    };
+  }
+  return {
+    task: {
+      id: runningChild?.id || manager.id,
+      status: 'running',
+      phase: runningChild?.phase || manager.checkpoint?.phase || 'manager',
+      progress: {
+        ...(runningChild?.progress || {}),
+        message: summary,
+        planned: runningChild?.progress?.planned,
+        processed: runningChild?.progress?.processed
+      },
+      events: runningChild?.events?.length ? runningChild.events : (summary ? [{ message: summary }] : []),
+      errorMessage: summary
+    },
+    running: true
+  };
+}
+
 export function derivePreflightBlockers(input: {
   piConfigured: boolean;
   channelsSummary: IntelligenceChannelsSummary | null | undefined;
@@ -371,7 +415,7 @@ export function deriveTodayRunView(input: TodayRunInput): TodayRunView {
     if (input.opportunityCount > 0) {
       return {
         step: 'done',
-        headline: '当前有可批选题',
+        headline: '',
         detail: (() => {
           const msg = visibleTaskMessage(input.task, '');
           if (!msg || /方案由当前任务写入|VALIDATION_ERROR|内部错误/.test(msg)) {
@@ -458,7 +502,7 @@ export function deriveTodayRunView(input: TodayRunInput): TodayRunView {
     if (input.opportunityCount > 0) {
       return {
         step,
-        headline: '当前有可批选题',
+        headline: '',
         detail: '',
         primaryCta: { kind: 'open_studio', label: '去创作' },
         secondaryCtas: [
@@ -502,7 +546,7 @@ export function deriveTodayRunView(input: TodayRunInput): TodayRunView {
     };
     return {
       step: 'idle',
-      headline: '当前有可批选题',
+      headline: '',
       detail: '重新侦察会补充新资料，并增量更新选题池',
       primaryCta: primary,
       secondaryCtas: [
