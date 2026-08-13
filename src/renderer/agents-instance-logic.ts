@@ -18,6 +18,22 @@ export type CrewInstanceStatus =
 
 export type EmployeeRole = 'reporter' | 'planner' | 'writer' | 'librarian';
 
+/** 记者卡研究摘要（与 src/main/crew-instance-projection.ts CrewResearchSummary 同构）。 */
+export type CrewResearchSummary = Readonly<{
+  planned: number | null;
+  processed: number | null;
+  verified: number | null;
+  saved: number | null;
+  claims: Readonly<{
+    total: number;
+    supported: number;
+    contradicted: number;
+    unresolved: number;
+    sourceUnavailable: number;
+    pending: number;
+  }> | null;
+}>;
+
 /** 实例一等身份 = jobId；活动期编号 displayNumber 纯显示（历史实例恒 0）。 */
 export type CrewInstance = Readonly<{
   jobId: string;
@@ -39,6 +55,8 @@ export type CrewInstance = Readonly<{
   writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
   error: string | null;
   code: string | null;
+  /** WMB-5174 记者卡研究摘要（research 任务非 null；数据缺失字段为 null，不伪造）。 */
+  research: CrewResearchSummary | null;
   queuedAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -75,6 +93,24 @@ export const STATUS_WORD: Readonly<Record<CrewInstanceStatus, string>> = Object.
 
 export function statusWord(status: string): string {
   return STATUS_WORD[status as CrewInstanceStatus] ?? '未知';
+}
+
+/** WMB-5174 记者卡状态词：running 的 research 任务读「研究中」；其余保持统一状态词。 */
+export function instanceStatusWord(instance: Pick<CrewInstance, 'intent' | 'status'>): string {
+  if (instance.status === 'running' && instance.intent === 'research') return '研究中';
+  return statusWord(instance.status);
+}
+
+/** WMB-5174 claim 摘要行：只有已落 research_claims 的计数（claims=null → null，不伪造）。 */
+export function researchClaimLine(research: CrewResearchSummary | null): string | null {
+  const claims = research?.claims;
+  if (!claims) return null;
+  const pendingVerify = claims.unresolved + claims.sourceUnavailable;
+  const parts = [`声明 ${claims.total}：支持 ${claims.supported}`];
+  if (claims.contradicted) parts.push(`反驳 ${claims.contradicted}`);
+  if (pendingVerify) parts.push(`待核实 ${pendingVerify}`);
+  if (claims.pending) parts.push(`待判定 ${claims.pending}`);
+  return parts.join(' · ');
 }
 
 /** 等待原因可读化（设计 §11.1：禁止裸「等资源」；已知锁码 → 人类可读，未知保留原文）。 */

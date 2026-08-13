@@ -445,6 +445,11 @@
 .topic-wiki-compile-banner.stale{border-color:color-mix(in srgb,var(--amber) 40%,var(--border));background:color-mix(in srgb,var(--amber) 8%,var(--surface-raised))}
 .topic-wiki-compile-banner.failed{border-color:color-mix(in srgb,var(--danger) 40%,var(--border));background:color-mix(in srgb,var(--danger) 8%,var(--surface-raised))}
 .topic-wiki-compile-banner.compiling{border-color:color-mix(in srgb,var(--accent) 35%,var(--border))}
+/* WMB-5233：空壳诚实三态 —— 尚未编译 / 初始档案（legacy，零采纳知识），绝不显示已编译/当前。 */
+.topic-wiki-compile-banner.compile-state-uncompiled{border-color:color-mix(in srgb,var(--muted) 35%,var(--border));background:color-mix(in srgb,var(--muted) 6%,var(--surface-raised));color:var(--muted)}
+.topic-wiki-compile-banner.compile-state-uncompiled strong{color:var(--muted)}
+.topic-wiki-compile-banner.compile-state-legacy_shell{border-color:color-mix(in srgb,var(--amber) 45%,var(--border));background:color-mix(in srgb,var(--amber) 9%,var(--surface-raised))}
+.topic-wiki-compile-banner.compile-state-legacy_shell strong{color:var(--amber)}
 .topic-wiki-risks{display:flex;flex-wrap:wrap;gap:6px}
 .topic-wiki-section{display:grid;gap:10px;min-width:0;scroll-margin-top:54px;outline:none}
 .topic-wiki-section h3{font-size:14px}

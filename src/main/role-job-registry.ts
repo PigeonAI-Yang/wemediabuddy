@@ -125,7 +125,9 @@ export type RoleJobReadbackV1 =
   | { kind: 'sources_mutated'; count: number }
   | { kind: 'topic_maintenance_proposed'; proposal: TopicMaintenanceProposal }
   | { kind: 'scan_phase_reached'; phase: string }
-  | { kind: 'noop_confirmed'; scope: string };
+  | { kind: 'noop_confirmed'; scope: string }
+  // WMB-5173：research 读回 = EvidencePack（result_refs_json）已落盘；状态映射 succeeded/partial。
+  | { kind: 'research_evidence'; jobId: string; status: 'succeeded' | 'partial' };
 
 export type RoleJobReportV1 = Readonly<{
   jobId: string;

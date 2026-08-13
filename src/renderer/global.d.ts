@@ -432,6 +432,22 @@ declare global {
       } | null>;
       getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; progressRatio: number | null; createdAt: string | null; updatedAt: string | null; finishedAt: string | null; writeCommandCount: number; instances: CrewInstance[] }>>;
       getCrewInstanceProjection(): Promise<CrewProjection>;
+      listResearchSuccessorsNeedsUser(): Promise<Array<{
+        id: string;
+        parentJobId: string;
+        parentTaskId: string;
+        researchTaskId: string;
+        parentRoleId: 'writer' | 'planner' | 'librarian';
+        unresolvedClaims: Array<{ key: string; text: string | null; type: 'fact' | 'price' | 'policy' | null }>;
+        decision: 'narrow' | 'supplement' | 'accept' | null;
+        createdAt: string;
+        updatedAt: string;
+      }>>;
+      decideResearchSuccessor(input: { jobId: string; decision: 'narrow' | 'supplement' | 'accept' }): Promise<{
+        ok: boolean;
+        data: unknown;
+        error: { code: string; message: string } | null;
+      }>;
       getAgentTaskTranscript(jobId: string): Promise<PiChatMessage[] | null>;
       listAgentAvatars?(): Promise<Array<{ roleId: string; assetId: string; url: string }>>;
       setAgentAvatar?(input: { roleId: string; base64: string; mimeType?: string; width?: number; height?: number }): Promise<{ roleId: string; assetId: string; url: string; relativePath: string }>;

@@ -1,0 +1,705 @@
+(node:31032) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31032) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+{
+  "schema": "wmb-5234-acceptance-evidence.v1",
+  "kind": "run",
+  "generatedAt": "2026-08-13T01:30:57.471Z",
+  "args": [
+    "--run",
+    "--ui",
+    "--fixture",
+    "copy",
+    "--fixture-source",
+    ".ai/wmb-5207-final-root",
+    "--keep",
+    "--out",
+    ".ai/wmb-5234-evidence"
+  ],
+  "node": "v24.13.1",
+  "piConfig": "C:\\Users\\yangda01\\AppData\\Roaming\\WeMediaBuddy\\pi-api-config.json",
+  "piConfigAutoDiscovered": true,
+  "fixture": {
+    "mode": "copy",
+    "source": ".ai/wmb-5207-final-root",
+    "workspaceId": "wmb-5207-final",
+    "root": "J:\\Users\\yangda01\\Temp\\wmb-5234-accept-w4LhRr",
+    "sourceInfo": {
+      "workspaceId": "wmb-5207-final",
+      "migrationVersion": null,
+      "counts": {
+        "knowledge_change_sets": null,
+        "knowledge_notes": null,
+        "knowledge_note_versions": null,
+        "knowledge_wiki_pages": null,
+        "knowledge_wiki_page_versions": null,
+        "knowledge_evidence_links": null,
+        "knowledge_update_receipts": null,
+        "knowledge_query_artifacts": null,
+        "knowledge_health_issues": null,
+        "knowledge_free_notes": null
+      }
+    }
+  },
+  "db": {
+    "fixture": {
+      "mode": "copy",
+      "source": ".ai/wmb-5207-final-root",
+      "workspaceId": "wmb-5207-final",
+      "sourceInfo": {
+        "workspaceId": "wmb-5207-final",
+        "migrationVersion": null,
+        "counts": {
+          "knowledge_change_sets": null,
+          "knowledge_notes": null,
+          "knowledge_note_versions": null,
+          "knowledge_wiki_pages": null,
+          "knowledge_wiki_page_versions": null,
+          "knowledge_evidence_links": null,
+          "knowledge_update_receipts": null,
+          "knowledge_query_artifacts": null,
+          "knowledge_health_issues": null,
+          "knowledge_free_notes": null
+        }
+      }
+    },
+    "phases": {
+      "A": {
+        "status": "pass",
+        "items": {
+          "workspaceId": "wmb-5207-final",
+          "sourceIds": [
+            "fc720f11-ae22-4a03-9696-957c82c739ff",
+            "fc720f11-ae22-4a03-9696-957c82c739ff"
+          ],
+          "topicId": "61b47b30-b716-4aa2-8e12-30e7d2be1af2",
+          "compile1": {
+            "changeSetId": "650f6d3b-a587-41d0-af8b-47066e0a0559",
+            "receiptId": "af28b467-180c-41ce-8470-08249747805d",
+            "entityId": "ent-0e4d9b2829b94155474113230b24025b",
+            "wikiVersionId": "wver-038eb59fe7c4b50c10edde7c203ab841",
+            "wikiAdopted": 2
+          },
+          "compile2": {
+            "changeSetId": "b5923067-790f-4914-ad4f-58be449b2036",
+            "receiptId": "a5cc438e-507b-4b48-87b7-c3fa05720936",
+            "disputedNoteId": "note-e2785c9e2328c75ed1f811881bed742b",
+            "disputedNoteVersionId": "ver-47dca104f616db36d166c5bb2a8d547e",
+            "wikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+            "wikiAdopted": 5,
+            "retainedDisputes": 1
+          },
+          "contextPackageId": "c47f7e9b-71ff-483b-a042-831eb1e9cad9",
+          "wikiPageId": "page-edd85aa6d4f5553457f324cc5ccbe5da",
+          "screenshotSelector": ".topic-wiki-page"
+        }
+      },
+      "B": {
+        "status": "pass",
+        "items": {
+          "frozenRead": {
+            "wikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+            "noteVersionIds": 5,
+            "evidenceIds": 5
+          },
+          "restatement": {
+            "decision": "skipped_repetition",
+            "artifactId": "7fb9e32c-9be4-4fb5-8235-315f44d67e09",
+            "receiptId": "qrec-7d33b0b5c252f05fe12f6a70ed0d999c"
+          },
+          "sameQuestionReplay": {
+            "duplicate": true,
+            "artifactSame": true
+          },
+          "synthesis": {
+            "noteId": "qnote-f8efb980e29de43880a57b61551da625",
+            "noteVersionId": "qver-ac6cfabc1747b0abf3e9e08f92460179",
+            "pageId": "qpage-a492923cef436932eb0ddbac9d9742e9",
+            "pageVersionId": "qwver-68e267ad6bfd27af6761372e73d11a6f",
+            "derivedEvidence": 6,
+            "receiptId": "qrec-e4574140ba32b75fb7c3234ec5e571f9"
+          },
+          "experienceFreeNoteId": "qfn-beb5da8604d76bf42e76fc125a6a5f4f",
+          "screenshotSelector": ".pi-knowledge-panel"
+        }
+      },
+      "C": {
+        "status": "pass",
+        "items": {
+          "frozenWikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+          "proposal": {
+            "objectId": "08c53b90-fee4-42e7-91a5-8498c90be242",
+            "usagePackageId": "01171da3-2b56-4a90-8f6e-56c611d6b080"
+          },
+          "brief": {
+            "objectId": "9dab59e6-73a3-4a9a-9566-344c3439516f",
+            "usagePackageId": "50dcde4a-f505-4bab-9d90-228c42a70bae"
+          },
+          "coreV1": {
+            "objectId": "aac24238-e7a9-40b4-8d7f-9bb34d34e309",
+            "usagePackageId": "cbf18d95-6354-4a2e-9206-f80f8860bead"
+          },
+          "coreV2": {
+            "objectId": "77ffe9d4-26b2-4a63-b779-445922007565",
+            "usagePackageId": "9fc13ee2-3613-4000-bae6-dc6778a6fab3"
+          },
+          "platform": {
+            "objectId": "8311d7bb-0bd1-4036-b459-004872b545ff",
+            "usagePackageId": "099aaa33-403d-44d2-9e0c-88113334a330",
+            "usageKind": "structure_pattern"
+          },
+          "rebaseRejected": {
+            "code": "REQUEST_REPLAY_CONFLICT",
+            "platformStillContentVersionId": "77ffe9d4-26b2-4a63-b779-445922007565",
+            "platformRevision": 1
+          },
+          "sameBaseUpdateRevision": 2,
+          "screenshotSelector": ".studio-editor-view"
+        }
+      },
+      "D": {
+        "status": "pass",
+        "items": {
+          "publicationId": "715bd455-19dd-4cac-a1da-b65141cdd0b5",
+          "metricSnapshotId": "a99bac54-2483-4e82-816f-38b393518c81",
+          "reviewId": "650cd499-c483-4c37-a54c-a166cda4ac51",
+          "outcomeChangeSetRequestId": "outcome:review:650cd499-c483-4c37-a54c-a166cda4ac51",
+          "caseNoteId": "of-case-c737374dea2db156f7fbb9f9cbba49d9",
+          "caseVersionId": "of-case-ver-c737374dea2db156f7fbb9f9cbba49d9",
+          "receiptId": "b261f364-13d6-4fa5-919c-341cba408a1a",
+          "lineageVersionIds": 6,
+          "wikiCurrentVersionId": "of-wver-16490539fb4c38c0e393a23ac6d1a74f",
+          "wikiRecentOutcomes": 1,
+          "zeroCausalMethod": true,
+          "zeroPattern": true,
+          "replayZeroWrite": true,
+          "screenshotSelector": ".results-page"
+        }
+      },
+      "E": {
+        "status": "pass",
+        "items": {
+          "conflictIssueId": "health-ba030239195d0edfa8ed0e529f8fe9d9",
+          "conflictStatus": "open",
+          "brokenEvidenceIssueId": "health-232efbf2b35f1a37e196ec79e8641a84",
+          "brokenEvidenceStatus": "open",
+          "repairedRelationId": "rel-ghost-wmb5234",
+          "repairIssueId": "health-2520b72bb26967c7a4b629a75024195f",
+          "repairReceiptId": "ecfb662e-ce32-4d57-9c3a-ab009231aa77",
+          "staleIssueId": "health-3c11542d8545ec8c5e45b96e9c976e38",
+          "staleStatus": "open",
+          "periodic": {
+            "runId": "lint-1786584660676-1feeae2e",
+            "completed": true,
+            "scannedObjects": 18,
+            "crashRetryZeroWrite": true,
+            "canceled": true
+          },
+          "shellZeroKnowledge": {
+            "zeroKnowledge": {
+              "topicId": "1127a69e-146f-40fd-bf80-fde9d4ad7c71",
+              "getTopicCompileState": "uncompiled",
+              "listTopicCompileStates": []
+            },
+            "mainWorkspace": {
+              "compiledTopic": "61b47b30-b716-4aa2-8e12-30e7d2be1af2",
+              "compiled": "compiled",
+              "legacyShellTopic": "1fde2938-6c48-42dc-9f29-08c6a8f2e338",
+              "legacyShell": "legacy_shell",
+              "staleShellTopic": "c48a51a6-cea5-412d-a353-6aad9381d0fa",
+              "staleShell": "uncompiled",
+              "legacyShellAfterCompile": "compiled"
+            },
+            "note": "WMB-5233 诚实三态（uncompiled/legacy_shell/compiled）经 getTopicCompileState/listTopicCompileStates 真实读回；legacy shell 保留 DB compile_status=current 但投影 legacy_shell，真实编译后过渡为 compiled"
+          },
+          "screenshotSelector": ".health-section"
+        }
+      },
+      "F": {
+        "status": "pass",
+        "items": {
+          "weakSource": {
+            "sourceId": "facbc8d0-5604-47ab-9036-00970416e3ae",
+            "notesCreated": 0,
+            "skippedLowValue": 1,
+            "receiptId": "dc7c362e-5e6f-42f8-99ab-4ddd24aaeb93"
+          },
+          "concurrency": {
+            "firstSucceededStatement": "V3A",
+            "secondRejectedCode": "REVISION_CONFLICT",
+            "versionsAfterConflict": 11
+          },
+          "restore": {
+            "revision": 4,
+            "changeType": "restored",
+            "restoredFromVersionId": "1af7ac6f-8265-47c7-a607-07c4d3d5ff1d",
+            "versionsKept": 4
+          },
+          "screenshotSelector": ".topic-wiki-versions"
+        }
+      },
+      "G": {
+        "status": "pass",
+        "items": {
+          "chainIntegrity": {
+            "orphanWikiAdopted": 0,
+            "orphanEvidence": 0,
+            "orphanReceipts": 0
+          },
+          "singleTopicSingleWiki": true,
+          "dataRootIsolation": {
+            "crossRootWriteRejected": true,
+            "dataRootBCounts": {
+              "changeSets": 0,
+              "notes": 0,
+              "wikiPages": 0
+            }
+          },
+          "canvasDelete": {
+            "canvasId": "15d3db45-58ca-4e0b-bc76-4e34d1df22d7",
+            "formalTopicStillExists": true,
+            "formalReviewStillExists": true,
+            "formalWikiStillExists": true
+          },
+          "immutableVersions": true,
+          "immutableFreeNoteBody": true,
+          "dispatcher": {
+            "command": "knowledge_flywheel.change_set_apply",
+            "commandReceipts": 1,
+            "changeSets": 1,
+            "directSqlWriteBlocked": true
+          }
+        }
+      }
+    }
+  },
+  "ui": {
+    "requested": true,
+    "piConfig": "copied",
+    "piConfigSource": "C:\\Users\\yangda01\\AppData\\Roaming\\WeMediaBuddy\\pi-api-config.json",
+    "phases": {
+      "A": {
+        "status": "pass",
+        "items": {
+          "opened": true,
+          "saveClicked": "clicked",
+          "surface": {
+            "conclusions": [
+              "AgentForge v2 可用于小红书运营场景的批量内容生成",
+              "评估多模型路由先用 20 条混合样本跑通延迟与质量",
+              "评估多模型路由的样本先覆盖目标平台（当前仅 xiaohongshu 验证）",
+              "AgentForge v2 支持多模型路由",
+              "AgentForge v2 多模型路由仅限企业版开放",
+              "AgentForge v2 多模型路由仅限企业版开放"
+            ],
+            "hasCurrent": true,
+            "compileState": "current",
+            "dbHitStatements": [
+              "AgentForge v2 可用于小红书运营场景的批量内容生成",
+              "评估多模型路由先用 20 条混合样本跑通延迟与质量",
+              "评估多模型路由的样本先覆盖目标平台（当前仅 xiaohongshu 验证）",
+              "AgentForge v2 支持多模型路由",
+              "AgentForge v2 多模型路由仅限企业版开放"
+            ]
+          },
+          "uiTarget": {
+            "matched": [
+              {
+                "selector": ".topic-wiki-page",
+                "text": "概览资料0变化4版本3有争议 1当前认识截至 2026/8/13 09:31:00AI Agent 工具链主题编译（v2 更新）AgentForge v2 可用于小红书运营场景的批量内容生成已支持证据 单源主张评估多模型路由先用 20 条混合样本跑通延迟与质量已支持证据 单源方法评估多模型路由的样本先覆盖目标平台（当前仅 xiaohongshu 验证）已支持限域证据 多源印证适用 xiaohong"
+              },
+              {
+                "selector": "#topic-wiki-current",
+                "text": "当前认识截至 2026/8/13 09:31:00AI Agent 工具链主题编译（v2 更新）AgentForge v2 可用于小红书运营场景的批量内容生成已支持证据 单源主张评估多模型路由先用 20 条混合样本跑通延迟与质量已支持证据 单源方法评估多模型路由的样本先覆盖目标平台（当前仅 xiaohongshu 验证）已支持限域证据 多源印证适用 xiaohongshu方法AgentForge "
+              },
+              {
+                "selector": ".topic-wiki-conclusion",
+                "text": "AgentForge v2 可用于小红书运营场景的批量内容生成已支持证据 单源主张"
+              }
+            ],
+            "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\A-topic-wiki.png"
+          },
+          "db": {
+            "workspaceId": "wmb-5207-final",
+            "sourceIds": [
+              "fc720f11-ae22-4a03-9696-957c82c739ff",
+              "fc720f11-ae22-4a03-9696-957c82c739ff"
+            ],
+            "topicId": "61b47b30-b716-4aa2-8e12-30e7d2be1af2",
+            "compile1": {
+              "changeSetId": "650f6d3b-a587-41d0-af8b-47066e0a0559",
+              "receiptId": "af28b467-180c-41ce-8470-08249747805d",
+              "entityId": "ent-0e4d9b2829b94155474113230b24025b",
+              "wikiVersionId": "wver-038eb59fe7c4b50c10edde7c203ab841",
+              "wikiAdopted": 2
+            },
+            "compile2": {
+              "changeSetId": "b5923067-790f-4914-ad4f-58be449b2036",
+              "receiptId": "a5cc438e-507b-4b48-87b7-c3fa05720936",
+              "disputedNoteId": "note-e2785c9e2328c75ed1f811881bed742b",
+              "disputedNoteVersionId": "ver-47dca104f616db36d166c5bb2a8d547e",
+              "wikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+              "wikiAdopted": 5,
+              "retainedDisputes": 1
+            },
+            "contextPackageId": "c47f7e9b-71ff-483b-a042-831eb1e9cad9",
+            "wikiPageId": "page-edd85aa6d4f5553457f324cc5ccbe5da",
+            "screenshotSelector": ".topic-wiki-page"
+          }
+        }
+      },
+      "B": {
+        "status": "pass",
+        "items": {
+          "panel": {
+            "decision": "created",
+            "writtenBack": true,
+            "text": "知识使用与沉淀已沉淀本次使用Wiki 1of-wver-…d1a74f知识 6of-case-…ba49d9 · ver-1028…17d023 · ver-47dc…8d547e · ver-4c79…ae4368 · ver-9736…1d0f2b · ver-db65…a9e7eb来源 9ev-ghost-wmb5234 · 9c82f75c…1a2a6f · ba0488ff…2d1ba0 · 5de436dd…a7c471 · f80a8bc4…4382c3 · 4549c1d7…da2113 · fee9d44f…5342a0 · d6028adf…65cf74 · af4a5b3"
+          },
+          "question": "请严格按已加载 wemedia-buddy-operator Skill 的「Pi 知识问答写回」协议执行本轮：1) 先用 wmb_get_knowledge_context 检索主题「AI Agent 工具链」（query 直接使用该主题名；若返回空请再试 AgentForge、小红书 等词），再用返回的 topic_id 冻结读取该主题的知识版本；2) 基于冻结读取的内容，综合 AgentForge v2 企业版限制、小红书图片场景人工抽检经验、多模型路由评估方法，给出一个新的可复用判断，classification=new_synthesis；3) 在末条回复正文的最后，以 ```json 围栏输出 wmb_query_writeback 清单：readWikiVersionIds/readNoteVersionIds/readEvidenceIds 与 synthesis.basedOnNoteVersionIds 只允许填工具真实返回的冻结版本 ID，synthesis.statement 为你的综合判断原文，禁止编造任何 ID 或跳过清单",
+          "artifactsBefore": 3,
+          "artifactsAfter": 4,
+          "notesAfter": 8,
+          "db": {
+            "frozenRead": {
+              "wikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+              "noteVersionIds": 5,
+              "evidenceIds": 5
+            },
+            "restatement": {
+              "decision": "skipped_repetition",
+              "artifactId": "7fb9e32c-9be4-4fb5-8235-315f44d67e09",
+              "receiptId": "qrec-7d33b0b5c252f05fe12f6a70ed0d999c"
+            },
+            "sameQuestionReplay": {
+              "duplicate": true,
+              "artifactSame": true
+            },
+            "synthesis": {
+              "noteId": "qnote-f8efb980e29de43880a57b61551da625",
+              "noteVersionId": "qver-ac6cfabc1747b0abf3e9e08f92460179",
+              "pageId": "qpage-a492923cef436932eb0ddbac9d9742e9",
+              "pageVersionId": "qwver-68e267ad6bfd27af6761372e73d11a6f",
+              "derivedEvidence": 6,
+              "receiptId": "qrec-e4574140ba32b75fb7c3234ec5e571f9"
+            },
+            "experienceFreeNoteId": "qfn-beb5da8604d76bf42e76fc125a6a5f4f",
+            "screenshotSelector": ".pi-knowledge-panel"
+          },
+          "uiTarget": {
+            "matched": [
+              {
+                "selector": ".pi-knowledge-panel",
+                "text": "知识使用与沉淀已沉淀本次使用Wiki 1of-wver-…d1a74f知识 6of-case-…ba49d9 · ver-1028…17d023 · ver-47dc…8d547e · ver-4c79…ae4368 · ver-9736…1d0f2b · ver-db65…a9e7eb来源 9ev-ghost-wmb5234 · 9c82f75c…1a2a6f · ba0488ff…2d1ba0"
+              },
+              {
+                "selector": ".pi-knowledge-writeback",
+                "text": "本次沉淀已沉淀：本次形成新知识Query 写回（new_synthesis）：创建综合「AgentForge v2 路由上线评估：能力核实与目标平台样本两分法」。读取冻结版本 wiki=1 / note=6 / evidence=9。回执 qrec-835…0b94c4 · 变更 f7597456…8db3be"
+              },
+              {
+                "selector": ".pi-knowledge-decision",
+                "text": "已沉淀：本次形成新知识"
+              }
+            ],
+            "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\B-pi-knowledge.png"
+          }
+        }
+      },
+      "C": {
+        "status": "pass",
+        "items": {
+          "opened": true,
+          "saveClicked": "clicked",
+          "docState": "核心正文 · 第 2 版 · 已保存 · 2026/8/13 09:31:00",
+          "uiTarget": {
+            "matched": [
+              {
+                "selector": ".studio-editor-view",
+                "text": "创作库/AI 项目核心正文 · 第 2 版 · 已保存 · 2026/8/13 09:31:00版本源码渲染编辑保存文章纲要开头标题会显示在这里。平台内容核心正文X 未创建小红书 1 个版本公众号 未创建正文二级标题三级标题引用BIS<>• 列表1. 列表链接代码块表格分割线图片清除↶↷查找替换标记AI 项目核心正文创作中1 条来源0 个素材Markdown 源码核心 V2实时预览核心 V2 字数"
+              },
+              {
+                "selector": ".studio-doc-state",
+                "text": "核心正文 · 第 2 版 · 已保存 · 2026/8/13 09:31:00"
+              },
+              {
+                "selector": ".studio-outline-section--content",
+                "text": "平台内容核心正文X 未创建小红书 1 个版本公众号 未创建"
+              }
+            ],
+            "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\C-studio.png"
+          },
+          "db": {
+            "frozenWikiVersionId": "wver-31d4e39c892b99bedbcea03e43d4fc5f",
+            "proposal": {
+              "objectId": "08c53b90-fee4-42e7-91a5-8498c90be242",
+              "usagePackageId": "01171da3-2b56-4a90-8f6e-56c611d6b080"
+            },
+            "brief": {
+              "objectId": "9dab59e6-73a3-4a9a-9566-344c3439516f",
+              "usagePackageId": "50dcde4a-f505-4bab-9d90-228c42a70bae"
+            },
+            "coreV1": {
+              "objectId": "aac24238-e7a9-40b4-8d7f-9bb34d34e309",
+              "usagePackageId": "cbf18d95-6354-4a2e-9206-f80f8860bead"
+            },
+            "coreV2": {
+              "objectId": "77ffe9d4-26b2-4a63-b779-445922007565",
+              "usagePackageId": "9fc13ee2-3613-4000-bae6-dc6778a6fab3"
+            },
+            "platform": {
+              "objectId": "8311d7bb-0bd1-4036-b459-004872b545ff",
+              "usagePackageId": "099aaa33-403d-44d2-9e0c-88113334a330",
+              "usageKind": "structure_pattern"
+            },
+            "rebaseRejected": {
+              "code": "REQUEST_REPLAY_CONFLICT",
+              "platformStillContentVersionId": "77ffe9d4-26b2-4a63-b779-445922007565",
+              "platformRevision": 1
+            },
+            "sameBaseUpdateRevision": 2,
+            "screenshotSelector": ".studio-editor-view"
+          }
+        }
+      },
+      "D": {
+        "status": "pass",
+        "items": {
+          "statsText": "1本周期发布1已复盘1方法库结论0结论被方案引用0待复盘",
+          "heroKsc": "✓ 保留开头钩子✕ 停止泛 CTA↻ 改变封面先给结论",
+          "kscText": "复盘✓ 保留开头钩子✕ 停止泛 CTA↻ 改变封面先给结论",
+          "drilled": true,
+          "uiTarget": {
+            "matched": [
+              {
+                "selector": ".results-page",
+                "text": "结果本周期 1 条已发布，1 条已复盘，没有遗留待复盘。1本周期发布1已复盘1方法库结论0结论被方案引用0待复盘周期近 7 天近 30 天全部平台全部小红书形式全部观点短文本周期概览由 1 条已发布内容实时计算和 Pi 讨论本周期① 本期最强内容《平台 V1》24h 阅读 100，是中位水平的 1.0×。② 最稳的模式样本不足，继续积累数据。③ 需要处理本周期 1/1 条已复盘，没有遗留。✓ 保留"
+              },
+              {
+                "selector": ".rl-hero-ksc",
+                "text": "✓ 保留开头钩子✕ 停止泛 CTA↻ 改变封面先给结论"
+              },
+              {
+                "selector": ".page-command-stats",
+                "text": "1本周期发布1已复盘1方法库结论0结论被方案引用0待复盘"
+              },
+              {
+                "selector": ".rl-ksc",
+                "text": "复盘✓ 保留开头钩子✕ 停止泛 CTA↻ 改变封面先给结论"
+              }
+            ],
+            "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\D-results.png"
+          },
+          "db": {
+            "publicationId": "715bd455-19dd-4cac-a1da-b65141cdd0b5",
+            "metricSnapshotId": "a99bac54-2483-4e82-816f-38b393518c81",
+            "reviewId": "650cd499-c483-4c37-a54c-a166cda4ac51",
+            "outcomeChangeSetRequestId": "outcome:review:650cd499-c483-4c37-a54c-a166cda4ac51",
+            "caseNoteId": "of-case-c737374dea2db156f7fbb9f9cbba49d9",
+            "caseVersionId": "of-case-ver-c737374dea2db156f7fbb9f9cbba49d9",
+            "receiptId": "b261f364-13d6-4fa5-919c-341cba408a1a",
+            "lineageVersionIds": 6,
+            "wikiCurrentVersionId": "of-wver-16490539fb4c38c0e393a23ac6d1a74f",
+            "wikiRecentOutcomes": 1,
+            "zeroCausalMethod": true,
+            "zeroPattern": true,
+            "replayZeroWrite": true,
+            "screenshotSelector": ".results-page"
+          }
+        }
+      },
+      "E": {
+        "status": "pass",
+        "items": {
+          "issueCount": 5,
+          "dbOpenIssues": 3,
+          "badges": {
+            "compiled": 2,
+            "uncompiled": 1,
+            "labels": [
+              "已编译",
+              "尚未编译",
+              "已编译"
+            ]
+          },
+          "uiTarget": {
+            "health": {
+              "matched": [
+                {
+                  "selector": ".health-section",
+                  "text": "严重度全部严重高中低提示状态全部未处理修复中已解决接受风险误报类型全部陈旧断言陈旧 Wiki未解决矛盾无依据断言重复知识孤立知识缺 Wiki 页失效引用未回流复盘健康问题 · 5 条高失效引用已解决影响对象：对象 rel-ghos确定性修复：自动终止该关系。解决记录：确定性修复：活动关系 derived_from 端点不存在：source:ghost-source-periodic-wmb5234"
+                },
+                {
+                  "selector": ".library-issue-item",
+                  "text": "高失效引用已解决影响对象：对象 rel-ghos确定性修复：自动终止该关系。解决记录：确定性修复：活动关系 derived_from 端点不存在：source:ghost-source-periodic-wmb5234。 已自动终止关系。打开受影响对象检测于 2026-08-13 09:31"
+                }
+              ],
+              "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\E-health.png"
+            },
+            "compileState": {
+              "matched": [
+                {
+                  "selector": ".topic-compile-state",
+                  "text": "已编译"
+                }
+              ],
+              "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\E-compile-state.png"
+            }
+          },
+          "db": {
+            "conflictIssueId": "health-ba030239195d0edfa8ed0e529f8fe9d9",
+            "conflictStatus": "open",
+            "brokenEvidenceIssueId": "health-232efbf2b35f1a37e196ec79e8641a84",
+            "brokenEvidenceStatus": "open",
+            "repairedRelationId": "rel-ghost-wmb5234",
+            "repairIssueId": "health-2520b72bb26967c7a4b629a75024195f",
+            "repairReceiptId": "ecfb662e-ce32-4d57-9c3a-ab009231aa77",
+            "staleIssueId": "health-3c11542d8545ec8c5e45b96e9c976e38",
+            "staleStatus": "open",
+            "periodic": {
+              "runId": "lint-1786584660676-1feeae2e",
+              "completed": true,
+              "scannedObjects": 18,
+              "crashRetryZeroWrite": true,
+              "canceled": true
+            },
+            "shellZeroKnowledge": {
+              "zeroKnowledge": {
+                "topicId": "1127a69e-146f-40fd-bf80-fde9d4ad7c71",
+                "getTopicCompileState": "uncompiled",
+                "listTopicCompileStates": []
+              },
+              "mainWorkspace": {
+                "compiledTopic": "61b47b30-b716-4aa2-8e12-30e7d2be1af2",
+                "compiled": "compiled",
+                "legacyShellTopic": "1fde2938-6c48-42dc-9f29-08c6a8f2e338",
+                "legacyShell": "legacy_shell",
+                "staleShellTopic": "c48a51a6-cea5-412d-a353-6aad9381d0fa",
+                "staleShell": "uncompiled",
+                "legacyShellAfterCompile": "compiled"
+              },
+              "note": "WMB-5233 诚实三态（uncompiled/legacy_shell/compiled）经 getTopicCompileState/listTopicCompileStates 真实读回；legacy shell 保留 DB compile_status=current 但投影 legacy_shell，真实编译后过渡为 compiled"
+            },
+            "screenshotSelector": ".health-section"
+          }
+        }
+      },
+      "F": {
+        "status": "pass",
+        "items": {
+          "versionInfo": {
+            "count": 3,
+            "restoreButtons": [
+              "恢复此版本",
+              "恢复此版本"
+            ],
+            "nums": [
+              "V3",
+              "V2",
+              "V1"
+            ]
+          },
+          "dbVersionCount": 3,
+          "uiTarget": {
+            "matched": [
+              {
+                "selector": ".topic-wiki-versions",
+                "text": "版本3 个版本V3wiki-topic:61b47b30-b716-4aa2-8e12-30e7d2be1af2当前2026/8/13 09:31:00查看差异结果观察：Keep 1 / Stop 1 / Change 1；指标 views=100。V2AI Agent 工具链2026/8/13 09:31:00查看差异采纳版本 2 → 5（本次晋升 3：agentforge-v2-xiaohon"
+              },
+              {
+                "selector": ".topic-wiki-version",
+                "text": "V3wiki-topic:61b47b30-b716-4aa2-8e12-30e7d2be1af2当前2026/8/13 09:31:00查看差异结果观察：Keep 1 / Stop 1 / Change 1；指标 views=100。"
+              },
+              {
+                "selector": ".topic-wiki-version-num",
+                "text": "V3"
+              }
+            ],
+            "screenshot": ".ai\\wmb-5234-evidence\\screenshots\\F-topic-versions.png"
+          },
+          "db": {
+            "weakSource": {
+              "sourceId": "facbc8d0-5604-47ab-9036-00970416e3ae",
+              "notesCreated": 0,
+              "skippedLowValue": 1,
+              "receiptId": "dc7c362e-5e6f-42f8-99ab-4ddd24aaeb93"
+            },
+            "concurrency": {
+              "firstSucceededStatement": "V3A",
+              "secondRejectedCode": "REVISION_CONFLICT",
+              "versionsAfterConflict": 11
+            },
+            "restore": {
+              "revision": 4,
+              "changeType": "restored",
+              "restoredFromVersionId": "1af7ac6f-8265-47c7-a607-07c4d3d5ff1d",
+              "versionsKept": 4
+            },
+            "screenshotSelector": ".topic-wiki-versions"
+          }
+        }
+      }
+    },
+    "screenshotDir": ".ai\\wmb-5234-evidence\\screenshots",
+    "workspaceLoaded": "WMB-5234 验收"
+  },
+  "siblingGates": {
+    "5231-operator-skill-wmb_query_writeback": {
+      "owner": "WMB-5231",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5231-query-writeback-manifest-module": {
+      "owner": "WMB-5231",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5232-content-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5232-review-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5232-topic-proposal-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5233-compile-state-module": {
+      "owner": "WMB-5233",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5233-renderer-shell-three-state": {
+      "owner": "WMB-5233",
+      "present": true,
+      "baseline": {
+        "labelsMapPresent": true,
+        "topicDetailCompileState": true,
+        "topicListCompileState": true,
+        "compileStateFallbackUncompiled": true,
+        "compileStateBanner": true,
+        "canvasCompileState": true
+      },
+      "pendingWhenMissing": true
+    }
+  },
+  "verdict": {
+    "dbAcceptance": "pass",
+    "uiAcceptance": "pass",
+    "wmb5234Complete": true,
+    "reasons": []
+  }
+}
+[wmb-5234] 证据：.ai\wmb-5234-evidence\wmb-5234-acceptance-2026-08-13.json

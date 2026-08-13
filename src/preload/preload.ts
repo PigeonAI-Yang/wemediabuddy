@@ -330,6 +330,8 @@ contextBridge.exposeInMainWorld('wmb', {
   syncManagerTask: (input?: { businessDate?: string }) => ipcRenderer.invoke('agent:sync-manager-task', input ?? {}),
   startStudioDraft: (input: { businessDate: string; projectId: string }) => ipcRenderer.invoke('agent:start-studio-draft', input),
   getToday: (planDate: string) => ipcRenderer.invoke('today:get', planDate),
+  listResearchSuccessorsNeedsUser: () => ipcRenderer.invoke('today:research-successors'),
+  decideResearchSuccessor: (input: { jobId: string; decision: 'narrow' | 'supplement' | 'accept' }) => ipcRenderer.invoke('agents:decide-research-successor', input),
   getAgentsRoster: (input?: { businessDate?: string }) => ipcRenderer.invoke('agents:roster-status', input ?? {}),
   getCrewInstanceProjection: () => ipcRenderer.invoke('agents:crew-projection'),
   getAgentTaskTranscript: (jobId: string) => ipcRenderer.invoke('agents:task-transcript', jobId) as Promise<Array<{

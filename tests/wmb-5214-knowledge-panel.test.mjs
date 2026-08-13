@@ -105,8 +105,11 @@ test('transcript renders a collapsible knowledge panel only after completed assi
   assert.match(panelBlock, /window\.wmb\.getQueryWritebackSummary/);
   assert.match(panelBlock, /\{ requestId \}\)/);
 
-  // 无 artifact（该轮无写回）→ 整个面板隐藏，不展示空壳
-  assert.match(panelBlock, /if \(!artifact\) return null;/);
+  // 无 artifact 且无 settle（重启后旧轮次）→ 整个面板隐藏，不展示空壳
+  assert.match(panelBlock, /if \(!artifact && !settle\) return null;/);
+  // WMB-5231：无 artifact 但有 settle（无/非法清单、校验或写回失败）→ 显示可读未写原因
+  assert.match(panelBlock, /settle\?\.reason \?\? '本轮未产生知识写回。'/);
+  assert.match(panelBlock, /pi-knowledge-settle-reason/);
 });
 
 test('knowledge panel shows used entries, risks, writeback decision, skip reason, receipt and changeSet entry — never tool JSON or answer-as-evidence', async () => {

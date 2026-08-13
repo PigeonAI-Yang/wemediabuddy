@@ -101,7 +101,9 @@ test('Pi system prompts keep detailed operating playbooks in the shared Skill', 
     readFile('src/main/workspace-intelligence.ts', 'utf8')
   ]);
   const prompts = sources.flatMap((source) => [...source.matchAll(/['"]--append-system-prompt['"]\s*,\s*([^,\]\r\n]+)/g)].map((match) => match[1]));
-  assert.equal(prompts.length, 5);
+  // 5 处既有 Pi spawn 点 + WMB-5229 后台知识编译 RPC（index.ts withKnowledgeCompilePi）共 6 处；
+  // 每个 spawn 点都必须携带权威系统提示（禁止直写文件/DB、禁止最终发布等操作边界）。
+  assert.equal(prompts.length, 6);
   assert.doesNotMatch(prompts.join('\n'), /wmb_(?:prepare|create|save|get|list|read)_[a-z0-9_]+/);
   assert.equal(prompts.every((prompt) => prompt.includes('PI_AUTHORITY_SYSTEM_PROMPT') || prompt.includes('piTaskAuthorityPrompt(')), true);
   assert.match(PI_AUTHORITY_SYSTEM_PROMPT, /禁止直接写文件或数据库/);

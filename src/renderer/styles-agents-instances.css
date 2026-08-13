@@ -82,6 +82,21 @@
   font-size: 12px;
   line-height: 1.4;
 }
+/* WMB-5174 记者卡 claim 摘要行（只显示已落库判定计数；无行不渲染，不伪造）。 */
+.agents-instance-claims {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.agents-job-anchor {
+  color: var(--muted-low);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
 .agents-instance-detail {
   margin: 0;
   color: var(--ink-soft, var(--ink));

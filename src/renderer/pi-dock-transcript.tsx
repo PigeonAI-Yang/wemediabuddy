@@ -113,18 +113,21 @@ const QUERY_USED_GROUPS: ReadonlyArray<{ key: 'readWikiVersionIds' | 'readNoteVe
  * WMB-5214：assistant 回答下方的“知识使用与沉淀”折叠面板。
  * 只展示本轮固定读取版本的入口、风险、写回决策/未写回原因与回执/变更入口；
  * 绝不混入 tool JSON，也绝不把回答正文/内部候选当作证据。
+ * WMB-5231：无 Artifact 但存在 settle 结果（无/非法清单、校验或写回失败）时，
+ * 面板显示可读未写原因；无 Artifact 且无 settle（重启后旧轮次）不渲染空壳。
  */
 function PiKnowledgePanel({ conversationId, question }: { conversationId: string | null; question: string | null }): React.JSX.Element | null {
   const requestId = conversationId && question ? knowledgeQueryWritebackRequestId(conversationId, question) : null;
   const summary = usePiKnowledgeSummary(requestId);
   const artifact = summary?.artifact ?? null;
-  if (!artifact) return null;
-  const decision = artifact.writeBackDecision;
+  const settle = summary?.settle ?? null;
+  if (!artifact && !settle) return null;
+  const decision = artifact?.writeBackDecision ?? null;
   const writtenBack = decision === 'created' || decision === 'updated';
   const riskFlags = summary?.riskFlags ?? [];
   const receipt = summary?.receipt ?? null;
-  const used = QUERY_USED_GROUPS.map((group) => ({ label: group.label, ids: artifact[group.key] ?? [] })).filter((item) => item.ids.length > 0);
-  const receiptEntryId = receipt?.changeSetId ?? artifact.changeSetId;
+  const used = QUERY_USED_GROUPS.map((group) => ({ label: group.label, ids: artifact ? (artifact[group.key] ?? []) : [] })).filter((item) => item.ids.length > 0);
+  const receiptEntryId = receipt?.changeSetId ?? artifact?.changeSetId;
   return (
     <details className={`pi-knowledge-panel${writtenBack ? ' written-back' : ' not-written-back'}`} data-decision={decision} aria-label={`知识使用与沉淀：${writtenBack ? '已沉淀' : '未写回'}`}>
       <summary>
@@ -132,7 +135,7 @@ function PiKnowledgePanel({ conversationId, question }: { conversationId: string
         <span className={`pi-knowledge-panel-badge${writtenBack ? ' ok' : ''}`}>{writtenBack ? '已沉淀' : '未写回'}</span>
       </summary>
       <div className="pi-knowledge-panel-body">
-        {used.length > 0 && <section className="pi-knowledge-used" aria-label="本次使用的知识">
+        {artifact && used.length > 0 && <section className="pi-knowledge-used" aria-label="本次使用的知识">
           <h4>本次使用</h4>
           <ul className="pi-knowledge-used-list">
             {used.map((group) => <li key={group.label} className="pi-knowledge-used-group">
@@ -141,7 +144,7 @@ function PiKnowledgePanel({ conversationId, question }: { conversationId: string
             </li>)}
           </ul>
         </section>}
-        {riskFlags.length > 0 && <section className="pi-knowledge-risks" aria-label="知识风险">
+        {artifact && riskFlags.length > 0 && <section className="pi-knowledge-risks" aria-label="知识风险">
           <h4>风险</h4>
           <ul className="pi-knowledge-risk-list">
             {riskFlags.map((flag, index) => <li key={`${flag.kind}-${flag.versionId ?? index}`} className={`pi-risk-chip ${flag.kind}`} title={flag.note ?? undefined}>
@@ -151,12 +154,18 @@ function PiKnowledgePanel({ conversationId, question }: { conversationId: string
         </section>}
         <section className="pi-knowledge-writeback" aria-label={writtenBack ? '本次沉淀' : '未写回原因'}>
           <h4>{writtenBack ? '本次沉淀' : '未写回原因'}</h4>
-          <p className="pi-knowledge-decision">{piKnowledgeWriteBackDecisionLabel(decision)}</p>
-          {!writtenBack && artifact.skipReason && <p className="pi-knowledge-skip-reason">{artifact.skipReason}</p>}
-          {receipt && <div className="pi-knowledge-receipt">
-            <p className="pi-knowledge-receipt-summary">{receipt.summary}</p>
-            {receiptEntryId && <p className="pi-knowledge-receipt-entry">回执 {piKnowledgeShortId(receipt.id)} · 变更 {piKnowledgeShortId(receiptEntryId)}</p>}
-          </div>}
+          {artifact ? (
+            <>
+              <p className="pi-knowledge-decision">{piKnowledgeWriteBackDecisionLabel(decision)}</p>
+              {!writtenBack && artifact.skipReason && <p className="pi-knowledge-skip-reason">{artifact.skipReason}</p>}
+              {receipt && <div className="pi-knowledge-receipt">
+                <p className="pi-knowledge-receipt-summary">{receipt.summary}</p>
+                {receiptEntryId && <p className="pi-knowledge-receipt-entry">回执 {piKnowledgeShortId(receipt.id)} · 变更 {piKnowledgeShortId(receiptEntryId)}</p>}
+              </div>}
+            </>
+          ) : (
+            <p className="pi-knowledge-settle-reason">{settle?.reason ?? '本轮未产生知识写回。'}</p>
+          )}
         </section>
       </div>
     </details>

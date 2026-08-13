@@ -6,6 +6,8 @@ import { createContentProjectWithVersion, getContentProject } from './content.ts
 import {
   getChangeSet, getWikiPage, listChangeSets
 } from './knowledge-flywheel.ts';
+// WMB-5233：诚实三态（与 Topic/Library 投影同一判定；空壳不显示已编译）。
+import { classifyWikiCompileState } from './knowledge-compile-state.ts';
 import type {
   KnowledgeCanvasDeepLink, KnowledgeCanvasNodeChange, KnowledgeCanvasProjectedNode, KnowledgeCanvasProjectedRelation,
   KnowledgeCanvasProjection, KnowledgeCanvasProjectionInput, KnowledgeCanvasNodeDetail, KnowledgeCanvasNodeDetailInput,
@@ -15,6 +17,7 @@ import type {
   KnowledgeChangeSetRecord, KnowledgeEntityRecord, KnowledgeHealthIssueRecord, KnowledgeNoteRecord,
   KnowledgeUpdateReceiptRecord as SharedKnowledgeUpdateReceiptRecord, KnowledgeWikiPageRecord, KnowledgeWikiPageVersionRecord
 } from '../shared/knowledge-flywheel.ts';
+import type { KnowledgeCompileState } from '../shared/knowledge-compile-state.ts';
 // 回执来自主进程 store 的读 API，其记录类型（affectedTopics 等）以 store 为准。
 import type { KnowledgeUpdateReceiptRecord } from './knowledge-flywheel.ts';
 
@@ -175,7 +178,30 @@ function deepLinkForNode(database: DatabaseSync, node: ProjectedCanvasNodeRow): 
 }
 
 function projectNode(database: DatabaseSync, node: ProjectedCanvasNodeRow) {
-  return { ...node, deepLink: deepLinkForNode(database, node) };
+  const projected = { ...node, deepLink: deepLinkForNode(database, node) } as Record<string, unknown>;
+  // WMB-5233：topic 节点携带诚实三态（uncompiled / legacy_shell / compiled），
+  // 三模式同一身份；非 topic 节点不设置（渲染端回退 compileStatus 行为）。
+  if (node.objectType === 'topic' && node.objectId) {
+    try {
+      const page = database.prepare(`SELECT id FROM knowledge_wiki_pages
+        WHERE subject_type='topic' AND subject_id=? AND lifecycle='active' ORDER BY updated_at DESC LIMIT 1`).get(node.objectId) as { id: string } | undefined;
+      if (page) {
+        const detail = getWikiPage(database, page.id);
+        if (detail) {
+          const wikiPage = detail.page as unknown as KnowledgeWikiPageRecord;
+          const wikiVersion = detail.version as unknown as KnowledgeWikiPageVersionRecord | null;
+          const body = wikiVersion?.body && typeof wikiVersion.body === 'object'
+            ? wikiVersion.body as Readonly<Record<string, unknown>>
+            : null;
+          projected.compileState = classifyWikiCompileState({ page: wikiPage, current: wikiVersion, body });
+        }
+      }
+      if (projected.compileState === undefined) projected.compileState = 'uncompiled' as const;
+    } catch {
+      projected.compileState = 'uncompiled' as const; // 精简 fixture 缺 v56 表 → 无正式编译
+    }
+  }
+  return projected as ProjectedCanvasNodeRow & { deepLink: KnowledgeCanvasDeepLink | null; compileState?: KnowledgeCompileState };
 }
 
 /** health 行 → 投影记录（evidence 解析为对象；SQL 行一次收紧为共享契约类型）。 */
@@ -546,7 +572,12 @@ export function getCanvasNodeDetail(database: DatabaseSync, input: KnowledgeCanv
   const healthIssues = readRelatedHealthIssues(database, node);
   let recentChanges: KnowledgeChangeSetRecord[] = [];
   try { recentChanges = listChangeSets(database, { limit: 8 }).items; } catch { /* 精简 fixture */ }
-  return { node: projectNode(database, node), formal: { wikiPage, wikiPageVersion, notes, entities, healthIssues, recentChanges } };
+  // WMB-5233：诚实三态（与投影节点同一判定；空壳不显示已编译）。
+  const body = wikiPageVersion?.body && typeof wikiPageVersion.body === 'object'
+    ? wikiPageVersion.body as Readonly<Record<string, unknown>>
+    : null;
+  const compileState = classifyWikiCompileState({ page: wikiPage, current: wikiPageVersion, body });
+  return { node: projectNode(database, node), formal: { wikiPage, wikiPageVersion, notes, entities, healthIssues, recentChanges, compileState } };
 }
 
 /**

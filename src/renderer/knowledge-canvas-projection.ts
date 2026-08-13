@@ -29,6 +29,18 @@ export function severityLabel(severity: string | null | undefined): string {
   return SEVERITY_LABELS[String(severity ?? '')] ?? String(severity ?? '');
 }
 
+// WMB-5233：诚实三态用户语言（uncompiled / legacy_shell / compiled）。
+// legacy_shell = 历史初始化初始页（零采纳知识），空壳不得显示“已编译/当前”。
+export const COMPILE_STATE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  uncompiled: '尚未编译',
+  legacy_shell: '初始档案',
+  compiled: '已编译'
+});
+
+export function compileStateLabel(state: string | null | undefined): string {
+  return COMPILE_STATE_LABELS[String(state ?? '')] ?? '';
+}
+
 export const CHANGE_KIND_LABELS: Readonly<Record<string, string>> = Object.freeze({
   created: '新增',
   strengthened: '加强',
@@ -201,6 +213,7 @@ export function mergeProjectionEmphasis(
         changes: node.changes,
         healthIssueIds: node.healthIssueIds,
         deepLink: node.deepLink,
+        compileState: node.compileState,
       },
     ]),
   );

@@ -278,11 +278,21 @@ export type KnowledgeQueryRiskFlag = Readonly<{
   note: string | null;
 }>;
 
-/** WMB-5214：每轮 Query 写回的可读摘要（面板消费；artifact 为 null 表示该轮无写回）。 */
+/** WMB-5231：每轮 Query settle 的可读结果（会话级内存投影，不落库；无 Artifact 时也可见零写原因）。 */
+export type KnowledgeQueryWritebackSettleRecord = Readonly<{
+  state: 'written' | 'not_written';
+  classification: string | null;
+  reason: string;
+  code: string | null;
+}>;
+
+/** WMB-5214：每轮 Query 写回的可读摘要（面板消费；artifact 为 null 表示该轮无写回记录）。 */
 export type KnowledgeQueryWritebackSummaryRecord = Readonly<{
   artifact: KnowledgeQueryArtifactRecord | null;
   riskFlags: readonly KnowledgeQueryRiskFlag[];
   receipt: KnowledgeUpdateReceiptRecord | null;
+  /** WMB-5231：本轮 settle 结果。无/非法清单、冻结版本校验失败或写回失败时为零写原因；写入成功为 written。 */
+  settle: KnowledgeQueryWritebackSettleRecord | null;
 }>;
 
 export type KnowledgeHealthIssueReadFilter = KnowledgeFlywheelReadFilter & Readonly<{

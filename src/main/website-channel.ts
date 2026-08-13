@@ -12,6 +12,7 @@ import {
   updateWebsiteSourceResolution
 } from './intelligence-channels.ts';
 import { extractOfficialItems } from './intelligence-wire.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { canonicalizeUrl, upsertSource } from './sources.ts';
 
 const SEARCH_TIMEOUT_MS = 15_000;
@@ -161,9 +162,10 @@ export function persistWebsiteSourceScan(database: DatabaseSync, input: ScanWebs
 
   const items = extractOfficialItems(page.trialRead.url, page.body ?? '', MAX_ITEMS_PER_SOURCE);
   const sourceIds: string[] = [];
+  const savedSources: Array<{ id: string; revision: number }> = [];
   try {
     for (const item of items) {
-      sourceIds.push(upsertSource(database, {
+      const saved = upsertSource(database, {
         feedId: current.sourceFeedId,
         originalUrl: item.url,
         title: item.title,
@@ -180,7 +182,9 @@ export function persistWebsiteSourceScan(database: DatabaseSync, input: ScanWebs
           httpStatus: page.trialRead.httpStatus,
           fetchedUrl: page.trialRead.url
         })
-      }).id);
+      });
+      savedSources.push({ id: saved.id, revision: saved.revision });
+      sourceIds.push(saved.id);
     }
     const source = updateWebsiteSourceResolution(database, {
       id: current.id,
@@ -199,6 +203,8 @@ export function persistWebsiteSourceScan(database: DatabaseSync, input: ScanWebs
       candidateCount: items.length,
       savedCount: sourceIds.length
     });
+    // WMB-5229：直写保存成功后异步有界编译（不阻断扫描/回执）。
+    for (const saved of savedSources) scheduleSourceKnowledgeCompile({ sourceId: saved.id, revision: saved.revision });
     return { source, receipt, sourceIds };
   } catch (error) {
     return recordScanFailure(database, input, current, checkedAt, page.trialRead, error, items.length, sourceIds);

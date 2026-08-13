@@ -139,9 +139,16 @@ test('WMB-5212 UI: original dossier stays reachable (deep mode + fallback when n
   // 完整档案入口：Wiki 页内一键深查 + 更多菜单保留。
   assert.match(topicView, /打开完整档案/);
   assert.match(topicView, /setDeepMode\(true\)/);
-  // 无编译 Wiki 时兜底显示既有档案，不显示半成品（WMB-5226 去除技术文案）。
-  assert.match(topicView, /主题认识尚未生成/);
+  // 无编译 Wiki 时兜底显示既有档案，不显示半成品（WMB-5226 去除技术文案；WMB-5233 诚实三态）。
+  // uncompiled 用户语言 =「尚未编译」：空壳不显示已编译/当前。
+  assert.match(topicView, /尚未编译/);
   assert.match(topicView, /以下为现有档案/);
+  // WMB-5233：三态用户语言与诚实空壳横幅（legacy_shell = 初始档案，绝不显示已编译/当前）。
+  assert.match(topicView, /COMPILE_STATE_LABELS/);
+  assert.match(topicView, /legacy_shell: '初始档案'/);
+  assert.match(topicView, /uncompiled: '尚未编译'/);
+  assert.match(topicView, /compile-state-\$\{compileState\}/);
+  assert.match(topicView, /isMigration \? COMPILE_STATE_LABELS\.legacy_shell : '当前'/);
   // 既有八类 dossier 分类与 deep 模式原样保留。
   assert.match(topicView, /DOSSIER_CATEGORY_ORDER/);
   assert.match(topicView, /library-topic-deep-tabs/);

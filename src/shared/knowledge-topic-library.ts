@@ -23,6 +23,8 @@ import type {
   KnowledgeWikiPageRecord,
   KnowledgeWikiPageVersionRecord
 } from './knowledge-flywheel.ts';
+// WMB-5233：诚实三态（uncompiled / legacy_shell / compiled），空壳不显示已编译。
+import type { KnowledgeCompileState } from './knowledge-compile-state.ts';
 
 // ===== Topic Wiki 正文（编译器 knowledge-compiler.ts 冻结 shape；主进程解析） =====
 
@@ -122,6 +124,8 @@ export type TopicWikiDetail = Readonly<{
     body: TopicWikiBody | null;
     compileStatus: KnowledgeCompileStatus | null;
     compileNote: string | null;
+    /** WMB-5233：诚实三态（uncompiled / legacy_shell / compiled）；空壳不得显示已编译。 */
+    compileState: KnowledgeCompileState;
   }> | null;
   /** 版本时间线（有界，version_number DESC）。 */
   versions: KnowledgeFlywheelListResult<KnowledgeWikiPageVersionRecord>;

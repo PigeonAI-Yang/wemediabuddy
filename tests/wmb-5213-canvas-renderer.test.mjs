@@ -116,11 +116,13 @@ test('WMB-5213 UI: refresh merge keeps user layout x/y while adopting new object
 
 test('WMB-5213 UI: projection emphasis merges changes/health/deepLink by node id without touching layout', () => {
   const canvas = { id: 'c1', nodes: [{ id: 'n1', x: 5, y: 6, revision: 2, object: { title: '主题' } }] };
-  const projection = { mode: 'change', nodes: [{ id: 'n1', changes: [{ changeType: 'created' }], healthIssueIds: undefined, deepLink: { route: 'topic', objectId: 'topic-1' } }] };
+  const projection = { mode: 'change', nodes: [{ id: 'n1', changes: [{ changeType: 'created' }], healthIssueIds: undefined, deepLink: { route: 'topic', objectId: 'topic-1' }, compileState: 'legacy_shell' }] };
   const merged = mergeProjectionEmphasis(canvas, projection);
   assert.equal(merged?.nodes[0].x, 5);
   assert.equal(merged?.nodes[0].changes?.length, 1);
   assert.equal(merged?.nodes[0].deepLink.route, 'topic');
+  // WMB-5233：诚实三态经投影强调层合并到画布节点（空壳不显示已编译）。
+  assert.equal(merged?.nodes[0].compileState, 'legacy_shell');
   assert.equal(mergeProjectionEmphasis(canvas, null), canvas);
   assert.equal(mergeProjectionEmphasis(null, projection), null);
 });
@@ -164,6 +166,7 @@ const layout = await readFile(new URL('../src/renderer/knowledge-canvas-layout.t
 const relations = await readFile(new URL('../src/renderer/knowledge-canvas-relations.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/renderer/styles-knowledge.css', import.meta.url), 'utf8');
 const mainTsx = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
+const projectionModule = await readFile(new URL('../src/renderer/knowledge-canvas-projection.ts', import.meta.url), 'utf8');
 
 test('WMB-5213 UI: dataChanged subscription replaces the 5s poll as primary path', () => {
   // 轮询不再是主路径：不再有 5000ms setInterval 整画布替换
@@ -238,6 +241,23 @@ test('WMB-5213 UI: node detail opens formal page deep links mapped to existing n
   assert.match(mainTsx, /onOpenDetail=\{\(target\) =>/);
   assert.match(mainTsx, /target\.type === 'topic' && target\.id\) openTopic\(target\.id\)/);
   assert.match(mainTsx, /libraryFocusSourceId/);
+});
+
+// WMB-5233：空壳诚实三态（uncompiled / legacy_shell / compiled）在画布节点与详情如实表达，
+// 空壳（legacy 初始页）绝不显示“已编译/当前”；标签与 chip 全 token。
+test('WMB-5233 UI: canvas shows honest compile state and never current for empty shells', () => {
+  // 节点 chip：compileState 优先，回退 compileStatus 旧行为。
+  assert.match(layout, /compileStateLabel\(status\.compileState\)/);
+  assert.match(layout, /compile-state-\$\{status\.compileState\}/);
+  assert.match(view, /node\.compileState/);
+  // 详情面板：legacy_shell 显示「初始档案（历史初始化，尚无采纳知识）」而非「当前」。
+  assert.match(layout, /初始档案（历史初始化，尚无采纳知识）/);
+  assert.match(layout, /已编译 · 当前/);
+  // 标签函数与 chip 样式走既有 token（无裸色旁路）。
+  assert.match(projectionModule, /legacy_shell: '初始档案'/);
+  assert.match(css, /\.kc-compile\.compile-state-legacy_shell\{/);
+  assert.match(css, /\.kc-compile\.compile-state-uncompiled\{/);
+  assert.doesNotMatch(css, /\.kc-compile\.compile-state-.*#[0-9a-fA-F]{3,6}/);
 });
 
 test('WMB-5213 UI: selected-only action list shows the exact manifest passed to backend', () => {

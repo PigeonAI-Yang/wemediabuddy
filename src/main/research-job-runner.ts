@@ -22,7 +22,7 @@ import {
   type ResearchEvidenceItem
 } from './research-claim-validation.ts';
 
-/** 深度档硬默认（本次唯一档位；gap.budget 缺省/非法时回落）。 */
+/** 深度档硬默认 = 机器硬上限（本次唯一档位；gap.budget 缺省/非法时回落；调用方逐字段上调一律钳制到本档）。 */
 export const RESEARCH_DEFAULT_BUDGET = Object.freeze({
   timeMinutes: 12,
   minValidSources: 15,
@@ -125,11 +125,17 @@ export type ResearchJobRunResult = Readonly<{
   claimStatuses: Readonly<Record<string, ResearchClaimStatus>>;
 }>;
 
-/** 硬默认逐键回落：gap.budget 缺省/非正数时使用固定默认档位值。 */
+/**
+ * 硬默认逐键回落 + 机器硬上限（WMB-5173/5174 生产阻塞）：
+ * - 缺省/非正数/NaN → 固定默认档位值（RESEARCH_DEFAULT_BUDGET）；
+ * - 合法下调（正数且 ≤ 硬上限）原值保留；
+ * - 上调（> RESEARCH_DEFAULT_BUDGET 对应键）一律钳制到硬上限——research.dispatch 等调用方无法放大预算。
+ */
 export function resolveResearchBudget(budget: ResearchBudget | undefined): ResearchBudget {
   const pick = (key: keyof ResearchBudget, fallback: number): number => {
     const value = budget?.[key];
-    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+    return Math.min(value, RESEARCH_DEFAULT_BUDGET[key]);
   };
   return {
     timeMinutes: pick('timeMinutes', RESEARCH_DEFAULT_BUDGET.timeMinutes),

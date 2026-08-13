@@ -286,6 +286,7 @@ button.pi-jump-latest:not(:disabled):not([aria-disabled="true"]):active { transf
 .pi-risk-note { margin-left: 3px; opacity: .75; }
 .pi-knowledge-decision { margin: 0; color: var(--ink-soft); font-weight: 650; }
 .pi-knowledge-skip-reason { margin: 4px 0 0; color: var(--muted); overflow-wrap: anywhere; word-break: break-word; }
+.pi-knowledge-settle-reason { margin: 0; color: var(--muted); overflow-wrap: anywhere; word-break: break-word; }
 .pi-knowledge-receipt { display: grid; gap: 4px; margin-top: 2px; }
 .pi-knowledge-receipt-summary { margin: 0; color: var(--ink-soft); overflow-wrap: anywhere; word-break: break-word; }
 .pi-knowledge-receipt-entry { margin: 0; color: var(--muted-low); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

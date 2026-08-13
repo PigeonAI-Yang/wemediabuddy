@@ -1,5 +1,6 @@
 import { broadcastDataChanged } from './data-changed.ts';
 import { createCommandEnvelope, type CommandActorV1, type CommandReceiptV1 } from './command-dispatcher.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { applyLaneGateBatch, restoreFilteredSource, type LaneGateBatchResult, type LaneJudgmentRecord, type LaneReasonCode, type LaneRestoreResult } from './lane-gate.ts';
 import { getSource, upsertSource, type SourceInput, type SourceRecord } from './sources.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
@@ -50,7 +51,13 @@ export function dispatchSourceUpsertBatch(
       readback: sources
     };
   }).then((receipt) => {
-    if (receipt.ok) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+    if (receipt.ok) {
+      broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+      // WMB-5229：保存事务已提交 → 异步有界编译（不阻断/不回滚保存；同 revision 并发去重）。
+      for (const item of receipt.data?.items ?? []) {
+        scheduleSourceKnowledgeCompile({ sourceId: item.id, revision: item.revision });
+      }
+    }
     return receipt;
   });
 }

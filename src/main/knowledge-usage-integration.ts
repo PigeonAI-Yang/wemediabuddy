@@ -16,6 +16,14 @@
  *   content_version_id 反查其核心包，继承同一批固定 wiki/note 版本（协议 §4.5）；
  * - used 由 usageKind 派生：quoted/paraphrased/reasoning_basis/structure_pattern/
  *   avoided_due_to_risk/rejected_by_user = used；consulted = 仅读取未证影响（§4.4/§6）。
+ *
+ * 零知识语义（WMB-5232 显式契约：如实空血缘，禁止伪造）：
+ * - 业务对象真实存在但无 Topic / Topic 无已编译 Wiki / 无采纳 Note / 无证据时，
+ *   仍按稳定 requestId 生成 Usage 包，血缘字段（wiki/note/evidence）如实为空、
+ *   零 Usage Record（不冒充 used/consulted）——包存在 = 审计面完整（“本次未使用知识”），
+ *   空血缘 = 未声称任何知识被调用；绝不回填后续编译知识（不可变血缘）。
+ * - 只有业务对象本身不存在/无工作空间身份时才跳过（readBoundWorkspaceId 守卫），
+ *   与 WMB-5215/WMB-5216 的“无归属不造血缘”一致。
  */
 import type { DatabaseSync } from 'node:sqlite';
 import type { KnowledgeScope } from './knowledge-flywheel.ts';

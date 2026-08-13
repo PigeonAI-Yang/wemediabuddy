@@ -368,24 +368,39 @@ export function KnowledgeCanvasView({
     [canvas, projection],
   );
   // 常驻状态投影：topic 的 Wiki 编译态 + 健康严重度（关系/变化/健康三模式同规则）。
+  // WMB-5233：优先用投影节点携带的诚实三态（uncompiled/legacy_shell/compiled）；
+  // 投影未就绪时回退 listWikiPages 的 compileStatus 旧行为。
   const nodeStatus = useMemo(() => {
     const map: Record<
       string,
-      { compileStatus?: string; issueCount: number; maxSeverity: string | null }
+      { compileStatus?: string; compileState?: string; issueCount: number; maxSeverity: string | null }
     > = {};
-    for (const node of canvas?.nodes ?? []) {
+    for (const node of (viewCanvas?.nodes ?? []) as Array<{
+      id: string;
+      objectType?: string;
+      objectId?: string | null;
+      compileState?: string;
+      [key: string]: unknown;
+    }>) {
       const issues = issuesForNode(knowledgeOverview.issues, node);
+      const topicWiki = node.objectType === "topic" && node.objectId
+        ? knowledgeOverview.wikiPages[node.objectId]
+        : undefined;
       map[node.id] = {
+        compileState:
+          node.objectType === "topic" && node.objectId
+            ? node.compileState ?? (topicWiki ? undefined : "uncompiled")
+            : undefined,
         compileStatus:
           node.objectType === "topic" && node.objectId
-            ? knowledgeOverview.wikiPages[node.objectId]?.compileStatus
+            ? topicWiki?.compileStatus
             : undefined,
         issueCount: issues.length,
         maxSeverity: maxIssueSeverity(issues),
       };
     }
     return map;
-  }, [canvas?.nodes, knowledgeOverview]);
+  }, [viewCanvas, knowledgeOverview]);
   const switchMode = (nextMode: KnowledgeCanvasProjectionMode) => {
     if (nextMode === projectionMode) return;
     setProjectionMode(nextMode);

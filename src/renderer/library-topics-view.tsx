@@ -9,6 +9,7 @@ import type {
   KnowledgeWikiPageRecord,
   KnowledgeWikiPageVersionRecord
 } from '../shared/knowledge-flywheel';
+import type { KnowledgeCompileState } from '../shared/knowledge-compile-state';
 import type {
   TopicWikiBody,
   TopicWikiDetail,
@@ -32,6 +33,8 @@ type TopicListItem = {
   opportunityCount?: number | null;
   contentCount?: number | null;
   publicationCount?: number | null;
+  // WMB-5233：诚实三态（uncompiled / legacy_shell / compiled）。
+  compileState?: string | null;
 };
 
 type TopicListPage = {
@@ -219,6 +222,21 @@ const COMPILE_STATUS_LABELS: Record<string, string> = {
   stale: '待重编译',
   compiling: '编译中',
   failed: '编译失败',
+};
+
+// WMB-5233：诚实三态用户语言（uncompiled / legacy_shell / compiled）。
+// legacy_shell = 历史初始化（migration/derived-from-legacy）创建的初始页，零采纳知识；
+// 空壳不得显示“已编译/当前”，必须如实表达“初始档案/尚未编译”。
+const COMPILE_STATE_LABELS: Record<string, string> = {
+  uncompiled: '尚未编译',
+  legacy_shell: '初始档案',
+  compiled: '已编译',
+};
+
+const COMPILE_STATE_HINTS: Record<string, string> = {
+  uncompiled: '本主题还没有正式编译的 Wiki：继续保存可靠来源，Pi 会把可验证、可复用的部分编译到这里。',
+  legacy_shell: '本页由历史资料迁移自动建立（初始档案），尚无采纳知识：继续保存来源并编译后将形成正式认识。',
+  compiled: '',
 };
 
 const CONCLUSION_STATUS_LABELS: Record<string, string> = {
@@ -475,6 +493,7 @@ function normalizeTopicListItem(raw: unknown): TopicListItem | null {
     opportunityCount: asNumber(record.opportunityCount) ?? 0,
     contentCount: asNumber(record.contentCount),
     publicationCount: asNumber(record.publicationCount),
+    compileState: asString(record.compileState) ?? null,
   };
 }
 
@@ -780,6 +799,7 @@ function normalizeTopicWikiDetail(raw: unknown): TopicWikiDetail | null {
       body: wikiBody,
       compileStatus: (asString(wikiRecord.compileStatus) ?? null) as KnowledgeCompileStatus | null,
       compileNote: asString(wikiRecord.compileNote) ?? null,
+      compileState: (asString(wikiRecord.compileState) ?? 'uncompiled') as KnowledgeCompileState,
     } : null,
     versions: normalizeListPage(record.versions, normalizeWikiPageVersionRecord),
     receipts: normalizeListPage(record.receipts, normalizeReceiptRecord),
@@ -1527,6 +1547,8 @@ export function LibraryTopicsView(props: {
   const showWikiPage = Boolean(wikiDetail?.wiki);
   const wikiRisks = wikiDetail?.risks ?? null;
   const wikiCompileStatus = wikiDetail?.wiki?.compileStatus ?? null;
+  // WMB-5233：诚实三态（后端读投影派生；无 wiki → uncompiled）。
+  const compileState = (wikiDetail?.wiki?.compileState ?? 'uncompiled') as KnowledgeCompileState;
 
   const scrollToWikiSection = useCallback((section: WikiSectionId) => {
     // 跨页签章节：先切到所属页签，等渲染完成后再滚动定位（DOM 章节始终保留）。
@@ -2048,7 +2070,7 @@ export function LibraryTopicsView(props: {
       <header>
         <strong><span className="topic-wiki-version-num">V{version.versionNumber}</span>{isMigration ? '主题档案初始化' : (version.title || '主题认识')}</strong>
         <div className="library-topic-card-badges">
-          {isCurrent ? <span className="library-topic-badge">当前</span> : null}
+          {isCurrent ? <span className="library-topic-badge">{isMigration ? COMPILE_STATE_LABELS.legacy_shell : '当前'}</span> : null}
           <time>{formatWhen(version.createdAt)}</time>
         </div>
       </header>
@@ -2092,6 +2114,12 @@ export function LibraryTopicsView(props: {
       {wikiCompileStatus && wikiCompileStatus !== 'current' ? <div className={`topic-wiki-compile-banner ${wikiCompileStatus}`} role="status">
         <strong>{COMPILE_STATUS_LABELS[wikiCompileStatus] ?? wikiCompileStatus}</strong>
         {wikiDetail.wiki?.compileNote ? <span>{wikiDetail.wiki.compileNote}</span> : null}
+      </div> : null}
+
+      {/* WMB-5233：空壳诚实三态 —— 尚未编译 / legacy 初始档案，绝不显示“已编译/当前”。 */}
+      {compileState === 'uncompiled' || compileState === 'legacy_shell' ? <div className={`topic-wiki-compile-banner compile-state-${compileState}`} role="status">
+        <strong>{COMPILE_STATE_LABELS[compileState]}</strong>
+        <span>{COMPILE_STATE_HINTS[compileState]}</span>
       </div> : null}
 
       {wikiRisks && (wikiRisks.disputed > 0 || wikiRisks.inference > 0 || wikiRisks.contradicted > 0 || wikiRisks.stale || wikiRisks.failed) ? <div className="topic-wiki-risks" aria-label="知识风险">
@@ -2287,9 +2315,15 @@ export function LibraryTopicsView(props: {
           >
             <div className="topic-object-card-top">
               <strong>{item.title}</strong>
-              <span className={`pill-status ${topicStatusClass(item.status)}`}>
-                <span className="dot" />
-                {topicStatusLabel(item.status)}
+              <span className="topic-object-card-top-badges">
+                {/* WMB-5233：诚实三态（尚未编译 / 初始档案 / 已编译）。 */}
+                <span className={`topic-compile-state ${item.compileState ?? 'uncompiled'}`}>
+                  {COMPILE_STATE_LABELS[item.compileState ?? 'uncompiled']}
+                </span>
+                <span className={`pill-status ${topicStatusClass(item.status)}`}>
+                  <span className="dot" />
+                  {topicStatusLabel(item.status)}
+                </span>
               </span>
             </div>
             {summary ? <p className="topic-object-card-summary">{summary}</p> : null}
@@ -2410,7 +2444,7 @@ export function LibraryTopicsView(props: {
           </div>
           : !wikiDetail ? <p className="library-panel-empty">正在加载主题…</p>
           : showWikiPage ? renderWikiPage() : <>
-          <p className="library-topic-action-note">主题认识尚未生成：继续保存资料后，Pi 会在这里汇总出当前认识。以下为现有档案。</p>
+          <p className="library-topic-action-note">本主题尚未编译（尚无正式 Wiki）：继续保存资料后，Pi 会在这里汇总出当前认识。以下为现有档案。</p>
           <nav className="topic-work-tabs" aria-label="主题工作分段">
             <button type="button" className={segment === 'judgments' ? 'active' : ''} onClick={() => setSegment('judgments')}>
               判断 <span>{counts.judgments}</span>

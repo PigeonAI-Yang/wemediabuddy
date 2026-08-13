@@ -17,6 +17,7 @@ import { JOB_ERROR_CODES, snapshotScanReadback } from './role-job-registry.ts';
 import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { startWorkspaceDailyIntelligence } from './workspace-intelligence.ts';
 import { startStudioDraft } from './agent-runner.ts';
+import { startResearchJob } from './research-job-runtime.ts';
 import { preparePiExtension } from './pi-extension.ts';
 import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
@@ -67,6 +68,7 @@ export async function runRolePolicy(policy: RoleJobPolicy, ctx: EmployeePolicyCo
   if (policy === 'scan') return runScanPolicy(ctx);
   if (policy === 'judge') return runJudgePolicy(ctx);
   if (policy === 'draft') return runDraftPolicy(ctx);
+  if (policy === 'research') return runResearchPolicy(ctx);
   return runOrganizePolicy(ctx);
 }
 
@@ -125,6 +127,29 @@ export function runDraftPolicy(ctx: EmployeePolicyContext): Promise<EmployeePoli
     onEvent: ctx.onEvent,
     onRuntime: (rt) => ctx.registerStoppable(() => rt.stop())
   });
+}
+
+/**
+ * WMB-5173：research 策略（WMB-5172 执行器接线）。研究工单 = reporter + research 块，
+ * 由角色注册表派生 intent='research'；执行入口 startResearchJob 读 context_refs 的
+ * ResearchGap（fail-closed）、硬预算执行、终态落 EvidencePack 并 enqueue research_successor。
+ */
+export async function runResearchPolicy(ctx: EmployeePolicyContext): Promise<EmployeePolicyRun> {
+  const run = await startResearchJob({
+    dataRootPath: ctx.runtime.identity.rootPath,
+    businessDate: ctx.businessDate,
+    mcpUrl: ctx.mcpUrl,
+    xhsMcpUrl: ctx.xhsMcpUrl,
+    activeRuntime: ctx.runtime,
+    workerLeaseId: ctx.workerLeaseId,
+    sessionFile: ctx.sessionFile,
+    onTaskReady: ctx.onTaskReady,
+    onEvent: ctx.onEvent,
+    onRuntime: (rt) => ctx.registerStoppable(() => rt.stop()),
+    jobId: ctx.jobId,
+    signal: ctx.signal
+  });
+  return { task: run.task, reused: run.reused };
 }
 
 function taskCommandContext(lane: string, requestId: string, taskId?: string, workerLeaseId?: string): AgentTaskCommandContext {

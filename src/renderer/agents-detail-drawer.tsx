@@ -6,7 +6,8 @@ import { applyPiTranscriptEvent, isPiOrchestration, isPiSystemEvent, mergePiConv
 import {
   instanceTiming,
   sortInstancesForDisplay,
-  statusWord,
+  instanceStatusWord,
+  researchClaimLine,
   type CrewInstance,
   type CrewProjection,
   type EmployeeRole
@@ -285,7 +286,7 @@ function InstanceRunDetail({
           {roleLabel(inst.roleId)}
           {inst.displayNumber > 0 ? ` #${inst.displayNumber}` : ''}
         </span>
-        <span className={`agents-status-word status-${inst.status}`}>{statusWord(inst.status)}</span>
+        <span className={`agents-status-word status-${inst.status}`}>{instanceStatusWord(inst)}</span>
         <button type="button" className="agents-row-action" onClick={() => onCopyJobId(inst.jobId)}>复制任务编号</button>
       </div>
       <p className="agents-detail-brief" title={inst.brief}>{inst.brief}</p>
@@ -304,6 +305,7 @@ function InstanceRunDetail({
         <span className="agents-detail-pct">{present.percent}</span>
       </div>
       {step ? <p className="agents-instance-step">{step}</p> : null}
+      {researchClaimLine(inst.research) ? <p className="agents-instance-claims">{researchClaimLine(inst.research)}</p> : null}
       <div className="agents-detail-meta">
         <div className="agents-detail-meta-row"><span>任务编号</span><code className="agents-detail-jobid">{inst.jobId}</code></div>
         {inst.taskId ? <div className="agents-detail-meta-row"><span>任务标识</span><span>{inst.taskId}</span></div> : null}
@@ -504,7 +506,7 @@ export function AgentsDetailDrawer({
                     aria-pressed={selected?.jobId === inst.jobId}
                     onClick={() => onSelectJobId(inst.jobId)}
                   >
-                    #{inst.displayNumber || index + 1} · {statusWord(inst.status)}
+                    #{inst.displayNumber || index + 1} · {instanceStatusWord(inst)}
                   </button>
                 ))}
               </div>

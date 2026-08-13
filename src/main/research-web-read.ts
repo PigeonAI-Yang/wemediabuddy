@@ -19,7 +19,7 @@ import { lookup } from 'node:dns/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as z from 'zod';
-import type { Browser, BrowserType } from 'playwright-core';
+import type { BrowserContext, BrowserType } from 'playwright-core';
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
   assertPublicDns,
@@ -312,10 +312,10 @@ export async function guardResearchDocument(
 
 /**
  * Default fallback: render a dynamic public page in a fresh, isolated headless browser
- * (temp user-data-dir + incognito context → zero cookies/session), render-only extraction.
- * Every document navigation (initial + redirect hops) is intercepted and validated
- * fail-closed before dispatch; the final URL is re-validated by the caller. Never
- * performs user-script interaction or credential injection.
+ * (temp user-data-dir via launchPersistentContext → zero cookies/session), render-only
+ * extraction. Every document navigation (initial + redirect hops) is intercepted and
+ * validated fail-closed before dispatch; the final URL is re-validated by the caller.
+ * Never performs user-script interaction or credential injection.
  */
 export async function headlessRenderPublicPage(
   url: string,
@@ -334,14 +334,20 @@ export async function headlessRenderPublicPage(
   if (!executablePath) throw Object.assign(new Error('未找到可用的无头浏览器可执行文件。'), { code: 'WEBSITE_RENDER_UNAVAILABLE' });
   const profileDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-research-render-'));
   const remainingMs = () => Math.max(0, options.deadlineMs - Date.now());
-  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
   try {
-    browser = await chromium.launch({
+    // WMB-5175: playwright-core 1.62 forbids `--user-data-dir` inside chromium.launch args
+    // (throws a misuse error before spawn), so the fresh temp profile is passed through the
+    // official launchPersistentContext(userDataDir, …) API instead. The returned context
+    // owns the browser process and starts with zero cookies/session (brand-new temp dir);
+    // closing it releases the profile lock and our finally removes the temp directory.
+    context = await chromium.launchPersistentContext(profileDir, {
       executablePath,
       headless: true,
-      args: ['--no-first-run', '--disable-gpu', '--disable-extensions', '--no-default-browser-check', `--user-data-dir=${profileDir}`]
+      args: ['--no-first-run', '--disable-gpu', '--disable-extensions', '--no-default-browser-check'],
+      locale: 'en-US',
+      viewport: { width: 1280, height: 900 }
     });
-    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     let status = 0;
     let contentType: string | null = null;
@@ -381,7 +387,7 @@ export async function headlessRenderPublicPage(
       throw error;
     }
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
     await rm(profileDir, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { upsertSource } from './sources.ts';
 import { writeXListTimelineCacheIfImproved } from './x-list-timeline-cache.ts';
 import { saveXPostMetricSnapshot } from './x-post-metrics.ts';
@@ -188,6 +189,8 @@ export function persistBoundXListTimeline(
       source: 'collect',
       fetchedAt: capturedAt
     });
+    // WMB-5229：直写保存成功后异步有界编译（不阻断采集/快照）。
+    for (const { source } of saved) scheduleSourceKnowledgeCompile({ sourceId: source.id, revision: source.revision });
     return success({ binding: updated!, sourceIds, snapshotIds, candidateCount: result.posts.length, capturedAt });
   } catch (error) {
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));

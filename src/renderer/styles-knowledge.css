@@ -184,6 +184,28 @@
   justify-content: space-between;
   gap: 10px;
 }
+.topic-object-card-top-badges {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+}
+/* WMB-5233：诚实三态 chip —— 尚未编译（中性）/ 初始档案（amber）/ 已编译（success），全 token。 */
+.topic-compile-state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  background: color-mix(in srgb, var(--muted-low) 14%, transparent);
+  color: var(--muted);
+}
+.topic-compile-state.uncompiled { background: color-mix(in srgb, var(--muted-low) 14%, transparent); color: var(--muted); }
+.topic-compile-state.legacy_shell { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
+.topic-compile-state.compiled { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
 .topic-object-card-top strong {
   font-size: 14.5px;
   line-height: 1.45;
@@ -556,6 +578,10 @@
 .kc-compile.compile-stale{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
 .kc-compile.compile-compiling{background:color-mix(in srgb,var(--info) 16%,transparent);color:var(--info)}
 .kc-compile.compile-failed{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+/* WMB-5233：空壳诚实三态 chip —— 尚未编译（中性）/ 初始档案（amber）/ 已编译（success），全 token。 */
+.kc-compile.compile-state-uncompiled{background:color-mix(in srgb,var(--muted-low) 18%,transparent);color:var(--muted)}
+.kc-compile.compile-state-legacy_shell{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+.kc-compile.compile-state-compiled{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
 .kc-issue-count{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
 .kc-change-count{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
 .kc-node-detail{position:absolute;z-index:3;top:8px;right:8px;width:22px;height:22px;border:1px solid var(--border-soft);border-radius:6px;background:var(--surface-raised);color:var(--muted);font-size:12px;line-height:1;cursor:pointer;opacity:0;transition:opacity 160ms ease,color 160ms ease}

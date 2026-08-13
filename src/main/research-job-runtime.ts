@@ -1,12 +1,13 @@
 import { broadcastDataChanged } from './data-changed.ts';
 import { recordOperation } from './operations.ts';
 import { readResearchGap, type ResearchEvidencePack } from './research-task-state.ts';
-import type { ResearchGap } from './role-job-registry.ts';
+import { enqueueResearchSuccessor } from './research-successor.ts';
+import type { ResearchGap, ResearchRequiredClaim } from './role-job-registry.ts';
 import { roleReadTools } from '../shared/agent-capabilities.ts';
 import { readWebPage, RESEARCH_READ_TIMEOUT_MS } from './research-web-read.ts';
 import { dispatchSourceUpsertBatch } from './source-commands.ts';
 import type { SourceInput } from './sources.ts';
-import { listResearchClaims, upsertResearchClaim } from './db/research-claims-store.ts';
+import { listResearchClaims, upsertResearchClaim, type ResearchClaimStatus } from './db/research-claims-store.ts';
 import {
   parseClaimProposals,
   parseResearchCandidates,
@@ -14,13 +15,13 @@ import {
   type ResearchRunnerDeps
 } from './research-job-runner.ts';
 import type { ResearchEvidenceItem } from './research-claim-validation.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
-import { requireReceiptData } from './business-command.ts';
+import { requireReceiptData, dispatchBusinessCommand } from './business-command.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { preparePiExtension } from './pi-extension.ts';
 import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
@@ -150,8 +151,10 @@ function researchEvidenceSummary(evidenceByClaim: Readonly<Record<string, readon
  * WMB-5172 §5.6：research 任务终态落盘（succeeded/partial + EvidencePack）。
  * 既有命令面无 research resultRefs 写面（complete/partial 为 daily 专用），本地写 + operation_log
  * 审计 + data-changed 广播，语义与 completeAgentTask 对齐；failed/cancelled 走 dispatchFail/Cancel。
+ * 工作空间写守卫下必须由 startResearchJob 终态段包在 agent_tasks.research_terminal 命令 execute 中调用
+ * （writeAuthorizationDepth>0）；裸库路径直接调用（生产路径测试同构验证）。
  */
-function writeResearchTerminal(database: DatabaseSync, taskId: string, input: { status: 'succeeded' | 'partial'; pack: ResearchEvidencePack }): void {
+export function writeResearchTerminal(database: DatabaseSync, taskId: string, input: { status: 'succeeded' | 'partial'; pack: ResearchEvidencePack }): void {
   const now = new Date().toISOString();
   const phase = input.status === 'succeeded' ? 'completed' : 'partial';
   database.prepare(`UPDATE agent_tasks SET status = ?, phase = ?, result_refs_json = ?, error_code = NULL, error_message = NULL,
@@ -166,6 +169,91 @@ function writeResearchTerminal(database: DatabaseSync, taskId: string, input: { 
     errorCode: input.status === 'partial' ? 'PARTIAL' : undefined
   });
   broadcastDataChanged({ scopes: ['agent', 'today'], reason: `agent.research.${input.status}` });
+}
+
+// ============================================================================
+// WMB-5173 写守卫合规：research_claims 批量持久化（单命令原子 + 稳定重放键）
+// ============================================================================
+
+/** runner persistClaims 单条声明（与 ResearchRunnerDeps.persistClaims 元素同构）。 */
+export type ResearchClaimPersistInput = Readonly<{
+  claimKey: string;
+  claimText: string;
+  claimType: ResearchRequiredClaim['type'];
+  status: ResearchClaimStatus;
+  verdictReason: string;
+  evidenceSourceIds: readonly string[];
+  verifiedAt: string;
+}>;
+
+/**
+ * 整批声明在单个事务内 upsert：任一 claim 失败即抛错 → 调用方（dispatcher 或裸库调用点）
+ * 回滚整批，零部分写；按 (task_id, claim_key) 幂等 upsert（重放不产生第二行、不覆盖冻结字段）。
+ */
+function persistClaimsBatch(database: DatabaseSync, taskId: string, claims: readonly ResearchClaimPersistInput[]): void {
+  for (const claim of claims) {
+    const result = upsertResearchClaim(database, {
+      taskId,
+      claimKey: claim.claimKey,
+      claimText: claim.claimText,
+      claimType: claim.claimType,
+      status: claim.status,
+      verdictReason: claim.verdictReason,
+      evidenceSourceIds: [...claim.evidenceSourceIds],
+      verifiedAt: claim.verifiedAt
+    });
+    if (!result.ok) throw new Error(`claim 写入失败：${result.error.message}`);
+  }
+}
+
+/**
+ * 稳定 requestId：同一任务同一逻辑批恒同键（dispatcher 按 (workspace,requestId) 重放去重，
+ * 同键同输入返回原收据不重执行），不同内容批互异（绝不 REQUEST_REPLAY_CONFLICT）；
+ * 内容哈希派生（非 randomUUID/时间戳），跨重启/乱序确定性。
+ */
+function researchClaimsRequestId(taskId: string, claims: readonly ResearchClaimPersistInput[]): string {
+  const digest = createHash('sha256').update(JSON.stringify(claims.map((claim) => ({
+    claimKey: claim.claimKey,
+    claimText: claim.claimText,
+    claimType: claim.claimType,
+    status: claim.status,
+    verdictReason: claim.verdictReason,
+    evidenceSourceIds: [...claim.evidenceSourceIds],
+    verifiedAt: claim.verifiedAt
+  })))).digest('hex');
+  return `${taskId}:claims:${digest.slice(0, 24)}`;
+}
+
+/**
+ * WMB-5173：research_claims 批量持久化生产接线（startResearchJob deps.persistClaims 同构）。
+ * - 裸库（无 dispatchCommand）：直写（既有测试分支语义，无写守卫）。
+ * - 活动运行时（写守卫）：整批原子包在 dispatchBusinessCommand 单事务中；
+ *   requestId 内容稳定 → 同批重放返回原收据；失败收据经 requireReceiptData 抛错（fail-closed）。
+ */
+export async function dispatchPersistResearchClaims(
+  dependency: AgentTaskMutationDependency,
+  input: { taskId: string; claims: readonly ResearchClaimPersistInput[]; workerLeaseId?: string; causation?: Readonly<Record<string, unknown>> }
+): Promise<void> {
+  if (!('dispatchCommand' in dependency)) {
+    persistClaimsBatch(dependency, input.taskId, input.claims);
+    return;
+  }
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'research_claims.upsert_batch',
+    requestId: researchClaimsRequestId(input.taskId, input.claims),
+    actor: schedulerActor('research-runner'),
+    input: { taskId: input.taskId, claims: input.claims },
+    boundIdentity: { entityType: 'research_claim', taskId: input.taskId },
+    entityType: 'research_claim',
+    taskId: input.taskId,
+    workerLeaseId: input.workerLeaseId,
+    causation: input.causation,
+    execute: (db, normalizedInput) => {
+      persistClaimsBatch(db, input.taskId, normalizedInput.claims);
+      return { data: { taskId: input.taskId, written: normalizedInput.claims.length }, entityId: input.taskId, readback: null };
+    }
+  });
+  requireReceiptData(receipt);
 }
 
 /**
@@ -350,19 +438,13 @@ export async function startResearchJob(input: {
         }, taskCommandContext(lane, `${task.id}:progress:${randomUUID()}`, task.id, input.workerLeaseId, { requestId: startRequestId }));
       },
       persistClaims: async (claims) => {
-        for (const claim of claims) {
-          const result = upsertResearchClaim(database, {
-            taskId: task.id,
-            claimKey: claim.claimKey,
-            claimText: claim.claimText,
-            claimType: claim.claimType,
-            status: claim.status,
-            verdictReason: claim.verdictReason,
-            evidenceSourceIds: [...claim.evidenceSourceIds],
-            verifiedAt: claim.verifiedAt
-          });
-          if (!result.ok) throw new Error(`claim 写入失败：${result.error.message}`);
-        }
+        // WMB-5173：写守卫下必须经命令派发（dispatchPersistResearchClaims 内部按依赖选路）。
+        await dispatchPersistResearchClaims(dependency, {
+          taskId: task.id,
+          claims,
+          workerLeaseId: input.workerLeaseId,
+          causation: { requestId: startRequestId }
+        });
       },
       listClaims: () => Promise.resolve(listResearchClaims(database, task.id).map((claim) => ({
         id: claim.id,
@@ -391,12 +473,36 @@ export async function startResearchJob(input: {
       return { task: getAgentTask(database, task.id) ?? task, reused: started.reused };
     }
     if (run.pack) {
+      // 机器不变量：EvidencePack 仅在 succeeded/partial 终态产出（runner 保证）；防御性 fail-closed。
+      if (run.terminal !== 'succeeded' && run.terminal !== 'partial') {
+        throw Object.assign(new Error(`RESEARCH_TERMINAL_STATUS_MISMATCH: EvidencePack 必须伴随 succeeded/partial（实际 ${run.terminal}）。`), { code: 'RESEARCH_FAILED' });
+      }
+      const terminalStatus = run.terminal;
+      const evidencePack = run.pack;
       await dispatchReportAgentTaskProgress(dependency, task.id, {
-        phase: run.terminal === 'succeeded' ? 'completed' : 'partial',
-        progress: { ...run.progress, message: run.terminal === 'succeeded' ? '研究完成：全部 required claim 已判定。' : '研究一轮耗尽：存在未解决声明。' },
+        phase: terminalStatus === 'succeeded' ? 'completed' : 'partial',
+        progress: { ...run.progress, message: terminalStatus === 'succeeded' ? '研究完成：全部 required claim 已判定。' : '研究一轮耗尽：存在未解决声明。' },
         checkpoint: { ...run.checkpoint }
       }, taskCommandContext(lane, `${task.id}:progress:terminal`, task.id, input.workerLeaseId, { requestId: startRequestId }));
-      writeResearchTerminal(database, task.id, { status: run.terminal, pack: run.pack });
+      // 工作空间写守卫要求经命令派发（writeAuthorizationDepth>0）；裸库路径直接本地写。
+      if ('dispatchCommand' in dependency) {
+        await dispatchBusinessCommand(dependency, {
+          command: 'agent_tasks.research_terminal',
+          requestId: `${task.id}:terminal:${terminalStatus}:${randomUUID()}`,
+          actor: schedulerActor(lane),
+          input: { taskId: task.id, status: terminalStatus },
+          boundIdentity: { entityType: 'agent_task', entityId: task.id },
+          entityType: 'agent_task',
+          execute: (db) => {
+            writeResearchTerminal(db, task.id, { status: terminalStatus, pack: evidencePack });
+            enqueueResearchSuccessor(db, { researchTaskId: task.id });
+            return { data: { taskId: task.id, status: terminalStatus }, entityId: task.id, readback: null };
+          }
+        });
+      } else {
+        writeResearchTerminal(database, task.id, { status: terminalStatus, pack: evidencePack });
+        enqueueResearchSuccessor(database, { researchTaskId: task.id });
+      }
     }
     return { task: getAgentTask(database, task.id) ?? task, reused: started.reused };
   } catch (error) {

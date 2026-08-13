@@ -823,6 +823,39 @@ export function writebackQueryKnowledge(database: DatabaseSync, rawInput: Knowle
 }
 
 // ============================================================
+// settle 结果（会话级内存投影：无 Artifact 的零写原因也可见；不落库、不改 schema）
+// ============================================================
+
+export type QueryWritebackSettleOutcome = Readonly<{
+  state: 'written' | 'not_written';
+  classification: QueryWritebackClassification | null;
+  reason: string;
+  code: string | null;
+}>;
+
+const QUERY_WRITEBACK_SETTLE_LIMIT = 1000;
+const queryWritebackSettleOutcomes = new Map<string, QueryWritebackSettleOutcome>();
+
+/** 记录一轮 settle 的可读结果（同 requestId 幂等覆盖；超限丢最旧，防长期会话无界增长）。 */
+export function recordQueryWritebackSettleOutcome(requestId: string, outcome: QueryWritebackSettleOutcome): void {
+  queryWritebackSettleOutcomes.set(requestId, Object.freeze(outcome));
+  if (queryWritebackSettleOutcomes.size > QUERY_WRITEBACK_SETTLE_LIMIT) {
+    const oldest = queryWritebackSettleOutcomes.keys().next().value;
+    if (oldest !== undefined) queryWritebackSettleOutcomes.delete(oldest);
+  }
+}
+
+/** 读回一轮 settle 结果；无记录（如应用重启后的旧轮次）→ null。 */
+export function getQueryWritebackSettleOutcome(requestId: string): QueryWritebackSettleOutcome | null {
+  return queryWritebackSettleOutcomes.get(requestId) ?? null;
+}
+
+/** 回复文本中是否存在 ```json 围栏（无论内容是否合法）；settle 用于区分「无清单」与「清单非法」。 */
+export function hasQueryWritebackFence(text: string): boolean {
+  return /```json\s*[\s\S]*?```/.test(text ?? '');
+}
+
+// ============================================================
 // 只读摘要（面板消费）：Artifact + 风险标记 + Receipt
 // ============================================================
 
@@ -865,7 +898,11 @@ export function resolveQueryWritebackRiskFlags(database: DatabaseSync, artifact:
 }
 
 /**
- * 每轮 Query 写回摘要（面板单次调用）；无 Artifact → { artifact: null, riskFlags: [], receipt: null }。
+ * 每轮 Query 写回摘要（面板单次调用）。
+ * - 有 Artifact → 返回 store 记录 + 风险标记 + 回执，settle 优先用本轮会话内记录（含分类），
+ *   无记录（重启后的旧轮次）则以 written 兜底；
+ * - 无 Artifact → { artifact: null, riskFlags: [], receipt: null, settle: 会话内 settle 结果或 null }，
+ *   使「无/非法清单、校验失败、写回失败」的零写原因在面板可见。
  * 返回 store 记录形态（IPC 边界序列化后由 preload 按 shared KnowledgeQueryWritebackSummaryRecord 消费）。
  */
 export function getQueryWritebackSummary(
@@ -875,12 +912,20 @@ export function getQueryWritebackSummary(
   artifact: KnowledgeQueryArtifactRecord | null;
   riskFlags: readonly KnowledgeQueryRiskFlag[];
   receipt: KnowledgeUpdateReceiptRecord | null;
+  settle: QueryWritebackSettleOutcome | null;
 }> {
   const artifact = getQueryArtifactByRequest(database, requestId);
-  if (!artifact) return Object.freeze({ artifact: null, riskFlags: Object.freeze([]), receipt: null });
+  const settle = getQueryWritebackSettleOutcome(requestId);
+  if (!artifact) return Object.freeze({ artifact: null, riskFlags: Object.freeze([]), receipt: null, settle });
   return Object.freeze({
     artifact,
     riskFlags: Object.freeze(resolveQueryWritebackRiskFlags(database, artifact)),
-    receipt: artifact.receiptId ? getUpdateReceiptByRequest(database, artifact.workspaceId, requestId) : null
+    receipt: artifact.receiptId ? getUpdateReceiptByRequest(database, artifact.workspaceId, requestId) : null,
+    settle: settle ?? Object.freeze({
+      state: 'written' as const,
+      classification: null,
+      reason: `本轮已写回：${artifact.writeBackDecision}。`,
+      code: null
+    })
   });
 }

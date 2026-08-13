@@ -392,3 +392,23 @@
 .fermenting-row.selected{background:color-mix(in srgb,var(--surface-selected) 90%,transparent);box-shadow:inset 3px 0 0 var(--accent);}
 .fermenting-row{cursor:pointer;}
 .today-topic-maintenance{margin:10px 0;padding:9px 12px;border:1px solid color-mix(in srgb, var(--amber) 55%, var(--border));border-radius:9px;background:var(--amber-soft);color:var(--amber);text-align:left}
+
+/* WMB-5174 研究缺口 · 等你批（只投影 unresolved required needs_user；琥珀 = 需要人类处理）。 */
+.today-research-gaps{margin:10px 0;border:1px solid color-mix(in srgb, var(--amber) 45%, var(--border));border-radius:11px;background:color-mix(in srgb, var(--amber) 6%, var(--surface-raised));padding:10px 12px;display:grid;gap:8px}
+.today-research-gaps-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.today-research-gaps-title{margin:0;font-size:13.5px;font-weight:700;color:var(--amber)}
+.today-research-gaps-note{margin:0;font-size:12px;color:var(--muted)}
+.today-research-gap-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.today-research-gap{border-top:1px solid var(--border-soft, var(--border));padding-top:8px;display:grid;gap:6px}
+.today-research-gap-claims{margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.today-research-gap-claim{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--border);border-radius:7px;background:var(--surface);padding:4px 8px;font-size:12px;color:var(--ink);max-width:100%}
+.today-research-gap-claim b{font-weight:700;color:var(--ink-soft);font-family:var(--mono);font-size:11px}
+.today-research-gap-claim-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.today-research-gap-meta{margin:0;font-size:11.5px;color:var(--muted-low)}
+.today-research-gap-actions{display:flex;flex-wrap:wrap;gap:6px}
+.today-research-gap-action{border:1px solid var(--border-strong);border-radius:7px;background:var(--surface-raised);color:var(--ink-soft);padding:5px 10px;font-size:12px;cursor:pointer}
+.today-research-gap-action:hover:not(:disabled){border-color:var(--accent);color:var(--ink);background:var(--surface-hover)}
+.today-research-gap-action.strong{border-color:color-mix(in srgb, var(--amber) 55%, var(--border));background:color-mix(in srgb, var(--amber) 10%, var(--surface-raised));color:var(--amber)}
+.today-research-gap-action.strong:hover:not(:disabled){border-color:var(--amber);background:color-mix(in srgb, var(--amber) 16%, var(--surface-raised))}
+.today-research-gap-action:disabled{opacity:0.45;cursor:default}
+.today-research-gap-msg{margin:0;font-size:12px;color:var(--ink-soft)}

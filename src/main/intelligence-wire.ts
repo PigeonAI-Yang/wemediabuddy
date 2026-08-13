@@ -8,6 +8,7 @@ import {
 } from './intelligence-wire-pages.ts';
 export { extractOfficialItems, extractReleaseItems } from './intelligence-wire-pages.ts';
 import { ensureRegistrySourceFeed, upsertSource } from './sources.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { collectBoundXListTimeline } from './x-list-execution.ts';
 import { readXListTimelineCache, type XListTimelineCachePost } from './x-list-timeline-cache.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
@@ -217,6 +218,7 @@ export async function runOfficialWebWire(input: {
       });
       const items = extractOfficialItems(page.finalUrl || source.url, body, OFFICIAL_ITEMS_PER_SOURCE);
       const savedIds: string[] = [];
+      const savedSources: Array<{ id: string; revision: number }> = [];
       if (items.length > 0) {
         for (const item of items) {
           const saved = upsertSource(input.database, {
@@ -242,9 +244,12 @@ export async function runOfficialWebWire(input: {
               fetchedUrl: page.finalUrl
             })
           });
+          savedSources.push({ id: saved.id, revision: saved.revision });
           savedIds.push(saved.id);
         }
       }
+      // WMB-5229：直写保存成功后异步有界编译（不阻断巡检）。
+      for (const saved of savedSources) scheduleSourceKnowledgeCompile({ sourceId: saved.id, revision: saved.revision });
       sourceIds.push(...savedIds);
       checkpoint = mergeWireCheckpoint(checkpoint, {
         completedSourceIds: [source.id],
@@ -303,7 +308,7 @@ function upsertTimelinePost(
   post: XListTimelineCachePost,
   evidence: Record<string, unknown>
 ): string {
-  return upsertSource(database, {
+  const saved = upsertSource(database, {
     feedId: binding.sourceFeedId,
     originalUrl: post.url,
     title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${binding.name} 动态`,
@@ -315,7 +320,10 @@ function upsertTimelinePost(
       avatarUrl: post.avatarUrl ?? (typeof evidence.avatarUrl === 'string' ? evidence.avatarUrl : null),
       displayName: post.displayName ?? (typeof evidence.displayName === 'string' ? evidence.displayName : null)
     })
-  }).id;
+  });
+  // WMB-5229：直写保存成功后异步有界编译（不阻断巡检）。
+  scheduleSourceKnowledgeCompile({ sourceId: saved.id, revision: saved.revision });
+  return saved.id;
 }
 
 export async function fetchWithTimeout(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<Response> {

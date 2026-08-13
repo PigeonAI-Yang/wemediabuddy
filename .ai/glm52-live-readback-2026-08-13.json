@@ -1,0 +1,69 @@
+{
+  "claim": {
+    "key": "glm52_official_price_rise",
+    "text": "GLM 5.2 官方在 OpenRouter 涨价",
+    "type": "price"
+  },
+  "runAt": "2026-08-12T23:59:42.873Z",
+  "note": "产品路径真实读取（wmb_read_web_page 底层 + 受控 headless fallback）；静态失败/无定价行时尝试渲染。",
+  "targets": [
+    {
+      "url": "https://zhipuai.cn/pricing",
+      "label": "zhipu-official-pricing",
+      "startedAt": "2026-08-12T23:59:42.873Z",
+      "static": {
+        "ok": true,
+        "ms": 727,
+        "renderMode": "static",
+        "title": "Z.ai - Inspiring AGI to Benefit Humanity",
+        "bodyTextLength": 2492,
+        "bodyHead": "Z.ai - Inspiring AGI to Benefit Humanity GLM MaaS 产品 研究 关于我们 EN 中 合作咨询 你好 我是AutoClaw 头脑风暴 逻辑推理 信息问答 内容创作 创意开发 AutoClaw，替你干活的 AI 搭档 只需1分钟，给每台电脑装上小龙虾 GLM模型 新一代大模型全栈技术体系 GLM-5.2 GLM-5.2 智谱上线并开源的新一代旗舰模型。在Artificial Analysis综合榜单上，GLM-5.2取得51分，与A"
+      },
+      "fallback": {
+        "ok": true,
+        "ms": 3718,
+        "status": 200,
+        "contentType": "text/html; charset=utf-8",
+        "finalUrl": "https://www.zhipuai.cn/pricing",
+        "title": "Z.ai - Inspiring AGI to Benefit Humanity",
+        "bodyTextLength": 2612
+      },
+      "pricingLines": []
+    },
+    {
+      "url": "https://openrouter.ai/models/zhipu/glm-5.2",
+      "label": "openrouter-glm52-model-page",
+      "startedAt": "2026-08-12T23:59:47.318Z",
+      "static": {
+        "ok": true,
+        "ms": 1065,
+        "renderMode": "static",
+        "title": "OpenRouter",
+        "bodyTextLength": 387,
+        "bodyHead": "OpenRouter Skip to content Search ⌘ K Home Models Benchmarks Chat Rankings Apps Docs © 2026 OpenRouter, Inc Product Chat Rankings Benchmarks Apps Discover Models Providers Pricing Enterprise Labs Company About Blog Careers Hiring Privacy Te"
+      },
+      "fallback": {
+        "ok": true,
+        "ms": 7257,
+        "status": 200,
+        "contentType": "text/html; charset=utf-8",
+        "finalUrl": "https://openrouter.ai/zhipu/glm-5.2",
+        "title": "OpenRouter",
+        "bodyTextLength": 408
+      },
+      "pricingLines": []
+    }
+  ],
+  "claimAssessment": {
+    "verdict": {
+      "status": "source_unavailable",
+      "verdictReason": "no_pricing_text_in_static_body"
+    },
+    "threshold": {
+      "passes": false,
+      "reason": "insufficient_evidence"
+    },
+    "evidenceItems": [],
+    "note": "无建议时机器校验按可核验证据产出（无证据 → unresolved/source_unavailable 而非伪造 supported）。"
+  }
+}

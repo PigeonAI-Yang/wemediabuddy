@@ -25,6 +25,32 @@ import { appConfirm } from './app-confirm';
 
 export type SettingsSectionId = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
 
+/** WMB-5174 Today「研究缺口 · 等你批」行投影（与 src/main/research-successor-projection.ts 同构）。 */
+export type ResearchSuccessorGapItem = Readonly<{
+  id: string;
+  parentJobId: string;
+  parentTaskId: string;
+  researchTaskId: string;
+  parentRoleId: 'writer' | 'planner' | 'librarian';
+  unresolvedClaims: ReadonlyArray<Readonly<{ key: string; text: string | null; type: 'fact' | 'price' | 'policy' | null }>>;
+  decision: 'narrow' | 'supplement' | 'accept' | null;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+/** 三动作可读标签（与 research-successor RESEARCH_SUCCESSOR_ACTIONS 对应）。 */
+const RESEARCH_DECISION_LABEL: Readonly<Record<'narrow' | 'supplement' | 'accept', string>> = Object.freeze({
+  narrow: '收窄范围',
+  supplement: '手动补料',
+  accept: '接受并标注待核实'
+});
+
+const RESEARCH_PARENT_ROLE_LABEL: Readonly<Record<'writer' | 'planner' | 'librarian', string>> = Object.freeze({
+  writer: '写手',
+  planner: '策划',
+  librarian: '资料员'
+});
+
 export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void; openStudio: (projectId?: string) => void;
@@ -61,6 +87,9 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const sssCount = todayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
   const [proposalSummary, setProposalSummary] = useState<Awaited<ReturnType<typeof window.wmb.getProposalLedgerSummary>>>(null);
+  const [researchGaps, setResearchGaps] = useState<ResearchSuccessorGapItem[]>([]);
+  const [researchBusyId, setResearchBusyId] = useState<string | null>(null);
+  const [researchMessage, setResearchMessage] = useState('');
   const [detailSource, setDetailSource] = useState<TodaySource | null>(null);
   const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
   const [detailBodyLoading, setDetailBodyLoading] = useState(false);
@@ -143,6 +172,39 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     });
     return () => { active = false; unsubscribe(); };
   }, [planDate]);
+
+  // WMB-5174：Today「研究缺口 · 等你批」只读投影（仅 unresolved required needs_user 上桌）。
+  useEffect(() => {
+    let active = true;
+    const loadGaps = () => void window.wmb.listResearchSuccessorsNeedsUser().then((items) => {
+      if (active) setResearchGaps(items ?? []);
+    }).catch(() => {});
+    loadGaps();
+    const unsubscribe = window.wmb.onDataChanged((event) => {
+      if (event.scopes.includes('today') || event.scopes.includes('agent')) loadGaps();
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [planDate]);
+
+  const decideResearchGap = async (jobId: string, decision: keyof typeof RESEARCH_DECISION_LABEL) => {
+    if (researchBusyId) return;
+    setResearchBusyId(jobId);
+    setResearchMessage('');
+    try {
+      const result = await window.wmb.decideResearchSuccessor({ jobId, decision });
+      if (result && typeof result === 'object' && result.ok) {
+        setResearchMessage(`已选择「${RESEARCH_DECISION_LABEL[decision]}」：原角色续派已恢复待调度。`);
+        window.setTimeout(() => { refresh(); window.wmb.listResearchSuccessorsNeedsUser().then((items) => setResearchGaps(items ?? [])).catch(() => {}); }, 250);
+      } else {
+        const error = result && typeof result === 'object' && result.error ? result.error : null;
+        setResearchMessage(error ? `决策未生效（${error.code}）：${error.message}` : '决策未生效：未知错误。');
+      }
+    } catch (error) {
+      setResearchMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setResearchBusyId(null);
+    }
+  };
 
   useEffect(() => {
     if (!detailSource) { setDetailBody(null); setDetailBodyError(''); setDetailBodyLoading(false); return; }
@@ -506,6 +568,37 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         </aside>
       </div>
       {pendingTopicMaintenance ? <button className="today-topic-maintenance" type="button" onClick={() => openTopic?.('')}>有 {pendingTopicMaintenance} 份主题整理提案待你批准</button> : null}
+      {researchGaps.length > 0 ? (
+        <section className="today-research-gaps" aria-label="研究缺口 · 等你批">
+          <header className="today-research-gaps-head">
+            <h3 className="today-research-gaps-title">研究缺口 · 等你批</h3>
+            <span className="today-research-gaps-note">研究补料有未解决声明，需你决策后续动作</span>
+          </header>
+          <ul className="today-research-gap-list">
+            {researchGaps.map((gap) => (
+              <li className="today-research-gap" key={gap.id} data-successor={gap.id}>
+                <p className="today-research-gap-claims">
+                  {gap.unresolvedClaims.map((claim) => (
+                    <span className="today-research-gap-claim" key={claim.key} title={claim.text ?? undefined}>
+                      <b>{claim.key}</b>
+                      {claim.text ? <span className="today-research-gap-claim-text">{claim.text}</span> : null}
+                    </span>
+                  ))}
+                </p>
+                <p className="today-research-gap-meta">
+                  父工单 {RESEARCH_PARENT_ROLE_LABEL[gap.parentRoleId]} · 研究任务 #{gap.researchTaskId.slice(0, 8)} · 等待你的决策
+                </p>
+                <div className="today-research-gap-actions">
+                  <button type="button" className="today-research-gap-action" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'narrow')}>收窄</button>
+                  <button type="button" className="today-research-gap-action" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'supplement')}>手动补料</button>
+                  <button type="button" className="today-research-gap-action strong" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'accept')}>接受并标注待核实</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {researchMessage ? <p className="today-research-gap-msg" role="status">{researchMessage}</p> : null}
+        </section>
+      ) : null}
       <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry} selectedId={fermentSelectedItem?.id ?? null} onSelectItem={onFermentSelectedItemChange}/>
     </section>
     <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>

@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
-import { roleOverviewStatus, sortInstancesForDisplay, statusWord, type CrewProjection, type EmployeeRole } from './agents-instance-logic';
+import { instanceStatusWord, roleOverviewStatus, sortInstancesForDisplay, type CrewProjection, type EmployeeRole } from './agents-instance-logic';
 import { progressPresentation, StatusDot, type ProgressPresentation, type RosterRow } from './agents-roster-parts';
 
 /** 员工高卡骨架：整卡 button（无嵌套交互元素），头像居中，进度轨主导，状态行收尾。 */
@@ -143,7 +143,7 @@ export function RoleOverviewRow({
   if (leader) {
     const running = leader.status === 'running';
     dotStatus = leader.status;
-    word = statusWord(leader.status);
+    word = instanceStatusWord(leader);
     present = progressPresentation(leader.progressRatio, running);
     if (running) summary = leader.progressLabel ?? leader.phase;
   } else if (legacyBusy) {

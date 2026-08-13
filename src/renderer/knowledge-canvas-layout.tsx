@@ -2,6 +2,7 @@ import { CanvasRelations } from './knowledge-canvas-relations';
 import { relationNames } from './knowledge-canvas-types';
 import {
   changeKindLabel,
+  compileStateLabel,
   issueTypeLabel,
   projectionNodeClass,
   severityLabel,
@@ -339,11 +340,16 @@ export function KnowledgeCanvasLayout({ c }: { c: any }) {
                         : node.objectType === "note"
                           ? "当前判断"
                           : node.objectType}
-                    {status?.compileStatus && (
+                    {/* WMB-5233：空壳诚实三态优先（uncompiled/legacy_shell/compiled）；投影未就绪回退 compileStatus。 */}
+                    {status?.compileState ? (
+                      <em className={`kc-compile compile-state-${status.compileState}`}>
+                        {compileStateLabel(status.compileState)}
+                      </em>
+                    ) : status?.compileStatus ? (
                       <em className={`kc-compile compile-${status.compileStatus}`}>
                         {compileStatusLabel(status.compileStatus)}
                       </em>
-                    )}
+                    ) : null}
                     {status?.issueCount > 0 && (
                       <em className="kc-issue-count">健康 {status.issueCount}</em>
                     )}
@@ -714,13 +720,18 @@ export function KnowledgeCanvasLayout({ c }: { c: any }) {
                   <strong>Wiki 页面</strong>
                   <p>{nodeDetail.formal.wikiPage.title}</p>
                   <small>
-                    {nodeDetail.formal.wikiPage.compileStatus === "current"
-                      ? "当前"
-                      : nodeDetail.formal.wikiPage.compileStatus === "stale"
-                        ? "陈旧"
-                        : nodeDetail.formal.wikiPage.compileStatus === "compiling"
-                          ? "编译中"
-                          : "编译失败"}
+                    {/* WMB-5233：空壳诚实三态 —— legacy 初始档案不得显示“当前”。 */}
+                    {nodeDetail.formal.compileState === "uncompiled"
+                      ? "尚未编译"
+                      : nodeDetail.formal.compileState === "legacy_shell"
+                        ? "初始档案（历史初始化，尚无采纳知识）"
+                        : nodeDetail.formal.wikiPage.compileStatus === "current"
+                          ? "已编译 · 当前"
+                          : nodeDetail.formal.wikiPage.compileStatus === "stale"
+                            ? "已编译 · 陈旧"
+                            : nodeDetail.formal.wikiPage.compileStatus === "compiling"
+                              ? "编译中"
+                              : "编译失败"}
                     {nodeDetail.formal.wikiPageVersion
                       ? ` · 版本 ${nodeDetail.formal.wikiPageVersion.versionNumber}`
                       : ""}

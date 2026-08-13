@@ -13,6 +13,7 @@ import { notifyDeskJobEvent } from './manager-job-notify.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import type { McpRuntime } from './mcp.ts';
 import { handleTopicReproposalJobEvent } from './topic-maintenance-reproposal.ts';
+import { handleResearchSuccessorJobEvent } from './research-successor.ts';
 
 export type JobsIpcDependencies = {
   getActiveRuntime: () => ActiveWorkspaceRuntime | null;
@@ -42,6 +43,7 @@ export function ensureJobsSpawner(deps: JobsIpcDependencies) {
         handle: jobId && spawner ? spawner.getHandle(jobId) : null
       });
       void handleTopicReproposalJobEvent(runtime, event).catch((error) => console.error('[topic-reproposal-event]', error));
+      void handleResearchSuccessorJobEvent(runtime, event).catch((error) => console.error('[research-successor-event]', error));
     },
     execute: createGenericEmployeeRunner(
       () => deps.getActiveRuntime(),

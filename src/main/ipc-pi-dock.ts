@@ -21,7 +21,10 @@ import { applyKnowledgeChangeSet, KNOWLEDGE_FLYWHEEL_CHANGE_SET_COMMAND, type Kn
 import {
   extractQueryWritebackManifest,
   finalizeQueryWriteback,
+  hasQueryWritebackFence,
   prepareQueryWriteback,
+  QueryWritebackError,
+  recordQueryWritebackSettleOutcome,
   stripQueryWritebackBlock,
   type KnowledgeQueryWritebackInput,
   type KnowledgeQueryWritebackResult
@@ -56,6 +59,11 @@ let lastAuthorityStatus: PageAuthorityResult | null = null;
 
 /**
  * WMB-5214：Pi 轮次完成后的显式结构化写回 hook（不依赖自由文本猜测）。
+ * WMB-5231：settle 结果区分六类并全部可读可见——
+ *   无知识读取/无清单（零写）、非法清单（零写）、restatement（纯复述零知识）、
+ *   new_synthesis（写回 Synthesis Wiki）、user_experience（先存 FreeNote）、
+ *   校验/派发失败（零写且原因可见）；失败不阻断回答（正文原样返回），
+ *   每轮 settle 结果经 recordQueryWritebackSettleOutcome 记录，面板经摘要读回显示。
  * - 只认回复文本中严格 `{"wmb_query_writeback": …}` 围栏清单：无围栏 / JSON 非法 /
  *   结构非法 → 零写返回原正文，绝不从自由文本猜分类或读取版本；
  * - 冻结读取版本（manifest 声明 + 服务端存在性校验）+ 严格三分写回（restatement /
@@ -64,19 +72,40 @@ let lastAuthorityStatus: PageAuthorityResult | null = null;
  *   apply 事务原子 → 失败零半写）；写回失败不阻断已完成的轮次。
  * 返回剥离 manifest 围栏后的正文（用户看到的正文不含协议块）。
  */
-async function settleQueryWritebackForRound(
+export async function settleQueryWritebackForRound(
   deps: Pick<Dependencies, 'getActiveRuntime'>,
   dataRoot: DataRoot,
   input: { conversationId: string; question: string; answerText: string }
 ): Promise<{ text: string; writeback: KnowledgeQueryWritebackResult | null }> {
+  const requestId = knowledgeQueryWritebackRequestId(input.conversationId, input.question);
   const manifest = extractQueryWritebackManifest(input.answerText);
   const text = manifest ? stripQueryWritebackBlock(input.answerText) : input.answerText;
-  if (!manifest) return { text, writeback: null };
+  if (!manifest) {
+    // 无清单 / 未声明知识读取 → 零写；区分「无任何 JSON 围栏」与「有围栏但非法/非本协议」。
+    const hasFence = hasQueryWritebackFence(input.answerText);
+    recordQueryWritebackSettleOutcome(requestId, {
+      state: 'not_written',
+      classification: null,
+      code: hasFence ? 'QUERY_WRITEBACK_MANIFEST_INVALID' : 'QUERY_WRITEBACK_MANIFEST_MISSING',
+      reason: hasFence
+        ? '回复含 JSON 围栏但无合法 wmb_query_writeback 清单（清单非法），零写。'
+        : '本轮回复未携带 wmb_query_writeback 清单（未声明真实知识读取），零写。'
+    });
+    return { text, writeback: null };
+  }
   const runtime = deps.getActiveRuntime?.() ?? null;
-  if (!runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) return { text, writeback: null };
+  if (!runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) {
+    recordQueryWritebackSettleOutcome(requestId, {
+      state: 'not_written',
+      classification: manifest.classification,
+      code: 'QUERY_WRITEBACK_RUNTIME_UNAVAILABLE',
+      reason: '工作空间运行时不可用，写回被跳过（零写）。'
+    });
+    return { text, writeback: null };
+  }
   try {
     const writebackInput: KnowledgeQueryWritebackInput = {
-      requestId: knowledgeQueryWritebackRequestId(input.conversationId, input.question),
+      requestId,
       workspaceId: runtime.identity.workspaceId,
       scope: 'global',
       conversationId: input.conversationId,
@@ -98,7 +127,15 @@ async function settleQueryWritebackForRound(
       ...(manifest.experience ? { experience: { body: manifest.experience.body } } : {})
     };
     const prepared = prepareQueryWriteback(runtime.database, writebackInput);
-    if (prepared.duplicate) return { text, writeback: prepared.result };
+    if (prepared.duplicate) {
+      recordQueryWritebackSettleOutcome(requestId, {
+        state: 'written',
+        classification: manifest.classification,
+        code: null,
+        reason: `同问幂等：requestId=${requestId} 已写回，本次零增量。`
+      });
+      return { text, writeback: prepared.result };
+    }
     // 经正式知识写命令（owner 面；与 renderer change-set-apply 同一 dispatcher 路径）。
     const commandReceipt = await dispatchBusinessCommand(runtime, {
       command: KNOWLEDGE_FLYWHEEL_CHANGE_SET_COMMAND,
@@ -112,12 +149,36 @@ async function settleQueryWritebackForRound(
         return { data: result, entityId: result.changeSetId, readback: result };
       }
     });
-    if (!commandReceipt.ok) return { text, writeback: null };
+    if (!commandReceipt.ok) {
+      const error = commandReceipt.error ?? { code: 'QUERY_WRITEBACK_DISPATCH_FAILED', message: '写回命令未通过。' };
+      recordQueryWritebackSettleOutcome(requestId, {
+        state: 'not_written',
+        classification: manifest.classification,
+        code: error.code,
+        reason: `写回命令未通过（${error.code}）：${error.message}`
+      });
+      return { text, writeback: null };
+    }
     broadcastDataChanged({ scopes: ['knowledge', 'topics', 'receipt', 'library'], reason: 'query_writeback' });
-    return { text, writeback: finalizeQueryWriteback(runtime.database, prepared) };
+    const result = finalizeQueryWriteback(runtime.database, prepared);
+    recordQueryWritebackSettleOutcome(requestId, {
+      state: 'written',
+      classification: result.classification,
+      code: null,
+      reason: `本轮已按 ${result.classification} 写回（${result.writeBackDecision}）。`
+    });
+    return { text, writeback: result };
   } catch (error) {
-    // 写回失败零写（apply 原子）；不阻断已完成的轮次
-    console.error('[query-writeback]', error instanceof Error ? error.message : String(error));
+    // 写回失败零写（apply 原子）；不阻断已完成的轮次，但原因必须可见
+    const code = error instanceof QueryWritebackError ? error.code : 'QUERY_WRITEBACK_FAILED';
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[query-writeback]', message);
+    recordQueryWritebackSettleOutcome(requestId, {
+      state: 'not_written',
+      classification: manifest.classification,
+      code,
+      reason: message.length > 240 ? `${message.slice(0, 240)}…` : message
+    });
     return { text, writeback: null };
   }
 }

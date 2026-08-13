@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title></title>
+</head>
+<body>
+<!-- 动态渲染 fixture：静态正文为空壳（无标题、无正文），价格行由客户端 JS 渲染。
+     静态读取必然触发 parse 失败 → 受控 headless fallback 渲染后返回正文。
+     渲染后端读取本文件中 id="rendered-content" 的 JSON 载荷作为渲染结果（fixture 自描述）。 -->
+<div id="root"></div>
+<script id="rendered-content" type="application/json">
+{
+  "status": 200,
+  "contentType": "text/html",
+  "finalUrl": "https://pricing.zhipu.example/dynamic/glm52",
+  "title": "GLM-5.2 动态价格页（渲染后）",
+  "bodyText": "GLM-5.2 动态价格页 GLM-5.2 输入 0.6 元每百万 tokens 输出 3.8 元每百万 tokens 生效时间 2026-08-12 本页为客户端渲染页面，静态读取无法取得价格行，必须由受控无头浏览器渲染后读取。"
+}
+</script>
+<script>
+  // 真实页面中此处为前端框架的渲染逻辑；fixture 用静态 JSON 载荷替代，避免引入运行时依赖。
+  window.__GLM52_PRICE__ = JSON.parse(document.getElementById('rendered-content').textContent);
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { getAgentTask, type AgentIntent, type AgentTask, type AgentTaskProgress, type AgentTaskStatus } from './agent-tasks.ts';
 import { isEmployeeRole, readJobContractFromRefs, type JobContract } from './job-object-boundary.ts';
 import { EMPLOYEE_ROLES, type EmployeeRole, type JobPool, type JobRecord, type JobStatus } from './job-pool.ts';
+import { readCrewResearchSummary, type CrewResearchSummary } from './research-successor-projection.ts';
 
 /**
  * WMB-5142 班组实例运行投影（设计 §5/§6.4/§7、CAP-027）。
@@ -47,6 +48,8 @@ export type CrewInstance = Readonly<{
   error: string | null;
   /** 终态稳定 code（failed/needs_user 取自 agent_task.errorCode；succeeded 无持久 code）。 */
   code: string | null;
+  /** WMB-5174 记者卡研究摘要：intent='research' 的任务非 null（预算计数 + claim 判定计数）；其余 null。 */
+  research: CrewResearchSummary | null;
   queuedAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -97,6 +100,13 @@ const TERMINAL_TASK_STATUSES: Readonly<Record<string, true>> = Object.freeze({
 export function instanceProgressLabel(task: AgentTask | null): string | null {
   if (!task) return null;
   const p = task.progress || {};
+  if (task.intent === 'research') {
+    // WMB-5174：research 预算进度（候选 processed/planned + 有效来源 verified）；缺字段不伪造。
+    if (typeof p.planned === 'number' && typeof p.processed === 'number') {
+      return `候选 ${p.processed}/${p.planned}` + (typeof p.verified === 'number' ? ` · 有效 ${p.verified}` : '');
+    }
+    return p.message || task.phase || null;
+  }
   if (typeof p.planned === 'number' && typeof p.processed === 'number') {
     return `渠道 ${p.processed}/${p.planned}` + (p.currentSource ? ` · ${p.currentSource}` : '');
   }
@@ -190,7 +200,8 @@ function loadTasksByJobId(database: DatabaseSync): Map<string, AgentTask> {
 function instanceFromPool(
   rec: JobRecord,
   task: AgentTask | null,
-  handle: Readonly<{ taskId?: string | null; sessionFile?: string | null }> | null
+  handle: Readonly<{ taskId?: string | null; sessionFile?: string | null }> | null,
+  research: CrewResearchSummary | null
 ): MutableCrewInstance {
   return {
     jobId: rec.id,
@@ -213,6 +224,7 @@ function instanceFromPool(
     writerTask: rec.writerTask,
     error: rec.error,
     code: rec.report?.code ?? null,
+    research,
     queuedAt: rec.queuedAt,
     startedAt: rec.startedAt,
     finishedAt: rec.finishedAt,
@@ -220,7 +232,7 @@ function instanceFromPool(
   };
 }
 
-function instanceFromTask(task: AgentTask, contract: JobContract, status: CrewInstanceStatus): MutableCrewInstance {
+function instanceFromTask(task: AgentTask, contract: JobContract, status: CrewInstanceStatus, research: CrewResearchSummary | null): MutableCrewInstance {
   return {
     jobId: contract.jobId,
     roleId: contract.roleId as EmployeeRole,
@@ -241,6 +253,7 @@ function instanceFromTask(task: AgentTask, contract: JobContract, status: CrewIn
     writerTask: task.contextRefs.writerTask === 'xiaohongshu_platform_version' ? 'xiaohongshu_platform_version' : contract.roleId === 'writer' ? 'core_draft' : null,
     error: task.errorMessage,
     code: task.errorCode,
+    research,
     queuedAt: task.createdAt,
     startedAt: task.createdAt,
     finishedAt: task.finishedAt,
@@ -277,7 +290,7 @@ export function readCrewInstanceProjection(source: CrewProjectionSource): CrewIn
     }
     // 共享任务归属（§7.1）：refs.jobId 锚点优先（rebind 后接续实例持有），handle 回落。
     const task = tasksByJobId.get(rec.id) ?? (handle?.taskId ? getAgentTask(database, handle.taskId) : null);
-    active.push(instanceFromPool(rec, task, handle));
+    active.push(instanceFromPool(rec, task, handle, readCrewResearchSummary(database, task)));
   }
   // 持久 needs_user：池清空（重启）后卡留活动视图「等你批」，按 jobId 与任务双重去重。
   const activeJobIds = new Set(active.map((i) => i.jobId));
@@ -289,7 +302,7 @@ export function readCrewInstanceProjection(source: CrewProjectionSource): CrewIn
     if (task.status !== 'needs_user') continue;
     const contract = readJobContractFromRefs(task.contextRefs);
     if (!contract) continue;
-    active.push(instanceFromTask(task, contract, 'needs_user'));
+    active.push(instanceFromTask(task, contract, 'needs_user', readCrewResearchSummary(database, task)));
   }
 
   // 活动期显示编号：每角色按 queuedAt 序 1..N（纯显示；不持久化；重启后重新计数）。
@@ -309,7 +322,7 @@ export function readCrewInstanceProjection(source: CrewProjectionSource): CrewIn
     if (!TERMINAL_TASK_STATUSES[task.status]) continue;
     const contract = readJobContractFromRefs(task.contextRefs);
     if (!contract) continue;
-    history.push(instanceFromTask(task, contract, task.status as CrewInstanceStatus));
+    history.push(instanceFromTask(task, contract, task.status as CrewInstanceStatus, readCrewResearchSummary(database, task)));
   }
   history.sort((a, b) => String(b.finishedAt ?? b.queuedAt).localeCompare(String(a.finishedAt ?? a.queuedAt)));
 

@@ -469,9 +469,10 @@ test('WMB-5172: structured output parsers are fail-closed', () => {
 test('WMB-5172: budget resolves to fixed hard defaults', () => {
   assert.deepEqual(resolveResearchBudget(undefined), RESEARCH_DEFAULT_BUDGET);
   assert.deepEqual(resolveResearchBudget({ timeMinutes: 5, minValidSources: 3, maxCandidates: 9, maxParallelFetches: 2, maxRounds: 1 }), { timeMinutes: 5, minValidSources: 3, maxCandidates: 9, maxParallelFetches: 2, maxRounds: 1 });
-  // 非法值（非正数/NaN）逐键回落硬默认；正值保留（spawn 深度档预算合法透传）。
+  // 非法值（非正数/NaN）逐键回落硬默认；合法下调保留。
   assert.deepEqual(resolveResearchBudget({ timeMinutes: 0, minValidSources: -1, maxCandidates: NaN, maxParallelFetches: 0, maxRounds: 0 }), RESEARCH_DEFAULT_BUDGET);
-  assert.equal(resolveResearchBudget({ timeMinutes: 5, minValidSources: 3, maxCandidates: 400, maxParallelFetches: 2, maxRounds: 1 }).maxCandidates, 400);
+  // WMB-5173/5174：RESEARCH_DEFAULT_BUDGET 即机器硬上限——调用方上调钳制到上限（400 → 40）。
+  assert.equal(resolveResearchBudget({ timeMinutes: 5, minValidSources: 3, maxCandidates: 400, maxParallelFetches: 2, maxRounds: 1 }).maxCandidates, 40);
 });
 
 test('WMB-5172: research prompts carry whitelist discipline and structured-output contract', () => {

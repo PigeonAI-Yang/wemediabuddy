@@ -14,6 +14,8 @@ import { buildRoleRoster } from './role-roster.ts';
 import { getActiveJobSpawner } from './job-spawner.ts';
 import { readCrewInstanceProjection } from './crew-instance-projection.ts';
 import { readTaskTranscriptForJob } from './pi-transcript-projection.ts';
+import { listResearchSuccessorNeedsUser } from './research-successor-projection.ts';
+import { decideResearchSuccessorViaRuntime, RESEARCH_SUCCESSOR_ACTIONS } from './research-successor.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
 import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
@@ -40,6 +42,27 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
       getHandle: spawner ? (jobId) => spawner.getHandle(jobId) : null
     });
   }));
+
+  // WMB-5174：Today「研究缺口 · 等你批」只读投影（仅 unresolved required needs_user；无候选/进度/裸资料）。
+  ipcMain.handle('today:research-successors', () => readWorkspaceDatabase(dependencies, () => [], database =>
+    listResearchSuccessorNeedsUser(database)
+  ));
+
+  // WMB-5174：三动作（收窄/手动补料/接受标注待核实）精确接 decideResearchSuccessorViaRuntime。
+  // 决策即系统命令（actor=scheduler，decision 写入 payload.briefSuffix）；结果原样返回 CommandResult，
+  // 权限/错误诚实回显（不吞错、不伪装成功）。
+  ipcMain.handle('agents:decide-research-successor', async (_event, input: { jobId?: string; decision?: string }) => {
+    const jobId = typeof input?.jobId === 'string' && input.jobId.trim() ? input.jobId.trim() : '';
+    const decision = input?.decision;
+    if (!jobId) return { ok: false as const, data: null, error: { code: 'VALIDATION_ERROR', message: '缺少研究续派工单 ID。' } };
+    if (!RESEARCH_SUCCESSOR_ACTIONS.includes(decision as (typeof RESEARCH_SUCCESSOR_ACTIONS)[number])) {
+      return { ok: false as const, data: null, error: { code: 'VALIDATION_ERROR', message: `决策只允许 ${RESEARCH_SUCCESSOR_ACTIONS.join('/')}（收窄/手动补料/接受标注待核实）。` } };
+    }
+    const runtime = await requireBusinessRuntime(dependencies);
+    const result = await decideResearchSuccessorViaRuntime(runtime, jobId, decision as (typeof RESEARCH_SUCCESSOR_ACTIONS)[number]);
+    if (result.ok) broadcastDataChanged({ scopes: ['agent', 'today'], reason: `research-successor.decide:${decision}` });
+    return result;
+  });
 
   // WMB-5195：只读工单 transcript。主进程只接受 jobId，依据 authoritative crew projection 反查会话
   // （daily/employee 会话名均按契约解析、路径 containment fail-closed）；无写操作、不新增 schema/权限，

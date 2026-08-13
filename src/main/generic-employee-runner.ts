@@ -17,6 +17,7 @@ import {
   dispatchUpdateAgentTaskPhase
 } from './agent-task-commands.ts';
 import { readJobContractFromRefs } from './job-object-boundary.ts';
+import { parseResearchEvidencePack } from './research-task-state.ts';
 import {
   buildJobContextRefs,
   buildJobObjectBoundary,
@@ -65,6 +66,7 @@ function successCodeFor(readback: RoleJobReadbackV1): string {
     case 'sources_mutated': return 'SOURCES_MUTATED';
     case 'topic_maintenance_proposed': return 'TOPIC_MAINTENANCE_PROPOSED';
     case 'noop_confirmed': return 'NOOP_CONFIRMED';
+    case 'research_evidence': return 'RESEARCH_EVIDENCE';
   }
 }
 
@@ -392,10 +394,21 @@ async function readbackFor(ctx: JobExecuteContext, spec: RoleJobSpec, run: Emplo
       // WMB-5121 §8.3：传策略捕获的内存末条文本（免读文件），未捕获时 readbackLibraryMutation 读会话文件兜底。
       return readbackLibraryMutation(db, task.id, sessionStartedAt, ctx.sessionFile, run.finalAssistantText);
     case 'research_evidence':
-      // WMB-5170：research 读回（EvidencePack）由 WMB-5172 执行器落地；本任务不落 research 行，
+      // WMB-5173：research 读回 = EvidencePack 已落盘（WMB-5172 执行器写 result_refs_json）；
       // 无证据即 null，走既有 JOB_READBACK_MISSING 保守失败，不伪造成功。
-      return null;
+      return researchEvidenceReadback(task);
   }
+}
+
+/** research 任务读回：result_refs_json 的 EvidencePack 是业务证据（缺 → null 保守失败）。 */
+function researchEvidenceReadback(task: AgentTask): RoleJobReadbackV1 | null {
+  const pack = parseResearchEvidencePack(task.resultRefs);
+  if (!pack) return null;
+  return Object.freeze({
+    kind: 'research_evidence',
+    jobId: pack.jobId,
+    status: task.status === 'partial' ? 'partial' : 'succeeded'
+  });
 }
 
 /** 写 agent_task 终态（§5.3 同一映射）；取消路径由 spawner.cancel 主导，这里尽力而为。 */

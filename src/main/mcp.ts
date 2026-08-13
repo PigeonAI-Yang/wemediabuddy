@@ -91,6 +91,7 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'jobs.cancel': 'wmb_cancel_job',
   'jobs.message': 'wmb_message_job',
   'jobs.messages': 'wmb_list_job_messages',
+  'research.dispatch': 'wmb_dispatch_research',
   'daily.readiness': 'wmb_daily_readiness',
   'daily.continue_after_scan': 'wmb_continue_after_scan',
   'daily.run_stage': 'wmb_run_daily_stage',

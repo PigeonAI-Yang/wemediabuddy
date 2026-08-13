@@ -71,7 +71,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 ### 资料与今日方案
 
-- 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`。Pi 保存外部资料必须用 `wmb_save_source` 并传当前 task、grant 和 WMB 注入的 worker lease；它在 MCP 内执行 `sources.upsert_batch`。外部 Agent 直接调用 `sources.upsert_batch`。两条路径都必须保留原始 URL。
+- 搜索/读取已入库资料使用 `wmb_search_sources`、`wmb_get_source`。Pi 保存外部资料必须用 `wmb_save_source` 并传当前 task、grant 和 WMB 注入的 worker lease；它在 MCP 内执行 `sources.upsert_batch`。外部 Agent 直接调用 `sources.upsert_batch`。两条路径都必须保留原始 URL。可选字段（对齐 `sources.upsert_batch` 入参）：`originalUrl`（原始 URL，必填语义）、`author`、`publishedAt`、`summary`、`categories`、`keywords`、`valueJudgment`、`ipRelevance`、`creationAngles`、`recommendedPlatforms`、`recommendedFormats`、`timeliness`、`priority`、`evidence`、`expectedRevision`。研究补料（research 工单）写回只允许 title + originalUrl + 证据字段（author/publishedAt/summary），禁止传 feedId（研究证据禁止挂渠道 feed）。
 - 有 `taskId` 的情报任务先读 `wmb_get_agent_task`，仅按任务要求用 `wmb_report_agent_progress` 写检查点；写入时遵守下方统一 task grant 与回执规则。
 - 当今日情报仍处于 `channel_scanned`、`judging_opportunities`、`synthesizing` 或 `validating` 时，这是同一自动闭环的后续阶段；继续读取该任务和工作台，不要另起一次选题或提议重复保存方案。
 - 今日情报判断以注入的「编辑简报」为唯一上下文：先对齐「身份」块的受众、内容目标与编辑简报（默认「AI × 个人商业化成长」），脱离身份的泛泛线索直接丢弃；「历史」块的已发布与复盘用于避免撞题并吸收教训；「增量」块是本轮要判断的新资料。简报已包含判断所需全部上下文；**判断任务中禁止调用 `wmb_get_workbench`（全量工作台几十万字会挤爆上下文）**，除查重（`wmb_get_knowledge_context`）与写回（`wmb_save_plan`）外不需要额外工具调用，写回成功即结束。
@@ -96,6 +96,17 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 派单后等系统 JOB_EVENT 终态推送（succeeded/failed/cancelled/partial/needs_user，含 code/message/readback）再汇报；不要 sleep+bash 轮询 session，必要时才用 `wmb_get_job` 看 monitor.task。成功必须业务读回；partial 表示部分达成，needs_user 表示需用户处理或补料；取消优先。
 - 监工与传话：`wmb_message_job`（参数 jobId、body）/ `wmb_list_job_messages`（参数 jobId）留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job`（参数 jobId）取消工单。
 - 工单是 WMB 内部业务编排，不构成平台执行授权：最终确认、激活和最终发布仍只由用户在 WMB UI 完成；平台写入继续走各自的精确 UI 授权路径。
+
+### 研究补料与续派决策（research_successor）
+
+- 父工单（写手/策划/资料员）在证据上有缺口时，系统会按证据缺口自动派生研究补料工单（reporter / research）：同父唯一（同一父工单至多一个活动研究）、businessDate/projectId 边界继承、三层止环（研究或续派产物不再自动再派）。需要补派或核查指定声明时用 `wmb_dispatch_research`（传 `parent_task_id` 与 `required_claims`；父角色仅限 writer/planner/librarian，父为研究/续派产物会拒绝）。
+- 研究工单终态后自动进入 research_successor 续派：全部 required 声明已判定 → 续派直接恢复原角色（写手/策划/资料员）继续交付；仍有未解决 required 声明（unresolved / source_unavailable）→ 续派先进入「研究缺口 · 等你批」（needs_user），等待主编决策，不自动绕行、不自动重试。
+- 三动作只能由主编在 WMB UI（今日页「研究缺口 · 等你批」卡）决策，主管对话只负责解释与引导：
+  - 收窄（narrow）：未解决声明从本次续派验收范围剔除；本次续派只对已判定声明交付。若仍需核实，必须由主编显式再开研究工单（不自动绕行）。
+  - 手动补料（supplement）：主编已手动补充材料；续派基于既有证据与补充材料继续完成剩余工作，不得编造缺失证据。
+  - 接受并标注待核实（accept）：未解决声明以「待核实」标注交付；正文必须如实标注，不得将其表述为已核实事实。
+- 决策后续派恢复 pending，调度器随即派生原角色续派工单（新 jobId、同一边界），终态以 JOB_EVENT 推送。对「研究缺口 · 等你批」的进度/状态回答只来自班组投影 API 的持久事实，禁止编造。
+- 研究工单执行时只走白名单只读工具（web/x/xhs）与唯一写回 `wmb_save_source`；禁止编造无出处数字或来源 URL；禁止调用 `wmb_get_workbench`（防上下文挤爆）。
 
 ### 任务授权与统一回执
 
@@ -151,6 +162,18 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 起草/改稿时 `structureGuidance` 与正文结构优先套六栏目之一（迷茫诊断/经典方法/AI 实战/项目日志/方向判断/商业化实验），禁止空话扩写冒充实测。
 - 商业化实验栏目仅在真实成交或真实失败后写；不得把「有人问」写成「很多人买」。
 
+### Pi 知识问答写回（wmb_query_writeback 协议）
+
+与工作空间知识对话（真实读取 Wiki / Note / Evidence 后回答）时，WMB 按协议解析末条回复中的结构化清单，机器校验后原子落库；未按协议声明时本轮零写，但「知识使用与沉淀」面板会显示可读的未写回原因，轮次回答不被阻断。
+
+- 声明方式：本轮确实通过知识读取工具（如 `wmb_get_knowledge_context`）冻结读取固定版本后，末条回复必须以 ```json 围栏块携带 wmb_query_writeback 清单（协议键，非工具名），且必须是回复中最后一个 JSON 围栏；WMB 会把该围栏从用户可见正文中剥离。禁止把清单写在 thinking、工具调用中间或非末条回复里。
+- 冻结读取版本：readWikiVersionIds / readNoteVersionIds / readEvidenceIds 只允许填本轮真实读取的冻结版本 id，每个 id 必须在知识库中真实存在；回答本身不是证据，禁止把回答摘要、内部候选或模型记忆当作读取版本。
+- 三分决策（classification 三选一，互斥）：
+  - restatement（纯复述）：仅复述既有知识，零新知识；只落 Artifact 与回执，不得携带 synthesis 或 experience。纯复述零 Note、零 Wiki、零 Evidence 写。
+  - new_synthesis（新综合）：必须携带 synthesis（canonicalKey / statement / valueRationale，可选 title / basedOnNoteVersionIds）；basedOnNoteVersionIds 必须 ⊆ readNoteVersionIds；系统沉淀为 insight Note + Synthesis Wiki，只对冻结读取版本建立 derived_from 证据。
+  - user_experience（用户经验）：必须携带 experience.body（用户自己的表述，不得与回答正文相同）；系统先保存不可变 FreeNote，不伪造知识。
+- 不得伪造：本轮未真实读取任何冻结知识时禁止产出 wmb_query_writeback 清单；无读取、无清单或清单非法时 WMB 零写并在面板显示原因。
+
 ## 工具清单
 
 当前工作空间与现场：`wmb_get_current_workspace`（只读包含 browser binding 快照）、`wmb_get_workbench`、`wmb_list_workspaces`、`wmb_list_workspace_catalog`、`wmb_prepare_workspace_profile`。不存在 browser profile 创建、改绑、验证或迁移工具。
@@ -159,7 +182,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_create_x_list`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
-主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
+主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_dispatch_research`（证据缺口补派研究）、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
 
 
 

@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { ROLE_CATALOG } from '../shared/agent-capabilities';
-import { instanceDetail, instanceTiming, statusWord, type ActiveRoleSection, type CrewInstance } from './agents-instance-logic';
+import { instanceDetail, instanceStatusWord, instanceTiming, researchClaimLine, statusWord, type ActiveRoleSection, type CrewInstance } from './agents-instance-logic';
 import { StatusDot, clock, roleLabel, stampLine } from './agents-roster-parts';
 
 /** 历史折叠区最近条数（只展示终态实例，越近越相关）。 */
@@ -23,6 +23,8 @@ export function InstanceCard({
   const timing = instanceTiming(inst);
   const detail = instanceDetail(inst);
   const canCancel = inst.status === 'queued' || inst.status === 'waiting_resource' || inst.status === 'running';
+  const claimLine = researchClaimLine(inst.research);
+  const isResearch = inst.intent === 'research';
   return (
     <li className={`agents-instance-card status-${inst.status}`} data-job={inst.jobId}>
       <header className="agents-instance-head">
@@ -31,7 +33,7 @@ export function InstanceCard({
           {roleLabel(inst.roleId)}
           {inst.displayNumber > 0 ? <span className="agents-instance-number"> #{inst.displayNumber}</span> : null}
         </strong>
-        <span className={`agents-job-status-word status-${inst.status}`}>{statusWord(inst.status)}</span>
+        <span className={`agents-job-status-word status-${inst.status}`}>{instanceStatusWord(inst)}</span>
       </header>
       <p className="agents-instance-brief" title={inst.brief}>{inst.brief}</p>
       {inst.status === 'running' && inst.progressRatio != null ? (
@@ -51,6 +53,7 @@ export function InstanceCard({
       ) : inst.status === 'running' && inst.progressLabel ? (
         <p className="agents-instance-step">{inst.progressLabel}</p>
       ) : null}
+      {claimLine ? <p className="agents-instance-claims" title={inst.research?.claims ? `声明判定（${inst.research.claims.supported} 支持 / ${inst.research.claims.contradicted} 反驳 / ${inst.research.claims.unresolved + inst.research.claims.sourceUnavailable} 待核实 / ${inst.research.claims.pending} 待判定）` : undefined}>{claimLine}</p> : null}
       {detail ? <p className="agents-instance-detail">{detail}</p> : null}
       <div className="agents-instance-meta">
         <span className="agents-job-stamp">
@@ -58,6 +61,7 @@ export function InstanceCard({
         </span>
         <span className="agents-job-stamp">{timing.prefix} {timing.label}</span>
         {inst.intent ? <span className="agents-job-intent">{inst.intent}</span> : null}
+        {isResearch ? <span className="agents-job-anchor" title={`任务编号 ${inst.jobId}`}>#{inst.jobId.slice(0, 8)}</span> : null}
         {inst.code ? <span className="agents-job-intent">{inst.code}</span> : null}
       </div>
       <footer className="agents-instance-actions">

@@ -247,7 +247,11 @@ export function copyContentVersionToNewProject(
     }
     const sourceIds = (database.prepare('SELECT source_id AS id FROM content_project_sources WHERE project_id = ?')
       .all(input.sourceProjectId) as Array<{ id: string }>).map(({ id }) => id);
-    const created = createContentProjectWithVersion(database, { title, body: version.body, sourceIds }, false);
+    // WMB-5232：副本继承来源项目 Topic 归属，首个核心版本才能冻结同一固定血缘；
+    // 否则副本 topic_id 为空 → core/platform/review 全部空 Usage（无知识引用却可保存）。
+    const sourceTopic = database.prepare('SELECT topic_id AS topicId FROM content_projects WHERE id = ?')
+      .get(input.sourceProjectId) as { topicId: string | null } | undefined;
+    const created = createContentProjectWithVersion(database, { title, body: version.body, sourceIds, topicId: sourceTopic?.topicId ?? undefined }, false);
     const detail = getContentProject(database, created.id)!;
     if (transaction) database.exec('COMMIT');
     if (transaction) broadcastDataChanged({ scopes: ['studio'], reason: 'content.copy' });

@@ -7,6 +7,9 @@ import { createGenericEmployeeRunner } from './generic-employee-runner.ts';
 import { notifyDeskJobEvent } from './manager-job-notify.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { getAgentTask } from './agent-tasks.ts';
+import { dispatchResearchForEvidenceGap } from './research-dispatch.ts';
+import { RESEARCH_DEFAULT_BUDGET } from './research-job-runner.ts';
+import { handleResearchSuccessorJobEvent } from './research-successor.ts';
 import type { RoleJobReportV1 } from './role-job-registry.ts';
 import type { McpRuntime } from './mcp.ts';
 
@@ -39,6 +42,8 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
         runtime,
         handle: jobId && spawner ? spawner.getHandle(jobId) : null
       });
+      // WMB-5173：research_successor 续派工单终态事件 → 行终态（消费完成；幂等）。
+      void handleResearchSuccessorJobEvent(runtime, event).catch((error) => console.error('[research-successor-event]', error));
     },
     execute: createGenericEmployeeRunner(
       () => runtime,
@@ -154,5 +159,50 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
   }, async ({ job_id }) => {
     const spawner = getActiveJobSpawner() ?? managerSpawner();
     return text(spawner.listMessages(job_id));
+  });
+
+  server.registerTool('research.dispatch', {
+    description: 'WMB-5173 证据缺口自动派记者：给父工单派生研究补料工单（同父唯一 + businessDate/projectId 边界继承 + 三层止环）。只需传父任务 ID 与 required claims；父角色仅限 writer/planner/librarian，父为研究/续派产物会拒绝。',
+    inputSchema: {
+      parent_task_id: z.string().min(1),
+      required_claims: z.array(z.object({ key: z.string().min(1), text: z.string().min(1), type: z.enum(['fact', 'price', 'policy']) }).strict()).min(1),
+      budget: z.object({
+        time_minutes: z.number().positive().max(RESEARCH_DEFAULT_BUDGET.timeMinutes).optional(),
+        min_valid_sources: z.number().positive().max(RESEARCH_DEFAULT_BUDGET.minValidSources).optional(),
+        max_candidates: z.number().positive().max(RESEARCH_DEFAULT_BUDGET.maxCandidates).optional(),
+        max_parallel_fetches: z.number().positive().max(RESEARCH_DEFAULT_BUDGET.maxParallelFetches).optional(),
+        max_rounds: z.number().positive().max(RESEARCH_DEFAULT_BUDGET.maxRounds).optional()
+      }).strict().optional(),
+      channels: z.array(z.enum(['web', 'x', 'xhs'])).min(1).optional(),
+      brief: z.string().optional(),
+      gap_id: z.string().optional()
+    }
+  }, async (input) => {
+    const spawner = managerSpawner();
+    const db = database();
+    try {
+      const budget = input.budget
+        ? {
+            timeMinutes: input.budget.time_minutes,
+            minValidSources: input.budget.min_valid_sources,
+            maxCandidates: input.budget.max_candidates,
+            maxParallelFetches: input.budget.max_parallel_fetches,
+            maxRounds: input.budget.max_rounds
+          }
+        : null;
+      const result = dispatchResearchForEvidenceGap({
+        spawner,
+        database: db,
+        parentTaskId: input.parent_task_id,
+        requiredClaims: input.required_claims.map((claim) => ({ key: claim.key, text: claim.text, type: claim.type })),
+        budget,
+        channels: input.channels ?? null,
+        brief: input.brief ?? null,
+        gapId: input.gap_id ?? null
+      });
+      return text(result);
+    } finally {
+      db.close();
+    }
   });
 }

@@ -1,0 +1,182 @@
+{
+  "schema": "wmb-5234-acceptance-evidence.v1",
+  "kind": "audit",
+  "generatedAt": "2026-08-13T01:35:37.447Z",
+  "node": "v24.13.1",
+  "phases": {
+    "shared": {
+      "modules": {
+        "knowledge-flywheel.ts::knowledgeQueryWritebackRequestId": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "A": {
+      "modules": {
+        "migrations.ts::migrateDatabase": true,
+        "sources.ts::upsertSource": true,
+        "knowledge.ts::upsertKnowledgeTopic": true,
+        "knowledge.ts::getKnowledgeContext": true,
+        "knowledge-compiler.ts::compileSourceKnowledge": true,
+        "knowledge-compiler.ts::sourceCompileRequestId": true,
+        "knowledge-flywheel.ts::applyKnowledgeChangeSet": true,
+        "knowledge-flywheel.ts::getChangeSet": true,
+        "knowledge-flywheel.ts::getKnowledgeNote": true,
+        "knowledge-flywheel.ts::getKnowledgeNoteVersion": true,
+        "knowledge-flywheel.ts::getUpdateReceiptByRequest": true,
+        "knowledge-flywheel.ts::getWikiPage": true,
+        "knowledge-flywheel.ts::getWikiPageVersion": true,
+        "knowledge-flywheel.ts::listKnowledgeEntities": true,
+        "knowledge-flywheel.ts::listKnowledgeEvidenceLinks": true,
+        "knowledge-flywheel.ts::listKnowledgeNoteVersions": true,
+        "knowledge-flywheel.ts::listWikiPages": true,
+        "knowledge-flywheel.ts::KNOWLEDGE_FLYWHEEL_CHANGE_SET_COMMAND": true,
+        "knowledge-canvas.ts::addKnowledgeCanvasNode": true,
+        "knowledge-canvas.ts::createCreativeBrief": true,
+        "knowledge-canvas.ts::createKnowledgeCanvas": true,
+        "knowledge-canvas.ts::createKnowledgeContextPackage": true,
+        "knowledge-canvas.ts::removeKnowledgeCanvasNode": true,
+        "knowledge-canvas.ts::getKnowledgeCanvasProjection": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "B": {
+      "modules": {
+        "query-writeback.ts::writebackQueryKnowledge": true,
+        "query-writeback.ts::getQueryWritebackSummary": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "C": {
+      "modules": {
+        "content.ts::createContentProjectWithVersion": true,
+        "content.ts::saveCoreVersion": true,
+        "content.ts::savePlatformVersion": true,
+        "topic-maintenance.ts::createTopicMaintenanceProposal": true,
+        "knowledge-usage.ts::getKnowledgeUsagePackageByRequest": true,
+        "knowledge-usage.ts::listKnowledgeUsageRecords": true,
+        "knowledge-usage-integration.ts::recordCreativeBriefUsage": true,
+        "knowledge-usage-integration.ts::usageRequestId": true,
+        "knowledge-usage-integration.ts::readPublicationTimeUsage": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "D": {
+      "modules": {
+        "publishing.ts::createPublication": true,
+        "metrics.ts::savePublicationMetricSnapshot": true,
+        "reviews.ts::saveReview": true,
+        "accounts.ts::saveAccount": true,
+        "outcome-feedback.ts::flowBackOutcome": true,
+        "outcome-feedback.ts::outcomeFeedbackRequestId": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "E": {
+      "modules": {
+        "knowledge-health.ts::beginPeriodicLint": true,
+        "knowledge-health.ts::cancelPeriodicLint": true,
+        "knowledge-health.ts::getPeriodicLintCheckpoint": true,
+        "knowledge-health.ts::runLocalLint": true,
+        "knowledge-health.ts::runPeriodicLintStep": true,
+        "knowledge-compile-state.ts::classifyWikiCompileState": true,
+        "knowledge-compile-state.ts::getTopicCompileState": true,
+        "knowledge-compile-state.ts::listTopicCompileStates": true
+      },
+      "ready": true,
+      "blockers": []
+    },
+    "F": {
+      "modules": {},
+      "ready": true,
+      "blockers": []
+    },
+    "G": {
+      "modules": {
+        "workspace-runtime.ts::ActiveWorkspaceRuntime": true,
+        "workspace-profiles.ts::ensureOfficialWorkspaceProfile": true,
+        "command-dispatcher.ts::createCommandEnvelope": true
+      },
+      "ready": true,
+      "blockers": []
+    }
+  },
+  "env": {
+    "repoRoot": "j:\\PigeonYang\\WeMediaBuddy\\",
+    "rendererPort": 27391,
+    "playwrightCore": true,
+    "electronDevBin": true,
+    "electronForgeCli": true,
+    "packagedExe": "j:\\PigeonYang\\WeMediaBuddy\\out\\WeMediaBuddy-win32-x64\\WeMediaBuddy.exe",
+    "packagedExeExists": false,
+    "fixtureSources": [
+      "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-5207-final-root",
+      "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-5207-accept-root"
+    ],
+    "piConfigProvided": true,
+    "piConfig": "C:\\Users\\yangda01\\AppData\\Roaming\\WeMediaBuddy\\pi-api-config.json",
+    "piConfigAutoDiscovered": true
+  },
+  "siblingGates": {
+    "5231-operator-skill-wmb_query_writeback": {
+      "owner": "WMB-5231",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5231-query-writeback-manifest-module": {
+      "owner": "WMB-5231",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5232-content-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5232-review-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5232-topic-proposal-usage-wired": {
+      "owner": "WMB-5232",
+      "present": true,
+      "importWired": true,
+      "callSites": true,
+      "pendingWhenMissing": true
+    },
+    "5233-compile-state-module": {
+      "owner": "WMB-5233",
+      "present": true,
+      "pendingWhenMissing": true
+    },
+    "5233-renderer-shell-three-state": {
+      "owner": "WMB-5233",
+      "present": true,
+      "baseline": {
+        "labelsMapPresent": true,
+        "topicDetailCompileState": true,
+        "topicListCompileState": true,
+        "compileStateFallbackUncompiled": true,
+        "compileStateBanner": true,
+        "canvasCompileState": true
+      },
+      "pendingWhenMissing": true
+    }
+  },
+  "verdict": {
+    "auditComplete": true,
+    "hardImportFailures": [],
+    "dbPhasesReady": true,
+    "wmb5234Complete": false,
+    "reason": "audit 只报就绪度；真实通过需 --run（+ --ui 与 5231–5233 集成齐备）"
+  }
+}

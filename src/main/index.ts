@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { openDataRoot, type DataRoot } from './data-root';
@@ -9,7 +10,10 @@ import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { stopManagedBrowsers, type BrowserRuntime } from './browser'; import { configureBrowserProfileRegistryPath, openBrowserProfileRegistry } from './browser-config';
-import { migratePiConfigToInstallation, readPiConfig, resolvePiConfigChain, savePiConfig } from './pi-config';
+import { migratePiConfigToInstallation, readPiConfig, resolvePiConfigChain, savePiConfig, type ResolvedPiConfig } from './pi-config';
+import { startPiRuntimeWithFallback } from './pi-config-fallback';
+import { setSourceKnowledgeCompileDeps, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
+import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, type KnowledgeBackfillDeps } from './knowledge-backfill';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
 import { piModelsJson, WMB_VISION_MODEL } from './pi-model';
@@ -48,7 +52,7 @@ import { DailyScanScheduler } from './daily-scan-scheduler';
 import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
-import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts';
+import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
 import { setDeskJobNotifyBridges } from './manager-job-notify.ts';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
@@ -234,10 +238,91 @@ async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable
   }
 }
 
+// ---------- WMB-5229：Source 保存后知识编译的后台模型调用（独立 Pi RPC，不占 desk 席） ----------
+let knowledgeCompilePi: PiRpcSupervisor | null = null;
+let knowledgeCompilePiLock: Promise<void> = Promise.resolve();
+let knowledgeCompilePiWorkDir: string | null = null;
+const KNOWLEDGE_COMPILE_PROMPT_TIMEOUT_MS = 10 * 60_000;
+
+async function withKnowledgeCompilePi<T>(dataRootPath: string, run: (runtime: PiRpcSupervisor) => Promise<T>): Promise<T> {
+  const previous = knowledgeCompilePiLock;
+  let release!: () => void;
+  knowledgeCompilePiLock = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    if (!knowledgeCompilePi?.isRunning) {
+      const layout = await ensurePiConversationLayout(dataRootPath);
+      const extensionPath = await preparePiExtension(layout.agentDir);
+      const runtimeRoot = await resolvePiRuntimeRoot(dataRootPath);
+      const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-knowledge-compile-'));
+      const sessionFile = path.join(layout.agentDir, 'sessions', `knowledge-compile-${randomUUID()}.jsonl`);
+      await mkdir(path.dirname(sessionFile), { recursive: true });
+      const createRuntime = async (config: ResolvedPiConfig) => {
+        await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+        return new PiRpcSupervisor(process.execPath, [
+          piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', sessionFile, '-e', extensionPath,
+          '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []),
+          '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT
+        ], {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          PI_CODING_AGENT_DIR: layout.agentDir,
+          WMB_PI_API_KEY: config.apiKey,
+          WMB_MCP_URL: currentMcp()?.url ?? '',
+          WMB_XHS_MCP_URL: currentXhs()?.getUrl() ?? ''
+        }, (event) => {
+          if (event.type === 'wmb_process_crashed') {
+            broadcastPiEvent({ type: 'failed', error: String(event.error ?? '知识编译 Pi 进程已退出。'), scope: 'task' });
+          }
+        }, workDir);
+      };
+      const started = await startPiRuntimeWithFallback({ createRuntime });
+      knowledgeCompilePi = started.runtime;
+      knowledgeCompilePiWorkDir = workDir;
+    }
+    return await run(knowledgeCompilePi!);
+  } finally {
+    release();
+  }
+}
+
+async function stopKnowledgeCompileModel(): Promise<void> {
+  const pi = knowledgeCompilePi;
+  knowledgeCompilePi = null;
+  await pi?.stop().catch(() => {});
+  if (knowledgeCompilePiWorkDir) await rm(knowledgeCompilePiWorkDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
+  knowledgeCompilePiWorkDir = null;
+}
+
+function createKnowledgeCompileDeps(dataRootPath: string): SourceKnowledgeCompileDeps {
+  return {
+    databasePath: path.join(dataRootPath, 'wmb.db'),
+    modelCall: async (prompt) => {
+      const result = await withKnowledgeCompilePi(dataRootPath, async (runtime) =>
+        runtime.promptUntilSettled(prompt, { timeoutMs: KNOWLEDGE_COMPILE_PROMPT_TIMEOUT_MS }));
+      const text = result.text?.trim();
+      if (!text) throw new Error(result.error || 'Pi 没有返回文字。');
+      return text;
+    }
+  };
+}
+
+// WMB-5230：回溯编译复用 WMB-5229 同款候选/编译管线（同 requestId 方案，回执去重共享）。
+function createKnowledgeBackfillDeps(dataRootPath: string): KnowledgeBackfillDeps {
+  return {
+    databasePath: path.join(dataRootPath, 'wmb.db'),
+    compileSource: createKnowledgeBackfillCompile(createKnowledgeCompileDeps(dataRootPath))
+  };
+}
+
 async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   if (activeRuntime?.isActive && activeRuntime.identity.rootPath === path.resolve(dataRoot.path)) return;
   const runtime = ActiveWorkspaceRuntime.open(dataRoot.path, { openDatabase: migrateDatabase });
   activeRuntime = runtime;
+  // WMB-5229：注册 Source 保存后的知识编译触发依赖（后台独立 Pi RPC，懒启动）。
+  setSourceKnowledgeCompileDeps(createKnowledgeCompileDeps(dataRoot.path));
+  // WMB-5230：注册存量高价值 Source 分批回溯编译依赖（同款编译管线；checkpoint 可恢复）。
+  setKnowledgeBackfillDeps(createKnowledgeBackfillDeps(dataRoot.path));
   try {
     await dispatchRecoverInterruptedPublications(runtime);
     await dispatchRecoverOrphanedXListOperations(runtime, activeXListOperationIds);
@@ -248,6 +333,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime);
     runtime.setMcp(mcp);
     stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
+    stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
     const xhs = await refreshXhsRuntime(readWorkspaceIntelligenceProfile(dataRoot.path, runtime).platforms.includes('xiaohongshu') ? dataRoot : null, null);
     runtime.setXhs(xhs);
     // MCP 就绪后再接力：扫完 channel_scanned 且无协调器时优先 judgeOnly。
@@ -374,6 +460,10 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     void runLegacyKnowledgeInitAtStartup(runtime).catch((error) => {
       console.error('[knowledge-init] startup legacy init failed', error);
     });
+    // WMB-5230：存量高价值 Raw Source 分批回溯编译（有界单批；checkpoint 续跑；不阻断启动）。
+    void runKnowledgeBackfillBatch().catch((error) => {
+      console.error('[knowledge-backfill] startup backfill failed', error);
+    });
     lintSchedulerRef?.stop();
     lintSchedulerRef = new KnowledgeLintScheduler({ runtime, isCurrent: () => activeRuntime === runtime && runtime.isActive });
     lintSchedulerRef.start();
@@ -385,12 +475,15 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     lintSchedulerRef?.stop();
     lintSchedulerRef = null;
     if (activeRuntime === runtime) activeRuntime = null;
+    setSourceKnowledgeCompileDeps(null);
+    setKnowledgeBackfillDeps(null);
+    await stopKnowledgeCompileModel().catch(() => {});
     await runtime.stop({ drain: false }).catch(() => {});
     throw error;
   }
 }
 type TimerHandle = ReturnType<typeof setInterval>;
-let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null;
+let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null;
 async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
   const dataRootPath = runtime?.identity.rootPath;
@@ -489,7 +582,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -509,7 +602,7 @@ const desktopLifecycle = createDesktopLifecycle({
   defaultBrowserProfileId,
   getActiveRuntime: () => activeRuntime,
   clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
-  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; },
+  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; },
   abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
   setShuttingDown: (value) => { shuttingDown = value; },
   restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,

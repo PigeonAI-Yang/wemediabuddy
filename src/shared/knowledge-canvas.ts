@@ -17,6 +17,8 @@ import type {
   KnowledgeWikiPageRecord,
   KnowledgeWikiPageVersionRecord
 } from './knowledge-flywheel.ts';
+// WMB-5233：诚实三态（uncompiled / legacy_shell / compiled），空壳不显示已编译。
+import type { KnowledgeCompileState } from './knowledge-compile-state.ts';
 
 /** 画布三模式投影读通道。 */
 export const KNOWLEDGE_CANVAS_PROJECTION_IPC_CHANNEL = 'knowledge-canvas:projection' as const;
@@ -72,6 +74,8 @@ export type KnowledgeCanvasProjectedNode = Readonly<{
   /** 与 getKnowledgeCanvas 一致的引用解析（{id,title,body,revision}；note 节点为本地对象）。 */
   object: Readonly<Record<string, unknown>> | null;
   deepLink: KnowledgeCanvasDeepLink | null;
+  /** WMB-5233：topic 节点诚实三态（uncompiled / legacy_shell / compiled）；非 topic 节点不设置。 */
+  compileState?: KnowledgeCompileState;
   /** change 模式：该节点受目标 ChangeSet 影响的正式对象变化。 */
   changes?: readonly KnowledgeCanvasNodeChange[];
   /** health 模式：该节点关联的健康问题 ID（与 modeData.healthIssues 同一 ID 空间）。 */
@@ -140,6 +144,8 @@ export type KnowledgeCanvasNodeDetail = Readonly<{
     entities: readonly KnowledgeEntityRecord[];
     healthIssues: readonly KnowledgeHealthIssueRecord[];
     recentChanges: readonly KnowledgeChangeSetRecord[];
+    /** WMB-5233：诚实三态（uncompiled / legacy_shell / compiled）；空壳不显示已编译。 */
+    compileState: KnowledgeCompileState;
   }>;
 }>;
 

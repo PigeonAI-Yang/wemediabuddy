@@ -1,5 +1,7 @@
 import { broadcastDataChanged } from './data-changed.ts';
 import { listUpdateReceipts } from './knowledge-flywheel.ts';
+// WMB-5233：主题列表诚实三态（uncompiled / legacy_shell / compiled）。
+import { listTopicCompileStates } from './knowledge-compile-state.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -254,7 +256,10 @@ export function listKnowledgeTopics(database: DatabaseSync, input: { query?: str
     WHERE ${where}
     GROUP BY t.id ORDER BY t.last_seen_at DESC,t.id DESC LIMIT ? OFFSET ?`)
     .all(...filterArgs, limit, offset);
-  return { items, total, limit, offset, hasMore: offset + items.length < total };
+  // WMB-5233：诚实三态（复用同一判定；列表投影一次 join 批量读回）。
+  const compileStates = listTopicCompileStates(database, items.map((row) => String(row.id)));
+  const enriched = items.map((row) => ({ ...row, compileState: compileStates.get(String(row.id)) ?? 'uncompiled' }));
+  return { items: enriched, total, limit, offset, hasMore: offset + items.length < total };
 }
 
 export function createKnowledgeDomain(database:DatabaseSync,input:{

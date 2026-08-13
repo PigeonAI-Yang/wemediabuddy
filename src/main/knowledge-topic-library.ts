@@ -15,6 +15,8 @@ import { getKnowledgeTopicDossier } from './knowledge.ts';
 import {
   getWikiPage, listHealthIssues, listKnowledgeEvidenceLinks, listUpdateReceipts, listWikiPageVersions, listWikiPages
 } from './knowledge-flywheel.ts';
+// WMB-5233：诚实三态判定（与 Canvas 投影共用同一判定，保证同一对象身份一致）。
+import { classifyWikiCompileState } from './knowledge-compile-state.ts';
 import type {
   KnowledgeEvidenceLinkRecord, KnowledgeHealthIssueRecord, KnowledgeUsageRecordRecord,
   KnowledgeWikiPageRecord, KnowledgeWikiPageVersionRecord
@@ -263,10 +265,12 @@ export function getTopicWikiDetail(database: DatabaseSync, rawInput: TopicWikiDe
     }
   }
   const risks = computeRisks(body, page?.compileStatus ?? null);
+  // WMB-5233：诚实三态（uncompiled / legacy_shell / compiled），空壳不随 compile_status 显示已编译。
+  const compileState = classifyWikiCompileState({ page, current, body });
   return Object.freeze({
     topicId,
     topic,
-    wiki: page || current || body ? { page, current, body, compileStatus: page?.compileStatus ?? null, compileNote: page?.compileNote ?? null } : null,
+    wiki: page || current || body ? { page, current, body, compileStatus: page?.compileStatus ?? null, compileNote: page?.compileNote ?? null, compileState } : null,
     versions, receipts, evidence, questions, creationImpact, healthIssues, dossierCounts, risks
   });
 }

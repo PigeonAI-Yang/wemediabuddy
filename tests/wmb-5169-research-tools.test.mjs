@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -14,7 +16,7 @@ import {
   hostnameOf,
   resolveWebsiteCandidates
 } from '../src/main/website-channel.ts';
-import { guardResearchDocument, readWebPage, searchWeb } from '../src/main/research-web-read.ts';
+import { guardResearchDocument, headlessRenderPublicPage, readWebPage, searchWeb } from '../src/main/research-web-read.ts';
 import { startMcp } from '../src/main/mcp.ts';
 
 const WHITELIST = [
@@ -552,6 +554,97 @@ test('fallback enforces the 2 MiB cap by UTF-8 bytes, not JS length', async () =
   });
   assert.equal(ok.ok, true);
   assert.equal(ok.data.renderMode, 'fallback');
+});
+
+// ---- real browser fallback lifecycle (WMB-5175) ----------------------------
+
+const DYNAMIC_SHELL = '<!doctype html><html><head><title>Dynamic Shell</title></head><body><div id="root"></div>'
+  + '<script>document.getElementById("root").innerText = "GLM-5.2 pricing: input 0.60 CNY / output 3.80 CNY per 1M tokens (rendered at runtime)";</script></body></html>';
+
+async function renderTempLeaks(snapshot) {
+  const now = new Set((await readdir(os.tmpdir())).filter((name) => name.startsWith('wmb-research-render-')));
+  return [...now].filter((name) => !snapshot.has(name));
+}
+
+test('playwright-core 1.62 rejects the legacy --user-data-dir launch combo (WMB-5175)', async () => {
+  const { chromium } = createRequire(import.meta.url)('playwright-core');
+  await assert.rejects(
+    chromium.launch({ executablePath: 'C:/definitely/not/here.exe', args: ['--user-data-dir=C:/tmp/legacy-profile'] }),
+    /Pass userDataDir parameter to 'browserType\.launchPersistentContext\(userDataDir, options\)'/
+  );
+});
+
+test('headless fallback renders a dynamic shell via launchPersistentContext (WMB-5175)', async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(DYNAMIC_SHELL);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/pricing`;
+  const before = new Set((await readdir(os.tmpdir())).filter((name) => name.startsWith('wmb-research-render-')));
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    let rendered;
+    try {
+      rendered = await headlessRenderPublicPage(url, {
+        signal: controller.signal,
+        deadlineMs: Date.now() + 30000,
+        maxBytes: 2 * 1024 * 1024,
+        // Local fixture: the SSRF/DNS guard is injected separately and covered by the
+        // dedicated fail-closed tests below; the live readback passes the real guard.
+        validateUrl: async () => {}
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    assert.equal(rendered.status, 200);
+    assert.equal(rendered.title, 'Dynamic Shell');
+    assert.match(rendered.bodyText, /rendered at runtime/);
+    assert.equal(rendered.finalUrl, url);
+  } catch (error) {
+    if (error?.code === 'WEBSITE_RENDER_UNAVAILABLE') return t.skip('no headless render executable installed');
+    throw error;
+  } finally {
+    server.close();
+    assert.deepEqual(await renderTempLeaks(before), [], 'launchPersistentContext temp profile dir must be removed on success');
+  }
+});
+
+test('headless fallback aborts a document hop the validator rejects and still cleans up (WMB-5175)', async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(DYNAMIC_SHELL);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/pricing`;
+  const before = new Set((await readdir(os.tmpdir())).filter((name) => name.startsWith('wmb-research-render-')));
+  const guard = Object.assign(new Error('SSRF guard: private target rejected'), { code: 'WEBSITE_URL_NOT_PUBLIC' });
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    let rejected;
+    try {
+      await headlessRenderPublicPage(url, {
+        signal: controller.signal,
+        deadlineMs: Date.now() + 30000,
+        maxBytes: 2 * 1024 * 1024,
+        validateUrl: async () => { throw guard; }
+      });
+    } catch (error) {
+      rejected = error;
+    } finally {
+      clearTimeout(timer);
+    }
+    assert.ok(rejected, 'validator rejection must surface from the render');
+    assert.equal(rejected.message, guard.message);
+  } catch (error) {
+    if (error?.code === 'WEBSITE_RENDER_UNAVAILABLE') return t.skip('no headless render executable installed');
+    throw error;
+  } finally {
+    server.close();
+    assert.deepEqual(await renderTempLeaks(before), [], 'temp profile dir must be removed even when the navigation is aborted');
+  }
 });
 
 // ---- helpers -------------------------------------------------------------
