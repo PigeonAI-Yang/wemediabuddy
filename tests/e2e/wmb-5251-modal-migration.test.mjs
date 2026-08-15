@@ -224,7 +224,7 @@ const DUPLICATE_SOURCE_TITLE = DUPLICATE_SOURCE_TEXT.slice(0, DUPLICATE_SOURCE_T
 const DISTINCT_BODY_TEXT = 'E2E 独立归档正文 3：这段正文与资料标题、工作摘要均不同，必须继续显示在正文摘录区域。';
 const TODAY_SOURCES = [
   { id: 'e2e-source-1', title: DUPLICATE_SOURCE_TITLE, summary: DUPLICATE_SOURCE_TEXT, author: 'E2E 作者', originalUrl: 'https://x.com/e2e/status/1' },
-  { id: 'e2e-source-2', title: 'E2E 资料 2', summary: 'E2E 资料摘要 2', author: 'E2E 作者', originalUrl: 'https://example.com/e2e/source-2' },
+  { id: 'e2e-source-2', title: 'E2E 资料 2', summary: 'E2E 资料摘要 2', author: 'E2E 作者', originalUrl: 'https://mp.weixin.qq.com/s/e2e-source-2' },
   { id: 'e2e-source-3', title: 'E2E 资料 3', summary: 'E2E 独立工作摘要 3', author: 'E2E 作者', originalUrl: 'https://example.com/e2e/source-3' }
 ];
 
@@ -326,6 +326,39 @@ export default [
         assert((await page.locator('[data-testid="today-source-detail-page"]').count()) === 0, '查看资料 应进入资料库而非来源详情');
         await navigateTo(page, 'today');
         await page.locator('.today-command[data-mode="idle"]').waitFor({ state: 'visible', timeout: 30_000 });
+      });
+
+      await step(evidence, 'feed 元数据行展示与文字等高的平台来源 icon', async () => {
+        const icons = await page.evaluate(() => {
+          const inspect = (title) => {
+            const row = [...document.querySelectorAll('.feed-item')].find((item) => item.querySelector('.feed-title')?.textContent?.includes(title));
+            const sub = row?.querySelector('.feed-sub');
+            const icon = sub?.querySelector('.feed-source-platform');
+            if (!sub || !icon) return null;
+            const sr = sub.getBoundingClientRect();
+            const ir = icon.getBoundingClientRect();
+            const style = getComputedStyle(sub);
+            return {
+              className: icon.className,
+              fontSize: Number.parseFloat(style.fontSize),
+              width: ir.width,
+              height: ir.height,
+              centerDelta: Math.abs((ir.top + ir.height / 2) - (sr.top + sr.height / 2)),
+              hasImage: Boolean(icon.querySelector('img')),
+              hasFallback: Boolean(icon.querySelector('svg'))
+            };
+          };
+          return { x: inspect('E2E 资料 1'), wechat: inspect('E2E 资料 2'), generic: inspect('E2E 资料 3') };
+        });
+        assert(icons.x?.className.includes('pf-x') && icons.x.hasImage, `X 来源应复用 X icon，实际 ${JSON.stringify(icons.x)}`);
+        assert(icons.wechat?.className.includes('pf-wechat') && icons.wechat.hasImage, `微信来源应复用微信 icon，实际 ${JSON.stringify(icons.wechat)}`);
+        assert(icons.generic?.className.includes('feed-source-platform-fallback') && icons.generic.hasFallback, `未知网页应显示通用来源标，实际 ${JSON.stringify(icons.generic)}`);
+        for (const [kind, icon] of Object.entries(icons)) {
+          assert(icon && Math.abs(icon.width - icon.fontSize) <= 1 && Math.abs(icon.height - icon.fontSize) <= 1,
+            `${kind} icon 应与元数据文字等高，实际 ${JSON.stringify(icon)}`);
+          assert(icon.centerDelta <= 1, `${kind} icon 应与元数据行垂直居中，实际 ${JSON.stringify(icon)}`);
+        }
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'today-feed-source-platform-icons' });
       });
 
       await step(evidence, 'feed 标题打开来源 1 内联详情；全局导航和 Pi 保持可用', async () => {

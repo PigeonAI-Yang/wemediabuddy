@@ -120,7 +120,7 @@ const getTopicMaintenance: ToolDefinition = {
 const saveCoreVersion: ToolDefinition = {
   name: 'wmb_save_core_version',
   label: '保存 WMB 核心初稿',
-  description: '通过 WMB MCP 为内容项目保存一个核心正文版本。',
+  description: '通过 WMB MCP 为内容项目保存一个核心正文版本，并可同时更新项目标题。',
   parameters: {
     type: 'object',
     properties: {
@@ -128,6 +128,7 @@ const saveCoreVersion: ToolDefinition = {
       requestId: { type: 'string' },
       projectId: { type: 'string' },
       expectedRevision: { type: 'number' },
+      title: { type: 'string' },
       body: { type: 'string' }
     },
     required: ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'body'],
@@ -139,6 +140,7 @@ const saveCoreVersion: ToolDefinition = {
       request_id: String(params.requestId ?? ''),
       project_id: String(params.projectId ?? ''),
       expected_revision: Number(params.expectedRevision),
+      title: params.title ? String(params.title) : undefined,
       body: String(params.body ?? '')
     }));
   }

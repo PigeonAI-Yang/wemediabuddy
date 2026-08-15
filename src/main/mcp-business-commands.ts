@@ -268,7 +268,8 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
           requireCommandResultData({ ok: false, data: null, error: { code: 'VALIDATION_ERROR', message: '核心版本写入必须提供 expected_revision。' } });
         }
         const data = requireCommandResultData(saveCoreVersion(database, {
-          projectId: normalized.projectId, body: normalized.body, expectedRevision: normalized.expectedRevision!
+          projectId: normalized.projectId, title: normalized.title, body: normalized.body,
+          expectedRevision: normalized.expectedRevision!
         }, false));
         return { data, entityId: data.id, beforeRevision: normalized.expectedRevision, afterRevision: data.projectRevision, readback: data };
       }

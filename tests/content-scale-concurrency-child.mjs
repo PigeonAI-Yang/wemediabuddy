@@ -99,6 +99,7 @@ try {
     grantId: grant.data.id,
     projectId: 'project-1001',
     expectedRevision: 1,
+    title: '客户端 A 新标题',
     body: '客户端 A 新版本'
   });
   const staleResult = await tools.get('wmb_save_core_version').execute('client-b', {
@@ -111,10 +112,11 @@ try {
   });
   const first = JSON.parse(firstResult.details.content[0].text);
   const stale = JSON.parse(staleResult.details.content[0].text);
-  const finalProject = db.prepare('SELECT revision FROM content_projects WHERE id = ?').get('project-1001');
+  const finalProject = db.prepare('SELECT title, revision FROM content_projects WHERE id = ?').get('project-1001');
   const finalVersions = db.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get('project-1001').count;
-  if (!first.ok || first.data.projectRevision !== 2 || stale.ok || stale.error.code !== 'REVISION_CONFLICT'
-    || stale.error.details.current.revision !== 2 || finalProject.revision !== 2 || finalVersions !== 4) {
+  if (!first.ok || first.data.projectRevision !== 2 || first.data.project.title !== '客户端 A 新标题'
+    || stale.ok || stale.error.code !== 'REVISION_CONFLICT' || stale.error.details.current.revision !== 2
+    || finalProject.title !== '客户端 A 新标题' || finalProject.revision !== 2 || finalVersions !== 4) {
     throw new Error('stale revision created an extra version');
   }
 
