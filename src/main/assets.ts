@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { pngDimensionsFromBytes } from './png-dimensions.ts';
 
 export type AssetRecord = {
   id: string; relativePath: string; mimeType: string; byteCount: number; sha256: string; origin: string;
@@ -43,6 +44,51 @@ export function guessImageMime(filePath: string, fallback = 'application/octet-s
   return IMAGE_MIME[path.extname(filePath).toLowerCase()] ?? fallback;
 }
 
+export type StagedAsset = {
+  id: string; relativePath: string; mimeType: string; byteCount: number; sha256: string; origin: string;
+  width: number | null; height: number | null; durationMs: number | null;
+};
+
+export async function stageAssetBytes(dataRoot: string, input: {
+  bytes: Buffer; fileName?: string; mimeType?: string; origin: string;
+  width?: number | null; height?: number | null; durationMs?: number | null;
+}): Promise<StagedAsset> {
+  const extension = path.extname(input.fileName || '').toLowerCase()
+    || (input.mimeType === 'image/png' ? '.png' : input.mimeType === 'image/jpeg' ? '.jpg'
+      : input.mimeType === 'image/webp' ? '.webp' : input.mimeType === 'image/gif' ? '.gif' : '.bin');
+  const mimeType = input.mimeType || guessImageMime(extension, 'application/octet-stream');
+  // WMB-5237：PNG 字节可直接解析像素尺寸（不依赖 sharp）；未显式传宽高时自动补全。
+  let width = input.width ?? null;
+  let height = input.height ?? null;
+  if (width == null && height == null && mimeType === 'image/png') {
+    const dimensions = pngDimensionsFromBytes(input.bytes);
+    width = dimensions?.width ?? null;
+    height = dimensions?.height ?? null;
+  }
+  const sha256 = createHash('sha256').update(input.bytes).digest('hex');
+  const relativePath = path.posix.join('assets', `${sha256}${extension}`);
+  const destination = path.join(dataRoot, ...relativePath.split('/'));
+  await mkdir(path.dirname(destination), { recursive: true });
+  try {
+    await writeFile(destination, input.bytes, { flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  }
+  return { id: randomUUID(), relativePath, mimeType, byteCount: input.bytes.byteLength, sha256, origin: input.origin,
+    width, height, durationMs: input.durationMs ?? null };
+}
+
+export function registerStagedAsset(database: DatabaseSync, staged: StagedAsset) {
+  const existing = database.prepare('SELECT id, relative_path AS relativePath, mime_type AS mimeType FROM assets WHERE sha256 = ?')
+    .get(staged.sha256) as { id: string; relativePath: string; mimeType: string } | undefined;
+  if (existing) return { ...existing, reused: true, sha256: staged.sha256 };
+  const now = new Date().toISOString();
+  database.prepare(`INSERT INTO assets (id, relative_path, mime_type, byte_count, sha256, origin, width, height, duration_ms, created_at, updated_at, revision)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(staged.id, staged.relativePath, staged.mimeType, staged.byteCount,
+    staged.sha256, staged.origin, staged.width, staged.height, staged.durationMs, now, now);
+  return { id: staged.id, relativePath: staged.relativePath, reused: false, mimeType: staged.mimeType, sha256: staged.sha256 };
+}
+
 async function persistAssetBytes(
   database: DatabaseSync,
   dataRoot: string,
@@ -72,22 +118,38 @@ async function persistAssetBytes(
     const id = randomUUID();
     const now = new Date().toISOString();
     const byteCount = (await stat(destination)).size;
-    database.prepare(`INSERT INTO assets (
-      id, relative_path, mime_type, byte_count, sha256, origin, width, height, duration_ms, created_at, updated_at, revision
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-      .run(
-        id,
-        relativePath,
-        input.mimeType,
-        byteCount,
-        sha256,
-        input.origin,
-        input.width ?? null,
-        input.height ?? null,
-        input.durationMs ?? null,
-        now,
-        now
-      );
+    // WMB-5237 血缘：新素材注册时同事务写入 imported provenance（追加式血缘；reused 路径已早退，不重复）。
+    // SAVEPOINT 保证 assets + asset_provenance 原子（可嵌套在调用方事务内，不与 BEGIN 冲突）。
+    database.exec('SAVEPOINT wmb_asset_import');
+    try {
+      database.prepare(`INSERT INTO assets (
+        id, relative_path, mime_type, byte_count, sha256, origin, width, height, duration_ms, created_at, updated_at, revision
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+        .run(
+          id,
+          relativePath,
+          input.mimeType,
+          byteCount,
+          sha256,
+          input.origin,
+          input.width ?? null,
+          input.height ?? null,
+          input.durationMs ?? null,
+          now,
+          now
+        );
+      database.prepare(`INSERT INTO asset_provenance (id, asset_id, kind, origin, created_at) VALUES (?, ?, 'imported', ?, ?)`)
+        .run(randomUUID(), id, input.origin, now);
+      database.exec('RELEASE wmb_asset_import');
+    } catch (error) {
+      try {
+        database.exec('ROLLBACK TO wmb_asset_import');
+        database.exec('RELEASE wmb_asset_import');
+      } catch {
+        // 回滚窗口已失效（外层事务已终止）→ 保留原始错误继续抛出
+      }
+      throw error;
+    }
     return { id, relativePath, reused: false, mimeType: input.mimeType, sha256 };
   } catch (error) {
     await rm(temporary, { force: true });
@@ -151,3 +213,12 @@ export function markdownImageForAsset(asset: { id: string; relativePath: string 
   const safeAlt = (alt || '图片').replace(/[[\]]/g, '');
   return `![${safeAlt}](wmb-asset://${asset.id})`;
 }
+
+// ============================================================
+// WMB-5237：非破坏裁切派生 —— 输入边界（纯常量/校验，无新依赖）。
+// PNG 解析（magic + IHDR 尺寸）的单一实现是 src/main/png-dimensions.ts；
+// 这里只保留裁切载荷的大小边界，解析一律走共享实现，禁止第二套 parser。
+// ============================================================
+
+/** 裁切派生 PNG 大小上限（50MB；renderer canvas 导出远小于此，防异常/滥用）。 */
+export const MAX_DERIVED_IMAGE_BYTES = 50 * 1024 * 1024;

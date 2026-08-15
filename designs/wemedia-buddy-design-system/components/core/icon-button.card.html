@@ -1,0 +1,73 @@
+<!-- @dsCard group="Components" viewport="700x170" name="IconButton" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>IconButton</title>
+<link rel="stylesheet" href="../../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cap { flex-basis: 100%; font-size: 11px; color: var(--muted-low); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="demo-root"></div>
+<script src="../../_ds_bundle.js"></script>
+<script>
+(function () {
+  var scripts = document.getElementsByTagName('script');
+  var rootUrl = '';
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].getAttribute('src') || '';
+    if (src.indexOf('_ds_bundle.js') !== -1) { rootUrl = src.slice(0, -'_ds_bundle.js'.length); break; }
+  }
+  var ns = null;
+  for (var key in window) { if (/^WemediaBuddyDesignSystem_[0-9a-f]{6}$/.test(key)) { ns = key; break; } }
+  if (!ns && window.location.protocol !== 'file:') {
+    try {
+      var req = new XMLHttpRequest();
+      req.open('GET', rootUrl + '_ds_manifest.json', false);
+      req.send(null);
+      var parsed = JSON.parse(req.responseText);
+      if (parsed && parsed.namespace && window[parsed.namespace]) ns = parsed.namespace;
+    } catch (e) { ns = null; }
+  }
+  window.__dsNs = ns;
+})();
+</script>
+<script>
+(function () {
+  var R = window.React;
+  var RD = window.ReactDOM;
+  var ns = window.__dsNs;
+  var host = document.getElementById('demo-root');
+  if (!ns || !R || !RD) { host.textContent = 'Design-system bundle not compiled yet (run compile-design-system.mjs).'; return; }
+  var C = window[ns];
+  var el = R.createElement;
+  var icon = function (d) { return el('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, el('path', { d: d })); };
+  var node = el('div', null,
+    el('div', { className: 'row' }, el('span', { className: 'cap' }, '38px · bordered')),
+    el('div', { className: 'row' },
+      el(C.IconButton, { label: '否掉这个机会' }, icon('M7 7l10 10M17 7L7 17')),
+      el(C.IconButton, { label: '开始创作' }, icon('m4 20 4.5-1 10-10-3.5-3.5-10 10z')),
+      el(C.IconButton, { label: '归档', disabled: true }, icon('M4 7h16M9 7V4h6v3'))
+    ),
+    el('div', { className: 'row' }, el('span', { className: 'cap' }, '32px · ghost / danger')),
+    el('div', { className: 'row' },
+      el(C.IconButton, { label: '开始创作', size: 'sm', variant: 'ghost' }, icon('m4 20 4.5-1 10-10-3.5-3.5-10 10z')),
+      el(C.IconButton, { label: '删除', size: 'sm', variant: 'danger' }, icon('M7 7l10 10M17 7L7 17'))
+    )
+  );
+  var root = null;
+  if (RD.createRoot) {
+    root = RD.createRoot(host);
+    if (RD.flushSync) { RD.flushSync(function () { root.render(node); }); }
+    else { root.render(node); }
+  } else {
+    RD.render(node, host);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1813 @@
+{
+  "meta": {
+    "title": "WeMediaBuddy Electron E2E 用户旅程矩阵（WMB-5243）",
+    "version": 1,
+    "generatedAt": "2026-08-13",
+    "source": "只读盘点 src/renderer 顶级页面/导航与现有 tests（main.tsx app-shell、app-types.ts views、各 view 实现、tests/*.test.mjs）",
+    "readOnly": "矩阵建立不修改任何业务代码；仅产出本文件。",
+    "journeySchema": {
+      "id": "全局唯一旅程 ID，形如 <页面前缀>-<序号>-<slug>",
+      "page": "顶级页面/表面 id（today/agents/discover/proposals/studio/publish/results/topic/library/canvas/settings/onboarding/pi/navigation）",
+      "risk": "critical | high | medium | low",
+      "automatable": "true=可运行 Electron 场景（本地 workspace 夹具即可，无外部真实副作用）；false=标 manual 排除",
+      "scenario": "Given/When/Then 场景描述",
+      "assertions": "可观察断言数组（DOM/状态/持久化）",
+      "exclusionReason": "automatable=false 时的排除理由；automatable=true 时为 null",
+      "testFile": "对应场景文件路径（tests/e2e/<page>.test.mjs）",
+      "status": "planned | implemented | passing（当前全部 planned；由实现方与主代理推进）"
+    },
+    "coverage": {
+      "formula": "coveragePct = passed / denominator * 100；denominator = 全部 risk∈{critical,high} 且 automatable=true 的旅程；passed = denominator 中 status=passing 的旅程",
+      "gatePct": 95,
+      "gate": "coveragePct >= 95 视为通过；manual（automatable=false）旅程不进入分母",
+      "current": {
+        "denominator": 73,
+        "manualExcluded": 4,
+        "passing": 0,
+        "coveragePct": 0,
+        "gateMet": false,
+        "note": "tests/e2e/ 场景文件尚未实现；分母为矩阵建立时盘点结果，实现后由 harness 按公式重算",
+        "gaps": [
+          {
+            "id": "OB-001-onboarding-first-run-complete",
+            "testFile": "tests/e2e/onboarding.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "OB-002-onboarding-completed-skip",
+            "testFile": "tests/e2e/onboarding.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "OB-003-onboarding-error-path",
+            "testFile": "tests/e2e/onboarding.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TD-001-today-plan-normal",
+            "testFile": "tests/e2e/today.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TD-002-today-run-running",
+            "testFile": "tests/e2e/today.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TD-003-today-empty",
+            "testFile": "tests/e2e/today.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TD-004-today-selection-pi-context",
+            "testFile": "tests/e2e/today.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TD-005-today-error-recovery",
+            "testFile": "tests/e2e/today.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-001-agents-roster-normal",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-002-agents-detail-modal",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-003-agents-redispatch-history",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-004-agents-cancel-active",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-005-agents-empty",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-006-agents-desk-conflict-error",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-007-agents-permission-redispatch-error",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "AG-008-agents-legacy-task-avatar",
+            "testFile": "tests/e2e/agents.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-001-discover-rankings-normal",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-002-discover-lists-normal",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-003-discover-rankings-error",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-004-discover-empty",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-005-discover-save-error",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "DS-006-discover-list-load-error",
+            "testFile": "tests/e2e/discover.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PP-001-proposals-ledger-normal",
+            "testFile": "tests/e2e/proposals.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PP-002-proposals-adopt-dismiss-restore",
+            "testFile": "tests/e2e/proposals.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PP-004-proposals-empty",
+            "testFile": "tests/e2e/proposals.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PP-005-proposals-error",
+            "testFile": "tests/e2e/proposals.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PP-006-proposals-pi-selection",
+            "testFile": "tests/e2e/proposals.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "ST-001-studio-project-normal",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-002-studio-save-persist",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-003-studio-platform-tabs",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-004-studio-annotations",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-005-studio-empty",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-006-studio-body-error",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "ST-007-studio-save-permission-error",
+            "testFile": "tests/e2e/studio.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-001-publish-list-normal",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-002-publish-empty",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-003-publish-prepared-actions",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-004-publish-needs-user-takeover",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-005-publish-reconcile-unknown",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "PB-009-publish-operation-error",
+            "testFile": "tests/e2e/publish.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "RS-001-results-cockpit-normal",
+            "testFile": "tests/e2e/results.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "RS-002-results-empty",
+            "testFile": "tests/e2e/results.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "RS-003-results-health-panel",
+            "testFile": "tests/e2e/results.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "RS-004-results-error",
+            "testFile": "tests/e2e/results.test.mjs",
+            "status": "implemented"
+          },
+          {
+            "id": "TP-001-topic-list-normal",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-002-topic-detail-overview",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-003-topic-keyboard-deeplinks",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-004-topic-honest-states",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-005-topic-empty-list",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-006-topic-error",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "TP-007-topic-actions",
+            "testFile": "tests/e2e/topic.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-001-library-saved-normal",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-002-library-sections-states",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-003-library-health-filters",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-004-library-focus-deeplink",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-005-library-empty",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "LB-006-library-error",
+            "testFile": "tests/e2e/library.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-001-canvas-network-normal",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-002-canvas-node-card",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-003-canvas-drag-select-pi",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-004-canvas-history-shortcuts",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-005-canvas-filters-display",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-006-canvas-empty",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-007-canvas-error-retry",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "CV-008-canvas-context-budget",
+            "testFile": "tests/e2e/canvas.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "STG-001-settings-sections-nav",
+            "testFile": "tests/e2e/settings.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "STG-002-settings-theme-persist",
+            "testFile": "tests/e2e/settings.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "STG-003-settings-pi-config-save",
+            "testFile": "tests/e2e/settings.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "STG-004-settings-data-workspace",
+            "testFile": "tests/e2e/settings.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "STG-005-settings-browser-bind",
+            "testFile": "tests/e2e/settings.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PI-001-pi-dock-context-chip",
+            "testFile": "tests/e2e/pi.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PI-003-pi-unconfigured-state",
+            "testFile": "tests/e2e/pi.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "PI-004-pi-configure-failure",
+            "testFile": "tests/e2e/pi.test.mjs",
+            "status": "planned"
+          },
+          {
+            "id": "NAV-001-global-navigation-all-views",
+            "testFile": "tests/e2e/navigation.test.mjs",
+            "status": "planned"
+          }
+        ]
+      }
+    },
+    "pages": [
+      {
+        "id": "onboarding",
+        "label": "首次引导（app-shell 前置页）",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 3
+      },
+      {
+        "id": "today",
+        "label": "今日",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 5
+      },
+      {
+        "id": "agents",
+        "label": "智能体",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 7
+      },
+      {
+        "id": "discover",
+        "label": "发现",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 6
+      },
+      {
+        "id": "proposals",
+        "label": "选题",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 5
+      },
+      {
+        "id": "studio",
+        "label": "创作",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 7
+      },
+      {
+        "id": "publish",
+        "label": "发布",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 6
+      },
+      {
+        "id": "results",
+        "label": "结果",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 4
+      },
+      {
+        "id": "topic",
+        "label": "主题",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 7
+      },
+      {
+        "id": "library",
+        "label": "资料库",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 6
+      },
+      {
+        "id": "canvas",
+        "label": "关系画布（WMB-5243 全局 Wiki 知识网络）",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 8
+      },
+      {
+        "id": "settings",
+        "label": "设置",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 5
+      },
+      {
+        "id": "pi",
+        "label": "Pi dock（跨页表面）",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 3
+      },
+      {
+        "id": "navigation",
+        "label": "全局导航（跨页）",
+        "minJourneys": 1,
+        "criticalHighAutomatable": 1
+      }
+    ]
+  },
+  "journeys": [
+    {
+      "id": "OB-001-onboarding-first-run-complete",
+      "page": "onboarding",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 全新隔离 userData（无 onboarding 记录） When 启动应用 Then 显示 onboarding 引导（未完成态）；按流程完成工作空间初始化（选择数据根目录/确认 profile） When 完成后返回应用 Then 进入主壳并落在今日页",
+      "assertions": [
+        "启动瞬间显示 onboarding 卡（「正在准备本地工作空间…」或引导表单），不显示主壳",
+        "完成初始化后 onboardingStatus.completed=true，主壳渲染（.app-shell），默认视图为 today",
+        "onboarding 完成后再次启动不再显示引导，直接进入主壳"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/onboarding.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "OB-002-onboarding-completed-skip",
+      "page": "onboarding",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 已存在 completed 的 onboarding 状态 When 启动应用 Then 跳过引导直接渲染主壳；状态栏显示当前工作空间与 profile",
+      "assertions": [
+        "无 onboarding 表单 DOM，直接出现 .app-shell",
+        "状态栏出现工作空间显示名与 profileId",
+        "getDataRoot 返回路径并在设置「数据与存储」中可见"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/onboarding.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "OB-003-onboarding-error-path",
+      "page": "onboarding",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 工作空间初始化失败（数据根目录不可写/创建 workspace 失败） When 用户完成引导步骤 Then 显示明确错误且不进入主壳；修复后可重试成功",
+      "assertions": [
+        "失败时页面显示错误信息而非卡死在加载壳",
+        "重试路径可完成初始化并进入主壳",
+        "无静默成功或假完成状态"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/onboarding.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-001-today-plan-normal",
+      "page": "today",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 已初始化工作空间且今日有计划数据 When 打开今日页 Then 渲染今日计划项、统计、状态行与命令栏；「去创作」打开创作页",
+      "assertions": [
+        "今日页渲染计划项列表与统计（今日可批等计数）",
+        "状态栏显示今日运行状态与 pageStatus 文本",
+        "点击计划项/「去创作」导航到 studio，或 openTopic/openLibrary/openProposals/openSettings 各入口可达",
+        "滚动位置在切回今日页时恢复（scrollMemory）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-002-today-run-running",
+      "page": "today",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 今日运行进行中（running/nonterminal） When 停留在今日页 Then 页面显示运行中状态、blockers 面板与入库信息流；存在 needs_user 研究缺口时显示「研究缺口 · 等你批」区段",
+      "assertions": [
+        "运行中状态文案出现且 data-running 反映 busy",
+        "blockers 区渲染且可执行动作（如需）",
+        "feed 区渲染来源列表；无新资料时显示「今天暂无新资料，以下为最近有效入库」",
+        "researchGaps 非空时出现 aria-label=研究缺口 · 等你批 的区段"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-003-today-empty",
+      "page": "today",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 空工作空间（无计划、无来源） When 打开今日页 Then 显示各空态文案且不崩溃；Pi 未配置时状态栏显示「Pi 未配置」",
+      "assertions": [
+        "feed 区显示「今日还没有入库资料。」或「暂无可用入库资料。」",
+        "计划/发酵区为空态且页面无异常报错",
+        "无数据时页面仍可导航到其他视图"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-004-today-selection-pi-context",
+      "page": "today",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 今日页有计划项与来源 When 勾选计划项/选择来源 Then Pi 上下文 chip 更新（今日内容 · 选中对象）且显示「已选 N/M 条资料进 Pi」；切换页面后 chip 归零",
+      "assertions": [
+        "选择来源后 feed-selection-bar 显示「已选 N/M 条资料进 Pi」",
+        "Pi dock 上下文 chip 反映今日内容与选中对象（describePiContextChip）",
+        "切到其他视图后选择状态清空（onSelectionChange 重置），Pi chip 不再引用今日选中"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-005-today-error-recovery",
+      "page": "today",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given getToday 首次失败或数据为空 When 打开今日页 Then 页面优雅降级；触发 dataChanged（today/agent scope）或可见性恢复后自动刷新恢复数据",
+      "assertions": [
+        "加载失败/空数据时无白屏崩溃，页面渲染空态",
+        "dataChanged 事件（scopes 含 today/agent）触发 refreshToday 后数据出现",
+        "document.hidden 恢复可见时触发刷新"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TD-006-today-fermenting-rail",
+      "page": "today",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 存在发酵中（fermenting）条目 When 打开今日页 Then 发酵栏展示 items/watching/topics/pinnedSources；选中发酵项进入 Pi 上下文",
+      "assertions": [
+        "发酵栏渲染携带条目与关注主题",
+        "点击发酵项后 Pi 上下文对象类型为 fermenting/plan_item"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/today.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-001-agents-roster-normal",
+      "page": "agents",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 有智能体班组投影 When 打开智能体页 Then 五角色（主管/记者/策划/写作/资料员）分组与概览行渲染，活动实例卡显示状态与任务",
+      "assertions": [
+        "五个角色分组始终可见（含空角色）",
+        "活动实例显示状态词（running/needs_user/blocked 等）与任务摘要",
+        "页头显示工作/排队/等你批计数（有数据时）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-002-agents-detail-modal",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 角色区有实例 When 点击实例/角色 Then 打开详情弹窗显示工单信息；关闭后焦点回到触发元素",
+      "assertions": [
+        "弹窗打开并渲染该 job/role 详情",
+        "关闭弹窗后页面状态与焦点正常（focusReturn）",
+        "needs_user 实例在弹窗与卡片中均显示「等你批」提示"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-003-agents-redispatch-history",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 历史工单区存在已结束实例 When 点击一键续派并确认 Then 调用 jobsSpawn 并显示「已续派 …」消息；新实例出现于活动区",
+      "assertions": [
+        "续派按钮可用并触发确认",
+        "消息文本包含「已续派」与 job id 前缀",
+        "刷新后活动实例区包含新实例，历史保留"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-004-agents-cancel-active",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 活动实例可取消 When 点击取消 Then 显示「已取消 …」消息且实例状态更新为终态",
+      "assertions": [
+        "取消调用成功并返回终态 job",
+        "消息反映取消结果与状态词",
+        "实例从活动区消失或转为历史"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-005-agents-empty",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何任务 When 打开智能体页 Then 每个角色组显示「当前无任务」；计数为零；页面不崩溃",
+      "assertions": [
+        "五角色组均渲染且空态文案出现",
+        "页头计数为零或隐藏",
+        "无投影错误提示"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-006-agents-desk-conflict-error",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 主管席位被占用或员工任务资源冲突 When 打开智能体页 Then 显示 role=alert 冲突横幅「主管受阻，或员工任务正被资源占用…」，页面其余部分正常",
+      "assertions": [
+        "冲突横幅出现且 role=alert",
+        "冲突时仍可查看其他角色区",
+        "冲突解除后横幅消失"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-007-agents-permission-redispatch-error",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无续派/取消权限（grant 缺失） When 触发续派或取消 Then 操作失败并显示错误消息，无静默成功或崩溃",
+      "assertions": [
+        "错误消息显示（message 区）且不误报成功",
+        "界面保持可用，可继续浏览",
+        "错误后刷新仍与后端一致"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "AG-008-agents-legacy-task-avatar",
+      "page": "agents",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 角色卡显示遗留 Pi 任务工作中（roster 行 active 而投影无实例） When 打开详情弹窗 Then 渲染同一 roster 行的真实任务明细（状态/进度/任务事件/运行记录）并经轮询实时更新；大号头像控件为唯一头像入口，裁切画布预载当前头像像素，保存后弹窗即时恢复并同步新头像",
+      "assertions": [
+        "投影无实例时弹窗显示真实任务而非「暂无运行明细」",
+        "任务事件/进度/业务日随磁盘更新经轮询刷新",
+        "弹窗头像控件点击进入裁切，画布预载当前头像像素",
+        "替换图片保存后裁切关闭、详情弹窗恢复并显示新头像；角色卡同步"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/agents.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-001-discover-rankings-normal",
+      "page": "discover",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 工作空间启用 rankings 能力 When 打开发现页（榜单区） Then 加载 GitHub 榜单并渲染条目；切换 board、刷新榜单可用；点击「入库」将条目写入资料库并显示成功提示",
+      "assertions": [
+        "榜单条目列表渲染（排名/名称/描述/语言/星数）",
+        "board 筛选切换有效，选中态标记 context-selected",
+        "刷新按钮触发重新加载且 loading 态出现",
+        "入库成功后 savedKeys 更新且无「入库失败」提示；资料库中出现该来源"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-002-discover-lists-normal",
+      "page": "discover",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given X Lists 索引可用（缓存/登录态） When 切到 Lists 区并读取列表 Then 渲染 List 分组与时间线帖子；点击帖子打开详情与评论；选中帖子更新 Pi 上下文",
+      "assertions": [
+        "List 索引读取后分组渲染，时间线卡片含作者/文本/时间",
+        "打开帖子显示正文与评论（无评论时「暂无评论」）",
+        "选中帖子后 Pi 上下文对象类型为 x_list_post（或列表级 x_list）",
+        "刷新按钮与「读取 X Lists」重试路径可用"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-003-discover-rankings-error",
+      "page": "discover",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 榜单读取失败或 board 不可用 When 打开发现页 Then 显示「榜单读取失败」错误态或「暂时不可读」+ 打开来源按钮；不崩溃",
+      "assertions": [
+        "读取失败时 empty-state 显示「榜单读取失败」与错误信息",
+        "board.status=unavailable 时显示「暂时不可读」与「打开来源」按钮",
+        "错误态下仍可切到 Lists 区"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-004-discover-empty",
+      "page": "discover",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given rankings 未启用或无榜单数据 When 打开发现页 Then 榜单入口隐藏/降级，Lists 区正常；空数据时显示加载或空态",
+      "assertions": [
+        "rankingsEnabled=false 时 activeSection 回退到 lists，榜单按钮不渲染",
+        "无榜单数据时显示「正在读取最新榜单…」或空态，无报错",
+        "无工作空间时显示「正在读取工作空间…」"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-005-discover-save-error",
+      "page": "discover",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 入库操作失败（权限/写入失败） When 点击「入库」 Then 显示「入库失败」错误提示且不显示成功状态",
+      "assertions": [
+        "saveNote 显示失败原因（含「入库失败」）",
+        "savedKeys 未包含失败条目",
+        "后续重试可成功"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "DS-006-discover-list-load-error",
+      "page": "discover",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given X List 索引读取失败 When 切到 Lists 区 Then 显示错误提示与「读取 X Lists」重试按钮；加载更多失败时给出重试提示",
+      "assertions": [
+        "索引失败时显示错误/空态与读取按钮",
+        "加载更多失败时显示「这轮没抓到新动态，再下拉或点一次加载更多重试。」",
+        "重试成功后时间线恢复渲染"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/discover.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-001-proposals-ledger-normal",
+      "page": "proposals",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 选题台账有数据 When 打开选题页 Then 渲染五个页签（今日可批/待处理/已采纳/已否掉/已过期）与计数统计；今日可批列表展示选题卡",
+      "assertions": [
+        "五页签与台账计数渲染（今日可批/待处理/已采纳/已否掉/已过期）",
+        "选题卡显示标题/优先级/时效性/理由等字段",
+        "页签切换渲染对应状态列表且计数一致"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-002-proposals-adopt-dismiss-restore",
+      "page": "proposals",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 今日可批存在选题 When 否掉选题（确认弹窗） Then 条目进入「已否掉」；在「已否掉」点击恢复回到原状态；已采纳条目可「去创作」打开对应项目",
+      "assertions": [
+        "否掉需 appConfirm 确认；确认后条目移入已否掉并留痕",
+        "恢复按钮将条目移回可批状态",
+        "adopted 条目显示「去创作 ›」且点击打开 studio 对应项目"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-003-proposals-batch-dismiss",
+      "page": "proposals",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 勾选多条选题 When 批量否掉 Then 显示批量确认并全部移入已否掉；计数更新",
+      "assertions": [
+        "批量确认文本包含勾选条数",
+        "确认后所有勾选项进入已否掉，计数同步"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-004-proposals-empty",
+      "page": "proposals",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 台账为空 When 打开选题页 Then 各页签显示对应空态文案且计数为零；「今日没有待批选题」空态带「回到今日」入口",
+      "assertions": [
+        "今日可批空态「今日没有待批选题」+ 回到今日按钮",
+        "待处理/已采纳/已否掉/已过期各自空态文案出现",
+        "页面无崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-005-proposals-error",
+      "page": "proposals",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 台账加载失败或操作失败 When 打开选题页/执行动作 Then 显示错误且可恢复，无静默失败",
+      "assertions": [
+        "加载失败时显示错误态与重试入口",
+        "否掉/恢复失败时错误消息可见且计数未漂移",
+        "恢复后数据与后端一致"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PP-006-proposals-pi-selection",
+      "page": "proposals",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 选题卡可选中 When 选中一条选题 Then Pi 上下文 chip 显示选题台账与选中选题；发送时携带选中条目",
+      "assertions": [
+        "选中后 Pi 上下文对象类型为 plan_item，chip 显示选题标题",
+        "切走视图后选择清空"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/proposals.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "ST-001-studio-project-normal",
+      "page": "studio",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 存在创作项目 When 打开创作页 Then 项目列表渲染；打开项目进入核心正文编辑器（标题/正文），主 CTA 为「保存」",
+      "assertions": [
+        "项目列表渲染并支持选中（studioSelectedId 持久化）",
+        "核心编辑器加载标题与正文，格式栏可用",
+        "页面主 CTA 唯一且为「保存」"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-002-studio-save-persist",
+      "page": "studio",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 打开项目并编辑正文 When 修改标题/正文并保存 Then 保存成功反馈；切走再切回（或重载）后内容持久保留",
+      "assertions": [
+        "保存后出现成功反馈且 dirty 标记清除",
+        "刷新/重进项目后编辑内容仍在（真实 SQLite 读回）",
+        "保存失败时无假成功（错误可见）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-003-studio-platform-tabs",
+      "page": "studio",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 项目启用了平台版本 When 切到 X/小红书/公众号 页签 Then 只读取该平台自身版本；无版本时显示空白编辑器并可从核心正文创建首版；可切换同平台历史版本",
+      "assertions": [
+        "平台页签仅渲染该平台版本（互不串数据）",
+        "无版本时显示空编辑器与「基于核心正文创建首版」路径",
+        "版本栏切换同平台其他版本有效；保存写入对应平台版本"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-004-studio-annotations",
+      "page": "studio",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 打开项目正文 When 拖选文字并标记为有问题/标记并说明 Then 批注层持久化并显示暖黄底纹；可在版本栏批注列表查看、编辑说明、移除或标记已解决",
+      "assertions": [
+        "批注创建后正文显示批注样式且列表出现该批注",
+        "批注说明可编辑保存；移除/已解决后状态更新",
+        "批注在重载后仍存在（持久化）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-005-studio-empty",
+      "page": "studio",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何项目 When 打开创作页 Then 显示空态（无项目指引），可从今日/选题进入创建路径；页面不崩溃",
+      "assertions": [
+        "无项目时显示空态与创建入口（或经选题去创作路径）",
+        "无项目时编辑器区不报错"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-006-studio-body-error",
+      "page": "studio",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 正文加载失败或为空 When 打开项目 Then 诚实显示 bodyStatus（failed/empty）与摘要，不用工程元数据填充，可重试",
+      "assertions": [
+        "bodyStatus=failed 时显示失败态与重试；empty 时显示空态",
+        "不伪造正文内容",
+        "重试/刷新后可加载正文"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-007-studio-save-permission-error",
+      "page": "studio",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无保存权限/写保护触发 When 保存正文 Then 显示明确错误且不假成功，内容不丢失并可恢复编辑",
+      "assertions": [
+        "保存失败错误可见（write-guard/权限消息）",
+        "dirty 状态保持，再次授权后可保存成功"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "ST-008-studio-open-publish",
+      "page": "studio",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 项目已准备平台版本 When 点击去发布 Then 进入发布页并选中该项目对应发布记录（若已生成）",
+      "assertions": [
+        "发布页打开且选中项与项目关联",
+        "无发布记录时发布页空态指引回创作"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/studio.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PB-001-publish-list-normal",
+      "page": "publish",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 存在发布记录（prepared/awaiting/published/failed/needs_user/unknown） When 打开发布页 Then 发布列表与选中详情卡渲染，状态映射为用户语言（已准备/等待人工发布/已发布/失败/需要接管/待对账），账号身份核对显示",
+      "assertions": [
+        "发布卡显示平台标签、状态词、账号身份（accountKey 核对）",
+        "选中项与列表同步（selectedId 回填第一个）",
+        "操作状态词映射正确（待授权/已授权/浏览器已锁定/编辑器执行中/等待核对/编辑器已准备/需要人工处理/结果未知/失败）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "PB-002-publish-empty",
+      "page": "publish",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何发布记录 When 打开发布页 Then 显示空态「还没有发布任务」与「回到创作」按钮；点击回到创作页",
+      "assertions": [
+        "空态文案出现且无异常",
+        "「回到创作」导航到 studio"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "PB-003-publish-prepared-actions",
+      "page": "publish",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given prepared 发布项且平台已启用（非小红书） When 选中该项 Then 显示「继续编辑」与「授权打开并填充编辑器」按钮；继续编辑打开对应项目",
+      "assertions": [
+        "prepared 项渲染待授权状态与两个动作按钮",
+        "「继续编辑」跳转 studio 对应项目",
+        "平台未启用时动作按钮不渲染且无错误"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "PB-004-publish-needs-user-takeover",
+      "page": "publish",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given needs_user 发布项 When 选中 Then 显示「打开浏览器接管」按钮；点击进入接管路径（设置/浏览器接管或对账入口），状态可更新为已处理",
+      "assertions": [
+        "needs_user 项渲染「打开浏览器接管」主按钮",
+        "接管入口可达（takeover→设置或浏览器）",
+        "对账/接管动作后状态刷新正确"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "PB-005-publish-reconcile-unknown",
+      "page": "publish",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given unknown/待对账发布项（非微信） When 点击「我已核对，确认未发布」 Then 对账动作执行且状态更新为已处理/失败可见",
+      "assertions": [
+        "unknown 项渲染「我已核对，确认未发布」按钮",
+        "对账成功后状态更新，无重复操作",
+        "对账失败时错误可见"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "PB-006-publish-execute-editor",
+      "page": "publish",
+      "risk": "critical",
+      "automatable": false,
+      "scenario": "真实人工路径：prepared 项 → 授权打开并填充平台编辑器 → 浏览器锁定 → 编辑器执行 → 等待核对 → 人工核对后最终发布",
+      "assertions": [
+        "人工核对发布前的操作状态链（待授权→已授权→浏览器已锁定→编辑器执行中→等待核对）",
+        "最终发布按钮由人工在真实账号浏览器完成",
+        "发布后状态为已发布且回读指标"
+      ],
+      "exclusionReason": "「授权打开并填充编辑器」需要真实平台账号登录会话并在账号上产生可见副作用（打开登录态编辑器、填充正文）；无沙箱账号可供自动化，纳入 manual 排除，不进可自动化分母。",
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PB-007-publish-final-publish",
+      "page": "publish",
+      "risk": "critical",
+      "automatable": false,
+      "scenario": "真实人工路径：编辑器已准备 → 人工在平台编辑器点击最终发布 → 内容出现在真实账号",
+      "assertions": [
+        "发布发生在真实平台编辑器中，由人类点击（等待人工发布/需要接管语义）",
+        "发布后发布页状态为已发布",
+        "E2E 不得代点最终发布"
+      ],
+      "exclusionReason": "最终发布是真实外部平台副作用（在真实账号发布内容），契约明确为人工边界；自动化会制造真实公开内容，纳入 manual 排除，不进可自动化分母。",
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PB-008-publish-readback-metrics",
+      "page": "publish",
+      "risk": "high",
+      "automatable": false,
+      "scenario": "真实人工路径：已发布内容回读（微信回读/指标快照），核对账号侧发布结果",
+      "assertions": [
+        "回读基于真实账号已发布内容与指标",
+        "回读失败时显示失败原因且不假成功"
+      ],
+      "exclusionReason": "回读依赖真实平台账号已发布数据与指标；无账号夹具不可自动化，纳入 manual 排除，不进可自动化分母。",
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PB-009-publish-operation-error",
+      "page": "publish",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 发布操作失败（failed/unknown） When 选中该项 Then 显示失败/待对账状态与原因，可走继续编辑/对账恢复路径，页面不崩溃",
+      "assertions": [
+        "failed 项显示「失败」与错误原因",
+        "unknown 项可进入对账路径",
+        "状态刷新后（dataChanged publications scope）列表更新"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/publish.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "RS-001-results-cockpit-normal",
+      "page": "results",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 存在发布结果与指标快照 When 打开结果页 Then 周期聚合驾驶舱渲染（hero/图表区），可在图表区内钻取单帖详情",
+      "assertions": [
+        "聚合视图渲染指标（阅读/点赞/评论等映射中文）与图表",
+        "点击数据点/帖子进入 DrillView 单帖钻取并可返回",
+        "空窗口/无指标字段显示诚实状态（平台不支持/暂不可见/解析失败）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/results.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "RS-002-results-empty",
+      "page": "results",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何发布记录 When 打开结果页 Then 各面板显示空态，页面不崩溃",
+      "assertions": [
+        "无数据时 hero/图表/健康面板均有空态",
+        "页面无异常报错"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/results.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "RS-003-results-health-panel",
+      "page": "results",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 存在健康问题数据 When 打开结果页健康面板 Then 问题列表按严重度渲染并可过滤；操作面板动作可用",
+      "assertions": [
+        "健康问题按严重度/状态渲染",
+        "严重度与状态过滤生效",
+        "动作面板（ActionsPanel）渲染对应动作"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/results.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "RS-004-results-error",
+      "page": "results",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 结果/指标加载失败 When 打开结果页 Then 诚实显示失败或空态并可通过刷新恢复，无崩溃",
+      "assertions": [
+        "加载失败时显示错误/空态而非白屏",
+        "dataChanged（publications scope）或刷新后数据恢复"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/results.test.mjs",
+      "status": "implemented"
+    },
+    {
+      "id": "RS-005-results-focus-pi",
+      "page": "results",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 点击结果页数据对象 When 聚焦某条记录 Then Pi 上下文聚焦对象更新（结果 · publication）",
+      "assertions": [
+        "点击记录后 Pi 上下文对象类型/标题更新",
+        "取消聚焦后上下文归零"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/results.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-001-topic-list-normal",
+      "page": "topic",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 存在主题 When 打开主题页 Then 列表渲染（WMB-5242 知识目录语义：当前认识/更新时间/整理状态）；状态筛选（全部/active/watching/dormant）可用",
+      "assertions": [
+        "主题卡显示当前认识摘要、最近整理时间与整理状态（已整理/等待整理/初始档案）",
+        "状态筛选切换列表正确",
+        "点击主题卡打开详情"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-002-topic-detail-overview",
+      "page": "topic",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 打开已整理主题 When 进入详情 Then 默认「概览」页签展示当前认识/资料员维护信息/来源预览/最近变化；四页签（概览/资料/变化/版本）切换正确",
+      "assertions": [
+        "概览页签显示当前认识正文与最近变化时间流",
+        "四页签切换渲染对应内容（资料/变化/版本）",
+        "页面无横向溢出，唯一主 CTA「让 Pi 出选题方案」"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-003-topic-keyboard-deeplinks",
+      "page": "topic",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 主题详情页打开 When 按键盘 1-7 或使用深链（wmb-open-library-topic/localStorage libraryTopicId） Then 直达对应章节（跨页签先切页签再滚动）；版本页签展示版本历史并支持恢复动作",
+      "assertions": [
+        "键盘 1-7 可跳转七段章节（当前认识/最近变化/证据/创作影响/待研究/完整档案/版本）",
+        "深链打开指定主题详情",
+        "版本页签列出历史版本，恢复动作可用（真实读回）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-004-topic-honest-states",
+      "page": "topic",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 不同编译状态的主题（uncompiled/legacy_shell/compiled） When 打开列表与详情 Then 用户语言诚实投影：等待整理/初始档案/已整理；空壳不冒充已整理，详情空分区诚实",
+      "assertions": [
+        "列表状态文案分别为「等待整理」「初始档案」「已整理」且不泄漏工程词",
+        "legacy_shell 显示「初始档案」而非全绿 current",
+        "空详情分区显示诚实空态而非伪造内容"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-005-topic-empty-list",
+      "page": "topic",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何主题 When 打开主题页 Then 显示空态与引导（资料入库后生成主题），页面不崩溃",
+      "assertions": [
+        "空列表显示引导文案",
+        "页面无报错，导航正常"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-006-topic-error",
+      "page": "topic",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 详情加载失败或主题 id 无效 When 打开主题详情 Then 显示错误与重试，不崩溃；无效 id 优雅降级",
+      "assertions": [
+        "加载失败显示错误态与重试",
+        "无效/缺失主题 id 不崩溃",
+        "重试/刷新后详情恢复"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-007-topic-actions",
+      "page": "topic",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 主题详情页 When 点击主 CTA「让 Pi 出选题方案」 Then Pi dock 展开并聚焦 composer；「去创作」打开创作页；打开关系画布入口可达",
+      "assertions": [
+        "主 CTA 触发 Pi 展开与 composer 聚焦事件",
+        "去创作导航到 studio（选中项目传递）",
+        "onOpenCanvas 导航到 canvas"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "TP-008-topic-approval-ledger",
+      "page": "topic",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 存在待批整理提案 When 打开主题页台账区 Then 显示提案正文与批准/驳回动作；批准后原子生效，驳回显示失败原因",
+      "assertions": [
+        "待批卡渲染真实提案正文与明细入口",
+        "批准/驳回动作产生对应终态（approved/rejected）且无部分写",
+        "操作失败时显示原因"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/topic.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-001-library-saved-normal",
+      "page": "library",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 存在已保存资料 When 打开资料库（资料区） Then 来源按新鲜度分组渲染（今天/昨天/近 7 天/更早），来源卡展示知识摘要/状态徽标，分页可用",
+      "assertions": [
+        "来源卡渲染标题/来源/时间/知识摘要（digest）与状态徽标",
+        "新鲜度分组头正确且顺序保持服务端排序",
+        "分页加载更多/翻页可用"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-002-library-sections-states",
+      "page": "library",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 资料库三态数据 When 切换 资料/重发/移出 页签 Then 各态列表正确渲染；移出区显示恢复指引",
+      "assertions": [
+        "三态页签切换渲染对应列表（saved/rediscovery/removed）",
+        "移出区显示 removed 行动指引",
+        "无数据态显示空态不崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-003-library-health-filters",
+      "page": "library",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 存在健康问题 When 打开资料库健康区 Then 问题按严重度/状态/类型过滤渲染，来源详情显示对应健康信息",
+      "assertions": [
+        "严重度（全部/严重/高/中/低/提示）、状态、类型过滤器可用且结果正确",
+        "来源详情展示健康问题与证据边界",
+        "过滤为空时显示空态"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-004-library-focus-deeplink",
+      "page": "library",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 从今日/创作/关系画布打开来源 When 进入资料库 Then 聚焦该来源并展开详情（libraryFocusSourceId 深链消费后清除）",
+      "assertions": [
+        "深链来源被聚焦/高亮且详情可打开",
+        "focusSource 消费后 localStorage 键被清除",
+        "无该来源时优雅降级到列表"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-005-library-empty",
+      "page": "library",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 无任何资料 When 打开资料库 Then 显示空态与入库引导，页面不崩溃",
+      "assertions": [
+        "空态文案出现（无资料引导）",
+        "页面无异常报错"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-006-library-error",
+      "page": "library",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 列表加载失败 When 打开资料库 Then 显示错误与重试，不崩溃；刷新恢复",
+      "assertions": [
+        "加载失败显示错误态与重试",
+        "刷新/dataChanged 后列表恢复"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "LB-007-library-open-topic-canvas",
+      "page": "library",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 来源关联主题/画布 When 点击来源操作 Then 打开主题详情或关系画布，上下文传递正确",
+      "assertions": [
+        "打开主题后主题详情显示对应来源",
+        "打开画布后网络投影存在该来源证据摘要"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/library.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-001-canvas-network-normal",
+      "page": "canvas",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 工作空间存在正式知识（Topic/Knowledge Note/Entity 与正式关系） When 打开关系画布 Then 直接渲染全局 Wiki 知识网络（无需创建画布），节点为知识短标题，无旧手工画布/创作工具台职责 UI",
+      "assertions": [
+        "打开即渲染力导向网络，默认节点仅 topic/knowledge_note/knowledge_entity，Source 不作常驻节点",
+        "节点显示知识短标题（非工程标签如「知识结论 17」）",
+        "连线投影正式关系（支持/反驳/限定/派生/属于主题/实体关联）",
+        "无「新建画布」「手工添加关系」「变化/健康三模式」等旧职责 UI"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-002-canvas-node-card",
+      "page": "canvas",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 网络渲染完成 When 单击节点 Then 节点附近浮层打开知识卡（完整认识/适用范围/证据边界/依据摘要/相关认识/最近更新），第一屏不含工程元数据；点击空白关闭；双击节点进入正式页面",
+      "assertions": [
+        "单击节点出现邻近浮层知识卡（非固定右侧栏，图谱宽度不变）",
+        "知识卡第一屏无对象 ID/表名/Change Set/Receipt/编译状态/版本号",
+        "点击图谱空白处关闭卡片",
+        "双击节点跳转对应主题/正式详情页"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-003-canvas-drag-select-pi",
+      "page": "canvas",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 网络渲染完成 When 拖框命中节点 Then 框选动作立即更新 Pi 上下文（无确认按钮）；多次框选累加并按正式知识身份去重；Pi 显示「知识网络 · 已框选 N 项」但不自动发送",
+      "assertions": [
+        "拖框后 Pi 上下文即时更新且无确认按钮",
+        "连续两次框选累加去重（重复节点只计一次）",
+        "Pi chip 显示「知识网络 · 已框选 N 项」",
+        "Pi 未自动发送问题（无新对话产生）",
+        "上下文携带冻结知识正文包与证据摘要（非内部对象名清单）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-004-canvas-history-shortcuts",
+      "page": "canvas",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 已有框选 When 按 Esc 则无卡片时清空全部框选与 Pi 上下文、有卡片时先关卡片；Ctrl+Z 回退上次框选、Ctrl+X 前进；输入框聚焦时保留系统快捷键；新框选作废前进历史",
+      "assertions": [
+        "Esc 在无卡片时清空框选与 Pi 上下文",
+        "Esc 有卡片时先关闭卡片不直接清空",
+        "Ctrl+Z 回退上一次框选上下文，Ctrl+X 前进",
+        "输入框/可编辑区聚焦时快捷键不劫持",
+        "新框选后前进历史作废"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-005-canvas-filters-display",
+      "page": "canvas",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 网络渲染完成 When 使用搜索/过滤/分组与显示参数 Then 节点按类型/关键词过滤与分组着色；邻接节点高亮；缩放/平移/节点拖动可用；显示参数（节点大小/连线粗细/排斥力/中心力/连线长度）调整生效并在刷新后保留视口与过滤条件",
+      "assertions": [
+        "搜索/过滤/分组可用且结果正确",
+        "邻接节点与连线高亮",
+        "滚轮缩放、拖拽平移、节点拖动可用",
+        "显示参数调节生效",
+        "刷新/更新后视口与过滤条件保留，仍有效的框选保留"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-006-canvas-empty",
+      "page": "canvas",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 工作空间尚无正式知识 When 打开关系画布 Then 显示空图状态，说明尚无正式知识并引导保存资料（不引导手工建画布）",
+      "assertions": [
+        "空态文案指向保存资料/资料库路径",
+        "不出现手工画布创建引导",
+        "页面不崩溃且导航正常"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-007-canvas-error-retry",
+      "page": "canvas",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 投影加载失败或部分对象无完整正文 When 打开关系画布 Then 加载失败显示明确重试；部分对象诚实展示现有摘要，不用工程元数据填充",
+      "assertions": [
+        "加载失败出现重试入口，重试成功恢复",
+        "无完整正文节点显示诚实摘要而非工程元数据填充",
+        "页面不崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "CV-008-canvas-context-budget",
+      "page": "canvas",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 框选超过 Pi 上下文预算 When 框选完成 Then 按选中顺序与知识优先级生成可解释有界包，Pi 明示未纳入数量，不得静默换成全图",
+      "assertions": [
+        "超限时上下文包有界且按顺序/优先级截断",
+        "Pi 显示未纳入数量提示",
+        "不静默替换为全图上下文"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/canvas.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-001-settings-sections-nav",
+      "page": "settings",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 打开设置页 When 点击各分区 Then 分区渲染正确（常规/AI 与模型/Pi Skills/数据与存储/浏览器与账号/情报渠道/X Lists/智能体接入/系统诊断/关于）；sessionStorage 深链（wmb.settingsSection）直达指定分区",
+      "assertions": [
+        "全部设置分区可切换且标题正确",
+        "从智能体页「设置」进入时自动定位智能体接入分区",
+        "settings 视图隐藏 Pi dock（app-shell settings-mode）",
+        "返回按钮回到今日"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-002-settings-theme-persist",
+      "page": "settings",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 任意页 When 切换主题（黑夜紫罗兰/白昼紫罗兰） Then data-theme 更新且 localStorage（wmb.theme）持久化；重载后主题保持",
+      "assertions": [
+        "切换后 documentElement.dataset.theme 变化",
+        "localStorage wmb.theme 持久化，重载后保持",
+        "状态栏主题按钮 aria-label 正确"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-003-settings-pi-config-save",
+      "page": "settings",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 打开 AI 与模型分区 When 保存/切换 Pi profile 配置（名称/api/baseUrl/model） Then 配置持久化（getSettings 读回一致）；无效配置显示可见错误不假成功",
+      "assertions": [
+        "保存后设置读回包含新配置（真实持久化）",
+        "profile 切换与回退顺序编辑生效",
+        "非法/失败保存显示错误信息",
+        "Pi 未配置时 dock 显示等待配置/未配置态"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-004-settings-data-workspace",
+      "page": "settings",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 打开数据与存储分区 When 查看/切换工作空间或选择数据目录 Then 数据根路径显示；工作空间列表与切换生效（当前标记）；切换失败显示错误",
+      "assertions": [
+        "数据目录 chip 显示当前路径（或「尚未选择数据根目录」）",
+        "工作空间列表渲染且当前项标记「当前」",
+        "切换工作空间成功且应用刷新；失败时错误可见"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-005-settings-browser-bind",
+      "page": "settings",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 打开浏览器与账号分区 When 绑定/解绑浏览器 profile Then 选择持久化（boundBrowserProfile）；浏览器状态显示；失败显示错误",
+      "assertions": [
+        "绑定选择后设置读回一致",
+        "浏览器状态（已连接/未启动）在状态栏同步",
+        "浏览器不可用时错误提示可见"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-006-settings-diagnostics",
+      "page": "settings",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 打开系统诊断分区 When 渲染 Then 本地数据/创作助手连接/专用浏览器健康卡显示真实状态",
+      "assertions": [
+        "三张健康卡渲染且状态与 settings.health 一致",
+        "无 MCP/浏览器时显示未启动而非假绿"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-007-settings-app-update",
+      "page": "settings",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 打开关于 WMB 分区 When 渲染 Then 版本信息与更新设置显示；检查更新入口可用（失败容忍）",
+      "assertions": [
+        "版本/更新设置渲染",
+        "检查更新失败时显示容忍提示不崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "STG-008-settings-skills",
+      "page": "settings",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given 打开 Pi Skills 分区 When 渲染 Then 技能库列表显示并可刷新",
+      "assertions": [
+        "技能列表渲染",
+        "刷新/状态更新不崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/settings.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PI-001-pi-dock-context-chip",
+      "page": "pi",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 各页面有可选对象 When 选中对象或框选（画布） Then Pi 上下文 chip 与页面标签更新；dock 折叠/展开与宽度持久化（localStorage），重载保持",
+      "assertions": [
+        "每页选择后 chip 反映页面标签与对象（今日内容/发现·X Lists/选题台账/知识网络·已框选 N 项等）",
+        "折叠状态 wmb.piDockCollapsed 与宽度 wmb.piDockWidth 持久化",
+        "contextSelection 传递形状保持（canvasId+nodeIds 兼容契约），main.tsx/pi-dock 不因新网络投影断裂"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/pi.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PI-002-pi-send-conversation",
+      "page": "pi",
+      "risk": "critical",
+      "automatable": false,
+      "scenario": "真实人工路径：配置有效 Pi provider 后发送消息，经历 starting→running→delta 流式回复→idle，转写与工具活动渲染",
+      "assertions": [
+        "发送后状态经历 正在连接 Pi→正在回复→已配置",
+        "流式回复渲染于转写区",
+        "工具调用/系统事件以系统通知呈现",
+        "新会话/切换/归档/分叉 UI 可用"
+      ],
+      "exclusionReason": "真实发送需要活动 AI provider（真实 API key 与推理额度），无沙箱 provider；E2E 不进行真实付费推理，纳入 manual 排除，不进可自动化分母。",
+      "testFile": "tests/e2e/pi.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PI-003-pi-unconfigured-state",
+      "page": "pi",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given Pi 未配置 When 打开任意页 Then dock 显示「等待配置/未配置」状态，composer 禁用或引导配置，不崩溃",
+      "assertions": [
+        "状态栏与 dock 显示未配置态",
+        "发送入口禁用或给出配置指引",
+        "配置入口可达（设置 AI 分区）"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/pi.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PI-004-pi-configure-failure",
+      "page": "pi",
+      "risk": "high",
+      "automatable": true,
+      "scenario": "Given 配置了不可达 provider（错误 baseUrl/key） When 发送消息 Then Pi 事件 failed 且转写显示失败消息与原因；可停止/重试恢复",
+      "assertions": [
+        "失败事件投影为 failed 状态与错误文本（非假成功）",
+        "停止操作恢复可用态",
+        "修正配置后重试成功"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/pi.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "PI-005-pi-session-management",
+      "page": "pi",
+      "risk": "medium",
+      "automatable": true,
+      "scenario": "Given dock 打开 When 新建/切换/归档/分叉会话 Then 会话列表与活动会话更新且持久化（本地会话，不触发外部调用）",
+      "assertions": [
+        "新建会话清空转写并设置活动会话",
+        "切换会话加载对应历史消息",
+        "归档/分叉后会话状态正确且不崩溃"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/pi.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "NAV-001-global-navigation-all-views",
+      "page": "navigation",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 主壳打开 When 依次点击侧栏各导航（工作流：今日/智能体/发现/选题/创作/发布/结果；知识资产：主题/资料库/关系画布；设置） Then 各视图正确渲染且导航激活态正确；视图选择持久化（wmb.view），非法值回退今日，compose 归一为 canvas",
+      "assertions": [
+        "11 个顶级视图均可经侧栏到达且激活态正确",
+        "settings 视图进入 settings-mode 且隐藏 Pi dock；topic/studio 有对应 mode class",
+        "wmb.view 持久化，重载后恢复上次视图",
+        "非法/陈旧 wmb.view 归一为 today；'compose' 归一为 canvas",
+        "各视图切换不产生 Vite overlay/白屏"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/navigation.test.mjs",
+      "status": "planned"
+    }
+  ]
+}

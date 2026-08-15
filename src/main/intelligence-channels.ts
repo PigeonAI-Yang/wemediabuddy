@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { readBrowserConfig } from './browser-config.ts';
+import { workspaceBrowserReady } from './bound-browser.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { canonicalizeUrl, createSourceFeed } from './sources.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
@@ -271,7 +271,7 @@ export function listSourceScanReceipts(database: DatabaseSync, input: {
   return (database.prepare(`${receiptSelect}${where} ORDER BY checked_at DESC, id DESC LIMIT ?`).all(...args, limit) as ReceiptRow[]).map((row) => ({ ...row }));
 }
 
-export function readIntelligenceChannelsSummary(database: DatabaseSync, browserConfigured = Boolean(readBrowserConfig())): IntelligenceChannelsSummary {
+export function readIntelligenceChannelsSummary(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database)): IntelligenceChannelsSummary {
   const websites = listWebsiteSources(database);
   const xLists = listXListBindings(database);
   const xReady = browserConfigured;
@@ -292,7 +292,7 @@ function readinessFor(module: IntelligenceModule, sources: IntelligenceChannelSo
     status: ready.length ? blocked.length ? 'partial' : 'ready' : enabled.length ? blocked.length ? 'needs_user' : 'needs_config' : 'needs_config' };
 }
 
-export function readIntelligenceChannelReadiness(database: DatabaseSync, browserConfigured = Boolean(readBrowserConfig())): IntelligenceChannelReadiness[] {
+export function readIntelligenceChannelReadiness(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database)): IntelligenceChannelReadiness[] {
   return readIntelligenceChannelsSummary(database, browserConfigured).readiness;
 }
 

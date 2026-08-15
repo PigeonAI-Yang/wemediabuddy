@@ -10,6 +10,7 @@ import { cubicBezier } from './x-list-primitives.ts';
 const execFileAsync = promisify(execFile);
 
 export class XListNeedsUserError extends Error {}
+export class XListPlatformRejectedError extends XListNeedsUserError {}
 export class XListCooldownError extends Error {}
 export class XListDataError extends XListCooldownError {}
 export class XListSupersededError extends Error {

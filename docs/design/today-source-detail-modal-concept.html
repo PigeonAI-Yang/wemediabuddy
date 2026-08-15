@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WeMediaBuddy · 今日来源详情弹窗概念</title>
+  <!-- 可选字体：离线时回退到 foundation --font-sans / --mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Machine SSOT: open this file from the repo so the relative path resolves under file:// -->
+  <link rel="stylesheet" href="../../src/renderer/styles-foundation.css" />
+  <style>
+    /* 概念页外壳：解除 foundation 的 app-shell 约束（与 living-style-guide 同一手法） */
+    html, body {
+      min-width: 0 !important;
+      overflow: auto !important;
+      height: auto !important;
+      background: var(--app-bg);
+      color: var(--ink);
+      font-family: var(--font-sans);
+    }
+    .stage {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: var(--app-bg);
+    }
+
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+
+    /* ---------- 克制的「今日」工作区背景（被遮罩压暗，仅作上下文） ---------- */
+    .today-backdrop {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      color: var(--ink-soft);
+    }
+    .backdrop-topbar {
+      flex: none; height: 52px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--topbar-bg);
+    }
+    .backdrop-brand { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; }
+    .backdrop-brand .mark {
+      width: 20px; height: 20px; border-radius: 6px;
+      display: grid; place-items: center;
+      background: var(--accent-faint); color: var(--accent-soft);
+      font-size: 11px; font-weight: 800;
+    }
+    .backdrop-topbar .spacer { flex: 1; }
+    .backdrop-topbar time { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .backdrop-body {
+      flex: 1; min-height: 0; overflow: hidden;
+      padding: 18px 22px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .backdrop-toolbar {
+      flex: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .backdrop-toolbar h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+    .backdrop-toolbar .filters { display: flex; gap: 8px; }
+    .backdrop-toolbar .filter {
+      height: 28px; padding: 0 11px; border: 1px solid var(--border-soft); border-radius: 999px;
+      background: var(--tag-bg); color: var(--muted); font-size: 12px; font-weight: 600;
+    }
+    .backdrop-toolbar .filter.hot { color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+    .backdrop-stats { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .backdrop-stat {
+      border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised);
+      padding: 9px 12px; display: grid; gap: 2px;
+    }
+    .backdrop-stat .label { color: var(--muted-low); font-size: 11px; }
+    .backdrop-stat .value { font-family: var(--mono); font-size: 19px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+    .backdrop-feed { display: grid; gap: 8px; }
+    .backdrop-row {
+      display: flex; align-items: center; gap: 11px;
+      border: 1px solid var(--border-soft); border-radius: 10px; background: var(--panel-bg);
+      padding: 10px 12px; max-width: min(860px, 100%);
+    }
+    .backdrop-row .avatar {
+      flex: none; width: 30px; height: 30px; border-radius: 7px;
+      background: var(--tag-bg); border: 1px solid var(--border);
+    }
+    .backdrop-row .cols { flex: 1; min-width: 0; display: grid; gap: 6px; }
+    .backdrop-row .line { height: 8px; border-radius: 4px; background: var(--border-soft); }
+    .backdrop-row .line.w60 { width: 60%; }
+    .backdrop-row .line.w38 { width: 38%; }
+    .backdrop-pi {
+      position: absolute; top: 52px; right: 0; bottom: 0; width: 208px;
+      border-left: 1px solid var(--border-soft); background: var(--sidebar-bg);
+      padding: 16px 14px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .backdrop-pi .pi-label { color: var(--muted-low); font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+    .backdrop-pi .pi-row {
+      height: 34px; border: 1px solid var(--border-soft); border-radius: 8px;
+      background: var(--surface); display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    }
+    .backdrop-pi .pi-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-low); }
+    .backdrop-pi .pi-row .fill { flex: 1; height: 7px; border-radius: 4px; background: var(--border-soft); }
+
+    .reopen-bar {
+      position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%);
+      z-index: 2000;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+      padding: 12px 16px;
+      border: 1px solid var(--border-strong); border-radius: 12px;
+      background: var(--surface-raised); color: var(--muted); font-size: 12.5px;
+      box-shadow: 0 14px 40px color-mix(in srgb, var(--overlay) 60%, transparent);
+    }
+    .reopen-bar[hidden] { display: none; }
+
+    /* ---------- 共享弹窗几何（镜像 styles-modal.css 语义，仅用 foundation 变量） ---------- */
+    .app-modal-root {
+      position: fixed; inset: 0; z-index: 4000;
+      display: grid; place-items: center; padding: 24px;
+    }
+    .app-modal-root[hidden] { display: none; }
+    .app-modal-backdrop { position: absolute; inset: 0; border: 0; background: var(--overlay); }
+    .app-modal-dialog {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
+      width: min(1040px, calc(100vw - 64px));
+      min-width: 0; min-height: 0;
+      max-width: calc(100vw - 64px); max-height: calc(100vh - 64px);
+      border: 1px solid var(--border-strong); border-radius: 14px;
+      background: var(--surface-raised); color: var(--ink);
+      overflow: hidden;
+      animation: modal-in 160ms ease-out;
+    }
+    .app-modal-head {
+      flex: none;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 13px 18px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .app-modal-title { margin: 0; min-width: 0; font-size: 15px; font-weight: 750; letter-spacing: -0.01em; }
+    .head-actions { display: flex; align-items: center; gap: 6px; }
+    .icon-button {
+      width: 32px; height: 32px;
+      border: 1px solid transparent; border-radius: 8px;
+      background: transparent; color: var(--muted);
+      font-size: 15px; line-height: 1; cursor: pointer;
+    }
+    .icon-button:hover { color: var(--ink); background: var(--surface-hover); border-color: var(--border); }
+    .app-modal-body {
+      flex: 1 1 auto; min-height: 0;
+      overflow-y: auto; overflow-x: hidden;
+      padding: 18px 22px 22px;
+    }
+    .app-modal-footer {
+      flex: none;
+      display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-soft); background: var(--surface);
+    }
+
+    @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+    /* ---------- 按钮（复用 styles-workflow.css 的 primary/secondary 形态） ---------- */
+    .primary-button, .secondary-button, .ghost-button {
+      min-height: 40px; border-radius: 7px; padding: 9px 15px;
+      font-weight: 650; cursor: pointer; white-space: nowrap;
+      transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 80ms ease, opacity 120ms ease;
+    }
+    .primary-button { border: 0; background: var(--accent); color: var(--accent-ink); }
+    .primary-button:hover:not(:disabled) { background: var(--accent-hover); }
+    .primary-button:active:not(:disabled) {
+      background: color-mix(in srgb, var(--accent) 82%, var(--overlay));
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--overlay) 33%, transparent);
+    }
+    .secondary-button { border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink); }
+    .secondary-button:hover:not(:disabled) { background: var(--surface-hover); }
+    .secondary-button:active:not(:disabled) {
+      background: color-mix(in srgb, var(--surface-hover) 70%, var(--border));
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--overlay) 18%, transparent);
+    }
+    .secondary-button:disabled { opacity: 0.45; cursor: default; }
+    .ghost-button { border: 0; background: transparent; color: var(--muted); }
+    .ghost-button:hover:not(:disabled) { color: var(--ink); background: var(--surface-hover); }
+    .spin {
+      display: inline-block; width: 12px; height: 12px; margin-right: 7px; vertical-align: -2px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      border-top-color: var(--accent);
+      animation: rotate 0.7s linear infinite;
+    }
+    @keyframes rotate { to { transform: rotate(360deg); } }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
+      border: 1px solid var(--border-soft); border-radius: 999px;
+      background: var(--tag-bg); color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap;
+    }
+    .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
+    .chip.amber { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); background: var(--amber-soft); }
+    .chip.amber .dot { background: var(--amber); }
+    .chip.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 38%, var(--border)); background: var(--success-soft); }
+    .chip.ok .dot { background: var(--success); }
+    .chip.accent { color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); background: var(--accent-faint); }
+    .chip.accent .dot { background: var(--accent); }
+
+    /* ---------- 详情内容层级：身份 → 标题 → 工作摘要 → 正文摘录 | 存档媒体 → 版权提示 → 动作 ---------- */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+      gap: 22px;
+      align-items: start;
+    }
+    .detail-main, .detail-media { min-width: 0; }
+
+    .source-id { display: flex; align-items: center; gap: 11px; flex-wrap: wrap; }
+    .source-avatar {
+      flex: none; width: 38px; height: 38px; border-radius: 9px;
+      border: 1px solid var(--border-strong); background: var(--mark-bg);
+      display: grid; place-items: center;
+      color: var(--ink-soft); font-size: 15px; font-weight: 800;
+    }
+    .source-name { display: grid; gap: 1px; min-width: 0; }
+    .source-name strong { font-size: 13.5px; color: var(--ink); }
+    .source-name span { font-size: 11.5px; color: var(--muted-low); }
+    .source-id .chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .detail-title {
+      margin: 14px 0 0;
+      font-size: 21px; line-height: 1.35; letter-spacing: -0.02em; font-weight: 700;
+      color: var(--ink); overflow-wrap: anywhere;
+    }
+    .detail-meta {
+      margin: 7px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      color: var(--muted-low); font-size: 12px;
+    }
+
+    .detail-section { margin-top: 20px; display: grid; gap: 8px; }
+    .section-label {
+      margin: 0;
+      color: var(--muted-low); font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .section-copy { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+
+    .excerpt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .excerpt-box {
+      position: relative; max-height: 290px; overflow-y: auto;
+      border: 1px solid var(--border-soft); border-radius: 10px;
+      background: var(--surface); padding: 14px 16px;
+    }
+    .excerpt-box p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+
+    /* 存档媒体证据 */
+    .media-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .media-preview {
+      position: relative; aspect-ratio: 16 / 9;
+      border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+      background: var(--canvas-bg); min-width: 0;
+    }
+    .media-preview > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .play-ctl {
+      position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 13px;
+      border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent); border-radius: 999px;
+      background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--surface);
+      font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap;
+    }
+    .play-ctl:hover { background: color-mix(in srgb, var(--ink) 88%, transparent); }
+    .play-ctl .play-icon { font-size: 10px; }
+    .media-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+    .media-progress-fill { height: 100%; width: 0; background: var(--accent); }
+    .media-preview.is-playing .media-progress-fill { animation: progress 9s linear forwards; }
+    @keyframes progress { from { width: 0; } to { width: 100%; } }
+    .media-caption {
+      margin: 8px 2px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; color: var(--muted);
+    }
+    .media-caption strong { color: var(--ink-soft); font-weight: 650; }
+    .media-caption .grow { flex: 1; }
+    .media-thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .media-thumb {
+      position: relative; aspect-ratio: 16 / 9; min-width: 0;
+      border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+      background: var(--canvas-bg); padding: 0; cursor: pointer;
+    }
+    .media-thumb svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .media-thumb:hover { border-color: var(--border-strong); }
+    .media-thumb[aria-pressed="true"] {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--canvas-bg));
+    }
+    .thumb-tag {
+      position: absolute; top: 5px; left: 5px;
+      height: 17px; padding: 0 7px; border-radius: 5px;
+      display: inline-flex; align-items: center; gap: 4px;
+      background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--surface);
+      font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px;
+    }
+    .thumb-ok {
+      position: absolute; left: 5px; bottom: 5px;
+      height: 17px; padding: 0 7px; border-radius: 5px;
+      display: inline-flex; align-items: center; gap: 4px;
+      border: 1px solid color-mix(in srgb, var(--success) 40%, var(--border));
+      background: color-mix(in srgb, var(--success) 16%, var(--surface));
+      color: var(--success); font-size: 9.5px; font-weight: 700;
+    }
+    .thumb-ok .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
+
+    /* 来源与版权提示 */
+    .caution {
+      margin-top: 20px; display: grid; gap: 8px;
+      border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--amber) 6%, var(--surface-raised));
+      padding: 12px 14px;
+    }
+    .caution-head { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--amber); font-size: 12px; font-weight: 700; }
+    .caution-head svg { flex: none; }
+    .caution p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+    .canon-url {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+      font-family: var(--mono); font-size: 11.5px; color: var(--link);
+      overflow-wrap: anywhere;
+    }
+    .canon-url .url-label { flex: none; color: var(--muted-low); font-family: var(--font-sans); }
+
+    /* 底部动作 */
+    .pi-chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      margin-right: auto; height: 34px; padding: 0 12px;
+      border: 1px solid var(--border-soft); border-radius: 999px;
+      background: var(--tag-bg); color: var(--muted);
+      font-size: 12px; font-weight: 600;
+      transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+    .pi-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-low); }
+    .pi-chip.active { color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); background: var(--accent-faint); }
+    .pi-chip.active .dot { background: var(--accent); }
+
+    /* ---------- 紧凑窗口：与共享弹窗同一断点，整体降级全屏 ---------- */
+    @media (max-width: 799px), (max-height: 699px) {
+      .app-modal-root { padding: 0; }
+      .app-modal-dialog {
+        width: 100vw; height: 100vh;
+        max-width: none; max-height: none;
+        border-radius: 0; border-left: 0; border-right: 0;
+      }
+      .detail-grid { grid-template-columns: 1fr; gap: 18px; }
+      .app-modal-body { padding: 14px 16px 18px; }
+      .excerpt-box { max-height: 240px; }
+      .app-modal-footer { padding: 10px 14px; }
+      .app-modal-footer .primary-button,
+      .app-modal-footer .secondary-button,
+      .app-modal-footer .ghost-button { min-height: 36px; padding: 7px 12px; }
+      .detail-title { font-size: 18px; }
+      .backdrop-stats, .backdrop-pi { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .app-modal-dialog { animation: none; }
+      .media-preview.is-playing .media-progress-fill { animation: none; }
+      .spin { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- 克制的今日工作区背景：仅上下文，被遮罩压暗；弹窗打开时 inert -->
+    <div class="today-backdrop" id="backdrop" aria-hidden="true">
+      <header class="backdrop-topbar">
+        <div class="backdrop-brand"><span class="mark">W</span>WeMediaBuddy</div>
+        <span class="spacer"></span>
+        <time>2026-08-14 · 周五</time>
+      </header>
+      <div class="backdrop-body">
+        <div class="backdrop-toolbar">
+          <h1>今日 · 2026-08-14</h1>
+          <div class="filters">
+            <span class="filter hot">全部资料</span>
+            <span class="filter">已入库</span>
+            <span class="filter">待处理</span>
+          </div>
+        </div>
+        <div class="backdrop-stats">
+          <div class="backdrop-stat"><span class="label">今日入库</span><span class="value">23</span></div>
+          <div class="backdrop-stat"><span class="label">命中选题</span><span class="value">6</span></div>
+          <div class="backdrop-stat"><span class="label">待人工处理</span><span class="value">2</span></div>
+          <div class="backdrop-stat"><span class="label">Pi 上下文</span><span class="value"><span id="backdropPiCount">1</span>/5</span></div>
+        </div>
+        <div class="backdrop-feed">
+          <div class="backdrop-row"><span class="avatar"></span><span class="cols"><span class="line w60"></span><span class="line w38"></span></span></div>
+          <div class="backdrop-row"><span class="avatar"></span><span class="cols"><span class="line w60"></span><span class="line w38"></span></span></div>
+        </div>
+      </div>
+      <aside class="backdrop-pi">
+        <span class="pi-label">PI 上下文</span>
+        <div class="pi-row"><span class="dot"></span><span class="fill"></span></div>
+        <div class="pi-row"><span class="dot"></span><span class="fill"></span></div>
+      </aside>
+    </div>
+
+    <!-- 关闭后恢复演示 -->
+    <div class="reopen-bar" id="reopenBar" hidden aria-live="polite">
+      <span>来源详情已关闭（Esc）。拖拽窗口至 700×800 可体验全屏模式。</span>
+      <button type="button" class="secondary-button" id="reopenBtn">重新打开来源详情</button>
+    </div>
+
+    <!-- 唯一弹窗：只展示当前点击的这一条来源 -->
+    <div class="app-modal-root" id="modalRoot">
+      <div class="app-modal-backdrop" id="modalBackdrop"></div>
+      <div class="app-modal-dialog" id="sourceDialog" role="dialog" aria-modal="true"
+           aria-labelledby="modalTitle" aria-describedby="modalDesc">
+        <header class="app-modal-head">
+          <h1 class="app-modal-title" id="modalTitle">来源详情</h1>
+          <div class="head-actions">
+            <button type="button" class="icon-button" id="themeBtn" aria-label="切换明暗主题" title="切换明暗主题">☀</button>
+            <button type="button" class="icon-button" id="closeBtn" aria-label="关闭（Esc）" title="关闭（Esc）">×</button>
+          </div>
+        </header>
+        <p class="visually-hidden" id="modalDesc">当前点击的今日来源资料详情：信源身份、工作摘要、正文摘录、存档媒体证据与版权提示。</p>
+        <div class="app-modal-body">
+          <div class="detail-grid">
+            <div class="detail-main">
+              <div class="source-id">
+                <span class="source-avatar" aria-hidden="true">X</span>
+                <span class="source-name">
+                  <strong>@Li_AI_Daily</strong>
+                  <span>X · x.com · 2026-08-14 08:12 发布，08:41 入库</span>
+                </span>
+                <span class="chips">
+                  <span class="chip ok"><span class="dot"></span>正文与媒体已本地保存</span>
+                </span>
+              </div>
+
+              <h2 class="detail-title">MiniMax 开放 H3 视频模型 API：多模态分镜与商用说明同步更新</h2>
+              <p class="detail-meta">
+                <span class="chip">AI 工具</span>
+                <span class="chip">视频生成</span>
+                <span class="chip amber"><span class="dot"></span>重点</span>
+                <span>建议优先级 B · 已进入观察名单</span>
+              </p>
+
+              <section class="detail-section" aria-label="工作摘要">
+                <h3 class="section-label">工作摘要</h3>
+                <p class="section-copy">已与今日选题池完成相似资料检查：命中「AI 视频工具」趋势主线，适合作为背景资料继续观察。正文与 2 图 1 视频均已在本地归档，可直接带上下文进入 Pi 讨论。</p>
+              </section>
+
+              <section class="detail-section" aria-label="正文摘录">
+                <div class="excerpt-head">
+                  <h3 class="section-label">正文摘录</h3>
+                  <span class="chip ok"><span class="dot"></span><span id="bodyStatus">已抓取 12,480 字 · 本地归档</span></span>
+                </div>
+                <div class="excerpt-box" tabindex="0" aria-label="正文摘录内容，可滚动">
+                  <p>MiniMax 今日开放 H3 视频生成模型 API 公测，官方文档同步更新。H3 支持从多模态分镜脚本生成成片；提示词中可结构化描述画面、运镜、对白与音景。
+
+官方页面同时更新了计费、授权范围、输出规格与审核说明。具体价格、商用条件和版本限制应以打开原文后的最新条款为准。
+
+示例页展示了电商、短剧、资讯口播等分镜工作流，并提供配音与字幕对接样例。发布前仍需复核素材版权、平台规则和实际输出质量。</p>
+                </div>
+              </section>
+            </div>
+
+            <aside class="detail-media" aria-label="存档媒体证据">
+              <div class="media-head">
+                <h3 class="section-label">存档媒体证据 · 3 项</h3>
+                <span class="chip ok"><span class="dot"></span>已全部本地保存</span>
+              </div>
+              <div class="media-preview" id="previewBox" role="img"></div>
+              <div class="media-caption" id="previewCaption"></div>
+              <div class="media-thumbs" id="mediaThumbs" role="group" aria-label="选择要查看的存档媒体"></div>
+            </aside>
+          </div>
+
+          <section class="caution" aria-label="来源与版权提示">
+            <h3 class="caution-head">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 1.5 15 14H1L8 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path d="M8 6.2v3.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <circle cx="8" cy="11.4" r="0.9" fill="currentColor"/>
+              </svg>
+              来源与版权提示
+            </h3>
+            <p>内容版权归原作者 @Li_AI_Daily 及 X 平台所有。本资料仅用于内部编辑研判，不会自动发布；对外引用、转载或商用前需另行确认授权。</p>
+            <p class="canon-url"><span class="url-label">原文地址</span>https://x.com/Li_AI_Daily/status/1834629804123456789</p>
+          </section>
+        </div>
+
+        <footer class="app-modal-footer">
+          <span class="pi-chip" id="piChip" aria-live="polite"><span class="dot"></span>Pi 上下文 · <span id="piCount">1</span>/5</span>
+          <button type="button" class="ghost-button" id="libraryBtn">在资料库中查看</button>
+          <button type="button" class="secondary-button" id="openBtn">打开原文 ↗</button>
+          <button type="button" class="secondary-button" id="fetchBtn">抓取正文</button>
+          <button type="button" class="primary-button" id="piToggle" aria-pressed="false">加入 Pi 上下文</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      var root = document.documentElement;
+      var modalRoot = document.getElementById('modalRoot');
+      var dialog = document.getElementById('sourceDialog');
+      var backdropEl = document.getElementById('backdrop');
+      var backdropPi = document.getElementById('backdropPiCount');
+      var closeBtn = document.getElementById('closeBtn');
+      var themeBtn = document.getElementById('themeBtn');
+      var reopenBar = document.getElementById('reopenBar');
+      var reopenBtn = document.getElementById('reopenBtn');
+      var piBtn = document.getElementById('piToggle');
+      var piChip = document.getElementById('piChip');
+      var piCount = document.getElementById('piCount');
+      var fetchBtn = document.getElementById('fetchBtn');
+      var bodyStatus = document.getElementById('bodyStatus');
+      var previewBox = document.getElementById('previewBox');
+      var previewCaption = document.getElementById('previewCaption');
+      var thumbsWrap = document.getElementById('mediaThumbs');
+      var added = false;
+      var mediaIndex = 0;
+      var playing = false;
+
+      /* ---------- 主题 ---------- */
+      function setTheme(theme) {
+        root.dataset.theme = theme;
+        themeBtn.textContent = theme === 'dark' ? '☀' : '☾';
+        themeBtn.setAttribute('aria-label', theme === 'dark' ? '切换为明亮主题' : '切换为暗黑主题');
+        try { localStorage.setItem('wmb-today-source-concept-theme', theme); } catch (e) { /* file:// 下可忽略 */ }
+      }
+      var saved = null;
+      try { saved = localStorage.getItem('wmb-today-source-concept-theme'); } catch (e) { /* ignore */ }
+      if (saved === 'light' || saved === 'dark') setTheme(saved);
+      themeBtn.addEventListener('click', function () {
+        setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
+      });
+
+      /* ---------- 存档媒体（2 图 1 视频，SVG 骨架示意，仅用 foundation 变量） ---------- */
+      var MEDIA = [
+        {
+          name: '产品说明与权益截图',
+          kind: 'image',
+          meta: 'PNG · 214 KB',
+          note: '官方产品页 · 2026-08-14 08:40 抓取',
+          alt: 'MiniMax H3 产品说明页面截图（示意）',
+          art: '<svg viewBox="0 0 320 180" role="img" aria-label="MiniMax H3 产品说明页面截图（示意）" preserveAspectRatio="xMidYMid slice">' +
+            '<rect width="320" height="180" fill="var(--surface)"/>' +
+            '<circle cx="24" cy="22" r="5" fill="var(--muted-low)"/><circle cx="40" cy="22" r="5" fill="var(--muted-low)"/><circle cx="56" cy="22" r="5" fill="var(--muted-low)"/>' +
+            '<rect x="16" y="38" width="120" height="12" rx="4" fill="var(--border-strong)"/>' +
+            '<rect x="16" y="58" width="86" height="8" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="16" y="80" width="288" height="52" rx="7" fill="var(--tag-bg)" stroke="var(--border)"/>' +
+            '<rect x="30" y="92" width="60" height="10" rx="3" fill="var(--muted-low)"/>' +
+            '<text x="30" y="124" font-size="18" font-weight="750" fill="var(--ink)" font-family="var(--mono)">API 计费说明</text>' +
+            '<rect x="150" y="104" width="86" height="14" rx="4" fill="var(--accent)"/>' +
+            '<text x="164" y="115" font-size="10" font-weight="700" fill="var(--accent-ink)">开通 API</text>' +
+            '<rect x="16" y="146" width="200" height="7" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="16" y="158" width="160" height="7" rx="3" fill="var(--border-soft)"/>' +
+            '</svg>'
+        },
+        {
+          name: '官方示例分镜帧',
+          kind: 'image',
+          meta: 'PNG · 388 KB',
+          note: '示例页分镜 1–3 · 2026-08-14 08:40 抓取',
+          alt: 'MiniMax H3 官方示例分镜帧（示意）',
+          art: '<svg viewBox="0 0 320 180" role="img" aria-label="MiniMax H3 官方示例分镜帧（示意）" preserveAspectRatio="xMidYMid slice">' +
+            '<rect width="320" height="180" fill="var(--surface)"/>' +
+            '<rect x="12" y="12" width="88" height="56" rx="4" fill="var(--surface-hover)" stroke="var(--border)"/>' +
+            '<circle cx="44" cy="40" r="10" fill="var(--muted-low)"/>' +
+            '<rect x="24" y="52" width="44" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="108" y="12" width="88" height="56" rx="4" fill="var(--surface-hover)" stroke="var(--border)"/>' +
+            '<circle cx="140" cy="40" r="10" fill="var(--accent-soft)"/>' +
+            '<rect x="120" y="52" width="44" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="204" y="12" width="88" height="56" rx="4" fill="var(--surface-hover)" stroke="var(--border)"/>' +
+            '<circle cx="236" cy="40" r="10" fill="var(--info)"/>' +
+            '<rect x="216" y="52" width="44" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="12" y="84" width="296" height="8" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="12" y="100" width="240" height="8" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="12" y="122" width="296" height="42" rx="6" fill="var(--tag-bg)" stroke="var(--border)"/>' +
+            '<rect x="26" y="136" width="130" height="7" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="26" y="149" width="96" height="7" rx="3" fill="var(--border-soft)"/>' +
+            '<rect x="170" y="133" width="120" height="20" rx="5" fill="var(--accent-faint)"/>' +
+            '<text x="182" y="147" font-size="10" font-weight="700" fill="var(--accent-soft)">分镜 1 · 2 · 3</text>' +
+            '</svg>'
+        },
+        {
+          name: '官方演示短片',
+          kind: 'video',
+          meta: 'MP4 · 3.2 MB · 00:42',
+          note: '演示成片 · 2026-08-14 08:43 归档',
+          alt: 'MiniMax H3 官方演示短片画面（示意）',
+          art: '<svg viewBox="0 0 320 180" role="img" aria-label="MiniMax H3 官方演示短片画面（示意）" preserveAspectRatio="xMidYMid slice">' +
+            '<rect width="320" height="180" fill="var(--canvas-bg)"/>' +
+            '<rect x="0" y="120" width="320" height="60" fill="var(--surface-hover)"/>' +
+            '<circle cx="110" cy="86" r="34" fill="color-mix(in srgb, var(--accent) 22%, var(--surface-hover))"/>' +
+            '<rect x="72" y="122" width="70" height="4" rx="2" fill="var(--border)"/>' +
+            '<rect x="60" y="130" width="94" height="4" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="204" y="52" width="64" height="40" rx="4" fill="var(--tag-bg)" stroke="var(--border)"/>' +
+            '<rect x="212" y="60" width="48" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="212" y="70" width="36" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<rect x="212" y="80" width="42" height="5" rx="2" fill="var(--border-soft)"/>' +
+            '<circle cx="266" cy="140" r="14" fill="var(--accent)"/>' +
+            '<path d="M262 133 l10 7 -10 7 z" fill="var(--accent-ink)"/>' +
+            '<rect x="240" y="158" width="52" height="14" rx="4" fill="color-mix(in srgb, var(--ink) 78%, transparent)"/>' +
+            '<text x="250" y="168" font-size="9" fill="var(--surface)">00:42</text>' +
+            '</svg>'
+        }
+      ];
+
+      function selectMedia(i) {
+        mediaIndex = i;
+        var m = MEDIA[i];
+        var isVideo = m.kind === 'video';
+        playing = false;
+        previewBox.classList.remove('is-playing');
+        previewBox.innerHTML = m.art +
+          (isVideo
+            ? '<button type="button" class="play-ctl" id="playCtl" aria-label="播放演示片段"><span class="play-icon">▶</span><span id="playTime">播放演示 · 00:00 / 00:42</span></button>' +
+              '<div class="media-progress" aria-hidden="true"><div class="media-progress-fill"></div></div>'
+            : '');
+        previewBox.setAttribute('aria-label', m.alt);
+        previewCaption.innerHTML = '<strong>' + m.name + '</strong><span>' + m.meta + '</span><span class="grow"></span>' +
+          '<span class="chip ok"><span class="dot"></span>本地存档 · 完整性已核验</span><span class="chip accent"><span class="dot"></span>' + m.note + '</span>';
+        var thumbs = thumbsWrap.querySelectorAll('.media-thumb');
+        for (var t = 0; t < thumbs.length; t++) {
+          thumbs[t].setAttribute('aria-pressed', String(t === i));
+        }
+        if (isVideo) {
+          var playCtl = document.getElementById('playCtl');
+          var playTime = document.getElementById('playTime');
+          playCtl.addEventListener('click', function () {
+            playing = !playing;
+            previewBox.classList.toggle('is-playing', playing);
+            playCtl.setAttribute('aria-label', playing ? '暂停演示片段' : '播放演示片段');
+            playTime.textContent = playing ? '播放中 · 00:07 / 00:42' : '播放演示 · 00:00 / 00:42';
+          });
+        }
+      }
+
+      function renderThumbs() {
+        thumbsWrap.innerHTML = '';
+        MEDIA.forEach(function (m, i) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'media-thumb';
+          btn.setAttribute('aria-label', m.name + '（' + (m.kind === 'video' ? '视频' : '图片') + '，已本地保存）');
+          btn.setAttribute('aria-pressed', 'false');
+          btn.innerHTML = m.art.replace(' role="img" aria-label="' + m.alt + '"', ' aria-hidden="true"') +
+            '<span class="thumb-tag">' + (m.kind === 'video' ? 'MP4' : 'PNG') + '</span>' +
+            '<span class="thumb-ok"><span class="dot"></span>已保存</span>';
+          btn.addEventListener('click', function () { selectMedia(i); });
+          thumbsWrap.appendChild(btn);
+        });
+      }
+
+      renderThumbs();
+      selectMedia(0);
+
+      /* ---------- Pi 上下文（单一紫罗兰主操作：加入 / 移出当前项） ---------- */
+      piBtn.addEventListener('click', function () {
+        added = !added;
+        dialog.classList.toggle('is-added', added);
+        piBtn.classList.toggle('primary-button', !added);
+        piBtn.classList.toggle('secondary-button', added);
+        piBtn.textContent = added ? '移出 Pi 上下文' : '加入 Pi 上下文';
+        piBtn.setAttribute('aria-pressed', String(added));
+        piCount.textContent = added ? '2' : '1';
+        backdropPi.textContent = added ? '2' : '1';
+        piChip.classList.toggle('active', added);
+      });
+
+      /* ---------- 抓取正文（模拟） ---------- */
+      fetchBtn.addEventListener('click', function () {
+        if (fetchBtn.disabled) return;
+        fetchBtn.disabled = true;
+        fetchBtn.innerHTML = '<span class="spin"></span>抓取中…';
+        bodyStatus.textContent = '正在重新抓取正文…';
+        window.setTimeout(function () {
+          fetchBtn.disabled = false;
+          fetchBtn.textContent = '重新抓取';
+          bodyStatus.textContent = '已抓取 12,480 字 · 本地归档 · 刚刚刷新';
+        }, 1100);
+      });
+
+      /* ---------- 关闭 / 打开 / Esc / 焦点 ---------- */
+      function closeModal() {
+        modalRoot.hidden = true;
+        backdropEl.inert = false;
+        reopenBar.hidden = false;
+        reopenBtn.focus();
+      }
+      function openModal() {
+        reopenBar.hidden = true;
+        backdropEl.inert = true;
+        modalRoot.hidden = false;
+        closeBtn.focus();
+      }
+      closeBtn.addEventListener('click', closeModal);
+      document.getElementById('modalBackdrop').addEventListener('click', closeModal);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modalRoot.hidden) closeModal();
+      });
+      reopenBtn.addEventListener('click', openModal);
+
+      /* 轻量焦点圈定 */
+      var FOCUSABLE = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+      dialog.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab') return;
+        var items = Array.prototype.filter.call(dialog.querySelectorAll(FOCUSABLE), function (el) {
+          return el.offsetParent !== null;
+        });
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
+
+      backdropEl.inert = true;
+    })();
+  </script>
+</body>
+</html>

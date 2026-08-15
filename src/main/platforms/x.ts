@@ -1,6 +1,7 @@
 import type { BrowserContext, Locator, Page } from 'playwright-core';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { assertNoInternalMediaToken } from '../platform-body-compile.ts';
 import { parseMetricValue } from './metric-value.ts';
 
 export type XIdentity = { platform: 'x'; accountKey: string; displayName: string; loginState: 'authenticated'; evidenceUrl: string };
@@ -22,6 +23,8 @@ export async function identifyXAccount(cdpUrl: string): Promise<XIdentity> {
 }
 
 export async function prepareXText(cdpUrl: string, body: string): Promise<{ title: null; body: string; assetIds: []; evidenceUrl: string }> {
+  // 只消费已编译正文：发现内部 token 即拒绝。
+  assertNoInternalMediaToken(body);
   const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);
@@ -44,6 +47,8 @@ export async function prepareXVideo(cdpUrl: string, body: string, assetPath: str
 }
 
 async function prepareXMedia(cdpUrl: string, body: string, assetPath: string, assetId: string, waitsForProcessing: boolean): Promise<{ title: null; body: string; assetIds: [string]; evidenceUrl: string }> {
+  // 只消费已编译正文：发现内部 token 即拒绝。
+  assertNoInternalMediaToken(body);
   const browser = await connectXBrowser(cdpUrl);
   try {
     const page = await xPage(browser.contexts()[0]);

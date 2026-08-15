@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {migrateDatabase} from '../src/main/db/migrations.ts';
+import {migrateDatabase, migrations} from '../src/main/db/migrations.ts';
 
 const databasePath=path.join(process.env.WMB_TEST_DIRECTORY,'wmb.db');
+const expectedCount=migrations.length;
 const first=migrateDatabase(databasePath);
-assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,38);
+assert.equal(first.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,expectedCount);
+first.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('legacy.tool','legacy-request','{"ok":true}','2026-08-05T00:00:00.000Z');
 first.close();
 const second=migrateDatabase(databasePath);
-assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,38);
+assert.equal(second.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count,expectedCount);
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_meta'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ranking_cache'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='x_list_operations'").get());
@@ -20,4 +22,11 @@ assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND 
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='website_sources'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='source_scan_receipts'").get());
 assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='x_post_metric_snapshots'").get());
+assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='workspace_browser_bindings'").get());
+assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='command_receipts'").get());
+assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='task_grants'").get());
+assert.ok(second.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='source_lane_judgments'").get());
+assert.equal(second.prepare('SELECT result_json AS resultJson FROM mcp_request_results WHERE tool=? AND request_id=?').get('legacy.tool','legacy-request').resultJson,'{"ok":true}');
+assert.ok(second.prepare("SELECT 1 FROM pragma_table_info('platform_accounts') WHERE name='browser_profile_id'").get());
+assert.ok(second.prepare("SELECT 1 FROM pragma_table_info('platform_accounts') WHERE name='browser_binding_revision'").get());
 second.close();

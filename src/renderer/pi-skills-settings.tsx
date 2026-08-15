@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { appConfirm } from './app-confirm';
 
 type PiSkill = Awaited<ReturnType<typeof window.wmb.listPiSkills>>[number];
 
@@ -35,20 +36,21 @@ export function PiSkillsSettings(): React.JSX.Element {
     try {
       const saved = await window.wmb.savePiSkill({ originalName, name, description, instructions });
       await load(saved.name);
-      setNote('已保存。新的 Pi 进程会使用此版本。');
+      setNote('已保存。新的 Pi 会话会使用此版本。');
     } catch (error) { setNote(error instanceof Error ? error.message : '保存失败'); }
   };
   const remove = async () => {
-    if (!selected?.editable || !window.confirm(`删除 Skill“${selected.name}”？`)) return;
+    if (!selected?.editable) return;
+    if (!await appConfirm({ title: '删除 Skill', message: `删除 Skill“${selected.name}”？`, confirmLabel: '删除', danger: true })) return;
     try {
       await window.wmb.deletePiSkill(selected.name);
       await load();
-      setNote('已删除，所有工作空间的新 Pi 进程都不会再加载它。');
+      setNote('已删除，所有工作空间的新 Pi 会话都不会再加载它。');
     } catch (error) { setNote(error instanceof Error ? error.message : '删除失败'); }
   };
 
   return <section className="settings-section pi-skills-settings">
-    <div className="settings-section-heading"><h3>Skill 清单</h3><p>系统 Skill 保障 WMB 正常操作；普通 Skill 在本机所有工作空间共享。</p></div>
+    <div className="settings-section-heading"><h3>Skill 清单</h3></div>
     <div className="pi-skills-layout">
       <div className="pi-skills-list">
         {skills.map((skill) => <button type="button" key={`${skill.scope}:${skill.name}`} className={selectedName === skill.name ? 'selected' : ''} onClick={() => select(skill)}>

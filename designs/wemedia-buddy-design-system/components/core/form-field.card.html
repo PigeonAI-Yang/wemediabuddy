@@ -1,0 +1,66 @@
+<!-- @dsCard group="Components" viewport="700x220" name="FormField" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>FormField</title>
+<link rel="stylesheet" href="../../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+</style>
+</head>
+<body>
+<div id="demo-root"></div>
+<script src="../../_ds_bundle.js"></script>
+<script>
+(function () {
+  var scripts = document.getElementsByTagName('script');
+  var rootUrl = '';
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].getAttribute('src') || '';
+    if (src.indexOf('_ds_bundle.js') !== -1) { rootUrl = src.slice(0, -'_ds_bundle.js'.length); break; }
+  }
+  var ns = null;
+  for (var key in window) { if (/^WemediaBuddyDesignSystem_[0-9a-f]{6}$/.test(key)) { ns = key; break; } }
+  if (!ns && window.location.protocol !== 'file:') {
+    try {
+      var req = new XMLHttpRequest();
+      req.open('GET', rootUrl + '_ds_manifest.json', false);
+      req.send(null);
+      var parsed = JSON.parse(req.responseText);
+      if (parsed && parsed.namespace && window[parsed.namespace]) ns = parsed.namespace;
+    } catch (e) { ns = null; }
+  }
+  window.__dsNs = ns;
+})();
+</script>
+<script>
+(function () {
+  var R = window.React;
+  var RD = window.ReactDOM;
+  var ns = window.__dsNs;
+  var host = document.getElementById('demo-root');
+  if (!ns || !R || !RD) { host.textContent = 'Design-system bundle not compiled yet (run compile-design-system.mjs).'; return; }
+  var C = window[ns];
+  var el = R.createElement;
+  var node = el('div', { className: 'grid' },
+    el(C.FormField, { label: '工作区名称', htmlFor: 'ws-name', required: true, helper: '给本地资料库起个名字' },
+      el('input', { id: 'ws-name', defaultValue: 'PigeonYang 主编台', placeholder: '工作区名称' })
+    ),
+    el(C.FormField, { label: 'Pi API Key', htmlFor: 'pi-key', error: 'Key 不能为空' },
+      el('input', { id: 'pi-key', type: 'password', defaultValue: '' })
+    )
+  );
+  var root = null;
+  if (RD.createRoot) {
+    root = RD.createRoot(host);
+    if (RD.flushSync) { RD.flushSync(function () { root.render(node); }); }
+    else { root.render(node); }
+  } else {
+    RD.render(node, host);
+  }
+})();
+</script>
+</body>
+</html>

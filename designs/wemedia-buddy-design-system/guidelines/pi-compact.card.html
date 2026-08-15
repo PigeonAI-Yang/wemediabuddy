@@ -1,0 +1,49 @@
+<!-- @dsCard group="Guidelines" viewport="700x320" name="PiAndCompact" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Pi &amp; Compact Behavior</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .math { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .math { grid-template-columns: 1fr; } }
+  .case { padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--surface); }
+  .case h2 { margin: 0 0 6px; font-size: 14px; color: var(--ink); }
+  .case p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+  .case code { font-family: var(--mono); color: var(--accent-soft); font-size: .95em; }
+  .bar { display: flex; height: 18px; margin-top: 10px; border-radius: var(--radius-sm); overflow: hidden; font-size: 10px; font-weight: 700; }
+  .bar i { display: grid; place-items: center; color: var(--ink); }
+  .bar .nav { background: var(--sidebar-bg); border-right: 1px solid var(--border-soft); }
+  .bar .work { background: var(--workspace-bg); }
+  .bar .pi { background: var(--panel-bg); border-left: 1px solid var(--border-soft); }
+  .bar .overlay { background: var(--panel-bg); border-left: 1px solid var(--border-strong); position: absolute; right: 0; top: 0; bottom: 0; }
+  .wrap { position: relative; }
+  .rules { margin: 12px 0 0; padding-left: 20px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<h1>Pi &amp; Compact — 不永久压工作区</h1>
+<p>桌面优先；低于 1280px 时 Pi 不得永久从房间宽度里扣除：默认收起，或作为不改变布局的浮层打开。Pi 保持可开、可关、可聚焦、状态持久。</p>
+<div class="math">
+  <div class="case">
+    <h2>1100px 最小宽 · Pi 收起</h2>
+    <p>工作区 = 1100 − 216（侧栏）≈ <code>884px ≥ 760px</code>，不出现横向溢出。</p>
+    <div class="bar"><i class="nav" style="width:20%">216</i><i class="work" style="width:80%">workspace ≥ 760</i></div>
+  </div>
+  <div class="case">
+    <h2>Pi 展开 = 浮层，不是网格第三列</h2>
+    <p>打开时 <code>--pi-width</code> 保持 0，dock 绝对定位覆盖在工作区右侧；房间宽度不变。</p>
+    <div class="bar wrap"><i class="nav" style="width:20%">216</i><i class="work" style="width:80%">workspace（不收缩）</i><i class="overlay" style="width:34%">Pi overlay</i></div>
+  </div>
+</div>
+<ul class="rules">
+  <li>每房一个纵向滚动属主；嵌套滚动只允许在声明的编辑器/画布 pane 内</li>
+  <li>小断点集命名化，移除 1279/1280 分裂与重复的 799/699 契约</li>
+  <li>展开/收起用同一尺寸的切换按钮（<code>.ds-pi-toggle</code>），阴影不在按钮上</li>
+</ul>
+</body>
+</html>

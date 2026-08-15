@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WMB 小动物 W 式走路</title>
+<style>
+  :root{color-scheme:dark;--bg:#0b0b0b;--surface:#171717;--line:#343434;--ink:#f1f1f1;--muted:#aaa;--violet:#8b7cff;--ease:cubic-bezier(.25,1,.5,1)}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif}
+  main{width:min(1120px,calc(100vw - 48px));display:grid;gap:18px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:24px}
+  h1{margin:0;font-size:24px;letter-spacing:-.02em}
+  p{margin:4px 0 0;color:var(--muted)}
+  .controls{display:flex;gap:8px}
+  button{height:38px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);padding:0 14px;cursor:pointer}
+  button:hover{border-color:#555}
+  button:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+  button[aria-pressed="true"]{border-color:var(--violet);color:#fff}
+  .stage{position:relative;height:430px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#111}
+  .floor{position:absolute;left:5%;right:5%;top:73%;height:1px;background:#303030}
+  .traveler{position:absolute;left:8%;top:calc(73% - 178px);width:240px;height:178px}
+  .creature{position:absolute;inset:0;display:grid;place-items:center}
+  .creature svg{display:block;width:100%;height:100%;overflow:visible}
+  .white-shape,.pupil,.lid{fill:#f1f1f1}
+  .white-shape{stroke:#f1f1f1;stroke-linejoin:round;stroke-width:3}
+  .purple{fill:var(--violet)}
+  .pupil-track{transform-box:fill-box;transform-origin:center;animation:look 1.2s var(--ease) infinite}
+  .lid{transform:translateY(-174px);animation:blink 6.7s ease-in-out infinite}
+  .feet{position:absolute;left:50%;bottom:-8px;width:142px;height:18px;transform:translateX(-50%)}
+  .foot{position:absolute;top:5px;width:48px;height:8px;border-radius:50%;background:#000;filter:blur(2px);opacity:.2}
+  .foot.left{left:7px;animation:left-contact 1.4s linear infinite}
+  .foot.right{right:7px;animation:right-contact 1.4s linear infinite}
+  .legend{position:absolute;left:20px;bottom:18px;display:flex;gap:18px;color:var(--muted);font-size:12px}
+  .legend span{display:flex;align-items:center;gap:7px}
+  .legend i{width:7px;height:7px;border-radius:50%;background:var(--violet)}
+  .paused *{animation-play-state:paused!important}
+  .slow .foot{animation-duration:2.8s}
+  .slow .pupil-track{animation-duration:2.4s}
+  body.embed{min-height:0;background:transparent}body.embed main{width:100%;display:block}body.embed header,body.embed .legend{display:none}body.embed .stage{height:158px;border:0;border-radius:0;background:transparent}body.embed .floor{left:3%;right:3%;top:82%}body.embed .traveler{left:3%;top:calc(82% - 82px);width:110px;height:82px}body.embed .feet{bottom:-4px;width:65px;height:9px}body.embed .foot{top:3px;width:22px;height:4px}body.embed .foot.left{left:3px}body.embed .foot.right{right:3px}
+  @keyframes look{0%,40%{transform:translateX(58px)}50%,80%{transform:translateX(72px)}100%{transform:translateX(58px)}}
+  @keyframes blink{0%,20%,25%,64%,70%,100%{transform:translateY(-174px)}22.5%,67%{transform:translateY(172px)}}
+  @keyframes left-contact{0%,10%,35%,45%,100%{opacity:.62;transform:scale(1.12,.82)}55%,70%,85%{opacity:.08;transform:scale(.5)}}
+  @keyframes right-contact{0%,15%,35%,95%,100%{opacity:.08;transform:scale(.5)}50%,60%,85%{opacity:.62;transform:scale(1.12,.82)}}
+  @media(prefers-reduced-motion:reduce){.pupil-track,.lid,.foot{animation:none!important}.traveler{left:38%}.pupil-track{transform:translateX(42px)}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>W 式走路</h1><p>上半身保持稳定，两个底角分别压缩、弯曲、前摆，交替成为柔性短腿。</p></div>
+    <div class="controls" aria-label="动画控制">
+      <button type="button" id="normal" aria-pressed="true">正常速度</button>
+      <button type="button" id="slow" aria-pressed="false">慢速观察</button>
+      <button type="button" id="pause" aria-pressed="false">暂停</button>
+    </div>
+  </header>
+  <section class="stage" aria-label="WMB 小动物走路动画">
+    <div class="floor"></div>
+    <div class="traveler">
+      <div class="creature">
+        <svg viewBox="0 0 751 510" aria-hidden="true">
+          <defs>
+            <clipPath id="walk-eye"><path d="M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z"/></clipPath>
+          </defs>
+          <g>
+            <path class="purple" d="M749,0 L615,1 L534,200 L531,203 L540,210 L540,212 L538,213 L544,213 L553,222 L552,225 L556,225 L556,230 L557,228 L559,228 L564,233 L563,238 L569,239 L578,248 L577,252 L579,253 L579,255 L584,255 L596,268 L594,272 L599,277 L604,277 L603,280 L607,281 L606,284 L609,284 L612,287 L611,291 L615,295 L618,294 L621,298 L621,300 L618,302 L623,301 L625,307 L643,267 L751,2Z"/>
+            <path class="white-shape" fill-rule="evenodd" d="M0,1 L211,510 L216,509 L246,455 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L450,350 L534,505 L538,510 L541,510 L543,508 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z">
+              <animate id="walkMorph" attributeName="d" dur="1.4s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.25;.5;.75;1" keySplines=".25 1 .5 1;.25 1 .5 1;.25 1 .5 1;.25 1 .5 1" values="
+M0,1 L205,507 L216,509 L252,451 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L460,352 L554,476 L559,480 L563,479 L567,474 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z;
+M0,1 L211,510 L216,509 L246,455 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L450,350 L534,505 L538,510 L541,510 L543,508 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z;
+M0,1 L238,478 L244,476 L271,429 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L452,350 L529,507 L536,510 L542,510 L546,506 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z;
+M0,1 L211,510 L216,509 L246,455 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L450,350 L534,505 L538,510 L541,510 L543,508 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z;
+M0,1 L205,507 L216,509 L252,451 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L460,352 L554,476 L559,480 L563,479 L567,474 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z"/>
+            </path>
+            <g class="pupil-track"><path class="pupil" d="M370,213 L358,216 L350,220 L340,228 L331,242 L328,252 L327,264 L331,280 L336,289 L343,297 L356,305 L365,308 L378,309 L392,306 L403,300 L411,293 L420,278 L423,258 L420,244 L414,233 L407,225 L400,220 L386,214Z"/></g>
+            <g clip-path="url(#walk-eye)"><path class="lid" d="M180,-200 H570 V174 C485,242 285,242 180,174 Z"/></g>
+          </g>
+        </svg>
+      </div>
+      <div class="feet"><i class="foot left"></i><i class="foot right"></i></div>
+    </div>
+    <div class="legend"><span><i></i>左右尖角交替承重</span><span><i></i>腿尖压缩、弯曲、前摆</span><span><i></i>躯干不弹跳</span></div>
+  </section>
+</main>
+<script>
+  const embedMode=new URLSearchParams(location.search).has('embed');
+  if(embedMode)document.body.classList.add('embed');
+  const stage=document.querySelector('.stage'),traveler=document.querySelector('.traveler'),creature=document.querySelector('.creature'),svg=document.querySelector('.creature svg'),morph=document.querySelector('#walkMorph'),normal=document.querySelector('#normal'),slow=document.querySelector('#slow'),pause=document.querySelector('#pause');
+  const stride=embedMode?28:72,cycles=embedMode?5:8,phases=[[0,0,-4],[.08,0,-4],[.25,.16,1],[.45,.44,-2],[.5,.5,-4],[.58,.5,-4],[.75,.66,1],[.95,.94,-2],[1,1,-4]];
+  let travelAnimation,bodyAnimation;
+  const startTravel=(cycleMs)=>{
+    travelAnimation?.cancel();
+    bodyAnimation?.cancel();
+    const frames=[],bodyFrames=[];
+    for(let cycle=0;cycle<cycles;cycle+=1){
+      for(const [phase,progress,height] of phases){
+        if(cycle>0&&phase===0)continue;
+        frames.push({offset:(cycle+phase)/cycles,transform:`translateX(${(cycle+progress)*stride}px)`});
+        bodyFrames.push({offset:(cycle+phase)/cycles,transform:`translateY(${height}px)`});
+      }
+    }
+    travelAnimation=traveler.animate(frames,{duration:cycleMs*cycles,iterations:Infinity,easing:'linear'});
+    bodyAnimation=creature.animate(bodyFrames,{duration:cycleMs*cycles,iterations:Infinity,easing:'linear'});
+  };
+  const setSpeed=(seconds,isSlow)=>{stage.classList.toggle('slow',isSlow);morph.setAttribute('dur',`${seconds}s`);morph.beginElement();startTravel(seconds*1000);normal.setAttribute('aria-pressed',String(!isSlow));slow.setAttribute('aria-pressed',String(isSlow))};
+  normal.onclick=()=>setSpeed(1.4,false);
+  slow.onclick=()=>setSpeed(2.8,true);
+  let paused=false;
+  pause.onclick=()=>{paused=!paused;stage.classList.toggle('paused',paused);if(paused){svg.pauseAnimations();travelAnimation.pause();bodyAnimation.pause()}else{svg.unpauseAnimations();travelAnimation.play();bodyAnimation.play()}pause.textContent=paused?'继续':'暂停';pause.setAttribute('aria-pressed',String(paused))};
+  startTravel(1400);
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){stage.classList.add('paused');svg.pauseAnimations();travelAnimation.cancel();bodyAnimation.cancel()}
+</script>
+</body>
+</html>

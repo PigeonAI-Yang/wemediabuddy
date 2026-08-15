@@ -70,7 +70,8 @@ function parseJob(row: JobRow): MetricJob {
 
 export function schedulePublicationMetricJobs(
   database: DatabaseSync,
-  input: { publicationId: string; publishedAt: string; sourceUrl: string; platform: string }
+  input: { publicationId: string; publishedAt: string; sourceUrl: string; platform: string },
+  audit = true
 ): CommandResult<{ created: number; jobs: MetricJob[] }> {
   if (!input.sourceUrl) return failure('VALIDATION_ERROR', '没有可采集的发布 URL。');
   const publishedMs = Date.parse(input.publishedAt);
@@ -103,10 +104,16 @@ export function schedulePublicationMetricJobs(
     created += 1;
     jobs.push(parseJob(database.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as JobRow));
   }
-  if (created) recordOperation(database, {
+  if (audit && created) recordOperation(database, {
     actorType: 'ui', command: 'metrics.schedule', entityType: 'publication', entityId: input.publicationId, result: 'ok'
   });
   return success({ created, jobs });
+}
+
+export function hasScheduledPublicationMetricJobs(database: DatabaseSync, publicationId: string): boolean {
+  const row = database.prepare(`SELECT COUNT(*) AS count FROM jobs WHERE kind = 'publication_metrics' AND dedupe_key LIKE ?`)
+    .get(`metric:${publicationId}:%`) as { count: number };
+  return row.count >= WINDOWS_MS.length;
 }
 
 export function listMetricJobs(database: DatabaseSync, publicationId?: string): MetricJob[] {
@@ -121,6 +128,22 @@ export function recoverRunningMetricJobs(database: DatabaseSync): number {
   const result = database.prepare(`UPDATE jobs SET status = 'pending', updated_at = ?, started_at = NULL
     WHERE kind = 'publication_metrics' AND status = 'running'`).run(now);
   return Number(result.changes ?? 0);
+}
+
+export function recoverMetricJob(database: DatabaseSync, jobId: string, expectedAttempts: number, recoveredAt: string): CommandResult<MetricJob> {
+  const changed = database.prepare(`UPDATE jobs SET status = 'pending', updated_at = ?, started_at = NULL
+    WHERE id = ? AND kind = 'publication_metrics' AND status = 'running' AND attempts = ?`)
+    .run(recoveredAt, jobId, expectedAttempts);
+  if (Number(changed.changes ?? 0) !== 1) return failure('REVISION_CONFLICT', '指标任务恢复身份已失效。');
+  return success(parseJob(database.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as JobRow));
+}
+
+export function claimMetricJob(database: DatabaseSync, jobId: string, expectedAttempts: number, claimedAt: string): CommandResult<MetricJob> {
+  const changed = database.prepare(`UPDATE jobs SET status = 'running', attempts = attempts + 1, started_at = ?, updated_at = ?
+    WHERE id = ? AND kind = 'publication_metrics' AND status = 'pending' AND attempts = ? AND due_at <= ?`)
+    .run(claimedAt, claimedAt, jobId, expectedAttempts, claimedAt);
+  if (Number(changed.changes ?? 0) !== 1) return failure('REVISION_CONFLICT', '指标任务认领身份已失效。');
+  return success(parseJob(database.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as JobRow));
 }
 
 export function claimDueMetricJobs(database: DatabaseSync, nowIso = new Date().toISOString(), limit = 20): MetricJob[] {
@@ -148,10 +171,16 @@ export function completeMetricJob(
     capturedAt: string;
     normalized: Record<string, unknown>;
     raw: Record<string, unknown>;
-  }
+    expectedAttempts?: number;
+  },
+  transaction = true,
+  audit = true
 ): CommandResult<MetricSnapshot> {
   const job = database.prepare('SELECT * FROM jobs WHERE id = ?').get(input.jobId) as JobRow | undefined;
   if (!job) return failure('NOT_FOUND', '指标任务不存在。');
+  if (input.expectedAttempts !== undefined && (job.attempts !== input.expectedAttempts || job.status !== 'running')) {
+    return failure('REVISION_CONFLICT', '指标任务执行身份已失效。');
+  }
   if (job.status !== 'running' && job.status !== 'pending') return failure('INVALID_STATE', '任务状态不可完成。');
 
   const existing = database.prepare(`SELECT id FROM publication_metric_snapshots
@@ -174,7 +203,7 @@ export function completeMetricJob(
 
   const now = new Date().toISOString();
   const id = randomUUID();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     database.prepare(`INSERT INTO publication_metric_snapshots (
       id, publication_id, scheduled_for, captured_at, source_url, normalized_json, raw_json, created_at
@@ -190,12 +219,12 @@ export function completeMetricJob(
     );
     database.prepare(`UPDATE jobs SET status = 'succeeded', finished_at = ?, updated_at = ?, last_error = NULL WHERE id = ?`)
       .run(now, now, input.jobId);
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
-  recordOperation(database, {
+  if (audit) recordOperation(database, {
     actorType: 'scheduler',
     command: 'metrics.capture',
     entityType: 'publication',
@@ -218,6 +247,14 @@ export function failMetricJob(database: DatabaseSync, jobId: string, errorMessag
   const now = new Date().toISOString();
   database.prepare(`UPDATE jobs SET status = 'failed', last_error = ?, finished_at = ?, updated_at = ? WHERE id = ?`)
     .run(errorMessage, now, now, jobId);
+}
+
+export function failClaimedMetricJob(database: DatabaseSync, jobId: string, expectedAttempts: number, errorMessage: string, failedAt: string): CommandResult<MetricJob> {
+  const changed = database.prepare(`UPDATE jobs SET status = 'failed', last_error = ?, finished_at = ?, updated_at = ?
+    WHERE id = ? AND kind = 'publication_metrics' AND status = 'running' AND attempts = ?`)
+    .run(errorMessage, failedAt, failedAt, jobId, expectedAttempts);
+  if (Number(changed.changes ?? 0) !== 1) return failure('REVISION_CONFLICT', '指标任务失败身份已失效。');
+  return success(parseJob(database.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as JobRow));
 }
 
 export function listPublicationMetricSnapshots(database: DatabaseSync, publicationId?: string): MetricSnapshot[] {
@@ -245,7 +282,8 @@ export function savePublicationMetricSnapshot(
     capturedAt: string;
     normalized: Record<string, unknown>;
     raw: Record<string, unknown>;
-  }
+  },
+  audit = true
 ): CommandResult<MetricSnapshot> {
   const publication = database.prepare(`SELECT id, status, external_url AS externalUrl FROM publications WHERE id = ?`)
     .get(input.publicationId) as { id: string; status: string; externalUrl: string | null } | undefined;
@@ -281,7 +319,7 @@ export function savePublicationMetricSnapshot(
     JSON.stringify(input.raw),
     now
   );
-  recordOperation(database, {
+  if (audit) recordOperation(database, {
     actorType: 'ui',
     command: 'metrics.capture_manual',
     entityType: 'publication',
@@ -320,7 +358,8 @@ export function saveAccountMetricSnapshot(
     capturedAt: string;
     normalized: Record<string, unknown>;
     raw: Record<string, unknown>;
-  }
+  },
+  audit = true
 ): CommandResult<AccountMetricSnapshot> {
   const account = database.prepare('SELECT id, platform FROM platform_accounts WHERE id = ?').get(input.accountId) as { id: string; platform: string } | undefined;
   if (!account) return failure('NOT_FOUND', '平台账号不存在。');
@@ -339,7 +378,7 @@ export function saveAccountMetricSnapshot(
     JSON.stringify(input.raw),
     now
   );
-  recordOperation(database, {
+  if (audit) recordOperation(database, {
     actorType: 'ui',
     command: 'metrics.account_capture',
     entityType: 'platform_account',

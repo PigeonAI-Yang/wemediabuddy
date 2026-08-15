@@ -14,6 +14,7 @@ export const PiComposer = memo(function PiComposer({
   phase,
   draftSeed,
   onDraftSeedConsumed,
+  annotationBadge,
   onSend,
   onStop,
   modelLabel,
@@ -33,6 +34,8 @@ export const PiComposer = memo(function PiComposer({
   phase: 'idle' | 'starting' | 'running' | 'failed' | 'stopped';
   draftSeed: string | null;
   onDraftSeedConsumed: () => void;
+  /** WMB-5207：发送时实际带入的批注数；null 表示无批注，不显示徽标。 */
+  annotationBadge: { included: number; omitted: number } | null;
   onSend: (text: string, delivery?: 'steer' | 'followUp') => void;
   onStop: () => void;
   modelLabel: string;
@@ -83,6 +86,11 @@ export const PiComposer = memo(function PiComposer({
     });
     return () => { current = false; };
   }, [paletteOpen]);
+  useEffect(() => {
+    const focusComposer = () => textareaRef.current?.focus();
+    window.addEventListener('wmb:pi-composer-focus', focusComposer);
+    return () => window.removeEventListener('wmb:pi-composer-focus', focusComposer);
+  }, []);
 
   useEffect(() => setActiveCommand(0), [input]);
   useEffect(() => {
@@ -131,6 +139,11 @@ export const PiComposer = memo(function PiComposer({
       <button type="button" className="primary-button" disabled={modelMenuBusy || !modelChoice} onClick={onApplyModel}>{modelMenuBusy ? '读取中…' : '应用到新回复'}</button>
     </div>}
     <div className="pi-composer">
+      {annotationBadge && <div className="pi-annotation-badge" role="status" data-omitted={annotationBadge.omitted > 0 ? 'true' : 'false'} title={annotationBadge.omitted > 0 ? `上下文预算内只带入 ${annotationBadge.included} 条批注，省略 ${annotationBadge.omitted} 条` : '发送时随消息带入的正文批注数量'}>
+        {annotationBadge.included > 0
+          ? `已带入 ${annotationBadge.included} 条正文批注${annotationBadge.omitted > 0 ? `（省略 ${annotationBadge.omitted} 条）` : ''}`
+          : `正文批注已省略 ${annotationBadge.omitted} 条（上下文超限）`}
+      </div>}
       <textarea
         ref={textareaRef}
         disabled={!configured}

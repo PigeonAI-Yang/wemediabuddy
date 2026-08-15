@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "activeWorkspaceId": "wmb-5207-accept",
+  "workspaces": [
+    {
+      "id": "wmb-5207-accept",
+      "displayName": "WMB-5207 验收",
+      "rootPath": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-5207-accept-root"
+    }
+  ],
+  "switchJournal": null
+}

@@ -14,9 +14,12 @@ import {
   cancelAgentTask,
   completeAgentTask,
   failAgentTask,
+  finishDailyIntelligenceFromReceipts,
   getActiveAgentTask,
+  partialAgentTask,
   recoverInterruptedAgentTasks,
   reportAgentTaskProgress,
+  requestAgentTaskControl,
   startAgentTask,
   updateAgentTaskPhase
 } from '../src/main/agent-tasks.ts';
@@ -184,5 +187,40 @@ test('daily task persists bounded progress and resumes the same checkpoint', asy
     assert.equal(resumed.id, started.data.id);
     assert.equal(resumed.phase, 'resume_pending');
     assert.deepEqual(resumed.checkpoint.completedRoutes, ['slow source']);
+  });
+});
+
+
+test('control actions are idempotent after terminal states', async () => {
+  await withDb((database) => {
+    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-07' });
+    assert.equal(started.ok, true);
+    const id = started.data.id;
+    const cancelled = cancelAgentTask(database, id);
+    assert.equal(cancelled.ok, true);
+    assert.equal(cancelled.data.status, 'cancelled');
+    const again = cancelAgentTask(database, id);
+    assert.equal(again.ok, true);
+    assert.equal(again.data.status, 'cancelled');
+    const control = requestAgentTaskControl(database, id, 'save_partial');
+    assert.equal(control.ok, true);
+    assert.equal(control.data.status, 'cancelled');
+  });
+});
+
+test('partialAgentTask is idempotent for daily intelligence', async () => {
+  await withDb((database) => {
+    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-07' });
+    assert.equal(started.ok, true);
+    const id = started.data.id;
+    const first = partialAgentTask(database, id);
+    assert.equal(first.ok, true);
+    assert.equal(first.data.status, 'partial');
+    const second = partialAgentTask(database, id);
+    assert.equal(second.ok, true);
+    assert.equal(second.data.status, 'partial');
+    const finish = finishDailyIntelligenceFromReceipts(database, id, { forcePartial: true });
+    assert.equal(finish.ok, true);
+    assert.equal(finish.data.status, 'partial');
   });
 });

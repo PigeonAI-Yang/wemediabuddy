@@ -1,4 +1,5 @@
 import { broadcastDataChanged } from './data-changed.ts';
+import { projectSourceSaved } from './wiki-index-triggers.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -110,7 +111,7 @@ export function ensureRegistrySourceFeed(
   return { ...created, created: true };
 }
 
-export function upsertSource(database: DatabaseSync, input: SourceInput): { id: string; created: boolean; revision: number } {
+export function upsertSource(database: DatabaseSync, input: SourceInput, notify = true): { id: string; created: boolean; revision: number } {
   const canonicalUrl = input.originalUrl ? canonicalizeUrl(input.originalUrl) : null;
   const fingerprint = canonicalUrl ? null : fingerprintFor(input);
   const existing = database.prepare(`SELECT id, revision, feed_id AS feedId, original_url AS originalUrl, title, author,
@@ -170,7 +171,9 @@ export function upsertSource(database: DatabaseSync, input: SourceInput): { id: 
       verification_status=?, management_status=?, updated_at=?, revision=?
       WHERE id=?`)
       .run(...values, now, revision, existing.id);
-    broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+    if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+    // WMB-5238：重复触发（同内容重存）不重复投影/日志；只有实质字段变化才增量投影。
+    if (sourceMateriallyChanged(values, existing)) projectSourceSaved(database, existing.id);
     return { id: existing.id, created: false, revision };
   }
 
@@ -182,8 +185,38 @@ export function upsertSource(database: DatabaseSync, input: SourceInput): { id: 
       verification_status, management_status, created_at, updated_at, revision
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, ...values.slice(0, 7), now, ...values.slice(7), now, now, 1);
-  broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+  if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+  // WMB-5238：新建 Source 增量投影（索引 + 日志）。
+  projectSourceSaved(database, id);
   return { id, created: true, revision: 1 };
+}
+
+/** WMB-5238：判断一次 upsert 是否造成实质字段变化（排除 revision/updated_at 等派生字段）。 */
+function sourceMateriallyChanged(values: unknown[], existing: {
+  feedId: string | null; originalUrl: string | null; title: string; author: string | null; publishedAt: string | null;
+  summary: string | null; categories: string; keywords: string; valueJudgment: string | null; ipRelevance: string | null;
+  creationAngles: string | null; recommendedPlatforms: string; recommendedFormats: string; timeliness: string | null;
+  priority: number | null; evidence: string | null; clientLabel: string | null; verificationStatus: string; managementStatus: string;
+}): boolean {
+  return values[0] !== existing.feedId
+    || values[1] !== existing.originalUrl
+    || values[4] !== existing.title
+    || values[5] !== existing.author
+    || values[6] !== existing.publishedAt
+    || values[7] !== existing.summary
+    || values[8] !== existing.categories
+    || values[9] !== existing.keywords
+    || values[10] !== existing.valueJudgment
+    || values[11] !== existing.ipRelevance
+    || values[12] !== existing.creationAngles
+    || values[13] !== existing.recommendedPlatforms
+    || values[14] !== existing.recommendedFormats
+    || values[15] !== existing.timeliness
+    || values[16] !== existing.priority
+    || values[17] !== existing.evidence
+    || values[18] !== existing.clientLabel
+    || values[19] !== existing.verificationStatus
+    || values[20] !== existing.managementStatus;
 }
 
 export function getSource(database: DatabaseSync, id: string): SourceRecord | null {
@@ -191,12 +224,17 @@ export function getSource(database: DatabaseSync, id: string): SourceRecord | nu
   return row ? parseSource(row) : null;
 }
 
-export function searchSources(database: DatabaseSync, query = '', limit = 50): SourceRecord[] {
+/**
+ * 搜索资料：默认只返回有效资料库（management_status != 'archived'），
+ * 传 includeArchived=true 可含已移出条目（资料库「已移出」视图等场景）。
+ */
+export function searchSources(database: DatabaseSync, query = '', limit = 50, includeArchived = false): SourceRecord[] {
   const boundedLimit = Math.min(Math.max(limit, 1), 200);
   const pattern = `%${query}%`;
   const rows = database.prepare(`${sourceSelect}
-    WHERE ? = '' OR title LIKE ? OR summary LIKE ? OR keywords_json LIKE ?
-    ORDER BY collected_at DESC LIMIT ?`).all(query, pattern, pattern, pattern, boundedLimit) as unknown as SourceRow[];
+    WHERE (? = '' OR title LIKE ? OR summary LIKE ? OR keywords_json LIKE ?)
+      AND (? = 1 OR management_status != 'archived')
+    ORDER BY collected_at DESC LIMIT ?`).all(query, pattern, pattern, pattern, includeArchived ? 1 : 0, boundedLimit) as unknown as SourceRow[];
   return rows.map(parseSource);
 }
 

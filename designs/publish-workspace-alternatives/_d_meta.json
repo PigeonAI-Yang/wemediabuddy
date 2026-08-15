@@ -1,0 +1,95 @@
+{
+  "type": "design",
+  "title": "发布工作台 · 三案重构",
+  "prompt": "以全部平台任务总盘为主轴，设计队列总控、沉浸终审、分发矩阵三种高保真可交互发布页原型，覆盖完整发布状态链，Pi 默认收起。",
+  "designSystems": [
+    {
+      "name": "WeMediaBuddy Design System",
+      "slug": "wemedia-buddy-design-system",
+      "namespace": "WemediaBuddyDesignSystem_1c877c",
+      "dsFolder": "_ds/wemedia-buddy-design-system",
+      "sourcePath": "designs/wemedia-buddy-design-system"
+    }
+  ],
+  "primaryDesignSystem": "wemedia-buddy-design-system",
+  "createdAt": "2026-08-14T17:16:55.019Z",
+  "updatedAt": "2026-08-14T20:34:26.287Z",
+  "assets": {
+    "发布工作台三案总览": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-08-14T17:41:38.534Z",
+          "status": "needs-review",
+          "subtitle": "队列总控 / 沉浸终审 / 分发矩阵",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        }
+      ]
+    },
+    "A · 队列总控": {
+      "versions": [
+        {
+          "path": "queue-control.html",
+          "createdAt": "2026-08-14T17:41:38.597Z",
+          "status": "needs-review",
+          "subtitle": "高密度任务账本与单一决策轨",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        }
+      ]
+    },
+    "B · 沉浸终审": {
+      "versions": [
+        {
+          "path": "immersive-review.html",
+          "createdAt": "2026-08-14T17:41:38.661Z",
+          "status": "needs-review",
+          "subtitle": "稿件校对画布与稳定签发条",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        }
+      ]
+    },
+    "C · 分发矩阵": {
+      "versions": [
+        {
+          "path": "distribution-matrix.html",
+          "createdAt": "2026-08-14T17:41:38.727Z",
+          "status": "approved",
+          "subtitle": "内容 × 平台分发任务总盘",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        },
+        {
+          "path": "distribution-matrix-v2.html",
+          "createdAt": "2026-08-15T02:10:47+08:00",
+          "status": "needs-review",
+          "subtitle": "矩阵优先 · 多级导航与按需动作",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        },
+        {
+          "path": "distribution-matrix-v3.html",
+          "createdAt": "2026-08-14T20:15:39.938Z",
+          "status": "needs-review",
+          "subtitle": "自适应尺寸硬化 · Owner 复核",
+          "viewport": {
+            "width": 1600,
+            "height": 960
+          }
+        }
+      ]
+    }
+  }
+}

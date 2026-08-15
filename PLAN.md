@@ -2,6 +2,388 @@
 
 This plan orders the complete current PRD. Phases are dependency gates, not reduced scope or an MVP.
 
+
+## M-5100 角色编制 × Capability 注册表（CAP-026）
+
+Scope: implement fixed staff roles + Capability registry + harness gates + readonly Agents page; then scan/judge split and worker roleId. Canonical design `docs/spark/2026-08-07-role-permission-design.md`. Owner approved 2026-08-07 full lock + harness first.
+
+Order:
+
+1. `WMB-5100` — harness + legislate + registry file + CI gate (this foundation).
+2. `WMB-5101` — grant filter by roleId in ensureAutomaticTaskGrant + tests.
+3. `WMB-5102` — readonly Agents roster page + nav.
+4. `WMB-5103` — P0 evidence / focused regression (desk zero-regression).
+5. `WMB-5104` — split daily_scan / daily_judge intents (P1).
+6. `WMB-5105` — lease roleId + roster live projection API (P1).
+7. `WMB-5106` — safe capability overlays UI (P2; blocked until P0/P1 gates).
+
+Gate P0: `npm run check:capabilities` green; writer cannot receive lane_restore via filter; Agents view readonly; no capability_overlays write IPC.
+
+
+
+## M-5110 Desk 经理 + 员工工单池（CAP-027）
+
+Scope: main Pi = Desk manager; role agents = subagent jobs with worker pool (default maxWorkers=2), per-job session, role-filtered grants (CAP-026 reuse), entity locks on planDate/projectId. Canonical: `docs/spark/2026-08-07-desk-manager-job-runtime.md`. Aligns role-permission design §11 P1 worker pool + single-hop dispatch.
+
+Order:
+
+1. `WMB-5111` — JobPool + multi-lease runtime
+2. `WMB-5112` — JobSpawner + role grant projection
+3. `WMB-5113` — jobs IPC + preload
+4. `WMB-5114` — Agents job board + today chip
+5. `WMB-5115` — tests + evidence pack
+
+Gate: job-pool tests green; two non-conflicting leases; roster shows multi running; CAP-026 registry unchanged except wiring.
+
+
+## M-5140 智能体班组多实例协同（固定五角色 × 按任务实例）（CAP-027）
+
+Scope: implement the formal construction Owner lock `docs/spark/2026-08-08-agent-crew-multi-instance-design.md` (§17) on top of the M-5110 JobPool runtime: role ≠ slot, same-role multi-instance with explicit visibility, instances created per task and exiting the active view at terminal state, shared pool as pure capacity (maxWorkers 0..7), desk as coordination entry (not supervisor workstation), instance permission = task grant ∩ role capability ∩ resource boundary with dispatcher object-level hard isolation, red lines unchanged, jobId first-class identity with active-period-only display numbering, needs_user staying in the active view without holding slot/lease/grant/lock, and the persistent re-dispatch contract in the existing `context_refs_json` (no new table/column). Spec: PRODUCT C9, PRD §2.4 (REQ-028/REQ-029, AC-024..AC-027), SPEC §1.0 items 8-9 and CAP-027 (EVAL-030).
+
+Owner lock 2026-08-08 (13 points; authoritative text in design doc §17):
+
+1. 固定五角色（桌助/记者/策划/写手/资料员）跨赛道稳定。
+2. 同角色多实例显式可见。
+3. 实例按任务创建，终态退出活动视图（needs_user 例外见 9）。
+4. 不预设空槽：五角色分组始终可见，空角色「当前无任务」。
+5. 共享并发池仅系统容量：maxWorkers（0..7，0=停用派工，默认 2）。
+6. 桌助是协调入口，不是主管工位（无 standing 写权、不进员工槽、不代批）。**（2026-08-10 主管授权翻转修订：历史锁保留；现行规范 = M-5180——主管（desk）= 软件内主管/主编席，全站内部 standing 写权，内部审批归主管，红线三类仅人类 UI。）**
+7. 实例权限 = 任务精确授权 ∩ 角色能力 ∩ 资源边界。
+8. 发布/硬删红线不变（agentGrantable:false 对一切实例不可达）。
+9. needs_user 停留活动区「等你批」至用户处理/关闭，期间不占并发/lease/grant/锁。
+10. 空态呈现：五角色分组始终可见，空角色「当前无任务」，不画空槽。
+11. 角色编号仅活动期显示，持久身份 jobId。
+12. 对象级硬隔离（施工必需）：dispatcher 校验工单对象边界，跨对象写拒绝。
+13. 持久续派合同：jobId/roleId/brief/边界参数写入既有 context_refs_json，不新增表。
+
+Order (dependency: 持久合同+对象 gate → 运行投影 → UI → Skill → 验收):
+
+1. `WMB-5141` — 持久续派合同 + dispatcher 对象级硬隔离：spawn 合同写 jobId/roleId/brief/边界参数入 `context_refs_json`；`agent_tasks`/`task_grants`/`execution_grants` 三表 schema 零改动；对象键校验（businessDate/projectId/sourceIds/scope）跨对象写 BLOCKED + 审计；check:capabilities G1 + effective grant 一致性 G2。
+2. `WMB-5142` — 运行投影：实例一等身份 jobId、活动期编号、终态顺序（agent_task 终态 → grant 回收 → lease/锁释放 → pool 终态）、scan→judge 单活动实例不双计、历史只从持久面重建。
+3. `WMB-5143` — 智能体页实例驱动 UI：五角色分组始终可见、空角色「当前无任务」、实例卡、needs_user「等你批」停留、页头摘要（工作中/排队/等你批）、历史折叠 + 一键续派。
+4. `WMB-5144` — Pi operator Skill 多实例感知 + 桌助呈报/续派路径（不新增 Skill；提示词按 `docs/pi-operation-skill-maintenance.md` 规程登记）。
+5. `WMB-5145` — 验收：EVAL-030（设计 §14 A1..A14）+ 聚焦测试 + typecheck + check:capabilities + 实机；变更集零新增角色/能力，注册表零改动。
+
+Gate: EVAL-030 passes; same-role multi-instance visible; empty state shows 「当前无任务」 without seats; needs_user stays without slot/lease/grant/lock; restart re-dispatch from `context_refs_json`; cross-object write blocked with audit; red-line commands unreachable; check:capabilities green. **TASKS doing 仍是唯一施工许可**：每个任务须自带任务合同（显式引用设计 §12 兼容原则与 §16 影响面）+ 施工 Owner lock，进入 TASKS doing 才可开工。
+
+
+## M-5150 主题整理提案与 Owner 审批（CAP-003 / CAP-026）
+
+Scope: 资料员整理主题家底，生成精确变更台账；桌助呈报；Owner 批准后整批原子生效。覆盖主题新建、修改、合并、归档和关系迁移，stale 零部分写；禁止把整理退回 Owner 手工执行。Canonical design: `docs/spark/2026-08-10-topic-maintenance-approval-design.md`。
+
+Order:
+
+1. `WMB-5150` — legislation + durable proposal ledger + transactional apply/reject + librarian job/Pi tools + Topic/Today approval UI + EVAL-031 evidence。
+
+Gate: real duplicate-topic proposal has zero pre-approval mutations; reject zero business write; approve migrates all formal links and archives old topic in one transaction; stale zero partial write; Agent apply blocked; Topic/Today/desk projections agree; operator Skill, typecheck, capability gate, focused tests and renderer smoke pass。
+
+## M-5160 主题冲突合同与自动重提（CAP-003 / CAP-026）
+
+Scope: replace snapshot-wide stale inference with one persisted intent-level conflict contract; real conflicts atomically enqueue a domain-specific reproposal outbox, then dispatch librarian after commit and recover across restart. Preserve immutable old proposals, Owner-only approval and legacy stale history. Canonical design: `docs/spark/2026-08-10-topic-maintenance-conflict-reproposal-design.md`。
+
+Order:
+
+1. `WMB-5158` — snapshot v2 conflict contract, structured conflict evidence and v1-compatible reads/decisions。
+2. `WMB-5159` — topic reproposal outbox, stable internal job identity, post-commit dispatch, bounded failure handling and cold-start recovery。
+3. `WMB-5160` — supersession UI, historical stale classification, operator Skill/Pi prompt synchronization and EVAL-031 full acceptance。
+
+Gate: irrelevant drift approves; true conflict writes zero formal facts and one durable outbox in the approval transaction; no Agent runs before commit; duplicate click/kick/restart creates one successor from current facts; old/legacy proposals remain immutable; focused/full/typecheck/capability/lightweight/smoke and real Electron approval-to-successor readback pass。
+
+
+## M-5170 ResearchJob 补料与研究续派（窄例外）（REQ-031 / CAP-028）
+
+Scope: 立法落档正式 Owner lock `docs/spark/2026-08-10-agent-research-job-design.md`（§5–§13 R1–R13）：记者 = 统一补料执行者，新增 `cap.research`（L2 注册表唯一扩展点，readToolWhitelist 可选字段，`sources.upsert_batch` 唯一写回）；新独立 Web 读工具 `wmb_search_web`/`wmb_read_web_page`（channel resolve/trial 保持渠道语义、不承载研究读面）；research 会话读硬门 fail-closed（P1.4 读门窄域首落）；深度档 12 分钟 / 15 有效来源 / 40 候选 / 3 并行 / 仅一轮；claim 机器校验四态；`research_claims` 为 REQ-031/CAP-028 授权的唯一新增研究业务表（非续派合同表，消解与 PRD §2.4.8 / REQ-029 / CAP-027 §8 的字面冲突）；自动续派 = 系统终态处理器创建新 job（非重试），每父工单至多一次，research→research 禁止。PRODUCT C9 窄例外增补 C9.2（设计 §10 误写 C9.3，以 C9.2 为准）。仅立法，不产生实现计划与任务编号（R13）。
+
+Canonical design: `docs/spark/2026-08-10-agent-research-job-design.md`（§5–§8 契约 + §10 立法清单 + §12 EVAL-032；Owner lock 2026-08-10 正式锁定）。
+
+Depends: M-5110 / M-5140（JobPool 运行时、持久续派合同与对象级硬隔离之上）。
+
+Order (dependency order: 立法 → 注册表/读工具 → 读硬门 → 持久化 → ResearchJob → 自动 successor → UI/Pi Skill → EVAL-032):
+
+1. **立法** — PRODUCT C9.2 窄例外 + C9.10/C9.11 范围澄清；PRD §2.5 + REQ-031 + AC-029（`research_claims` 唯一新业务表，消解字面冲突）；SPEC CAP-027 兼容澄清 + CAP-028（含 Web 安全条款）+ EVAL-032。
+2. **注册表 / 读工具** — `cap.research` 登记（readToolWhitelist；TASK_INTENT_NEEDED_CAPS / AUTOMATIC_TASK_GRANT_SCOPES / roleForTaskIntent）；注册 `wmb_search_web` / `wmb_read_web_page`。
+3. **读硬门** — research 会话按 readToolWhitelist fail-closed：越权 READ_PROFILE_BLOCKED（reason RESEARCH_READ_WHITELIST）+ 审计；其余角色/意图零回归。
+4. **持久化** — late-migrations v54：agent_tasks intent CHECK 重建 + `research_claims` DDL；ResearchGap / 预算 / checkpoint / EvidencePack 分落 context_refs_json / progress_json / checkpoint_json / result_refs_json。
+5. **ResearchJob** — 记者补料工单运行：预算硬边界、`wmb_save_source` 证据入库（originalUrl 去重、price/policy 带时间+摘录、无 feedId）、claim 机器校验、resume_pending 重启恢复。
+6. **自动 successor** — 系统终态处理器创建新 job（非重试）：research_successor（dedupe_key UNIQUE + INSERT OR IGNORE 幂等）→ 调度器派生原角色续派；未答 required claim 先入 needs_user（收窄 / 手动补料 / 接受标注待核实）；三层硬止环。
+7. **UI / Pi Skill** — 智能体页记者卡 + needs_user 等你批；Today 只上 unresolved required needs_user；operator Skill playbook（lane Skill 不复制）。
+8. **EVAL-032** — GLM 5.2 端到端验收（13 条可证伪条款）+ 机械层测试（claim 门槛矩阵、读白名单负断言、successor 幂等、Web URL 校验）。
+
+Gate: EVAL-032 全 13 条 + AC-029 通过（真实 GLM readback：writer evidenceGap → 桌助自动派 research → 证据入库 → 终态处理器自动续派一次 → 续派新稿无无出处数字）；读硬门负断言（白名单外工具含 channel resolve/trial 必被 READ_PROFILE_BLOCKED + 审计）；research_claims 约束（UNIQUE(task_id, claim_key) / CHECK 枚举 / 机器校验，伪造 supported 降级 unresolved）；successor 唯一（同 parentJobId 重放仍只产出一个 research_successor，research→research spawn 拒绝）；Today 只上 unresolved required needs_user；重启从 checkpoint + research_claims 恢复；check:capabilities green；typecheck green。
+
+
+## M-5180 主管全站内部授权（desk = 软件内主管）（CAP-026 / CAP-027 / CAP-003 / CAP-028）
+
+Scope: 正式 Owner lock `docs/spark/2026-08-10-supervisor-authority-design.md`（§8 全 10 项确认，approach A，2026-08-10）立法与施工：身份翻转（desk = 软件内主管/主编席，用户可见身份统一，删除「桌助/协调入口」文案）；授权翻转（主管 standing = 全部 grantable 业务能力命令 ∪ INFRA_GRANT_COMMANDS，含内部准备命令，不含三类红线执行命令；任一页 dock 绑定主管签发全量内部 grant）；红线恰三类（类别，非命令清单）——最终平台发布、硬删执行、外部平台变更执行——最终动作仅人类 UI 新鲜确认（Precise Gate + Owner UI），主管可准备不可执行；内部审批（`knowledge.topic_maintenance_approve / reject / reproposal_retry`）重分类归主管（`agentGrantable:true`、`precise:false`、`{desk:true}`）；员工隔离与 grant/lease/Precise/审计纪律不变；`spawn(roleId:'desk')` 仍拒绝；standing 集变化经 `sameCommandSet` 自动换发 + 写前 `TASK_SCOPE_BROADENED` 恰一次安全重试；新内部写命令默认绑定主管（仅红线类别执行命令例外）；主管 v1 不参与 overlays；非中止 Pi 行为（红线/基建/注册缺口三类拒绝 + `[WMB_AUTHORITY_BLOCKED]`）。
+
+Canonical design: `docs/spark/2026-08-10-supervisor-authority-design.md`（§0/§2/§4/§5/§6/§7/§8）；canonical 修订：`docs/spark/2026-08-07-role-permission-design.md`、`docs/spark/2026-08-08-agent-crew-multi-instance-design.md`、`docs/spark/2026-08-10-topic-maintenance-approval-design.md`、`docs/spark/2026-08-10-topic-maintenance-conflict-reproposal-design.md`。
+
+Order (dependency order: 立法 → 注册表/授权核心 → 边界/审批 → 身份/文案 → 验收):
+
+1. `WMB-5181` — **立法（Legislate）**：PRODUCT C9.6 / PRD §2.3/§2.4/§2.5 + REQ-029/REQ-030/AC-027/AC-028 / SPEC §1.0 + CAP-026.9/CAP-003/CAP-027.6/CAP-028 + EVAL-030/031 + PLAN M-5180 + canonical 修订 + 实施合同 5182-5185。只立法不实现。
+2. `WMB-5182` — **authority core：注册表形状 / deskStanding + task/page grant 续期**（deskStanding 常量、`roleWriteCommands('desk')`、`filterCommandsForRole`、删除 `pageScopePassThrough`、cap.topic_approval 翻转、REDLINE_COMMANDS 三类类别化、`ensureAutomaticTaskGrant`/`assertTaskGrantForEnvelope` desk 基底与续期、`ensurePageAuthority` 发布页签发、`setCapabilityOverlay` desk 拒绝、`DESK_ROSTER_FACE` 删除、check-capability-registry 检查 4/6/7 翻转）。
+3. `WMB-5183` — **边界：安全内部准备 vs 不可逆/外部执行 + 主题审批**（channel `proposal_apply` 无 remove 安全路径归主管/含 remove 硬删路径 Owner UI；x_lists 新增 internal prepare 命令 + `operation_execute` 保持 precise Owner UI；`publication.editor_prepare_execute` 精确人工确认边界、最终 publish click 永不自动；topic approve/reject/reproposal_retry 仅主管可授予，员工/外部 Agent 拒绝零写）。消费 5182 注册表契约。
+4. `WMB-5184` — **身份/提示词/Skill/renderer 文案**（`PI_AUTHORITY_SYSTEM_PROMPT`、`skills/wemedia-buddy-operator/SKILL.md` + 镜像、MCP 工具描述、roster/renderer 文案 → 主管/主编席；不改 grant 语义）。
+5. `WMB-5185` — **集成验收 / live 证据**（设计 §7 A1–A9 落为测试与实机场景；EVAL-030 desk 行翻转、EVAL-031 主管审批；仅可修复 5182–5184 归属源码的集成缺陷）。
+
+Gate: A1 standing 集断言（`roleWriteCommands('desk')` == `commandsCoveredByGrantableCapabilities() ∪ INFRA_GRANT_COMMANDS` 且与红线执行命令集交集为空）；A2 跨页写（发布页绑定主管签发全量 grant、员工仍只读）；A3 红线回归（channel 安全应用成功/含 remove 拒绝零写、x_lists internal prepare 成功 + operation_execute Precise 拦截、editor_prepare_execute 精确人工确认、硬删 Owner UI only）；A4 内部审批（主管应用原子生效 + 读回；资料员/策划/外部拒绝零写；真冲突 stale 零写 + 重提仍主管批准）；A5 员工隔离回归；A6 续期 + 恰一次重试；A7 非中止 Pi 行为；A8 文案 grep 门（无「桌助/协调入口」残留，desk 行 = 主管/主编席 且写命令数 > 0）；A9 实机演练；check:capabilities green；typecheck green；`npm run check:capabilities` 断言翻转后全绿。**TASKS doing 仍是唯一施工许可**：每个任务须自带任务合同（显式引用设计 §4/§6/§7）+ 施工 Owner lock，进入 TASKS doing 才可开工。
+
+
+## M-5000 产品形态宪法锁定（Agent 主路径终端）
+
+Scope: freeze product form so later Today/desk/topic/opportunity work cannot drift back to traditional CMS or VS Code-like human-primary IDE. Docs/rules only in the freeze task; continuous-attention rewrite to topic projection is a follow-up milestone, not silently implied by this lock.
+
+Normative:
+
+- `PRODUCT.md` constitution C1–C7
+- `PRD.md` §2.0
+- `SPEC.md` §1.0
+- `AGENTS.md` Project goal
+- Detail: `docs/spark/2026-08-07-product-form-agent-desk-constitution.md`
+
+Owner lock 2026-08-07:
+
+1. Form = Codex Desktop-like agent-primary terminal; reject VS Code-like human-primary writing IDE.
+2. Human = editor-in-chief (approve/dispatch/supervise/publish confirm/liability); Agent = primary labor.
+3. Today = editor desk for decidable/must-know submissions only.
+4. Long-horizon attention formal identity = **Topic**; continuous-attention must not dump untriaged sources as opportunity-drafting offload.
+5. Topic induction = LLM editorial judgment, not regex primary.
+
+Order:
+
+1. `WMB-5000` — write constitution into PRODUCT/PRD/SPEC/AGENTS/README + spark detail + ledger (this freeze).
+2. Follow-up (separate milestone when scheduled) — **same four items as** `docs/spark/2026-08-07-product-form-agent-desk-constitution.md` §8:
+   1. Replace Today continuous-attention: retire `work_carry_items` + `storyKey`/`sameStory` as long-horizon identity; project **topic progress**.
+   2. Backend upsert/merge **topic** + link evidence when agent marks long-horizon worth (LLM induction, not regex primary).
+   3. Stop promoting bare high-value sources onto the desk without an opportunity brief.
+   4. UI glossary: 关注 / 主题 / 选题 / 资料.
+
+Gate: any new desk/topic/opportunity design cites §2.0 / SPEC §1.0 / PRODUCT C1–C7; agents read AGENTS form clause before those surfaces; follow-up work must name replacement of carry/storyKey rail explicitly.
+
+## M-5001 持续关注 → 主题进展投影
+
+Scope: implement product-form constitution §8 four items for Today continuous-attention. Replace long-horizon rail identity from `work_carry_items`+`storyKey`/bare source to **topic progress**. Keep plan_item carry for proposals state machine. Does not redesign chair/opportunity pool.
+
+Design: `docs/spark/2026-08-07-continuous-attention-topic-progress-design.md`  
+Normative: PRODUCT C3/C4, PRD §2.0, SPEC §1.0, form constitution §5/§8
+
+Owner lock (inherits M-5000):
+
+1. Rail long-horizon identity = Topic only.
+2. Stop bare high-value source desk promotion.
+3. plan_item open/dismiss stays on proposals/carry — not the attention identity.
+4. Topic induction remains LLM/multi-day bind + evidence link; no regex primary.
+
+Order:
+
+1. `WMB-5001` — freeze this design + hang 5002-5004.
+2. `WMB-5002` — `listFermentingBundle` topic-progress projection; no-op `seedCarryFromHighValueSources`; plan-save topic↔source links.
+3. `WMB-5003` — FermentingRail topic UI + glossary + create/open path.
+4. `WMB-5004` — focused tests + typecheck + evidence.
+
+Gate: rail shows topics never bare sources; proposals restore intact; ferment/desk focused tests green.
+
+
+
+
+## M-4990 今日情报任务控制鲁棒性
+
+Scope: make Today daily-intelligence controls (save_partial / cancel / timeout / zombie) reliable: click feedback, bounded exit from running, sync terminal state after abort, stall/wall-clock paths. Does not redesign judgment content, Today visual IA, or Pi page authority (M-4980).
+
+Design: `docs/spark/2026-08-07-daily-intelligence-control-robustness-design.md`
+Owner lock 2026-08-07: wall clock 30m auto partial; stall>10m auto partial (P1); cancel keeps ingested sources; zombie primary=cleanup keep results; start P0 now.
+
+Order:
+
+1. `WMB-4990` — freeze design and hang chain (docs/ledger).
+2. `WMB-4991` — control-daily authoritative sequence + idempotent + single-flight.
+3. `WMB-4992` — UI pending/error/refresh for save_partial/cancel.
+4. `WMB-4993` — runner catch dual-path + abortDailyIntelligence harden; no rewrite after terminal.
+5. `WMB-4994` — zombie running CTA + minimal startup interrupted reconcile.
+6. `WMB-4995`–`WMB-4998` — P1/P2 stall wall-clock, scan cooperative cancel, tests, diagnostics.
+
+Gate: synthesis-phase save_partial leaves running within 15s with UI feedback; no 68m hang; zombie cleanable.
+
+## M-4980 内置 Pi 页面级权限（dock 自由对话）
+
+Scope: replace studio-only dock auto-grant with page-scoped `PAGE_TASK_GRANT_SCOPES` + `page_*` intents; library organize tools (soft archive/restore/status); authority chip and non-silent BLOCKED errors. Does not auto-grant X List platform mutation or final publish (PreciseExecution stays). Owner lock 2026-08-07: 1A hard-delete Owner-UI only; 2A grants expire ~4h without revoke-on-leave; 3A discover observation may auto-grant.
+
+Design: `docs/spark/2026-08-07-pi-page-authority-design.md`  
+Audit: `.ai/2026-08-07-pi-page-authority-audit.md`
+
+Order:
+
+1. `WMB-4980` — freeze design/audit + hang 4981-4986 (docs/ledger).
+2. `WMB-4981` — shared `page-authority` table + AgentIntent/page_* migration + AUTOMATIC_TASK_GRANT_SCOPES.
+3. `WMB-4982` — `ensurePageAuthority` replaces studio special-case in pi dock.
+4. `WMB-4983` — MCP `lane_gate` / `lane_restore` / `sources.update_status` + library P0 tools.
+5. `WMB-4984` — operator Skill + authority prompt BLOCKED guidance.
+6. `WMB-4985` — chip + `pi:authority-status` + non-silent authorize failures.
+7. `WMB-4986` — focused tests, typecheck, evidence, studio regression.
+
+Gate: library dock can soft-archive/restore/status with grants; publish dock readonly BLOCKED; studio save_version still works; no silent authorize swallow.
+
+
+
+## M-4970 Pi 页面点选焦点统一
+
+Scope: unify “click card = Pi focus without navigating in” across workflow pages. Today’s opportunity/source multi-select is the reference. Delivers interaction contract, shared selection helpers, payload honesty, then per-page wiring starting with Proposals and Results. Does not add comment/DM scraping, settings Pi dock, or full-page screenshot context.
+
+Design: `.ai/2026-08-07-pi-page-context-selection-audit.md`  
+Owner lock 2026-08-07: single-click focuses Pi context; enter detail is a separate gesture; prefer single-focus by default; multi-select kept where Today/canvas/rankings already use it.
+
+Order:
+
+1. `WMB-4970` — freeze audit/contract and hang 4971-4976 (docs/ledger only).
+2. `WMB-4971` — shared focus helper + `buildPiContextPayload` pure module + unit tests.
+3. `WMB-4972` — Proposals page click-to-focus (no navigate) + main `piContext` branch.
+4. `WMB-4973` — Results click-to-focus + shallow metrics/review fields in payload.
+5. `WMB-4974` — Studio list click=focus vs open-editor; editor auto-focus + body excerpt.
+6. `WMB-4975` — Publish / Library / Topic align to contract.
+7. `WMB-4976` — Today ferment item focus + chip/clear copy consistency + acceptance evidence.
+
+Gate: Proposals/Results/Studio-list support focus-without-enter; Chip honest when empty; Today multi-select and canvas/X-list do not regress; settings still has no business Pi dock.
+
+
+## M-4960 AI×个人商业化成长配方落地
+
+Scope: tighten the existing `official.ai` workspace + `wemedia-intelligence-engine` judgment/creation copy into Owner-locked「AI × 个人商业化成长」without a new lane, pack id, or publication automation. Delivers template v2 identity strings, official-root re-ensure (current `ensure` no-ops on existing profiles), dailyPrompt/Skill four-question overlay, lane-gate copy, review/method seed docs, and Owner ops checklist. Does not implement xhs editor prep, method-library aggregate UI, ReviewRecord new columns, product-seed automation, or M-4950 proposal-ledger P1.
+
+Design: `.ai/2026-08-07-ai-commercialization-recipe-impl.md`  
+Strategy: `docs/spark/2026-08-07-ai-personal-commercialization-wmb-plan.md`  
+Owner lock 2026-08-07: rename display; accept xhs manual publish for 90d; map commercialization signals into review summary/notes first; bump officialTemplateVersion and re-ensure official AI roots; add indie-hacker / tool-review X List via config (no hard-coded list ids).
+
+Order:
+
+1. `WMB-4960` — freeze design, Owner resolutions, and 4961-4965 chain (docs/ledger only).
+2. `WMB-4961` — `official.ai` template v2 + ensure upgrade path for official lineage + tests.
+3. `WMB-4962` — `dailyPrompt` + intelligence opportunity Skill/standard commercialization overlay and column skeleton (parallel with 4961 after 4960).
+4. `WMB-4963` — lane-gate / gate-section copy aligned to commercial audience (after 4961+4962).
+5. `WMB-4964` — operator review template + method seeds doc (parallel after 4960).
+6. `WMB-4965` — Owner ops checklist + acceptance evidence (after 4961-4964).
+
+Gate: new and existing official AI roots surface commercial identity in editorial brief; judge prompt requires五维 hit; xhs remains manual-publish night-light; no fake List bindings; focused tests + typecheck green; M-4950 code surfaces untouched unless coincidental.
+
+## M-4930 Today as editor desk（主编办公台）
+
+Scope: reposition Today as the chief-editor desk — chair = current approvable opportunities (never cleared while a new run is in flight), secondary rail =「持续关注」(story-keyed event cards with “why still watching”), backlog labeled「待处理」, task/partial narrative stays on Discover. Does not change publication, precise grants, browser binding, Studio or Results schema; reuses `plan_items` + `work_carry_items`.
+
+Design: `.ai/2026-08-06-today-editor-desk-design.md` (north-star revision; supersedes `.ai/2026-08-06-fermenting-rail-redesign.md` as the governing IA/copy/acceptance doc).
+
+Order:
+
+1. `WMB-4930` — land MVP: chair `displayItems` empty-pool fallback, storyKey merge +「持续关注」rail filter/fields/copy, pool「待处理」badge, planning carry reason seed, focused tests.
+2. `WMB-4932` — close MVP gaps: chair pool storyKey dedupe (same-story one card) + live Electron acceptance (run keeps prior plan; copy; dismiss path).
+3. `WMB-4931` (later) — full version: aftershock without topic hard-dep, optional `story_key`/`stage` columns, Discover owns task/partial stream, higher `topic_id` bind rate.
+4. `WMB-4933` — zero-update empty current plan must not blank the chair: pool reads latest non-empty plan per date (not `is_current`); `latestPlan`/displayItems fall back to latest non-empty plan. Design: `.ai/2026-08-07-empty-current-plan-chair-fix.md`.
+
+
+## M-4950 选题台账（编辑部提案夹）
+
+Scope: new workflow nav「选题」between Discover and Studio — full decision ledger for plans/plan_items (今日可批 / 待处理·搁置 / 已采纳 / 已否掉 / 已过期). Today stays the editor desk only (chair + 持续关注 + one ledger entry link). Zero schema; reuse pool row source + create/dismiss write paths. Does not put archive drawers on Today, does not mix unadopted proposals into Studio, does not put plans into Discover.
+
+Design: `.ai/2026-08-07-proposals-ledger-design.md`
+
+Order:
+
+1. `WMB-4946` — backend ledger query + shared pool helpers + IPC/preload/types + tests.
+2. `WMB-4947` — frontend ProposalsView + nav + Today entry bar + adopt/dismiss wiring.
+3. `WMB-4948` (later) — pagination, restore, batch ops, Pi context refinement.
+
+## M-4940 Lane relevance gate（赛道资料门 / 有效资料库）
+
+Scope: after broad channel collect, add a workspace-lane relevance gate before topic/opportunity judgment. Irrelevant sources leave the effective library with traceable reasons and restore; effective sources alone feed brief, Today source counts/feed, and four-question planning. Does not change scan-all collection, publication, precise grants, browser binding, Studio/Results, plan_items structure, or M-4930 chair/rail rules.
+
+Design: `.ai/2026-08-07-lane-relevance-gate-design.md` (Owner-locked pipeline: 广收 → 赛道门 → 有效库 → 四问选题 → 今日办公台).
+
+Order:
+
+1. `WMB-4940` — freeze design and hang 4941-4945 implementation chain (docs/ledger only).
+2. `WMB-4941` — `source_lane_judgments` contract + dispatcher `sources.lane_gate` / `sources.lane_restore` + judge grant mount.
+3. `WMB-4942` — Tier0 official/lane-source pass + Tier1 same-turn binary gate with reason codes; archive write path; parse-fail zero-archive.
+4. `WMB-4943` — effective-library consumers: brief increment filter + transparency line; Today feed/stats effective-only + tail count; searchSources default exclude + include flag; regression that ferment/knowledge consumers already exclude archived.
+5. `WMB-4944` — Library「已移出」view with reason badges, restore, 7-day rejudge cooldown.
+6. `WMB-4945` — end-to-end mixed-batch acceptance (split/restore/stats) + empty-run no-op (AC-017) + M-4930 desk regression.
+
+Gate: lifestyle/off-lane noise is archived with reason and disappears from effective library/brief/Today counts; official/lane sources stay active without model call; restore returns to effective set and blocks rejudge for 7 days; parse failure archives nothing; chair/rail/pool invariants from M-4930 still hold.
+
+## M-4910 Rolling opportunity pool and editorial brief
+
+Scope: intelligence-to-topic pipeline only — channel failure isolation, incremental judgment with a live-assembled editorial brief, rolling opportunity pool semantics, Today pool projection, and bounded deep-dive ingestion. Does not change publication, precise grants, browser binding, Studio or Results; `plan_items` structure is unchanged (pool state rides the existing ferment/carry state machine).
+
+Design: `docs/spark/2026-08-06-intelligence-to-topic-agent-design.md`
+
+Order:
+
+1. `WMB-4910` — land pure `assembleEditorialBrief` (identity/history/inventory/increment) with seed-DB fixtures.
+2. `WMB-4911` — rewire daily judgment prompt to the brief and four-question mandate; judgment must not depend on browser state.
+3. `WMB-4912` — isolate per-channel scan failure (official-web never browser-bound; X absence is annotated, never blocking) and unify rolling/manual scan entries.
+4. `WMB-4913` — incremental judgment via checkpoint watermark, single-instance judge with queued follow-up, auto-trigger after each scan (Owner-approved trigger 甲).
+5. `WMB-4914` — pool semantics: cross-date unterminated pool view in workbench plus ferment expired/dismissed states and publish-time same-topic demotion.
+6. `WMB-4915` — Today pool projection: pool list, timeliness/new markers, evidence-chain links, channel-absent banner, dismiss action.
+7. `WMB-4916` — deep-dive ingestion constraint (canonicalUrl required before citation) and preset native-search capability flag in Pi settings.
+8. `WMB-4917` — end-to-end acceptance: absent-channel run, watermark continuity, review-visible-in-brief within minutes, pool four-question quality readback.
+
+Gate: X absence never blocks judgment; every pool opportunity answers the four questions with clickable evidence; a review saved at 20:00 is visible in the brief of any judgment run at 20:05; no new scheduler framework, scoring system or second agent.
+
+## M-4800 Workspace-scoped human-AI collaboration architecture
+
+Scope: approved product/architecture contracts for workspace-isolated self-media operations, task-authorized AI autonomy, one authoritative business-command boundary, and explicit installation/workspace/runtime ownership. This milestone changes documents and freezes a migration chain only; it does not start implementation or weaken existing publication confirmation and evidence requirements.
+
+Order:
+
+1. `WMB-4800` — reconcile PRD, SPEC, technical architecture and the stale architecture guide; add the approved target-architecture document and dependency-ordered implementation tasks.
+2. `WMB-4801` — seal current write/runtime/profile routes, legacy read compatibility and the real AI/UK fixtures used by EVAL-029.
+3. `WMB-4802` — land BrowserProfile registry/default inheritance, explicit legacy-profile migration and root binding/account snapshots.
+4. `WMB-4803` — establish the single ActiveWorkspaceRuntime owner, runtime epoch, bounded leases and switch/quit drain.
+5. `WMB-4804` — land CommandEnvelopeV1, dispatcher, atomic receipts/replay/audit and one representative migrated mutation.
+6. `WMB-4805` — land task grants and prove Pi/external-Agent continuation with persisted business facts.
+7. `WMB-4806` — land precise-execution grants and UI-only issuance/revoke gates with stale zero-write behavior.
+8. `WMB-4807` — route remaining UI/MCP/scheduler business writes through the dispatcher and remove migrated direct write paths.
+9. `WMB-4808` — migrate browser side effects/publication reconciliation and retire implicit conversational/direct-tool authorization.
+10. `WMB-4809` — complete legacy read compatibility, operator Skill synchronization and packaged EVAL-029 across real AI/UK roots.
+11. `WMB-4812` — close the remaining current-package EVAL-029 coverage explicitly left by WMB-4809: real Pi model continuation under worker lease, packaged precise-grant negative matrix, and packaged immutable publication-snapshot/browser reconciliation.
+
+Gate for WMB-4800: REQ-027, AC-023, CAP-025, EVAL-029 and `docs/architecture/workspace-ai-collaboration-architecture.md` agree on the same product center, scope boundaries, authority, runtime ownership and migration gates; while planning, WMB-4800 is the only `doing` task; on completion WMB-4801 is the next `todo`. No production code, schema, packaged Skill or runtime artifact changes in WMB-4800.
+
+Gate for M-4800 completion: no `focusedCoverageRequired` remains and architecture §8 is proven in the current Windows package.
+
+
+## M-4900 Today daily-intelligence mainline convergence
+
+Scope: Today page user narrative only — one run view, one CTA matrix, no fake human todos. Does not redesign channel modules, Pi judgment prompts, or Studio/Results.
+
+Design: `docs/spark/2026-08-06-today-daily-intelligence-mainline-design.md`
+
+Order:
+
+1. `WMB-4900` — freeze the design and hang the task chain (docs/ledger only).
+2. `WMB-4901` — land pure `TodayRunView` projection and make Today render from that single source.
+3. `WMB-4902` — remove fake plan pending actions; apply CTA/blocker matrix and minimal settings deep-links.
+4. `WMB-4903` — regression evidence for start/continue/partial/needs_user paths without contradictory copy.
+
+Gate: Owner can name the current step in one sentence; at most one primary CTA; no “创建今日运营方案” fake todo; real blockers are actionable; command bar, empty state and right rail never contradict.
+
+## M-4700 Daily intelligence run isolation
+
+Scope: existing CAP-014/CAP-020 daily-intelligence execution only; no validation, source-selection or plan-authority change.
+
+Order:
+
+1. `WMB-4700` — resolve the Beijing business date at click time, bind each daily task to its own Pi session, and return a durably saved partial task without emitting a Pi runtime failure.
+
+Gate: an overnight-open Today view starts the current Beijing date; two tasks on one date cannot share a Pi transcript; a failed judgment with trustworthy receipts returns `partial`; current-task `plans.save` and real-source validation remain mandatory.
+
+## M-4600 Pi delegated vision
+
+Scope: CAP-014 delegated image understanding for a text-only primary model; reuse the pinned upstream Pi extension and the active OpenAI-compatible preset without adding an Agent framework or changing WMB business authority.
+
+Order:
+
+1. `WMB-4600` — package `pi-vision-tool`, register the explicit MiMo vision model alongside the active primary model, load the extension in RPC mode, and prove real text-only and image turns in the Windows package.
+
+Gate: EVAL-028 passes; the primary remains DeepSeek V4 Flash, only an explicit image request invokes MiMo, the observation returns through a visible tool result, and failures do not fallback, mutate WMB business state or fabricate image content.
+
 ## M-4300 Pi conversation archive
 
 Scope: the existing root-local Pi conversation index and header menu only; no deletion, Settings page or transcript rewrite.
@@ -518,3 +900,51 @@ Order:
 1. `WMB-3400` — prove whether the reported sequence is one or two reads, then render zero initial posts as one retryable empty state and expose pagination only after at least one post exists.
 
 Gate: one empty response cannot show both no-dynamics and load-more; no automatic second timeline request is introduced; non-empty timelines retain existing pagination.
+
+
+## M-5210 内建 Wiki 与知识飞轮（CAP-002 / CAP-003 / CAP-014 / CAP-027）
+
+Scope: implement the Owner-approved design package `docs/spark/2026-08-12-wmb-knowledge-flywheel-design-package.md` as an in-place upgrade of Source → Topic → Opportunity → Content → Publication → Review. SQLite remains the only source of truth; existing Source/Topic/Content/Publication/Review identities remain canonical; `LibraryTopicsView`, `LibraryView`, `KnowledgeCanvasView`, Pi and Studio are retrofitted rather than adding a parallel Wiki product. Formal knowledge writes are atomic, immutable-versioned, evidence-backed, immediately effective and reversible. Final platform publication, hard delete and external platform mutation boundaries remain unchanged.
+
+Canonical contracts:
+
+- `docs/spark/2026-08-12-wmb-built-in-wiki-notes-architecture-design.md`
+- `docs/spark/2026-08-12-wmb-knowledge-object-version-contract-design.md`
+- `docs/spark/2026-08-12-wmb-ai-knowledge-compilation-protocol-design.md`
+- `docs/spark/2026-08-12-wmb-existing-knowledge-surfaces-retrofit-design.md`
+- `docs/spark/2026-08-12-wmb-creation-knowledge-usage-protocol-design.md`
+- `docs/spark/2026-08-12-wmb-outcome-feedback-knowledge-health-design.md`
+- `docs/spark/2026-08-12-wmb-knowledge-flywheel-migration-delivery-acceptance-design.md`
+
+Order (freeze shared contracts first; then run independent consumers concurrently where dependencies permit):
+
+1. `WMB-5210` — M1 core storage and command boundary: schema, immutable versions, version-level evidence, relations, annotations, atomic ChangeSet, Receipt, QueryArtifact and HealthIssue; capability/dispatcher/requestId/revision/read APIs; migration and transaction tests.
+2. `WMB-5211` — M2 minimum compiler vertical slice: one real Source resolves an existing Entity, creates/updates sparse knowledge, qualifies an old Method, preserves a dispute, recompiles one existing Topic Wiki and emits one readable receipt; low-value and idempotent paths included.
+3. `WMB-5212` — M3 in-place Topic and Library retrofit: Wiki-first Topic details; Raw/Evidence/Inbox/Receipt/Health Library; deep links and dataChanged refresh; no parallel route or user-facing knowledge CRUD.
+4. `WMB-5213` — M4 Canvas projection: relation/change/health modes, formal-object references, dataChanged subscription and selected-only creation actions; deleting a node never deletes knowledge.
+5. `WMB-5214` — M5 Pi Query write-back: frozen QueryArtifact inputs, reusable synthesis dedupe/write-back, pure-restatement no-op and visible usage/deposition receipt.
+6. `WMB-5215` — M6 creation usage lineage: immutable Knowledge Usage Package/Record across proposal, brief, core content and platform versions; actual-used vs consulted; risk and evidence projection.
+7. `WMB-5216` — M7 outcome feedback and health: publication-time lineage, conservative Review compilation, bounded incremental/periodic Lint, HealthIssue lifecycle and deterministic auto-repair only.
+8. `WMB-5217` — M8 historical initialization and clean cutover: derived legacy Wiki versions, bounded high-value extraction, retirement of parallel/dead paths, carry-to-topic convergence and no long-lived dual write.
+9. `WMB-5218` — integrated acceptance: real Ingest → Wiki → Query → Creation → Publication/Review → Lint loop; concurrency/restore/idempotency/data-root isolation; focused/full/typecheck/capability and live Electron evidence.
+
+Dependencies: WMB-5210 freezes all shared schemas and interfaces. WMB-5211 and WMB-5213 may proceed after 5210. WMB-5212 and WMB-5214 require the compiler read/write slice from 5211. WMB-5215 requires 5210 and may proceed independently of renderer work. WMB-5216 requires Query and creation lineage. WMB-5217 requires all user-facing writers to be migrated. WMB-5218 is the final gate.
+
+Gate: one existing Topic visibly changes after ingesting one real Source; the update is sparse, evidence-located, atomic, versioned, reversible and idempotent; Pi writes back only reusable synthesis; Studio records actual fixed knowledge versions; Review does not fabricate causality; deterministic health defects auto-repair while real disputes remain visible; existing business IDs and contribution chains survive; no external Wiki dependency, parallel Topic/Wiki identity, user-managed knowledge tables, partial ChangeSet, cross-data-root leakage or relaxation of publication red lines. `TASKS.md` status `doing` remains the construction permit for each slice.
+
+## M-5240 Karpathy LLM Wiki 非退化对齐（CAP-002 / CAP-003 / CAP-014 / CAP-027）
+
+Scope: WMB 必须覆盖 Karpathy 原始 LLM Wiki 的全部核心能力，并将其 optional UI/tooling 能力在 WMB 内提供等价能力。SQLite 保持唯一真源；现有主题、资料库、关系画布、Pi、创作是产品表面，不引入 Obsidian、Markdown Wiki 目录或第二套 Topic/Source/知识身份。核心原则：Raw 输入按 revision 不可变；AI 拥有 Wiki 编译；知识被持续整合而非问答时临时重建；单条/批量 Ingest、Query 写回、Lint、Index、Log、Search、Graph 和视觉来源都可观察、可恢复、可追溯。
+
+Order:
+
+1. `WMB-5235` — 原始能力矩阵与机器可证伪基线。
+2. `WMB-5236` — 持久化全库维护运行与全局报告。
+3. `WMB-5237` — 完整 Lint、Raw revision 不可变、图片感知摄取。
+4. `WMB-5238` — SQLite Wiki Index/Log/Hot 等价读模型与统一全文搜索。
+5. `WMB-5239` — 资料库原位全库维护/日志/搜索/批量摄取 UI。
+6. `WMB-5240` — Pi/operator 自然语言全 Wiki 操作。
+7. `WMB-5241` — 真实工作空间非退化最终验收。
+
+Gate: 一条真实 Source 可更新多个既有 Wiki 页面；一批 Sources 可断点摄取；高价值 Query 固定引用并写回；全库维护可由 Owner 或 Pi 启动、暂停、继续并在重启后恢复；Lint 实际检测矛盾、陈旧、孤立、缺页、缺交叉引用、重复、无证据和研究缺口；统一搜索命中 Wiki 正文与固定版本知识；全局 index/log/report 可读；图片结论绑定资产与 Source revision；关系图可导航；所有变化具备 ChangeSet、Receipt、版本和恢复路径。任何一项只存在于设计文档、测试 fixture 或单轮 Pi 文本均不算完成。
+

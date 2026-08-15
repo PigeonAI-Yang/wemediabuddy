@@ -8,6 +8,8 @@ import {
 } from './intelligence-wire-pages.ts';
 export { extractOfficialItems, extractReleaseItems } from './intelligence-wire-pages.ts';
 import { ensureRegistrySourceFeed, upsertSource } from './sources.ts';
+import { scheduleSourceBodyArchive } from './source-body-archive.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { collectBoundXListTimeline } from './x-list-execution.ts';
 import { readXListTimelineCache, type XListTimelineCachePost } from './x-list-timeline-cache.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
@@ -217,6 +219,7 @@ export async function runOfficialWebWire(input: {
       });
       const items = extractOfficialItems(page.finalUrl || source.url, body, OFFICIAL_ITEMS_PER_SOURCE);
       const savedIds: string[] = [];
+      const savedSources: Array<{ id: string; revision: number }> = [];
       if (items.length > 0) {
         for (const item of items) {
           const saved = upsertSource(input.database, {
@@ -242,9 +245,21 @@ export async function runOfficialWebWire(input: {
               fetchedUrl: page.finalUrl
             })
           });
+          savedSources.push({ id: saved.id, revision: saved.revision });
+          // WMB-5269：同巡检保存边界登记正文任务（item 为子页链接 → URL-only 排队异步抓取；
+          // 巡检页自身若与 item canonical 相同则冻结整页文本；X 列表缓存路径在 upsertTimelinePost 冻结全文）。
+          scheduleSourceBodyArchive(input.database, {
+            sourceId: saved.id,
+            sourceRevision: saved.revision,
+            url: item.url,
+            structuredText: null,
+            channel: 'official_web'
+          });
           savedIds.push(saved.id);
         }
       }
+      // WMB-5229：直写保存成功后异步有界编译（不阻断巡检）。
+      for (const saved of savedSources) scheduleSourceKnowledgeCompile({ sourceId: saved.id, revision: saved.revision });
       sourceIds.push(...savedIds);
       checkpoint = mergeWireCheckpoint(checkpoint, {
         completedSourceIds: [source.id],
@@ -303,15 +318,32 @@ function upsertTimelinePost(
   post: XListTimelineCachePost,
   evidence: Record<string, unknown>
 ): string {
-  return upsertSource(database, {
+  const saved = upsertSource(database, {
     feedId: binding.sourceFeedId,
     originalUrl: post.url,
     title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${binding.name} 动态`,
     author: post.authorHandle ?? undefined,
     publishedAt: post.postedAt ?? undefined,
     summary: post.text,
-    evidence: JSON.stringify(evidence)
-  }).id;
+    evidence: JSON.stringify({
+      ...evidence,
+      avatarUrl: post.avatarUrl ?? (typeof evidence.avatarUrl === 'string' ? evidence.avatarUrl : null),
+      displayName: post.displayName ?? (typeof evidence.displayName === 'string' ? evidence.displayName : null)
+    })
+  });
+  // WMB-5269：结构化 X 帖子完整文本 → 同事务立即固化正文（不请求 X 原页）。
+  scheduleSourceBodyArchive(database, {
+    sourceId: saved.id,
+    sourceRevision: saved.revision,
+    url: post.url,
+    structuredText: post.text,
+    contentType: 'text/plain',
+    origin: 'x_list_timeline',
+    channel: 'x_lists'
+  });
+  // WMB-5229：直写保存成功后异步有界编译（不阻断巡检）。
+  scheduleSourceKnowledgeCompile({ sourceId: saved.id, revision: saved.revision });
+  return saved.id;
 }
 
 export async function fetchWithTimeout(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<Response> {

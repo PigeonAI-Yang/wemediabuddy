@@ -9,7 +9,8 @@ type Operation = Awaited<ReturnType<typeof window.wmb.listXListOperations>>[numb
 type ComposerInput = Parameters<typeof window.wmb.prepareXListOperation>[0];
 
 const stateLabels: Record<Operation['state'], string> = {
-  prepared: '待读取快照', awaiting_confirmation: '等待确认', running: '执行中', succeeded: '已完成',
+  prepared: '待读取快照', awaiting_confirmation: '等待确认', execution_granted: '已确认，等待浏览器',
+  browser_leased: '浏览器已接管，等待执行', running: '执行中', succeeded: '已完成',
   partial: '已停止', needs_user: '需要接管', unknown: '结果未知', failed: '失败'
 };
 
@@ -81,24 +82,24 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
       if (!proposed.ok) { setNote(proposed.error.message); return; }
       const armed = await window.wmb.armXListOperation({ operationId: proposed.data.operation.id, expectedRevision: proposed.data.operation.revision });
       if (!armed.ok) { mergeOperation(proposed.data.operation); setNote(armed.error.message); return; }
-      mergeOperation(armed.data); setNote('已冻结账号、List 与精确变更集；请回到 Pi 对话框确认一次。');
+      mergeOperation(armed.data); setNote('已冻结账号、List 与本次变更；请回到 Pi 对话框确认一次。');
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setLoading(false); }
   };
   return <>
     <section className="settings-section">
-      <div className="settings-section-heading"><h3>List 工作台显示</h3><p>只决定发现页展示哪些 Lists，不会改变今日情报来源。</p></div>
+      <div className="settings-section-heading"><h3>List 工作台显示</h3></div>
       <div className="settings-inline-actions"><button type="button" className="secondary-button" disabled={loading} onClick={() => void load(true)}>{loading ? '读取中…' : '刷新账号 Lists'}</button><span className="settings-list-note">{note}</span></div>
       {index && <div className="settings-list-choices">{index.lists.map((list) => { const binding = bindings.find((item) => item.listId === list.listId); return <label key={list.listId}><input type="checkbox" checked={displayedIds.includes(list.listId)} onChange={(event) => toggle(list.listId, event.target.checked)}/><span><strong>{list.name}</strong><small>{binding?.enabled ? '今日情报已启用' : '未接入今日情报'}</small></span></label>; })}</div>}
     </section>
     {index && <section className="settings-section x-list-settings-management">
-      <div className="settings-section-heading"><h3>List 管理</h3><p>选择 List 后管理今日情报接入或准备平台变更；Pi 会在对话框里请求一次最终确认。</p></div>
+      <div className="settings-section-heading"><h3>List 管理</h3></div>
       <div className="settings-inline-actions">
         <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{index.lists.map((list) => <option key={list.listId} value={list.listId}>{list.name} · {list.kind === 'owned' ? '我创建的' : list.kind === 'following' ? '我关注的' : '我在其中'}</option>)}</select>
         {selected && <button type="button" className="secondary-button" disabled={loading} onClick={() => void toggleBinding()}>{selectedBinding?.enabled ? '移出今日情报' : '接入今日情报'}</button>}
       </div>
       <XListComposer accountKey={index.accountKey} selected={selected} disabled={loading} onPrepare={prepare}/>
-      {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabels[operation.state]} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
+      {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabel(operation)} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
     </section>}
   </>;
 }
@@ -118,13 +119,18 @@ function XListComposer({ accountKey, selected, disabled, onPrepare }: { accountK
     void onPrepare(input);
   };
   const modes: Array<{ id: typeof kind; label: string }> = [{ id: 'create', label: '新建' }, ...(canManage ? [{ id: 'update' as const, label: '编辑' }, { id: 'members_remove' as const, label: '移除成员' }, { id: 'delete' as const, label: '删除' }] : [])];
-  return <section className="x-list-composer"><header><div><p className="eyebrow">平台操作</p><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div></header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
+  return <section className="x-list-composer"><header><div><h3>{selected ? `操作 ${selected.name}` : '新建 List'}</h3></div></header><div className="x-list-mode-tabs">{modes.map((mode) => <button key={mode.id} className={kind === mode.id ? 'active' : ''} onClick={() => setKind(mode.id)} disabled={disabled}>{mode.label}</button>)}</div>
     {(kind === 'create' || kind === 'update') && <div className="x-list-form"><label>名称<input value={name} placeholder={kind === 'create' ? '例如：行业观察' : '不修改'} onChange={(event) => setName(event.target.value)}/></label><label className="x-list-description-toggle"><input type="checkbox" checked={kind === 'create' || changeDescription} onChange={(event) => setChangeDescription(event.target.checked)} disabled={kind === 'create'}/> {kind === 'create' ? '添加描述' : '修改或清空描述'}</label>{(kind === 'create' || changeDescription) && <label>描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="这份 List 关注什么？"/></label>}<label>公开性<select value={privacy} onChange={(event) => setPrivacy(event.target.value as typeof privacy)}><option value="unchanged">{kind === 'create' ? '公开' : '不修改'}</option><option value="public">公开</option><option value="private">私密</option></select></label></div>}
     {(kind === 'members_add' || kind === 'members_remove') && <label className="x-list-form">精确 handle（一行一个）<textarea value={handles} onChange={(event) => setHandles(event.target.value)} placeholder={'@karpathy\n@ylecun'}/></label>}
     {kind === 'delete' && <p className="x-list-danger">删除不会立即执行；下一步仍需读取快照，并要求输入当前 List 名称确认。</p>}
     <button className="x-list-primary" disabled={disabled || (kind !== 'create' && !selected) || (kind === 'create' && !name.trim())} onClick={submit}>读取快照并准备确认</button>
   </section>;
 }
+function stateLabel(operation: Operation): string {
+  if (operation.state === 'prepared' && operation.phase === 'awaiting_confirmation') return '等待确认';
+  return stateLabels[operation.state];
+}
+
 
 function operationLabel(operation: Operation): string {
   const labels: Record<Operation['kind'], string> = { create: '新建 List', update: '编辑 List', delete: '删除 List', members_add: '添加成员', members_remove: '移除成员' };

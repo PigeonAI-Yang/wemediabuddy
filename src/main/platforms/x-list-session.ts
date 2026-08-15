@@ -27,7 +27,7 @@ import {
   typeHumanly,
   type NavMode
 } from './x-list-session-support.ts';
-export { XListCooldownError, XListDataError, XListNeedsUserError, XListSupersededError } from './x-list-session-support.ts';
+export { XListCooldownError, XListDataError, XListNeedsUserError, XListPlatformRejectedError, XListSupersededError } from './x-list-session-support.ts';
 
 const SESSION_IDLE_MS = 3 * 60_000;
 

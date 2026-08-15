@@ -1,6 +1,0 @@
-{
-  "ok": false,
-  "error": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('管理成员').first() to be visible\u001b[22m\n",
-  "stack": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('管理成员').first() to be visible\u001b[22m\n\n    at openMembersDialog (J:\\PigeonYang\\WeMediaBuddy\\.ai\\run-add-members-dialog.mjs:28:16)\n    at async session.run.timeoutMs (J:\\PigeonYang\\WeMediaBuddy\\.ai\\run-add-members-dialog.mjs:128:7)\n    at async execute (J:\\PigeonYang\\WeMediaBuddy\\src\\main\\platforms\\x-list-session.ts:111:18)",
-  "results": []
-}

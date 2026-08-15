@@ -1,0 +1,1111 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WeMediaBuddy · 资料图文工作流</title>
+<style>
+  /* 设计令牌：与 src/renderer/styles-foundation.css 同名同值的 dark/light 子集（机器 SSOT） */
+  :root{color-scheme:dark;--app-bg:#0b0b0b;--topbar-bg:#0f0f0f;--sidebar-bg:#111111;--workspace-bg:#0d0d0d;--panel-bg:#131313;--surface:#171717;--surface-raised:#1c1c1c;--surface-hover:#242424;--surface-selected:#2a2a2a;--tag-bg:#202020;--ink:#f1f1f1;--ink-soft:#d2d2d2;--muted:#aaaaaa;--muted-low:#767676;--border:#363636;--border-soft:#292929;--border-strong:#484848;--line:rgb(255 255 255/6.5%);--line-strong:rgb(255 255 255/13%);--accent:#8b7cff;--accent-hover:#a495ff;--accent-ink:#fff;--accent-soft:#a495ff;--accent-faint:rgb(139 124 255/13%);--selected:rgb(139 124 255/13%);--link:#7aa8f0;--amber:#f0b45a;--amber-soft:rgb(240 180 90/12%);--success:#4cc38a;--success-soft:rgb(76 195 138/12%);--warning:#f0b45a;--danger:#e5636f;--danger-soft:rgb(229 99 111/12%);--info:#5aa9f0;--grade-sss:#c9a7ff;--grade-s:#8b7cff;--grade-a:#5aa9f0;--grade-b:#4cc38a;--grade-c:#a7adc0;--pf-x:#e9ebf3;--pf-xhs:#f04a5e;--pf-wx:#3fb575;--canvas-bg:#0f0f0f;--scroll-thumb:#505050;--scroll-hover:#707070;--overlay:rgb(0 0 0/55%);--topbar-height:56px;--page-space:16px;--font-sans:"Inter","PingFang SC","Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;--mono:"JetBrains Mono","Cascadia Code",Consolas,monospace}
+  :root[data-theme="light"]{color-scheme:light;--app-bg:#f6f5fa;--topbar-bg:#fff;--sidebar-bg:#f9f8fc;--workspace-bg:#f6f5fa;--panel-bg:#f9f8fc;--surface:#fff;--surface-raised:#fbfaff;--surface-hover:#f0ecfa;--surface-selected:#ebe6f8;--tag-bg:#eeeaf7;--ink:#221e2c;--ink-soft:#3e384a;--muted:#625b70;--muted-low:#857d93;--border:#d9d4e4;--border-soft:#e6e3ee;--border-strong:#bbb3ca;--line:rgb(31 25 43/8%);--line-strong:rgb(31 25 43/16%);--accent:#6d51e8;--accent-hover:#5733c7;--accent-ink:#fff;--accent-soft:#6d51e8;--accent-faint:rgb(109 81 232/10%);--selected:rgb(109 81 232/10%);--link:#315fba;--amber:#b97c1e;--amber-soft:rgb(185 124 30/12%);--success:#1f9d63;--success-soft:rgb(31 157 99/10%);--warning:#b97c1e;--danger:#c4304b;--danger-soft:rgb(196 48 75/10%);--info:#2f7fd4;--grade-sss:#7b4fd6;--grade-s:#6d51e8;--grade-a:#2f7fd4;--grade-b:#1f9d63;--grade-c:#857d93;--pf-x:#221e2c;--pf-xhs:#d43a4e;--pf-wx:#1f9d63;--canvas-bg:#f0eef7;--scroll-thumb:#aaa2b8;--scroll-hover:#81798f;--overlay:rgb(31 25 43/35%)}
+
+  *{box-sizing:border-box;scrollbar-width:thin;scrollbar-color:var(--scroll-thumb) transparent}
+  *::-webkit-scrollbar{width:8px;height:8px}
+  *::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:4px}
+  *::-webkit-scrollbar-track{background:transparent}
+  html,body{height:100%}
+  body{margin:0;min-width:0;background:var(--app-bg);color:var(--ink);font:14px/1.5 var(--font-sans);overflow:hidden}
+  button{font:inherit;color:inherit}
+  a{color:var(--link)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button:disabled,button[aria-disabled="true"]{cursor:not-allowed;opacity:.5;transform:none!important}
+  button:not(:disabled):active{transform:translateY(1px) scale(.98)}
+  .sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;clip:rect(0 0 0 0);overflow:hidden;white-space:nowrap}
+
+  /* 桌面窗口壳：topbar 56 · 状态栏 34 · Pi 270 */
+  .app{height:100vh;display:grid;grid-template-rows:var(--topbar-height) minmax(0,1fr) 34px}
+  .titlebar{display:flex;align-items:center;gap:18px;border-bottom:1px solid var(--line);background:var(--topbar-bg);padding:0 var(--page-space)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:750;white-space:nowrap}
+  .mark{display:grid;place-items:center;width:26px;height:26px;border:1px solid var(--border-strong);border-radius:7px;background:var(--accent-faint);font-size:11px;color:var(--accent-soft)}
+  .brand small{color:var(--muted);font-size:12px}
+  .view-switch{display:flex;align-items:center;gap:2px;margin-left:22px;border:1px solid var(--border);border-radius:9px;background:var(--panel-bg);padding:3px}
+  .vs-btn{border:0;border-radius:7px;background:transparent;color:var(--muted);padding:6px 14px;font-weight:600;font-size:13px;cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .vs-btn:hover{background:var(--surface-hover);color:var(--ink)}
+  .vs-btn.active{background:var(--surface-selected);color:var(--ink)}
+  .titlebar-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .theme-toggle{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .theme-toggle:hover{background:var(--surface-hover);color:var(--ink)}
+  .window{display:flex;gap:16px;color:var(--muted-low);font-size:12px}
+
+  .body{display:grid;grid-template-columns:216px minmax(0,1fr) 270px;min-height:0}
+  .body.ver-mode{grid-template-columns:minmax(0,1fr) 270px}
+  .body.ver-mode .sidebar{display:none}
+  .sidebar{display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--sidebar-bg);padding:14px 10px;min-width:0}
+  .nav-label{padding:8px 10px 6px;color:var(--muted);font-size:12px;white-space:nowrap}
+  .nav{display:grid;gap:3px}
+  .nav button{position:relative;display:flex;align-items:center;gap:10px;height:38px;border:0;border-radius:8px;background:transparent;text-align:left;padding:0 11px;color:var(--muted);cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .nav button:hover{background:var(--surface-hover);color:var(--ink)}
+  .nav button.active{background:var(--accent-faint);color:var(--accent-soft);font-weight:600}
+  .nav button.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+  .nav .icon{flex:none;width:22px;color:var(--muted-low)}
+  .nav button.active .icon{color:var(--accent-soft)}
+  .nav-assets{margin-top:13px}
+  .settings{margin-top:auto;border-top:1px solid var(--line);padding-top:9px}
+
+  .main{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--workspace-bg)}
+  .view{display:none;height:100%;min-height:0}
+  .view.active{display:flex;flex-direction:column;animation:view-in .12s ease}
+  @keyframes view-in{from{opacity:0}to{opacity:1}}
+
+  /* —— 通用控件 —— */
+  .btn{display:inline-flex;align-items:center;gap:8px;height:36px;border-radius:8px;padding:0 14px;cursor:pointer;font-weight:650;font-size:13px;border:0;background:transparent;color:var(--ink-soft);transition:background 140ms ease,color 140ms ease,border-color 140ms ease}
+  .btn.secondary{border:1px solid var(--border);color:var(--ink-soft)}
+  .btn.secondary:hover{border-color:var(--border-strong);background:var(--surface-hover);color:var(--ink)}
+  .btn.primary{background:var(--accent);color:var(--accent-ink)}
+  .btn.primary:hover{background:var(--accent-hover)}
+  .btn .count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--tag-bg);color:var(--muted);font-size:10.5px}
+  .btn-mini{display:inline-flex;align-items:center;height:26px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--muted);font-size:12px;padding:0 10px;cursor:pointer;transition:background 140ms ease,color 140ms ease,border-color 140ms ease}
+  .btn-mini:hover{border-color:var(--border-strong);background:var(--surface-hover);color:var(--ink)}
+  .icon-btn{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--muted);font-size:15px;cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .icon-btn:hover{background:var(--surface-hover);color:var(--ink)}
+  .crumb{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tabs{display:flex;gap:22px;border-bottom:1px solid var(--line)}
+  .tab{position:relative;border:0;background:none;padding:0 0 12px;color:var(--muted);cursor:pointer;transition:color 140ms ease}
+  .tab:hover{color:var(--ink-soft)}
+  .tab.active{color:var(--ink);font-weight:650}
+  .tab.active:after{content:"";position:absolute;height:2px;left:0;right:0;bottom:-1px;border-radius:2px 2px 0 0;background:var(--accent)}
+  .tab-panel{display:none;min-height:0}
+  .tab-panel.active{display:block;animation:view-in .12s ease}
+
+  /* ================= 视图一：资料图文原貌 ================= */
+  #view-source{position:relative}
+  .src-meta{flex:none;border-bottom:1px solid var(--line);background:var(--panel-bg);padding:14px 18px 13px}
+  .src-meta-row{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-top:8px}
+  .src-title{min-width:0}
+  .src-title h1{margin:0;font-size:19px;line-height:1.35;letter-spacing:-.015em;text-wrap:pretty}
+  .meta-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:8px;color:var(--muted);font-size:12px}
+  .meta-chips .sep{color:var(--muted-low)}
+  .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--muted);background:var(--tag-bg);white-space:nowrap}
+  .chip.accent{border-color:color-mix(in srgb,var(--accent) 34%,transparent);color:var(--accent-soft);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .pf{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:6px;font-size:10.5px;font-weight:750;padding:0 5px}
+  .pf-x{background:color-mix(in srgb,var(--pf-x) 14%,transparent);color:var(--pf-x)}
+  .src-actions{display:flex;flex:none;gap:8px}
+
+  .src-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,410px);gap:14px;padding:14px 16px 16px}
+  .col{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .col-original{padding-right:2px}
+  .col-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .col-head h2{margin:0;font-size:15px;font-weight:750}
+  .stamp{color:var(--muted);font-size:11.5px;white-space:nowrap}
+
+  /* 图文原貌：来源卡片（CSS 绘制的可信内容，无外部图片） */
+  .src-panel{flex:1;min-height:0;overflow:auto;padding:0 14px 20px 2px}
+  .post-card{position:relative;max-width:600px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);padding:16px 16px 8px}
+  .post-head{display:flex;align-items:center;gap:10px}
+  .avatar{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--accent-faint);color:var(--accent-soft);font-size:13px;font-weight:750}
+  .post-name{font-weight:700;font-size:13.5px}
+  .post-handle{color:var(--muted);font-size:12px}
+  .post-time{margin-left:auto;color:var(--muted);font-size:12px}
+  .post-text{margin:12px 0;font-size:14px;line-height:1.65;color:var(--ink)}
+  .post-fig{margin:0 0 12px;border:1px solid var(--border-soft);border-radius:10px;overflow:hidden;position:relative;background:var(--surface)}
+  .fig-tag{position:absolute;top:8px;left:8px;z-index:3;border-radius:6px;background:rgb(11 11 11/68%);color:#fff;font-size:10.5px;font-weight:650;padding:2px 8px}
+  :root[data-theme="light"] .fig-tag{background:rgb(255 255 255/78%);color:var(--ink-soft)}
+  .fig-body{padding:14px 16px 10px}
+  .fig-caption{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 4px 4px;color:var(--muted);font-size:11.5px}
+  .fig-idx{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted-low);font-size:10.5px}
+
+  /* 图内嵌图表（纯 CSS/SVG 绘制） */
+  .chart-grid{position:relative;height:190px;background-image:repeating-linear-gradient(to bottom,var(--line-strong) 0 1px,transparent 1px 38px)}
+  .chart-svg{position:absolute;inset:0;width:100%;height:100%}
+  .chart-line{stroke:var(--ink-soft);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .chart-area{fill:color-mix(in srgb,var(--accent) 10%,transparent);stroke:none}
+  .chart-dot{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
+  .chart-label{position:absolute;left:0;right:0;bottom:-2px;display:flex;justify-content:space-between;color:var(--muted);font-size:10.5px;font-family:var(--mono)}
+  .deal-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .deal-table th,.deal-table td{padding:7px 10px;border-bottom:1px solid var(--line-strong);text-align:left;white-space:nowrap}
+  .deal-table th{color:var(--muted);font-size:11px;font-weight:600}
+  .deal-table td:first-child{color:var(--muted)}
+  .deal-table td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:650}
+  .deal-table tr.hl td{color:var(--ink)}
+  .bar-list{display:grid;gap:10px}
+  .bar-row{display:grid;grid-template-columns:88px minmax(0,1fr) 46px;gap:10px;align-items:center;font-size:12px}
+  .bar-name{color:var(--muted);white-space:nowrap}
+  .bar-track{height:8px;border-radius:4px;background:var(--tag-bg);overflow:hidden}
+  .bar-fill{display:block;height:100%;border-radius:4px;background:var(--border-strong)}
+  .bar-fill.accent{background:var(--accent)}
+  .bar-val{font-family:var(--mono);color:var(--muted);font-size:11px;text-align:right}
+  .ui-shot{border:1px solid var(--border-strong);border-radius:9px;overflow:hidden;background:var(--surface)}
+  .ui-bar{display:flex;align-items:center;gap:5px;padding:7px 10px;background:var(--surface-hover);border-bottom:1px solid var(--line)}
+  .ui-dot{width:7px;height:7px;border-radius:50%;background:var(--muted-low)}
+  .ui-dot:first-child{background:var(--danger)}
+  .ui-title{margin-left:6px;color:var(--muted);font-size:10.5px;font-family:var(--mono)}
+  .ui-body{padding:10px 12px;display:grid;gap:7px;font-size:12px}
+  .ui-row{display:flex;align-items:center;gap:8px;color:var(--ink-soft)}
+  .ui-check{display:grid;place-items:center;flex:none;width:15px;height:15px;border-radius:4px;background:var(--success-soft);color:var(--success);font-size:10px}
+  .ui-btn{margin-top:4px;text-align:center;border-radius:6px;background:var(--accent);color:var(--accent-ink);font-size:11.5px;font-weight:650;padding:6px 0}
+  .donut-wrap{display:flex;align-items:center;gap:20px;padding:4px 0}
+  .donut{flex:none;position:relative;width:120px;height:120px;border-radius:50%;background:conic-gradient(var(--grade-b) 0 62%,var(--grade-a) 62% 86%,var(--muted-low) 86% 100%)}
+  .donut::after{content:"";position:absolute;inset:26px;border-radius:50%;background:var(--surface)}
+  .donut-center{position:absolute;inset:0;display:grid;place-items:center;z-index:1;text-align:center;font-size:10.5px;color:var(--muted)}
+  .donut-center b{display:block;font-size:13px;color:var(--ink);font-family:var(--mono)}
+  .legend{display:grid;gap:6px;font-size:12px}
+  .legend-row{display:flex;align-items:center;gap:7px;color:var(--muted)}
+  .legend-swatch{width:10px;height:10px;border-radius:3px;flex:none}
+  .legend-row b{margin-left:auto;color:var(--ink-soft);font-family:var(--mono);font-weight:600}
+  .price-line{display:flex;align-items:baseline;gap:8px;padding:6px 0 2px}
+  .price-line .big{font-size:22px;font-weight:750;font-family:var(--mono);color:var(--ink)}
+  .price-line .chip{border-radius:6px;font-family:var(--mono)}
+  .post-actions{display:flex;gap:18px;padding:2px 4px 12px;color:var(--muted);font-size:12px}
+
+  /* 视觉结论定位框 */
+  .locate-box{position:absolute;left:0;right:0;z-index:6;display:none;border:2px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 9%,transparent);pointer-events:none}
+  .locate-box.on{display:block;animation:locate-in .18s ease}
+  @keyframes locate-in{from{opacity:0}to{opacity:1}}
+  .locate-label{position:absolute;top:-13px;left:12px;display:inline-flex;align-items:center;gap:7px;height:24px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:650;padding:0 10px;pointer-events:auto;box-shadow:0 2px 8px rgb(0 0 0/25%)}
+  .locate-close{border:0;background:none;color:var(--accent-ink);font-size:13px;line-height:1;cursor:pointer;padding:0 0 0 4px}
+
+  /* 提取正文 */
+  .extract{max-width:600px;padding:2px 6px 20px 2px}
+  .extract h2{margin:0;font-size:18px;line-height:1.4}
+  .extract-meta{margin:6px 0 18px;color:var(--muted);font-size:12px}
+  .extract h3{margin:20px 0 8px;font-size:14px}
+  .extract p{margin:0 0 10px;font-size:13.5px;line-height:1.75;color:var(--ink-soft);text-wrap:pretty}
+  .extract ul{margin:0 0 12px;padding-left:20px;font-size:13.5px;line-height:1.75;color:var(--ink-soft)}
+  .fig-ref{border:0;background:none;color:var(--link);font-size:12px;cursor:pointer;padding:0 2px}
+  .fig-ref:hover{text-decoration:underline}
+
+  /* 资料理解 */
+  .col-understand{padding:0 4px 16px 6px}
+  .understand{flex:1;min-height:0;overflow:auto;padding-right:8px}
+  .u-section{padding:14px 0 12px;border-bottom:1px solid var(--line)}
+  .u-section:first-child{padding-top:2px}
+  .u-title{display:flex;align-items:baseline;gap:8px;margin:0 0 9px;font-size:13.5px;font-weight:700}
+  .u-sub{color:var(--muted);font-size:11px;font-weight:400}
+  .u-one{margin:0;font-size:13px;line-height:1.7;color:var(--ink-soft);text-wrap:pretty}
+  .fact-list{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+  .fact{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:baseline;font-size:12.5px;line-height:1.55}
+  .fact-k{color:var(--muted);font-size:11.5px;white-space:nowrap}
+  .fact-v{color:var(--ink-soft)}
+  .fact-state{font-size:10.5px;white-space:nowrap;padding:1px 8px;border-radius:10px}
+  .fact-state.ok{background:var(--success-soft);color:var(--success)}
+  .fact-state.warn{background:var(--amber-soft);color:var(--amber)}
+  .vc-list{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+  .vc{display:grid;grid-template-columns:34px minmax(0,1fr) 14px;gap:9px;align-items:start;width:100%;border:1px solid var(--border-soft);border-radius:8px;background:var(--panel-bg);padding:9px 10px;text-align:left;color:var(--ink-soft);font-size:12.5px;line-height:1.5;cursor:pointer;transition:border-color 140ms ease,background 140ms ease}
+  .vc:hover{border-color:color-mix(in srgb,var(--accent) 42%,transparent);background:var(--accent-faint)}
+  .vc-n{font-family:var(--mono);font-size:11px;color:var(--accent-soft);font-weight:650;padding-top:1px}
+  .vc-arrow{color:var(--muted-low);text-align:right;transition:color 140ms ease,transform 140ms ease}
+  .vc:hover .vc-arrow{color:var(--accent-soft);transform:translateX(2px)}
+  .open-list{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+  .open-list li{position:relative;padding-left:14px;font-size:12.5px;color:var(--muted);line-height:1.6}
+  .open-list li::before{content:"?";position:absolute;left:0;top:0;color:var(--amber);font-weight:700;font-size:11px}
+  .u-note{margin-top:14px;font-size:11.5px;color:var(--muted-low);line-height:1.6}
+
+  /* 图片资产抽屉 */
+  .scrim{position:absolute;inset:0;z-index:40;background:var(--overlay)}
+  .drawer{position:absolute;z-index:41;top:0;right:0;bottom:0;width:min(340px,86%);display:flex;flex-direction:column;background:var(--panel-bg);border-left:1px solid var(--border);box-shadow:-18px 0 40px rgb(0 0 0/35%);transform:translateX(104%);transition:transform 220ms cubic-bezier(.25,1,.5,1)}
+  .drawer.open{transform:none}
+  .drawer-head{display:flex;align-items:center;gap:10px;padding:16px 16px 10px}
+  .drawer-head h2{margin:0;font-size:15px;font-weight:750}
+  .drawer-count{color:var(--muted);font-size:12px}
+  .drawer-head .icon-btn{margin-left:auto}
+  .drawer-hint{margin:0 16px 12px;padding-bottom:12px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+  .drawer-list{flex:1;min-height:0;overflow:auto;padding:2px 16px 18px;display:grid;gap:8px}
+  .drawer-item{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:11px;align-items:center;padding:9px;border:1px solid var(--border-soft);border-radius:9px;background:var(--surface);transition:border-color 140ms ease,background 140ms ease}
+  .drawer-item:hover{border-color:var(--border);background:var(--surface-raised)}
+  .thumb{width:46px;height:34px;border-radius:6px;border:1px solid var(--border-soft);background:var(--tag-bg);overflow:hidden}
+  .thumb svg{display:block;width:100%;height:100%}
+  .m-grid{stroke:var(--line-strong);stroke-width:1;fill:none}
+  .m-line{stroke:var(--ink-soft);stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .m-dot{fill:var(--accent);stroke:none}
+  .m-frame{fill:var(--surface);stroke:var(--border-strong);stroke-width:1}
+  .m-fill{fill:color-mix(in srgb,var(--ink-soft) 42%,transparent);stroke:none}
+  .m-fill2{fill:var(--accent);stroke:none}
+  .m-line2{stroke:var(--muted);stroke-width:1.1;fill:none;stroke-linecap:round}
+  .m-accent{fill:var(--accent);stroke:none}
+  .m-ring{fill:none;stroke:var(--grade-b);stroke-width:3.4}
+  .m-ring2{fill:none;stroke:var(--grade-a);stroke-width:3.4}
+  .drawer-item b{display:block;font-size:12.5px}
+  .drawer-item small{display:block;color:var(--muted);font-size:11px;margin-top:1px}
+  .btn-locate{height:28px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--muted);font-size:12px;padding:0 11px;cursor:pointer;transition:background 140ms ease,color 140ms ease,border-color 140ms ease}
+  .btn-locate:hover{border-color:color-mix(in srgb,var(--accent) 42%,transparent);color:var(--accent-soft);background:var(--accent-faint)}
+
+  /* ================= 视图二：核心图文版本 ================= */
+  .ver-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;border-bottom:1px solid var(--line);background:var(--panel-bg);padding:14px 18px 13px}
+  .ver-title{min-width:0}
+  .ver-title h1{margin:0;display:flex;align-items:center;gap:10px;font-size:19px;letter-spacing:-.015em;white-space:nowrap}
+  .draft{display:inline-flex;align-items:center;height:20px;border-radius:10px;background:var(--amber-soft);color:var(--amber);font-size:10.5px;font-weight:600;padding:0 9px}
+  .ver-meta{margin-top:7px;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ver-actions{display:flex;align-items:center;gap:12px;flex:none}
+  .readiness{display:inline-flex;align-items:center;gap:9px;color:var(--muted);font-size:12px;white-space:nowrap}
+  .readiness b{color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .ready-bar{width:100px;height:6px;border-radius:3px;background:var(--tag-bg);overflow:hidden}
+  .ready-bar i{display:block;height:100%;border-radius:3px;background:var(--accent);width:48%;transition:width 220ms cubic-bezier(.25,1,.5,1)}
+
+  .ver-body{flex:1;min-height:0;display:grid;grid-template-columns:320px minmax(480px,1fr) 300px;gap:14px;padding:14px 16px 16px}
+  .vcol{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .vcol-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .vcol-head h2{margin:0;font-size:14px;font-weight:750;white-space:nowrap}
+  .vcol-note{color:var(--muted);font-size:11px;white-space:nowrap}
+  .live{display:inline-flex;align-items:center;gap:5px;color:var(--success);font-size:11px;white-space:nowrap}
+  .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--success)}
+
+  /* 候选素材池：无重复边框，来源/用途/身份三层 */
+  .pool{background:var(--panel-bg);border:1px solid var(--border-soft);border-radius:12px;padding:12px 12px 10px}
+  .pool-list{flex:1;min-height:0;overflow:auto;list-style:none;margin:4px 0 0;padding:0 2px;display:grid;gap:2px;align-content:start}
+  .pool-item{display:grid;grid-template-columns:52px minmax(0,1fr) 30px;gap:10px;align-items:center;padding:8px 6px;border-radius:8px;background:transparent;transition:background 140ms ease}
+  .pool-item:hover{background:var(--surface-hover)}
+  .pool-item .thumb{width:50px;height:36px}
+  .pool-src{display:block;font-size:12.5px;color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pool-usage{display:block;font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pool-id{display:block;font-size:10.5px;color:var(--muted-low);margin-top:1px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .btn-insert{width:28px;height:28px;border:0;border-radius:7px;background:var(--accent-faint);color:var(--accent-soft);font-size:14px;cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .btn-insert:hover{background:var(--accent);color:var(--accent-ink)}
+  .pool-empty{grid-column:1/-1;padding:24px 10px;text-align:center;color:var(--muted);font-size:12.5px}
+
+  /* 编辑区：图片工具条仅选中时出现 */
+  .editor{background:var(--panel-bg);border:1px solid var(--border-soft);border-radius:12px;padding:12px 12px 14px}
+  .editor-scroll{flex:1;min-height:0;overflow:auto;padding:2px 4px 6px}
+  .blocks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .block{border:1px solid var(--border-soft);border-radius:10px;background:var(--surface);padding:11px 13px;transition:border-color 140ms ease}
+  .block.selected{border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+  .block.cover{border-color:color-mix(in srgb,var(--accent) 26%,transparent)}
+  .block.cover.selected{border-color:var(--accent)}
+  .block-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .block-label{font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+  .block.cover .block-label{color:var(--accent-soft)}
+  .block-img{height:112px;border:1px solid var(--border-soft);border-radius:8px;background:var(--surface-hover);display:grid;place-items:center;overflow:hidden}
+  .block-img svg{width:100%;height:100%}
+  .img-toolbar{display:none;align-items:center;gap:6px;margin-top:8px}
+  .block.selected .img-toolbar{display:flex}
+  .tbtn{display:inline-flex;align-items:center;height:26px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--muted);font-size:11.5px;padding:0 10px;cursor:pointer;transition:background 140ms ease,color 140ms ease,border-color 140ms ease}
+  .tbtn:hover{border-color:var(--border-strong);background:var(--surface-hover);color:var(--ink)}
+  .tbtn.danger:hover{border-color:var(--danger);background:var(--danger-soft);color:var(--danger)}
+  .block-text .content{margin:0;font-size:13px;line-height:1.65;color:var(--ink-soft);text-wrap:pretty}
+  .block-text .content.lead{color:var(--ink)}
+  .quote-ref{display:inline-block;margin-top:8px;border-radius:6px;background:var(--tag-bg);color:var(--muted);font-size:11px;padding:2px 8px;font-family:var(--mono)}
+  .drop{display:grid;place-items:center;width:100%;min-height:52px;border:1.5px dashed var(--border-strong);border-radius:10px;background:transparent;color:var(--muted);font-size:12.5px;cursor:pointer;transition:border-color 140ms ease,color 140ms ease}
+  .drop:hover{border-color:var(--accent);color:var(--accent-soft)}
+  .cta .cta-btn{width:100%;height:34px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:12.5px;cursor:pointer;transition:background 140ms ease,color 140ms ease,border-color 140ms ease}
+  .cta .cta-btn:hover{border-color:color-mix(in srgb,var(--accent) 42%,transparent);color:var(--accent-soft);background:var(--accent-faint)}
+  .cta .cta-text{margin:0;font-size:12.5px;line-height:1.65;color:var(--ink-soft)}
+  .cta .cta-text em{display:block;margin-top:7px;color:var(--muted);font-size:11.5px;font-style:normal}
+
+  /* 版本结构检查：平台提醒为安静文字行，非状态卡 */
+  .check{background:var(--panel-bg);border:1px solid var(--border-soft);border-radius:12px;padding:12px 14px 10px;overflow:auto}
+  .check-list{list-style:none;margin:6px 0 6px;padding:0;display:grid;gap:1px}
+  .check-item{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+  .ci-mark{flex:none;display:grid;place-items:center;width:20px;height:20px;margin-top:1px;border-radius:50%;border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted)}
+  .check-item b{display:block;font-size:12.5px}
+  .check-item span{display:block;color:var(--muted);font-size:11px;margin-top:2px;line-height:1.5}
+  .check-item.ok .ci-mark{border-color:color-mix(in srgb,var(--success) 40%,transparent);background:var(--success-soft);color:var(--success)}
+  .check-item.warn .ci-mark{border-color:color-mix(in srgb,var(--amber) 40%,transparent);background:var(--amber-soft);color:var(--amber)}
+  .check-item.warn b{color:var(--amber)}
+  .check-item.todo .ci-mark{border-color:var(--border);color:var(--muted-low)}
+  .platform-title{display:flex;align-items:center;gap:7px;margin:12px 0 2px;font-size:12px;font-weight:700}
+  .reminder-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+  .reminder{display:grid;grid-template-columns:auto minmax(0,1fr) 20px;gap:8px;align-items:baseline;padding:6px 0;font-size:11.5px}
+  .rem-name{color:var(--muted);white-space:nowrap;font-weight:600}
+  .rem-msg{color:var(--muted-low);line-height:1.55}
+  .reminder.warn .rem-name,.reminder.warn .rem-msg{color:var(--amber)}
+  .reminder .dismiss{flex:none;width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted-low);font-size:12px;cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .reminder .dismiss:hover{background:var(--surface-hover);color:var(--ink)}
+
+  /* 版本冻结说明：创作页底部固定 */
+  .freeze-bar{flex:none;display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);background:var(--panel-bg);padding:9px 18px;font-size:12px;color:var(--muted)}
+  .freeze-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--success)}
+  .view.frozen .freeze-dot{background:var(--amber)}
+  .freeze-bar .btn-mini{margin-left:auto}
+  .view.frozen .btn-insert,.view.frozen .remove,.view.frozen .tbtn,.view.frozen .cta-btn,.view.frozen .drop{opacity:.4;pointer-events:none}
+
+  /* —— Pi 面板 —— */
+  .pi{min-width:0;border-left:1px solid var(--border);background:var(--panel-bg);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
+  .pi-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px}
+  .pi-title{display:flex;align-items:center;gap:9px;font-weight:750;font-size:14px}
+  .pi-mark{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:800}
+  .pi-state{color:var(--success);font-size:11px}
+  .pi-context{margin:0 14px 12px;padding:8px 11px;border:1px solid var(--border-soft);border-radius:7px;color:var(--muted);font-size:12px;line-height:1.5}
+  .pi-thread{overflow:auto;padding:6px 16px 14px;display:grid;gap:10px;align-content:start}
+  .pi-message{background:var(--surface);border:1px solid var(--border-soft);border-radius:9px;padding:14px 15px;color:var(--ink-soft)}
+  .pi-message strong{color:var(--ink);font-size:13px;line-height:1.55;display:block}
+  .pi-message ul{margin:9px 0 0;padding-left:18px;font-size:12.5px;line-height:1.7}
+  .pi-log{list-style:none!important;margin:10px 0 0!important;padding:0!important;border-top:1px dashed var(--line-strong)}
+  .pi-log li{display:flex;gap:7px;padding:7px 0 0;color:var(--muted);font-size:11.5px}
+  .pi-log li::before{content:"·";color:var(--accent-soft);font-weight:700}
+  .composer{margin:10px 14px 16px;border:1px solid var(--border);border-radius:9px;padding:12px;background:var(--workspace-bg);transition:border-color 140ms ease}
+  .composer:focus-within{border-color:var(--border-strong);outline:2px solid var(--accent);outline-offset:1px}
+  .composer textarea{width:100%;height:56px;resize:none;border:0;outline:0;background:transparent;color:var(--ink);font:inherit}
+  .composer textarea::placeholder{color:var(--muted-low)}
+  .composer-foot{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}
+  .send{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:var(--accent-faint);color:var(--accent-soft);cursor:pointer;transition:background 140ms ease,color 140ms ease}
+  .send:hover{background:var(--accent);color:var(--accent-ink)}
+
+  /* —— 状态栏 —— */
+  .statusbar{display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--topbar-bg);padding:0 var(--page-space);color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden}
+  .status-item{display:inline-flex;align-items:center;gap:6px}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted-low)}
+  .status-dot.ok{background:var(--success)}
+  .status-action{display:inline-flex;align-items:center;gap:6px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .status-action::before{content:"";width:1px;height:12px;background:var(--line-strong)}
+  .statusbar .right{margin-left:auto;color:var(--muted-low)}
+
+  /* —— 窄窗口降级 —— */
+  @media (max-width:1480px){
+    .body{grid-template-columns:216px minmax(0,1fr) 250px}
+    .body.ver-mode{grid-template-columns:minmax(0,1fr) 250px}
+    .src-body{grid-template-columns:minmax(0,1fr) minmax(0,380px)}
+    .ver-body{grid-template-columns:290px minmax(480px,1fr) 272px}
+  }
+  @media (max-width:1280px){
+    .pi{display:none}
+    .body{grid-template-columns:216px minmax(0,1fr)}
+    .body.ver-mode{grid-template-columns:minmax(0,1fr)}
+    .src-body{grid-template-columns:minmax(0,1fr) minmax(0,400px)}
+    .ver-body{grid-template-columns:280px minmax(480px,1fr) 260px}
+  }
+  @media (max-width:1100px){
+    .body{grid-template-columns:72px minmax(0,1fr)}
+    .sidebar .label,.nav-label{display:none}
+    .nav button{justify-content:center;text-align:center;padding:0}
+    .nav .icon{width:auto}
+    .src-body{grid-template-columns:minmax(0,1fr) minmax(0,340px)}
+    .ver-body{grid-template-columns:250px minmax(440px,1fr) 240px}
+    .view-switch{margin-left:8px}
+    .vs-btn{padding:6px 10px}
+  }
+  @media (max-width:960px){
+    .main{overflow:auto}
+    .src-body{display:block;overflow:visible}
+    .src-body .col{overflow:visible;min-height:0}
+    .col-understand{margin-top:6px;padding-left:2px}
+    .ver-body{display:block;overflow:visible}
+    .vcol{overflow:visible}
+    .pool-list{overflow:visible;max-height:none}
+    .vcol+.vcol{margin-top:14px}
+    .editor-scroll{overflow:visible}
+    .drawer{width:min(320px,92%)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important}
+    button:not(:disabled):active{transform:none}
+    .vc:hover .vc-arrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="brand"><span class="mark">W</span>WeMediaBuddy <small>AI</small></div>
+    <div class="view-switch" role="group" aria-label="切换工作视图">
+      <button id="viewSourceBtn" class="vs-btn active" type="button" aria-pressed="true">资料图文原貌</button>
+      <button id="viewVersionBtn" class="vs-btn" type="button" aria-pressed="false">核心图文版本</button>
+    </div>
+    <div class="titlebar-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" aria-label="切换到亮色主题" title="切换到亮色主题">☾</button>
+      <div class="window" aria-hidden="true"><span>—</span><span>□</span><span>×</span></div>
+    </div>
+  </header>
+
+  <div class="body" id="body">
+    <aside class="sidebar">
+      <div class="nav-label">工作流</div>
+      <nav class="nav">
+        <button type="button"><span class="icon">▣</span><span class="label">今日</span></button>
+        <button type="button"><span class="icon">⌘</span><span class="label">智能体</span></button>
+        <button type="button"><span class="icon">◉</span><span class="label">发现</span></button>
+        <button type="button"><span class="icon">◌</span><span class="label">选题</span></button>
+        <button type="button" class="active"><span class="icon">✎</span><span class="label">创作</span></button>
+        <button type="button"><span class="icon">△</span><span class="label">发布</span></button>
+        <button type="button"><span class="icon">▥</span><span class="label">结果</span></button>
+      </nav>
+      <div class="nav-label nav-assets">知识资产</div>
+      <nav class="nav">
+        <button type="button"><span class="icon">⌘</span><span class="label">主题</span></button>
+        <button type="button"><span class="icon">□</span><span class="label">资料库</span></button>
+        <button type="button"><span class="icon">⌯</span><span class="label">关系画布</span></button>
+      </nav>
+      <nav class="nav settings"><button type="button"><span class="icon">⚙</span><span class="label">设置</span></button></nav>
+    </aside>
+
+    <main class="main" id="main">
+
+      <!-- 视图一：资料图文原貌 -->
+      <section class="view active" id="view-source" aria-label="资料图文原貌">
+        <header class="src-meta">
+          <div class="crumb">资料库 / 微 SaaS 也能被收购 / 原始来源</div>
+          <div class="src-meta-row">
+            <div class="src-title">
+              <h1>Why Tiny SaaS Acquisitions Still Work</h1>
+              <div class="meta-chips">
+                <span class="pf pf-x">X</span>
+                <span>@indieletters</span>
+                <span class="sep">·</span><span>2026/08/10 08:42</span>
+                <span class="sep">·</span><span>图文 1 篇</span>
+                <span class="sep">·</span><span>412 字</span>
+                <span class="sep">·</span><span>6 张图</span>
+                <span class="chip accent">已归入主题</span>
+              </div>
+            </div>
+            <div class="src-actions">
+              <button class="btn secondary" id="assetDrawerBtn" type="button" aria-expanded="false" aria-controls="drawer">图片资产 <span class="count">6</span></button>
+              <button class="btn secondary" id="readToggle" type="button" aria-pressed="false">标记已读</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="src-body">
+          <section class="col col-original" aria-label="图文原貌">
+            <nav class="tabs" role="tablist" aria-label="来源内容视图">
+              <button class="tab active" id="tabView" role="tab" aria-selected="true" aria-controls="panelView" data-src-tab="view">图文原貌</button>
+              <button class="tab" id="tabText" role="tab" aria-selected="false" aria-controls="panelText" data-src-tab="text">提取正文</button>
+            </nav>
+
+            <div class="src-panel tab-panel active" id="panelView" role="tabpanel" aria-labelledby="tabView">
+              <article class="post-card" id="postCard">
+                <div class="post-head">
+                  <span class="avatar" aria-hidden="true">IL</span>
+                  <div><div class="post-name">Indie Letters</div><div class="post-handle">@indieletters · 独立开发者观察</div></div>
+                  <span class="post-time">8月10日</span>
+                </div>
+                <p class="post-text">Just sold my tiny SaaS for $1.3K — 2.5x monthly revenue, closed in 7 days. Everyone says micro-SaaS is dead. Buyers don't think so. Here's the full breakdown:</p>
+
+                <figure class="post-fig" data-fig="1">
+                  <span class="fig-tag">图 1</span>
+                  <div class="fig-body">
+                    <div class="chart-grid">
+                      <svg class="chart-svg" viewBox="0 0 400 190" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="chart-area" d="M0 158 L60 138 L120 118 L180 96 L240 72 L300 52 L360 30 L400 20 L400 190 L0 190 Z"/>
+                        <path class="chart-line" d="M0 158 L60 138 L120 118 L180 96 L240 72 L300 52 L360 30 L400 20"/>
+                        <circle class="chart-dot" cx="300" cy="52" r="4"/>
+                      </svg>
+                      <div class="chart-label"><span>Day 1 · $240 MRR</span><span>Day 7 · $520 MRR</span></div>
+                    </div>
+                    <div class="fig-caption"><span>收入曲线：交割前 7 天的月经常性收入</span><span class="fig-idx">IMG 01 · 1200×800</span></div>
+                  </div>
+                </figure>
+
+                <figure class="post-fig" data-fig="2">
+                  <span class="fig-tag">图 2</span>
+                  <div class="fig-body">
+                    <table class="deal-table">
+                      <tr><th>指标</th><th>数值</th><th>备注</th></tr>
+                      <tr class="hl"><td>月收入</td><td class="num">$520</td><td>交割前 30 天</td></tr>
+                      <tr class="hl"><td>成交价</td><td class="num">$1,300</td><td>现金</td></tr>
+                      <tr class="hl"><td>倍数</td><td class="num">2.5x</td><td>年化约 0.21x</td></tr>
+                      <tr class="hl"><td>周期</td><td class="num">7 天</td><td>从询价到交割</td></tr>
+                    </table>
+                    <div class="fig-caption"><span>成交数据表：一笔微型收购的完整参数</span><span class="fig-idx">IMG 02 · 1200×900</span></div>
+                  </div>
+                </figure>
+
+                <figure class="post-fig" data-fig="3">
+                  <span class="fig-tag">图 3</span>
+                  <div class="fig-body">
+                    <div class="bar-list">
+                      <div class="bar-row"><span class="bar-name">止痛药型</span><span class="bar-track"><span class="bar-fill" style="width:92%"></span></span><span class="bar-val">5–10x</span></div>
+                      <div class="bar-row"><span class="bar-name">工具型</span><span class="bar-track"><span class="bar-fill accent" style="width:55%"></span></span><span class="bar-val">2.5x</span></div>
+                      <div class="bar-row"><span class="bar-name">维生素型</span><span class="bar-track"><span class="bar-fill" style="width:36%"></span></span><span class="bar-val">1.5–2.5x</span></div>
+                      <div class="bar-row"><span class="bar-name">内容型</span><span class="bar-track"><span class="bar-fill" style="width:14%"></span></span><span class="bar-val">&lt;1x</span></div>
+                    </div>
+                    <div class="fig-caption"><span>价格对比：买家为「止痛药」付的溢价明显更高</span><span class="fig-idx">IMG 03 · 1200×800</span></div>
+                  </div>
+                </figure>
+
+                <figure class="post-fig" data-fig="4">
+                  <span class="fig-tag">图 4</span>
+                  <div class="fig-body">
+                    <div class="ui-shot">
+                      <div class="ui-bar"><span class="ui-dot"></span><span class="ui-dot"></span><span class="ui-dot"></span><span class="ui-title">acquisition-memo.md</span></div>
+                      <div class="ui-body">
+                        <div class="ui-row"><span class="ui-check">✓</span>帮我每周节省 3 小时，立即见效</div>
+                        <div class="ui-row"><span class="ui-check">✓</span>订阅收入可迁移，无平台锁定</div>
+                        <div class="ui-row"><span class="ui-check">✓</span>无技术栈包袱，接手零学习成本</div>
+                        <div class="ui-row"><span class="ui-check">✓</span>卖家承诺一周内完成交割</div>
+                        <div class="ui-btn">确认报价 $1,300</div>
+                      </div>
+                    </div>
+                    <div class="fig-caption"><span>买家动机截图：追求「立即见效」而非长期复利</span><span class="fig-idx">IMG 04 · 1200×1400</span></div>
+                  </div>
+                </figure>
+
+                <figure class="post-fig" data-fig="5">
+                  <span class="fig-tag">图 5</span>
+                  <div class="fig-body">
+                    <div class="donut-wrap">
+                      <div class="donut"><span class="donut-center"><b>$520</b>MRR 构成</span></div>
+                      <div class="legend">
+                        <div class="legend-row"><span class="legend-swatch" style="background:var(--grade-b)"></span>订阅<b>62%</b></div>
+                        <div class="legend-row"><span class="legend-swatch" style="background:var(--grade-a)"></span>一次性<b>24%</b></div>
+                        <div class="legend-row"><span class="legend-swatch" style="background:var(--muted-low)"></span>其他<b>14%</b></div>
+                      </div>
+                    </div>
+                    <div class="fig-caption"><span>收入构成：订阅为主，交割后增长确定性高</span><span class="fig-idx">IMG 05 · 1200×800</span></div>
+                  </div>
+                </figure>
+
+                <figure class="post-fig" data-fig="6">
+                  <span class="fig-tag">图 6</span>
+                  <div class="fig-body">
+                    <div class="ui-shot">
+                      <div class="ui-bar"><span class="ui-dot"></span><span class="ui-dot"></span><span class="ui-dot"></span><span class="ui-title">escrow · offer</span></div>
+                      <div class="ui-body">
+                        <div class="price-line"><span class="big">$1,300</span><span class="chip">2.5x MRR</span></div>
+                        <div class="ui-row"><span class="ui-check">✓</span>资金托管中 · Escrow</div>
+                        <div class="ui-row"><span class="ui-check">✓</span>交割周期 7 天</div>
+                        <div class="ui-btn">出价已确认</div>
+                      </div>
+                    </div>
+                    <div class="fig-caption"><span>报价界面：Escrow 托管，7 天完成交割</span><span class="fig-idx">IMG 06 · 1200×900</span></div>
+                  </div>
+                </figure>
+
+                <div class="post-actions"><span>♡ 4.1K</span><span>↻ 1.4K</span><span>💬 96</span></div>
+              </article>
+            </div>
+
+            <div class="src-panel tab-panel" id="panelText" role="tabpanel" aria-labelledby="tabText">
+              <article class="extract">
+                <h2>Why Tiny SaaS Acquisitions Still Work</h2>
+                <p class="extract-meta">X · @indieletters · 2026/08/10 · 从图文原貌提取 · 412 字 · 6 张图</p>
+                <h3>正文</h3>
+                <p>上周我用 $1,300 完成了一笔微型收购：一个月收入 $520 的小工具，2.5x 成交，7 天走完全程。很多人说微型 SaaS 没有市场了，但买家的实际行动并不这样认为。</p>
+                <p>成交的核心参数见 <button class="fig-ref" data-locate="2" type="button">[图 2]</button>：现金交割、Escrow 托管、收入全部迁移。</p>
+                <h3>关键论点</h3>
+                <ul>
+                  <li>买家为「止痛药型」产品付 5–10x，为「维生素型」只付 1.5–2.5x，对比见 <button class="fig-ref" data-locate="3" type="button">[图 3]</button></li>
+                  <li>本次买家是独立开发者、首次收购，动机截图见 <button class="fig-ref" data-locate="4" type="button">[图 4]</button></li>
+                  <li>收入以订阅为主（62%），交割后增长确定性较高，构成见 <button class="fig-ref" data-locate="5" type="button">[图 5]</button></li>
+                  <li>交割前 7 天收入快速爬升，见 <button class="fig-ref" data-locate="1" type="button">[图 1]</button></li>
+                </ul>
+                <h3>结尾</h3>
+                <p>微型收购不是赚大钱的故事，但它是普通开发者验证「把东西卖出去」能力的最低成本路径。下一期会拆完整交易清单。</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="col col-understand" aria-label="资料理解">
+            <header class="col-head"><h2>资料理解</h2><span class="stamp">Pi · 已读全文与全部配图</span></header>
+            <div class="understand">
+              <section class="u-section">
+                <h3 class="u-title">一句话理解</h3>
+                <p class="u-one">这篇推文用一笔 $1.3K 的微型收购做完整复盘，论证「微型 SaaS 收购依然可行」；核心论点是止痛药型产品的需求强度决定买家愿意付的价格，本次 2.5x 属于工具型区间的正常估值。</p>
+              </section>
+              <section class="u-section">
+                <h3 class="u-title">核心事实 <span class="u-sub">3 条 · 均已对照原文</span></h3>
+                <ul class="fact-list">
+                  <li class="fact"><span class="fact-k">成交参数</span><span class="fact-v">$1,300 现金 · 2.5x 月收入 · 7 天交割（图 1、2）</span><span class="fact-state ok">已核实</span></li>
+                  <li class="fact"><span class="fact-k">买家画像</span><span class="fact-v">独立开发者首次收购，偏好可迁移订阅收入（图 4）</span><span class="fact-state ok">已核实</span></li>
+                  <li class="fact"><span class="fact-k">需求定位</span><span class="fact-v">止痛药型 5–10x vs 维生素型 1.5–2.5x，本次 2.5x 属工具型（图 3）</span><span class="fact-state warn">口径待补证</span></li>
+                </ul>
+              </section>
+              <section class="u-section">
+                <h3 class="u-title">视觉结论 <span class="u-sub">3 条 · 点击定位到原图</span></h3>
+                <ul class="vc-list">
+                  <li><button class="vc" data-locate="1" type="button"><span class="vc-n">图 1</span><span class="vc-t">收入曲线交割前 7 天快速爬升，对应「7 天完成交易」的叙事节奏</span><span class="vc-arrow">→</span></button></li>
+                  <li><button class="vc" data-locate="3" type="button"><span class="vc-n">图 3</span><span class="vc-t">价格对比把本次 2.5x 定位在工具型区间，是全篇论证的核心视觉</span><span class="vc-arrow">→</span></button></li>
+                  <li><button class="vc" data-locate="4" type="button"><span class="vc-n">图 4</span><span class="vc-t">买家动机截图证明「止痛药」逻辑：立即见效、可迁移、零学习成本</span><span class="vc-arrow">→</span></button></li>
+                </ul>
+              </section>
+              <section class="u-section">
+                <h3 class="u-title">待核实 <span class="u-sub">2 项</span></h3>
+                <ul class="open-list">
+                  <li>「2.5x 倍数」是否含平台手续费口径差异（图 2 未注明）</li>
+                  <li>买家为「首次收购」的证据仅出现在图 4 截图，正文未展开</li>
+                </ul>
+              </section>
+              <p class="u-note">理解基于本文全部 6 张图与正文生成。点击上方视觉结论，可定位到原图对应位置核对。</p>
+            </div>
+          </section>
+        </div>
+
+        <!-- 图片资产抽屉 -->
+        <div class="scrim" id="scrim" hidden></div>
+        <aside class="drawer" id="drawer" aria-hidden="true" inert aria-label="图片资产抽屉">
+          <div class="drawer-head">
+            <h2>图片资产</h2><span class="drawer-count">6 张</span>
+            <button class="icon-btn" id="drawerClose" type="button" aria-label="关闭抽屉">×</button>
+          </div>
+          <p class="drawer-hint">全部来自这篇图文 · 点击「定位」跳到原图位置</p>
+          <ul class="drawer-list" id="drawerList"></ul>
+        </aside>
+      </section>
+
+      <!-- 视图二：核心图文版本 -->
+      <section class="view" id="view-version" aria-label="核心图文版本">
+        <header class="ver-head">
+          <div class="ver-title">
+            <div class="crumb">创作 / 微 SaaS 也能被收购 / 核心图文版本</div>
+            <h1>核心图文版本 <span class="draft">草稿</span></h1>
+            <div class="ver-meta">目标平台：小红书 · 微信公众号　·　目标 6 张图 · 400–600 字</div>
+          </div>
+          <div class="ver-actions">
+            <span class="readiness">就绪度 <b id="readinessNum">48%</b><span class="ready-bar"><i id="readyBar"></i></span></span>
+            <button class="btn secondary" type="button">生成平台版本</button>
+            <button class="btn primary" type="button">保存版本</button>
+          </div>
+        </header>
+
+        <div class="ver-body">
+          <aside class="vcol pool" aria-label="候选素材池">
+            <header class="vcol-head"><h2>候选素材池</h2><span class="vcol-note" id="poolCount">5 张图</span></header>
+            <ul class="pool-list" id="poolList"></ul>
+          </aside>
+
+          <section class="vcol editor" aria-label="图文编辑区">
+            <header class="vcol-head"><h2>编辑区</h2><span class="vcol-note">来源图仅候选 · 点＋插入 · 选中后管理</span></header>
+            <div class="editor-scroll">
+              <ol class="blocks" id="blocks">
+                <li class="block cover selected" data-fig="1">
+                  <div class="block-head"><span class="block-label">封面图 · 图 1 · 收入曲线</span></div>
+                  <div class="block-img" data-art="chart"></div>
+                  <div class="img-toolbar">
+                    <button class="tbtn" data-act="down" type="button">下移</button>
+                    <button class="tbtn danger remove" data-fig="1" type="button">移出</button>
+                  </div>
+                </li>
+                <li class="block text">
+                  <div class="block-head"><span class="block-label">标题</span></div>
+                  <p class="content lead">「$1.3K 买下一个小 SaaS」—— 7 天成交的微型收购复盘</p>
+                </li>
+                <li class="block text">
+                  <div class="block-head"><span class="block-label">正文 · 段 1</span></div>
+                  <p class="content">上周我用 $1,300 完成了一笔微型收购：月收入 $520 的小工具，2.5x 成交，7 天走完全程。这条推文讲了完整过程，这里整理成图文版本，配图都来自原始来源。</p>
+                </li>
+                <li class="block text">
+                  <div class="block-head"><span class="block-label">数据引用</span></div>
+                  <p class="content">$1,300 成交 · 2.5x 月收入 · 7 天交割 · 订阅占比 62%</p>
+                  <span class="quote-ref">来源：图 1 · 图 2 · 图 5</span>
+                </li>
+                <li class="block drop-wrap">
+                  <button class="drop" id="dropZone" type="button">＋ 插入下一张素材（图 2 · 成交数据表）</button>
+                </li>
+                <li class="block cta">
+                  <div class="block-head"><span class="block-label">结尾引导语</span></div>
+                  <button class="cta-btn" id="ctaBtn" type="button">＋ 补全结尾引导语</button>
+                </li>
+              </ol>
+            </div>
+          </section>
+
+          <aside class="vcol check" aria-label="版本结构检查">
+            <header class="vcol-head"><h2>版本结构检查</h2><span class="live">实时</span></header>
+            <ul class="check-list" id="checkList">
+              <li class="check-item ok" id="chkCover"><span class="ci-mark">✓</span><div><b>封面图</b><span>图 1 · 收入曲线</span></div></li>
+              <li class="check-item warn" id="chkImages"><span class="ci-mark">!</span><div><b>配图 ≥ 3 张</b><span id="chkImagesMeta">已用 1 / 3</span></div></li>
+              <li class="check-item ok"><span class="ci-mark">✓</span><div><b>数据引用</b><span>$1.3K · 2.5x · 7 天</span></div></li>
+              <li class="check-item todo" id="chkCta"><span class="ci-mark">·</span><div><b>结尾引导语</b><span>缺失，建议加一句关注引导</span></div></li>
+            </ul>
+            <div class="platform-title">平台提醒</div>
+            <ul class="reminder-list" id="reminderList">
+              <li class="reminder" data-reminder="xhs"><span class="rem-name">小红书</span><span class="rem-msg">封面建议 3:4，图上文字不超过 1/4</span><button class="dismiss" type="button" aria-label="关闭提醒">×</button></li>
+              <li class="reminder" data-reminder="wx"><span class="rem-name">微信公众号</span><span class="rem-msg">长图宽度不超过 1080px</span><button class="dismiss" type="button" aria-label="关闭提醒">×</button></li>
+            </ul>
+          </aside>
+        </div>
+
+        <!-- 版本冻结说明：底部固定 -->
+        <footer class="freeze-bar">
+          <span class="freeze-dot" aria-hidden="true"></span>
+          <span id="freezeText">版本未冻结 · 内容可编辑</span>
+          <button class="btn-mini" id="freezeBtn" type="button">冻结版本</button>
+        </footer>
+      </section>
+    </main>
+
+    <aside class="pi">
+      <div class="pi-head"><div class="pi-title"><span class="pi-mark">P</span>Pi</div><span class="pi-state">就绪</span></div>
+      <div class="pi-context" id="piContext" role="status" aria-live="polite">资料图文原貌 · 6 张图 · 3 条视觉结论 · 2 项待核实</div>
+      <div class="pi-thread">
+        <div class="pi-message" id="piMsgSource">
+          <strong>已读完整篇图文：6 张图、412 字。</strong>
+          <ul>
+            <li>提炼出 3 条核心事实与 3 条视觉结论</li>
+            <li>点击右侧「视觉结论」可定位到原图对应位置</li>
+            <li>有 2 项待核实，已标注在「资料理解」</li>
+          </ul>
+        </div>
+        <div class="pi-message" id="piMsgVersion" hidden>
+          <strong>版本草稿已与素材池同步。</strong>
+          <ul>
+            <li>插入素材时，我会同步核对平台适配</li>
+            <li>小红书对表格图的压缩最明显，建议拆分</li>
+            <li>移出图片会回到素材池，随时可再插入</li>
+          </ul>
+          <ul class="pi-log" id="piLog"></ul>
+        </div>
+      </div>
+      <div class="composer">
+        <textarea placeholder="给 Pi 发消息，输入 / 查看命令" aria-label="给 Pi 发消息"></textarea>
+        <div class="composer-foot"><span>附件 · 工具</span><button class="send" type="button" aria-label="发送">↑</button></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="statusbar">
+    <span class="status-item"><span class="status-dot ok"></span>Pi 就绪</span>
+    <span class="status-item"><span class="status-dot ok"></span>AI 已连接</span>
+    <span class="status-item"><span class="status-dot"></span>浏览器未启动</span>
+    <span class="status-action" id="statusAction" role="status" aria-live="polite">最近操作 —</span>
+    <span class="right">交互原型 · 仅演示布局与交互 · 8 月 13 日</span>
+  </footer>
+</div>
+
+<div class="sr" id="srAnnounce" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- 素材数据：来源 / 用途 / 身份 ---------- */
+  var FIGS=[
+    {id:1,name:"收入曲线",type:"chart",usage:"封面 · 视觉锚点",id2:"1200×800 · 图表"},
+    {id:2,name:"成交数据表",type:"table",usage:"配图 · 数据支撑",id2:"1200×900 · 表格"},
+    {id:3,name:"价格对比",type:"bars",usage:"配图 · 论证核心",id2:"1200×800 · 对比图"},
+    {id:4,name:"买家动机",type:"ui",usage:"配图 · 动机证据",id2:"1200×1400 · 截图"},
+    {id:5,name:"收入构成",type:"donut",usage:"配图 · 收益结构",id2:"1200×800 · 占比图"},
+    {id:6,name:"报价界面",type:"ui2",usage:"配图 · 交割流程",id2:"1200×900 · 截图"}
+  ];
+  var REMIND_ON_INSERT={
+    3:["warn","小红书","图 3 表格文字密集，发布后约 80% 可读，建议拆成两张"],
+    4:["warn","微信公众号","图 4 含小字截图，建议保留原尺寸导出"],
+    5:["warn","小红书","图 5 占比图建议放在正文中段"]
+  };
+
+  /* ---------- 迷你缩略图 ---------- */
+  function mini(type){
+    var s="";
+    switch(type){
+      case "chart": s='<path class="m-grid" d="M0 8H44M0 16H44M0 24H44"/><path class="m-line" d="M2 26L10 22 18 18 26 12 34 9 42 7"/><circle class="m-dot" cx="34" cy="9" r="2.4"/>';break;
+      case "table": s='<path class="m-frame" d="M5 5h34v22H5z"/><path class="m-grid" d="M5 12h34M5 19h34M14 5v22M26 5v22"/>';break;
+      case "bars": s='<rect class="m-fill" x="4" y="7" width="10" height="4" rx="1"/><rect class="m-fill" x="4" y="14" width="19" height="4" rx="1"/><rect class="m-fill2" x="4" y="21" width="30" height="4" rx="1"/><rect class="m-fill" x="4" y="28" width="14" height="4" rx="1"/>';break;
+      case "ui": s='<rect class="m-frame" x="5" y="5" width="34" height="22" rx="2"/><path class="m-line2" d="M10 10h24M10 16h24M10 22h24"/><rect class="m-accent" x="9" y="9" width="3" height="3" rx="1"/>';break;
+      case "donut": s='<circle class="m-ring" cx="22" cy="16" r="9" stroke-dasharray="35 21.5"/><circle class="m-ring2" cx="22" cy="16" r="9" stroke-dasharray="13.5 43" stroke-dashoffset="-35"/><circle class="m-dot" cx="22" cy="16" r="2"/>';break;
+      case "ui2": s='<rect class="m-frame" x="5" y="5" width="34" height="22" rx="2"/><path class="m-line2" d="M10 11h12"/><rect class="m-accent" x="10" y="20" width="24" height="4" rx="2"/>';break;
+    }
+    return '<svg viewBox="0 0 44 32" aria-hidden="true">'+s+"</svg>";
+  }
+  function fillArt(container,type){ if(container) container.innerHTML=mini(type); }
+
+  /* ---------- DOM ---------- */
+  var $=function(id){return document.getElementById(id);};
+  var root=document.documentElement, body=$("body");
+  var srcView=$("view-source"), verView=$("view-version");
+  var vsSource=$("viewSourceBtn"), vsVersion=$("viewVersionBtn");
+  var piContext=$("piContext"), statusAction=$("statusAction"), sr=$("srAnnounce");
+  var drawer=$("drawer"), scrim=$("scrim"), drawerBtn=$("assetDrawerBtn");
+  var drawerList=$("drawerList"), poolList=$("poolList"), blocks=$("blocks");
+  var dropZone=$("dropZone"), ctaBtn=$("ctaBtn");
+  var locateBox=document.createElement("div");
+  locateBox.className="locate-box"; locateBox.id="locateBox";
+  locateBox.innerHTML='<span class="locate-label"><span id="locateLabel">图 1</span><button class="locate-close" id="locateClose" type="button" aria-label="关闭定位框">×</button></span>';
+  var postCardEl=$("postCard"); if(postCardEl) postCardEl.appendChild(locateBox);
+
+  /* ---------- 状态 ---------- */
+  var currentView=document.body.classList.contains("only-version")?"version":"source";
+  var used={1:true};
+  var poolOrder=[2,3,4,5,6];
+  var ctaOk=false;
+  var drawerOpen=false;
+  var frozen=false;
+  var msgSource=$("piMsgSource"), msgVersion=$("piMsgVersion");
+
+  /* ---------- 提示播报 ---------- */
+  function announce(text){ sr.textContent=text; }
+  function setStatus(text){ statusAction.textContent="最近操作 — "+text; }
+
+  /* ---------- 视图切换 ---------- */
+  function switchView(v){
+    currentView=v;
+    var source=v==="source";
+    if(source&&!srcView){ window.location.href="source-image-detail-prototype.html"; return; }
+    if(!source&&!verView){ window.location.href="core-image-version-prototype.html"; return; }
+    srcView.classList.toggle("active",source);
+    verView.classList.toggle("active",!source);
+    vsSource.classList.toggle("active",source); vsSource.setAttribute("aria-pressed",source?"true":"false");
+    vsVersion.classList.toggle("active",!source); vsVersion.setAttribute("aria-pressed",source?"false":"true");
+    body.classList.toggle("ver-mode",!source);
+    if(msgSource) msgSource.hidden=!source;
+    if(msgVersion) msgVersion.hidden=source;
+    if(!source && drawerOpen) closeDrawer();
+    updatePiContext();
+    setStatus(source?"已切换到 资料图文原貌":"已切换到 核心图文版本");
+    announce(source?"已切换到资料图文原貌":"已切换到核心图文版本");
+  }
+  vsSource.addEventListener("click",function(){switchView("source");});
+  vsVersion.addEventListener("click",function(){switchView("version");});
+
+  /* ---------- 来源 tabs ---------- */
+  var srcTabs=[].slice.call(document.querySelectorAll("[data-src-tab]"));
+  function activateSrcTab(name){
+    srcTabs.forEach(function(t){
+      var on=t.dataset.srcTab===name;
+      t.classList.toggle("active",on);
+      t.setAttribute("aria-selected",on?"true":"false");
+    });
+    $("panelView").classList.toggle("active",name==="view");
+    $("panelText").classList.toggle("active",name==="text");
+  }
+  srcTabs.forEach(function(t){
+    t.addEventListener("click",function(){activateSrcTab(t.dataset.srcTab);});
+    t.addEventListener("keydown",function(e){
+      if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft")return;
+      var i=srcTabs.indexOf(t), n=e.key==="ArrowRight"?(i+1)%srcTabs.length:(i-1+srcTabs.length)%srcTabs.length;
+      activateSrcTab(srcTabs[n].dataset.srcTab); srcTabs[n].focus();
+    });
+  });
+
+  /* ---------- 视觉结论定位 ---------- */
+  var locating=null;
+  function locate(n){
+    if(!$("postCard")) return;
+    if(currentView!=="source") switchView("source");
+    activateSrcTab("view");
+    var fig=document.querySelector('.post-fig[data-fig="'+n+'"]');
+    if(!fig) return;
+    if(locating===n){ hideLocate(); return; }
+    locating=n;
+    setTimeout(function(){
+      locateBox.style.top=fig.offsetTop+"px";
+      locateBox.style.height=fig.offsetHeight+"px";
+      locateBox.classList.add("on");
+      $("locateLabel").textContent="图 "+n;
+      var panel=fig.closest(".src-panel");
+      var target=fig.offsetTop-(panel.clientHeight/2-fig.offsetHeight/2);
+      if(target<0) target=0;
+      panel.scrollTop=target;
+      setStatus("已定位到 图 "+n+" · "+figById(n).name);
+      announce("已定位到 图 "+n);
+    },16);
+  }
+  function hideLocate(){ locateBox.classList.remove("on"); locating=null; }
+  var locateClose=$("locateClose"); if(locateClose) locateClose.addEventListener("click",hideLocate);
+  document.querySelectorAll("[data-locate]").forEach(function(el){
+    el.addEventListener("click",function(){ locate(parseInt(el.getAttribute("data-locate"),10)); });
+  });
+
+  /* ---------- 抽屉 ---------- */
+  function renderDrawer(){
+    drawerList.innerHTML=FIGS.map(function(f){
+      return '<li class="drawer-item"><span class="thumb">'+mini(f.type)+'</span><div><b>图 '+f.id+' · '+f.name+'</b><small>'+f.id2+' · 来自原图文</small></div><button class="btn-locate" type="button" data-locate="'+f.id+'">定位</button></li>';
+    }).join("");
+    drawerList.querySelectorAll("[data-locate]").forEach(function(el){
+      el.addEventListener("click",function(){
+        closeDrawer();
+        locate(parseInt(el.getAttribute("data-locate"),10));
+      });
+    });
+  }
+  function openDrawer(){ drawerOpen=true; drawer.classList.add("open"); drawer.removeAttribute("inert"); drawer.setAttribute("aria-hidden","false"); scrim.hidden=false; drawerBtn.setAttribute("aria-expanded","true"); var dc=$("drawerClose"); if(dc) dc.focus(); }
+  function closeDrawer(){ drawerOpen=false; drawer.classList.remove("open"); drawer.setAttribute("inert",""); drawer.setAttribute("aria-hidden","true"); scrim.hidden=true; drawerBtn.setAttribute("aria-expanded","false"); drawerBtn.focus(); }
+  if(drawer&&scrim&&drawerBtn){
+    drawerBtn.addEventListener("click",function(){ drawerOpen?closeDrawer():openDrawer(); });
+    $("drawerClose").addEventListener("click",closeDrawer);
+    scrim.addEventListener("click",closeDrawer);
+  }
+
+  /* ---------- 已读切换 ---------- */
+  var readToggle=$("readToggle")||{addEventListener:function(){},setAttribute:function(){},getAttribute:function(){return "false";},textContent:""};
+  readToggle.addEventListener("click",function(){
+    var now=readToggle.getAttribute("aria-pressed")==="true";
+    readToggle.setAttribute("aria-pressed",now?"false":"true");
+    readToggle.textContent=now?"标记已读":"已读 ✓";
+    setStatus(now?"已标记为未读":"已标记为已读");
+  });
+
+  /* ---------- 主题 ---------- */
+  var themeToggle=$("themeToggle");
+  function syncTheme(){
+    var light=root.getAttribute("data-theme")==="light";
+    themeToggle.textContent=light?"☀":"☾";
+    themeToggle.setAttribute("aria-pressed",light?"true":"false");
+    var label=light?"切换到深色主题":"切换到亮色主题";
+    themeToggle.setAttribute("aria-label",label); themeToggle.setAttribute("title",label);
+  }
+  themeToggle.addEventListener("click",function(){
+    root.setAttribute("data-theme",root.getAttribute("data-theme")==="light"?"dark":"light");
+    syncTheme();
+  });
+  syncTheme();
+
+  /* ---------- 创作视图：素材池（来源/用途/身份三层，无重复边框） ---------- */
+  function figById(n){ return FIGS.find(function(f){return f.id===n;}); }
+  function renderPool(){
+    var items=poolOrder.map(function(id){
+      var f=figById(id);
+      return '<li class="pool-item" data-fig="'+id+'"><span class="thumb">'+mini(f.type)+'</span><div><span class="pool-src">图 '+id+' · '+f.name+'</span><span class="pool-usage">'+f.usage+'</span><span class="pool-id">'+f.id2+'</span></div><button class="btn-insert insert" data-fig="'+id+'" type="button" aria-label="插入图 '+id+'">＋</button></li>';
+    }).join("");
+    poolList.innerHTML=items||'<li class="pool-empty">全部素材已插入版本</li>';
+    $("poolCount").textContent=poolOrder.length+" 张图";
+    poolList.querySelectorAll(".insert").forEach(function(b){
+      b.addEventListener("click",function(){ insertFig(parseInt(b.getAttribute("data-fig"),10)); });
+    });
+  }
+  function imgBlockHTML(id,f){
+    return '<li class="block'+(id===1?" cover":"")+'" data-fig="'+id+'">'+
+      '<div class="block-head"><span class="block-label">'+(id===1?"封面图 · 图 1 · 收入曲线":"配图 · 图 "+id+" · "+f.name)+'</span></div>'+
+      '<div class="block-img" data-art="'+f.type+'"></div>'+
+      '<div class="img-toolbar">'+
+        (id!==1?'<button class="tbtn" data-act="up" type="button">上移</button>':'')+
+        '<button class="tbtn" data-act="down" type="button">下移</button>'+
+        '<button class="tbtn danger remove" data-fig="'+id+'" type="button">移出</button>'+
+      '</div></li>';
+  }
+  function insertFig(id){
+    if(used[id]||frozen) return;
+    poolOrder=poolOrder.filter(function(x){return x!==id;});
+    used[id]=true;
+    var f=figById(id);
+    var li=document.createElement("li");
+    li.innerHTML=imgBlockHTML(id,f);
+    var el=li.firstChild;
+    fillArt(el.querySelector(".block-img"),f.type);
+    if(id===1){ blocks.insertBefore(el,blocks.firstChild); }
+    else{ blocks.insertBefore(el,dropZone.closest(".block")); }
+    selectBlock(el);
+    renderPool(); updateCreation();
+    addPiLog("已插入 图 "+id+" · "+f.name);
+    setStatus("已插入 图 "+id+"（已用 "+Object.keys(used).length+"/6）");
+    announce("已插入 图 "+id);
+    var r=REMIND_ON_INSERT[id];
+    if(r) addReminder(r[0],r[1],r[2]);
+  }
+  function removeFig(id){
+    if(!used[id]||frozen) return;
+    delete used[id];
+    poolOrder.push(id); poolOrder.sort(function(a,b){return a-b;});
+    var block=blocks.querySelector('.block[data-fig="'+id+'"]');
+    if(block) block.remove();
+    renderPool(); updateCreation();
+    addPiLog("已移出 图 "+id+"，回到素材池");
+    setStatus("已移出 图 "+id+"（已用 "+Object.keys(used).length+"/6）");
+    announce("已移出 图 "+id);
+  }
+  function moveBlock(li,dir){
+    if(frozen) return;
+    var siblings=[].slice.call(blocks.children);
+    var idx=siblings.indexOf(li), target=null;
+    if(dir==="up"){ for(var i=idx-1;i>=0;i--){ if(!siblings[i].classList.contains("drop-wrap")&&!siblings[i].classList.contains("cta")){target=siblings[i];break;} } }
+    else{ for(var i=idx+1;i<siblings.length;i++){ if(!siblings[i].classList.contains("drop-wrap")&&!siblings[i].classList.contains("cta")){target=siblings[i];break;} } }
+    if(!target) return;
+    if(dir==="up") blocks.insertBefore(li,target); else blocks.insertBefore(target,li);
+    setStatus("已调整图片顺序");
+    announce("已调整图片顺序");
+  }
+  function selectBlock(li){
+    blocks.querySelectorAll(".block.selected").forEach(function(b){b.classList.remove("selected");});
+    if(li) li.classList.add("selected");
+  }
+  if(blocks) blocks.addEventListener("click",function(e){
+    var block=e.target.closest(".block");
+    if(!block) return;
+    if(block.querySelector(".block-img")){ selectBlock(block); }
+    var t=e.target.closest(".tbtn");
+    if(t){ var act=t.getAttribute("data-act"); if(act==="up"||act==="down") moveBlock(block,act); return; }
+    var rm=e.target.closest(".remove");
+    if(rm) removeFig(parseInt(rm.getAttribute("data-fig"),10));
+  });
+  if(blocks) blocks.addEventListener("focusin",function(e){
+    var block=e.target.closest(".block");
+    if(block&&block.querySelector(".block-img")) selectBlock(block);
+  });
+  if(blocks) document.addEventListener("click",function(e){
+    if(!e.target.closest("#blocks")) selectBlock(null);
+  });
+  if(dropZone) dropZone.addEventListener("click",function(){ if(!frozen&&poolOrder.length) insertFig(poolOrder[0]); });
+  if(ctaBtn) ctaBtn.addEventListener("click",function(){
+    if(frozen) return;
+    ctaOk=true;
+    var block=ctaBtn.closest(".block");
+    block.innerHTML='<div class="block-head"><span class="block-label">结尾引导语</span></div><p class="cta-text">你觉得微型收购还有机会吗？评论区聊聊。关注我，下期拆解完整交易清单。<em>已由 Pi 生成 · 可编辑</em></p>';
+    updateCreation();
+    addPiLog("已补全结尾引导语");
+    setStatus("已补全结尾引导语");
+  });
+
+  /* ---------- 平台提醒：安静文字行 ---------- */
+  var reminderList=$("reminderList");
+  function addReminder(kind,name,msg){
+    var li=document.createElement("li");
+    li.className="reminder"+(kind==="warn"?" warn":"");
+    li.innerHTML='<span class="rem-name">'+name+'</span><span class="rem-msg">'+msg+'</span><button class="dismiss" type="button" aria-label="关闭提醒">×</button>';
+    reminderList.appendChild(li);
+  }
+  if(reminderList) reminderList.addEventListener("click",function(e){
+    var b=e.target.closest(".dismiss");
+    if(b){ b.closest(".reminder").remove(); updatePiContext(); }
+  });
+
+  /* ---------- 版本冻结 ---------- */
+  var freezeBtn=$("freezeBtn")||{addEventListener:function(){},classList:{toggle:function(){}},textContent:""};
+  freezeBtn.addEventListener("click",function(){
+    frozen=!frozen;
+    verView.classList.toggle("frozen",frozen);
+    freezeBtn.textContent=frozen?"解冻":"冻结版本";
+    $("freezeText").textContent=frozen?"版本已冻结 · 编辑已锁定，生成平台版本后将自动冻结本版内容":"版本未冻结 · 内容可编辑";
+    setStatus(frozen?"版本已冻结":"版本已解冻");
+    addPiLog(frozen?"版本已冻结，编辑锁定":"版本已解冻，可继续编辑");
+    announce(frozen?"版本已冻结":"版本已解冻");
+  });
+
+  /* ---------- 状态刷新 ---------- */
+  function updateCreation(){
+    if(!blocks||!$("chkCover")) return;
+    var count=Object.keys(used).length;
+    var coverOk=!!used[1];
+    var coverEl=$("chkCover"), imgEl=$("chkImages");
+    coverEl.className="check-item "+(coverOk?"ok":"warn");
+    coverEl.querySelector(".ci-mark").textContent=coverOk?"✓":"!";
+    coverEl.querySelector("span").textContent=coverOk?"图 1 · 收入曲线":"封面缺失，请从素材池插入图 1";
+    var imgOk=count>=3, imgWarn=count>=1;
+    imgEl.className="check-item "+(imgOk?"ok":(imgWarn?"warn":"todo"));
+    imgEl.querySelector(".ci-mark").textContent=imgOk?"✓":(imgWarn?"!":"·");
+    $("chkImagesMeta").textContent="已用 "+count+" / 3";
+    var ctaEl=$("chkCta");
+    ctaEl.className="check-item "+(ctaOk?"ok":"todo");
+    ctaEl.querySelector(".ci-mark").textContent=ctaOk?"✓":"·";
+    ctaEl.querySelector("span").textContent=ctaOk?"已生成，含关注引导":"缺失，建议加一句关注引导";
+    var ready=Math.min(100,Math.round(20*(coverOk?1:0)+8*Math.min(count,3)+20+(ctaOk?15:0)));
+    $("readinessNum").textContent=ready+"%";
+    $("readyBar").style.width=ready+"%";
+    var next=poolOrder.length?figById(poolOrder[0]):null;
+    dropZone.textContent=next?("＋ 插入下一张素材（图 "+next.id+" · "+next.name+"）"):"素材已全部插入版本 ✓";
+    dropZone.disabled=!next;
+    updatePiContext();
+  }
+  function updatePiContext(){
+    if(currentView==="source"||!$("readinessNum")){
+      piContext.textContent="资料图文原貌 · 6 张图 · 3 条视觉结论 · 2 项待核实";
+    }else{
+      var count=Object.keys(used).length;
+      var rems=reminderList?reminderList.querySelectorAll(".reminder").length:0;
+      var ready=$("readinessNum").textContent;
+      piContext.textContent="核心图文版本 · 已用 "+count+"/6 张图 · 平台提醒 "+rems+" · 就绪度 "+ready;
+    }
+  }
+  function addPiLog(text){
+    var log=$("piLog");
+    if(!log) return;
+    var li=document.createElement("li");
+    li.textContent=text;
+    log.insertBefore(li,log.firstChild);
+    while(log.children.length>4){ log.removeChild(log.lastChild); }
+  }
+
+  /* ---------- Esc 关闭 ---------- */
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"){
+      if(drawerOpen){ closeDrawer(); }
+      else if(locating){ hideLocate(); }
+    }
+  });
+
+  /* ---------- 初始化 ---------- */
+  document.querySelectorAll("#blocks .block-img[data-art]").forEach(function(el){ fillArt(el,el.dataset.art); });
+  if(drawer) renderDrawer();
+  if(poolList) renderPool();
+  updateCreation();
+  updatePiContext();
+  if(document.body.classList.contains("only-version")){ body.classList.add("ver-mode"); }
+})();
+</script>
+</body>
+</html>

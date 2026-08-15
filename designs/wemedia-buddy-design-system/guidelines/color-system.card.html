@@ -1,0 +1,37 @@
+<!-- @dsCard group="Guidelines" viewport="700x380" name="ColorSystem" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Color System</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .ladder { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+  .sw { border: 1px solid var(--border-soft); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  .sw i { display: block; height: 34px; }
+  .sw span { display: block; padding: 6px 8px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+  .note { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--accent-faint); color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>Color — 一对主题，一套语义变量</h1>
+<p>墨夜/白昼消费同一组 <code>--*</code> 语义变量；组件规则永不硬编码主题色。层级由对比度承载（surface 阶梯、ink 阶梯、border 阶梯），紫罗兰（One Violet）只给每屏一个主操作，琥珀只标记需要人类处理的事项。</p>
+<div class="ladder">
+  <div class="sw"><i style="background:var(--app-bg)"></i><span>--app-bg</span></div>
+  <div class="sw"><i style="background:var(--panel-bg)"></i><span>--panel-bg</span></div>
+  <div class="sw"><i style="background:var(--surface)"></i><span>--surface</span></div>
+  <div class="sw"><i style="background:var(--surface-raised)"></i><span>--surface-raised</span></div>
+  <div class="sw"><i style="background:var(--ink)"></i><span>--ink</span></div>
+  <div class="sw"><i style="background:var(--accent)"></i><span>--accent</span></div>
+  <div class="sw"><i style="background:var(--amber)"></i><span>--amber</span></div>
+  <div class="sw"><i style="background:var(--success)"></i><span>--success</span></div>
+  <div class="sw"><i style="background:var(--danger)"></i><span>--danger</span></div>
+  <div class="sw"><i style="background:var(--info)"></i><span>--info</span></div>
+</div>
+<div class="note">切换 <code>data-theme="light"</code> 后同一批变量整体换极性；白昼主题仍消费 <code>var(--accent)</code>。页级 CSS 与组件 CSS 禁止另起一套 hex；新增品牌色先问 owner，再进 foundation 与 drift allowlist。</div>
+</body>
+</html>

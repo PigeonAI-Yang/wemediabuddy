@@ -30,7 +30,7 @@
 .channel-confirm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .channel-confirm-row > span[data-state="ready"] { color: var(--success); }
 .channel-confirm-row > span[data-state="blocked"] { color: var(--amber); }
-.channel-confirm-row .primary-button { margin-left: auto; }
+.channel-confirm-row .channel-confirm-cta { margin-left: auto; }
 .channel-source-list { border-top: 1px solid var(--border); }
 .channel-source-list > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 2px 12px; }
 .channel-source-list > div { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
@@ -64,9 +64,7 @@
 .channel-proposal ol { display: grid; gap: 9px; min-width: 0; margin: 0; padding-left: 21px; }
 .channel-proposal li { display: grid; gap: 3px; color: var(--ink); font-size: 13px; }
 .channel-proposal small { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
-.today-command[data-mode="idle"] { align-items: stretch; flex-wrap: wrap; }
-.today-command[data-mode="idle"] .today-command-stats { flex: 1 1 360px; }
-.today-command[data-mode="idle"] .today-command-actions { margin-left: auto; }
+/* today-command idle layout lives in styles-workflow.css (buttons never shrink). */
 
 @media (max-width: 1180px) {
   .channel-add-grid { grid-template-columns: 1fr; }
@@ -80,6 +78,6 @@
   .channel-readiness { grid-template-columns: 1fr; }
   .channel-source-row { grid-template-columns: 1fr; gap: 12px; }
   .channel-source-actions { grid-column: auto; grid-row: auto; justify-content: flex-start; }
-  .channel-confirm-row .primary-button { margin-left: 0; }
+  .channel-confirm-row .channel-confirm-cta { margin-left: 0; }
   .channel-proposal { align-items: stretch; flex-direction: column; }
 }

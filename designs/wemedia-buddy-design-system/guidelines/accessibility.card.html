@@ -1,0 +1,33 @@
+<!-- @dsCard group="Guidelines" viewport="700x330" name="Accessibility" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Accessibility</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .check { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .check li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+  .check li::before { content: "✓"; display: grid; place-items: center; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; background: var(--success-soft); color: var(--success); font-size: 10px; font-weight: 700; }
+  .check li b { color: var(--ink); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+  .bad { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--danger-soft); color: var(--danger); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>Accessibility — WCAG AA 基线</h1>
+<p>正文与关键控件满足 AA；不只依赖颜色；键盘焦点清晰；尊重 reduced motion。审计确立两条硬伤基线：主决策卡曾是鼠标专用、常驻 Pi 输入框曾无无障碍名——两者都由组件契约修复。</p>
+<ul class="check">
+  <li><b>零未命名可见控件</b>：IconButton 强制 <code>aria-label</code>；Pi 输入框有名字；placeholder 不作 label</li>
+  <li><b>键盘完整</b>：主卡片/行是真实 button（Tab + Enter/Space）；tablist 方向键；弹窗焦点陷阱 + 归还</li>
+  <li><b>不只颜色</b>：状态点+词双编码；链接有下划线/图标辅助</li>
+  <li><b>focus-visible</b>：<code>2px solid var(--accent)</code>，offset 2px，不靠 :hover 才能见</li>
+  <li><b>语义地标</b>：一房一 H1；区域 <code>role="status"</code>；tabpanel 配对 aria-controls</li>
+  <li><b>reduced motion</b>：所有非必要动效有静态等价物（creature 动画冻结为静帧）</li>
+</ul>
+<div class="bad">验收口径：11 个房间 1600×960 dark / 6 个 light / 全部 1100×720，零横向溢出、零未命名可见控件。</div>
+</body>
+</html>

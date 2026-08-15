@@ -14,25 +14,52 @@ export type WorkspaceProfileV1 = {
   intelligencePackVersion: number;
   creationPackId: 'wmb-core-creation';
   creationPackVersion: number;
-  platforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  platforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
 };
 
 export const OFFICIAL_WORKSPACE_TEMPLATES: Record<OfficialTemplateId, Omit<WorkspaceProfileV1, 'revision'>> = {
   'official.ai': {
-    profileId: 'profile.ai.official', officialTemplateId: 'official.ai', officialTemplateVersion: 1, displayName: 'AI',
-    audience: '关注 AI 工具、行业、开发和商业机会的中文受众', contentGoal: '持续发现并做出有判断、有证据、可执行的 AI 内容',
-    editorialBrief: '优先官方发布、真实实测和受众正在遇到的问题；机会按 SSS 至 F 保留全部合格结果。',
-    intelligencePackId: 'wemedia-intelligence-engine', intelligencePackVersion: 1,
-    creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x', 'xiaohongshu', 'wechat']
+    profileId: 'profile.ai.official',
+    officialTemplateId: 'official.ai',
+    officialTemplateVersion: 4,
+    displayName: 'AI × 商业化成长',
+    audience: '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人',
+    contentGoal: '帮中文普通人从迷茫走向明确：找到个人商业化方向，完成第一个真实项目并拿到真实反馈；不承诺收入',
+    editorialBrief: '编辑使命=帮「面对 AI 浪潮无所适从」的普通人从迷茫走向明确方向，完成第一个真实项目并拿到真实反馈；不承诺收入。五维=时代认知/个人方向/AI 实践/公开验证/产品化。差异化=经典方法论 × 真实 AI 实践/案例。梯子=宽情绪/问题入口 → 经典方法论解读 → 真实 AI 项目/案例 → 合格对话/诊断/陪跑转化。证据=真实来源+本人实践/案例+具体动作；区分流量与合格线索。降权：纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺。栏目骨架：迷茫诊断/经典方法/AI 实战/项目日志/方向判断/商业化实验。机会按 SSS 至 F 保留全部合格结果。',
+    intelligencePackId: 'wemedia-intelligence-engine',
+    intelligencePackVersion: 1,
+    creationPackId: 'wmb-core-creation',
+    creationPackVersion: 1,
+    // WMB-5249：v4 为 official.ai 存量工作空间启用知乎发布面；ensure 仅升级官方谱系，
+    // 自定义配方不受影响，运行中任务仍按既有保护跳过升级。
+    platforms: ['x', 'xiaohongshu', 'wechat', 'zhihu']
   },
   'official.uk': {
-    profileId: 'profile.uk.official', officialTemplateId: 'official.uk', officialTemplateVersion: 1, displayName: '英国生活',
-    audience: '在英国生活、学习、工作或准备赴英的中国人', contentGoal: '把英国政策与生活信息转化为有来源、可执行的中文内容',
+    profileId: 'profile.uk.official',
+    officialTemplateId: 'official.uk',
+    officialTemplateVersion: 1,
+    displayName: '英国生活',
+    audience: '在英国生活、学习、工作或准备赴英的中国人',
+    contentGoal: '把英国政策与生活信息转化为有来源、可执行的中文内容',
     editorialBrief: '政策、签证、金融、劳动和合同结论回到当前官方来源；区分事实、专业解释与个案。',
-    intelligencePackId: 'uk-life-content-radar', intelligencePackVersion: 1,
-    creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x', 'xiaohongshu']
+    intelligencePackId: 'uk-life-content-radar',
+    intelligencePackVersion: 1,
+    creationPackId: 'wmb-core-creation',
+    creationPackVersion: 1,
+    platforms: ['x', 'xiaohongshu']
   }
 };
+
+export function buildOfficialTemplateProfile(templateId: OfficialTemplateId, revision: number): WorkspaceProfileV1 {
+  return { ...OFFICIAL_WORKSPACE_TEMPLATES[templateId], revision };
+}
+
+function isOfficialTemplateLineage(existing: WorkspaceProfileV1, templateId: OfficialTemplateId): boolean {
+  const template = OFFICIAL_WORKSPACE_TEMPLATES[templateId];
+  return existing.officialTemplateId === templateId
+    && existing.profileId === template.profileId
+    && existing.intelligencePackId === template.intelligencePackId;
+}
 
 export const AI_ONLY_ROUTE_IDS = [
   'ai.intelligence.skill',
@@ -54,10 +81,17 @@ export function readWorkspaceProfile(database: DatabaseSync): WorkspaceProfileV1
 
 export function ensureOfficialWorkspaceProfile(database: DatabaseSync, templateId: OfficialTemplateId): WorkspaceProfileV1 {
   const existing = readWorkspaceProfile(database);
-  if (existing) return existing;
-  const profile = { ...OFFICIAL_WORKSPACE_TEMPLATES[templateId], revision: 1 };
-  insertWorkspaceProfile(database, profile);
-  return profile;
+  const template = OFFICIAL_WORKSPACE_TEMPLATES[templateId];
+  if (!existing) {
+    const profile = buildOfficialTemplateProfile(templateId, 1);
+    insertWorkspaceProfile(database, profile);
+    return profile;
+  }
+  const existingVersion = existing.officialTemplateVersion ?? 0;
+  const templateVersion = template.officialTemplateVersion ?? 0;
+  if (!isOfficialTemplateLineage(existing, templateId) || existingVersion >= templateVersion) return existing;
+  if (database.prepare("SELECT 1 FROM agent_tasks WHERE status='running' LIMIT 1").get()) return existing;
+  return activateWorkspaceProfile(database, buildOfficialTemplateProfile(templateId, existing.revision + 1), existing.revision);
 }
 
 export function insertWorkspaceProfile(database: DatabaseSync, profile: WorkspaceProfileV1): WorkspaceProfileV1 {

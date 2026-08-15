@@ -1,0 +1,166 @@
+/* ============================================================
+ * WeMediaBuddy Design System — Color tokens
+ * Machine SSOT: src/renderer/styles-foundation.css (:root blocks).
+ * 墨夜/白昼 paired themes consume the same semantic variables;
+ * component rules never hard-code theme colors.
+ * All values are byte-identical to the product foundation.
+ * ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* 「墨夜编辑台」surface ladder — app chrome down to content */
+  --app-bg: #0b0b0b;
+  --topbar-bg: #0f0f0f;
+  --sidebar-bg: #111111;
+  --workspace-bg: #0d0d0d;
+  --panel-bg: #131313;
+  --surface: #171717;
+  --surface-raised: #1c1c1c;
+  --surface-hover: #242424;
+  --surface-selected: #2a2a2a;
+  --tag-bg: #202020;
+
+  /* Ink ladder — hierarchy by contrast, not by color */
+  --ink: #f1f1f1;
+  --ink-soft: #d2d2d2;
+  --muted: #aaaaaa;
+  --muted-low: #767676;
+
+  /* Border ladder */
+  --border: #363636;
+  --border-soft: #292929;
+  --border-strong: #484848;
+  --line: rgb(255 255 255 / 6.5%);
+  --line-strong: rgb(255 255 255 / 13%);
+
+  /* One Violet — accent is reserved for one primary action per view */
+  --accent: #8b7cff;
+  --accent-hover: #a495ff;
+  --accent-ink: #fff;
+  --accent-soft: #a495ff;
+  --accent-faint: rgb(139 124 255 / 13%);
+  --selected: rgb(139 124 255 / 13%);
+  --link: #7aa8f0;
+
+  /* Semantic — amber = needs a human */
+  --amber: #f0b45a;
+  --amber-soft: rgb(240 180 90 / 12%);
+  --success: #4cc38a;
+  --success-soft: rgb(76 195 138 / 12%);
+  --warning: #f0b45a;
+  --danger: #e5636f;
+  --danger-soft: rgb(229 99 111 / 12%);
+  --status-running: #c98300;
+  --status-running-soft: rgb(201 131 0 / 12%);
+  --info: #5aa9f0;
+
+  /* Priority grade ladder SSS → C (D/E/F are derived mixes, see styles/components.css) */
+  --grade-sss: #c9a7ff;
+  --grade-s: #8b7cff;
+  --grade-a: #5aa9f0;
+  --grade-b: #4cc38a;
+  --grade-c: #a7adc0;
+
+  /* Platform identity colors */
+  --pf-x: #e9ebf3;
+  --pf-xhs: #f04a5e;
+  --pf-wx: #3fb575;
+
+  --canvas-bg: #0f0f0f;
+  --mark-bg: #f2f4f7;
+  --mark-ink: #111111;
+  --scroll-thumb: #505050;
+  --scroll-hover: #707070;
+  --overlay: rgb(0 0 0 / 55%);
+}
+
+:root[data-theme="light"],
+.__dsroot[data-theme="light"] {
+  color-scheme: light;
+
+  /* 「白昼紫罗兰」— same semantic ladder, opposite polarity */
+  --app-bg: #f6f5fa;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f9f8fc;
+  --workspace-bg: #f6f5fa;
+  --panel-bg: #f9f8fc;
+  --surface: #fff;
+  --surface-raised: #fbfaff;
+  --surface-hover: #f0ecfa;
+  --surface-selected: #ebe6f8;
+  --tag-bg: #eeeaf7;
+
+  --ink: #221e2c;
+  --ink-soft: #3e384a;
+  --muted: #625b70;
+  --muted-low: #857d93;
+
+  --border: #d9d4e4;
+  --border-soft: #e6e3ee;
+  --border-strong: #bbb3ca;
+  --line: rgb(31 25 43 / 8%);
+  --line-strong: rgb(31 25 43 / 16%);
+
+  --accent: #6d51e8;
+  --accent-hover: #5733c7;
+  --accent-ink: #fff;
+  --accent-soft: #6d51e8;
+  --accent-faint: rgb(109 81 232 / 10%);
+  --selected: rgb(109 81 232 / 10%);
+  --link: #315fba;
+
+  --amber: #b97c1e;
+  --amber-soft: rgb(185 124 30 / 12%);
+  --success: #1f9d63;
+  --success-soft: rgb(31 157 99 / 10%);
+  --warning: #b97c1e;
+  --danger: #c4304b;
+  --danger-soft: rgb(196 48 75 / 10%);
+  --status-running: #9a5f00;
+  --status-running-soft: rgb(154 95 0 / 12%);
+  --info: #2f7fd4;
+
+  --grade-sss: #7b4fd6;
+  --grade-s: #6d51e8;
+  --grade-a: #2f7fd4;
+  --grade-b: #1f9d63;
+  --grade-c: #857d93;
+
+  --pf-x: #221e2c;
+  --pf-xhs: #d43a4e;
+  --pf-wx: #1f9d63;
+
+  --canvas-bg: #f0eef7;
+  --mark-bg: #eee9fa;
+  --mark-ink: #4f2eb7;
+  --scroll-thumb: #aaa2b8;
+  --scroll-hover: #81798f;
+  --overlay: rgb(31 25 43 / 35%);
+}
+
+/* ============================================================
+ * DS normalization aliases (documented, not SSOT changes)
+ * ------------------------------------------------------------
+ * These alias dominant current values / WMB-5258 unified
+ * contracts so components never repeat raw numbers. They do NOT
+ * change any product token above.
+ * ============================================================ */
+
+:root {
+  /* Danger action fill — source: styles-foundation.css
+   * `.primary-button.danger-button` (#d94848 / hover #e85b5b).
+   * WMB-5258 P3 asks the product to consume semantic tokens; the
+   * DS exposes them as named tokens (normalization only). */
+  --danger-button: #d94848;
+  --danger-button-hover: #e85b5b;
+
+  /* Failed status text — source: foundation `.status-item[data-phase="failed"]`.
+   * Dark-only in source; light falls back to --danger. */
+  --status-failed-text: #ff8e8e;
+}
+
+:root[data-theme="light"],
+.__dsroot[data-theme="light"] {
+  --status-failed-text: var(--danger);
+}

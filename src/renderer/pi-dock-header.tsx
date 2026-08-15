@@ -12,6 +12,8 @@ export function PiDockHeader({
   phase,
   statusText,
   contextChip,
+  authorityChip,
+  authorityTone,
   toast,
   onToggleSessions,
   onNewConversation,
@@ -27,6 +29,8 @@ export function PiDockHeader({
   phase: 'idle' | 'starting' | 'running' | 'failed' | 'stopped';
   statusText: string;
   contextChip: string;
+  authorityChip?: string;
+  authorityTone?: 'write' | 'readonly' | 'prepare';
   toast: string;
   onToggleSessions: () => void;
   onNewConversation: () => void;
@@ -34,6 +38,7 @@ export function PiDockHeader({
   onArchiveSession: (id: string, archived: boolean) => void;
   busy: boolean;
 }): React.JSX.Element {
+  void phase; void statusText; void authorityChip; void authorityTone;
   const [archivedView, setArchivedView] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const visible = sessions.filter((session) => Boolean(session.archivedAt) === archivedView);
@@ -45,7 +50,6 @@ export function PiDockHeader({
         <span className="pi-session-current" title={activeTitle}>{activeTitle === 'Pi' ? '会话' : activeTitle}</span>
         <em className="pi-session-caret" aria-hidden="true">▾</em>
       </button>
-      <span data-phase={phase}>状态：{statusText}</span>
     </div>
     {sessionMenuOpen && <div className="pi-session-menu" role="listbox" aria-label="会话列表">
       <div className="pi-session-menu-head"><span>{archivedView ? '已归档会话' : '会话'}</span>{archivedView

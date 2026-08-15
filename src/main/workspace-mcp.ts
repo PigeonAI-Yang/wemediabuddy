@@ -6,6 +6,7 @@ import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import { WORKSPACE_CATALOG, WorkspaceProposalStore } from './workspace-proposals.ts';
 import { readIntelligenceChannelsSummary, type IntelligenceChannelsSummary } from './intelligence-channels.ts';
 import type { IntelligenceChannelProposalStore } from './intelligence-channel-proposals.ts';
+import { readWorkspaceBrowserBinding, type BrowserBindingState, type ExpectedAccountSnapshot } from './workspace-browser-binding.ts';
 
 type WorkspaceListing = { activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> };
 
@@ -19,6 +20,7 @@ export type WorkspaceApplicationMcp = {
   listWorkspaces: () => Promise<WorkspaceListing>;
   proposals: WorkspaceProposalStore;
   channelProposals?: IntelligenceChannelProposalStore;
+  runtimeEpoch?: string;
 };
 
 export type WorkspaceCapabilitySnapshot = {
@@ -26,21 +28,26 @@ export type WorkspaceCapabilitySnapshot = {
   displayName: string;
   rootPath: string;
   dataRoot: { workspaceId: string; path: string };
+  runtimeEpoch: string | null;
   profile: ReturnType<typeof requireWorkspaceProfile>;
   intelligenceChannels: IntelligenceChannelsSummary;
+  browserProfileId: string | null;
+  bindingRevision: number | null;
+  state: BrowserBindingState | 'missing';
+  expectedAccountSnapshots: ExpectedAccountSnapshot;
   capabilities: {
     xLists: true;
     aiIntelligence: boolean;
     fixedAiLists: boolean;
     rankings: boolean;
     sourceWire: boolean;
-    publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+    publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
   };
 };
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
 
-export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspaces: () => Promise<WorkspaceListing>): Promise<WorkspaceCapabilitySnapshot> {
+export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspaces: () => Promise<WorkspaceListing>, runtimeEpoch: string | null = null): Promise<WorkspaceCapabilitySnapshot> {
   const registry = await listWorkspaces();
   const workspace = registry.workspaces.find((item) => item.id === registry.activeWorkspaceId);
   const resolvedRootPath = path.resolve(rootPath);
@@ -50,11 +57,17 @@ export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspa
     if (!workspace || workspace.id !== workspaceId || path.resolve(workspace.rootPath) !== resolvedRootPath) throw new Error('活动工作空间身份不一致。');
     const profile = requireWorkspaceProfile(db);
     const intelligence = WORKSPACE_INTELLIGENCE_CAPABILITIES[profile.intelligencePackId];
+    const browserBinding = readWorkspaceBrowserBinding(db);
     return {
       ...workspace,
       dataRoot: { workspaceId, path: resolvedRootPath },
+      runtimeEpoch,
       profile,
       intelligenceChannels: readIntelligenceChannelsSummary(db),
+      browserProfileId: browserBinding?.profileId ?? null,
+      bindingRevision: browserBinding?.bindingRevision ?? null,
+      state: browserBinding?.state ?? 'missing',
+      expectedAccountSnapshots: browserBinding?.expectedAccountSnapshot ?? {},
       capabilities: {
         xLists: true,
         ...intelligence,
@@ -65,9 +78,9 @@ export async function readCurrentWorkspaceSnapshot(rootPath: string, listWorkspa
 }
 
 export function registerWorkspaceApplicationMcp(server: McpServer, rootPath: string, application: WorkspaceApplicationMcp): void {
-  const currentWorkspace = () => readCurrentWorkspaceSnapshot(rootPath, application.listWorkspaces);
+  const currentWorkspace = () => readCurrentWorkspaceSnapshot(rootPath, application.listWorkspaces, application.runtimeEpoch ?? null);
   server.registerTool('workspaces.list', { description: '列出应用登记的工作空间和当前活动身份。' }, async () => text(await application.listWorkspaces()));
-  server.registerTool('workspaces.get_current', { description: '读取当前 MCP URL 绑定的工作空间和有效配方。' }, async () => text(await currentWorkspace()));
+  server.registerTool('workspaces.get_current', { description: '只读当前 MCP URL 绑定的工作空间、有效配方和浏览器 binding 快照；不提供 profile 写入。' }, async () => text(await currentWorkspace()));
   server.registerTool('workspaces.catalog', { description: '读取 WMB 编译期官方能力包和受支持平台。' }, async () => text(WORKSPACE_CATALOG));
   server.registerTool('workspaces.proposals.prepare', {
     description: '提交当前 Main 会话有效的完整自媒体配方提案；不能确认、激活或指定数据目录。',
@@ -75,7 +88,7 @@ export function registerWorkspaceApplicationMcp(server: McpServer, rootPath: str
       request_id: z.string(), target: z.enum(['current', 'new']), purpose: z.string(), display_name: z.string(), audience: z.string(),
       content_goal: z.string(), editorial_brief: z.string(), intelligence_pack_id: z.enum(['wemedia-intelligence-engine', 'uk-life-content-radar', 'game-news-radar']),
       intelligence_pack_version: z.number().int(), creation_pack_id: z.literal('wmb-core-creation'), creation_pack_version: z.number().int(),
-      platforms: z.array(z.enum(['x', 'xiaohongshu', 'wechat'])).min(1)
+      platforms: z.array(z.enum(['x', 'xiaohongshu', 'wechat', 'zhihu'])).min(1)
     }
   }, async (input) => {
     const current = input.target === 'current' ? await currentWorkspace() : null;

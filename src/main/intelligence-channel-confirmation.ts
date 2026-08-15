@@ -1,13 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { broadcastDataChanged } from './data-changed.ts';
 import { readIntelligenceChannelsSummary, removeWebsiteSource, setWebsiteSourceEnabled, type IntelligenceChannelSource } from './intelligence-channels.ts';
-import { IntelligenceChannelProposalStore, stableIdentity, type ChannelProposalContext, type IntelligenceChannelProposalBinding, type PreparedChannelChange } from './intelligence-channel-proposals.ts';
+import { channelProposalBinding, IntelligenceChannelProposalStore, stableIdentity, type ChannelProposalContext, type IntelligenceChannelProposalBinding, type PreparedChannelChange } from './intelligence-channel-proposals.ts';
 import { bindXList, setXListBindingEnabled } from './x-lists.ts';
 import { verifyResolvedXList, type VerifiedXListResolution } from './x-list-channel.ts';
 import { confirmWebsiteSource, trialReadWebsite } from './website-channel.ts';
 import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import type { CurrentXListContext } from './x-list-context.ts';
 import { canonicalizeUrl } from './sources.ts';
+
+type AuthorizedWebsiteAdd = Extract<import('./intelligence-channel-proposals.ts').ChannelProposalChangeInput, { action: 'add'; module: 'official_web' }>;
 
 export function readChannelProposalContext(database: DatabaseSync): ChannelProposalContext {
   const workspaceId = (database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
@@ -20,20 +22,45 @@ export async function confirmIntelligenceChannelProposal(database: DatabaseSync,
   binding: IntelligenceChannelProposalBinding;
   xContext?: CurrentXListContext;
   trialWebsite?: typeof trialReadWebsite;
+  transaction?: boolean;
 }): Promise<{ applied: number }> {
+  const verifiedX = await verifyIntelligenceChannelProposal(database, input);
+  return applyVerifiedIntelligenceChannelProposal(database, { ...input, verifiedX });
+}
+
+export async function verifyIntelligenceChannelProposal(database: DatabaseSync, input: {
+  store: IntelligenceChannelProposalStore;
+  binding: IntelligenceChannelProposalBinding;
+  xContext?: CurrentXListContext;
+  trialWebsite?: typeof trialReadWebsite;
+}): Promise<Map<string, VerifiedXListResolution>> {
+  const initial = readChannelProposalContext(database);
+  const proposal = input.store.validateConfirmation(input.binding, initial);
+  return verifyExternalState(database, proposal.changes, input.xContext, input.trialWebsite ?? trialReadWebsite);
+}
+
+export function applyVerifiedIntelligenceChannelProposal(database: DatabaseSync, input: {
+  store: IntelligenceChannelProposalStore;
+  binding: IntelligenceChannelProposalBinding;
+  xContext?: CurrentXListContext;
+  verifiedX: Map<string, VerifiedXListResolution>;
+  transaction?: boolean;
+}): { applied: number } {
+  const ownsTransaction = input.transaction !== false;
   let transaction = false;
   try {
-    const initial = readChannelProposalContext(database);
-    const proposal = input.store.validateConfirmation(input.binding, initial);
-    const verifiedX = await verifyExternalState(database, proposal.changes, input.xContext, input.trialWebsite ?? trialReadWebsite);
-    database.exec('BEGIN IMMEDIATE');
-    transaction = true;
+    if (ownsTransaction) {
+      database.exec('BEGIN IMMEDIATE');
+      transaction = true;
+    }
     const current = readChannelProposalContext(database);
     const confirmed = input.store.validateConfirmation(input.binding, current);
     validateXAccounts(confirmed.changes, current.channels.sources, input.xContext);
-    for (const change of confirmed.changes) applyChange(database, change, current.channels.sources, verifiedX);
-    database.exec('COMMIT');
-    transaction = false;
+    for (const change of confirmed.changes) applyChange(database, change, current.channels.sources, input.verifiedX);
+    if (ownsTransaction) {
+      database.exec('COMMIT');
+      transaction = false;
+    }
     input.store.consume(confirmed.id);
     broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.channel-proposal.confirm' });
     return { applied: confirmed.changes.length };
@@ -41,6 +68,31 @@ export async function confirmIntelligenceChannelProposal(database: DatabaseSync,
     if (transaction) try { database.exec('ROLLBACK'); } catch {}
     throw stale(error instanceof Error ? error.message : String(error));
   }
+}
+
+export async function addAuthorizedWebsiteChannels(database: DatabaseSync, input: {
+  store: IntelligenceChannelProposalStore;
+  requestId: string;
+  websites: AuthorizedWebsiteAdd[];
+  trialWebsite?: typeof trialReadWebsite;
+}): Promise<{ applied: number; replayed: boolean; sources: IntelligenceChannelSource[] }> {
+  const initial = readChannelProposalContext(database);
+  const identities = input.websites.map((website) => canonicalizeUrl(website.candidate.canonicalUrl));
+  const existing = initial.channels.sources.filter((source) => source.module === 'official_web' && identities.includes(canonicalizeUrl(source.canonicalUrl)));
+  if (existing.length === identities.length) return { applied: 0, replayed: true, sources: existing };
+  if (existing.length) throw stale('批次中部分官网已存在，请重新读取渠道并只提交尚未添加的来源。');
+  const proposal = input.store.prepare({ requestId: input.requestId, changes: input.websites }, initial);
+  const result = await confirmIntelligenceChannelProposal(database, {
+    store: input.store,
+    binding: channelProposalBinding(proposal),
+    trialWebsite: input.trialWebsite
+  });
+  const current = readChannelProposalContext(database);
+  return {
+    applied: result.applied,
+    replayed: false,
+    sources: current.channels.sources.filter((source) => source.module === 'official_web' && identities.includes(canonicalizeUrl(source.canonicalUrl)))
+  };
 }
 
 async function verifyExternalState(

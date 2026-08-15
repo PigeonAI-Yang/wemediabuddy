@@ -114,6 +114,7 @@
   flex-direction: column;
   gap: 14px;
 }
+.topic-detail-pane{container-type:inline-size;container-name:topic-wiki-content}
 .library-topic-rail,
 .topic-rail {
   min-width: 0;
@@ -200,6 +201,9 @@
   font-size: 13.5px;
   line-height: 1.4;
 }
+.library-topic-source-title{display:flex;align-items:start;gap:10px;min-width:0;flex:1}
+.library-topic-source-title strong{min-width:0}
+.library-topic-source-title .source-mark{width:34px;height:34px;flex:0 0 34px;border-radius:8px}
 .library-topic-card header time,
 .library-topic-card-badges time {
   color: var(--muted-low);
@@ -218,8 +222,8 @@
   opacity: 0.96;
 }
 .library-topic-card.contradicting {
-  border-color: color-mix(in srgb, var(--danger, #d35) 35%, var(--border));
-  background: color-mix(in srgb, var(--danger, #d35) 6%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface-raised));
 }
 .library-topic-card-badges {
   display: flex;
@@ -239,9 +243,9 @@
   white-space: nowrap;
 }
 .library-topic-badge.danger {
-  border-color: color-mix(in srgb, var(--danger, #d35) 40%, transparent);
-  background: color-mix(in srgb, var(--danger, #d35) 12%, transparent);
-  color: var(--danger, #d35);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 .library-topic-card-meta {
   display: flex;
@@ -324,9 +328,9 @@
 .library-topic-error {
   display: grid;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--danger, #d35) 35%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--danger, #d35) 8%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
   padding: 14px;
 }
 .library-topic-error strong { font-size: 13.5px; }
@@ -363,9 +367,7 @@
 }
 @media (max-width: 1280px) {
   .topic-layout,
-  .library-topics-layout { grid-template-columns: 1fr; }
-  .library-topic-list-pane,
-  .topic-list-pane { max-height: 280px; border-right: 0; border-bottom: 1px solid var(--border-soft); }
+  .library-topics-layout { display: flex; flex-direction: column; }
   .library-topic-stats,
   .topic-object-meta { min-width: 0; }
   .library-topic-segments button,
@@ -388,3 +390,215 @@
     justify-content: flex-start;
   }
 }
+.topic-maintenance-ledger{flex:none;margin:0 0 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel-bg);overflow:hidden}.topic-maintenance-empty{padding:22px;color:var(--muted);font-size:13px}.topic-maintenance-row{display:grid;grid-template-areas:"head" "summary" "diff" "warning";gap:16px;padding:18px}.topic-maintenance-row+.topic-maintenance-row{border-top:1px solid var(--line)}.topic-maintenance-row p{margin:4px 0}.topic-maintenance-row small{color:var(--muted)}
+.topic-maintenance-head{grid-area:head;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px 18px}.topic-maintenance-head>div{min-width:0}.topic-maintenance-head strong{display:block;margin-bottom:3px;color:var(--ink);font-size:15px}.topic-maintenance-head-side{display:flex;align-items:center;gap:8px;margin-left:auto}.topic-maintenance-status{flex:none;border-radius:5px;padding:4px 8px;background:var(--surface-selected);color:var(--accent-soft);font-size:12px;font-weight:650}.topic-maintenance-status[data-state="approved"]{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success)}.topic-maintenance-status[data-state="rejected"],.topic-maintenance-status[data-state="retry-exhausted"]{background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger)}.topic-maintenance-status[data-state="legacy-stale"],.topic-maintenance-status[data-state="superseded"]{background:var(--surface-raised);color:var(--muted)}
+.topic-maintenance-summary{grid-area:summary;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(260px,.9fr);gap:20px}.topic-maintenance-summary>section+section{border-left:1px solid var(--line);padding-left:20px}.topic-maintenance-summary h3,.topic-maintenance-diff h4{margin:0 0 8px;color:var(--ink);font-size:13px}.topic-maintenance-summary ol{margin:0;padding-left:20px;color:var(--ink-soft);line-height:1.65}.topic-maintenance-summary p{color:var(--ink-soft);font-size:13px;line-height:1.55}.topic-maintenance-impact{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0;padding:0;list-style:none}.topic-maintenance-impact li{border-radius:5px;background:var(--surface-raised);padding:4px 8px;color:var(--ink-soft);font-size:12px}
+.topic-maintenance-actions{display:flex;justify-content:flex-end;gap:8px}.topic-maintenance-actions .primary-button,.topic-maintenance-actions .secondary-button{min-width:112px}.topic-maintenance-diff{grid-area:diff;min-width:0;border-top:1px solid var(--line);padding-top:12px}.topic-maintenance-diff>summary,.topic-maintenance-technical>summary{width:fit-content;cursor:pointer;color:var(--accent-soft);font-size:13px;font-weight:650}.topic-maintenance-topic-changes{margin-top:14px}.topic-maintenance-topic-changes>div{display:grid;gap:3px;padding:8px 0;border-bottom:1px solid var(--line)}.topic-maintenance-topic-changes strong{font-size:13px;line-height:1.5}.topic-maintenance-topic-changes span,.topic-maintenance-topic-changes>p{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.5}.topic-maintenance-technical-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:20px;margin-top:14px}.topic-maintenance-relations li,.topic-maintenance-relations code{min-width:0;overflow-wrap:anywhere}.topic-maintenance-technical{margin-top:14px}.topic-maintenance-technical h4{margin:12px 0 6px}.topic-maintenance-reason{color:var(--ink-soft);font-size:12px;line-height:1.5}.topic-maintenance-technical-topics{display:grid;gap:6px}.topic-maintenance-relations{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:8px;margin-top:10px}.topic-maintenance-relations details{min-width:0;padding:8px;background:var(--surface);border-radius:6px}.topic-maintenance-relations ul{margin:6px 0;padding-left:18px}.topic-maintenance-error{color:var(--danger);margin:14px 18px}.topic-maintenance-warning{grid-area:warning;display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--ink-soft);font-size:13px}.topic-maintenance-warning[data-state="retry-exhausted"]{color:var(--danger)}.topic-maintenance-warning .secondary-button{flex:none}
+@media(max-width:1180px){.topic-maintenance-row{gap:12px}.topic-maintenance-summary{grid-template-columns:1fr}.topic-maintenance-summary>section+section{border-left:0;border-top:1px solid var(--line);padding:12px 0 0}}
+@media(max-width:800px){.topic-maintenance-head{align-items:stretch;flex-direction:column}.topic-maintenance-head-side{width:100%;margin-left:0}.topic-maintenance-actions{flex:1}.topic-maintenance-actions button{flex:1}.topic-maintenance-relations{grid-template-columns:1fr}}
+.topic-home-toolbar > input[type="search"]{flex:0 1 360px;min-width:220px;width:auto}.topic-home-toolbar > .topic-status-filters{flex:none;overflow:visible}
+.topic-maintenance-entry{height:32px;border:1px solid var(--border);border-radius:7px;background:var(--surface-raised);color:var(--accent-soft);padding:0 11px;font-size:12.5px;font-weight:650;cursor:pointer}.topic-maintenance-entry:hover{background:var(--surface-hover);color:var(--ink)}
+.topic-maintenance-page{height:100%;min-height:0;overflow:auto;padding:var(--page-space)}.topic-maintenance-page-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:var(--page-space)}.topic-maintenance-page-head h2{margin:0 0 4px;font-size:20px}.topic-maintenance-page-head p{margin:0;color:var(--muted);font-size:13px}.topic-maintenance-page>.topic-maintenance-ledger{margin:0}
+
+/* ===== Topic 详情 masthead：返回/动作/状态/元数据 收进同一 header，标题成为视觉锚点 ===== */
+.topic-object-head{
+  display:grid;
+  gap:8px;
+  grid-template-columns:minmax(0,1fr);
+  width:100%;
+  max-width:1080px;
+  margin:0 auto 16px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.topic-object-head-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  justify-self:stretch;
+  width:100%;
+  min-width:0;
+  gap:12px;
+  margin-bottom:2px;
+}
+.topic-object-head h2{
+  font-size:20px;
+  line-height:1.35;
+  letter-spacing:-0.015em;
+  text-wrap:pretty;
+}
+.topic-object-head .library-topic-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.topic-object-meta{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.topic-object-head .library-topic-action-note{margin-top:2px !important}
+
+/* ===== WMB-5212 M3：Topic Wiki 默认详情（Wiki-first 原位改造） =====
+   WMB-5219 重排 + WMB-5223 收敛：三层层级 ——
+   当前认识（主阅读面）→ 最近变化（紧凑时间流）→
+   次级分区共享「知识储备」面板（证据/创作影响/待研究/完整档案双列收敛）+ 版本（紧凑历史行）。
+   阅读列 max-width 1080 居中；空数据时全部收敛为状态行，不制造大片空卡。 */
+.topic-wiki-page{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;width:100%;max-width:1080px;margin:0 auto;min-width:0;padding-bottom:28px;align-items:start}
+.topic-wiki-page>.topic-wiki-compile-banner,
+.topic-wiki-page>.topic-wiki-risks,
+.topic-wiki-page>.topic-wiki-primary,
+.topic-wiki-page>.topic-wiki-changes,
+.topic-wiki-page>.topic-wiki-secondary,
+.topic-wiki-page>.topic-wiki-versions{grid-column:1/-1}
+.topic-wiki-compile-banner{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised);padding:7px 12px;color:var(--muted);font-size:12.5px}
+.topic-wiki-compile-banner strong{font-size:12.5px;color:var(--ink-soft)}
+.topic-wiki-compile-banner.stale{border-color:color-mix(in srgb,var(--amber) 40%,var(--border));background:color-mix(in srgb,var(--amber) 8%,var(--surface-raised))}
+.topic-wiki-compile-banner.failed{border-color:color-mix(in srgb,var(--danger) 40%,var(--border));background:color-mix(in srgb,var(--danger) 8%,var(--surface-raised))}
+.topic-wiki-compile-banner.compiling{border-color:color-mix(in srgb,var(--accent) 35%,var(--border))}
+/* WMB-5233：空壳诚实三态 —— 尚未编译 / 初始档案（legacy，零采纳知识），绝不显示已编译/当前。 */
+.topic-wiki-compile-banner.compile-state-uncompiled{border-color:color-mix(in srgb,var(--muted) 35%,var(--border));background:color-mix(in srgb,var(--muted) 6%,var(--surface-raised));color:var(--muted)}
+.topic-wiki-compile-banner.compile-state-uncompiled strong{color:var(--muted)}
+.topic-wiki-compile-banner.compile-state-legacy_shell{border-color:color-mix(in srgb,var(--amber) 45%,var(--border));background:color-mix(in srgb,var(--amber) 9%,var(--surface-raised))}
+.topic-wiki-compile-banner.compile-state-legacy_shell strong{color:var(--amber)}
+.topic-wiki-risks{display:flex;flex-wrap:wrap;gap:6px}
+.topic-wiki-section{display:grid;gap:10px;min-width:0;scroll-margin-top:54px;outline:none}
+.topic-wiki-section h3{font-size:14px}
+.topic-wiki-summary{color:var(--ink);font-size:13.5px;line-height:1.7;overflow-wrap:anywhere}
+
+/* 层 1：当前认识 —— 主阅读面（面板 + 阅读宽度 + 文档式结论行，不套卡片） */
+.topic-wiki-primary{border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);padding:20px 22px 16px}
+.topic-wiki-primary.is-empty{border:0;border-radius:0;background:transparent;padding:0 2px}
+.topic-wiki-primary .library-topic-section-head{margin:0 0 12px}
+.topic-wiki-primary .library-topic-section-head h3{font-size:15px}
+.topic-wiki-primary .topic-wiki-summary{max-width:72ch;font-size:15px;line-height:1.8;color:var(--ink)}
+.topic-wiki-primary .library-topic-cards{display:grid;gap:0}
+.topic-wiki-primary .topic-wiki-conclusion{border:0;border-bottom:1px dashed var(--border);border-radius:0;background:transparent;padding:12px 2px;max-width:76ch}
+.topic-wiki-primary .topic-wiki-conclusion:last-child{border-bottom:0}
+.topic-wiki-primary .topic-wiki-conclusion header{margin-bottom:6px}
+.topic-wiki-primary .topic-wiki-conclusion header strong{font-size:14px;line-height:1.5}
+.topic-wiki-primary .topic-wiki-conclusion .library-topic-card-meta{margin-top:6px}
+.topic-wiki-primary .library-topic-secondary{margin-top:4px;padding-top:12px}
+.topic-wiki-primary .library-panel-empty{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+.topic-wiki-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;max-width:64ch;margin:0 auto;padding:20px 20px 18px}
+.topic-wiki-empty .empty-mark{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--accent-faint);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);color:var(--accent-soft);font-size:17px}
+.topic-wiki-empty-title{margin:0;color:var(--ink);font-size:16px;font-weight:650;line-height:1.4}
+.topic-wiki-empty-text{margin:6px 0 0;color:var(--muted);max-width:52ch;font-size:13px;line-height:1.6}
+.topic-wiki-empty .secondary-button{margin-top:14px}
+
+/* 层 2：最近变化 —— 紧凑时间流（轨道 + 节点，去卡片化） */
+.topic-wiki-changes .library-topic-cards{position:relative;display:grid;gap:0;padding-left:20px}
+.topic-wiki-changes .library-topic-cards::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:1px;background:var(--border)}
+.topic-wiki-changes .library-topic-card{position:relative;border:0;border-radius:0;background:transparent;padding:11px 0}
+.topic-wiki-changes .library-topic-card::before{content:"";position:absolute;left:-18px;top:14px;width:7px;height:7px;border-radius:50%;background:var(--app-bg);border:2px solid var(--accent-soft)}
+.topic-wiki-changes .library-topic-card header{margin-bottom:4px;align-items:baseline}
+.topic-wiki-changes .library-topic-card header strong{font-size:13.5px}
+.topic-wiki-changes .library-topic-card p{margin:0;color:var(--ink-soft);font-size:12.5px;line-height:1.55;overflow-wrap:anywhere}
+.topic-wiki-changes .library-topic-card-meta{margin-top:6px;font-size:11.5px}
+.topic-wiki-changes .library-panel-actions{margin-top:4px}
+.topic-wiki-changes .library-panel-actions span{color:var(--muted-low);font-size:11.5px}
+
+/* 层 3：次级分区 —— 共享「知识储备」面板；空数据收敛为一行状态，不再散落 */
+.topic-wiki-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 22px;min-width:0;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);padding:16px 18px}
+.topic-wiki-secondary-empty{grid-column:1/-1;margin:0;padding:2px 2px 4px;color:var(--muted);font-size:13px;line-height:1.6}
+.topic-wiki-secondary .topic-wiki-section{gap:8px}
+.topic-wiki-compact .library-topic-section-head{margin:0 0 8px}
+.topic-wiki-compact .library-topic-section-head h3{font-size:13.5px}
+.topic-wiki-compact .library-topic-cards{display:grid;gap:8px}
+.topic-wiki-compact .library-topic-card{padding:10px 12px;border-radius:10px}
+.topic-wiki-compact .library-topic-card header{margin-bottom:6px}
+.topic-wiki-compact .library-topic-card header strong{font-size:13px}
+.topic-wiki-compact .library-topic-card p{font-size:12.5px;line-height:1.5}
+.topic-wiki-compact .library-topic-card-meta{margin-top:8px;font-size:11.5px}
+.topic-wiki-compact .library-topic-card-badges{flex-wrap:wrap;justify-content:flex-end}
+.topic-wiki-compact .library-panel-empty,
+.topic-wiki-changes .library-panel-empty,
+.topic-wiki-versions .library-panel-empty{display:flex;align-items:center;gap:8px;min-height:30px;margin:0;color:var(--muted);font-size:12.5px;line-height:1.4}
+.topic-wiki-compact .library-panel-empty::before,
+.topic-wiki-changes .library-panel-empty::before,
+.topic-wiki-versions .library-panel-empty::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--muted-low);opacity:.65}
+
+/* 完整档案：计数 + 入口同区 */
+.topic-wiki-dossier .topic-wiki-dossier-counts{gap:6px}
+.topic-wiki-dossier .library-panel-actions{margin-top:10px}
+.topic-wiki-risks .library-topic-badge.warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber)}
+.topic-wiki-risks .library-topic-badge.info{border-color:color-mix(in srgb,var(--info) 40%,transparent);background:color-mix(in srgb,var(--info) 10%,transparent);color:var(--info)}
+.topic-wiki-conclusion .library-topic-badge.status-ok{border-color:color-mix(in srgb,var(--success) 40%,transparent);background:color-mix(in srgb,var(--success) 10%,transparent);color:var(--success)}
+.topic-wiki-conclusion .library-topic-badge.status-warn{border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber)}
+.topic-wiki-conclusion .library-topic-badge.status-danger{border-color:color-mix(in srgb,var(--danger) 40%,transparent);background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger)}
+.topic-wiki-conclusion .library-topic-badge.status-info{border-color:color-mix(in srgb,var(--info) 40%,transparent);background:color-mix(in srgb,var(--info) 10%,transparent);color:var(--info)}
+.topic-wiki-diff{margin-top:10px}
+.topic-wiki-diff summary{width:fit-content;cursor:pointer;color:var(--accent-soft);font-size:12.5px;font-weight:650}
+.topic-wiki-diff pre{margin:8px 0 0;max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink-soft);font-family:var(--mono);font-size:11.5px;line-height:1.6;padding:10px;white-space:pre-wrap}
+/* 版本：紧凑历史行 —— 版本号降为弱前缀，当前版靠徽标识别，不再像日志 */
+.topic-wiki-versions .library-topic-cards{display:grid;gap:6px}
+.topic-wiki-versions .library-topic-card{display:grid;gap:3px;padding:9px 12px;border-radius:9px}
+.topic-wiki-versions .library-topic-card header{margin-bottom:0;align-items:baseline}
+.topic-wiki-versions .library-topic-card header strong{font-size:13px;line-height:1.4}
+.topic-wiki-versions .library-topic-card header time{font-size:11.5px}
+.topic-wiki-versions .library-topic-card p{font-size:12.5px;line-height:1.45;margin:0;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.topic-wiki-versions .library-topic-card .library-panel-actions{margin-top:6px}
+.topic-wiki-version-num{color:var(--muted-low);font-size:11.5px;font-weight:650;margin-right:6px}
+.topic-wiki-version.current{border-color:color-mix(in srgb,var(--accent) 30%,var(--border));background:transparent}
+.topic-wiki-version .library-panel-actions span{color:var(--muted-low);font-size:11.5px}
+.topic-wiki-dossier-counts{display:flex;flex-wrap:wrap;gap:6px}
+@container topic-wiki-content (max-width:760px){
+  .topic-wiki-page{grid-template-columns:minmax(0,1fr)}
+  .topic-wiki-secondary{grid-template-columns:minmax(0,1fr)}
+  .topic-wiki-section{scroll-margin-top:48px}
+  .topic-wiki-primary{padding:16px 18px 14px}
+  .topic-object-head h2{font-size:20px}
+}
+
+/* ===== WMB-5226：四产品页签（概览/资料/变化/版本）替代七章节 sticky 导航 =====
+   七段章节 DOM 全部保留，按 data-wiki-tab 投影显隐；页签栏与概览预览均为 token-only。 */
+.topic-wiki-tabs{display:flex;flex:none;gap:24px;border-bottom:1px solid var(--line);margin:0 0 16px;padding:0 2px;overflow-x:auto;background:transparent}
+.topic-wiki-tabs button{position:relative;flex:none;min-height:0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:0 0 13px;color:var(--muted);font-size:14px;cursor:pointer;white-space:nowrap;transition:color 140ms ease}
+.topic-wiki-tabs button:hover{color:var(--ink-soft)}
+.topic-wiki-tabs button.active{color:var(--ink);font-weight:650}
+.topic-wiki-tabs button.active::after{content:"";position:absolute;height:2px;left:0;right:0;bottom:-1px;border-radius:2px 2px 0 0;background:var(--accent)}
+.topic-wiki-tabs button span{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 5px;margin-left:5px;border-radius:9px;background:var(--tag-bg);color:var(--muted);font-size:10.5px;vertical-align:2px}
+.topic-wiki-tabs button.active span{background:var(--accent-faint);color:var(--accent-soft)}
+.topic-wiki-page>.topic-wiki-tabs{grid-column:1/-1}
+
+/* 章节投影：仅显示当前页签所属章节；编译横幅与风险徽标常驻。 */
+.topic-wiki-page[data-wiki-tab="overview"] > :where(.topic-wiki-section, .topic-wiki-secondary):not([data-wiki-tab="overview"]){display:none}
+.topic-wiki-page[data-wiki-tab="sources"] > :where(.topic-wiki-section, .topic-wiki-secondary):not([data-wiki-tab="sources"]){display:none}
+.topic-wiki-page[data-wiki-tab="changes"] > :where(.topic-wiki-section, .topic-wiki-secondary):not([data-wiki-tab="changes"]){display:none}
+.topic-wiki-page[data-wiki-tab="versions"] > :where(.topic-wiki-section, .topic-wiki-secondary):not([data-wiki-tab="versions"]){display:none}
+
+/* 章节标题：主视觉标记条（与 approved HTML 的 section-title 一致）。 */
+.topic-wiki-page .library-topic-section-head h3{display:flex;align-items:center;gap:9px;letter-spacing:-0.01em}
+.topic-wiki-page .library-topic-section-head h3::before{content:"";flex:none;width:3px;height:14px;border-radius:2px;background:var(--accent)}
+
+/* 概览：已有资料（真实来源预览，行容器）+ 最近变化（轻时间线，复用 topic-wiki-changes）。 */
+.topic-wiki-page>.topic-wiki-sources-preview,
+.topic-wiki-page>.topic-wiki-recent{grid-column:1/-1}
+.topic-wiki-source-list{display:grid;gap:8px}
+.topic-wiki-source-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:13px;align-items:start;padding:11px 14px;background:var(--panel-bg);border:1px solid var(--border-soft);border-radius:9px;transition:border-color 140ms ease,background 140ms ease}
+.topic-wiki-source-row:hover{border-color:var(--border);background:var(--surface)}
+.topic-wiki-source-row .source-mark{width:34px;height:34px;flex:0 0 34px;border-radius:8px}
+.topic-wiki-source-body{min-width:0}
+.topic-wiki-source-title{font-weight:650;font-size:13.5px;overflow-wrap:anywhere}
+.topic-wiki-source-summary{margin-top:3px;color:var(--ink-soft);font-size:12.5px;line-height:1.5;overflow-wrap:anywhere}
+.topic-wiki-source-meta{margin-top:4px;color:var(--muted);font-size:11.5px}
+.topic-wiki-source-type{display:inline-flex;align-items:center;font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--muted);white-space:nowrap;margin-top:2px}
+.topic-wiki-source-type.primary{border-color:color-mix(in srgb,var(--accent) 34%,transparent);color:var(--accent-soft);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.topic-wiki-source-more{display:flex;justify-content:center;padding:9px 0 6px;border-top:1px dashed var(--line-strong)}
+
+/* ===== WMB-5239：主题原位「搜索本主题资料」+「相关动态」（与当前主题相关的检索/日志上下文） =====
+   不复制资料库维护控制台；异步四态齐全；样式仅 foundation 变量，禁新 hex/rgb/hsl。 */
+.topic-wiki-search{grid-column:1/-1;border:1px solid var(--border);border-radius:14px;background:var(--surface-raised);padding:16px 18px}
+.topic-wiki-search .library-topic-section-head{margin:0 0 12px}
+.topic-index-hint{color:var(--muted-low);font-size:12px}
+.topic-wiki-search-field{display:grid;gap:8px;margin-bottom:4px}
+.topic-wiki-search-input{width:100%;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--ink);padding:0 12px;font-size:13.5px}
+.topic-wiki-search-input::placeholder{color:var(--muted-low)}
+.topic-wiki-search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 16%,transparent)}
+.topic-wiki-search-count{margin:10px 0 0;color:var(--muted);font-size:12px}
+.topic-wiki-search-results{display:grid;gap:8px;margin-top:10px}
+.topic-wiki-search-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;width:100%;text-align:left;border:1px solid var(--border-soft);border-radius:9px;background:var(--panel-bg);padding:10px 12px;color:var(--ink);cursor:pointer;transition:border-color 140ms ease,background 140ms ease}
+.topic-wiki-search-result:hover{border-color:var(--border);background:var(--surface)}
+.topic-wiki-search-result:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:1px}
+.topic-wiki-search-result-body{min-width:0;display:block}
+.topic-wiki-search-result-title{display:block;font-weight:650;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.topic-wiki-search-result-snippet{display:block;margin-top:3px;color:var(--ink-soft);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.topic-wiki-search-result-meta{display:block;margin-top:4px;color:var(--muted-low);font-size:11.5px}
+.topic-wiki-search-result-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.topic-wiki-search-result-type{border:1px solid var(--border);border-radius:20px;color:var(--muted);padding:2px 8px;font-size:11px;white-space:nowrap}
+.topic-wiki-activity .library-topic-card-meta{margin-top:4px}
+.topic-wiki-activity-more{display:flex;justify-content:center;padding:8px 0 2px}
+.topic-wiki-activity-more button{min-height:30px;border:1px solid var(--border);border-radius:8px;background:var(--surface-raised);color:var(--muted);padding:0 12px;font-size:12.5px;cursor:pointer}
+.topic-wiki-activity-more button:hover{color:var(--ink);background:var(--surface-hover)}

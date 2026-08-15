@@ -1,12 +1,64 @@
 @import './styles-foundation.css';
+@import './styles-modal.css';
 @import './styles-pi.css';
 @import './styles-workflow.css';
+@import './styles-today-scout.css';
 @import './styles-workflow-today.css';
+@import './styles-agents.css';
+@import './styles-agents-overview.css';
+@import './styles-agents-instances.css';
+@import './styles-agents-status.css';
+@import './styles-proposals.css';
 @import './styles-workflow-library.css';
 @import './styles-studio.css';
 @import './styles-knowledge.css';
 @import './styles-knowledge-topic.css';
+@import './styles-knowledge-canvas.css';
 @import './styles-results.css';
 @import './styles-x-lists.css';
 @import './styles-x-lists-timeline.css';
 @import './styles-intelligence-channels.css';
+@import './styles-onboarding.css';
+@import './styles-app-update.css';
+
+/* Pi toggle — cascade end */
+.pi-dock-toggle-rail {
+  --pi-toggle-w: 18px;
+  --pi-toggle-h: 44px;
+}
+.pi-dock-toggle,
+.pi-dock-toggle-rail.is-collapsed .pi-dock-toggle {
+  width: 18px !important;
+  height: 44px !important;
+  min-width: 18px !important;
+  min-height: 44px !important;
+  max-width: 18px !important;
+  max-height: 44px !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+.pi-dock-toggle-rail .pi-dock-toggle { opacity: 0; pointer-events: none; }
+.pi-dock-toggle-rail:hover .pi-dock-toggle,
+.pi-dock-toggle-rail:focus-within .pi-dock-toggle,
+.pi-dock-toggle:focus-visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Canvas is intentionally free-form; only its fixed page chrome follows the shared inset. */
+.kc-header {
+  padding-inline: var(--page-space);
+}
+.kc-board-toolbar {
+  left: var(--page-space);
+  right: var(--page-space);
+}
+
+/* Compact source/platform identity shared by metadata rows. */
+.source-platform-mark { display: inline-grid; place-items: center; box-sizing: border-box; width: 1em; height: 1em; flex: 0 0 1em; overflow: hidden; border-radius: 2px; }
+.source-platform-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.source-platform-mark.feed-source-platform-registered { background: var(--surface-raised); }
+.source-platform-mark.feed-source-platform-fallback { color: currentColor; }
+.source-platform-mark.feed-source-platform-fallback svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.25; }

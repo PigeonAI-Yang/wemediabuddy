@@ -1,130 +1,107 @@
 import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
-import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
-import { migrateDatabase } from './db/migrations.ts';
 import {
   listSourceScanReceipts,
   readIntelligenceChannelsSummary,
-  recordSourceScanReceipt,
   type IntelligenceChannelSource,
   type IntelligenceModule
 } from './intelligence-channels.ts';
 import { currentXListContext } from './ipc-x-lists.ts';
+import type { CurrentXListContext } from './x-list-context.ts';
 import { resolveXListCandidates } from './x-list-channel.ts';
-import { collectBoundXListTimeline } from './x-list-execution.ts';
-import { resolveWebsiteCandidates, scanWebsiteSource, trialReadWebsite } from './website-channel.ts';
-import { confirmIntelligenceChannelProposal, readChannelProposalContext } from './intelligence-channel-confirmation.ts';
+import { readBoundXListTimeline } from './x-list-execution.ts';
+import { readWebsiteSourceScan, resolveWebsiteCandidates, trialReadWebsite } from './website-channel.ts';
+import { readChannelProposalContext } from './intelligence-channel-confirmation.ts';
+import { dispatchConfirmIntelligenceChannelProposal } from './intelligence-channel-command.ts';
 import { IntelligenceChannelProposalStore, type ChannelProposalInput, type IntelligenceChannelProposalBinding } from './intelligence-channel-proposals.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
+import {
+  dispatchChannelValidationFailure,
+  dispatchPersistWebsiteChannelScan,
+  dispatchPersistXChannelScan,
+  dispatchRecordXChannelPreflightFailure
+} from './intelligence-channel-business-command.ts';
 
-type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null>; channelProposals: IntelligenceChannelProposalStore };
+type Dependencies = { loadSelectedDataRoot: () => Promise<DataRoot | null>; channelProposals: IntelligenceChannelProposalStore; getActiveRuntime: () => ActiveWorkspaceRuntime | null };
 type ChannelInput = { module: IntelligenceModule; sourceId: string; expectedRevision: number };
 
-export function registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals }: Dependencies): void {
-  ipcMain.handle('intelligence-channels:get', async () => withDatabase(loadSelectedDataRoot, (database) => {
-    const workspaceId = workspaceIdOf(database);
-    return { summary: readIntelligenceChannelsSummary(database), receipts: listSourceScanReceipts(database, { workspaceId, limit: 500 }) };
-  }));
+export function registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals, getActiveRuntime }: Dependencies): void {
+  ipcMain.handle('intelligence-channels:get', async () => {
+    const runtime = requiredRuntime(getActiveRuntime);
+    return {
+      summary: readIntelligenceChannelsSummary(runtime.database),
+      receipts: listSourceScanReceipts(runtime.database, { workspaceId: runtime.identity.workspaceId, limit: 500 })
+    };
+  });
   ipcMain.handle('intelligence-channels:resolve-website', async (_event, input: { inputText: string }) => resolveWebsiteCandidates(input));
   ipcMain.handle('intelligence-channels:trial-website', async (_event, input: { url: string }) => trialReadWebsite(input));
   ipcMain.handle('intelligence-channels:resolve-x-list', async (_event, input: { inputText: string }) => {
-    const context = await currentXListContext(loadSelectedDataRoot);
-    const database = migrateDatabase(path.join(context.root.path, 'wmb.db'));
-    try { return resolveXListCandidates(database, context.config, input, async () => context.index); }
-    finally { database.close(); }
+    const runtime = requiredRuntime(getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    return resolveXListCandidates(runtime.database, context.config, input, async () => context.index);
   });
-  ipcMain.handle('intelligence-channels:scan-now', async (_event, input: ChannelInput) => scanNow(loadSelectedDataRoot, input));
-  ipcMain.handle('intelligence-channels:proposals-prepare', async (_event, input: ChannelProposalInput) =>
-    withDatabase(loadSelectedDataRoot, (database) => channelProposals.prepare(input, readChannelProposalContext(database))));
-  ipcMain.handle('intelligence-channels:proposals-list', async () =>
-    withDatabase(loadSelectedDataRoot, (database) => channelProposals.listForContext(readChannelProposalContext(database))));
+  ipcMain.handle('intelligence-channels:scan-now', async (_event, input: ChannelInput) => scanNow(loadSelectedDataRoot, getActiveRuntime, input));
+  ipcMain.handle('intelligence-channels:proposals-prepare', async (_event, input: ChannelProposalInput) => {
+    const runtime = requiredRuntime(getActiveRuntime);
+    return channelProposals.prepare(input, readChannelProposalContext(runtime.database));
+  });
+  ipcMain.handle('intelligence-channels:proposals-list', async () => {
+    const runtime = requiredRuntime(getActiveRuntime);
+    return channelProposals.listForContext(readChannelProposalContext(runtime.database));
+  });
   ipcMain.handle('intelligence-channels:proposal-confirm', async (_event, binding: IntelligenceChannelProposalBinding) => {
+    const runtime = requiredRuntime(getActiveRuntime);
     const pending = channelProposals.get(binding?.proposalId ?? '');
-    const xContext = pending?.changes.some((change) => change.module === 'x_lists') ? await currentXListContext(loadSelectedDataRoot) : undefined;
-    return withDatabase(loadSelectedDataRoot, (database) => confirmIntelligenceChannelProposal(database, { store: channelProposals, binding, xContext }));
+    const xContext = pending?.changes.some((change) => change.module === 'x_lists')
+      ? await currentXListContext(loadSelectedDataRoot, getActiveRuntime)
+      : undefined;
+    return dispatchConfirmIntelligenceChannelProposal(runtime, { store: channelProposals, binding, xContext });
   });
 }
 
-async function withDatabase<T>(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'], action: (database: ReturnType<typeof migrateDatabase>) => T | Promise<T>): Promise<T> {
-  const root = await requiredRoot(loadSelectedDataRoot);
-  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  try { return await action(database); } finally { database.close(); }
-}
-
-async function scanNow(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'], input: ChannelInput) {
-  const root = await requiredRoot(loadSelectedDataRoot);
-  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+async function scanNow(
+  loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'],
+  getActiveRuntime: Dependencies['getActiveRuntime'],
+  input: ChannelInput
+) {
+  const runtime = requiredRuntime(getActiveRuntime);
   let source: IntelligenceChannelSource;
-  let workspaceId: string;
-  try {
-    source = sourceFor(database, input);
-    workspaceId = workspaceIdOf(database);
-    if (!source.enabled) throw new Error('请先启用该来源再扫描。');
-    if (source.module === 'official_web') return await scanWebsiteSource(database, {
-      taskId: manualTaskId(), workspaceId, sourceId: source.sourceId
-    });
-  } finally { database.close(); }
+  try { source = sourceFor(runtime.database, input); }
+  catch (error) { return dispatchChannelValidationFailure(runtime, input, error); }
+  const taskId = manualTaskId();
+  if (source.module === 'official_web') {
+    const scanInput = { taskId, workspaceId: runtime.identity.workspaceId, sourceId: source.sourceId };
+    const read = await readWebsiteSourceScan(runtime.database, scanInput);
+    return dispatchPersistWebsiteChannelScan(runtime, input, taskId, read);
+  }
 
-  let context: Awaited<ReturnType<typeof currentXListContext>>;
-  try { context = await currentXListContext(loadSelectedDataRoot); }
-  catch (error) { return recordXPreflightFailure(root, input, error); }
-  const xDatabase = migrateDatabase(path.join(context.root.path, 'wmb.db'));
-  try {
-    source = sourceFor(xDatabase, input);
-    workspaceId = workspaceIdOf(xDatabase);
-    if (!source.accountKey || !source.listId) throw new Error('X List 来源身份不完整。');
-    const taskId = manualTaskId();
-    const result = await collectBoundXListTimeline(xDatabase, context.config, {
-      accountKey: source.accountKey, listId: source.listId, expectedBindingId: source.sourceId, expectedRevision: source.revision
-    });
-    if (!result.ok) {
-      const receipt = recordSourceScanReceipt(xDatabase, {
-        taskId, workspaceId, module: 'x_lists', sourceId: source.sourceId, sourceFeedId: source.sourceFeedId,
-        status: result.error.code === 'BROWSER_NEEDS_USER' || result.error.code === 'ACCOUNT_MISMATCH' ? 'needs_user' : 'failed',
-        errorCode: result.error.code, errorMessage: result.error.message
-      });
-      return { source, receipt, sourceIds: [] };
-    }
-    const receipt = recordSourceScanReceipt(xDatabase, {
-      taskId, workspaceId, module: 'x_lists', sourceId: source.sourceId, sourceFeedId: source.sourceFeedId,
-      status: 'succeeded', candidateCount: result.data.candidateCount, savedCount: result.data.sourceIds.length
-    });
-    return { source: result.data.binding, receipt, sourceIds: result.data.sourceIds };
-  } finally { xDatabase.close(); }
+  let context: CurrentXListContext;
+  try { context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime); }
+  catch (error) { return dispatchRecordXChannelPreflightFailure(runtime, input, taskId, error); }
+  if (!source.accountKey || !source.listId) {
+    return dispatchChannelValidationFailure(runtime, input, Object.assign(new Error('X List 来源身份不完整。'), { code: 'VALIDATION_ERROR' }));
+  }
+  const collectInput = {
+    accountKey: source.accountKey, listId: source.listId,
+    expectedBindingId: source.sourceId, expectedRevision: source.revision
+  };
+  const read = await readBoundXListTimeline(runtime.database, context.config, collectInput);
+  return dispatchPersistXChannelScan(runtime, context.config, input, taskId, collectInput, read);
 }
 
-function recordXPreflightFailure(root: DataRoot, input: ChannelInput, error: unknown) {
-  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  try {
-    const source = sourceFor(database, input);
-    if (source.module !== 'x_lists') throw new Error('X List 来源不存在。');
-    const receipt = recordSourceScanReceipt(database, {
-      taskId: manualTaskId(), workspaceId: workspaceIdOf(database), module: source.module,
-      sourceId: source.sourceId, sourceFeedId: source.sourceFeedId, status: 'needs_user',
-      errorCode: errorCodeOf(error), errorMessage: error instanceof Error ? error.message : String(error)
-    });
-    return { source, receipt, sourceIds: [] };
-  } finally { database.close(); }
-}
-
-function sourceFor(database: ReturnType<typeof migrateDatabase>, input: ChannelInput): IntelligenceChannelSource {
+function sourceFor(database: ActiveWorkspaceRuntime['database'], input: ChannelInput): IntelligenceChannelSource {
   const source = readIntelligenceChannelsSummary(database).sources.find((item) => item.module === input.module && item.sourceId === input.sourceId);
-  if (!source) throw new Error('情报来源不存在。');
+  if (!source) throw Object.assign(new Error('情报来源不存在。'), { code: 'NOT_FOUND' });
   if (source.revision !== input.expectedRevision) throw Object.assign(new Error('来源已变化，请重新加载。'), { code: 'REVISION_CONFLICT' });
+  if (!source.enabled) throw Object.assign(new Error('请先启用该来源再扫描。'), { code: 'INVALID_STATE' });
   return source;
 }
 
-function workspaceIdOf(database: ReturnType<typeof migrateDatabase>): string {
-  const row = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
-  if (!row?.value) throw new Error('当前工作空间身份缺失。');
-  return row.value;
+function requiredRuntime(getActiveRuntime: Dependencies['getActiveRuntime']): ActiveWorkspaceRuntime {
+  const runtime = getActiveRuntime();
+  if (!runtime?.isActive) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
+  return runtime;
 }
 
 function manualTaskId(): string { return `manual-channel-scan-${randomUUID()}`; }
-function errorCodeOf(error: unknown): string { return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'BROWSER_NEEDS_USER'; }
-
-async function requiredRoot(loadSelectedDataRoot: Dependencies['loadSelectedDataRoot']): Promise<DataRoot> {
-  const root = await loadSelectedDataRoot();
-  if (!root) throw new Error('请先选择数据根目录。');
-  return root;
-}

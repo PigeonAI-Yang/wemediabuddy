@@ -7,6 +7,7 @@ import { createProposedWorkspace, readRootWorkspaceId } from './workspaces.ts';
 
 export function createWorkspaceConfirmation(input: {
   userDataPath: () => string;
+  defaultBrowserProfileId: () => string;
   chooseDirectory: () => Promise<string | null>;
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
   relaunchCurrentWorkspace: <T>(apply: () => Promise<T>) => Promise<T>;
@@ -28,7 +29,7 @@ export function createWorkspaceConfirmation(input: {
       const proposal = input.proposals.validateConfirmation(binding, { workspaceId: null, currentProfile: null });
       const rootPath = selectedRoots.get(proposal.id);
       if (!rootPath) throw Object.assign(new Error('请先选择并核对新工作空间目录。'), { code: 'CONFIRMATION_REQUIRED' });
-      const workspace = await createProposedWorkspace({ registryPath: path.join(input.userDataPath(), 'workspace-registry.json'), rootPath, profile: proposal.profile });
+      const workspace = await createProposedWorkspace({ registryPath: path.join(input.userDataPath(), 'workspace-registry.json'), rootPath, profile: proposal.profile, defaultProfileId: input.defaultBrowserProfileId() });
       input.proposals.consume(proposal.id);
       selectedRoots.delete(proposal.id);
       return { workspace, profile: proposal.profile };

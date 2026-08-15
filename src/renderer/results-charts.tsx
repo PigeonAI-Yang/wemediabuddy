@@ -250,7 +250,7 @@ export function DrillView({ post, cohort, metricLabel, fieldStatusLabel, reviewB
     </div>
     <div className="rc-drill-detail">
       <div>
-        <p className="eyebrow rc-sec">指标快照 · 字段状态</p>
+        <p className="eyebrow rc-sec">指标快照 · 数据状态</p>
         {post.points.length ? <table className="rc-table"><thead><tr><th>窗口</th><th>实际采集</th>{Object.keys(post.points[0].snap.normalized).map((key) => <th key={key}>{metricLabel(key)}</th>)}<th>状态</th></tr></thead><tbody>
           {post.points.map((pt) => {
             const fields = Object.entries(pt.snap.normalized);

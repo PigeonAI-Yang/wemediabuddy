@@ -18,7 +18,7 @@ const transitions: Record<PublicationStatus, PublicationStatus[]> = {
 };
 
 export type PublicationRecord = {
-  id: string; platformVersionId: string; platformVersionRevision: number; platform: 'x' | 'xiaohongshu' | 'wechat';
+  id: string; platformVersionId: string; platformVersionRevision: number; platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
   accountId: string; accountKey: string; status: PublicationStatus; revision: number;
   externalUrl: string | null; externalId: string | null; publishedAt: string | null; projectId: string;
   format: string | null;
@@ -51,14 +51,14 @@ export function createPublication(database: DatabaseSync, input: { platformVersi
 
 export function transitionPublication(database: DatabaseSync, id: string, to: PublicationStatus, input: {
   expectedRevision: number; reason?: string; externalUrl?: string; externalId?: string; errorCode?: string; errorMessage?: string;
-}): CommandResult<PublicationRecord> {
+}, transaction = true): CommandResult<PublicationRecord> {
   const current = getPublication(database, id);
   if (!current) return failure('NOT_FOUND', '发布记录不存在。');
   if (current.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', '发布状态已变化，请重新加载。', { current });
   if (!transitions[current.status].includes(to)) return failure('INVALID_STATE', `发布状态不能从 ${current.status} 变为 ${to}。`, { currentStatus: current.status, requestedStatus: to });
   if (to === 'published' && (!input.externalUrl || !input.externalId)) return failure('VALIDATION_ERROR', '发布成功必须包含稳定地址和平台身份。');
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     database.prepare(`UPDATE publications SET status = ?, external_url = COALESCE(?, external_url), external_id = COALESCE(?, external_id),
       published_at = CASE WHEN ? = 'published' THEN ? ELSE published_at END, last_error_code = ?, last_error_message = ?,
@@ -71,7 +71,7 @@ export function transitionPublication(database: DatabaseSync, id: string, to: Pu
     }
     database.prepare('INSERT INTO publication_events (id, publication_id, from_status, to_status, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), id, current.status, to, input.reason ?? null, now);
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     const publication = getPublication(database, id)!;
     if (to === 'published' && publication.externalUrl && publication.publishedAt) {
       schedulePublicationMetricJobs(database, {
@@ -81,10 +81,12 @@ export function transitionPublication(database: DatabaseSync, id: string, to: Pu
         platform: publication.platform
       });
     }
-    broadcastDataChanged({ scopes: ['publications'], reason: `publication.${to}` });
+    // 事务由调用方（命令派发器）持有时不广播：渲染器在收据成功后显式 refresh，
+    // 避免在提交前广播造成陈旧读。
+    if (transaction) broadcastDataChanged({ scopes: ['publications'], reason: `publication.${to}` });
     return success(publication);
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 }
@@ -199,11 +201,11 @@ export function listPublicationDetails(database: DatabaseSync): NonNullable<Retu
   return ids.map(({ id }) => getPublicationDetail(database, id)).filter(Boolean) as NonNullable<ReturnType<typeof getPublicationDetail>>[];
 }
 
-export function recoverInterruptedPublications(database: DatabaseSync): number {
+export function recoverInterruptedPublications(database: DatabaseSync, transaction = true): number {
   const interrupted = database.prepare("SELECT id FROM publications WHERE status = 'publishing'").all() as Array<{ id: string }>;
   if (!interrupted.length) return 0;
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     for (const { id } of interrupted) {
       database.prepare(`UPDATE publication_attempts SET status = 'unknown', finished_at = ?,
@@ -216,31 +218,31 @@ export function recoverInterruptedPublications(database: DatabaseSync): number {
       database.prepare('INSERT INTO publication_events (id, publication_id, from_status, to_status, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(randomUUID(), id, 'publishing', 'unknown', 'restart preserved uncertain publication', now);
     }
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     return interrupted.length;
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 }
 
-export function reconcileAsNotPublished(database: DatabaseSync, input: { publicationId: string; expectedRevision: number; evidence: unknown }): CommandResult<PublicationRecord> {
+export function reconcileAsNotPublished(database: DatabaseSync, input: { publicationId: string; expectedRevision: number; evidence: unknown }, transaction = true): CommandResult<PublicationRecord> {
   const publication = getPublication(database, input.publicationId);
   if (!publication) return failure('NOT_FOUND', '发布记录不存在。');
   if (publication.status !== 'unknown') return failure('INVALID_STATE', '只有 unknown 状态可以确认未发布。');
   if (publication.revision !== input.expectedRevision) return failure('REVISION_CONFLICT', '发布记录已变化，请重新加载。', { current: publication });
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     database.prepare("INSERT INTO publication_reconciliations (id, publication_id, attempt_id, outcome, evidence_json, created_at) VALUES (?, ?, (SELECT id FROM publication_attempts WHERE publication_id = ? ORDER BY attempt_number DESC LIMIT 1), 'not_published', ?, ?)")
       .run(randomUUID(), publication.id, publication.id, JSON.stringify(input.evidence), now);
     database.prepare("UPDATE publications SET status = 'failed', updated_at = ?, revision = revision + 1 WHERE id = ?").run(now, publication.id);
     database.prepare('INSERT INTO publication_events (id, publication_id, from_status, to_status, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(randomUUID(), publication.id, 'unknown', 'failed', 'human confirmed not published', now);
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     return success(getPublication(database, publication.id)!);
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
 }

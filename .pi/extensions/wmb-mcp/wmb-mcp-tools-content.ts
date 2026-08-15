@@ -1,11 +1,23 @@
 import { callTool, textResult, type ToolDefinition } from './wmb-mcp-client.ts';
 
+const authorityProperties = {
+  taskId: { type: 'string' },
+  grantId: { type: 'string' },
+  workerLeaseId: { type: 'string' }
+};
+const authorityPayload = (params: Record<string, unknown>) => ({
+  task_id: String(params.taskId ?? ''),
+  grant_id: String(params.grantId ?? ''),
+  worker_lease_id: params.workerLeaseId ? String(params.workerLeaseId) : undefined
+});
+
 const createCreativeBrief: ToolDefinition = {
   name: 'wmb_create_creative_brief', label: '创建创作简报',
   description: '从当前页或用户勾选的画布节点创建可编辑创作简报。evidenceNodeIds 只能来自本次 nodeIds。',
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' },
       canvasId: { type: 'string' },
       nodeIds: { type: 'array', items: { type: 'string' } },
@@ -16,11 +28,12 @@ const createCreativeBrief: ToolDefinition = {
       structure: { type: 'array', items: { type: 'string' } },
       evidenceNodeIds: { type: 'array', items: { type: 'string' } }
     },
-    required: ['requestId', 'canvasId', 'nodeIds', 'selectionMode', 'title', 'coreJudgment', 'whyNow', 'structure', 'evidenceNodeIds'],
+    required: ['requestId', 'taskId', 'grantId', 'canvasId', 'nodeIds', 'selectionMode', 'title', 'coreJudgment', 'whyNow', 'structure', 'evidenceNodeIds'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('knowledge.creative_brief_create', {
+      ...authorityPayload(params),
       request_id: String(params.requestId ?? ''),
       canvas_id: String(params.canvasId ?? ''),
       node_ids: params.nodeIds,
@@ -40,15 +53,17 @@ const updateCreativeBrief: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' }, id: { type: 'string' }, expectedRevision: { type: 'number' },
       title: { type: 'string' }, coreJudgment: { type: 'string' }, whyNow: { type: 'string' },
       structure: { type: 'array', items: { type: 'string' } }, evidenceNodeIds: { type: 'array', items: { type: 'string' } }
     },
-    required: ['requestId','id','expectedRevision','title','coreJudgment','whyNow','structure','evidenceNodeIds'],
+    required: ['requestId','taskId','grantId','id','expectedRevision','title','coreJudgment','whyNow','structure','evidenceNodeIds'],
     additionalProperties: false
   },
   async execute(_toolCallId,params){
     return textResult(await callTool('knowledge.creative_brief_update',{
+      ...authorityPayload(params),
       request_id:String(params.requestId??''),id:String(params.id??''),expected_revision:Number(params.expectedRevision),
       title:String(params.title??''),core_judgment:String(params.coreJudgment??''),why_now:String(params.whyNow??''),
       structure:params.structure,evidence_node_ids:params.evidenceNodeIds
@@ -59,9 +74,9 @@ const updateCreativeBrief: ToolDefinition = {
 const createProjectFromBrief: ToolDefinition = {
   name: 'wmb_create_project_from_brief', label: '从简报进入正文',
   description: '从已确认创作简报原子创建内容项目和首版正文，并关联所选真实资料。',
-  parameters: { type:'object',properties:{requestId:{type:'string'},briefId:{type:'string'},expectedRevision:{type:'number'}},required:['requestId','briefId','expectedRevision'],additionalProperties:false },
+  parameters: { type:'object',properties:{requestId:{type:'string'},...authorityProperties,briefId:{type:'string'},expectedRevision:{type:'number'}},required:['requestId','taskId','grantId','briefId','expectedRevision'],additionalProperties:false },
   async execute(_toolCallId,params){
-    return textResult(await callTool('knowledge.creative_brief_create_project',{request_id:String(params.requestId??''),brief_id:String(params.briefId??''),expected_revision:Number(params.expectedRevision)}));
+    return textResult(await callTool('knowledge.creative_brief_create_project',{request_id:String(params.requestId??''),...authorityPayload(params),brief_id:String(params.briefId??''),expected_revision:Number(params.expectedRevision)}));
   }
 };
 
@@ -75,32 +90,57 @@ const getBriefLineage: ToolDefinition = {
 const recordKnowledge: ToolDefinition = {
   name: 'wmb_record_knowledge', label: '沉淀资料主题',
   description: '把已保存资料归入稳定主题，并记录核验和管理状态。',
-  parameters: { type: 'object', properties: { requestId: { type: 'string' }, items: { type: 'array', items: { type: 'object', properties: {
+  parameters: { type: 'object', properties: { requestId: { type: 'string' }, ...authorityProperties, items: { type: 'array', items: { type: 'object', properties: {
     sourceId: { type: 'string' }, topic: { type: 'object' }, relation: { type: 'string' }, verificationStatus: { type: 'string' }, managementStatus: { type: 'string' }
-  }, required: ['sourceId','topic'], additionalProperties: false } } }, required: ['requestId','items'], additionalProperties: false },
-  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.record_batch', { request_id: params.requestId, items: params.items })); }
+  }, required: ['sourceId','topic'], additionalProperties: false } } }, required: ['requestId','taskId','grantId','items'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.record_batch', { request_id: params.requestId, ...authorityPayload(params), items: params.items })); }
+};
+
+const proposeTopicMaintenance: ToolDefinition = {
+  name: 'wmb_propose_topic_maintenance', label: '提交主题整理提案',
+  description: '资料员提交 create/update/merge/archive/reassign 的冻结提案；不修改正式主题。Owner 只会在主题台账批准或驳回。',
+  parameters: { type: 'object', properties: { requestId: { type: 'string' }, ...authorityProperties, supersedesProposalId: { type: 'string' }, title: { type: 'string' }, reason: { type: 'string' }, changes: { type: 'array', items: { type: 'object' } } }, required: ['requestId','taskId','grantId','title','reason','changes'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_propose', { request_id: String(params.requestId ?? ''), ...authorityPayload(params), supersedes_proposal_id: params.supersedesProposalId, title: String(params.title ?? ''), reason: String(params.reason ?? ''), changes: params.changes })); }
+};
+
+const listTopicMaintenance: ToolDefinition = {
+  name: 'wmb_list_topic_maintenance', label: '读取主题整理台账',
+  description: '只读主题整理提案台账。主管用它呈报待批项；资料员用它核对状态。',
+  parameters: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'number' }, offset: { type: 'number' } }, additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_list', { status: params.status, limit: params.limit, offset: params.offset })); }
+};
+
+const getTopicMaintenance: ToolDefinition = {
+  name: 'wmb_get_topic_maintenance', label: '读取主题整理提案',
+  description: '按 proposalId 读取冻结 before/after、准确关系清单与状态。只读。',
+  parameters: { type: 'object', properties: { proposalId: { type: 'string' } }, required: ['proposalId'], additionalProperties: false },
+  async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_get', { proposal_id: String(params.proposalId ?? '') })); }
 };
 
 const saveCoreVersion: ToolDefinition = {
   name: 'wmb_save_core_version',
   label: '保存 WMB 核心初稿',
-  description: '通过 WMB MCP 为内容项目保存一个核心正文版本。',
+  description: '通过 WMB MCP 为内容项目保存一个核心正文版本，并可同时更新项目标题。',
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' },
       projectId: { type: 'string' },
       expectedRevision: { type: 'number' },
+      title: { type: 'string' },
       body: { type: 'string' }
     },
-    required: ['requestId', 'projectId', 'expectedRevision', 'body'],
+    required: ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'body'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('content.save_version', {
+      ...authorityPayload(params),
       request_id: String(params.requestId ?? ''),
       project_id: String(params.projectId ?? ''),
       expected_revision: Number(params.expectedRevision),
+      title: params.title ? String(params.title) : undefined,
       body: String(params.body ?? '')
     }));
   }
@@ -109,25 +149,27 @@ const saveCoreVersion: ToolDefinition = {
 const savePlatformVersion: ToolDefinition = {
   name: 'wmb_save_platform_version',
   label: '保存 WMB 平台版本',
-  description: '把 X、小红书或公众号文案保存为指定内容项目和核心版本下的平台版本；不执行最终发布。',
+  description: '把 X、小红书、公众号或知乎文案保存为指定内容项目和核心版本下的平台版本；不执行最终发布。',
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' },
       projectId: { type: 'string' },
       contentVersionId: { type: 'string' },
-      platform: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat'] },
+      platform: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat', 'zhihu'] },
       format: { type: 'string' },
       title: { type: 'string' },
       body: { type: 'string' },
       versionId: { type: 'string' },
       expectedRevision: { type: 'number' }
     },
-    required: ['requestId', 'projectId', 'contentVersionId', 'platform', 'format', 'body'],
+    required: ['requestId', 'taskId', 'grantId', 'projectId', 'contentVersionId', 'platform', 'format', 'body'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('content.save_version', {
+      ...authorityPayload(params),
       request_id: String(params.requestId ?? ''),
       project_id: String(params.projectId ?? ''),
       content_version_id: String(params.contentVersionId ?? ''),
@@ -147,17 +189,19 @@ const createContentProject: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' },
       title: { type: 'string' },
       body: { type: 'string' },
       planItemId: { type: 'string' },
       sourceIds: { type: 'array', items: { type: 'string' } }
     },
-    required: ['requestId', 'title', 'body'],
+    required: ['requestId', 'taskId', 'grantId', 'title', 'body'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('content.create', {
+      ...authorityPayload(params),
       request_id: String(params.requestId ?? ''),
       title: String(params.title ?? ''),
       body: String(params.body ?? ''),
@@ -251,6 +295,7 @@ const saveReview: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
+      ...authorityProperties,
       requestId: { type: 'string' },
       publicationId: { type: 'string' },
       metricSnapshotIds: { type: 'array', items: { type: 'string' } },
@@ -272,11 +317,12 @@ const saveReview: ToolDefinition = {
         }
       }
     },
-    required: ['requestId', 'publicationId', 'metricSnapshotIds', 'keep', 'stop', 'change', 'status'],
+    required: ['requestId', 'taskId', 'grantId', 'publicationId', 'metricSnapshotIds', 'keep', 'stop', 'change', 'status'],
     additionalProperties: false
   },
   async execute(_toolCallId, params) {
     return textResult(await callTool('reviews.save', {
+      ...authorityPayload(params),
       request_id: String(params.requestId ?? ''),
       publication_id: String(params.publicationId ?? ''),
       metric_snapshot_ids: params.metricSnapshotIds,
@@ -290,4 +336,4 @@ const saveReview: ToolDefinition = {
   }
 };
 
-export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];
+export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];

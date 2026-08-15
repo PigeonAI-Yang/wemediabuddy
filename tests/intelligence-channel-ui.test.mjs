@@ -4,13 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
+import { dailyAgentSessionId } from '../src/main/agent-tasks.ts';
 import { createWebsiteSource, getWebsiteSource, recordSourceScanReceipt } from '../src/main/intelligence-channels.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { dailyPreflightMessage } from '../src/renderer/intelligence-channel-ui.ts';
 
 const readiness = (module, values) => ({ module, configuredCount: 0, enabledCount: 0, readyCount: 0, blockedCount: 0, status: 'needs_config', ...values });
 
-test('Today uses authoritative readiness and always starts all enabled Discover channels', async () => {
+test('Today uses authoritative readiness and always starts all enabled Settings channels', async () => {
   const summary = {
     websites: [], xLists: [], sources: [],
     readiness: [readiness('official_web', { configuredCount: 1, enabledCount: 1, readyCount: 1, status: 'ready' }), readiness('x_lists', { configuredCount: 1, enabledCount: 1, blockedCount: 1, status: 'needs_user' })]
@@ -19,35 +20,62 @@ test('Today uses authoritative readiness and always starts all enabled Discover 
   assert.equal(dailyPreflightMessage({ summary: { ...summary, readiness: [readiness('official_web', {}), readiness('x_lists', { blockedCount: 1, status: 'needs_user' })] }, piConfigured: true }), '已有来源需要浏览器登录或重新确认。');
   assert.equal(dailyPreflightMessage({ summary, piConfigured: false }), '请先在设置中配置 Pi API。');
 
-  const today = (await Promise.all([
+  const todayLegacy = (await Promise.all([
     'today-view.tsx',
     'today-view-parts.tsx',
     'today-view-panels.tsx'
   ].map((name) => readFile(new URL(`../src/renderer/${name}`, import.meta.url), 'utf8')))).join('\n');
+  const today = `${todayLegacy}\n${(await Promise.all([
+    'today-command-bar.tsx',
+    'today-run-view.ts'
+  ].map((name) => readFile(new URL(`../src/renderer/${name}`, import.meta.url), 'utf8')))).join('\n')}`;
   const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const workspaceIntelligence = await readFile(new URL('../src/main/workspace-intelligence.ts', import.meta.url), 'utf8');
   const discover = await readFile(new URL('../src/renderer/discover-view.tsx', import.meta.url), 'utf8');
+  const settings = await readFile(new URL('../src/renderer/settings-view.tsx', import.meta.url), 'utf8');
   const channels = await readFile(new URL('../src/renderer/intelligence-channels-view.tsx', import.meta.url), 'utf8');
-  assert.match(today, /startDailyIntelligence\(\{ businessDate: planDate \}\)/);
-  assert.doesNotMatch(today, /本次情报渠道|selectedModules|configuredCount|enabledCount|blockedCount/);
-  assert.doesNotMatch(today, /没有可运行的情报渠道。|前往发现配置|openDiscover|noRunnableChannels/);
-  assert.doesNotMatch(today, /跳过当前来源/);
-  assert.equal((today.match(/onClick=\{\(\) => void startIntelligence\(\)\}/g) ?? []).length, 1);
-  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string \}\)/);
+  assert.match(today, /Intl\.DateTimeFormat\('en-CA', \{ timeZone: 'Asia\/Shanghai' \}\)\.format\(new Date\(\)\)/);
+  assert.match(today, /startDailyIntelligence\(\{ businessDate \}\)/);
+  assert.doesNotMatch(todayLegacy, /本次情报渠道|selectedModules|configuredCount|enabledCount|blockedCount/);
+  assert.doesNotMatch(todayLegacy, /没有可运行的情报渠道。|前往发现配置|openDiscover|noRunnableChannels/);
+  assert.doesNotMatch(todayLegacy, /跳过当前来源/);
+  assert.equal((today.match(/className="primary-button" onClick=\{onPrimary\}/g) ?? []).length, 1);
+  assert.match(today, /view\.primaryCta\.kind !== 'none'/);
+  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules\?: Array<'official_web' \| 'x_lists'>; legacyPipeline\?: boolean \}\)/);
   assert.doesNotMatch(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules:/);
-  assert.match(main, /businessDate, modules: input\.modules, mcpUrl/);
-  assert.match(discover, /IntelligenceChannelsView/);
-  assert.match(discover, /: 'channels'/);
+  assert.match(main, /businessDate,?\s*modules:\s*input\.modules/);
+  assert.doesNotMatch(discover, /IntelligenceChannelsView|情报渠道/);
+  assert.match(settings, /section === 'channels' && settings && <IntelligenceChannelsView settingsMode/);
+  assert.match(settings, /\{ id: 'channels', label: '情报渠道'/);
   assert.match(today, /trend\.viewsPerHour\.snapshotIds/);
   assert.match(channels, /startXObservation/);
   assert.match(channels, /15\/60\/180 分钟三个观察窗口/);
   assert.match(channels, /停止观察/);
   assert.match(today, /channel_scanned: '渠道扫描已完成'/);
-  assert.match(today, /judging_opportunities: '正在生成今日运营方案'/);
-  assert.match(today, /data-indeterminate=\{judgmentPhase/);
+  assert.match(today, /judging_opportunities: '正在评估新资料并更新选题池'/);
+  assert.match(today, /data-indeterminate=\{view\.progress\?\.indeterminate/);
   assert.match(workspaceIntelligence, /phase: 'judging_opportunities'/);
   assert.match(workspaceIntelligence, /setInterval\([\s\S]*15_000\)/);
+});
+
+test('daily run lifecycle is click-current, task-scoped, and returns durable partial', async () => {
+  assert.equal(dailyAgentSessionId('2026-08-05', 'task-a'), 'daily-2026-08-05-task-a');
+  assert.notEqual(dailyAgentSessionId('2026-08-05', 'task-a'), dailyAgentSessionId('2026-08-05', 'task-b'));
+  const today = await readFile(new URL('../src/renderer/today-view.tsx', import.meta.url), 'utf8');
+  const workspace = await readFile(new URL('../src/main/workspace-intelligence.ts', import.meta.url), 'utf8');
+  const generic = await readFile(new URL('../src/main/agent-runner.ts', import.meta.url), 'utf8');
+  const tasks = await readFile(new URL('../src/main/agent-tasks.ts', import.meta.url), 'utf8');
+  const taskCommands = await readFile(new URL('../src/main/agent-task-commands.ts', import.meta.url), 'utf8');
+  assert.match(today, /const businessDate = new Intl\.DateTimeFormat\('en-CA', \{ timeZone: 'Asia\/Shanghai' \}\)\.format\(new Date\(\)\);/);
+  assert.match(today, /startDailyIntelligence\(\{ businessDate \}\)/);
+  assert.match(workspace, /sessions', `\$\{piSessionId\}\.jsonl`/);
+  const partialDispatch = /const\s+partial\s*=\s*await\s+dispatchFinishDailyIntelligence[\s\S]*?return\s*\{\s*task:\s*partial,\s*reused:\s*started\.reused\s*\}/;
+  assert.match(workspace, partialDispatch);
+  assert.match(generic, partialDispatch);
+  assert.match(taskCommands, /requireCommandResultData\(\s*receiptAsCommandResult<TData>\(receipt\)\s*\)/);
+  assert.match(tasks, /tool='plans\.save' AND request_id=\?/);
+  assert.match(tasks, /非空方案的每个条目必须引用真实资料/);
 });
 
 test('Today default run freezes all enabled sources before daily scanning', async () => {
@@ -72,6 +100,7 @@ test('Today default run freezes all enabled sources before daily scanning', asyn
     });
     assert.deepEqual(run.frozen.modules, ['official_web', 'x_lists']);
     assert.deepEqual(run.frozen.sources.map((source) => source.sourceId), [website.id]);
+    assert.equal(run.task.piSessionId, dailyAgentSessionId('2026-08-03', run.task.id));
     assert.equal(run.shouldRunJudgment, true);
   } finally {
     database.close();

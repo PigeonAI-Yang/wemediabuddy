@@ -83,6 +83,7 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   const saveToLibrary = async (item: RankingContextItem) => {
     const key = `${item.boardId}:${item.name}`;
     const result = await window.wmb.saveDiscoveredSource({
+      requestId: crypto.randomUUID(),
       title: item.name,
       originalUrl: item.url,
       summary: item.description || undefined,
@@ -98,14 +99,29 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   };
   if (!workspace || !workspaceId) return <section className="ranking-loading">正在读取工作空间…</section>;
   return <section className="page library-page discover-page" data-intelligence-pack={workspace.profile.intelligencePackId}>
-    {rankingsEnabled && <nav className="discover-categories" aria-label="发现内容"><button className={`library-section-tab${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>AI 榜单</button><button className={`library-section-tab${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>X Lists</button></nav>}
+    <section className="page-command" aria-label="发现概览">
+      <div className="page-command-main">
+        <div className="page-command-copy">
+          {rankingsEnabled ? (
+            <div className="page-command-stats" role="navigation" aria-label="发现内容">
+              <button type="button" className={`page-command-stat${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>
+                <strong>榜单</strong><span>AI 榜单</span>
+              </button>
+              <button type="button" className={`page-command-stat${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>
+                <strong>Lists</strong><span>X Lists</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
     {activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('[data-ranking-item], button, a, input, select, textarea')) onRankingContextChange({ boards: [], items: [] });
   }}>
     <div className="discover-sources">{sources.map((item) => <button className={`chip${item.id === source?.id ? ' on' : ''}`} key={item.id} onClick={() => { setSourceId(item.id); const first = item.boards[0]; if (first) selectBoard(first); }}>{item.label}<span className="chip-count">{item.boards.length}</span></button>)}</div>
     <div className="page-toolbar ranking-toolbar">
-      <div className="filter-row">{source?.boards.map((item) => <button className={`filter${item.id === board?.id ? ' active' : ''}${rankingContext.boards.some((selected) => selected.id === item.id) ? ' context-selected' : ''}`} key={item.id} onClick={() => selectBoard(item)}>{rankingContext.boards.some((selected) => selected.id === item.id) ? '✓ ' : ''}{item.label}</button>)}</div>
+      <div className="filter-row">{source?.boards.map((item) => <button className={`filter${item.id === board?.id ? ' active' : ''}${rankingContext.boards.some((selected) => selected.id === item.id) ? ' context-selected' : ''}`} key={item.id} onClick={() => selectBoard(item)}>{item.label}</button>)}</div>
       <div className="ranking-actions"><button className="refresh-button" disabled={loadingRankings} title={loadingRankings ? '正在刷新榜单' : '刷新榜单'} aria-label={loadingRankings ? '正在刷新榜单' : '刷新榜单'} onClick={() => void loadRankings(true)}><span className={loadingRankings ? 'ranking-refresh-spinning' : ''} aria-hidden="true">↻</span></button></div>
     </div>
     {saveNote && <p className="task-status" data-running="false">{saveNote}</p>}
@@ -119,7 +135,7 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
         return <article key={`${board.id}-${item.name}`} data-ranking-item className={selected ? 'selected' : ''} onClick={() => toggleRankingItem(contextItem)}>
         <strong className="ranking-number">{item.rank}</strong>
         <div><h2>{item.name}</h2><p>{item.description || '该项目尚未提供简介。'}</p><small>{[item.language, item.stars && `★ ${item.stars}`, item.gained].filter(Boolean).join(' · ')}</small></div>
-        {selected && <span className="ranking-check" aria-label="已选中">✓</span>}
+
         <button className="ranking-save" disabled={saved} title={saved ? '已在资料库' : '收入资料库'} aria-label={`收入资料库 ${item.name}`} onClick={(event) => { event.stopPropagation(); void saveToLibrary(contextItem); }}>{saved ? '✓' : '＋'}</button>
         <button className="ranking-open" title="查看项目" aria-label={`查看 ${item.name}`} onClick={(event) => { event.stopPropagation(); void window.wmb.openExternal(item.url); }}><span aria-hidden="true">↗</span></button>
       </article>; })}</div>}

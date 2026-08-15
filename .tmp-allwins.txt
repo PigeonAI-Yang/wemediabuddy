@@ -1,0 +1,71 @@
+625884	vis=False	3440x1392	@0,0	XamlExplorerHostIslandWindow	任务切换	style=-2080374784
+511616	vis=False	322x348	@2343,1011	Chrome_WidgetWin_1	资料卡	style=79691776
+640124	vis=False	640x480	@1400,456	Qt5QWindowToolSaveBits		style=-2046820352
+468156	vis=True	511x1399	@2936,0	CASCADIA_HOSTING_WINDOW_CLASS	π : Record task, set goal, implement fully	style=349110272
+705124	vis=False	993x519	@156,156	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe	style=82771968
+468156	vis=True	507x1399	@2443,0	CASCADIA_HOSTING_WINDOW_CLASS	π : Set goal to complete all work	style=349110272
+511616	vis=False	1172x997	@922,340	Chrome_WidgetWin_1	QQ	style=80150528
+511616	vis=False	800x600	@1320,396	Chrome_WidgetWin_1	QQ	style=80150528
+468156	vis=True	480x1399	@1977,0	CASCADIA_HOSTING_WINDOW_CLASS	π > Fix missing ComfyUI nodes	style=349110272
+695324	vis=False	2580x1023	@156,156	Chrome_WidgetWin_0		style=114229248
+468156	vis=True	480x1399	@1513,0	CASCADIA_HOSTING_WINDOW_CLASS	π > 讲解IDE及本地IDE	style=349110272
+625884	vis=False	2580x1023	@26,26	OperationStatusWindow	进度	style=114163712
+693292	vis=False	1400x900	@10,10	Chrome_WidgetWin_1	*Unsaved Workflow (6) - ComfyUI - Google Chrome for Testing	style=248446976
+693292	vis=False	2580x1023	@286,286	Chrome_WidgetWin_0		style=114229248
+468156	vis=True	1936x1048	@3432,-8	CASCADIA_HOSTING_WINDOW_CLASS	C:\WINDOWS\system32\cmd.exe	style=365887488
+695640	vis=True	1440x900	@-32000,-32000	Chrome_WidgetWin_1	@KimbomArtist/赚钱信息差博主 / X - 个人 - Microsoft? Edge	style=382664704
+695640	vis=True	1440x900	@-32000,-32000	Chrome_WidgetWin_1	about:blank - 个人 - Microsoft? Edge	style=382664704
+695640	vis=False	1440x900	@-32000,-32000	Chrome_WidgetWin_1	about:blank - 个人 - Microsoft? Edge	style=114229248
+695640	vis=False	2580x1023	@130,130	Chrome_WidgetWin_0		style=114229248
+560216	vis=False	1936x1048	@3432,-8	Tauri Window	Clash Verge	style=97452032
+681156	vis=False	1209x844	@917,505	#32770	Internet Download Manager 6.43	style=-2066808764
+640124	vis=False	656x519	@1392,425	Qt5QWindowIcon		style=114229248
+640124	vis=False	656x519	@1392,425	Qt5QWindowIcon		style=114229248
+560216	vis=False	2580x1023	@104,104	tray_icon_app		style=79691776
+615468	vis=False	2580x1023	@52,52	Chrome_WidgetWin_0		style=114229248
+560216	vis=False	2580x1023	@26,26	global_hotkey_app		style=79691776
+458320	vis=True	3440x1440	@0,0	Windows.UI.Core.CoreWindow	Windows 输入体验	style=-1811939328
+625884	vis=False	2580x1023	@234,234	MS_WebcheckMonitor	MS_WebcheckMonitor	style=80674816
+625884	vis=False	1920x1032	@3440,0	TabletModeCoverWindow		style=-2080374784
+625884	vis=False	3440x1392	@0,0	TabletModeCoverWindow		style=-2080374784
+356120	vis=False	200x200	@104,104	Nucleus Auth Window	Microsoft OneDrive Sync Service	style=80674816
+356120	vis=False	2580x1023	@78,78	ATL:00007FFB97C3C0C0		style=114229248
+531812	vis=False	2580x1023	@130,130	AnimationTimerClass		style=80674816
+521576	vis=False	981x619	@0,0	Chrome_WidgetWin_0		style=-2079850496
+521576	vis=False	350x347	@0,0	Chrome_WidgetWin_0		style=-2079850496
+521260	vis=False	2580x1023	@208,208	Chrome_WidgetWin_0		style=114229248
+521576	vis=False	2580x1023	@182,182	Chrome_WidgetWin_0		style=114229248
+500924	vis=False	2580x1023	@130,130	Chrome_WidgetWin_0		style=114229248
+511616	vis=False	720x640	@1360,376	Chrome_WidgetWin_1	QQ	style=80150528
+511616	vis=False	2580x1023	@104,104	Chrome_WidgetWin_0		style=114229248
+486120	vis=False	2580x1023	@312,312	Chrome_WidgetWin_0		style=114229248
+475540	vis=False	2580x1023	@78,78	Chrome_WidgetWin_0		style=114229248
+453784	vis=False	993x519	@260,260	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe	style=82771968
+42556	vis=False	2580x1023	@234,234	Chrome_WidgetWin_0		style=114229248
+399604	vis=False	2580x1023	@130,130	tray_icon_app		style=79691776
+346192	vis=False	993x519	@130,130	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe	style=82771968
+232656	vis=False	993x519	@234,234	ConsoleWindowClass	C:\Users\yangda01\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe	style=82771968
+214232	vis=False	993x519	@52,52	ConsoleWindowClass	C:\Users\yangda01\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe	style=82771968
+208712	vis=False	993x519	@26,26	ConsoleWindowClass	C:\Users\yangda01\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe	style=82771968
+188432	vis=False	993x839	@52,52	ConsoleWindowClass	C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe	style=82771968
+206408	vis=False	2580x1023	@130,130	Chrome_WidgetWin_0		style=114229248
+172684	vis=False	993x519	@78,78	ConsoleWindowClass	C:\Users\yangda01\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe	style=82771968
+35764	vis=False	993x519	@26,26	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe 	style=82771968
+531812	vis=False	448x373	@0,0	TXGuiFoundation	播放队列	style=-2046296064
+51464	vis=False	2580x1023	@208,208	WinUIDesktopWin32WindowClass	Logitech G HUB	style=67305472
+26212	vis=False	320x240	@260,260	FilterGraphWindow	ActiveMovie Window	style=80674816
+25144	vis=False	1600x900	@920,246	Chrome_WidgetWin_1	自媒体桌面终端	style=114229248
+25144	vis=False	2580x1023	@312,312	Chrome_WidgetWin_0		style=114229248
+34176	vis=False	2580x1023	@26,26	Chrome_WidgetWin_0		style=114229248
+25332	vis=False	993x519	@26,26	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe 	style=82771968
+4928	vis=False	993x519	@312,312	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe 	style=82771968
+28988	vis=False	993x519	@260,260	ConsoleWindowClass	C:\WINDOWS\system32\cmd.exe 	style=82771968
+20092	vis=False	726x467	@1357,463	#32770		style=-2080374708
+16600	vis=False	2580x1023	@338,338	RECORDER_NOTIFY_WND	RECORDER_NOTIFY_WND	style=80674816
+12768	vis=False	2580x1023	@312,312	UxdService	UxdService	style=214892544
+6968	vis=False	2580x1023	@286,286	NVSVC64.DLL	NvSvc	style=214892544
+6968	vis=False	2580x1023	@260,260	UxdService	UxdService	style=214892544
+11220	vis=False	2580x1059	@78,78	CrossDeviceResumeWindowClass	CrossDeviceResumeWindow	style=80674816
+625884	vis=True	5360x1440	@0,0	Progman	Program Manager	style=-1778384896
+42556	vis=False	470x240	@103,62	SoPY_Comp		style=-1946157056
+468156	vis=False	354x248	@3087,1114	CherryIMEWindowClass		style=-1946157056

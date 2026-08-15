@@ -1,0 +1,35 @@
+```json
+{
+  "planDate": "2026-08-06",
+  "summary": "今日唯一证据充足的机会是 Qwen3.8-Max 发布后的模型选型判断：别只看“Agent 第一”，要把能力、单任务成本与部署路径放在同一张决策表里。",
+  "items": [
+    {
+      "title": "Qwen3.8-Max 拿下 Agentic Index 第一，但它未必是所有团队的默认选择",
+      "priority": 1,
+      "whyNow": "热点 2-3 天：8 月 6 日，Qwen 官方称 Qwen3.8-Max 位列 Artificial Analysis Intelligence Index 第 5、Agentic Index 第 1；Artificial Analysis 同日给出的数据则显示，它在 Intelligence Index 得分为 56、单任务成本 1.14 美元，而开源权重模型 Kimi K3 高 1 分且单任务成本低约 25%（0.86 美元）。新模型刚发布，正是从宣传排名转向实际选型的窗口。",
+      "timeliness": "热点 2-3 天",
+      "targetAudience": "关注模型能力、Agent 开发与 AI 成本的中文开发者、产品负责人和小团队创始人",
+      "angle": "用同一组公开评测数据拆开看“Agent 第一”与“通用能力/单任务成本”，给团队一套不被单一榜单带偏的模型选型框架。",
+      "pointOfView": "Agentic Index 第一是一个很强的信号，但不是采购结论：做 Agent 的团队应先验证任务匹配度，再并列比较通用能力、单位任务成本、是否需要开源权重与可控部署；Qwen3.8-Max 的价值在于它让“Agent 优先”的选择更有竞争力，而不是自动替代所有模型。",
+      "platforms": ["x", "xiaohongshu", "wechat"],
+      "formats": ["text"],
+      "titleGuidance": "主标题直接给结论：Qwen3.8-Max Agent 第一，但别急着把它设成默认模型；副标题点出“56 分、1.14 美元 vs Kimi K3 高 1 分且 0.86 美元”的对照。",
+      "openingGuidance": "开头先给可验证结论：Qwen3.8-Max 刚拿到 Agentic Index 第一，但同一份公开对比里，Kimi K3 的通用智能得分高 1 分、单任务成本低约四分之一。然后提出问题：你的任务到底该为哪一个指标付费？",
+      "structureGuidance": "1）列出 Qwen 官方发布的排名；2）补上 Artificial Analysis 的能力与成本对照；3）解释 Agentic Index 与通用 Intelligence Index 分别回答什么问题；4）给出三类团队的选择路径：Agent 自动化优先、成本/开源部署优先、尚未完成任务评测者；5）以“先跑自己的 3 个代表性任务再决定默认模型”收束。",
+      "effortEstimate": "约 40 分钟",
+      "sourceIds": [
+        "1fc56b68-6b26-45dc-9017-8e26ce89c520",
+        "a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5"
+      ],
+      "availableMaterials": [
+        "Artificial Analysis 对 Qwen3.8-Max、Kimi K3 的公开能力与单任务成本对比",
+        "Qwen 官方关于 Intelligence Index 与 Agentic Index 排名的公告"
+      ],
+      "missingMaterials": [
+        "针对中文真实 Agent 工作流的独立复现实测",
+        "Qwen3.8-Max 的官方定价、可用渠道与上下文/工具调用限制说明"
+      ]
+    }
+  ]
+}
+```

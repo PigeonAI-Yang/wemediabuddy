@@ -76,7 +76,7 @@ export function readXListTimelineCache(
   database: DatabaseSync,
   accountKey: string,
   listId: string,
-  options: { touch?: boolean; now?: Date } = {}
+  options: { touch?: boolean; cleanup?: boolean; now?: Date } = {}
 ): XListTimelineCacheRecord | null {
   const row = database.prepare(`
     SELECT account_key, list_id, payload_json, posts_count, payload_bytes, fetched_at, last_accessed_at, source, schema_version, fingerprint
@@ -86,7 +86,7 @@ export function readXListTimelineCache(
   if (!row) return null;
   const parsed = parseRow(row, options.now ?? new Date());
   if (!parsed) {
-    database.prepare('DELETE FROM x_list_timeline_cache WHERE account_key = ? AND list_id = ?').run(accountKey, listId);
+    if (options.cleanup !== false) database.prepare('DELETE FROM x_list_timeline_cache WHERE account_key = ? AND list_id = ?').run(accountKey, listId);
     return null;
   }
   if (options.touch !== false) touchAccess(database, parsed, options.now ?? new Date());

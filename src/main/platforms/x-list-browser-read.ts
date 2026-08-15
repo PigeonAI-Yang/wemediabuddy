@@ -85,9 +85,9 @@ export async function readXListDetail(config: XListBrowserConfig, listId: string
   const session = await XListSession.open(config);
   try {
     return await session.run(async (active) => {
-      await active.navigateInitially(xListUrl(listId));
+      await active.navigateInitially(xListUrl(listId), { mode: 'browse' });
       return { accountKey: await readAccountKey(active), detail: await detailFromCurrentPage(active, listId) };
-    });
+    }, { timeoutMs: 45_000 });
   } finally { await session.close(); }
 }
 

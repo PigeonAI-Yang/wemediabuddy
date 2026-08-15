@@ -14,7 +14,7 @@ export const WORKSPACE_CATALOG = {
     { id: 'game-news-radar', version: 1, label: '游戏资讯情报' }
   ],
   creationPacks: [{ id: 'wmb-core-creation', version: 1, label: 'WMB 文字创作' }],
-  platforms: ['x', 'xiaohongshu', 'wechat']
+  platforms: ['x', 'xiaohongshu', 'wechat', 'zhihu']
 } as const;
 
 export type WorkspaceProposalInput = {

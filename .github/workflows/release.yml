@@ -1,0 +1,96 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    environment: release
+    timeout-minutes: 60
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WMB_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WMB_WINDOWS_CERTIFICATE_PASSWORD }}
+      WMB_OUT_DIR: ${{ github.workspace }}\..\..\wmb-out
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify tag matches package version
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Tag $env:GITHUB_REF_NAME does not match package version v$version." }
+
+      - name: Restore signing certificate when configured
+        shell: pwsh
+        env:
+          WMB_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WMB_WINDOWS_CERTIFICATE_BASE64 }}
+        run: |
+          if (-not $env:WMB_WINDOWS_CERTIFICATE_BASE64 -and -not $env:WMB_WINDOWS_CERTIFICATE_PASSWORD) {
+            Write-Warning 'No Authenticode certificate configured; publishing an unsigned installer.'
+            "WMB_RELEASE_UNSIGNED=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            return
+          }
+          if (-not $env:WMB_WINDOWS_CERTIFICATE_BASE64 -or -not $env:WMB_WINDOWS_CERTIFICATE_PASSWORD) {
+            throw 'Configure both WMB_WINDOWS_CERTIFICATE_BASE64 and WMB_WINDOWS_CERTIFICATE_PASSWORD, or neither.'
+          }
+          $certificate = Join-Path $env:RUNNER_TEMP 'wemediabuddy-release.pfx'
+          [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:WMB_WINDOWS_CERTIFICATE_BASE64))
+          "WMB_WINDOWS_CERTIFICATE_FILE=$certificate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run release gates
+        shell: pwsh
+        run: |
+          npm run typecheck
+          npm test
+          npm run package
+          npm run e2e
+          npm run e2e:gate
+
+      - name: Build installer and upload draft release
+        run: npm run publish
+
+      - name: Record release asset checksums
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem (Join-Path $env:WMB_OUT_DIR 'make') -Recurse -File | Where-Object { $_.Extension -in '.exe', '.nupkg' -or $_.Name -eq 'RELEASES' }
+          if (-not $assets) { throw '未生成 Squirrel.Windows 发布资产。' }
+          $lines = foreach ($asset in $assets) {
+            $hash = (Get-FileHash $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $([IO.Path]::GetRelativePath((Join-Path $env:WMB_OUT_DIR 'make'), $asset.FullName))"
+          }
+          $lines | Set-Content release-assets.sha256 -Encoding utf8
+          Get-Content release-assets.sha256
+
+      - name: Upload checksum evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-checksums
+          path: release-assets.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:WMB_WINDOWS_CERTIFICATE_FILE) { Remove-Item $env:WMB_WINDOWS_CERTIFICATE_FILE -Force -ErrorAction SilentlyContinue }

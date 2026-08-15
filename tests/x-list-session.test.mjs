@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { cubicBezier, isPyaireaderXProfile, isXHomeUrl, parseXListId, xListUrl } from '../src/main/platforms/x-list-primitives.ts';
 import { hasUsableDocumentText } from '../src/main/platforms/x-list-session-support.ts';
-import { xProfileHrefMatchesHandle } from '../src/main/platforms/x-list-browser-actions.ts';
+import { xListMutationErrorMessage, xProfileHrefMatchesHandle } from '../src/main/platforms/x-list-browser-actions.ts';
 import { memberCountFromManagerText } from '../src/main/platforms/x-list-browser-read.ts';
+import { listDescriptionFromHeaderLines } from '../src/main/platforms/x-list-browser-dom.ts';
 
 test('X List session accepts only the Pyaireader profile and stable List URLs', () => {
   assert.equal(isPyaireaderXProfile({ id: 'edge:pyaireader-default', cdpUrl: 'http://127.0.0.1:9334/' }), true);
@@ -41,6 +42,17 @@ test('member manager count is parsed from the owned-list sheet', () => {
   assert.equal(memberCountFromManagerText('管理成员\n成员 (8)\n已推荐'), 8);
   assert.equal(memberCountFromManagerText('Manage members\nMembers (1,234)\nSuggested'), 1234);
   assert.equal(memberCountFromManagerText('列表页面'), null);
+});
+
+test('member mutation surfaces a platform GraphQL rejection', () => {
+  assert.equal(xListMutationErrorMessage({ data: {}, errors: [{ message: 'not allowed' }] }), 'not allowed');
+  assert.equal(xListMutationErrorMessage({ data: { list: { member_count: 1 } }, errors: [{ message: 'non-fatal' }] }), null);
+  assert.equal(xListMutationErrorMessage({ data: {} }), null);
+});
+
+test('List detail distinguishes a description from the owner display name', () => {
+  assert.equal(listDescriptionFromHeaderLines('社区', ['社区', '真实描述', '亵渎', '@Owner']), '真实描述');
+  assert.equal(listDescriptionFromHeaderLines('社区', ['社区', '亵渎', '@Owner']), '');
 });
 
 test('shared X session queues later reads instead of preempting an active operation', async () => {

@@ -1,0 +1,84 @@
+{
+  "$comment": "EVAL-CAP-028 / EVAL-032 GLM 5.2 fixture set. Roles map to ResearchEvidenceSourceKind ('official' | 'secondary'); each entry lists the required-claim contributions the fixture must support in the acceptance test.",
+  "scenario": {
+    "claimKey": "glm52_official_price_rise",
+    "claimText": "GLM 5.2 官方在 OpenRouter 涨价",
+    "claimType": "price",
+    "trigger": "abionmorse-post"
+  },
+  "fixtures": [
+    {
+      "id": "abionmorse-post",
+      "kind": "x_post",
+      "role": "secondary",
+      "domain": "x.com",
+      "file": "abionmorse-post.html",
+      "canonicalUrl": "https://x.com/AbionMorse/status/1765213350994000000",
+      "publishedAt": "2026-08-11T09:24:00Z",
+      "contribution": "writer evidenceGap 的触发材料：声称 GLM-5.2 在 OpenRouter 出现反常低价（0.50/3.15 USD per 1M），提示需核对官方定价页。",
+      "assertions": ["excerpt 含反常低价数字", "时间戳 2026-08-11"]
+    },
+    {
+      "id": "zhipu-pricing",
+      "kind": "official_pricing",
+      "role": "official",
+      "domain": "zhipuai.cn",
+      "file": "zhipu-pricing.html",
+      "canonicalUrl": "https://zhipuai.cn/pricing",
+      "publishedAt": "2026-08-12",
+      "contribution": "官方一手证据：GLM-5.2 输入由 0.5 上调至 0.6 元/百万 tokens、输出由 3.15 上调至 3.8 元/百万 tokens（2026-08-12 起）→ supported 门槛（1 官方一手）。",
+      "assertions": ["excerpt 为原句 verbatim", "publishedAt + excerpt 齐备（price 必需）"]
+    },
+    {
+      "id": "zhipu-pricing-no-rise",
+      "kind": "official_pricing",
+      "role": "official",
+      "domain": "zhipuai.cn",
+      "file": "zhipu-pricing-no-rise.html",
+      "canonicalUrl": "https://zhipuai.cn/pricing",
+      "publishedAt": "2026-08-12",
+      "contribution": "官方推翻路径：价格近期未作调整 → 官方证据直接推翻 '涨价' 声明 → contradicted。",
+      "assertions": ["excerpt 明确「未作调整」"]
+    },
+    {
+      "id": "openrouter-glm52",
+      "kind": "model_page",
+      "role": "secondary",
+      "domain": "openrouter.ai",
+      "file": "openrouter-glm52.html",
+      "canonicalUrl": "https://openrouter.ai/models/zhipu/glm-5.2",
+      "publishedAt": "2026-08-12",
+      "contribution": "独立可靠二手：OpenRouter 页面显示 0.60/3.80 USD per 1M（2026-08-12 更新，旧价 0.50/3.15）→ 与官方页 domain 互异，构成独立二手支撑。",
+      "assertions": ["domain 与 zhipuai.cn 互异", "publishedAt + excerpt 齐备"]
+    },
+    {
+      "id": "dynamic-pricing-shell",
+      "kind": "dynamic_shell",
+      "role": "official",
+      "domain": "pricing.zhipu.example",
+      "file": "dynamic-pricing-shell.html",
+      "canonicalUrl": "https://pricing.zhipu.example/dynamic/glm52",
+      "contribution": "动态渲染 fallback fixture：静态正文为空壳（parse 失败，retryable）→ 受控 headless fallback 渲染后返回内嵌 JSON 载荷中的价格正文。",
+      "assertions": ["静态读取失败且可重试", "fallback 渲染后 bodyText 含价格行", "最终 URL 经 validateUrl 复检"]
+    },
+    {
+      "id": "auth-wall",
+      "kind": "auth_wall",
+      "role": "unavailable",
+      "domain": "paywall.zhipu.example",
+      "file": "auth-wall.html",
+      "canonicalUrl": "https://paywall.zhipu.example/pricing",
+      "contribution": "安全负断言：验证码/登录墙 → 明确失败（reason=auth_required），不渲染回退、不绕过、不携带会话凭证；全候选不可读 → claim 判定 source_unavailable。",
+      "assertions": ["auth_required 且 retryable=false", "renderFn 不得被调用"]
+    }
+  ],
+  "safety_negatives": [
+    "私网/环回/内部/链路本地 URL → SSRF 拒绝（零请求零渲染）",
+    "DNS 重绑定宿主（解析到私网）→ dns 拒绝（零请求）",
+    "重定向跳出可信域/跳到私网 → redirect 拒绝",
+    ">2 MiB 页面 → too_large 拒绝（按 UTF-8 字节）",
+    "非文档类型（image/png 等）→ unsupported_type 拒绝",
+    ">15s 超时 → timeout 拒绝",
+    "验证码/登录墙 → auth_required，无凭据携带"
+  ]
+}

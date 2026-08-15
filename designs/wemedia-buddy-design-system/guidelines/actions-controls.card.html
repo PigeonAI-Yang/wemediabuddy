@@ -1,0 +1,52 @@
+<!-- @dsCard group="Guidelines" viewport="700x330" name="ActionsControls" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Actions &amp; Controls</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .demo { padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--surface); margin-bottom: 10px; }
+  .demo h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-low); font-weight: 650; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); padding: 0 16px; border-radius: var(--radius-lg); font-size: var(--text-ui); font-weight: 650; }
+  .primary { border: 0; background: var(--accent); color: var(--accent-ink); }
+  .secondary { border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink); }
+  .tab { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-h-tab); padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: var(--text-ui); font-weight: 600; }
+  .tab[aria-selected="true"] { color: var(--accent-soft); border-bottom-color: var(--accent); }
+  .chip { display: inline-flex; align-items: center; gap: 7px; min-height: var(--control-h-sm); padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .chip[aria-pressed="true"] { background: var(--accent-faint); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent-soft); }
+  .field { display: grid; gap: 6px; max-width: 260px; }
+  .field label { color: var(--ink-soft); font-size: var(--text-ui); font-weight: 650; }
+  .field input { height: var(--control-h-field); padding: 0 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink); font-size: 13px; }
+  .field input:focus { border-color: var(--accent); outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Actions &amp; Controls — 单一属主</h1>
+<p>每个通用原语只有一个定义属主（WMB-5258 §1）：按钮一套 variant（primary/secondary/text/danger + sm）；tab 与 filter 语义分离；字段的 label 就是无障碍名，placeholder 永远不是 label。</p>
+<div class="demo">
+  <h2>Buttons · tabs ≠ filters</h2>
+  <div class="row">
+    <button type="button" class="btn primary">主操作</button>
+    <button type="button" class="btn secondary">次要</button>
+    <button type="button" class="tab" role="tab" aria-selected="true">今日可批</button>
+    <button type="button" class="tab" role="tab">待处理</button>
+    <button type="button" class="chip" aria-pressed="true">全部</button>
+    <button type="button" class="chip" aria-pressed="false">小红书</button>
+  </div>
+</div>
+<div class="demo">
+  <h2>Fields — label is the name</h2>
+  <div class="field">
+    <label for="g-ws">工作区名称 <span style="color:var(--danger)">*</span></label>
+    <input id="g-ws" value="PigeonYang 主编台"/>
+  </div>
+</div>
+<p>Tabs = 真 <code>tablist/tab</code>（roving tabindex + ←/→/Home/End）；Filters = <code>aria-pressed</code> 按压芯片。无嵌套控件的卡片可以是整卡按钮；有嵌套控件的卡片本身不可点击，必须暴露显式主按钮。</p>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!-- @dsCard group="Components" viewport="700x320" name="AppModal" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>AppModal</title>
+<link rel="stylesheet" href="../../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .cap { flex-basis: 100%; font-size: 11px; color: var(--muted-low); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="demo-root"></div>
+<script src="../../_ds_bundle.js"></script>
+<script>
+(function () {
+  var scripts = document.getElementsByTagName('script');
+  var rootUrl = '';
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].getAttribute('src') || '';
+    if (src.indexOf('_ds_bundle.js') !== -1) { rootUrl = src.slice(0, -'_ds_bundle.js'.length); break; }
+  }
+  var ns = null;
+  for (var key in window) { if (/^WemediaBuddyDesignSystem_[0-9a-f]{6}$/.test(key)) { ns = key; break; } }
+  if (!ns && window.location.protocol !== 'file:') {
+    try {
+      var req = new XMLHttpRequest();
+      req.open('GET', rootUrl + '_ds_manifest.json', false);
+      req.send(null);
+      var parsed = JSON.parse(req.responseText);
+      if (parsed && parsed.namespace && window[parsed.namespace]) ns = parsed.namespace;
+    } catch (e) { ns = null; }
+  }
+  window.__dsNs = ns;
+})();
+</script>
+<script>
+(function () {
+  var R = window.React;
+  var RD = window.ReactDOM;
+  var ns = window.__dsNs;
+  var host = document.getElementById('demo-root');
+  if (!ns || !R || !RD) { host.textContent = 'Design-system bundle not compiled yet (run compile-design-system.mjs).'; return; }
+  var C = window[ns];
+  var el = R.createElement;
+  var App = function () {
+    var standard = R.useState(false);
+    var confirm = R.useState(false);
+    var openStandard = standard[1];
+    var openConfirm = confirm[1];
+    return el('div', null,
+      el('div', { className: 'row' }, el('span', { className: 'cap' }, 'One modal layer · focus trap · Esc/backdrop · scroll lock')),
+      el('div', { className: 'row' },
+        el(C.Button, { variant: 'primary', onClick: function () { openStandard(true); } }, '打开标准弹窗'),
+        el(C.Button, { variant: 'danger', onClick: function () { openConfirm(true); } }, '危险确认')
+      ),
+      standard[0]
+        ? el(C.AppModal, {
+            open: true,
+            title: '智能体详情',
+            size: 'standard',
+            onRequestClose: function () { openStandard(false); },
+            footer: el('div', { style: { display: 'flex', gap: '10px' } },
+              el(C.Button, { variant: 'secondary', onClick: function () { openStandard(false); } }, '关闭'),
+              el(C.Button, { variant: 'primary', onClick: function () { openStandard(false); } }, '派发新任务')
+            )
+          },
+          el('p', { style: { margin: 0 } }, '员工详情、任务台账与授权状态。Esc / 背景点击 / 右上角 ✕ 均可关闭；焦点在打开时落入弹窗并循环，关闭后归还触发元素。')
+        )
+        : null,
+      confirm[0]
+        ? el(C.AppModal, {
+            open: true,
+            title: '删除并归档',
+            size: 'confirm',
+            role: 'alertdialog',
+            onRequestClose: function () { openConfirm(false); },
+            footer: el('div', { style: { display: 'flex', gap: '10px' } },
+              el(C.Button, { variant: 'secondary', onClick: function () { openConfirm(false); } }, '取消'),
+              el(C.Button, { variant: 'danger', onClick: function () { openConfirm(false); } }, '删除并归档')
+            )
+          },
+          el('p', { style: { margin: 0 } }, '此操作会从选题台账移除该方案，并归档到结果卷。硬删除不进入任何角色自动权，最终动作仅人类确认。')
+        )
+        : null
+    );
+  };
+  var node = el(App);
+  var root = null;
+  if (RD.createRoot) {
+    root = RD.createRoot(host);
+    if (RD.flushSync) { RD.flushSync(function () { root.render(node); }); }
+    else { root.render(node); }
+  } else {
+    RD.render(node, host);
+  }
+})();
+</script>
+</body>
+</html>

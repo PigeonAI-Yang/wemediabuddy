@@ -1,0 +1,47 @@
+<!-- @dsCard group="Guidelines" viewport="700x320" name="ContentLanguage" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Content &amp; Language</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .dodont { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .dodont { grid-template-columns: 1fr; } }
+  .do, .dont { padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--border-soft); background: var(--surface); }
+  .do h2, .dont h2 { margin: 0 0 8px; font-size: 13px; }
+  .do h2 { color: var(--success); } .dont h2 { color: var(--danger); }
+  .do ul, .dont ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.7; }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+  .note { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--accent-faint); color: var(--ink-soft); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>Content — 主编台语言</h1>
+<p>默认文案是中文用户语言；机器 ID、路径、revision、intent/state 代码一律进「技术详情」折叠区。产品名词全局共享一个 label map：页面标题 = 侧栏 = Pi 页标 = PRODUCT 房间名。</p>
+<div class="dodont">
+  <div class="do">
+    <h2>Do</h2>
+    <ul>
+      <li>「今日可批 / 等你批 / 重新侦察 / 删除并归档」</li>
+      <li>房间名照 PRODUCT C6：主编桌、前线、策划组提案夹、写字间、签发台、评报栏、关系墙</li>
+      <li>一个公开小红书 MCP 标签；一个画布名（关系墙）</li>
+      <li>空态给去向：「先去「发现」看看外面」</li>
+    </ul>
+  </div>
+  <div class="dont">
+    <h2>Don't</h2>
+    <ul>
+      <li>「jobId #2847 状态 RUNNING」「mcp://… Bridge」「receipt 不存在」</li>
+      <li>同一语义多个叫法（未处理/未解决、关系画布/知识网络）</li>
+      <li>把「小红书 MCP / 外部 MCP / MCP Bridge」混用出三个标签</li>
+      <li>技术词混进默认视图（browser-lock、DB 路径、skill 包名）</li>
+    </ul>
+  </div>
+</div>
+<p class="note">验收口令：若有人把 WMB 听成「自动发帖工具」或「又一个 AI 写作框」，说明叙事说歪了。</p>
+</body>
+</html>

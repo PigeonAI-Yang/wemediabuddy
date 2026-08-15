@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openDataRoot, validateDataRoot } from './data-root.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { ensureOfficialWorkspaceProfile, insertWorkspaceProfile, OFFICIAL_WORKSPACE_TEMPLATES, type OfficialTemplateId, type WorkspaceProfileV1 } from './workspace-profiles.ts';
+import { initializeWorkspaceBrowserBinding } from './workspace-browser-binding.ts';
 
 export type WorkspaceRecord = { id: string; displayName: string; rootPath: string };
 export type WorkspaceSwitchJournal = { previousWorkspaceId: string; pendingWorkspaceId: string; state: 'pending' | 'attempting' };
@@ -83,6 +84,7 @@ export async function createProposedWorkspace(input: {
   registryPath: string;
   rootPath: string;
   profile: WorkspaceProfileV1;
+  defaultProfileId: string;
   injectFailure?: (phase: 'root_ready' | 'schema_ready' | 'identity_ready' | 'profile_ready' | 'before_registry' | 'after_registry') => void;
 }): Promise<WorkspaceRecord> {
   const originalRegistry = await readWorkspaceRegistry(input.registryPath);
@@ -99,7 +101,10 @@ export async function createProposedWorkspace(input: {
   if (!existingId) writeRootWorkspaceId(root.path, workspaceId);
   input.injectFailure?.('identity_ready');
   const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  try { insertWorkspaceProfile(database, input.profile); } finally { database.close(); }
+  try {
+    insertWorkspaceProfile(database, input.profile);
+    initializeWorkspaceBrowserBinding(database, input.defaultProfileId);
+  } finally { database.close(); }
   input.injectFailure?.('profile_ready');
   const alreadyRegistered = originalRegistry.workspaces.find((item) => item.id === workspaceId || item.rootPath === root.path);
   if (alreadyRegistered) {
@@ -132,13 +137,17 @@ async function prepareCandidateRoot(rootPath: string) {
 }
 
 function candidateBusinessRowCount(database: DatabaseSync): number {
-  const metadata = new Set(['schema_migrations', 'app_meta', 'workspace_profiles']);
-  const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((row) => row.name).filter((name) => !metadata.has(name));
+  // 系统在 schema/工作空间初始化时写入的表不算业务数据：migration 台账、app 元数据、
+  // 工作空间身份配置，以及 v56 迁移内置的关系类型目录（knowledge_relation_registry 种子行；
+  // 用户扩展关系总是随 ChangeSet 写入，knowledge_change_sets 本身会被计数）。
+  const metadata: Record<string, true> = { schema_migrations: true, app_meta: true, workspace_profiles: true, workspace_browser_bindings: true, knowledge_relation_registry: true };
+  const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>).map((row) => row.name).filter((name) => !metadata[name]);
   return tables.reduce((total, name) => total + Number((database.prepare(`SELECT COUNT(*) AS count FROM "${name.replaceAll('"', '""')}"`).get() as { count: number }).count), 0);
 }
 
-export async function enrollAiWorkspace(input: { registryPath: string; rootPath: string; displayName?: string }): Promise<WorkspaceRecord> {
+export async function enrollAiWorkspace(input: { registryPath: string; rootPath: string; displayName?: string; defaultProfileId?: string }): Promise<WorkspaceRecord> {
   const root = await openDataRoot(input.rootPath);
+  migrateDatabase(path.join(root.path, 'wmb.db')).close();
   const registry = await readWorkspaceRegistry(input.registryPath);
   const rootWorkspaceId = await readRootWorkspaceId(root.path);
   if (registry.workspaces.length > 0 && !rootWorkspaceId) throw workspaceError('WORKSPACE_ID_MISMATCH', '未登记的数据根不能替换当前工作空间。');
@@ -147,13 +156,16 @@ export async function enrollAiWorkspace(input: { registryPath: string; rootPath:
   if (existing && existing.rootPath !== root.path) throw workspaceError('WORKSPACE_ID_MISMATCH', '移动后的数据根必须通过重新关联更新位置。');
   writeRootWorkspaceId(root.path, workspaceId);
   const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  try { ensureOfficialWorkspaceProfile(database, 'official.ai'); } finally { database.close(); }
+  try {
+    ensureOfficialWorkspaceProfile(database, 'official.ai');
+    if (input.defaultProfileId) initializeWorkspaceBrowserBinding(database, input.defaultProfileId);
+  } finally { database.close(); }
   const workspace = existing ?? { id: workspaceId, displayName: input.displayName ?? 'AI', rootPath: root.path };
   if (!existing) await writeWorkspaceRegistry(input.registryPath, { version: 1, activeWorkspaceId: workspace.id, workspaces: [workspace], switchJournal: null });
   return workspace;
 }
 
-export async function createOfficialWorkspace(input: { registryPath: string; rootPath: string; templateId: OfficialTemplateId }): Promise<WorkspaceRecord> {
+export async function createOfficialWorkspace(input: { registryPath: string; rootPath: string; templateId: OfficialTemplateId; defaultProfileId: string }): Promise<WorkspaceRecord> {
   const registry = await readWorkspaceRegistry(input.registryPath);
   await mkdir(input.rootPath, { recursive: true });
   const entries = await readdir(input.rootPath);
@@ -167,7 +179,10 @@ export async function createOfficialWorkspace(input: { registryPath: string; roo
   }
   writeRootWorkspaceId(root.path, workspaceId);
   const database = migrateDatabase(path.join(root.path, 'wmb.db'));
-  try { ensureOfficialWorkspaceProfile(database, input.templateId); } finally { database.close(); }
+  try {
+    ensureOfficialWorkspaceProfile(database, input.templateId);
+    initializeWorkspaceBrowserBinding(database, input.defaultProfileId);
+  } finally { database.close(); }
   const workspace = { id: workspaceId, displayName: OFFICIAL_WORKSPACE_TEMPLATES[input.templateId].displayName, rootPath: root.path };
   await writeWorkspaceRegistry(input.registryPath, { ...registry, workspaces: [...registry.workspaces, workspace] });
   return workspace;

@@ -1,27 +1,35 @@
 {
-  "active_loop": "wmb-4500-pi-tool-activity",
-  "status": "complete",
-  "symptom": "An active Pi tool row looks identical to a completed static row, so the user cannot tell whether it is working or stuck without opening details.",
+  "active_loop": "worktree-regression-closeout",
+  "status": "blocked",
+  "symptom": "当前 WMB-5235–5243 未提交工作树导致 18 项完整测试失败。",
   "observation_packet": {
-    "url": "packaged WeMediaBuddy Pi dock",
-    "viewport": "1600x960",
-    "user_action": "ask Pi to perform work and watch the visible tool summary",
-    "expected": "the currently executing tool has an obvious lightweight motion cue that stops on completion",
-    "actual": "the visible tool summary is static and visually identical before and after its result",
-    "screenshot": "J:/Users/yangda01/Temp/codex-clipboard-ac5bddb1-604b-4e1d-a833-8313dfd1f755.png",
-    "console": "no renderer error",
-    "network_ws": "Pi emits tool_execution_start and tool_execution_end through the existing renderer event stream",
-    "dom_selector": ".pi-tool-line > summary",
-    "computed_style_layout": "animation-name is none; class is always pi-tool-line",
-    "state_store_snapshot": "tool start appends a tool segment without output; tool result adds the output property while the assistant turn remains streaming"
+    "url": "Electron production test surface; no replacement web server",
+    "viewport": "not applicable to contract/data regressions",
+    "user_action": "运行 npm test 并沿内容详情、Today、Pi 编排、设置与知识授权链路验收",
+    "expected": "内容详情查询数固定、终态机会不复活、编排任务卡优先路由、迁移/授权契约与 schema 63 对齐",
+    "actual": "修复前 1483 项中 18 失败；修复后完整测试 1485 项中 1482 通过，仅 3 项因 XHS 二进制被 Defender 删除而失败。",
+    "screenshot": "未涉及像素或布局改动；UNIT/CONTRACT-TEST-ONLY",
+    "console": "无 renderer console 取证；测试输出已定位契约断点",
+    "network_ws": "XHS MCP 被 Windows Defender 阻断，无法建立 loopback MCP 会话",
+    "dom_selector": "Pi orchestration branch: PiOrchestrationRow before pi-bubble-wrap",
+    "computed_style_layout": "未改样式；design token gate 5/5",
+    "state_store_snapshot": "schema migrations 1..63；Today pool 是未终结机会唯一权威"
   },
-  "hypotheses": [{
-    "hypothesis": "The transcript has enough truthful state but never projects it into an active tool class",
-    "would_disprove": "an unfinished tool already receives a distinct class or active animation",
-    "result": "confirmed: PiAssistantSegments ignores streaming/output state for tool rows"
-  }],
-  "breakpoint": "Resolved by projecting unfinished/result state into the shared WmbCreatureMark working/settling/idle states.",
-  "owner_check": "Packaged live tool showed animated W body/pupil without opening details, settled on the real result, and remained static afterward.",
+  "hypotheses": [
+    {"hypothesis":"内容详情新增绑定读取形成 N+1","supports":"查询数从固定 9 增长为 9+核心版本数+平台版本数","would_disprove":"版本数增加而查询数不变","result":"confirmed-and-repaired-with-two-batch-queries"},
+    {"hypothesis":"其余非 XHS 失败主要是旧测试冻结旧 schema/能力/业务语义","supports":"新版生产链路专项测试通过，旧断言固定 58、14 capabilities 或历史 plan fallback","would_disprove":"真实生产链路缺失或聚焦测试仍失败","result":"confirmed-and-contracts-aligned"},
+    {"hypothesis":"XHS 三项失败由缺文件而非产品逻辑","supports":"恢复 HEAD 文件后 Defender 报病毒/潜在垃圾软件并再次删除，历史 ThreatDetection 命中打包资源","would_disprove":"可信签名二进制可读取并启动","result":"confirmed-external-security-blocker"}
+  ],
+  "breakpoint": "content data access N+1 plus stale test contracts; XHS vendor executable blocked by endpoint security",
+  "owner_check": {
+    "user_blocked_on": "XHS MCP only; remaining local product contracts repaired",
+    "now_usable": true,
+    "real_data_or_state": "real SQLite migrations and production modules exercised by focused tests",
+    "loading_empty_error_states": "Today empty authoritative pool and Pi orchestration states covered",
+    "v1_v2_baseline_preserved": true,
+    "regression_risk_checked": true,
+    "would_user_return_this": true
+  },
   "attempts": 1,
-  "last_gate": "8/8 focused tests, typecheck, Harness, package and live packaged working/settling/idle DOM readback passed"
+  "last_gate": {"type":"focused contract/data regression","tests":1485,"passed":1482,"failed":3,"typecheck":"pass","design_and_source_hygiene":5,"xhs_blocked":3}
 }

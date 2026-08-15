@@ -3,18 +3,21 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { startMcp } from '../src/main/mcp.ts';
 import { bindXList } from '../src/main/x-lists.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { assertPublishingPlatforms, insertWorkspaceProfile, OFFICIAL_WORKSPACE_TEMPLATES } from '../src/main/workspace-profiles.ts';
 import { writeRootWorkspaceId } from '../src/main/workspaces.ts';
 
 test('workspace publishing subsets reject new work while root-local List sources keep the X chain', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-platform-subsets-'));
-  let mcp;
+  let mcp, runtime;
   const databases = [];
   try {
     const game = await lane(parent, 'game', 'workspace-game', {
@@ -24,7 +27,7 @@ test('workspace publishing subsets reject new work while root-local List sources
     });
     const uk = await lane(parent, 'uk', 'workspace-uk', { ...OFFICIAL_WORKSPACE_TEMPLATES['official.uk'], revision: 1 });
     const ai = await lane(parent, 'ai', 'workspace-ai', { ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'], revision: 1 });
-    databases.push(game.db, uk.db, ai.db);
+    databases.push(uk.db, ai.db);
     assert.throws(() => assertPublishingPlatforms(game.db, ['xiaohongshu', 'wechat']), { code: 'VALIDATION_ERROR' });
     assert.throws(() => assertPublishingPlatforms(uk.db, ['wechat']), { code: 'VALIDATION_ERROR' });
     assert.doesNotThrow(() => assertPublishingPlatforms(ai.db, ['x', 'xiaohongshu', 'wechat']));
@@ -35,24 +38,45 @@ test('workspace publishing subsets reject new work while root-local List sources
     assert.equal(game.db.prepare('SELECT COUNT(*) count FROM source_items WHERE id=?').get(ukChain.sourceId).count, 0);
     assert.equal(uk.db.prepare('SELECT COUNT(*) count FROM source_items WHERE id=?').get(gameChain.sourceId).count, 0);
 
-    mcp = await startMcp(game.root);
+    game.db.close();
+    runtime = ActiveWorkspaceRuntime.open(game.root, { openDatabase: migrateDatabase, createEpoch: () => 'platform-boundary-runtime' });
+    game.db = runtime.database;
+    const task = (await dispatchStartAgentTask(runtime, { intent: 'studio_draft', businessDate: '2026-08-03', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'platform-boundary-task' })).task;
+    const grant = await dispatchIssueTaskGrant(runtime, {
+      requestId: 'platform-boundary-grant', taskId: task.id, ownerGoal: '验证工作空间平台边界',
+      allowedCommands: ['plans.save', 'content.save_version'], workers: [{ type: 'external_agent', id: 'mcp' }],
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(grant.ok, true);
+    const authority = { task_id: task.id, grant_id: grant.data.id };
+    mcp = await startMcp(game.root, runtime.gate, undefined, runtime);
     const initialized = await request(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'platform-boundary', version: '1' } });
     const before = counts(game.db);
-    const deniedPlan = await request(mcp.url, 'tools/call', { name: 'plans.save', arguments: planInput(gameChain.sourceId, ['wechat']) }, initialized.sessionId);
-    const deniedVersion = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: { request_id: 'denied-version', project_id: gameChain.projectId, content_version_id: gameChain.contentVersionId, platform: 'xiaohongshu', format: 'text', body: 'denied' } }, initialized.sessionId);
+    const deniedPlan = await request(mcp.url, 'tools/call', { name: 'plans.save', arguments: { ...planInput(gameChain.sourceId, ['wechat']), ...authority } }, initialized.sessionId);
+    const deniedVersion = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: { request_id: 'denied-version', ...authority, project_id: gameChain.projectId, content_version_id: gameChain.contentVersionId, platform: 'xiaohongshu', format: 'text', body: 'denied' } }, initialized.sessionId);
     assert.match(JSON.stringify(deniedPlan.data), /未启用发布平台：wechat/);
     assert.match(JSON.stringify(deniedVersion.data), /未启用发布平台：xiaohongshu/);
     assert.deepEqual(counts(game.db), before);
-    const allowedInput = { request_id: 'historical-x-version', project_id: gameChain.projectId, content_version_id: gameChain.contentVersionId, platform: 'x', format: 'text', body: 'historical X' };
+    const allowedInput = { request_id: 'historical-x-version', ...authority, project_id: gameChain.projectId, content_version_id: gameChain.contentVersionId, platform: 'x', format: 'text', body: 'historical X' };
     const allowed = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: allowedInput }, initialized.sessionId);
-    game.db.prepare("UPDATE workspace_profiles SET platforms_json='[\"xiaohongshu\"]' WHERE id='effective'").run();
-    const replay = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: allowedInput }, initialized.sessionId);
-    const deniedFresh = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: { ...allowedInput, request_id: 'fresh-disabled-x' } }, initialized.sessionId);
+    await mcp.close();mcp=undefined;
+    await runtime.stop({ drain: false });runtime=undefined;
+    const profileDb = migrateDatabase(path.join(game.root, 'wmb.db'));
+    profileDb.prepare("UPDATE workspace_profiles SET platforms_json='[\"xiaohongshu\"]' WHERE id='effective'").run();
+    profileDb.close();
+    runtime = ActiveWorkspaceRuntime.open(game.root, { openDatabase: migrateDatabase, createEpoch: () => 'platform-boundary-runtime' });
+    game.db = runtime.database;
+    mcp = await startMcp(game.root, runtime.gate, undefined, runtime);
+    const resumed = await request(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'platform-boundary-replay', version: '1' } });
+    const replay = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: allowedInput }, resumed.sessionId);
+    const deniedFresh = await request(mcp.url, 'tools/call', { name: 'content.save_version', arguments: { ...allowedInput, request_id: 'fresh-disabled-x' } }, resumed.sessionId);
     assert.deepEqual(replay.data, allowed.data);
     assert.match(JSON.stringify(deniedFresh.data), /未启用发布平台：x/);
-    assert.equal(game.db.prepare('SELECT COUNT(*) count FROM mcp_request_results WHERE tool=?').get('content.save_version').count, 1);
+    assert.equal(game.db.prepare("SELECT COUNT(*) count FROM command_receipts WHERE command='content.save_version'").get().count, 3);
+    assert.equal(game.db.prepare("SELECT COUNT(*) count FROM mcp_request_results WHERE tool='content.save_version'").get().count, 0);
   } finally {
     await mcp?.close();
+    await runtime?.stop({ drain: false });
     for (const database of databases) database.close();
     await rm(parent, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
@@ -82,7 +106,7 @@ function listChain(db, accountKey, listId, title) {
 
 const planItem = (sourceId, platforms) => ({ title: '选题', priority: 1, whyNow: '当前更新', timeliness: '今天', targetAudience: '受众', angle: '角度', pointOfView: '判断', platforms, formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30 分钟', sourceIds: [sourceId] });
 const planInput = (sourceId, platforms) => ({ request_id: `plan-${platforms.join('-')}`, plan_date: '2026-08-03', summary: 'denied', items: [planItem(sourceId, platforms)] });
-const counts = (db) => ({ plans: db.prepare('SELECT COUNT(*) count FROM plans').get().count, versions: db.prepare('SELECT COUNT(*) count FROM platform_versions').get().count, receipts: db.prepare('SELECT COUNT(*) count FROM mcp_request_results').get().count });
+const counts = (db) => ({ plans: db.prepare('SELECT COUNT(*) count FROM plans').get().count, versions: db.prepare('SELECT COUNT(*) count FROM platform_versions').get().count });
 
 async function request(url, method, params, sessionId) {
   const response = await fetch(url, { method: 'POST', headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json', ...(sessionId ? { 'mcp-session-id': sessionId } : {}) }, body: JSON.stringify({ jsonrpc: '2.0', id: crypto.randomUUID(), method, params }) });

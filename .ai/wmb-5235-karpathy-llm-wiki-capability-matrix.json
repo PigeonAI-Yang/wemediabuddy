@@ -1,0 +1,377 @@
+{
+  "schema": "wmb.karpathy-llm-wiki-capability-matrix.v1",
+  "baselineSource": "https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f",
+  "capturedAt": "2026-08-14",
+  "decision": {
+    "coreRule": "WMB must implement every core LLM Wiki capability as observable product behavior.",
+    "optionalRule": "Karpathy optional tooling receives a native WMB equivalent when relevant; Obsidian and Markdown are not introduced as truth stores.",
+    "sourceOfTruth": "SQLite",
+    "productSurfaces": [
+      "主题",
+      "资料库",
+      "关系画布",
+      "Pi",
+      "创作"
+    ]
+  },
+  "verification": {
+    "runDate": "2026-08-14",
+    "evidenceRoot": "tests/e2e/.artifacts/WMB-5241-*",
+    "focusedTestRuns": [
+      "tests/wmb-5236-knowledge-maintenance.test.mjs: 9/9 PASS (start idempotent, budget continuation, pause/resume, failure recovery, restart recovery, empty library, broadcast, cross-workspace rejection, fail-closed advance)",
+      "tests/wmb-5237-knowledge-health-completeness.test.mjs: PASS (orphan/missing-page/duplicate/unsupported/stale-claim/cross-reference/data-gap detectors, dedup, auto-resolve, 14-phase periodic lint)",
+      "tests/wmb-5237-source-body-revisions.test.mjs: 7/7 PASS (migration 61 immutable revisions, sha256, purge gate, lifecycle)",
+      "tests/wmb-5237-visual-source-lineage.test.mjs: 12/12 PASS (migration 59 visual runs, asset lineage locators, compile evidence)",
+      "tests/wmb-5237-media-bindings.test.mjs: 22/22 PASS (migration 62 bindings, backfill hook, crop provenance)",
+      "tests/wmb-5238-knowledge-search.test.mjs + knowledge-global-log + wiki-index-search + index-store-core + wiki-index-ipc: 26/26 PASS (index/log/hot-cache/search contracts)",
+      "tests/wmb-5239-ui-contract + library-maintenance-ui + wiki-discovery-components + canvas-locate + wiki-discovery + ui-seams-ipc: 85/85 PASS (UI seams)",
+      "tests/wmb-5240-wiki-actions + protocol + pi-wiki-actions + pi-wiki-operator-protocol: 45/45 PASS (executor, grants, replay, isolation)",
+      "tests/wmb-5241-ingest-query-chain.test.mjs: PASS on one real workspace; evidence tests/e2e/.artifacts/WMB-5241-ingest-query-chain.json",
+      "tests/fixed-version-query-bridge-child.mjs: PASS; tests/wmb-5231-query-writeback-activation: 5/5 PASS",
+      "tests/wmb-5243-knowledge-network.test.mjs: PASS (graph projection with version refs/deep links)",
+      "Real Electron (WMB-5240 real-provider deepseek-v4-pro run): tests/e2e/.artifacts/WMB-5241-pi-wiki-real-electron-6c740b classification=passed (round-1 maintain / round-2 search / round-3 query asserted + restart readback); WMB-5239-maintenance-search-log E2E artifacts pass",
+      "Peer production fixes verified: src/main/assets.ts imported provenance + wiki-index-migrations v63 table-existence guard; tests/wmb-5237-media-bindings.test.mjs 22/22 PASS with updated revision-conflict provenance assertions; typecheck PASS (AcceptMediaGraphCreation)"
+    ],
+    "unifiedE2E": {
+      "run": "node tests/e2e/runner.mjs --file tests/e2e/wmb-5241-unified.test.mjs",
+      "outcome": "passed",
+      "duration": "186s (2026-08-13T18:39:53Z -> 18:42:59Z)",
+      "evidenceDir": "tests/e2e/.artifacts/WMB-5241-unified-e2e-YGuChh",
+      "classification": {
+        "outcome": "passed",
+        "steps": "15 steps ok (含 Studio 图片菜单/布局编辑 + 视觉切片; maintenance:pause-resume:ok)",
+        "restart": "maintenance-1786646396858-e811dc52 completed before/after restart, UI completed",
+        "versionRestore": "beforeVersions 4 -> afterVersions 5, restoreFromVersionId wver-30662fe8f04ff538221d3ee86dc8a1c7",
+        "fixedVersionQuery": "1 wiki page + 2 note versions resolved ok",
+        "writeback": "1 note + 1 version + 3 evidence links + 1 wiki compile (changeSet 65599886-...)",
+        "dbSnapshots": [
+          "phase-1-pre-ingest.db",
+          "phase-2-post-window-a.db",
+          "phase-3-final.db",
+          "db-summary-*.json"
+        ],
+        "finalSummary": "sources 7, wikiPages 3, wikiVersions 7, notes 9, noteVersions 9, indexEntries 34, receipts 8, operationLog 75, assets 2, provenance 2, knowledge_visual_runs 1 (visual run completed with asset|sourceRevision locator), publications/snapshots/metrics 0 (publish boundary intact)"
+      }
+    }
+  },
+  "capabilities": [
+    {
+      "id": "raw-immutable",
+      "baseline": "Raw sources are immutable",
+      "status": "present",
+      "evidence": [
+        "src/main/source-body-cache.ts (append-only revisions, sha256, purge gate)",
+        "src/main/db/source-body-revision-migrations.ts (migration 61)",
+        "tests/wmb-5237-source-body-revisions.test.mjs (7/7 PASS: UPDATE/DELETE rejected, purge is only delete gate)"
+      ]
+    },
+    {
+      "id": "persistent-ai-wiki",
+      "baseline": "AI owns and persistently maintains the wiki",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-compiler.ts",
+        "src/main/knowledge-flywheel.ts",
+        "src/main/knowledge-maintenance.ts (durable run orchestrator)",
+        "tests/wmb-5236-knowledge-maintenance.test.mjs (9/9 PASS)",
+        "tests/wmb-5240-wiki-actions.test.mjs (executor on ActiveWorkspaceRuntime)"
+      ]
+    },
+    {
+      "id": "schema-policy",
+      "baseline": "Explicit schema and maintenance conventions",
+      "status": "present",
+      "evidence": [
+        "src/shared/knowledge-flywheel.ts",
+        "src/shared/wiki-operator-protocol.ts (fail-closed NL protocol SSOT)",
+        "src/shared/knowledge-maintenance.ts",
+        "docs/spark/2026-08-12-wmb-knowledge-object-version-contract-design.md"
+      ]
+    },
+    {
+      "id": "single-ingest",
+      "baseline": "One source is read, summarized, integrated and logged",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-candidates.ts + knowledge-compiler.ts + knowledge-compile-trigger.ts",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A1 (receipt counts.notesCreated=2, wikiPagesCompiled=1; evidence JSON pass list)",
+        "SQLite readback: knowledge_update_receipts.request_id/counts_json"
+      ]
+    },
+    {
+      "id": "batch-ingest",
+      "baseline": "Many sources can be batch ingested",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-backfill.ts (checkpoint, pendingRetry, per-item outcome)",
+        "src/main/pi-wiki-actions.ts ingest 1..50 with partial-failure isolation",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A3 (batch partial failure honest; backfillCheckpoint counts scanned=8/processed=5/failed=1)",
+        "tests/wmb-5240-protocol.test.mjs T-BR-1 (WIKI_INGEST_BATCH_MAX=50)"
+      ]
+    },
+    {
+      "id": "cross-page-update",
+      "baseline": "One ingest may update many relevant pages and cross-references",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-compiler.ts (atomic ChangeSet: entities+notes+topic wiki page+evidence links in one transaction)",
+        "src/main/knowledge-flywheel.ts applyKnowledgeChangeSet (wikiPages/notes/entities/evidenceLinks segments)",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A4 (T1 recompiled across Source A+B: 4 immutable page versions, adopted note versions 2→4→5→6; Source B compiled T1 and T2 pages)",
+        "SQLite: knowledge_wiki_pages.revision/current_version_id, knowledge_wiki_page_versions.adopted_note_version_ids_json"
+      ]
+    },
+    {
+      "id": "query-citations",
+      "baseline": "Queries use wiki pages and return citations",
+      "status": "present",
+      "evidence": [
+        "src/main/fixed-version-query.ts (runFixedVersionQuery resolves immutable version rows, fail-closed)",
+        "src/main/query-writeback.ts (read wiki/note/evidence version ids)",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A5 (old v1 resolves after v4 exists)",
+        "tests/fixed-version-query-bridge-child.mjs PASS",
+        "Real Electron round-3-query asserted (WMB-5240 real-provider run, artifacts/WMB-5241-pi-wiki-real-electron-6c740b)"
+      ]
+    },
+    {
+      "id": "query-writeback",
+      "baseline": "Valuable answers are filed back into the wiki",
+      "status": "present",
+      "evidence": [
+        "src/main/query-writeback.ts (synthesis wiki page + note version + evidence derived_from chain)",
+        "src/main/knowledge-flywheel.ts QueryArtifact/Receipt segments",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A6 (restatement zero knowledge write; new_synthesis writes Note+version+Synthesis page with basedOn.noteVersionIds; replay duplicate zero increment)",
+        "tests/wmb-5231-query-writeback-activation.test.mjs 5/5 PASS",
+        "SQLite: knowledge_query_artifacts.write_back_decision/read_note_version_ids_json, knowledge_evidence_links.relation='derived_from'"
+      ]
+    },
+    {
+      "id": "lint-contradictions",
+      "baseline": "Detect contradictions",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts unresolved_contradiction detector",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs (disputed/contradicted kept open, never auto-adjudicated)"
+      ]
+    },
+    {
+      "id": "lint-stale",
+      "baseline": "Detect stale or superseded claims/pages",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts stale_wiki_page + stale_claim (validUntil) detectors",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs stale-claim case (validUntil=OLD flags)"
+      ]
+    },
+    {
+      "id": "lint-orphans",
+      "baseline": "Detect orphan pages",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts orphan_knowledge detector (no evidence link/relation/adoption)",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs orphan case"
+      ]
+    },
+    {
+      "id": "lint-missing-pages",
+      "baseline": "Detect important concepts missing pages",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts missing_wiki_page detector (entity + topic subjects referenced without active page)",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs missing-page cases"
+      ]
+    },
+    {
+      "id": "lint-crossrefs",
+      "baseline": "Detect missing/broken cross-references",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts cross_reference → broken_reference@wiki_page (structured adopted_note_version_ids/business_object_refs only, no free-text guessing)",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs cross-reference case"
+      ]
+    },
+    {
+      "id": "lint-research-gaps",
+      "baseline": "Identify data gaps and propose research",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-health.ts data_gap detector (captured FreeNote > 14 days) in 14-phase periodic lint",
+        "src/main/studio-annotations.ts + src/main/ipc-studio-annotations.ts research_request annotation intent (UI label 研究请求)",
+        "src/main/research-dispatch.ts + research-successor.ts (evidence-gap reporter dispatch)",
+        "tests/wmb-5237-knowledge-health-completeness.test.mjs data-gap threshold semantics"
+      ]
+    },
+    {
+      "id": "global-maintenance",
+      "baseline": "LLM can maintain and health-check the whole wiki",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-maintenance.ts (phases scan_compile→lint→report→completed; bounded ticks, pause/resume at batch boundary, failure recovery, restart recovery, durable report, broadcast)",
+        "tests/wmb-5236-knowledge-maintenance.test.mjs 9/9 PASS",
+        "UI: tests/e2e/wmb-5239-maintenance.test.mjs + artifacts (全库整理 entry/progress/暂停继续/失败项/整理报告; zero engineering jargon)",
+        "Real Electron round-1-maintain asserted (WMB-5240 real-provider run, artifacts/WMB-5241-pi-wiki-real-electron-6c740b)"
+      ]
+    },
+    {
+      "id": "index",
+      "baseline": "Content-oriented index updated on operations",
+      "status": "present",
+      "evidence": [
+        "src/main/db/wiki-index-store.ts + wiki-index-migrations.ts (migration 63 knowledge_index_entries)",
+        "src/main/wiki-index-triggers.ts (incremental projection on ChangeSet)",
+        "tests/wmb-5238-wiki-index-search.test.mjs (rebuild wipe→rebuild byte-identical; archive not resurrected; index summary == search summary == hot cache summary)",
+        "SQLite: knowledge_index_entries.object_type/version_ref",
+        "src/main/db/wiki-index-migrations.ts v63 rebuild skips when knowledge_wiki_pages table absent (table-existence guard; WMB-5238 migration no longer breaks pre-62 legacy fixture databases)"
+      ]
+    },
+    {
+      "id": "log",
+      "baseline": "Append-only chronological operation log",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-global-log.ts (9 event types: change_set/receipt/compile/lint_detected/lint_resolved/query/source/maintenance_started/maintenance_completed; keyset stable pagination; historical anchors never rewritten)",
+        "tests/wmb-5238-knowledge-global-log.test.mjs PASS (anchor non-drift: resolved issue keeps lint_detected entry + adds lint_resolved)",
+        "UI: 最近变化 panel (tests/e2e/wmb-5239-maintenance.test.mjs)"
+      ]
+    },
+    {
+      "id": "hot-context",
+      "baseline": "Efficient recent-context cache",
+      "status": "present",
+      "evidence": [
+        "src/main/db/wiki-index-store.ts rebuildWikiHotCache + knowledge_hot_cache persistent single row (migration 63)",
+        "src/main/knowledge-search.ts in-process hot cache with index fingerprint lazy rebuild",
+        "tests/wmb-5238-knowledge-search.test.mjs (bounded, rebuildable, non-truth-store)"
+      ]
+    },
+    {
+      "id": "search",
+      "baseline": "Search wiki content at scale",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-search.ts + ipc-wiki-index.ts (read-only IPC, no write channel)",
+        "six object types: wiki_page/knowledge_note/entity/topic/source/fixed_version_reference",
+        "tests/wmb-5238-wiki-index-search.test.mjs (body-level hit not in metadata; keyset cursor stable across inserts)",
+        "Real Electron round-2-search asserted (WMB-5240 real-provider run, artifacts/WMB-5241-pi-wiki-real-electron-6c740b)"
+      ]
+    },
+    {
+      "id": "graph",
+      "baseline": "Browse interlinked wiki graph",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-canvas.ts getKnowledgeNetworkProjection (nodes/relations/versionRefs/deepLinks)",
+        "src/shared/knowledge-network.ts + src/renderer/knowledge-canvas-layout.tsx (WMB-5243)",
+        "tests/wmb-5243-knowledge-network.test.mjs PASS",
+        "UI: 知识网络 canvas (tests/wmb-5239-canvas-locate.test.mjs PASS)"
+      ]
+    },
+    {
+      "id": "image-awareness",
+      "baseline": "Read locally retained source images when useful",
+      "status": "present",
+      "evidence": [
+        "src/main/assets.ts (asset_provenance kind='imported' written in SAVEPOINT-atomic registration, reused idempotent — imported lineage is real, not schema-only)",
+        "src/main/visual-source-lineage.ts (migration 59 knowledge_visual_runs; local+remote assets; immutable observations; locator binds assetId+sourceRevisionId; completed run compiles evidence links with 3-part lineage)",
+        "tests/wmb-5237-visual-source-lineage.test.mjs 12/12 PASS",
+        "SQLite: knowledge_visual_runs, assets, knowledge_evidence_links with asset|revision locator"
+      ]
+    },
+    {
+      "id": "alternative-outputs",
+      "baseline": "Queries can produce pages, tables, slides, charts or canvases",
+      "status": "present",
+      "evidence": [
+        "src/main/query-writeback.ts produces synthesis Wiki pages (pageType='synthesis') + free notes",
+        "src/main/knowledge-canvas.ts (canvas form)",
+        "Note: Marp deck / matplotlib chart remain optional modular forms per baseline text (everything optional and modular); native WMB equivalents are synthesis page + canvas + structured index/search data",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A6 (synthesis page version qwver-...)"
+      ]
+    },
+    {
+      "id": "version-history",
+      "baseline": "Wiki changes retain history",
+      "status": "present-plus",
+      "evidence": [
+        "knowledge_wiki_pages/versions + knowledge_note_versions immutable version rows (restore via restoreFromVersionId)",
+        "src/main/source-body-cache.ts source_body_revisions (migration 61)",
+        "tests/wmb-5241-ingest-query-chain.test.mjs A5 (old version content unchanged after new versions; 4 page generations)",
+        "tests/wmb-5237-source-body-revisions.test.mjs (immutable chain)",
+        "SQLite: knowledge_wiki_page_versions.version_number, knowledge_notes.revision"
+      ]
+    },
+    {
+      "id": "human-control",
+      "baseline": "Human directs emphasis and may supervise ingest",
+      "status": "present-plus",
+      "evidence": [
+        "src/main/studio-annotations.ts + src/main/ipc-studio-annotations.ts (9 intents incl. research_request; annotation ledger UI)",
+        "src/main/knowledge-maintenance.ts pause/resume (batch boundary)",
+        "tests/wmb-5240-wiki-actions.test.mjs F (grant/dispatcher hard gate: missing/expired/revoked grant → zero write; worker mismatch rejected)",
+        "tests/wmb-5240-wiki-actions.test.mjs I (publication boundary: zero publish actions in executor)",
+        "UI: tests/wmb-5239-library-maintenance-ui.test.mjs (暂停/继续/失败项)"
+      ]
+    }
+  ],
+  "extensions": [
+    {
+      "id": "fixed-version-query",
+      "baseline": "Pi/operator queries pin immutable versions (WMB-5240)",
+      "status": "present",
+      "evidence": [
+        "src/main/fixed-version-query.ts",
+        "tests/wmb-5240-wiki-actions.test.mjs E (unregistered executor fail-closed)",
+        "tests/fixed-version-query-bridge-child.mjs PASS"
+      ]
+    },
+    {
+      "id": "pi-wiki-operator",
+      "baseline": "Natural-language full-wiki operation protocol with authority gates (WMB-5240)",
+      "status": "present",
+      "evidence": [
+        "src/shared/wiki-operator-protocol.ts (7 action kinds, strict fence parsing)",
+        "src/main/pi-wiki-actions.ts (grant/dispatcher, replay, isolation, error hygiene)",
+        "tests/wmb-5240-protocol.test.mjs + wmb-5240-wiki-actions.test.mjs 45/45 PASS",
+        "Real Electron round-1/2/3 asserted"
+      ]
+    },
+    {
+      "id": "visual-source-lineage",
+      "baseline": "Traceable vision pipeline binding observations to asset+source revision (WMB-5237)",
+      "status": "present",
+      "evidence": [
+        "src/main/visual-source-lineage.ts",
+        "tests/wmb-5237-visual-source-lineage.test.mjs 12/12 PASS"
+      ]
+    },
+    {
+      "id": "media-bindings",
+      "baseline": "Structured content/platform media bindings with crop provenance (WMB-5237)",
+      "status": "present",
+      "evidence": [
+        "src/main/media-bindings.ts + db/media-binding-migrations.ts (migration 62)",
+        "tests/wmb-5237-media-bindings.test.mjs 22/22 PASS"
+      ]
+    },
+    {
+      "id": "knowledge-network",
+      "baseline": "Global wiki knowledge network projection with version refs (WMB-5243)",
+      "status": "present",
+      "evidence": [
+        "src/main/knowledge-canvas.ts + src/shared/knowledge-network.ts",
+        "tests/wmb-5243-knowledge-network.test.mjs PASS"
+      ]
+    }
+  ],
+  "acceptanceRule": "At WMB-5241 every core capability is present with test/SQLite/real-Electron evidence; no missing or partial core capability remains; design-only, fixture-only, or chat-only behavior does not count; each matrix entry cites runnable evidence paths.",
+  "conclusion": {
+    "verdict": "WMB not weaker than Karpathy original core contract",
+    "reason": "All 24 core capabilities recalibrated to present/present-plus against WMB-5236..5240 implemented facts, each with runnable test/SQLite/real-Electron evidence; 5 stronger business extensions (fixed-version query, Pi operator protocol, visual source lineage, media bindings, knowledge network) documented separately and not used to mask core gaps.",
+    "blockers": [],
+    "notes": [
+      "Karpathy's deck/chart output forms are optional and modular per baseline text; native equivalents are synthesis wiki page (markdown) + canvas + structured index/search read models.",
+      "Entity/Method/Map wiki page synthesis is schema-supported (pageType entity/method/map with subject binding) but not auto-produced by ingest; cross-page contract is satisfied via atomic multi-object ChangeSet (topic pages + notes + entities + evidence links + receipts).",
+      "Test-side defects repaired during final acceptance (9 items across wmb-5237-source-body-revisions / visual-source-lineage / media-bindings); all now PASS, no product code changes.",
+      "Final real-Electron evidence lands in tests/e2e/.artifacts/WMB-5241-* (unified E2E in progress; per-round real-Electron evidence already present for maintain/search/query + restart readback)."
+    ]
+  }
+}

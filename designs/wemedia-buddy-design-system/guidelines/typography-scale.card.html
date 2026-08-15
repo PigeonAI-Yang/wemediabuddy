@@ -1,0 +1,37 @@
+<!-- @dsCard group="Guidelines" viewport="700x360" name="TypographyScale" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Typography Scale</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .stack { display: grid; gap: 8px; }
+  .row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); }
+  .row .label { color: var(--muted); font-size: 11px; font-weight: 650; font-family: var(--mono); }
+  .display { font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); font-weight: 700; }
+  .h2 { font-size: var(--text-h2); line-height: var(--text-h2-lh); letter-spacing: var(--text-h2-ls); font-weight: 700; }
+  .title { font-size: var(--text-title); font-weight: 650; letter-spacing: -.02em; }
+  .body { font-size: var(--text-body); line-height: var(--text-body-lh); color: var(--ink-soft); }
+  .ui { font-size: var(--text-ui); color: var(--muted); }
+  .meta { font-size: var(--text-meta); color: var(--muted-low); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Typography — 34 / 25 / 18 / 13 + 12 元数据</h1>
+<p>正文栈 <code>--font-sans</code>（Inter + PingFang SC + YaHei UI + Segoe UI），等宽 <code>--mono</code>（JetBrains Mono + Cascadia + Consolas）。系统不随包发布字体、不声明 <code>@font-face</code>；新字号需文档化例外。</p>
+<div class="stack">
+  <div class="row"><span class="label">Display 34</span><span class="display">今日选题</span></div>
+  <div class="row"><span class="label">H2 25</span><span class="h2">机会判断与选题呈报</span></div>
+  <div class="row"><span class="label">Title 18</span><span class="title">把判断放在同一条可追溯链路</span></div>
+  <div class="row"><span class="label">Body 14</span><span class="body">界面服务于高频决策：今天应该讲什么，以及为什么值得讲。</span></div>
+  <div class="row"><span class="label">UI 13</span><span class="ui">按钮 · 标签 · 字段</span></div>
+  <div class="row"><span class="label">Meta 12</span><span class="meta">元数据层 · 时间 · 角标</span></div>
+</div>
+<p style="margin-top:12px;">权重重阶 400/500/600/650/700/750；每个房间状态恰有一个 H1，页面例外必须记录（如 today-main 26px）。</p>
+</body>
+</html>

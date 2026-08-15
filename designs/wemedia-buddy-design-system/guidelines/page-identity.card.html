@@ -1,0 +1,33 @@
+<!-- @dsCard group="Guidelines" viewport="700x320" name="PageIdentity" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Page Identity &amp; Hierarchy</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .demo { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: linear-gradient(135deg, var(--accent-faint), transparent 46%), var(--surface); }
+  .demo .eyebrow { color: var(--accent-soft); font-size: 13px; font-weight: 650; }
+  .demo h2 { margin: 4px 0 8px; font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); }
+  .demo p { margin: 0 0 14px; color: var(--ink-soft); font-size: 14px; }
+  .demo .sec { margin: 12px 0 6px; color: var(--ink); font-size: var(--text-h2); line-height: var(--text-h2-lh); font-weight: 700; }
+  .demo .card { padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); color: var(--ink-soft); font-size: 13px; }
+  .bad { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--danger-soft); color: var(--danger); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>Page Identity — 一房一 H1</h1>
+<p>每个房间状态恰有一个页面级 H1（画布可并入面包屑，但必须保留同一 landmark）；H2 给主分区、H3 给卡片。eyebrow 不是标题的替代品。审计时 11 个视图里 7 个缺可见 H1——统一入口从此合同开始。</p>
+<div class="demo">
+  <span class="eyebrow">策划组 · 提案夹</span>
+  <h2>选题台账</h2>
+  <p>今日值得批的方案，一屏一个主操作。</p>
+  <div class="sec">今日可批</div>
+  <div class="card">「XX」平台 ×× 话题热度曲线异动，可追溯三条入库资料。</div>
+</div>
+<div class="bad">反面：标题栏、侧栏、内容区各写一个「设置」，页面没有自己的 H1 与 aria-current。</div>
+</body>
+</html>

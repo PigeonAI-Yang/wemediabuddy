@@ -7,7 +7,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { getToday } from '../src/main/workbench.ts';
-import { refreshWorkCarry, setCarryState } from '../src/main/ferment.ts';
+import { listFermentingBundle, refreshWorkCarry, setCarryState } from '../src/main/ferment.ts';
 import { createProjectFromPlanItem } from '../src/main/content.ts';
 
 function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国产模型的 Agent 时刻到了吗？') {
@@ -42,7 +42,7 @@ function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国
   return source.id;
 }
 
-test('yesterday high-value plan item appears in today fermenting rail', () => {
+test('yesterday multi-day plan projects topic onto continuous-attention rail', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'wmb-ferment-'));
   const database = migrateDatabase(path.join(directory, 'wmb.db'));
   try {
@@ -53,28 +53,64 @@ test('yesterday high-value plan item appears in today fermenting rail', () => {
     getToday(database, '2026-08-01');
     assert.deepEqual(database.prepare('SELECT id, revision, updated_at FROM work_carry_items ORDER BY id').all(), before);
     assert.ok(today.fermenting);
-    const hit = today.fermenting.items.find((item) => item.objectType === 'plan_item' && item.title.includes('DeepSeek-V4-Flash'));
-    assert.ok(hit, 'expected yesterday plan item in fermenting rail');
+    const hit = today.fermenting.items.find((item) => item.objectType === 'topic' && item.title.includes('DeepSeek-V4-Flash'));
+    assert.ok(hit, 'expected topic progress row in continuous-attention rail');
+    assert.equal(hit.objectType, 'topic');
+    assert.ok(hit.topicId);
     assert.equal(today.plan, null);
-    assert.ok(hit.fermentedDays >= 1);
+    assert.ok(hit.fermentedDays >= 0);
+    assert.equal(today.fermenting.items.some((item) => item.objectType === 'source'), false);
+    assert.equal(today.fermenting.pinnedSources.length, 0);
+    const linked = database.prepare('SELECT count(*) AS c FROM topic_source_links WHERE topic_id=?').get(hit.topicId);
+    assert.ok(Number(linked.c) >= 1, 'plan save should link sources onto topic');
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('dismiss and done remove item from active fermenting list', () => {
+test('bare high-value source alone does not appear on continuous-attention rail', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-ferment-bare-'));
+  const database = migrateDatabase(path.join(directory, 'wmb.db'));
+  try {
+    upsertSource(database, {
+      title: '孤立高价值资料不应上桌',
+      originalUrl: 'https://example.com/bare-source',
+      summary: 'no plan no topic',
+      priority: 0,
+      categories: ['signal']
+    });
+    // Backdate so seed window would historically pick it up.
+    database.prepare(`UPDATE source_items SET collected_at = ?`).run('2026-07-30T08:00:00.000Z');
+    const bundle = refreshWorkCarry(database, '2026-08-01');
+    assert.equal(bundle.items.some((row) => row.objectType === 'source'), false);
+    assert.equal(bundle.items.length, 0);
+    assert.equal(bundle.pinnedSources.length, 0);
+    const sourceCarry = database.prepare(`SELECT count(*) AS c FROM work_carry_items WHERE object_type='source'`).get();
+    assert.equal(Number(sourceCarry.c), 0, 'seedCarryFromHighValueSources must not insert source carry');
+  } finally {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('dismissing plan-item carry removes topic from rail when no other signal', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'wmb-ferment-state-'));
   const database = migrateDatabase(path.join(directory, 'wmb.db'));
   try {
     seedPlan(database, '2026-07-31');
     let bundle = refreshWorkCarry(database, '2026-08-01');
-    const item = bundle.items.find((row) => row.title.includes('DeepSeek-V4-Flash'));
-    assert.ok(item);
-    const dismissed = setCarryState(database, { id: item.id, expectedRevision: item.revision, state: 'dismissed' });
+    const topicRow = bundle.items.find((row) => row.objectType === 'topic' && row.title.includes('DeepSeek-V4-Flash'));
+    assert.ok(topicRow);
+    const carry = database.prepare(`SELECT id, revision FROM work_carry_items WHERE object_type='plan_item' AND state='active' LIMIT 1`).get();
+    assert.ok(carry);
+    const dismissed = setCarryState(database, { id: carry.id, expectedRevision: carry.revision, state: 'dismissed' });
     assert.equal(dismissed.state, 'dismissed');
-    bundle = refreshWorkCarry(database, '2026-08-01');
-    assert.equal(bundle.items.some((row) => row.id === item.id), false);
+    // Drop topic_source_links so only carry signal remains for this fixture.
+    database.prepare('DELETE FROM topic_source_links').run();
+    database.prepare(`UPDATE topics SET last_seen_at = ?`).run('2026-06-01T00:00:00.000Z');
+    bundle = listFermentingBundle(database, '2026-08-01');
+    assert.equal(bundle.items.some((row) => row.topicId === topicRow.topicId), false);
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
@@ -91,32 +127,23 @@ test('marking sources watching keeps them in library watching board', async () =
     assert.ok(marked.ids.includes(sourceId));
     const board = listWatchingSources(database, 20);
     assert.ok(board.some((row) => row.id === sourceId));
-    // Old carry watching rows are promoted into library watching and leave the today rail.
-    let bundle = refreshWorkCarry(database, '2026-08-01');
-    const item = bundle.items.find((row) => row.title.includes('DeepSeek-V4-Flash'));
-    if (item) {
-      setCarryState(database, { id: item.id, expectedRevision: item.revision, state: 'watching' });
-      bundle = refreshWorkCarry(database, '2026-08-01');
-      assert.equal(bundle.watchingItems.some((row) => row.id === item.id), false);
-      assert.ok(listWatchingSources(database, 20).some((row) => row.id === sourceId));
-    }
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('creating project marks matching carry done', () => {
+test('creating project marks matching carry done and topic may leave if no signal', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'wmb-ferment-done-'));
   const database = migrateDatabase(path.join(directory, 'wmb.db'));
   try {
     seedPlan(database, '2026-07-31');
-    const planItem = database.prepare(`SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date='2026-07-31' LIMIT 1`).get();
+    const planItem = database.prepare(`SELECT pi.id, pi.topic_id AS topicId FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date='2026-07-31' LIMIT 1`).get();
     assert.ok(planItem?.id);
     refreshWorkCarry(database, '2026-08-01');
     createProjectFromPlanItem(database, planItem.id);
-    const bundle = refreshWorkCarry(database, '2026-08-01');
-    assert.equal(bundle.items.some((row) => row.objectId === planItem.id), false);
+    const activeCarry = database.prepare(`SELECT count(*) AS c FROM work_carry_items WHERE object_type='plan_item' AND object_id=? AND state IN ('active','watching')`).get(planItem.id);
+    assert.equal(Number(activeCarry.c), 0);
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });

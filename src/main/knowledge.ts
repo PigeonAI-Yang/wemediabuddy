@@ -1,4 +1,14 @@
 import { broadcastDataChanged } from './data-changed.ts';
+import { listUpdateReceipts } from './knowledge-flywheel.ts';
+// WMB-5237：Source 删除生命周期清正文 revision 历史（不可变表经授权 purge 窗口删除，避免 FK cascade 触发 DELETE 守卫）。
+import { purgeSourceBodyHistory } from './source-body-cache.ts';
+// WMB-5247：删除门 —— 删除 Source 前读取其 Asset 被知识 Evidence/内容/平台 Binding/发布快照等引用的清单；有引用则阻止普通删除并要求显式确认（素材字节永不随删除消失）。
+import { sourceDeleteGate } from './media-governance.ts';
+import { CommandDispatchError } from './command-dispatcher.ts';
+// WMB-5238：Source/Topic 写路径增量索引与日志投影。
+import { projectSourceSaved, projectTopicSaved } from './wiki-index-triggers.ts';
+// WMB-5233：主题列表诚实三态（uncompiled / legacy_shell / compiled）。
+import { listTopicCompileStates } from './knowledge-compile-state.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -31,10 +41,14 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
   }
   const clause = where.join(' AND ');
   const total = Number((database.prepare(`SELECT count(*) AS count FROM source_items s WHERE ${clause}`).get(...args) as { count: number }).count);
-  const items = database.prepare(`
+  const rows = database.prepare(`
     SELECT s.id, s.title, s.original_url AS originalUrl, s.author, s.published_at AS publishedAt,
       s.collected_at AS collectedAt, s.summary, s.priority, s.verification_status AS verificationStatus,
       s.management_status AS managementStatus, s.revision,
+      (SELECT json_object('decision', j.decision, 'reasonCode', j.reason_code, 'reason', j.reason,
+        'judgedBy', j.judged_by, 'judgedAt', j.judged_at)
+        FROM source_lane_judgments j WHERE j.source_id = s.id
+        ORDER BY j.judged_at DESC, j.id DESC LIMIT 1) AS laneJudgmentJson,
       coalesce((SELECT group_concat(t.title, '、') FROM topic_source_links l JOIN topics t ON t.id=l.topic_id WHERE l.source_id=s.id), '') AS topics,
       (SELECT count(*) FROM plan_items pi, json_each(pi.source_ids_json) j WHERE j.value=s.id) AS opportunityCount,
       (SELECT count(*) FROM content_project_sources cps WHERE cps.source_id=s.id) AS projectCount,
@@ -43,6 +57,12 @@ export function listKnowledgeSources(database: DatabaseSync, input: {
         JOIN publications p ON p.platform_version_id=pv.id WHERE cps.source_id=s.id AND p.status='published') AS publicationCount
     FROM source_items s WHERE ${clause}
     ORDER BY s.collected_at DESC, s.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
+  // 「已移出」视图徽标数据源：source_lane_judgments 最新一行（追加型语义，按 judged_at DESC 取首行）；
+  // 无判定行 = 主编手动归档（徽标显示「主编归档」），有判定行 = AI/系统判定原因可展示。
+  const items = rows.map((item) => {
+    const { laneJudgmentJson, ...rest } = item as { laneJudgmentJson: string | null } & Record<string, unknown>;
+    return { ...rest, laneJudgment: laneJudgmentJson ? JSON.parse(laneJudgmentJson) : null };
+  });
   return { items, total, limit, offset, hasMore: offset + items.length < total };
 }
 
@@ -54,7 +74,7 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
   title?: string;
   summary?: string | null;
   author?: string | null;
-}) {
+}, broadcast = true) {
   if (input.verificationStatus && !verification.has(input.verificationStatus)) throw new Error('INVALID_VERIFICATION_STATUS');
   if (input.managementStatus && !management.has(input.managementStatus)) throw new Error('INVALID_MANAGEMENT_STATUS');
   const title = input.title?.trim();
@@ -82,18 +102,31 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
       next,
       input.id
     );
-  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
+  if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
+  // WMB-5238：Source 状态/字段更新成功提交后增量投影（含归档 → 移除索引条目）。
+  projectSourceSaved(database, input.id);
   return { id: input.id, revision: next };
 }
 
-export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }) {
+export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }, transaction = true, broadcast = true, options: { forceReferencedDelete?: boolean } = {}) {
   const current = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.id) as { id: string; revision: number } | undefined;
   if (!current) throw new Error('SOURCE_NOT_FOUND');
   if (current.revision !== input.expectedRevision) throw new Error('REVISION_CONFLICT');
-  database.exec('BEGIN');
+  // WMB-5247 删除门：有外部 Asset 引用时阻止普通删除；forceReferencedDelete 仅表示用户显式
+  // 确认“仍删除 Source 关系”，Asset 字节永不删除（字节由引用感知 GC 另行保护）。
+  const gate = sourceDeleteGate(database, input.id, { forceReferencedDelete: options.forceReferencedDelete === true });
+  if (!gate.allowed) {
+    throw new CommandDispatchError(
+      'SOURCE_DELETE_BLOCKED_REFERENCED_ASSETS',
+      '该资料关联的素材仍被内容/平台版本、发布快照或知识证据引用；请先查看引用清单。确认后仍可删除资料（素材文件保留）。',
+      { summary: gate.summary }
+    );
+  }
+  if (transaction) database.exec('BEGIN');
   try {
     database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(input.id);
     database.prepare('DELETE FROM content_project_sources WHERE source_id=?').run(input.id);
+    purgeSourceBodyHistory(database, input.id);
     database.prepare('DELETE FROM source_body_cache WHERE source_id=?').run(input.id);
     try {
       database.prepare("DELETE FROM knowledge_canvas_nodes WHERE object_type='source' AND object_id=?").run(input.id);
@@ -102,12 +135,14 @@ export function deleteKnowledgeSource(database: DatabaseSync, input: { id: strin
     }
     const result = database.prepare('DELETE FROM source_items WHERE id=?').run(input.id);
     if (!result.changes) throw new Error('SOURCE_NOT_FOUND');
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (transaction) database.exec('ROLLBACK');
     throw error;
   }
-  broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+  if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+  // WMB-5238：删除成功提交后移除索引条目（对象不存在 → projectSourceSaved 走 remove 分支）。
+  projectSourceSaved(database, input.id);
   return { id: input.id, deleted: true as const };
 }
 
@@ -130,7 +165,7 @@ export function listWatchingSources(database: DatabaseSync, limit = 30) {
   `).all(safeLimit);
 }
 
-export function markSourcesWatching(database: DatabaseSync, sourceIds: string[]): { updated: number; ids: string[] } {
+export function markSourcesWatching(database: DatabaseSync, sourceIds: string[], broadcast = true): { updated: number; ids: string[] } {
   const unique = [...new Set(sourceIds.filter(Boolean))];
   if (!unique.length) return { updated: 0, ids: [] };
   const now = new Date().toISOString();
@@ -151,7 +186,7 @@ export function markSourcesWatching(database: DatabaseSync, sourceIds: string[])
     updated += 1;
     ids.push(id);
   }
-  if (updated > 0) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
+  if (updated > 0 && broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
   return { updated, ids };
 }
 
@@ -162,11 +197,21 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
   if (!key || !input.title.trim()) throw new Error('TOPIC_REQUIRED');
   if (input.status && !topicStatuses.has(input.status)) throw new Error('INVALID_TOPIC_STATUS');
   const now = new Date().toISOString();
-  const existing = database.prepare('SELECT id, revision FROM topics WHERE canonical_key=?').get(key) as { id: string; revision: number } | undefined;
+  const existing = database.prepare('SELECT id, revision, title, kind, summary, status FROM topics WHERE canonical_key=?').get(key) as
+    | { id: string; revision: number; title: string; kind: string | null; summary: string | null; status: string }
+    | undefined;
   if (existing) {
+    const nextTitle = input.title.trim();
+    const nextKind = input.kind ?? 'theme';
+    const nextStatus = input.status ?? existing.status;
     database.prepare(`UPDATE topics SET title=?, kind=?, summary=coalesce(?, summary), status=coalesce(?, status),
       last_seen_at=?, updated_at=?, revision=revision+1 WHERE id=?`)
-      .run(input.title.trim(), input.kind ?? 'theme', input.summary ?? null, input.status ?? null, now, now, existing.id);
+      .run(nextTitle, nextKind, input.summary ?? null, nextStatus, now, now, existing.id);
+    // WMB-5238：Topic 更新成功提交后增量投影（含归档 → 移除索引条目）；无实质变化不重复投影/日志。
+    if (nextTitle !== existing.title || nextKind !== existing.kind || nextStatus !== existing.status
+      || (input.summary !== undefined && input.summary !== existing.summary)) {
+      projectTopicSaved(database, existing.id);
+    }
     return { id: existing.id, created: false, revision: existing.revision + 1 };
   }
   const id = randomUUID();
@@ -174,16 +219,18 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
     (id,title,created_at,updated_at,revision,canonical_key,kind,summary,status,first_seen_at,last_seen_at)
     VALUES (?,?,?,?,1,?,?,?,?,?,?)`)
     .run(id, input.title.trim(), now, now, key, input.kind ?? 'theme', input.summary ?? null, input.status ?? 'active', now, now);
+  // WMB-5238：新建 Topic 增量投影（索引 + 日志）。
+  projectTopicSaved(database, id);
   return { id, created: true, revision: 1 };
 }
 
 export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Array<{
   sourceId: string; topic: { canonicalKey?: string; title: string; kind?: 'theme' | 'event'; summary?: string };
   relation?: TopicRelation; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus;
-}> }) {
+}> }, transaction = true) {
   if (!input.items.length) throw new Error('KNOWLEDGE_ITEMS_REQUIRED');
   const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
+  if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const results = input.items.map((item) => {
       const source = database.prepare('SELECT revision FROM source_items WHERE id=?').get(item.sourceId) as { revision: number } | undefined;
@@ -194,13 +241,13 @@ export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Arr
         .run(topic.id, item.sourceId, item.relation ?? 'primary', now, now);
       if (item.verificationStatus || item.managementStatus) {
         updateKnowledgeSource(database, { id: item.sourceId, expectedRevision: source.revision,
-          verificationStatus: item.verificationStatus, managementStatus: item.managementStatus });
+          verificationStatus: item.verificationStatus, managementStatus: item.managementStatus }, transaction);
       }
       return { sourceId: item.sourceId, topicId: topic.id };
     });
-    database.exec('COMMIT');
+    if (transaction) database.exec('COMMIT');
     return results;
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
+  } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
 }
 
 export function listKnowledgeTopics(database: DatabaseSync, input: { query?: string; status?: TopicStatus; limit?: number; offset?: number } = {}) {
@@ -243,7 +290,10 @@ export function listKnowledgeTopics(database: DatabaseSync, input: { query?: str
     WHERE ${where}
     GROUP BY t.id ORDER BY t.last_seen_at DESC,t.id DESC LIMIT ? OFFSET ?`)
     .all(...filterArgs, limit, offset);
-  return { items, total, limit, offset, hasMore: offset + items.length < total };
+  // WMB-5233：诚实三态（复用同一判定；列表投影一次 join 批量读回）。
+  const compileStates = listTopicCompileStates(database, items.map((row) => String(row.id)));
+  const enriched = items.map((row) => ({ ...row, compileState: compileStates.get(String(row.id)) ?? 'uncompiled' }));
+  return { items: enriched, total, limit, offset, hasMore: offset + items.length < total };
 }
 
 export function createKnowledgeDomain(database:DatabaseSync,input:{
@@ -324,6 +374,64 @@ export function getKnowledgeDomain(database:DatabaseSync,id:string,input:{limit?
   return {...domain,topics,total,limit,offset,hasMore:offset+topics.length<total};
 }
 
+function parseIdArrayJson(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * WMB-5214：冻结飞轮知识版本（Pi 查询读取面）。只返回真实存在且已落库的固定版本：
+ * Topic Wiki 当前版本 + 其采纳的 Note 版本 + 这些 Note 版本挂载的 Evidence（带 id）。
+ * Pi 的 Query 写回 manifest 只能引用本集合（服务端存在性 + basedOn ⊆ read 双校验）；
+ * 回答本身不是证据，综合候选的证据关系 derived_from 指向这里返回的版本 id。
+ */
+export function resolveFixedKnowledgeVersions(
+  database: DatabaseSync,
+  topicIds: readonly string[],
+  limit: number
+): { wikiPages: unknown[]; noteVersions: unknown[]; evidence: unknown[] } {
+  if (!topicIds.length) return { wikiPages: [], noteVersions: [], evidence: [] };
+  const placeholders = topicIds.map(() => '?').join(',');
+  const wikiPages = database.prepare(`
+    SELECT p.id AS pageId, p.page_type AS pageType, p.title, p.compile_status AS compileStatus,
+           p.subject_id AS subjectId, p.current_version_id AS currentVersionId,
+           pv.version_number AS versionNumber, pv.adopted_note_version_ids_json AS adoptedNoteVersionIds
+    FROM knowledge_wiki_pages p
+    LEFT JOIN knowledge_wiki_page_versions pv ON pv.id = p.current_version_id
+    WHERE p.lifecycle = 'active' AND p.subject_type = 'topic' AND p.subject_id IN (${placeholders})
+    ORDER BY p.updated_at DESC LIMIT ?
+  `).all(...topicIds, limit);
+  const adopted = new Set<string>();
+  for (const row of wikiPages as Array<{ adoptedNoteVersionIds?: string }>) {
+    for (const id of parseIdArrayJson(String(row.adoptedNoteVersionIds ?? '[]'))) adopted.add(id);
+  }
+  const noteVersionIds = [...adopted].slice(0, limit);
+  const noteVersions = noteVersionIds.length
+    ? database.prepare(`
+        SELECT nv.id AS versionId, nv.note_id AS noteId, n.kind AS kind, nv.title, nv.statement,
+               nv.conclusion_status AS conclusionStatus, nv.evidence_level AS evidenceLevel,
+               nv.applies_to AS appliesTo, nv.adopted_topic_ids_json AS adoptedTopicIds
+        FROM knowledge_note_versions nv JOIN knowledge_notes n ON n.id = nv.note_id
+        WHERE nv.id IN (${noteVersionIds.map(() => '?').join(',')})
+      `).all(...noteVersionIds)
+    : [];
+  const evidence = noteVersionIds.length
+    ? database.prepare(`
+        SELECT id, knowledge_note_version_id AS noteVersionId, evidence_object_type AS evidenceObjectType,
+               evidence_object_id AS evidenceObjectId, relation, source_nature AS sourceNature,
+               excerpt, locator
+        FROM knowledge_evidence_links
+        WHERE knowledge_note_version_id IN (${noteVersionIds.map(() => '?').join(',')})
+        ORDER BY created_at DESC LIMIT ?
+      `).all(...noteVersionIds, limit)
+    : [];
+  return { wikiPages, noteVersions, evidence };
+}
+
 export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: string; sourceId?: string; query?: string; limit?: number }) {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
   const topicIds = input.topicId ? [input.topicId] : input.sourceId
@@ -332,7 +440,8 @@ export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: s
   const sourceIds = input.sourceId ? [input.sourceId] : topicIds.length
     ? (database.prepare(`SELECT DISTINCT source_id AS id FROM topic_source_links WHERE topic_id IN (${topicIds.map(() => '?').join(',')}) LIMIT ?`).all(...topicIds, limit) as Array<{ id: string }>).map((r) => r.id) : [];
   const topics = topicIds.length ? database.prepare(`SELECT id,title,kind,summary,status,first_seen_at AS firstSeenAt,last_seen_at AS lastSeenAt FROM topics WHERE id IN (${topicIds.map(() => '?').join(',')})`).all(...topicIds) : [];
-  const sources = sourceIds.length ? database.prepare(`SELECT id,title,original_url AS originalUrl,summary,priority,verification_status AS verificationStatus,management_status AS managementStatus,collected_at AS collectedAt FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')})`).all(...sourceIds) : [];
+  // 有效资料库口径：知识上下文只带回未移出（archived）资料；已移出条目经「已移出」视图（4944）单独可查。
+  const sources = sourceIds.length ? database.prepare(`SELECT id,title,original_url AS originalUrl,summary,priority,verification_status AS verificationStatus,management_status AS managementStatus,collected_at AS collectedAt FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')}) AND management_status != 'archived'`).all(...sourceIds) : [];
   const opportunities = sourceIds.length ? database.prepare(`SELECT DISTINCT pi.id,pi.title,pi.priority,p.plan_date AS planDate
     FROM plan_items pi JOIN plans p ON p.id=pi.plan_id, json_each(pi.source_ids_json) j WHERE j.value IN (${sourceIds.map(() => '?').join(',')})
     ORDER BY p.plan_date DESC,pi.priority LIMIT ?`).all(...sourceIds, limit) : [];
@@ -352,7 +461,9 @@ export function getKnowledgeContext(database: DatabaseSync, input: { topicId?: s
   const reviewIds = (reviews as Array<{ id: string }>).map((r) => r.id);
   const findings = reviewIds.length ? database.prepare(`SELECT id,review_id AS reviewId,title,body,updated_at AS updatedAt FROM method_findings
     WHERE review_id IN (${reviewIds.map(() => '?').join(',')}) ORDER BY updated_at DESC LIMIT ?`).all(...reviewIds, limit) : [];
-  return { topics, sources, opportunities, projects, publications, metrics, reviews, findings };
+  // WMB-5214：冻结飞轮知识版本（Pi 读取面；QueryArtifact 写回据此引用固定版本，回答本身不是证据）。
+  const knowledge = resolveFixedKnowledgeVersions(database, topicIds, limit);
+  return { topics, sources, opportunities, projects, publications, metrics, reviews, findings, knowledge };
 }
 
 export const topicDossierCategories = ['sources','judgments','audience_demands','counter_evidence','content_history','metrics','reviews','method_findings'] as const;
@@ -407,12 +518,18 @@ export function getKnowledgeTopicDossier(database: DatabaseSync,input:{
 export function listRediscovery(database: DatabaseSync) {
   const unused = database.prepare(`SELECT s.id,s.title,s.priority,s.collected_at AS collectedAt,'高价值但尚未创作' AS reason FROM source_items s
     WHERE s.management_status!='archived' AND s.priority<=2 AND NOT EXISTS(SELECT 1 FROM content_project_sources c WHERE c.source_id=s.id)
-    ORDER BY s.priority,s.collected_at DESC LIMIT 20`).all();
+    ORDER BY s.priority,s.collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
   const watching = database.prepare(`SELECT id,title,priority,collected_at AS collectedAt,'持续观察' AS reason FROM source_items
-    WHERE management_status='watching' ORDER BY collected_at DESC LIMIT 20`).all();
+    WHERE management_status='watching' ORDER BY collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
   const pending = database.prepare(`SELECT id,title,priority,collected_at AS collectedAt,'待核验超过 7 天' AS reason FROM source_items
-    WHERE verification_status='pending' AND collected_at < datetime('now','-7 days') ORDER BY collected_at DESC LIMIT 20`).all();
-  return { unused, watching, pending };
+    WHERE verification_status='pending' AND collected_at < datetime('now','-7 days') ORDER BY collected_at DESC LIMIT 20`).all() as Array<Record<string, unknown>>;
+  // WMB-5212：每项附加该 Source 最近一次知识回执（证据变化摘要；有界单条）。
+  const withReceipt = (items: Array<Record<string, unknown>>) => items.map((item) => {
+    const id = String(item.id);
+    const latest = listUpdateReceipts(database, { sourceId: id, limit: 1 }).items[0] ?? null;
+    return { ...item, latestReceipt: latest };
+  });
+  return { unused: withReceipt(unused), watching: withReceipt(watching), pending: withReceipt(pending) };
 }
 
 function normalizeTopicKey(value: string) { return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN'); }

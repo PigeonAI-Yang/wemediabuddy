@@ -1,0 +1,37 @@
+<!-- @dsCard group="Guidelines" viewport="700x330" name="StatesContract" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Four-State Contract</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  .panel { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--surface); }
+  .panel h2 { margin: 0 0 4px; font-size: 14px; color: var(--ink); }
+  .panel p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .panel .icon { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-lg); margin-bottom: 8px; }
+  .loading .icon { background: var(--accent-faint); color: var(--accent-soft); animation: pulse 1.6s ease-in-out infinite; }
+  .error .icon { background: var(--danger-soft); color: var(--danger); }
+  .empty .icon { background: var(--tag-bg); color: var(--muted-low); }
+  .retry { margin-top: 8px; min-height: var(--control-h-sm); padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink); font-size: 12.5px; font-weight: 600; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+  .rule { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--accent-faint); color: var(--ink-soft); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>States — 四态契约</h1>
+<p>每个异步区域恰好四种状态：loading / error+retry / 诚实空态 / content。loading 绝不渲染空态文案；IPC 失败绝不渲染成「没有资料」；loading 挂 <code>role="status"</code>。</p>
+<div class="grid">
+  <div class="panel loading"><span class="icon">↻</span><h2>正在读取…</h2><p>正在从本地资料库读取内容。</p></div>
+  <div class="panel error"><span class="icon">!</span><h2>读取失败</h2><p>没能读取到内容，请重试。</p><button type="button" class="retry">重试</button></div>
+  <div class="panel empty"><span class="icon">◇</span><h2>还没有内容</h2><p>这里还没有内容，先去「发现」看看外面。</p></div>
+  <div class="panel"><span class="icon" style="background:var(--success-soft);color:var(--success)">✓</span><h2>内容态</h2><p>渲染真实数据，四个状态互斥且可被测试区分。</p></div>
+</div>
+<p class="rule">空态文案必须是「诚实空」，不是「没做好」：给去向、给动作，不把 Agent 的半成品原料堆给主编。</p>
+</body>
+</html>

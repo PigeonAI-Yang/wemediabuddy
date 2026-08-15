@@ -1,10 +1,11 @@
 import { relationNames } from './knowledge-canvas-types';
 
-export function CanvasRelations({ canvas, selectedRelation, setSelectedRelation, setPendingRelation }: {
+export function CanvasRelations({ canvas, selectedRelation, setSelectedRelation, setPendingRelation, projectionMode }: {
   canvas: any;
   selectedRelation: any;
   setSelectedRelation: (value: any) => void;
   setPendingRelation: (value: any) => void;
+  projectionMode?: 'relation' | 'change' | 'health';
 }) {
   return (canvas?.relations ?? []).map((relation: any) => {
     const from = canvas.nodes.find((node: any) => node.id === relation.fromNodeId);
@@ -15,10 +16,17 @@ export function CanvasRelations({ canvas, selectedRelation, setSelectedRelation,
     const y1 = (from.y + from.height / 2) * zoom;
     const x2 = (to.x + to.width / 2) * zoom;
     const y2 = (to.y + to.height / 2) * zoom;
+    // 变化模式：两端都被本次 ChangeSet 影响的边做相邻强调（关系本身不是正式知识）。
+    const adjacent =
+      projectionMode === 'change' &&
+      Array.isArray(from.changes) &&
+      from.changes.length > 0 &&
+      Array.isArray(to.changes) &&
+      to.changes.length > 0;
     return (
       <g
         key={relation.id}
-        className={selectedRelation?.id === relation.id ? 'selected' : ''}
+        className={`${selectedRelation?.id === relation.id ? 'selected' : ''}${adjacent ? ' changed-adjacent' : ''}`}
         onClick={(event) => {
           event.stopPropagation();
           setSelectedRelation(relation);

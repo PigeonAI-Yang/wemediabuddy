@@ -1,0 +1,36 @@
+<!-- @dsCard group="Guidelines" viewport="700x300" name="AuthorityAndTokens" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Authority &amp; Tokens</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-pill); background: var(--tag-bg); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .chip.accent { color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+  ol { margin: 4px 0 0; padding-left: 20px; color: var(--ink-soft); font-size: 13px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<h1>Authority — 单一事实源</h1>
+<p>机器 SSOT 是 <code>src/renderer/styles-foundation.css</code>（墨夜/白昼、Inter、accent、56px topbar）。本设计系统的 token 文件与组件样式全部由它派生；<code>docs/design/living-style-guide.html</code> 只渲染、<code>DESIGN.md</code> 只叙事、<code>prototype/</code> 与 <code>.impeccable/design.json</code> 不是执行真相。</p>
+<div class="chip-row">
+  <span class="chip accent">SSOT · foundation</span>
+  <span class="chip">gate · design-tokens-drift</span>
+  <span class="chip">组件零硬编码 hex</span>
+  <span class="chip">hex allowlist 只收缩</span>
+</div>
+<p style="margin-top:12px;">品牌级 token 变更必须先问 owner，批准后按协议执行：</p>
+<ol>
+  <li>只改 <code>src/renderer/styles-foundation.css</code></li>
+  <li>运行 <code>node scripts/sync-design-doc-from-foundation.mjs</code> 同步 LSG</li>
+  <li>刷新 living style guide，目检 dark / light</li>
+  <li>运行 <code>node --test tests/design-tokens-drift.test.mjs</code>，allowlist 保持为空</li>
+</ol>
+</body>
+</html>

@@ -1,7 +1,8 @@
-project-purpose: Pi tool summaries tell the user both what is running and whether work is still progressing without opening raw details.
-target-surface: Current tool row inside the packaged Pi transcript.
-runtime-chain: Pi tool start/result events -> streaming message segments -> transcript running-state projection -> logo activity DOM/CSS.
-completion-authority: only an unfinished tool in the streaming turn animates; tool result, error, stop and turn completion remove the activity state while details remain expandable.
-focused-gate: deterministic start/result projection test plus packaged live Pi tool call animation and completion readback.
-budgets: one transcript render change, one CSS change, one focused regression, one packaged live verification.
-stop-conditions: tool completion cannot be inferred truthfully from existing events, animation obscures the summary, or live tool execution cannot be observed.
+selected-milestone: WMB-5223
+project-purpose: 主题 Wiki 是用户读取当前综合、变化依据和下一步创作行动的主界面，不是知识对象调试台。
+target-surface: 主题详情 header、七段 Wiki 导航、当前认识、最近变化、证据/创作影响/待研究/完整档案、版本历史。
+runtime-chain: Topic/Wiki read model -> renderer state -> library-topics-view -> topic Wiki DOM -> computed layout -> 用户首屏理解与操作。
+completion-authority: 在用户截图同尺度 1183x871 下，首屏层级明确、正文可读、空态收敛、技术日志降权、唯一主 CTA 清晰；真实数据与所有既有动作保留。
+focused-gate: 主题 renderer 聚焦测试 + typecheck + 真实 Electron 1183x871 截图、DOM 几何与交互抽查。
+budgets: implementation attempts=1; repair attempts=2; product files max=2; scope growth=0.
+stop-conditions: 需要改变 foundation 品牌 token、主题业务语义、IPC/schema/权限、七段知识合同或新增依赖。

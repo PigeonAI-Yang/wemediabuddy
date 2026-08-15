@@ -1,0 +1,890 @@
+{
+  "comment": "shrink only 鈥?Phase 3 cleans; do not add without justification",
+  "entries": [
+    {
+      "file": "src/renderer/styles-agents.css",
+      "line": 131,
+      "match": "#888"
+    },
+    {
+      "file": "src/renderer/styles-agents.css",
+      "line": 671,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-agents.css",
+      "line": 682,
+      "match": "rgb(0 0 0 / 35%)"
+    },
+    {
+      "file": "src/renderer/styles-agents.css",
+      "line": 706,
+      "match": "#111"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 221,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 222,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 242,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 243,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 244,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 327,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge-topic.css",
+      "line": 329,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#f8f7fc"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#f8f7fc"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#f8f7fc"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#22144b12"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#5b3ad522"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#f3d66b"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 2,
+      "match": "#6b43ee18"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 88,
+      "match": "#0006"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 112,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 116,
+      "match": "#5aa9f0"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 116,
+      "match": "#5aa9f0"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 449,
+      "match": "#d35"
+    },
+    {
+      "file": "src/renderer/styles-knowledge.css",
+      "line": 533,
+      "match": "rgb(0 0 0 / 28%)"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 67,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 138,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 193,
+      "match": "rgb(0 0 0 / 22%)"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 197,
+      "match": "rgb(0 0 0 / 28%)"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 303,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 317,
+      "match": "#ff8e8e"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 360,
+      "match": "#ff8e8e"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 384,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 404,
+      "match": "#ff9c9c"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 445,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 446,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 449,
+      "match": "#ff5d5d"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 450,
+      "match": "#ff5d5d"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 470,
+      "match": "#ff5d5d"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 522,
+      "match": "#3ecf8e"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 522,
+      "match": "#8dffc5"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 524,
+      "match": "#e6b84d"
+    },
+    {
+      "file": "src/renderer/styles-pi.css",
+      "line": 524,
+      "match": "#ffd27a"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 51,
+      "match": "rgb(139 124 255 / 7%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 52,
+      "match": "rgb(139 124 255 / 17%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 53,
+      "match": "rgb(139 124 255 / 5%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 54,
+      "match": "rgb(139 124 255 / 11%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 55,
+      "match": "rgb(139 124 255 / 30%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 56,
+      "match": "rgb(139 124 255 / 14%)"
+    },
+    {
+      "file": "src/renderer/styles-results.css",
+      "line": 69,
+      "match": "rgb(0 0 0 / 55%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 15,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 48,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 48,
+      "match": "#16181d"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 49,
+      "match": "#e03a4c"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 50,
+      "match": "#1faa59"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 51,
+      "match": "#16181d"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 51,
+      "match": "#f4f4f5"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 122,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 123,
+      "match": "#222"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 137,
+      "match": "#16181d"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 139,
+      "match": "#f4f4f5"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 143,
+      "match": "#e03a4c"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 144,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 148,
+      "match": "#1faa59"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 149,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 153,
+      "match": "#ffe411"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 154,
+      "match": "#111"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 508,
+      "match": "#ffb4b4"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 577,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 577,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 588,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 595,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 610,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 610,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 610,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 628,
+      "match": "#31206b2b"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 661,
+      "match": "rgb(240 180 90 / 20%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 662,
+      "match": "rgb(240 180 90 / 34%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 666,
+      "match": "rgb(185 124 30 / 15%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 667,
+      "match": "rgb(185 124 30 / 30%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 718,
+      "match": "rgb(0 0 0 / 32%)"
+    },
+    {
+      "file": "src/renderer/styles-studio.css",
+      "line": 731,
+      "match": "rgb(0 0 0 / 36%)"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 87,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 89,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 98,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 99,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 100,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 129,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 132,
+      "match": "#a22"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 572,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 572,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 626,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-library.css",
+      "line": 626,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 91,
+      "match": "#e25555"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 92,
+      "match": "#e25555"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 93,
+      "match": "#e25555"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 141,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 141,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 187,
+      "match": "#c44"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 320,
+      "match": "rgb(0 0 0 / 30%)"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 329,
+      "match": "#dfe3e8"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 329,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 333,
+      "match": "#111"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 404,
+      "match": "#d69c2f"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 404,
+      "match": "#fff7dd"
+    },
+    {
+      "file": "src/renderer/styles-workflow-today.css",
+      "line": 404,
+      "match": "#6b4800"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 146,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 147,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 153,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 458,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 517,
+      "match": "#d29922"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 518,
+      "match": "#f0b429"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 540,
+      "match": "#fff0a6"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 664,
+      "match": "rgb(0 0 0 / 22%)"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 671,
+      "match": "rgb(0 0 0 / 22%)"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 679,
+      "match": "#3b2500"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#8a5a00"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#d4a017"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#ffe7a0"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#f0c14b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#b8860b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 681,
+      "match": "#7a4e00"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 683,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 684,
+      "match": "#f0c14b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 685,
+      "match": "#f0c14b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 686,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 697,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 698,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 699,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 711,
+      "match": "#fff5f5"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 712,
+      "match": "#8b1020"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 712,
+      "match": "#d61f35"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 712,
+      "match": "#ff5a6a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 714,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 715,
+      "match": "#ff4d63"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 718,
+      "match": "#f3f8ff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 719,
+      "match": "#123a7a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 719,
+      "match": "#1f6feb"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 719,
+      "match": "#5aa2ff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 721,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 722,
+      "match": "#4d8dff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 725,
+      "match": "#f2fff5"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 726,
+      "match": "#0f5a2c"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 726,
+      "match": "#1f9d55"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 726,
+      "match": "#4fd68a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 728,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 729,
+      "match": "#3dce75"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 731,
+      "match": "#edf3f8"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 731,
+      "match": "#354a5d"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 731,
+      "match": "#526b80"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 732,
+      "match": "#f0f1f2"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 732,
+      "match": "#50555c"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 732,
+      "match": "#6d737b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 733,
+      "match": "#e7e7e7"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 733,
+      "match": "#666"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 733,
+      "match": "#7b7b7b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 739,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 739,
+      "match": "#f0c14b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 739,
+      "match": "#f0c14b"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 740,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 740,
+      "match": "#ffe08a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 740,
+      "match": "#ffd76a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 743,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 743,
+      "match": "#ffd76a"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 743,
+      "match": "#ffcc4d"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 744,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 744,
+      "match": "#ffe9a8"
+    },
+    {
+      "file": "src/renderer/styles-workflow.css",
+      "line": 744,
+      "match": "#ffd76a"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 141,
+      "match": "#111"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 170,
+      "match": "#1b1f2a"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 170,
+      "match": "#0d1118"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 177,
+      "match": "rgba(0,0,0,.62)"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 178,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 406,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 413,
+      "match": "#000"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 426,
+      "match": "rgba(0,0,0,.72)"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 427,
+      "match": "#fff"
+    },
+    {
+      "file": "src/renderer/styles-x-lists-timeline.css",
+      "line": 432,
+      "match": "rgba(0,0,0,.88)"
+    }
+  ]
+}

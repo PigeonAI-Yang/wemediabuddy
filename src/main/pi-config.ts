@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { modelLimits, modelOption, requireModelLimits, type PiModelOption } from './pi-model.ts';
 
 const configKey = 'pi-api-config';
 const { app, safeStorage } = electron;
@@ -14,9 +15,12 @@ type StoredProfile = {
   model: string;
   api?: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
   encryptedApiKey: string;
 };
-type StoredState = { activeId: string | null; profiles: StoredProfile[] };
+type StoredState = { activeId: string | null; profiles: StoredProfile[]; fallbackOrder: string[] };
 type LegacyConfig = { baseUrl: string; model: string; encryptedApiKey: string };
 type StoredEnvelope = { version: 1; state: StoredState };
 
@@ -27,6 +31,9 @@ export type PiConfigProfile = {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
   configured: boolean;
   active: boolean;
 };
@@ -35,9 +42,22 @@ export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'x
 export type PiConfig = {
   activeId: string | null;
   profiles: PiConfigProfile[];
+  fallbackOrder: string[];
   baseUrl: string;
   model: string;
   configured: boolean;
+};
+export type ResolvedPiConfig = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  api: PiApiType;
+  thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+  apiKey: string;
 };
 
 export function requirePiApiType(value: unknown): PiApiType {
@@ -57,9 +77,12 @@ export function readPiConfig(configPath = defaultConfigPath()): PiConfig {
       model: profile.model,
       api: requirePiApiType(profile.api),
       thinking: profile.thinking,
+      nativeSearch: profile.nativeSearch,
+      ...modelLimits(profile.model, profile),
       configured: Boolean(profile.encryptedApiKey),
       active: profile.id === active?.id
     })),
+    fallbackOrder: sanitizeFallbackOrder(state.fallbackOrder, state.profiles, state.activeId),
     baseUrl: active?.baseUrl ?? '',
     model: active?.model ?? '',
     configured: Boolean(active?.encryptedApiKey)
@@ -73,6 +96,9 @@ export function savePiConfig(input: {
   model: string;
   api: PiApiType;
   thinking?: PiThinkingLevel;
+  nativeSearch?: boolean;
+  contextWindow?: number | null;
+  maxTokens?: number | null;
   apiKey?: string;
 }, configPath = defaultConfigPath()): PiConfig {
   const api = requirePiApiType(input.api);
@@ -86,6 +112,10 @@ export function savePiConfig(input: {
   const state = readStored(configPath);
   const id = input.id ?? randomUUID();
   const current = state.profiles.find((profile) => profile.id === id);
+  const limits = requireModelLimits({
+    contextWindow: input.contextWindow === null ? undefined : input.contextWindow ?? (current?.model === model ? current.contextWindow : undefined),
+    maxTokens: input.maxTokens === null ? undefined : input.maxTokens ?? (current?.model === model ? current.maxTokens : undefined)
+  });
   const encryptedApiKey = input.apiKey?.trim()
     ? safeStorage.encryptString(input.apiKey.trim()).toString('base64')
     : current?.encryptedApiKey;
@@ -98,11 +128,15 @@ export function savePiConfig(input: {
     model,
     api,
     thinking: input.thinking,
+    nativeSearch: input.nativeSearch ?? current?.nativeSearch,
+    ...limits,
     encryptedApiKey
   };
+  const profiles = [profile, ...state.profiles.filter((item) => item.id !== id)];
   writeStored(configPath, {
     activeId: id,
-    profiles: [profile, ...state.profiles.filter((item) => item.id !== id)]
+    profiles,
+    fallbackOrder: sanitizeFallbackOrder(state.fallbackOrder, profiles, id)
   });
   return readPiConfig(configPath);
 }
@@ -110,7 +144,11 @@ export function savePiConfig(input: {
 export function activatePiConfig(id: string, configPath = defaultConfigPath()): PiConfig {
   const state = readStored(configPath);
   if (!state.profiles.some((profile) => profile.id === id)) throw new Error('API 配置不存在。');
-  writeStored(configPath, { ...state, activeId: id });
+  writeStored(configPath, {
+    ...state,
+    activeId: id,
+    fallbackOrder: sanitizeFallbackOrder(state.fallbackOrder, state.profiles, id)
+  });
   return readPiConfig(configPath);
 }
 
@@ -118,9 +156,20 @@ export function deletePiConfig(id: string, configPath = defaultConfigPath()): Pi
   const state = readStored(configPath);
   const profiles = state.profiles.filter((profile) => profile.id !== id);
   if (profiles.length === state.profiles.length) throw new Error('API 配置不存在。');
+  const activeId = state.activeId === id ? (profiles[0]?.id ?? null) : state.activeId;
   writeStored(configPath, {
-    activeId: state.activeId === id ? (profiles[0]?.id ?? null) : state.activeId,
-    profiles
+    activeId,
+    profiles,
+    fallbackOrder: sanitizeFallbackOrder(state.fallbackOrder.filter((item) => item !== id), profiles, activeId)
+  });
+  return readPiConfig(configPath);
+}
+
+export function setPiFallbackOrder(ids: string[], configPath = defaultConfigPath()): PiConfig {
+  const state = readStored(configPath);
+  writeStored(configPath, {
+    ...state,
+    fallbackOrder: sanitizeFallbackOrder(ids, state.profiles, state.activeId)
   });
   return readPiConfig(configPath);
 }
@@ -130,7 +179,7 @@ export async function listPiModels(input: {
   baseUrl: string;
   api: PiApiType;
   apiKey?: string;
-}, configPath = defaultConfigPath()): Promise<string[]> {
+}, configPath = defaultConfigPath()): Promise<PiModelOption[]> {
   requirePiApiType(input.api);
   const baseUrl = new URL(input.baseUrl.trim());
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw new Error('Pi API 地址必须使用 HTTP 或 HTTPS。');
@@ -144,26 +193,47 @@ export async function listPiModels(input: {
     signal: AbortSignal.timeout(15_000)
   });
   if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
-  const body = await response.json() as { data?: Array<{ id?: unknown }> };
-  const models = [...new Set((body.data ?? [])
-    .map((item) => typeof item.id === 'string' ? item.id.trim() : '')
-    .filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b));
+  const body = await response.json() as { data?: Array<Record<string, unknown>> };
+  const models = [...new Map((body.data ?? [])
+    .map(modelOption)
+    .filter((item): item is PiModelOption => Boolean(item))
+    .map((item) => [item.id, item])).values()]
+    .sort((a, b) => a.id.localeCompare(b.id));
   if (!models.length) throw new Error('接口没有返回可用模型。');
   return models;
 }
 
-export function resolvePiConfig(configPath = defaultConfigPath()): { baseUrl: string; model: string; api: PiApiType; thinking?: PiThinkingLevel; apiKey: string } {
-  const state = readStored(configPath);
-  const active = state.profiles.find((profile) => profile.id === state.activeId);
+export function resolvePiConfig(configPath = defaultConfigPath()): ResolvedPiConfig {
+  const chain = resolvePiConfigChain(configPath);
+  const active = chain[0];
   if (!active) throw new Error('请先在设置中配置 Pi API。');
-  return {
-    baseUrl: active.baseUrl,
-    model: active.model,
-    api: requirePiApiType(active.api),
-    thinking: active.thinking,
-    apiKey: safeStorage.decryptString(Buffer.from(active.encryptedApiKey, 'base64'))
-  };
+  return active;
+}
+
+export function resolvePiConfigChain(configPath = defaultConfigPath(), options: { skipProfileIds?: Iterable<string> } = {}): ResolvedPiConfig[] {
+  const state = readStored(configPath);
+  if (!state.profiles.length) throw new Error('请先在设置中配置 Pi API。');
+  const skip = new Set(options.skipProfileIds ?? []);
+  const byId = new Map(state.profiles.map((profile) => [profile.id, profile] as const));
+  const orderedIds = [
+    ...(state.activeId ? [state.activeId] : []),
+    ...sanitizeFallbackOrder(state.fallbackOrder, state.profiles, state.activeId)
+  ].filter((id, index, all) => Boolean(id) && byId.has(id) && all.indexOf(id) === index && !skip.has(id));
+  if (!orderedIds.length) throw new Error('请先在设置中配置 Pi API。');
+  return orderedIds.map((id) => {
+    const profile = byId.get(id)!;
+    return {
+      id: profile.id,
+      name: profile.name,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      api: requirePiApiType(profile.api),
+      thinking: profile.thinking,
+      nativeSearch: profile.nativeSearch,
+      ...modelLimits(profile.model, profile),
+      apiKey: safeStorage.decryptString(Buffer.from(profile.encryptedApiKey, 'base64'))
+    };
+  });
 }
 
 export function migratePiConfigToInstallation(configPath: string, rootPaths: string[]): { migratedFrom: string | null; profileCount: number } {
@@ -184,7 +254,7 @@ export function migratePiConfigToInstallation(configPath: string, rootPaths: str
     throw new Error('检测到多个不同的 AI 模型预设来源，无法自动迁移。');
   }
   const selected = candidates[0] ?? null;
-  writeStored(configPath, selected?.state ?? { activeId: null, profiles: [] });
+  writeStored(configPath, selected?.state ?? { activeId: null, profiles: [], fallbackOrder: [] });
   return { migratedFrom: selected?.rootPath ?? null, profileCount: selected?.state.profiles.length ?? 0 };
 }
 
@@ -193,19 +263,41 @@ function defaultConfigPath(): string {
 }
 
 function readStored(configPath: string): StoredState {
-  if (!existsSync(configPath)) return { activeId: null, profiles: [] };
+  if (!existsSync(configPath)) return { activeId: null, profiles: [], fallbackOrder: [] };
   const envelope = JSON.parse(readFileSync(configPath, 'utf8')) as StoredEnvelope;
   if (envelope.version !== 1) throw new Error('Pi 配置文件版本不受支持。');
   return normalizeStored(envelope.state);
 }
 
-function normalizeStored(value: StoredState | LegacyConfig): StoredState {
-  if ('profiles' in value) return value;
+function normalizeStored(value: StoredState | LegacyConfig | (Omit<StoredState, 'fallbackOrder'> & { fallbackOrder?: string[] })): StoredState {
+  if ('profiles' in value) {
+    const activeId = value.activeId ?? null;
+    const profiles = value.profiles ?? [];
+    return {
+      activeId,
+      profiles,
+      fallbackOrder: sanitizeFallbackOrder(value.fallbackOrder ?? [], profiles, activeId)
+    };
+  }
   const id = 'default';
   return {
     activeId: id,
-    profiles: [{ id, name: '默认配置', ...value }]
+    profiles: [{ id, name: '默认配置', ...value }],
+    fallbackOrder: []
   };
+}
+
+function sanitizeFallbackOrder(ids: unknown, profiles: StoredProfile[], activeId: string | null): string[] {
+  if (!Array.isArray(ids)) return [];
+  const known = new Set(profiles.map((profile) => profile.id));
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const value of ids) {
+    if (typeof value !== 'string' || !value || value === activeId || !known.has(value) || seen.has(value)) continue;
+    seen.add(value);
+    order.push(value);
+  }
+  return order;
 }
 
 function writeStored(configPath: string, state: StoredState): void {

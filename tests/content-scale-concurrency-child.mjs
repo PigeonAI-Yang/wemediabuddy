@@ -1,9 +1,12 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { getContentProject, listContentProjects } from '../src/main/content.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 function measured(database) {
@@ -23,10 +26,12 @@ function measured(database) {
 
 const externalDirectory=process.env.WMB_TEST_DIRECTORY;
 const directory = externalDirectory??await mkdtemp(path.join(os.tmpdir(), 'wmb-content-scale-'));
-let mcp;
+let mcp, runtime;
 try {
-  const db = migrateDatabase(path.join(directory, 'wmb.db'));
+  let db = migrateDatabase(path.join(directory, 'wmb.db'));
   ensureOfficialWorkspaceProfile(db, 'official.ai');
+  const workspaceNow = new Date().toISOString();
+  db.prepare("INSERT INTO app_meta(key,value,created_at,updated_at,revision) VALUES('workspace_id','workspace-content-scale',?,?,1)").run(workspaceNow, workspaceNow);
   let insertProject = db.prepare(`INSERT INTO content_projects
     (id, title, status, archived_at, created_at, updated_at, revision)
     VALUES (?, ?, 'drafting', NULL, ?, ?, 1)`);
@@ -70,33 +75,48 @@ try {
   }
   const detailCounter = measured(db);
   const detail = getContentProject(detailCounter.database, 'project-1001');
-  if (!detail || detail.revisions.length !== 3 || detail.revisions[0].body.length !== 1500 || detailCounter.count() !== 9) {
+  if (!detail || detail.revisions.length !== 3 || detail.revisions[0].body.length !== 1500 || detailCounter.count() !== 11) {
     throw new Error(`fixed detail query count mismatch ${JSON.stringify({found:Boolean(detail),revisions:detail?.revisions.length,body:detail?.revisions[0]?.body.length,queries:detailCounter.count()})}`);
   }
 
-  mcp = await startMcp(directory);
+  insertProject=null;insertVersion=null;db.close();
+  runtime = ActiveWorkspaceRuntime.open(directory, { openDatabase: migrateDatabase, createEpoch: () => 'content-scale-runtime' });
+  db = runtime.database;
+  const task = (await dispatchStartAgentTask(runtime, { intent: 'studio_draft', businessDate: '2026-08-02', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'content-scale-task' })).task;
+  const grant = await dispatchIssueTaskGrant(runtime, {
+    requestId: 'content-scale-grant', taskId: task.id, ownerGoal: '验证核心版本并发控制', allowedCommands: ['content.save_version'],
+    workers: [{ type: 'external_agent', id: 'mcp' }], expiresAt: new Date(Date.now() + 60_000).toISOString()
+  });
+  if (!grant.ok) throw new Error(grant.error.message);
+  mcp = await startMcp(directory, runtime.gate, undefined, runtime);
   process.env.WMB_MCP_URL = mcp.url;
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
   const firstResult = await tools.get('wmb_save_core_version').execute('client-a', {
     requestId: 'wmb-1103-client-a',
+    taskId: task.id,
+    grantId: grant.data.id,
     projectId: 'project-1001',
     expectedRevision: 1,
+    title: '客户端 A 新标题',
     body: '客户端 A 新版本'
   });
   const staleResult = await tools.get('wmb_save_core_version').execute('client-b', {
     requestId: 'wmb-1103-client-b',
+    taskId: task.id,
+    grantId: grant.data.id,
     projectId: 'project-1001',
     expectedRevision: 1,
     body: '客户端 B 旧 revision'
   });
   const first = JSON.parse(firstResult.details.content[0].text);
   const stale = JSON.parse(staleResult.details.content[0].text);
-  const finalProject = db.prepare('SELECT revision FROM content_projects WHERE id = ?').get('project-1001');
+  const finalProject = db.prepare('SELECT title, revision FROM content_projects WHERE id = ?').get('project-1001');
   const finalVersions = db.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get('project-1001').count;
-  if (!first.ok || first.data.projectRevision !== 2 || stale.ok || stale.error.code !== 'REVISION_CONFLICT'
-    || stale.error.details.current.revision !== 2 || finalProject.revision !== 2 || finalVersions !== 4) {
+  if (!first.ok || first.data.projectRevision !== 2 || first.data.project.title !== '客户端 A 新标题'
+    || stale.ok || stale.error.code !== 'REVISION_CONFLICT' || stale.error.details.current.revision !== 2
+    || finalProject.title !== '客户端 A 新标题' || finalProject.revision !== 2 || finalVersions !== 4) {
     throw new Error('stale revision created an extra version');
   }
 
@@ -114,8 +134,10 @@ try {
     staleError: stale.error.code,
     finalProjectVersionCount: finalVersions
   }));
-  await mcp?.close();mcp=null;insertProject=null;insertVersion=null;db.close();
+  await mcp?.close();mcp=null;
+  await runtime.stop({ drain: false });runtime=null;
 } finally {
   await mcp?.close();
+  if (runtime?.isActive) await runtime.stop({ drain: false });
   if(!externalDirectory)await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }

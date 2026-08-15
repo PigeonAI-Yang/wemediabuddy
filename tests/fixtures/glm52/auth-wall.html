@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>验证页面</title>
+</head>
+<body>
+<!-- 验证码/登录墙 fixture：静态读取返回反自动化挑战页。产品必须明确失败（auth_required），
+     不渲染、不绕过、不携带任何会话凭证。 -->
+<div class="cf-browser-verification">
+  <h1>Just a moment... Attention Required</h1>
+  <p>Please enable cookies and reload the page. Verifying you are human. This may take a few seconds.</p>
+  <form action="/cdn-cgi/challenge-platform" method="post">
+    <input type="hidden" name="challenge" value="captcha-token-placeholder">
+    <button type="submit">Verify you are human</button>
+  </form>
+</div>
+</body>
+</html>

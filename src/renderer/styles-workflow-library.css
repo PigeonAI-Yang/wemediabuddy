@@ -1,8 +1,8 @@
 .library-page {
   max-width: 1320px;
   margin: 0 auto;
-  padding-top: 10px;
-  padding-bottom: 24px;
+  padding-top: var(--page-space);
+  padding-bottom: var(--page-space);
 }
 .library-source-detail-page {
   max-width: 920px;
@@ -31,6 +31,9 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .library-source-detail > section {
   margin-top: 22px;
@@ -84,9 +87,9 @@
 .library-source-confirm {
   margin: 0 0 16px;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, #c44 35%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
   border-radius: 12px;
-  background: color-mix(in srgb, #c44 8%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 .library-source-confirm p {
   margin: 0 0 12px;
@@ -95,9 +98,9 @@
   line-height: 1.55;
 }
 .library-source-confirm .primary-button.danger-button {
-  border-color: #c44;
-  background: #c44;
-  color: #fff !important;
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--accent-ink) !important;
 }
 .library-source-edit {
   display: grid;
@@ -125,71 +128,6 @@
   min-height: 120px;
   line-height: 1.6;
 }
-.danger-button {
-  color: #c44 !important;
-}
-.danger-button:hover {
-  color: #a22 !important;
-}
-.library-watching-board {
-  margin: 0 0 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  border-radius: 14px;
-  background:
-    radial-gradient(500px 160px at 12% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
-    var(--surface);
-  padding: 14px 16px 12px;
-}
-.library-watching-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.library-watching-head h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.library-watching-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-}
-.library-watching-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--panel-bg);
-  padding: 12px 12px 10px;
-  cursor: pointer;
-  transition: border-color .12s, transform .12s, background .12s, box-shadow .12s;
-}
-.library-watching-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  transform: translateY(-1px);
-}
-.library-watching-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-.library-watching-meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--muted-low);
-  font-size: 11.5px;
-}
-.library-watching-card p {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.45;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
 /* X Lists needs a single inner scroller; disable the page-level scrollbar here. */
 .discover-page:has(.x-lists-view) {
   height: 100%;
@@ -197,7 +135,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding-bottom: 12px;
+  padding-bottom: var(--page-space);
 }
 .discover-page:has(.x-lists-view) > .discover-categories {
   flex: 0 0 auto;
@@ -224,7 +162,9 @@
 .ranking-list h2 { margin: 0 0 6px; font-size: 17px; }
 .ranking-list p { max-width: 78ch; margin: 0 0 7px; color: var(--ink-soft); line-height: 1.45; }
 .ranking-list small { color: var(--muted-low); }
-.ranking-check { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 800; }
+/* selection check removed — accent only */
+.ranking-check { display: none !important; }
+.ranking-check-legacy { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 800; }
 .ranking-actions { display: flex; align-self: flex-start; align-items: center; gap: 8px; }
 .ranking-actions .refresh-button { display: grid; width: 34px; min-height: 34px; padding: 0; place-items: center; font-size: 16px; line-height: 1; }
 .ranking-actions .refresh-button span { display: block; }
@@ -236,6 +176,7 @@
 .ranking-list article > .ranking-open:hover { border-color: var(--accent); background: var(--surface-selected); color: var(--accent-soft); transform: translate(1px, -1px); }
 .ranking-footnote { color: var(--muted-low); font-size: 12px; text-align: right; }
 .ranking-footnote button { border: 0; background: transparent; color: var(--link); cursor: pointer; padding: 0; }
+
 
 /* Superseded by styles-knowledge.css flywheel full-height .topic-layout / .library-topics-layout */
 .library-topics-layout {
@@ -371,10 +312,12 @@
   font: inherit;
 }
 .studio-title-input {
-  padding: 12px 14px;
-  font-size: 18px;
+  padding: 10px 12px;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .studio-body-input {
   flex: 1;
@@ -407,12 +350,15 @@
 .context-list strong { color: var(--ink-soft); font-weight: 600; }
 .muted { color: var(--muted-low) !important; }
 
-.workflow-page { height: calc(100vh - var(--topbar-height) - var(--status-height)); overflow: hidden; padding: clamp(24px, 2vw, 32px) clamp(24px, 2vw, 32px) 0; }
+.workflow-page { height: calc(100vh - var(--topbar-height) - var(--status-height)); overflow: hidden; padding: var(--page-space); }
 .workflow-page > .page-heading { height: 82px; margin-bottom: 20px; }
-.publish-layout, .results-layout { display: grid; height: calc(100% - 102px); margin-inline: calc(clamp(24px, 2vw, 32px) * -1); border-top: 1px solid var(--border-soft); }
+.publish-layout, .results-layout { display: grid; height: calc(100% - 120px); margin-inline: 0; border-top: 1px solid var(--border-soft); }
+.publish-page, .results-page { display: flex; flex-direction: column; min-height: 0; }
+.publish-page > .page-command, .results-page > .page-command { flex: 0 0 auto; }
+.publish-page > .publish-layout { flex: 1 1 auto; min-height: 0; height: auto; }
 .publish-layout { grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 400px); }
 .results-layout { grid-template-columns: clamp(250px, 20vw, 320px) minmax(500px, 1fr) clamp(270px, 21vw, 340px); }
-.workflow-list, .publish-preview, .confirmation-panel, .results-main, .findings-panel { overflow-y: auto; padding: 24px; }
+.workflow-list, .publish-preview, .confirmation-panel, .results-main, .findings-panel { overflow-y: auto; padding: var(--page-space); }
 .workflow-list { border-right: 1px solid var(--border-soft); background: var(--panel-bg); }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .section-heading h2 { margin: 0; font-size: 18px; }
@@ -428,3 +374,588 @@
 .publication-list strong { margin-bottom: 6px; line-height: 1.4; }
 .publication-list span { color: var(--muted); font-size: 12px; }
 .publish-preview { display: grid; place-items: start center; }
+
+/* WMB-4944 「已移出」视图：原因徽标 + 恢复确认 */
+.removed-head { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.removed-hint { margin-left: 12px; color: var(--muted-low); font-size: 12px; }
+/* WMB-5212 观察中页：页头计数与提示（行内容直接复用 .library-list/.lib-row） */
+.watching-head { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.watching-hint { margin-left: 12px; color: var(--muted-low); font-size: 12px; }
+.lane-badge { max-width: min(420px, 60vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-badge.amber { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.lane-badge.gray { background: color-mix(in srgb, var(--muted-low) 16%, transparent); color: var(--muted); }
+.lib-row-wrap { border-bottom: 1px solid var(--border); }
+.lib-row-wrap:last-child { border-bottom: 0; }
+.lib-row-wrap .lib-row { border-bottom: 0; }
+.lane-restore-confirm {
+  margin: 0 18px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.lane-restore-confirm p { margin: 0 0 10px; color: var(--ink); font-size: 13px; line-height: 1.55; }
+.lane-restore-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.lane-restore-actions button { min-height: 32px; }
+
+/* =====================================================================
+   WMB-5212 资料库知识面（原位改造）：资料/待处理/知识健康/移出 tabs、
+   Source Raw/质量/回执/Evidence/批注/健康 详情区、持久内联回执。
+   只读投影样式：不引入平行知识组件；沿用既有 design tokens。
+   ===================================================================== */
+
+/* 可访问性：仅屏幕阅读器可见的自动刷新宣布 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* tabs：键盘 tablist/tab 语义，与 proposal-tabs 同源 */
+.library-tabs { margin-bottom: 18px; }
+.library-tabs .proposal-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* 资料行内联知识面徽标（正文缓存/已消化/健康问题） */
+.lib-inline.green { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
+.lib-inline.amber { background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); }
+.lib-inline.gray { background: color-mix(in srgb, var(--muted-low) 15%, transparent); color: var(--muted); }
+.lib-knowledge-change {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 详情页知识区公共 */
+.library-detail-loading { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* 来源质量画像 */
+.library-quality-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.quality-cell {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  padding: 10px 12px;
+  display: grid;
+  gap: 5px;
+}
+.quality-cell b { font-size: 13.5px; line-height: 1.4; }
+.quality-cell b.health-count { color: var(--amber); }
+.quality-cell small { color: var(--muted-low); font-size: 11.5px; }
+
+/* 持久内联摄取回执（可收起；details/summary 原生键盘） */
+.library-source-receipts details { margin-top: 8px; }
+.library-source-receipts summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 4px 0;
+}
+.library-source-receipts summary:hover { color: var(--ink); }
+.library-receipt-item {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-receipt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.receipt-trigger { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-soft); }
+.library-receipt-time { color: var(--muted-low); font-size: 11.5px; }
+.library-receipt-request { color: var(--muted-low); font-size: 11px; font-family: var(--font-mono, monospace); }
+.library-receipt-summary { margin: 8px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.library-receipt-counts { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.library-receipt-resolutions,
+.library-receipt-disputes,
+.library-receipt-failures {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.library-receipt-resolutions strong,
+.library-receipt-disputes strong,
+.library-receipt-failures strong { margin-right: 6px; color: var(--ink-soft); }
+.library-receipt-failures strong { color: var(--amber); }
+.library-receipt-topics { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.library-receipt-topics > span { color: var(--muted-low); font-size: 11.5px; }
+
+/* Evidence 贡献（只读：展示证据链与所支撑知识版本，不直接编辑 EvidenceLink） */
+.library-evidence-list { display: grid; gap: 10px; }
+.library-evidence-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.evidence-relation { font-weight: 650; }
+.evidence-relation.支持 { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
+.evidence-relation.反驳 { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+.evidence-relation.限定 { background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber); }
+.evidence-nature { background: color-mix(in srgb, var(--muted-low) 14%, transparent); color: var(--muted); }
+.library-evidence-statement { margin: 9px 0 0; color: var(--ink); font-size: 13.5px; line-height: 1.6; }
+.library-evidence-excerpt {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.library-evidence-locator { margin: 6px 0 0; color: var(--muted-low); font-size: 11.5px; }
+
+/* 批注（只读投影；用户批注入口在 Pi/创作侧） */
+.library-annotation-list { display: grid; gap: 10px; }
+.library-annotation-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 5%, var(--surface));
+}
+.library-annotation-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.annotation-intent { background: color-mix(in srgb, var(--amber) 14%, transparent); color: var(--amber); }
+.library-annotation-time { color: var(--muted-low); font-size: 11.5px; }
+.library-annotation-quote {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.55;
+}
+.library-annotation-body { margin: 8px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+
+/* 健康问题（资料详情区与知识健康页共用） */
+.library-issue-list { display: grid; gap: 10px; }
+.library-issue-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.library-issue-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.issue-severity {
+  border-radius: 99px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.issue-severity.critical { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.issue-severity.medium { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
+.issue-severity.low { background: color-mix(in srgb, var(--muted-low) 15%, transparent); color: var(--muted); }
+.issue-type { background: color-mix(in srgb, var(--muted-low) 14%, transparent); color: var(--muted); }
+.library-issue-affected { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.library-issue-suggestion { margin: 6px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.library-issue-resolution { margin: 6px 0 0; color: var(--success); font-size: 12px; line-height: 1.5; }
+.library-issue-time { color: var(--muted-low); font-size: 11.5px; }
+.library-issue-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
+
+/* 待处理（复用 rediscovery 三池 + 最近摄取回执） */
+.pending-pools { display: grid; gap: var(--page-space); }
+.pending-pool {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px 16px 16px;
+}
+.pending-pool-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+.pending-pool-head h2 { margin: 0; font-size: 16px; }
+.pending-pool-head h2 span { margin-left: 6px; border-radius: 5px; background: var(--tag-bg); padding: 3px 8px; color: var(--muted); font-size: 12px; }
+.pending-pool-head p { margin: 0; color: var(--muted-low); font-size: 12px; line-height: 1.5; }
+.pending-pool-list { display: grid; gap: 8px; }
+.pending-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.pending-item-main { min-width: 0; flex: 1 1 auto; }
+.pending-item-main strong { display: block; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.pending-item-reason { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pending-item-change { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.pending-item-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+
+/* 知识健康页 */
+.health-section { min-width: 0; }
+.health-total { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.health-list { margin-top: 4px; }
+
+/* 窄屏：详情质量网格与动作区不横向溢出 */
+@media (max-width: 760px) {
+  .library-quality-grid { grid-template-columns: 1fr 1fr; }
+  .library-source-detail-head { flex-direction: column; align-items: stretch; }
+  .library-source-detail-actions { justify-content: flex-start; }
+  .health-total { margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .library-quality-grid { grid-template-columns: 1fr; }
+  .pending-pool-head { flex-direction: column; gap: 4px; }
+}
+
+/* =====================================================================
+   WMB-5239 资料库全库工具：全库整理入口 + 统一搜索全部资料 + 最近变化
+   （原位、渐进展开；紧凑行式，不做仪表盘卡片堆；仅 foundation 变量）。
+   ===================================================================== */
+.library-wiki-tools { display: grid; gap: 12px; margin: 0 0 18px; min-width: 0; }
+.library-wiki-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.library-wiki-tool-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+.library-wiki-tool-toggle:hover { border-color: var(--border-strong); color: var(--ink); }
+.library-wiki-tool-toggle.on {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  color: var(--accent-soft);
+}
+.library-wiki-tool-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.library-wiki-tool-toggle .pill-status { flex: none; }
+.library-wiki-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px 16px 16px;
+}
+
+/* 全库整理面板 */
+.library-maintenance-panel { display: grid; gap: 12px; }
+.library-maintenance-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.library-maintenance-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-items: center;
+}
+.library-maintenance-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.library-maintenance-phase + .library-maintenance-phase::before {
+  content: "→";
+  margin: 0 10px;
+  color: var(--muted-low);
+  font-size: 12px;
+}
+.library-maintenance-phase-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  flex: none;
+}
+.library-maintenance-phase.done { color: var(--muted); }
+.library-maintenance-phase.done .library-maintenance-phase-dot { background: var(--success); }
+.library-maintenance-phase.active { color: var(--ink); font-weight: 650; }
+.library-maintenance-phase.active .library-maintenance-phase-dot { background: var(--accent); }
+.library-maintenance-phase.pending .library-maintenance-phase-dot { background: var(--border); }
+.library-maintenance-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.library-maintenance-actions button { min-height: 32px; padding: 0 14px; }
+.library-maintenance-action-error { margin: 0; color: var(--danger); font-size: 12.5px; line-height: 1.55; }
+.library-maintenance-empty { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.library-maintenance-loading { margin: 0; color: var(--muted); font-size: 12.5px; }
+
+/* 批量摄取反馈（成功/低价值保留原始资料/失败原因；非模态内联） */
+.library-ingestion-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.library-ingestion-feedback strong { color: var(--ink); font-weight: 650; }
+.library-ingestion-feedback .ok { color: var(--success); }
+.library-ingestion-feedback .warn { color: var(--amber); }
+.library-ingestion-feedback .bad { color: var(--danger); }
+.library-ingestion-feedback .scan { color: var(--muted); }
+
+/* 失败项 */
+.library-maintenance-failure {
+  display: grid;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border-soft));
+  border-radius: 10px;
+  background: var(--danger-soft);
+  padding: 10px 12px;
+}
+.library-maintenance-failure strong { color: var(--danger); font-size: 12.5px; }
+.library-maintenance-failure p { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.6; }
+
+/* 整理报告（可收起持久可回看） */
+.library-maintenance-report summary {
+  cursor: pointer;
+  color: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 650;
+  padding: 2px 0;
+}
+.library-maintenance-report summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.library-maintenance-report-grid { display: grid; gap: 7px; margin: 10px 0 0; }
+.library-maintenance-report-grid > div { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.library-maintenance-report-grid dt { color: var(--muted); font-size: 12px; }
+.library-maintenance-report-grid dd { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; min-width: 0; overflow-wrap: anywhere; }
+.library-maintenance-risks { margin: 0; padding-left: 18px; }
+.library-maintenance-risks li { margin: 3px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .library-wiki-tool-toggle { transition: none; }
+}
+
+/* =====================================================================
+   WMB-5244 Source 详情「媒体」区块：当前 revision 媒体完整度 + 候选明细
+   （缩略图/poster、顺序、大小、来源、状态、错误、重试；全局暂停；查看本地原件）
+   仅 foundation 变量（success/info/danger/amber/muted/border/surface），无新颜色。
+===================================================================== */
+
+/* 失败状态 pill（复用既有 token，无新颜色值） */
+.pill-status.red { background: var(--danger-soft); color: var(--danger); }
+.lib-inline.red { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+.lib-inline.blue { background: color-mix(in srgb, var(--info) 13%, transparent); color: var(--info); }
+
+.library-source-media-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.library-source-media-head h2 { margin: 0; }
+.library-source-media-head .secondary-button { min-height: 32px; padding: 5px 12px; font-size: 12px; }
+
+.library-source-media-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px !important;
+  color: var(--muted);
+  font-size: 13px;
+}
+.library-source-media-summary strong { color: var(--ink); font-size: 13.5px; }
+.library-source-media-summary em { color: var(--amber); font-style: normal; font-size: 12px; }
+
+.library-media-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+
+.library-media-list { display: grid; gap: 10px; }
+
+.library-media-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.library-media-item:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
+.library-media-thumb {
+  width: 92px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--muted-low);
+  font-size: 11px;
+  overflow: hidden;
+}
+.library-media-thumb.is-video { position: relative; }
+.library-media-thumb .library-media-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* 视频占位播放标记（纯 CSS 三角，无图标/无新颜色） */
+.library-media-play {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 9px 0 9px 15px;
+  border-color: transparent transparent transparent var(--muted);
+  opacity: 0.85;
+}
+
+.library-media-main { min-width: 0; display: grid; gap: 4px; }
+.library-media-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.library-media-order { color: var(--ink); font-size: 13px; font-weight: 650; }
+.library-media-origin {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.library-media-caption { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+.library-media-size { margin: 0; color: var(--muted-low); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.library-media-error {
+  margin: 2px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.library-media-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.library-media-actions .secondary-button { min-height: 30px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .library-media-item { grid-template-columns: 72px minmax(0, 1fr); }
+  .library-media-thumb { width: 72px; height: 52px; }
+  .library-media-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+}
+
+/* =====================================================================
+   WMB-5269 资料库「采集异常」：正文归档终态失败统一中心
+   （结构化原因/类别、尝试次数、可重试选择与 所选/同类/全部 新周期重试）
+   仅 foundation 变量（success/danger/amber/info/muted/border/surface），无新颜色。
+===================================================================== */
+.capture-failures-section { display: grid; gap: 14px; }
+.capture-failures-head { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.capture-failures-total { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.capture-failures-hint { margin-left: 12px; color: var(--muted-low); font-size: 12px; }
+
+.capture-failures-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.capture-failures-actions .secondary-button { min-height: 32px; padding: 5px 12px; font-size: 12px; }
+.capture-failures-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.capture-failures-select-all input { margin: 0; }
+.capture-failures-excluded {
+  color: var(--muted-low);
+  font-size: 12px;
+}
+.capture-failures-feedback {
+  margin: 0;
+  color: var(--success);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.capture-failures-list { display: grid; gap: 10px; }
+
+.capture-failure-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+.capture-failure-item:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.capture-failure-item.is-not-retryable { opacity: 0.78; }
+
+.capture-failure-check {
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.capture-failure-check:disabled { cursor: not-allowed; opacity: 0.4; }
+
+.capture-failure-main { min-width: 0; display: grid; gap: 4px; }
+.capture-failure-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.capture-failure-title { color: var(--ink); font-size: 13.5px; font-weight: 650; line-height: 1.4; }
+.capture-failure-domain { color: var(--muted); font-size: 12px; }
+.capture-failure-url {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.capture-failure-message {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.capture-failure-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  color: var(--muted-low);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capture-failure-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.capture-failure-actions .secondary-button { min-height: 30px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+
+.capture-failure-retryable { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
+.capture-failure-blocked { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
+
+.capture-failures-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.capture-failures-pager .secondary-button { min-height: 32px; padding: 5px 14px; font-size: 12.5px; }
+
+@media (max-width: 560px) {
+  .capture-failure-item { grid-template-columns: 22px minmax(0, 1fr); }
+  .capture-failure-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+}

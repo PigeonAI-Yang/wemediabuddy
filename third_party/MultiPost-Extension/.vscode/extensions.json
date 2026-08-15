@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "aaron-bond.better-comments",
+    "naumovs.color-highlight",
+    "mikestead.dotenv",
+    "biomejs.biome",
+    "heybourn.headwind",
+    "antfu.iconify",
+    "bradlc.vscode-tailwindcss",
+    "lokalise.i18n-ally"
+  ]
+}

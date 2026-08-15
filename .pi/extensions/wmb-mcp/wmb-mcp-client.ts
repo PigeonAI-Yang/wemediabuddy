@@ -44,7 +44,13 @@ export async function callTool(name: string, args: unknown): Promise<unknown> {
     capabilities: {},
     clientInfo: { name: 'wmb-pi', version: '0.1.0' }
   });
-  return (await request('tools/call', { name, arguments: args }, initialized.sessionId)).data;
+  const params: Record<string, unknown> = { name, arguments: args };
+  // WMB-5170 客户端身份接缝：只从环境派生 taskId+workerLeaseId（两者均非空才注入 _meta）。
+  // callTool 只暴露 name/args，调用方无法覆盖 _meta；WMB-5172 执行器落地时负责设置这两个 env。
+  const taskId = process.env.WMB_AGENT_TASK_ID;
+  const workerLeaseId = process.env.WMB_WORKER_LEASE_ID;
+  if (taskId && workerLeaseId) params._meta = { taskId, workerLeaseId };
+  return (await request('tools/call', params, initialized.sessionId)).data;
 }
 
 export function textResult(result: unknown) {

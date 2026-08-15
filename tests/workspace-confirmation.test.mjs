@@ -8,6 +8,8 @@ import { agentRequestId, completeAgentTask, failAgentTask, getAgentTask, startAg
 import { createContentProjectWithVersion, savePlatformVersion } from '../src/main/content.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { applyKnowledgeChangeSet } from '../src/main/knowledge-flywheel.ts';
+import { openBrowserProfileRegistry } from '../src/main/browser-config.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { createWorkspaceConfirmation } from '../src/main/workspace-confirmation.ts';
@@ -15,15 +17,17 @@ import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intellige
 import { readWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { createWebsiteSource } from '../src/main/intelligence-channels.ts';
 import { proposalBinding, WorkspaceProposalStore } from '../src/main/workspace-proposals.ts';
+import { readWorkspaceBrowserBinding } from '../src/main/workspace-browser-binding.ts';
 import { createProposedWorkspace, enrollAiWorkspace, readWorkspaceRegistry } from '../src/main/workspaces.ts';
 
 test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-confirmation-'));
   const userData = path.join(parent, 'user-data');
   const registryPath = path.join(userData, 'workspace-registry.json');
+  const defaultProfileId = openBrowserProfileRegistry(path.join(userData, 'browser-config.json')).defaultProfileId;
   const aiRoot = await openDataRoot(path.join(parent, 'ai'));
   migrateDatabase(path.join(aiRoot.path, 'wmb.db')).close();
-  const ai = await enrollAiWorkspace({ registryPath, rootPath: aiRoot.path });
+  const ai = await enrollAiWorkspace({ registryPath, rootPath: aiRoot.path, defaultProfileId });
   const store = new WorkspaceProposalStore(() => true);
   try {
     const aiDb = migrateDatabase(path.join(aiRoot.path, 'wmb.db'));
@@ -35,7 +39,7 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     aiDb.close();
     const currentProposal = store.prepare({ ...proposalInput('update-current'), target: 'current', displayName: base.displayName, contentGoal: '持续创作可复现的 AI 开发自媒体内容' }, { workspaceId: ai.id, currentProfile: base });
     let relaunches = 0;
-    const currentConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { throw new Error('existing profile must not choose a root'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => { const result = await apply(); relaunches += 1; return result; }, proposals: store });
+    const currentConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, defaultBrowserProfileId: () => defaultProfileId, chooseDirectory: async () => { throw new Error('existing profile must not choose a root'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => { const result = await apply(); relaunches += 1; return result; }, proposals: store });
     const durableBefore = await profileState(registryPath, aiRoot.path);
     await assert.rejects(() => currentConfirmation.confirm(proposalBinding(currentProposal)), { code: 'WORKSPACE_BUSY' });
     assert.equal(await profileState(registryPath, aiRoot.path), durableBefore);
@@ -52,11 +56,11 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
       const proposal = store.prepare({ ...proposalInput(`crash-${phase}`), displayName: `恢复-${phase}` }, { workspaceId: null, currentProfile: null });
       const rootPath = path.join(parent, `candidate-${phase}`);
       const before = await readWorkspaceRegistry(registryPath);
-      await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath, profile: proposal.profile, injectFailure(at) { if (at === phase) throw new Error(`crash:${phase}`); } }), new RegExp(`crash:${phase}`));
+      await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath, profile: proposal.profile, defaultProfileId, injectFailure(at) { if (at === phase) throw new Error(`crash:${phase}`); } }), new RegExp(`crash:${phase}`));
       const failed = await readWorkspaceRegistry(registryPath);
       assert.equal(failed.activeWorkspaceId, activeId);
       assert.equal(failed.workspaces.length, before.workspaces.length);
-      const recovered = await createProposedWorkspace({ registryPath, rootPath, profile: proposal.profile });
+      const recovered = await createProposedWorkspace({ registryPath, rootPath, profile: proposal.profile, defaultProfileId });
       const reopened = new DatabaseSync(path.join(rootPath, 'wmb.db'), { readOnly: true });
       assert.equal(readWorkspaceProfile(reopened).profileId, proposal.profile.profileId);
       reopened.close();
@@ -65,14 +69,14 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
 
     const afterProposal = store.prepare({ ...proposalInput('after-registry'), displayName: '提交后恢复' }, { workspaceId: null, currentProfile: null });
     const afterPath = path.join(parent, 'candidate-after-registry');
-    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: afterPath, profile: afterProposal.profile, injectFailure(phase) { if (phase === 'after_registry') throw new Error('crash:after_registry'); } }), /crash:after_registry/);
+    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: afterPath, profile: afterProposal.profile, defaultProfileId, injectFailure(phase) { if (phase === 'after_registry') throw new Error('crash:after_registry'); } }), /crash:after_registry/);
     const countAfterCommit = (await readWorkspaceRegistry(registryPath)).workspaces.length;
-    await createProposedWorkspace({ registryPath, rootPath: afterPath, profile: afterProposal.profile });
+    await createProposedWorkspace({ registryPath, rootPath: afterPath, profile: afterProposal.profile, defaultProfileId });
     assert.equal((await readWorkspaceRegistry(registryPath)).workspaces.length, countAfterCommit);
 
     const newProposal = store.prepare({ ...proposalInput('ui-new'), displayName: '第三赛道测试' }, { workspaceId: null, currentProfile: null });
     const thirdRoot = path.join(parent, 'third');
-    const confirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => thirdRoot, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
+    const confirmation = createWorkspaceConfirmation({ userDataPath: () => userData, defaultBrowserProfileId: () => defaultProfileId, chooseDirectory: async () => thirdRoot, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
     await confirmation.selectRoot(proposalBinding(newProposal));
     assert.equal(confirmation.list().find((item) => item.proposal.id === newProposal.id).selectedRootPath, thirdRoot);
     const created = await confirmation.confirm(proposalBinding(newProposal));
@@ -84,6 +88,8 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     const cold = migrateDatabase(path.join(thirdRoot, 'wmb.db'));
     const chain = createTextChain(cold);
     assert.equal(readWorkspaceProfile(cold).profileId, newProposal.profile.profileId);
+    assert.equal(readWorkspaceBrowserBinding(cold).profileId, defaultProfileId);
+    assert.equal(readWorkspaceBrowserBinding(cold).bindingRevision, 1);
     assert.equal(cold.prepare('SELECT source_id FROM content_project_sources WHERE project_id=?').get(chain.projectId).source_id, chain.sourceId);
     assert.equal(cold.prepare('SELECT body FROM platform_versions WHERE id=?').get(chain.platformVersionId).body, '第三赛道 X 纯文字版本');
     cold.close();
@@ -104,7 +110,9 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
           routes.game += 1;
           const database = migrateDatabase(path.join(thirdRoot, 'wmb.db'));
           try {
-            const task = getAgentTask(database, database.prepare("SELECT id FROM agent_tasks WHERE intent='daily_intelligence' AND business_date=?").get('2026-08-02').id);
+            const taskRow = database.prepare("SELECT id FROM agent_tasks WHERE intent IN ('daily_intelligence','daily_scan','daily_judge') AND business_date=? ORDER BY created_at DESC").get('2026-08-02');
+            assert.ok(taskRow, 'channel task must exist before judgment runner');
+            const task = getAgentTask(database, taskRow.id);
             assert.ok(task);
             saveCurrentPlan(database, { planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
             database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('plans.save', agentRequestId(task.id, 'plan'), '{}', new Date().toISOString());
@@ -120,7 +128,7 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
 
     const staleProposal = store.prepare({ ...proposalInput('stale-ui'), displayName: '过期提案' }, { workspaceId: null, currentProfile: null });
     let chooserCalls = 0;
-    const staleConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, chooseDirectory: async () => { chooserCalls += 1; return path.join(parent, 'must-not-open'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
+    const staleConfirmation = createWorkspaceConfirmation({ userDataPath: () => userData, defaultBrowserProfileId: () => defaultProfileId, chooseDirectory: async () => { chooserCalls += 1; return path.join(parent, 'must-not-open'); }, loadSelectedDataRoot: async () => aiRoot, relaunchCurrentWorkspace: async (apply) => apply(), proposals: store });
     await assert.rejects(() => staleConfirmation.selectRoot({ ...proposalBinding(staleProposal), normalizedHash: 'changed' }), { code: 'PROFILE_STALE' });
     assert.equal(chooserCalls, 0);
 
@@ -130,11 +138,43 @@ test('UI confirmation is exact, busy-safe, crash-recoverable and cold-readable',
     occupiedDb.close();
     const occupiedProposal = store.prepare({ ...proposalInput('occupied'), displayName: '不应创建' }, { workspaceId: null, currentProfile: null });
     const registryCount = (await readWorkspaceRegistry(registryPath)).workspaces.length;
-    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: occupiedRoot.path, profile: occupiedProposal.profile }), { code: 'VALIDATION_ERROR' });
+    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: occupiedRoot.path, profile: occupiedProposal.profile, defaultProfileId }), { code: 'VALIDATION_ERROR' });
     const occupiedRead = new DatabaseSync(path.join(occupiedRoot.path, 'wmb.db'), { readOnly: true });
     assert.equal(occupiedRead.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get(), undefined);
     assert.equal(readWorkspaceProfile(occupiedRead), null);
     occupiedRead.close();
+    assert.equal((await readWorkspaceRegistry(registryPath)).workspaces.length, registryCount);
+  } finally { await rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+});
+
+test('candidate root with real knowledge rows cannot become a new workspace', async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-workspace-knowledge-'));
+  const userData = path.join(parent, 'user-data');
+  const registryPath = path.join(userData, 'workspace-registry.json');
+  const defaultProfileId = openBrowserProfileRegistry(path.join(userData, 'browser-config.json')).defaultProfileId;
+  const root = await openDataRoot(path.join(parent, 'knowledge-root'));
+  const database = migrateDatabase(path.join(root.path, 'wmb.db'));
+  try {
+    // 真实 knowledge 数据：经 ChangeSet 原子写入一条 Note（空 v56 只有关系目录种子行，不算业务数据）
+    database.prepare("INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('workspace_id', ?, ?, ?, 1)").run('knowledge-root', new Date().toISOString(), new Date().toISOString());
+    const applied = applyKnowledgeChangeSet(database, { workspaceId: 'knowledge-root', requestId: 'knowledge-row-block', reason: '阻断测试', triggerSource: 'lint', resolutionMode: 'replaced_current', createdBy: 'system' }, {
+      notes: [{ id: 'note-block', scope: 'global', kind: 'claim', canonicalKey: 'note-block-key', title: '既有知识', version: { title: '既有知识', statement: '真实知识数据', conclusionStatus: 'unverified', evidenceLevel: 'none', changeType: 'created', changeReason: '阻断测试' } }]
+    });
+    assert.equal(applied.replay, false);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM knowledge_notes').get().n, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS n FROM knowledge_change_sets').get().n, 1);
+  } finally { database.close(); }
+  const store = new WorkspaceProposalStore(() => true);
+  const proposal = store.prepare({ ...proposalInput('knowledge-occupied'), displayName: '不应创建' }, { workspaceId: null, currentProfile: null });
+  const registryCount = (await readWorkspaceRegistry(registryPath)).workspaces.length;
+  try {
+    await assert.rejects(() => createProposedWorkspace({ registryPath, rootPath: root.path, profile: proposal.profile, defaultProfileId }), { code: 'VALIDATION_ERROR' });
+    const untouched = new DatabaseSync(path.join(root.path, 'wmb.db'), { readOnly: true });
+    try {
+      assert.equal(untouched.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get().value, 'knowledge-root');
+      assert.equal(untouched.prepare('SELECT COUNT(*) AS n FROM knowledge_notes').get().n, 1);
+      assert.equal(readWorkspaceProfile(untouched), null);
+    } finally { untouched.close(); }
     assert.equal((await readWorkspaceRegistry(registryPath)).workspaces.length, registryCount);
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });

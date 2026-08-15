@@ -32,13 +32,18 @@ const platformAliases: Record<string, string> = {
   小红书: 'xiaohongshu',
   red: 'xiaohongshu',
   RED: 'xiaohongshu',
+  zhihu: 'zhihu',
+  知乎: 'zhihu',
   jike: 'jike',
   即刻: 'jike'
 };
 
 function assetByFileName(assets: Record<string, string>, fileName: string): string | null {
   if (assets[fileName]) return assets[fileName];
-  const hit = Object.entries(assets).find(([key]) => key.replaceAll('\\', '/').endsWith(`/${fileName}`) || key.endsWith(fileName));
+  const hit = Object.entries(assets).find(([key]) => {
+    const normalized = key.replaceAll('\\', '/');
+    return normalized.slice(normalized.lastIndexOf('/') + 1) === fileName;
+  });
   return hit?.[1] ?? null;
 }
 

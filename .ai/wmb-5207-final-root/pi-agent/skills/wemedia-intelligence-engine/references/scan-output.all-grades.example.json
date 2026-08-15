@@ -1,0 +1,15 @@
+{
+  "sources": [
+    {"id":"source-1","title":"Example release","original_url":"https://example.com/release"}
+  ],
+  "opportunities": [
+    {"title":"SSS","priority":0,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"S","priority":1,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"A","priority":2,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"B","priority":3,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"C","priority":4,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"D","priority":5,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"E","priority":6,"why_now":"now","angle":"angle","source_ids":["source-1"]},
+    {"title":"F","priority":7,"why_now":"now","angle":"angle","source_ids":["source-1"]}
+  ]
+}

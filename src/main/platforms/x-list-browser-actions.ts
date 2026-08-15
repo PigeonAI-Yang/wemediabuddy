@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Locator, Page, Response } from 'playwright-core';
 import { parseXListId, isXListTimelineResponse, type XListBrowserConfig, xListUrl } from './x-list-primitives.ts';
-import { XListNeedsUserError, XListSession, XListSupersededError } from './x-list-session.ts';
+import { XListNeedsUserError, XListPlatformRejectedError, XListSession, XListSupersededError } from './x-list-session.ts';
 import { xMetricEvidenceMap, xMetricValues, type XMetricEvidenceMap } from './metric-value.ts';
 
 import type {
@@ -91,22 +91,23 @@ export async function createXList(config: XListBrowserConfig, input: XListCreate
   const session = await XListSession.open(config);
   try {
     return await session.run(async (active) => {
-      const accountKey = await (async () => {
-        await active.navigateInitially('https://x.com/home');
-        return readAccountKey(active);
-      })();
-      await active.navigateWithinOperation(`https://x.com/${accountKey.slice(1)}/lists`);
-      await active.click(await active.findFirstVisible(createListSelectors));
-      await active.typeInto(await active.findFirstVisible(listNameSelectors), input.name);
-      if (input.description !== undefined) await active.typeInto(await active.findFirstVisible(listDescriptionSelectors), input.description);
-      if (input.isPrivate) await active.click(await active.findFirstVisible(privateListSelectors));
+      if (!config.accountKey) throw new XListNeedsUserError('当前 X 账号未知，无法创建 List。');
+      await active.navigateInitially(`https://x.com/${config.accountKey.slice(1)}/lists`, { mode: 'browse' });
+      const accountKey = await readAccountKey(active);
+      await (await active.findFirstVisible(createListSelectors)).click({ force: true });
+      await active.page.locator(listNameSelectors.join(', ')).first().waitFor({ state: 'visible', timeout: 15_000 });
+      await (await active.findFirstVisible(listNameSelectors)).fill(input.name);
+      if (input.description !== undefined) await (await active.findFirstVisible(listDescriptionSelectors)).fill(input.description);
+      if (input.isPrivate) await (await active.findFirstVisible(privateListSelectors)).check({ force: true });
       await assertNotStopped(hooks);
       await hooks.beforeAction?.('create_list');
-      await active.click(await active.findFirstVisible(confirmCreateSelectors));
+      await (await active.findFirstVisible(confirmCreateSelectors)).click({ force: true });
+      await active.page.waitForURL(/\/i\/lists\/\d+/, { timeout: 20_000 }).catch(() => {});
       const listId = parseXListId(active.page.url());
       if (!listId) throw new XListUnknownError('创建 List 后未能从当前页面读回稳定 List ID。');
+      await active.navigateWithinOperation(xListUrl(listId), { mode: 'browse' });
       return { accountKey, detail: await detailFromCurrentPage(active, listId) };
-    });
+    }, { timeoutMs: 180_000 });
   } finally { await session.close(); }
 }
 
@@ -380,21 +381,29 @@ export async function addMemberInOpenSheet(session: XListSession, listId: string
 
   await assertNotStopped(hooks);
   await hooks.beforeAction?.('add_member');
-  // Prefer a real center click on the compact Add control; force-click on layered X sheets is flaky.
-  const box = await action.boundingBox();
-  if (!box) throw new XListNeedsUserError(`X 未显示 ${handle} 的安全添加控件。`);
-  await session.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await sleepMs(1000);
+  const mutation = session.page.waitForResponse((response) => (
+    response.request().method() === 'POST' && response.url().includes('/ListAddMember')
+  ), { timeout: 12_000 }).catch(() => null);
+  await action.click({ timeout: 5_000 });
+  const response = await mutation;
+  const platformError = response ? xListMutationErrorMessage(await response.json().catch(() => null)) : null;
+  if (platformError) throw new XListPlatformRejectedError(`X 拒绝添加 ${handle}：${platformError}`);
   await removeBtn.waitFor({ state: 'visible', timeout: 8_000 }).catch(() => {});
   if (!await removeBtn.isVisible().catch(() => false)) {
-    // Second try through session click path.
-    await session.click(action, { force: true, preserveOverlay: true });
-    await sleepMs(900);
-  }
-  if (!await removeBtn.isVisible().catch(() => false)) {
-    throw new XListUnknownError(`点击添加 ${handle} 后按钮未变为移除。`);
+    await openManagedMembers(session, listId, 'members');
+    if (!await hasMember(session, handle)) throw new XListUnknownError(`点击添加 ${handle} 后未能从成员页读回。`);
   }
   return 'added';
+}
+
+export function xListMutationErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as { data?: unknown; errors?: unknown };
+  if (record.data && typeof record.data === 'object' && (record.data as { list?: unknown }).list) return null;
+  const errors = record.errors;
+  if (!Array.isArray(errors)) return null;
+  const message = errors.find((item) => item && typeof item === 'object' && typeof (item as { message?: unknown }).message === 'string');
+  return message ? (message as { message: string }).message : null;
 }
 
 async function exactHandleRow(rows: Locator, handle: string): Promise<Locator | null> {

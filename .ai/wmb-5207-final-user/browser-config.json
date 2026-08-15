@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "revision": 1,
+  "defaultProfileId": "f18b2c03-704f-49d4-9e0b-af229a3359c7",
+  "profiles": [
+    {
+      "id": "f18b2c03-704f-49d4-9e0b-af229a3359c7",
+      "label": "Edge · WMB 默认登录态",
+      "executablePath": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "userDataDir": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\wmb-5207-final-user\\browser-profiles\\f18b2c03-704f-49d4-9e0b-af229a3359c7",
+      "profileDirectory": "Default",
+      "origin": "installation",
+      "createdAt": "2026-08-12T03:31:20.458Z"
+    }
+  ]
+}

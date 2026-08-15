@@ -1,7 +1,11 @@
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 
-export type View = 'today' | 'discover' | 'knowledge' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
-export const views: View[] = ['today', 'discover', 'knowledge', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
+export type View = 'today' | 'agents' | 'discover' | 'proposals' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';
+export const views: View[] = ['today', 'agents', 'discover', 'proposals', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];
+/** WMB-5239：跨页知识对象深链统一导航事件（wiki-discovery 组件派发；main.tsx App 监听）。
+ * detail = { payload: KnowledgeDeepLinkPayload }（../shared/knowledge-topic-library）；topic→objectId 为主题 ID、
+ * source→objectId 为资料 ID、knowledge_object→知识对象（画布本体卡降级）。 */
+export const WMB_NAVIGATE_WIKI_OBJECT_EVENT = 'wmb-navigate-wiki-object' as const;
 export type Theme = 'dark' | 'light';
 export type RankingContextItem = { rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string; boardId: string; boardLabel: string };
 export type RankingContext = {
@@ -30,6 +34,31 @@ export type XListPiContext = {
   /** Total posts loaded in UI (same as visiblePosts.length after fix; kept explicit for chip honesty). */
   loadedCount: number;
 };
+/** WMB-5207：Studio 当前可编辑文档种类。 */
+export type StudioDocumentKind = 'core' | 'platform';
+/** WMB-5207：可批注的平台版本。 */
+export type StudioPlatformId = 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
+/** WMB-5207：Studio 通过 page focus 发布的当前可编辑工作稿快照。 */
+export type PiStudioDocument = {
+  projectId: string;
+  documentKind: StudioDocumentKind;
+  documentId: string | null;
+  platform: StudioPlatformId | null;
+  title: string;
+  currentBody: string;
+  bodyFingerprint: string;
+  dirty: boolean;
+};
+/** WMB-5207：随工作稿带入 Pi 的开放批注（用户标注，非修改授权）。prefix/suffix 为 Data 契约的稳定邻近锚点，恒为 string。 */
+export type PiStudioOpenAnnotation = {
+  id: string;
+  startOffset: number;
+  endOffset: number;
+  quotedText: string;
+  prefixContext: string;
+  suffixContext: string;
+  note: string | null;
+};
 export type PiFocusObject = {
   type: string;
   id: string;
@@ -40,6 +69,10 @@ export type PiFocusObject = {
   bodyExcerpt?: string | null;
   bodyChars?: number;
   meta?: Record<string, unknown>;
+  /** WMB-5207：Studio 当前可编辑工作稿；仅用户在创作页显式发送消息时序列化。 */
+  studioDocument?: PiStudioDocument | null;
+  /** WMB-5207：当前工作稿上的开放批注；只作上下文，不构成授权。 */
+  openAnnotations?: PiStudioOpenAnnotation[] | null;
 };
 export type PiContextRef = {
   page: View;
@@ -49,7 +82,8 @@ export type PiContextRef = {
   objectTitle: string | null;
   packagePurpose?: 'discussion';
   canvasId?: string;
-  contextSelection?: { canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string };
+  /** WMB-5243：全局知识网络框选上下文；mode 恒为 selected（不再有整页画布回退）。 */
+  contextSelection?: { canvasId: string; nodeIds: string[]; mode: 'selected'; title: string };
   selectedItems?: TodayPlanItem[];
   selectedSources?: Array<TodaySource & { bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number }>;
   fermenting?: {
@@ -104,6 +138,8 @@ export const platformNames: Record<string, string> = {
   微信: '公众号',
   公众号: '公众号',
   微信公众号: '公众号',
+  zhihu: '知乎',
+  知乎: '知乎',
   jike: '即刻',
   即刻: '即刻'
 };
@@ -112,6 +148,7 @@ export const platformIcon = (platform?: string): string => ({
   x: '𝕏', X: '𝕏', twitter: '𝕏',
   xiaohongshu: '红', 小红书: '红',
   wechat: '微', 微信: '微', 公众号: '微', 微信公众号: '微',
+  zhihu: '知', 知乎: '知',
   jike: '即', 即刻: '即'
 } as Record<string, string>)[platform ?? ''] ?? '·';
 export const formatNames: Record<string, string> = { text: '观点短文', article: '文章', image: '图文', video: '视频', short_video: '口播视频' };

@@ -1,0 +1,1812 @@
+{
+  "namespace": "WemediaBuddyDesignSystem_1c877c",
+  "components": [
+    {
+      "name": "AppModal",
+      "sourcePath": "components/core/AppModal.jsx",
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "values": [
+            "confirm",
+            "standard",
+            "large",
+            "fullscreen"
+          ]
+        },
+        {
+          "name": "onRequestClose",
+          "type": "() => void"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "footer",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "ariaDescription",
+          "type": "string"
+        },
+        {
+          "name": "closeOnBackdrop",
+          "type": "boolean"
+        },
+        {
+          "name": "closeOnEscape",
+          "type": "boolean"
+        },
+        {
+          "name": "role",
+          "values": [
+            "dialog",
+            "alertdialog"
+          ]
+        },
+        {
+          "name": "initialFocusRef",
+          "type": "React.RefObject<HTMLElement | null>"
+        }
+      ]
+    },
+    {
+      "name": "Button",
+      "sourcePath": "components/core/Button.jsx",
+      "props": [
+        {
+          "name": "variant",
+          "values": [
+            "primary",
+            "secondary",
+            "text",
+            "danger"
+          ]
+        },
+        {
+          "name": "size",
+          "values": [
+            "md",
+            "sm"
+          ]
+        },
+        {
+          "name": "type",
+          "values": [
+            "button",
+            "submit",
+            "reset"
+          ]
+        },
+        {
+          "name": "disabled",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "onClick",
+          "type": "(event: React.MouseEvent<HTMLButtonElement>) => void"
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "ChipFilter",
+      "sourcePath": "components/core/ChipFilter.jsx",
+      "props": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "pressed",
+          "type": "boolean"
+        },
+        {
+          "name": "count",
+          "type": "number"
+        },
+        {
+          "name": "size",
+          "values": [
+            "md",
+            "sm"
+          ]
+        },
+        {
+          "name": "disabled",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "onToggle",
+          "type": "(pressed: boolean) => void"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "FormField",
+      "sourcePath": "components/core/FormField.jsx",
+      "props": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "htmlFor",
+          "type": "string"
+        },
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "required",
+          "type": "boolean"
+        },
+        {
+          "name": "error",
+          "type": "string"
+        },
+        {
+          "name": "helper",
+          "type": "string"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        }
+      ]
+    },
+    {
+      "name": "IconButton",
+      "sourcePath": "components/core/IconButton.jsx",
+      "props": [
+        {
+          "name": "label",
+          "type": "string"
+        },
+        {
+          "name": "size",
+          "values": [
+            "md",
+            "sm"
+          ]
+        },
+        {
+          "name": "variant",
+          "values": [
+            "default",
+            "ghost",
+            "danger"
+          ]
+        },
+        {
+          "name": "disabled",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "onClick",
+          "type": "(event: React.MouseEvent<HTMLButtonElement>) => void"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "PageCommand",
+      "sourcePath": "components/core/PageCommand.jsx",
+      "props": [
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "summary",
+          "type": "string"
+        },
+        {
+          "name": "stats",
+          "type": "PageCommandStat[]"
+        },
+        {
+          "name": "actions",
+          "type": "PageCommandAction[]"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "RoleCard",
+      "sourcePath": "components/core/RoleCard.jsx",
+      "props": [
+        {
+          "name": "labelZh",
+          "type": "string"
+        },
+        {
+          "name": "roomZh",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "values": [
+            "idle",
+            "running",
+            "needs-user",
+            "ok",
+            "bad"
+          ]
+        },
+        {
+          "name": "word",
+          "type": "string"
+        },
+        {
+          "name": "percent",
+          "type": "string"
+        },
+        {
+          "name": "indeterminate",
+          "type": "boolean"
+        },
+        {
+          "name": "summary",
+          "type": "string | null"
+        },
+        {
+          "name": "avatar",
+          "type": "string"
+        },
+        {
+          "name": "expanded",
+          "type": "boolean"
+        },
+        {
+          "name": "isDesk",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "onOpen",
+          "type": "() => void"
+        }
+      ]
+    },
+    {
+      "name": "StatePanel",
+      "sourcePath": "components/core/StatePanel.jsx",
+      "props": [
+        {
+          "name": "state",
+          "values": [
+            "loading",
+            "error",
+            "empty",
+            "content"
+          ]
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "body",
+          "type": "string"
+        },
+        {
+          "name": "action",
+          "type": "{ label: string"
+        },
+        {
+          "name": "onClick",
+          "type": "() => void }"
+        },
+        {
+          "name": "icon",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "minHeight",
+          "type": "number"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        }
+      ]
+    },
+    {
+      "name": "StatusPill",
+      "sourcePath": "components/core/StatusPill.jsx",
+      "props": [
+        {
+          "name": "tone",
+          "values": [
+            "idle",
+            "ok",
+            "warn",
+            "needs-user",
+            "bad",
+            "active"
+          ]
+        },
+        {
+          "name": "children",
+          "type": "React.ReactNode"
+        },
+        {
+          "name": "live",
+          "type": "boolean"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "TabList",
+      "sourcePath": "components/core/TabList.jsx",
+      "props": [
+        {
+          "name": "tabs",
+          "type": "TabItem[]"
+        },
+        {
+          "name": "selectedId",
+          "type": "string"
+        },
+        {
+          "name": "onSelect",
+          "type": "(id: string) => void"
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string"
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "WmbCreatureMark",
+      "sourcePath": "components/core/WmbCreatureMark.jsx",
+      "props": [
+        {
+          "name": "state",
+          "values": [
+            "idle",
+            "connect",
+            "working",
+            "settling",
+            "sleep",
+            "scout"
+          ]
+        },
+        {
+          "name": "className",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "startingPoints": [
+    {
+      "name": "editorial-terminal",
+      "path": "ui_kits/editorial-terminal/index.html",
+      "previewPath": "ui_kits/editorial-terminal/index.html",
+      "kind": "screen",
+      "section": "WeMediaBuddy",
+      "subtitle": "墨夜主编台：工作台、阅读页与 Pi 非挤压浮层",
+      "viewport": "1440x880"
+    }
+  ],
+  "cards": [
+    {
+      "path": "components/core/app-modal.card.html",
+      "group": "Components",
+      "viewport": "700x320",
+      "subtitle": "",
+      "name": "AppModal"
+    },
+    {
+      "path": "components/core/button.card.html",
+      "group": "Components",
+      "viewport": "700x230",
+      "subtitle": "",
+      "name": "Button"
+    },
+    {
+      "path": "components/core/chip-filter.card.html",
+      "group": "Components",
+      "viewport": "700x150",
+      "subtitle": "",
+      "name": "ChipFilter"
+    },
+    {
+      "path": "components/core/form-field.card.html",
+      "group": "Components",
+      "viewport": "700x220",
+      "subtitle": "",
+      "name": "FormField"
+    },
+    {
+      "path": "components/core/icon-button.card.html",
+      "group": "Components",
+      "viewport": "700x170",
+      "subtitle": "",
+      "name": "IconButton"
+    },
+    {
+      "path": "components/core/page-command.card.html",
+      "group": "Components",
+      "viewport": "700x180",
+      "subtitle": "",
+      "name": "PageCommand"
+    },
+    {
+      "path": "components/core/role-card.card.html",
+      "group": "Components",
+      "viewport": "700x560",
+      "subtitle": "",
+      "name": "RoleCard"
+    },
+    {
+      "path": "components/core/state-panel.card.html",
+      "group": "Components",
+      "viewport": "700x400",
+      "subtitle": "",
+      "name": "StatePanel"
+    },
+    {
+      "path": "components/core/status-pill.card.html",
+      "group": "Components",
+      "viewport": "700x150",
+      "subtitle": "",
+      "name": "StatusPill"
+    },
+    {
+      "path": "components/core/tab-list.card.html",
+      "group": "Components",
+      "viewport": "700x170",
+      "subtitle": "",
+      "name": "TabList"
+    },
+    {
+      "path": "components/core/wmb-creature-mark.card.html",
+      "group": "Components",
+      "viewport": "700x170",
+      "subtitle": "",
+      "name": "WmbCreatureMark"
+    },
+    {
+      "path": "guidelines/accessibility.card.html",
+      "group": "Guidelines",
+      "viewport": "700x330",
+      "subtitle": "",
+      "name": "Accessibility"
+    },
+    {
+      "path": "guidelines/actions-controls.card.html",
+      "group": "Guidelines",
+      "viewport": "700x330",
+      "subtitle": "",
+      "name": "ActionsControls"
+    },
+    {
+      "path": "guidelines/authority-and-tokens.card.html",
+      "group": "Guidelines",
+      "viewport": "700x300",
+      "subtitle": "",
+      "name": "AuthorityAndTokens"
+    },
+    {
+      "path": "guidelines/color-system.card.html",
+      "group": "Guidelines",
+      "viewport": "700x380",
+      "subtitle": "",
+      "name": "ColorSystem"
+    },
+    {
+      "path": "guidelines/content-language.card.html",
+      "group": "Guidelines",
+      "viewport": "700x320",
+      "subtitle": "",
+      "name": "ContentLanguage"
+    },
+    {
+      "path": "guidelines/one-violet.card.html",
+      "group": "Guidelines",
+      "viewport": "700x300",
+      "subtitle": "",
+      "name": "OneViolet"
+    },
+    {
+      "path": "guidelines/overlays-contract.card.html",
+      "group": "Guidelines",
+      "viewport": "700x300",
+      "subtitle": "",
+      "name": "OverlaysContract"
+    },
+    {
+      "path": "guidelines/page-identity.card.html",
+      "group": "Guidelines",
+      "viewport": "700x320",
+      "subtitle": "",
+      "name": "PageIdentity"
+    },
+    {
+      "path": "guidelines/pi-compact.card.html",
+      "group": "Guidelines",
+      "viewport": "700x320",
+      "subtitle": "",
+      "name": "PiAndCompact"
+    },
+    {
+      "path": "guidelines/room-forms.card.html",
+      "group": "Guidelines",
+      "viewport": "700x360",
+      "subtitle": "",
+      "name": "RoomForms"
+    },
+    {
+      "path": "guidelines/shape-elevation-motion.card.html",
+      "group": "Guidelines",
+      "viewport": "700x340",
+      "subtitle": "",
+      "name": "ShapeElevationMotion"
+    },
+    {
+      "path": "guidelines/spacing-scale.card.html",
+      "group": "Guidelines",
+      "viewport": "700x340",
+      "subtitle": "",
+      "name": "SpacingScale"
+    },
+    {
+      "path": "guidelines/states-contract.card.html",
+      "group": "Guidelines",
+      "viewport": "700x330",
+      "subtitle": "",
+      "name": "StatesContract"
+    },
+    {
+      "path": "guidelines/status-language.card.html",
+      "group": "Guidelines",
+      "viewport": "700x260",
+      "subtitle": "",
+      "name": "StatusLanguage"
+    },
+    {
+      "path": "guidelines/typography-scale.card.html",
+      "group": "Guidelines",
+      "viewport": "700x360",
+      "subtitle": "",
+      "name": "TypographyScale"
+    }
+  ],
+  "globalCssPaths": [
+    "tokens/colors.css",
+    "tokens/typography.css",
+    "tokens/spacing.css",
+    "tokens/shape-motion.css",
+    "styles/components.css",
+    "styles.css"
+  ],
+  "tokens": [
+    {
+      "name": "--app-bg",
+      "value": "#0b0b0b",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--topbar-bg",
+      "value": "#0f0f0f",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--sidebar-bg",
+      "value": "#111111",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--workspace-bg",
+      "value": "#0d0d0d",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--panel-bg",
+      "value": "#131313",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface",
+      "value": "#171717",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-raised",
+      "value": "#1c1c1c",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-hover",
+      "value": "#242424",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-selected",
+      "value": "#2a2a2a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--tag-bg",
+      "value": "#202020",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--ink",
+      "value": "#f1f1f1",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--ink-soft",
+      "value": "#d2d2d2",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--muted",
+      "value": "#aaaaaa",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--muted-low",
+      "value": "#767676",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border",
+      "value": "#363636",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border-soft",
+      "value": "#292929",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border-strong",
+      "value": "#484848",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--line",
+      "value": "rgb(255 255 255 / 6.5%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--line-strong",
+      "value": "rgb(255 255 255 / 13%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent",
+      "value": "#8b7cff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "#a495ff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-ink",
+      "value": "#fff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-soft",
+      "value": "#a495ff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-faint",
+      "value": "rgb(139 124 255 / 13%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--selected",
+      "value": "rgb(139 124 255 / 13%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--link",
+      "value": "#7aa8f0",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--amber",
+      "value": "#f0b45a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--amber-soft",
+      "value": "rgb(240 180 90 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--success",
+      "value": "#4cc38a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--success-soft",
+      "value": "rgb(76 195 138 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--warning",
+      "value": "#f0b45a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger",
+      "value": "#e5636f",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger-soft",
+      "value": "rgb(229 99 111 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-running",
+      "value": "#c98300",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-running-soft",
+      "value": "rgb(201 131 0 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--info",
+      "value": "#5aa9f0",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-sss",
+      "value": "#c9a7ff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-s",
+      "value": "#8b7cff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-a",
+      "value": "#5aa9f0",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-b",
+      "value": "#4cc38a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-c",
+      "value": "#a7adc0",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-x",
+      "value": "#e9ebf3",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-xhs",
+      "value": "#f04a5e",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-wx",
+      "value": "#3fb575",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--canvas-bg",
+      "value": "#0f0f0f",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--mark-bg",
+      "value": "#f2f4f7",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--mark-ink",
+      "value": "#111111",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--scroll-thumb",
+      "value": "#505050",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--scroll-hover",
+      "value": "#707070",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--overlay",
+      "value": "rgb(0 0 0 / 55%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--app-bg",
+      "value": "#f6f5fa",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--topbar-bg",
+      "value": "#fff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--sidebar-bg",
+      "value": "#f9f8fc",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--workspace-bg",
+      "value": "#f6f5fa",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--panel-bg",
+      "value": "#f9f8fc",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface",
+      "value": "#fff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-raised",
+      "value": "#fbfaff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-hover",
+      "value": "#f0ecfa",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--surface-selected",
+      "value": "#ebe6f8",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--tag-bg",
+      "value": "#eeeaf7",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--ink",
+      "value": "#221e2c",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--ink-soft",
+      "value": "#3e384a",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--muted",
+      "value": "#625b70",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--muted-low",
+      "value": "#857d93",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border",
+      "value": "#d9d4e4",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border-soft",
+      "value": "#e6e3ee",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--border-strong",
+      "value": "#bbb3ca",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--line",
+      "value": "rgb(31 25 43 / 8%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--line-strong",
+      "value": "rgb(31 25 43 / 16%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent",
+      "value": "#6d51e8",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-hover",
+      "value": "#5733c7",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-ink",
+      "value": "#fff",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-soft",
+      "value": "#6d51e8",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--accent-faint",
+      "value": "rgb(109 81 232 / 10%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--selected",
+      "value": "rgb(109 81 232 / 10%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--link",
+      "value": "#315fba",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--amber",
+      "value": "#b97c1e",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--amber-soft",
+      "value": "rgb(185 124 30 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--success",
+      "value": "#1f9d63",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--success-soft",
+      "value": "rgb(31 157 99 / 10%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--warning",
+      "value": "#b97c1e",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger",
+      "value": "#c4304b",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger-soft",
+      "value": "rgb(196 48 75 / 10%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-running",
+      "value": "#9a5f00",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-running-soft",
+      "value": "rgb(154 95 0 / 12%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--info",
+      "value": "#2f7fd4",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-sss",
+      "value": "#7b4fd6",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-s",
+      "value": "#6d51e8",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-a",
+      "value": "#2f7fd4",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-b",
+      "value": "#1f9d63",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--grade-c",
+      "value": "#857d93",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-x",
+      "value": "#221e2c",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-xhs",
+      "value": "#d43a4e",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--pf-wx",
+      "value": "#1f9d63",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--canvas-bg",
+      "value": "#f0eef7",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--mark-bg",
+      "value": "#eee9fa",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--mark-ink",
+      "value": "#4f2eb7",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--scroll-thumb",
+      "value": "#aaa2b8",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--scroll-hover",
+      "value": "#81798f",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--overlay",
+      "value": "rgb(31 25 43 / 35%)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger-button",
+      "value": "#d94848",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--danger-button-hover",
+      "value": "#e85b5b",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-failed-text",
+      "value": "#ff8e8e",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--status-failed-text",
+      "value": "var(--danger)",
+      "kind": "color",
+      "definedIn": "tokens/colors.css"
+    },
+    {
+      "name": "--font-sans",
+      "value": "\"Inter\", \"PingFang SC\", \"Microsoft YaHei UI\", \"Segoe UI\", system-ui, sans-serif",
+      "kind": "font",
+      "definedIn": "tokens/typography.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--mono",
+      "value": "\"JetBrains Mono\", \"Cascadia Code\", Consolas, monospace",
+      "kind": "font",
+      "definedIn": "tokens/typography.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--text-display",
+      "value": "34px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-display-lh",
+      "value": "1.16",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-display-ls",
+      "value": "-0.03em",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-h2",
+      "value": "25px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-h2-lh",
+      "value": "1.2",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-h2-ls",
+      "value": "-0.02em",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-title",
+      "value": "18px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-title-lh",
+      "value": "1.3",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-title-ls",
+      "value": "-0.02em",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-body",
+      "value": "14px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-body-lh",
+      "value": "1.55",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-ui",
+      "value": "13px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-ui-lh",
+      "value": "1.45",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-nav",
+      "value": "13.5px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-meta",
+      "value": "12px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-meta-lh",
+      "value": "1.4",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--text-micro",
+      "value": "11.5px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--text-micro-mono",
+      "value": "11px",
+      "kind": "spacing",
+      "definedIn": "tokens/typography.css"
+    },
+    {
+      "name": "--weight-regular",
+      "value": "400",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--weight-medium",
+      "value": "500",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--weight-semibold",
+      "value": "600",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--weight-demi",
+      "value": "650",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--weight-bold",
+      "value": "700",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--weight-heavy",
+      "value": "750",
+      "kind": "other",
+      "definedIn": "tokens/typography.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--topbar-height",
+      "value": "56px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--status-height",
+      "value": "34px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--nav-width",
+      "value": "216px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--pi-width",
+      "value": "clamp(340px, 24vw, 400px)",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--pi-width-collapsed",
+      "value": "0px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--pi-open-width",
+      "value": "var(--pi-width)",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--page-space",
+      "value": "16px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-1",
+      "value": "2px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-2",
+      "value": "4px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-3",
+      "value": "6px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-4",
+      "value": "8px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-5",
+      "value": "10px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-6",
+      "value": "12px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-7",
+      "value": "14px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-8",
+      "value": "16px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-9",
+      "value": "18px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-10",
+      "value": "24px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-11",
+      "value": "28px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-12",
+      "value": "32px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--space-13",
+      "value": "40px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--control-h-md",
+      "value": "40px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--control-h-sm",
+      "value": "32px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--control-h-nav",
+      "value": "38px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--control-h-tab",
+      "value": "40px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--control-h-field",
+      "value": "42px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--icon-btn",
+      "value": "38px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--icon-btn-sm",
+      "value": "32px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--card-command-h",
+      "value": "96px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--card-role-h",
+      "value": "228px",
+      "kind": "spacing",
+      "definedIn": "tokens/spacing.css"
+    },
+    {
+      "name": "--radius-xs",
+      "value": "5px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-sm",
+      "value": "6px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-md",
+      "value": "7px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-lg",
+      "value": "8px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-xl",
+      "value": "10px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-2xl",
+      "value": "12px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-3xl",
+      "value": "14px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--radius-pill",
+      "value": "999px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--shadow-modal",
+      "value": "0 24px 64px rgb(0 0 0 / 42%)",
+      "kind": "shadow",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--shadow-press",
+      "value": "inset 0 1px 0 color-mix(in srgb, var(--overlay) 18%, transparent)",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--focus-ring",
+      "value": "2px solid var(--accent)",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--focus-offset",
+      "value": "2px",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--focus-ring-soft",
+      "value": "2px solid color-mix(in srgb, var(--accent) 45%, transparent)",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--dur-instant",
+      "value": "80ms",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--dur-base",
+      "value": "120ms",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--dur-slow",
+      "value": "140ms",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--dur-expand",
+      "value": "200ms",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--ease-base",
+      "value": "ease",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--ease-out-expo",
+      "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--ease-creature",
+      "value": "cubic-bezier(0.25, 1, 0.5, 1)",
+      "kind": "other",
+      "definedIn": "tokens/shape-motion.css",
+      "annotation": "other"
+    },
+    {
+      "name": "--press-transform",
+      "value": "translateY(1px) scale(0.98)",
+      "kind": "spacing",
+      "definedIn": "tokens/shape-motion.css"
+    },
+    {
+      "name": "--ds-command-h",
+      "value": "var(--card-command-h)",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-command-h",
+      "value": "108px",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-panel-min-h",
+      "value": "320px",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-modal-width",
+      "value": "700px",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-modal-width",
+      "value": "520px",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-modal-width",
+      "value": "700px",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--ds-modal-width",
+      "value": "min(1040px, calc(100vw - 64px))",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    },
+    {
+      "name": "--pi-width",
+      "value": "var(--pi-width-collapsed)",
+      "kind": "spacing",
+      "definedIn": "styles/components.css"
+    }
+  ],
+  "themes": [],
+  "fonts": [],
+  "brandFonts": [],
+  "source": "spa"
+}

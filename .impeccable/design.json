@@ -2,6 +2,7 @@
   "schemaVersion": 2,
   "generatedAt": "2026-07-27T15:30:00+08:00",
   "title": "Design System: WeMediaBuddy",
+  "_notSsot": "Historical Impeccable export only. Machine SSOT is src/renderer/styles-foundation.css; living guide is docs/design/living-style-guide.html; Oh My Pi entry is CLAUDE.md.",
   "extensions": {
     "colorMeta": {
       "violet": {

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WMB 品牌角色动作库</title>
+<style>
+  :root{color-scheme:dark;--bg:#0b0b0b;--card:#151515;--line:#303030;--ink:#f2f2f2;--muted:#9b9b9b;--violet:#8b7cff;--ease:cubic-bezier(.25,1,.5,1);--speed:1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif}
+  main{width:min(1180px,calc(100vw - 40px));margin:40px auto 64px}
+  header{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:28px}
+  h1{margin:0;font-size:28px;letter-spacing:-.03em} header p{margin:6px 0 0;color:var(--muted)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  button,.walk-link{height:36px;border:1px solid var(--line);border-radius:8px;background:#1a1a1a;color:var(--ink);padding:0 13px;font:inherit;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+  button:hover,.walk-link:hover{border-color:#555} button:focus-visible,.walk-link:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+  button[aria-pressed="true"]{border-color:var(--violet)}
+  h2{margin:30px 0 12px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .card{position:relative;min-height:250px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+  .card h3{margin:0;font-size:16px}.card p{margin:4px 0 0;color:var(--muted);font-size:12px;min-height:35px}
+  .stage{position:relative;height:158px;display:grid;place-items:end center;padding-bottom:20px}
+  .stage::after{content:"";position:absolute;left:50%;bottom:18px;width:76px;height:8px;border-radius:50%;background:#000;filter:blur(4px);opacity:.32;transform:translateX(-50%)}
+  .mark{position:relative;z-index:1;width:126px;height:86px;transform-origin:50% 100%;will-change:transform}
+  .mark svg{display:block;width:100%;height:100%;overflow:visible}.purple{fill:var(--violet)}.white,.pupil,.lid{fill:var(--ink)}
+  .pupil-track,.lid{transform-box:fill-box;transform-origin:center}.pupil-track{animation:gaze calc(6.1s * var(--speed)) var(--ease) infinite}.lid{transform:translateY(-174px);animation:blink calc(6.7s * var(--speed)) ease-in-out infinite}
+  .micro .stage{height:116px}.micro .mark{width:52px;height:36px}.micro.card{min-height:208px}
+  .icon-sample{position:absolute;right:14px;top:14px;width:24px;height:17px;opacity:.72}
+  .icon-sample svg{display:block;width:100%;height:100%}
+  .fx{position:absolute;z-index:2;inset:0;pointer-events:none}.fx svg{width:100%;height:100%;overflow:visible}
+  .fx-electric path{fill:none;stroke:var(--violet);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:5 7;opacity:0;animation:electric calc(1.8s * var(--speed)) linear infinite}
+  .fx-electric path+path{animation-delay:calc(-.9s * var(--speed))}
+  .fx-work{inset:35px 26px 18px}.work-item{position:absolute;width:27px;height:18px;border:1px solid #6f6f6f;border-radius:4px;background:#202020;opacity:.22}.work-item::after{content:"";position:absolute;left:5px;right:5px;top:5px;height:2px;background:var(--violet);box-shadow:0 5px 0 #777}.work-item.one{left:0;top:28px;animation:task-left calc(2.4s * var(--speed)) var(--ease) infinite}.work-item.two{right:0;top:12px;animation:task-right calc(2.4s * var(--speed)) var(--ease) infinite}.work-progress{position:absolute;left:36px;right:36px;bottom:0;height:3px;border-radius:3px;background:#333;overflow:hidden}.work-progress::after{content:"";display:block;width:100%;height:100%;background:var(--violet);transform-origin:left;animation:progress calc(2.4s * var(--speed)) var(--ease) infinite}
+  .fx-settle i{position:absolute;width:16px;height:16px;border-color:var(--violet);border-style:solid;opacity:0;animation:brackets calc(3.2s * var(--speed)) var(--ease) infinite}.fx-settle i:nth-child(1){--dx:-16px;--dy:-10px;left:52px;top:42px;border-width:2px 0 0 2px}.fx-settle i:nth-child(2){--dx:16px;--dy:-10px;right:52px;top:42px;border-width:2px 2px 0 0}.fx-settle i:nth-child(3){--dx:-16px;--dy:10px;left:52px;bottom:25px;border-width:0 0 2px 2px}.fx-settle i:nth-child(4){--dx:16px;--dy:10px;right:52px;bottom:25px;border-width:0 2px 2px 0}
+  .fx-sleep{overflow:visible}.sleep-z{position:absolute;left:64%;top:45%;color:var(--violet);font-weight:700;font-style:normal;opacity:0;animation:sleep-z calc(4.8s * var(--speed)) var(--ease) infinite}.sleep-z:nth-child(2){font-size:16px;animation-delay:calc(-3.2s * var(--speed))}.sleep-z:nth-child(3){font-size:21px;animation-delay:calc(-1.6s * var(--speed))}
+  .fx-celebrate i{position:absolute;left:50%;top:54%;width:4px;height:20px;border-radius:3px;background:linear-gradient(to top,transparent,var(--violet));transform-origin:50% 50%;opacity:0;animation:cheer-ray calc(3s * var(--speed)) var(--ease) infinite}.fx-celebrate i:nth-child(1){--angle:-64deg}.fx-celebrate i:nth-child(2){--angle:-30deg}.fx-celebrate i:nth-child(3){--angle:30deg}.fx-celebrate i:nth-child(4){--angle:64deg}
+  .paused *{animation-play-state:paused!important}
+  .action-blink .lid{animation:demo-blink calc(2.8s * var(--speed)) ease-in-out infinite}
+  .action-look .pupil-track{animation:look-around calc(3.8s * var(--speed)) var(--ease) infinite}
+  .action-breathe .mark{animation:breathe calc(3.6s * var(--speed)) ease-in-out infinite}
+  .action-connect .mark{animation:connect calc(1.8s * var(--speed)) var(--ease) infinite}.action-connect .pupil-track{animation:scan calc(1.8s * var(--speed)) var(--ease) infinite}
+  .action-work .mark{animation:work calc(2.4s * var(--speed)) var(--ease) infinite}.action-work .pupil-track{animation:work-eye calc(2.4s * var(--speed)) var(--ease) infinite}
+  .action-settle .mark{animation:settle calc(3.2s * var(--speed)) var(--ease) infinite}
+  .action-scout .mark{animation:scout calc(8.4s * var(--speed)) var(--ease) infinite}.action-scout .pupil-track{animation:scout-eye calc(8.4s * var(--speed)) var(--ease) infinite}
+  .action-hop .mark{animation:hop calc(2.6s * var(--speed)) var(--ease) infinite}.action-hop .stage::after{animation:hop-shadow calc(2.6s * var(--speed)) var(--ease) infinite}
+  .action-sleep .mark{animation:sleep-breathe calc(4.8s * var(--speed)) ease-in-out infinite;transform:translateY(8px) scaleY(.92)}.action-sleep .lid{animation:none;transform:translateY(118px)}.action-sleep .pupil-track{animation:none}
+  .action-discover .mark{animation:discover calc(3.6s * var(--speed)) var(--ease) infinite}.action-discover .pupil-track{animation:discover-eye calc(3.6s * var(--speed)) var(--ease) infinite}
+  .action-celebrate .mark{animation:celebrate calc(3s * var(--speed)) var(--ease) infinite}
+  .action-recover .mark{animation:recover calc(4s * var(--speed)) var(--ease) infinite}
+  .walk-preview{position:absolute;z-index:1;inset:0;width:100%;height:100%;border:0;background:transparent}
+  @keyframes gaze{0%,42%,100%{transform:translateX(0)}48%,65%{transform:translateX(32px)}72%,88%{transform:translateX(-20px)}}
+  @keyframes blink{0%,24%,28%,67%,71%,100%{transform:translateY(-174px)}26%,69%{transform:translateY(172px)}}
+  @keyframes demo-blink{0%,38%,56%,100%{transform:translateY(-174px)}46%,49%{transform:translateY(172px)}}
+  @keyframes look-around{0%,16%,100%{transform:translateX(0)}28%,46%{transform:translateX(58px)}60%,78%{transform:translateX(-42px)}}
+  @keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(3px) scale(1.075,.92)}}
+  @keyframes connect{0%,100%{filter:drop-shadow(0 0 0 transparent);transform:scale(.96)}45%,55%{filter:drop-shadow(0 0 8px var(--violet));transform:scale(1.07)}}
+  @keyframes scan{0%,18%{transform:translateX(-55px)}48%,68%{transform:translateX(64px)}82%,100%{transform:translateX(8px)}}
+  @keyframes electric{0%,18%{stroke-dashoffset:22;opacity:0}28%,72%{opacity:1}100%{stroke-dashoffset:-22;opacity:0}}
+  @keyframes work{0%,12%,100%{transform:none}25%,42%{transform:translate(-8px,-2px) rotate(-4deg)}55%,72%{transform:translate(8px,-2px) rotate(4deg)}84%{transform:translateY(2px) scale(1.04,.94)}}
+  @keyframes work-eye{0%,12%,100%{transform:translateX(0)}25%,42%{transform:translateX(-54px)}55%,72%{transform:translateX(62px)}}
+  @keyframes task-left{0%,12%,100%{opacity:.2;transform:translateX(-5px)}25%,42%{opacity:1;transform:none}58%{opacity:.15;transform:translateX(10px)}}
+  @keyframes task-right{0%,42%,100%{opacity:.2;transform:translateX(5px)}55%,72%{opacity:1;transform:none}86%{opacity:.15;transform:translateX(-10px)}}
+  @keyframes progress{0%,12%{transform:scaleX(0)}82%,100%{transform:scaleX(1)}}
+  @keyframes settle{0%,12%{transform:translate(24px,-8px) rotate(9deg) scale(.94,1.04)}38%{transform:translate(-5px,2px) rotate(-2deg) scale(1.03,.96)}58%,100%{transform:none}}
+  @keyframes brackets{0%,12%{opacity:0;translate:var(--dx) var(--dy)}32%,58%{opacity:1;translate:0 0}72%,100%{opacity:0}}
+  @keyframes scout{0%,7%,48%,55%,96%,100%{transform:none}12%{transform:translate(3px,4px) rotate(2deg) scale(1.06,.92)}20%,34%{transform:translate(-25px,-18px) rotate(-8deg) scale(.86,1.32)}42%{transform:translate(-7px,-3px) rotate(-2deg) scale(1.025,.98)}60%{transform:translate(-3px,4px) rotate(-2deg) scale(1.06,.92)}68%,82%{transform:translate(25px,-18px) rotate(8deg) scale(.86,1.32)}90%{transform:translate(7px,-3px) rotate(2deg) scale(1.025,.98)}}
+  @keyframes scout-eye{0%,5%,46%,53%,94%,100%{transform:translateX(0)}10%,38%{transform:translateX(-92px)}44%{transform:translateX(-20px)}58%,86%{transform:translateX(92px)}92%{transform:translateX(20px)}}
+  @keyframes hop{0%,18%,100%{transform:none}27%{transform:translateY(4px) scale(1.05,.92)}46%{transform:translateY(-34px) scale(.97,1.04)}64%{transform:translateY(3px) scale(1.06,.91)}76%{transform:none}}
+  @keyframes hop-shadow{0%,18%,76%,100%{transform:translateX(-50%) scale(1);opacity:.32}46%{transform:translateX(-50%) scale(.64);opacity:.16}64%{transform:translateX(-50%) scale(1.12);opacity:.38}}
+  @keyframes sleep-breathe{0%,100%{transform:translateY(9px) scale(1.02,.88)}50%{transform:translateY(4px) scale(1.08,.95)}}
+  @keyframes sleep-z{0%,18%{opacity:0;transform:translate(0,8px) scale(.65)}30%,56%{opacity:1}78%,100%{opacity:0;transform:translate(28px,-38px) scale(1.15)}}
+  @keyframes discover{0%,22%,100%{transform:none}34%{transform:translate(-4px,-2px) rotate(-3deg) scale(1.035)}48%,72%{transform:translate(2px,-1px) rotate(1deg) scale(1.015)}}
+  @keyframes discover-eye{0%,22%,100%{transform:translateX(0)}31%,75%{transform:translateX(68px)}}
+  @keyframes celebrate{0%,16%,78%,100%{transform:none}28%{transform:rotate(-10deg) scale(1.04,.97)}40%{transform:rotate(10deg) scale(1.04,.97)}52%{transform:rotate(-7deg) scale(1.03,.98)}64%{transform:rotate(7deg) scale(1.03,.98)}}
+  @keyframes cheer-ray{0%,16%{opacity:0;transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-22px) scaleY(.25)}27%{opacity:1;transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-34px) scaleY(.7)}48%{opacity:1;transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-58px) scaleY(1.25)}70%,100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-78px) scaleY(.25)}}
+  @keyframes recover{0%,20%{transform:translateY(8px) rotate(-5deg) scale(1.04,.9)}44%{transform:translateY(3px) rotate(2deg) scale(.99,1.01)}66%,100%{transform:none}}
+  @media(max-width:620px){main{width:min(100% - 24px);margin-top:24px}header{align-items:start;flex-direction:column}.grid{grid-template-columns:1fr 1fr}.card{padding:12px}.grid .card{min-width:0}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}.fx{display:none}.mark{transform:none!important}.action-sleep .mark{transform:translateY(8px) scaleY(.92)!important}.action-sleep .lid{transform:translateY(118px)!important}.pupil-track{transform:translateX(20px)}.lid{transform:translateY(-174px)}}
+</style>
+</head>
+<body>
+<main>
+  <header><div><h1>WMB 品牌角色动作库</h1><p>机灵、好奇、克制的小主编。真实 Logo 轮廓，不增加器官。</p></div><div class="controls" aria-label="动画控制"><button id="normal" aria-pressed="true">正常</button><button id="slow" aria-pressed="false">慢速</button><button id="pause" aria-pressed="false">暂停</button></div></header>
+  <h2>界面微状态 · 20–52px</h2>
+  <section class="grid" id="micro"></section>
+  <h2>品牌角色场景 · 120px+</h2>
+  <section class="grid" id="scenes"></section>
+</main>
+<template id="mark"><span class="mark" aria-hidden="true"><svg viewBox="0 0 751 510"><defs><clipPath><path d="M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z"/></clipPath></defs><g><path class="purple" d="M749,0 L615,1 L534,200 L531,203 L540,210 L540,212 L538,213 L544,213 L553,222 L552,225 L556,225 L556,230 L557,228 L559,228 L564,233 L563,238 L569,239 L578,248 L577,252 L579,253 L579,255 L584,255 L596,268 L594,272 L599,277 L604,277 L603,280 L607,281 L606,284 L609,284 L612,287 L611,291 L615,295 L618,294 L621,298 L621,300 L618,302 L623,301 L625,307 L643,267 L751,2Z"/><path class="white" fill-rule="evenodd" d="M0,1 L211,510 L216,509 L246,455 L309,349 L357,373 L371,377 L380,377 L396,371 L415,361 L442,343 L445,343 L450,350 L534,505 L538,510 L541,510 L543,508 L626,306 L589,261 L529,200 L377,77 L374,77 L226,197 L220,200 L216,194 L138,1Z M216,264 L229,248 L256,221 L274,207 L297,193 L317,184 L341,177 L359,174 L392,174 L411,177 L434,184 L454,193 L474,205 L496,222 L512,237 L532,259 L536,266 L490,304 L465,320 L445,330 L427,337 L402,343 L386,345 L363,345 L331,339 L311,332 L285,319 L251,296 L216,266Z"/><g class="pupil-track"><path class="pupil" d="M370,213 L358,216 L350,220 L340,228 L331,242 L328,252 L327,264 L331,280 L336,289 L343,297 L356,305 L365,308 L378,309 L392,306 L403,300 L411,293 L420,278 L423,258 L420,244 L414,233 L407,225 L400,220 L386,214Z"/></g><g class="lids"><path class="lid" d="M180,-200 H570 V174 C485,242 285,242 180,174 Z"/></g></g></svg></span></template>
+<script>
+  const groups={micro:[['blink','眨眼','自然确认存在感，不绑定业务节拍'],['look','观察','先看目标，再决定动作'],['breathe','呼吸','静候时极轻微活性'],['connect','连接','连接 Pi 时左右扫描'],['work','工作','工具执行中的专注忙碌'],['settle','归位','任务结束后收势回中']],scenes:[['walk','走路','W 底部双尖柔性变形、交替承重'],['scout','探头','左看看、回中，再右看看'],['hop','起跳','明确离地的单次跳跃语义'],['sleep','睡眠','闭眼、下沉、慢呼吸'],['discover','发现','视线先到，身体随后响应'],['celebrate','庆祝','原地左右欢呼，放射线向外飞出'],['recover','恢复','受挫压低后重新站稳']]};
+  let markIndex=0;
+  function newMark(){const node=document.querySelector('#mark').content.firstElementChild.cloneNode(true),id=`eye-${markIndex++}`;node.querySelector('clipPath').id=id;node.querySelector('.lids').setAttribute('clip-path',`url(#${id})`);return node}
+  const effects={connect:'<span class="fx fx-electric"><svg viewBox="0 0 230 158"><path d="M18 88 L48 88 L58 72 L72 103 L88 80"/><path d="M212 70 L183 70 L171 53 L157 91 L142 76"/></svg></span>',work:'<span class="fx fx-work"><i class="work-item one"></i><i class="work-item two"></i><i class="work-progress"></i></span>',settle:'<span class="fx fx-settle"><i></i><i></i><i></i><i></i></span>',sleep:'<span class="fx fx-sleep"><i class="sleep-z">Z</i><i class="sleep-z">Z</i><i class="sleep-z">Z</i></span>',celebrate:'<span class="fx fx-celebrate"><i></i><i></i><i></i><i></i></span>'};
+  function card([action,title,description],micro=false){const article=document.createElement('article');article.className=`card action-${action}${micro?' micro':''}${action==='walk'?' walk-card':''}`;article.dataset.action=action;article.innerHTML=`<h3>${title}</h3><p>${description}</p><div class="stage"></div>`;const stage=article.querySelector('.stage');if(action==='walk'){stage.innerHTML='<iframe class="walk-preview" src="wmb-creature-walk.html?embed=1" title="WMB W 式走路母版"></iframe>'}else{stage.append(newMark())}if(effects[action])stage.insertAdjacentHTML('beforeend',effects[action]);if(micro){const icon=newMark();icon.className='icon-sample';article.append(icon)}return article}
+  for(const [group,items] of Object.entries(groups)){const root=document.querySelector(`#${group}`);for(const item of items)root.append(card(item,group==='micro'))}
+  const root=document.documentElement,normal=document.querySelector('#normal'),slow=document.querySelector('#slow'),pause=document.querySelector('#pause');
+  normal.onclick=()=>{root.style.setProperty('--speed','1');normal.setAttribute('aria-pressed','true');slow.setAttribute('aria-pressed','false')};
+  slow.onclick=()=>{root.style.setProperty('--speed','2');normal.setAttribute('aria-pressed','false');slow.setAttribute('aria-pressed','true')};
+  pause.onclick=()=>{const paused=document.body.classList.toggle('paused');pause.textContent=paused?'继续':'暂停';pause.setAttribute('aria-pressed',String(paused))};
+</script>
+</body>
+</html>

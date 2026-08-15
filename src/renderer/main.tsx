@@ -6,22 +6,26 @@ import { KnowledgeCanvasView } from './knowledge-canvas-view';
 import { Icon, TodayView, LibraryView } from './today-library-view';
 import { LibraryTopicsView } from './library-topics-view';
 import { DiscoverView } from './discover-view';
+import { ProposalsView } from './proposals-view';
 import { LegacyStudioView } from './legacy-studio-view';
 import { PublishView } from './publishing-results-view';
 import { ResultsView } from './results-view';
 import { SettingsView } from './settings-view';
+import { OnboardingView } from './onboarding-view';
+import { AgentsRosterView } from './agents-roster-view';
 import { PiDock } from './pi-dock';
-import { XListOperationTray } from './x-list-operation-tray';
+import { XListOperationModal } from './x-list-operation-modal';
+import { AppConfirmHost } from './app-confirm'; import { AppUpdateBanner } from './app-update-banner';
 import type { PiContextRef, PiFocusObject, RankingContext, Theme, View, XListPiContext } from './app-types';
-import { logoUrl, views } from './app-types';
+import { logoUrl, views, WMB_NAVIGATE_WIKI_OBJECT_EVENT } from './app-types';
+import type { TodayFermentingSelection } from './today-view';
+import type { KnowledgeDeepLinkPayload } from '../shared/knowledge-topic-library';
 import { workspaceStorageKey } from './workspace-storage';
 import './styles.css';
 
 function normalizeView(raw: string | null): View {
   if (!raw) return 'today';
   if (raw === 'compose') return 'canvas';
-  // Retired knowledge-system home collapses into primary Topics.
-  if (raw === 'knowledge') return 'topic';
   return views.includes(raw as View) ? raw as View : 'today';
 }
 function StatusClock(): React.JSX.Element {
@@ -50,17 +54,40 @@ function App(): React.JSX.Element {
   const [theme, setTheme] = useState<Theme>(() => localStorage.getItem('wmb.theme') === 'light' ? 'light' : 'dark');
   const [dataRoot, setDataRoot] = useState<string | null>(null);
   const [settings, setSettings] = useState<Awaited<ReturnType<typeof window.wmb.getSettings>>>(null);
+  const [onboardingStatus, setOnboardingStatus] = useState<Awaited<ReturnType<typeof window.wmb.getOnboardingStatus>> | null>(null);
   const [today, setToday] = useState<Awaited<ReturnType<typeof window.wmb.getToday>>>(null);
   const [publications, setPublications] = useState<Awaited<ReturnType<typeof window.wmb.getPublications>>>([]);
   const [browserChoice, setBrowserChoice] = useState('');
   const [piDockCollapsed, setPiDockCollapsed] = useState(() => localStorage.getItem('wmb.piDockCollapsed') === 'true');
+  useEffect(() => {
+    void window.wmb.getOnboardingStatus().then(setOnboardingStatus);
+    void window.wmb.markRendererReady();
+  }, []);
+  useEffect(() => {
+    const expand = () => setPiDockCollapsed(false);
+    const discussStudioAnnotations = () => {
+      setPiDockCollapsed(false);
+      window.requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('wmb:pi-composer-focus')));
+    };
+    window.addEventListener('wmb:pi-dock-expand', expand);
+    window.addEventListener('wmb:focus-manager-dialog', expand);
+    window.addEventListener('studio-discuss-pi', discussStudioAnnotations);
+    return () => {
+      window.removeEventListener('wmb:pi-dock-expand', expand);
+      window.removeEventListener('wmb:focus-manager-dialog', expand);
+      window.removeEventListener('studio-discuss-pi', discussStudioAnnotations);
+    };
+  }, []);
+
   const [piDockWidth, setPiDockWidth] = useState(() => Number(localStorage.getItem('wmb.piDockWidth')) || 380);
   const [todaySelectedItems, setTodaySelectedItems] = useState<TodayPlanItem[]>([]);
   const [todaySelectedSources, setTodaySelectedSources] = useState<Array<TodaySource & { bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number }>>([]);
+  const [proposalsSelectedItem, setProposalsSelectedItem] = useState<TodayPlanItem | null>(null);
+  const [fermentSelectedItem, setFermentSelectedItem] = useState<TodayFermentingSelection | null>(null);
   const [rankingContext, setRankingContext] = useState<RankingContext>({ boards: [], items: [] });
   const [xListContext, setXListContext] = useState<XListPiContext | null>(null);
   const [canvasOpenId, setCanvasOpenId] = useState<string | null>(null);
-  const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string } | null>(null);
+  const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'selected'; title: string } | null>(null);
   const [studioSelectedId, setStudioSelectedId] = useState<string | null>(null);
   const [studioContext, setStudioContext] = useState<{ id: string; title: string } | null>(null);
   const [libraryTopicContext, setLibraryTopicContext] = useState<{ id: string; title: string } | null>(null);
@@ -74,7 +101,7 @@ function App(): React.JSX.Element {
   const planDate = useMemo(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()), []);
   const todaySigRef = useRef('');
   const publicationsSigRef = useRef('');
-  const refreshSettings = useCallback(() => void window.wmb.getSettings().then((value) => { setSettings(value); setBrowserChoice(value?.selectedBrowser?.id ?? value?.browserOptions[0]?.id ?? ''); }), []);
+  const refreshSettings = useCallback(() => void window.wmb.getSettings().then((value) => { setSettings(value); setBrowserChoice(value?.boundBrowserProfile?.id ?? ''); }), []);
   const refreshToday = useCallback(() => void window.wmb.getToday(planDate).then((value) => {
     const nextSig = JSON.stringify(value ?? null);
     if (nextSig === todaySigRef.current) return;
@@ -124,13 +151,13 @@ function App(): React.JSX.Element {
     if (!workspaceId) return;
     skipStudioPersist.current = true;
     setStudioSelectedId(localStorage.getItem(workspaceStorageKey(workspaceId, 'studioSelectedId')));
-    setRankingContext({ boards: [], items: [] }); setXListContext(null); setCanvasOpenId(null); setLibraryTopicContext(null); setPageFocus(null); setPublishSelectedId(null);
+    setRankingContext({ boards: [], items: [] }); setXListContext(null); setCanvasOpenId(null); setLibraryTopicContext(null); setPageFocus(null); setPublishSelectedId(null); setProposalsSelectedItem(null);
   }, [workspaceId]);
-  useEffect(() => { setPageFocus(null); }, [view]);
+  useEffect(() => { setPageFocus(null); setProposalsSelectedItem(null); setFermentSelectedItem(null); }, [view]);
   useEffect(() => {
     if (view !== 'discover' && view !== 'today') setPageStatus(null);
   }, [view]);
-  useEffect(() => { localStorage.removeItem('wmb.creativeContext'); localStorage.removeItem('wmb.knowledgeDomainId'); localStorage.removeItem('wmb.knowledgeTopicId'); }, []);
+  useEffect(() => { localStorage.removeItem('wmb.creativeContext'); }, []);
   useEffect(() => { localStorage.setItem('wmb.piDockCollapsed', String(piDockCollapsed)); }, [piDockCollapsed]);
   useEffect(() => {
     if (!workspaceId || skipStudioPersist.current) { skipStudioPersist.current = false; return; }
@@ -207,8 +234,34 @@ function App(): React.JSX.Element {
     navigate('topic');
     window.dispatchEvent(new CustomEvent('wmb-open-library-topic', { detail: { topicId } }));
   };
-  const nav = [{ id: 'today', label: '今日' }, { id: 'discover', label: '发现' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
-  const pageLabels: Record<View, string> = { today: '今日内容', discover: '发现', knowledge: '主题', topic: '主题', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
+  useEffect(() => {
+    // WMB-5239：跨页深链统一导航（wiki-discovery 组件派发 CustomEvent，detail.payload=KnowledgeDeepLinkPayload）。
+    // topic→openTopic(payload.objectId)（objectId=主题 ID；targetId 可能是 Wiki 页 ID，不能用于主题定位）；
+    // source→写 libraryFocusSourceId+navigate('library')；knowledge_object→知识网络（画布本体卡降级）。
+    // 非法/缺字段载荷 fail-closed 忽略（不导航、不抛错）；不新增顶层路由/View。
+    const onNavigateWikiObject = (event: Event) => {
+      const detail = (event as CustomEvent<{ payload?: KnowledgeDeepLinkPayload }>).detail;
+      const payload = detail?.payload;
+      if (!payload || typeof payload !== 'object' || typeof payload.targetType !== 'string') return;
+      if (payload.targetType === 'topic_wiki' && payload.objectId) {
+        openTopic(payload.objectId);
+      } else if (payload.targetType === 'source' && payload.objectId) {
+        if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), payload.objectId);
+        navigate('library');
+      } else if (payload.targetType === 'knowledge_object') {
+        navigate('canvas');
+      }
+    };
+    window.addEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT, onNavigateWikiObject);
+    return () => window.removeEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT, onNavigateWikiObject);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+  const openStudio = (projectId?: string | null) => {
+    if (projectId) setStudioSelectedId(projectId);
+    navigate('studio');
+  };
+  const nav = [{ id: 'today', label: '今日' }, { id: 'agents', label: '智能体' }, { id: 'discover', label: '发现' }, { id: 'proposals', label: '选题' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
+  const pageLabels: Record<View, string> = { today: '今日内容', agents: '智能体班组', discover: '发现', proposals: '选题台账', topic: '主题', library: '资料库', canvas: '知识网络', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
   const publishSelected = publications.find((item) => item.publication.id === publishSelectedId) ?? publications[0] ?? null;
   const piContext: PiContextRef = useMemo(() => {
     if (view === 'today') {
@@ -218,9 +271,10 @@ function App(): React.JSX.Element {
       return {
         page: view,
         pageLabel: pageLabels[view],
-        objectType: first ? 'plan_item' : firstSource ? 'source' : (fermenting.items[0] ? 'fermenting' : null),
-        objectId: first?.id ?? firstSource?.id ?? fermenting.items[0]?.id ?? null,
-        objectTitle: first?.title ?? firstSource?.title ?? fermenting.items[0]?.title ?? null,
+        objectType: pageFocus?.type ?? (first ? 'plan_item' : firstSource ? 'source' : (fermenting.items[0] ? 'fermenting' : null)),
+        objectId: pageFocus?.id ?? first?.id ?? firstSource?.id ?? fermenting.items[0]?.id ?? null,
+        objectTitle: pageFocus?.title ?? first?.title ?? firstSource?.title ?? fermenting.items[0]?.title ?? null,
+        focus: pageFocus,
         selectedItems: todaySelectedItems,
         selectedSources: todaySelectedSources,
         fermenting
@@ -250,6 +304,17 @@ function App(): React.JSX.Element {
         objectId: firstRankingItem ? `${firstRankingItem.boardId}:${firstRankingItem.name}` : firstRankingBoard?.id ?? null,
         objectTitle: firstRankingItem?.name ?? firstRankingBoard?.label ?? null,
         rankingContext
+      };
+    }
+    if (view === 'proposals') {
+      const item = proposalsSelectedItem;
+      return {
+        page: view,
+        pageLabel: pageLabels[view],
+        objectType: item ? 'plan_item' : null,
+        objectId: item?.id ?? null,
+        objectTitle: item?.title ?? null,
+        selectedItems: item ? [item] : []
       };
     }
     if (view === 'topic') {
@@ -288,9 +353,9 @@ function App(): React.JSX.Element {
       return {
         page: view,
         pageLabel: pageLabels[view],
-        objectType: studioContext ? 'project' : null,
-        objectId: studioContext?.id ?? null,
-        objectTitle: studioContext?.title ?? null,
+        objectType: pageFocus?.type ?? (studioContext ? 'project' : null),
+        objectId: pageFocus?.id ?? studioContext?.id ?? null,
+        objectTitle: pageFocus?.title ?? studioContext?.title ?? null,
         focus: pageFocus
       };
     }
@@ -300,36 +365,52 @@ function App(): React.JSX.Element {
         pageLabel: pageLabels[view],
         objectType: publishSelected ? 'publication' : null,
         objectId: publishSelected?.publication.id ?? null,
-        objectTitle: publishSelected?.payload?.title || publishSelected?.payload?.body.slice(0, 42) || publishSelected?.publication.id || null
+        objectTitle: publishSelected?.payload?.title || publishSelected?.payload?.body.slice(0, 42) || publishSelected?.publication.id || null,
+        focus: publishSelected ? {
+          type: 'publication',
+          id: publishSelected.publication.id,
+          title: publishSelected.payload?.title || publishSelected.payload?.body.slice(0, 42) || publishSelected.publication.id,
+          summary: `${publishSelected.publication.platform} · ${publishSelected.publication.status}`,
+          meta: {
+            platform: publishSelected.publication.platform,
+            status: publishSelected.publication.status,
+            projectId: publishSelected.publication.projectId,
+            accountKey: publishSelected.publication.accountKey,
+            operationState: publishSelected.operation?.state ?? null
+          }
+        } : null
       };
     }
     if (view === 'results') {
-      const selected = (publications ?? []).find((item) => item.publication.status === 'published') ?? null;
       return {
         page: view,
         pageLabel: pageLabels[view],
-        objectType: selected ? 'publication' : null,
-        objectId: selected?.publication.id ?? null,
-        objectTitle: selected?.payload?.title || selected?.payload?.body.slice(0, 42) || selected?.publication.id || null
+        objectType: pageFocus?.type ?? null,
+        objectId: pageFocus?.id ?? null,
+        objectTitle: pageFocus?.title ?? null,
+        focus: pageFocus
       };
     }
     return { page: view, pageLabel: pageLabels[view], objectType: null, objectId: null, objectTitle: null, focus: pageFocus };
-  }, [view, todaySelectedItems, todaySelectedSources, today?.fermenting, xListContext, rankingContext, libraryTopicContext, pageFocus, canvasContext, studioContext, publishSelected, publications]);
+  }, [view, todaySelectedItems, todaySelectedSources, today?.fermenting, fermentSelectedItem, proposalsSelectedItem, xListContext, rankingContext, libraryTopicContext, pageFocus, canvasContext, studioContext, publishSelected, publications]);
+  if (!onboardingStatus) return <main className="onboarding-shell onboarding-loading"><div className="onboarding-card"><span className="eyebrow">STARTING</span><h2>正在准备本地工作空间…</h2></div></main>;
+  if (!onboardingStatus.completed) return <OnboardingView initialStatus={onboardingStatus} onComplete={() => { void window.wmb.getOnboardingStatus().then(setOnboardingStatus); void window.wmb.getDataRoot().then((root) => setDataRoot(root?.path ?? null)); refreshSettings(); refreshToday(); refreshPublications(); }}/>;
   return <main className={`app-shell${piDockCollapsed ? ' pi-collapsed' : ' pi-open'}${view === 'settings' ? ' settings-mode' : ''}${view === 'studio' ? ' studio-mode' : ''}${view === 'topic' ? ' topic-mode' : ''}`} style={{ '--pi-open-width': `${piDockWidth}px` } as React.CSSProperties}>
     <header className="topbar">
-      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName} · r{settings.workspace.profile.revision}</small>}</div>
+      <div className="brand"><img src={logoUrl} alt=""/><strong>WeMediaBuddy</strong>{settings?.workspace && <small title={settings.workspace.dataRoot.path}>{settings.workspace.displayName}</small>}</div>
       {view === 'settings' && <span className="topbar-page-title">设置</span>}
-      {view === 'studio' && <div className="studio-topbar-actions"><button onClick={() => { setStudioSelectedId(null); window.setTimeout(() => window.dispatchEvent(new CustomEvent('studio-import-request')), 0); }}>导入已有稿件</button><button onClick={() => setPiDockCollapsed(false)}>和 Pi 讨论</button></div>}
       <div className="titlebar-actions">
         <button aria-label="最小化窗口" onClick={() => void window.wmb.windowControl('minimize')}>−</button>
         <button aria-label="最大化或还原窗口" onClick={() => void window.wmb.windowControl('maximize')}>□</button>
         <button className="window-close" aria-label="关闭窗口" onClick={() => void window.wmb.windowControl('close')}>×</button>
       </div>
-    </header>
+    </header><AppUpdateBanner openSettings={() => navigate('settings')}/>
     <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view === 'topic' ? 'active' : ''} onClick={() => navigate('topic')} title="主题"><Icon name="knowledge"/><span>主题</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="canvas"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
     <section className="workspace">
-      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={() => navigate('studio')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} planDate={planDate} onStatusChange={setPageStatus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} intelligenceChannels={settings?.workspace.intelligenceChannels ?? null} piConfigured={settings?.pi.configured === true}/>}
+      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={openStudio} openTopic={openTopic} openProposals={() => navigate('proposals')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} openSettings={(section) => { if (section) sessionStorage.setItem('wmb.settingsSection', section); navigate('settings'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} fermentSelectedItem={fermentSelectedItem} onFermentSelectedItemChange={setFermentSelectedItem} planDate={planDate} onStatusChange={setPageStatus} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} intelligenceChannels={settings?.workspace.intelligenceChannels ?? null} piConfigured={settings?.pi.configured ?? false}/>} 
+      {view === 'agents' && <AgentsRosterView onOpenSettings={() => { sessionStorage.setItem('wmb.settingsSection', 'agent'); navigate('settings'); }}/>}
       {view === 'discover' && <DiscoverView key={workspaceId ?? 'discover-loading'} workspace={settings?.workspace ?? null} workspaceId={workspaceId} rankingContext={rankingContext} onRankingContextChange={setRankingContext} onStatusChange={setPageStatus} onXListContextChange={setXListContext}/>}
+      {view === 'proposals' && <ProposalsView planDate={planDate} openStudio={openStudio} openTopic={openTopic} onOpenProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} openToday={() => navigate('today')} selectedItem={proposalsSelectedItem} onSelectedItemChange={setProposalsSelectedItem}/>}
       {view === 'topic' && (
         <LibraryTopicsView
           key={workspaceId ?? 'topics-loading'} workspaceId={workspaceId} initialTopicId={workspaceId ? localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryTopicId')) : null}
@@ -337,14 +418,23 @@ function App(): React.JSX.Element {
           onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }}
           onGoStudio={() => navigate('studio')}
           onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }}
+          onOpenPi={() => setPiDockCollapsed(false)}
+          piConfigured={settings?.pi.configured ?? false}
+          aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}
         />
       )}
       {view === 'library' && workspaceId && <LibraryView key={workspaceId} onOpenTopic={(topicId) => openTopic(topicId)} onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }} onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }} focusSourceId={localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusSourceConsumed={() => localStorage.removeItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} sectionStorageKey={workspaceStorageKey(workspaceId, 'librarySection')}/>}
-      {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)}/>}
+      {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)} onOpenDetail={(target) => {
+        if (target.type === 'topic' && target.id) openTopic(target.id);
+        else if (target.type === 'source' && target.id) { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), target.id); navigate('library'); }
+        else if (target.type === 'source' && !target.id) navigate('library');
+        else if (target.type === 'studio' && target.id) { setStudioSelectedId(target.id); navigate('studio'); }
+        else if (target.type === 'results') navigate('results');
+      }}/>}
 
-      {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
-      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={() => navigate('studio')} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => void window.wmb.startBrowser({ mode: 'visible' }).then(refreshSettings)} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
-      {view === 'results' && <ResultsView publications={publications} refresh={refreshPublications} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
+      {view === 'studio' && <LongTermStudioView openPublish={() => navigate('publish')} selectedId={studioSelectedId} onSelect={setStudioSelectedId} onContext={setStudioContext} onFocusChange={setPageFocus} onOpenSource={(sourceId) => { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}/>}
+      {view === 'publish' && <PublishView publications={publications} refresh={refreshPublications} openStudio={openStudio} onEditProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} takeover={() => navigate('settings')} selectedId={publishSelectedId} onSelect={setPublishSelectedId} settings={settings} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []}/>}
+      {view === 'results' && <ResultsView publications={publications} refresh={refreshPublications} planDate={planDate} enabledPlatforms={settings?.workspace.capabilities.publishingPlatforms ?? []} onFocusChange={setPageFocus}/>}
       {view === 'settings' && <SettingsView dataRoot={dataRoot} settings={settings} browserChoice={browserChoice} setBrowserChoice={setBrowserChoice} refresh={refreshSettings} theme={theme} setTheme={setTheme} back={() => navigate('today')}/>}
     </section>
     {view !== 'settings' && <MemoPiDock collapsed={piDockCollapsed} toggle={togglePiDock} configured={settings?.pi.configured ?? false} context={piContext} resize={resizePiDock} resetWidth={resetPiDockWidth}/>}
@@ -352,16 +442,17 @@ function App(): React.JSX.Element {
       <div className="status-bar-left">
         <span className="status-item" data-phase={piPhase}><span className="status-dot"/>{piStatusText}</span>
         {settings?.workspace && <span className="status-item" title={settings.workspace.dataRoot.path}><span className="status-dot ok"/>{settings.workspace.displayName} · {settings.workspace.profile.profileId}</span>}
-        <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'MCP 已连接' : 'MCP 未连接'}</span>
+        <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'AI 接入已就绪' : 'AI 接入未启动'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
         {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}
-        <XListOperationTray/>
+        <XListOperationModal/>
       </div>
       <div className="status-bar-right">
         <button type="button" className="status-theme" title={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} aria-label={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☾' : '☀'} <span>{theme === 'dark' ? '黑夜紫罗兰' : '白昼紫罗兰'}</span></button>
         <StatusClock />
       </div>
     </footer>
+    <AppConfirmHost />
   </main>;
 }
 

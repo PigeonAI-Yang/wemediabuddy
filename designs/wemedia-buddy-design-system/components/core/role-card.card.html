@@ -1,0 +1,76 @@
+<!-- @dsCard group="Components" viewport="700x560" name="RoleCard" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>RoleCard</title>
+<link rel="stylesheet" href="../../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  .cap { font-size: 11px; color: var(--muted-low); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .grid .ds-role-card { min-height: 208px; }
+  .grid .ds-role-card__avatar { width: 88px; height: 88px; font-size: 28px; }
+</style>
+</head>
+<body>
+<div id="demo-root"></div>
+<script src="../../_ds_bundle.js"></script>
+<script>
+(function () {
+  var scripts = document.getElementsByTagName('script');
+  var rootUrl = '';
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].getAttribute('src') || '';
+    if (src.indexOf('_ds_bundle.js') !== -1) { rootUrl = src.slice(0, -'_ds_bundle.js'.length); break; }
+  }
+  var ns = null;
+  for (var key in window) { if (/^WemediaBuddyDesignSystem_[0-9a-f]{6}$/.test(key)) { ns = key; break; } }
+  if (!ns && window.location.protocol !== 'file:') {
+    try {
+      var req = new XMLHttpRequest();
+      req.open('GET', rootUrl + '_ds_manifest.json', false);
+      req.send(null);
+      var parsed = JSON.parse(req.responseText);
+      if (parsed && parsed.namespace && window[parsed.namespace]) ns = parsed.namespace;
+    } catch (e) { ns = null; }
+  }
+  window.__dsNs = ns;
+})();
+</script>
+<script>
+(function () {
+  var R = window.React;
+  var RD = window.ReactDOM;
+  var ns = window.__dsNs;
+  var host = document.getElementById('demo-root');
+  if (!ns || !R || !RD) { host.textContent = 'Design-system bundle not compiled yet (run compile-design-system.mjs).'; return; }
+  var C = window[ns];
+  var el = R.createElement;
+  var roles = [
+    { labelZh: '桌助', roomZh: '主编台 · 值班', status: 'needs-user', word: '等你批', percent: null, summary: '今日呈报待你定夺' },
+    { labelZh: '记者', roomZh: '前线 · 发现', status: 'running', word: '扫描中', percent: '42%', summary: 'X / 小红书 情报扫描' },
+    { labelZh: '策划', roomZh: '策划组 · 提案', status: 'ok', word: '已完成', percent: '100%', summary: '选题方案已入库' },
+    { labelZh: '写手', roomZh: '写字间 · 创作', status: 'idle', word: '当前无任务' },
+    { labelZh: '资料员', roomZh: '资料室 · 整理', status: 'running', word: '归并中', percent: null, indeterminate: true, summary: '主题档案整理待批' }
+  ];
+  var node = el('div', null,
+    el('div', { className: 'cap' }, '智能体班组 · full-card button · 空角色显示「当前无任务」'),
+    el('div', { className: 'grid' },
+      roles.map(function (role) {
+        return el(C.RoleCard, { key: role.labelZh, labelZh: role.labelZh, roomZh: role.roomZh, status: role.status, word: role.word, percent: role.percent, indeterminate: role.indeterminate, summary: role.summary });
+      })
+    )
+  );
+  var root = null;
+  if (RD.createRoot) {
+    root = RD.createRoot(host);
+    if (RD.flushSync) { RD.flushSync(function () { root.render(node); }); }
+    else { root.render(node); }
+  } else {
+    RD.render(node, host);
+  }
+})();
+</script>
+</body>
+</html>

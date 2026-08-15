@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { openDataRoot } from '../src/main/data-root.ts';
-import { confirmIntelligenceChannelProposal, readChannelProposalContext } from '../src/main/intelligence-channel-confirmation.ts';
+import { addAuthorizedWebsiteChannels, confirmIntelligenceChannelProposal, readChannelProposalContext } from '../src/main/intelligence-channel-confirmation.ts';
 import { IntelligenceChannelProposalStore, channelProposalBinding } from '../src/main/intelligence-channel-proposals.ts';
 import { createWebsiteSource, getWebsiteSource, updateWebsiteSourceResolution } from '../src/main/intelligence-channels.ts';
 import { resolveXListCandidates } from '../src/main/x-list-channel.ts';
@@ -40,6 +40,22 @@ function state(database) {
     (SELECT COUNT(*) FROM source_feeds) AS feeds,
     (SELECT COUNT(*) FROM source_items) AS items`).get());
 }
+
+test('explicitly authorized website batch applies directly and reads back idempotently', async () => {
+  const current = await makeRoot();
+  try {
+    const store = new IntelligenceChannelProposalStore();
+    const input = { store, requestId: 'direct-websites-1', websites: [{ action: 'add', module: 'official_web', inputText: 'Example', candidate: websiteCandidate, trialRead: websiteTrial }], trialWebsite: async () => websiteTrial };
+    const applied = await addAuthorizedWebsiteChannels(current.database, input);
+    assert.equal(applied.applied, 1);
+    assert.equal(applied.replayed, false);
+    assert.equal(applied.sources[0].canonicalUrl, 'https://example.com/');
+    const replayed = await addAuthorizedWebsiteChannels(current.database, input);
+    assert.equal(replayed.applied, 0);
+    assert.equal(replayed.replayed, true);
+    assert.equal(JSON.parse(state(current.database)).websites, 1);
+  } finally { current.database.close(); await rm(current.root, { recursive: true, force: true }); }
+});
 
 async function resolvedX(database, workspaceId) {
   const result = await resolveXListCandidates(database, { id: 'fixture', cdpUrl: 'http://127.0.0.1:9334', workspaceId }, { inputText: 'UK creators' }, async () => index);
@@ -176,25 +192,18 @@ test('remove preserves existing source items and duplicate request/change is rej
   } finally { current.database.close(); await rm(current.root, { recursive: true, force: true }); }
 });
 
-test('Pi extension and Discover expose prepare-only channel confirmation surfaces', async () => {
-  const [extension, view, preload] = await Promise.all([
-    import(`../.pi/extensions/wmb-mcp/index.ts?channels=${Date.now()}`),
-    readFile('src/renderer/intelligence-channels-view.tsx', 'utf8'),
-    readFile('src/preload/preload.ts', 'utf8')
-  ]);
+test('Pi exposes channel preparation but no side-effecting confirmation or direct-add tool', async () => {
+  const extension = await import(`../.pi/extensions/wmb-mcp/index.ts?channels=${Date.now()}`);
   const tools = new Map();
   extension.default({ registerTool(tool) { tools.set(tool.name, tool); } });
   for (const name of ['wmb_get_intelligence_channels', 'wmb_resolve_intelligence_website', 'wmb_trial_intelligence_website', 'wmb_resolve_intelligence_x_list', 'wmb_prepare_intelligence_channel_changes']) assert.equal(tools.has(name), true);
+  assert.equal(tools.has('wmb_add_intelligence_websites'), false);
   assert.equal([...tools.keys()].some((name) => /confirm.*intelligence|intelligence.*confirm/i.test(name)), false);
-  assert.match(view, /待确认的来源变更/);
-  assert.match(view, /prepareIntelligenceChannelProposal/);
-  assert.doesNotMatch(view, /confirmWebsiteSource|confirmResolvedXList|setIntelligenceChannelEnabled|removeIntelligenceChannel/);
-  assert.match(view, /confirmIntelligenceChannelProposal/);
-  assert.match(preload, /intelligence-channels:proposal-confirm/);
-  assert.doesNotMatch(preload, /intelligence-channels:confirm-website|intelligence-channels:confirm-x-list|intelligence-channels:set-enabled|intelligence-channels:remove/);
+  assert.match(tools.get('wmb_prepare_intelligence_channel_changes').description, /只准备/);
+  assert.match(tools.get('wmb_prepare_intelligence_channel_changes').description, /WMB UI/);
 });
 
-test('MCP exposes channel reads and preparation but never a confirmation tool', async () => {
+test('MCP exposes channel preparation but no confirmation or direct website write', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-channel-mcp-'));
   const registryPath = path.join(parent, 'user-data', 'workspace-registry.json');
   const root = await openDataRoot(path.join(parent, 'root'));
@@ -208,6 +217,7 @@ test('MCP exposes channel reads and preparation but never a confirmation tool', 
     const listed = await mcpRequest(mcp.url, 'tools/list', {}, initialized.sessionId);
     const names = listed.data.tools.map((tool) => tool.name);
     for (const name of ['intelligence_channels.get', 'intelligence_channels.receipts_list', 'intelligence_channels.resolve_website', 'intelligence_channels.trial_website', 'intelligence_channels.resolve_x_list', 'intelligence_channels.proposals.prepare']) assert.equal(names.includes(name), true);
+    assert.equal(names.includes('intelligence_channels.websites_add'), false);
     assert.equal(names.some((name) => name.startsWith('intelligence_channels.') && /confirm/i.test(name)), false);
     const current = await mcpRequest(mcp.url, 'tools/call', { name: 'intelligence_channels.get', arguments: {} }, initialized.sessionId);
     assert.equal(JSON.parse(current.data.content[0].text).data.id, workspace.id);

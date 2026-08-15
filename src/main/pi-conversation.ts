@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { installPiOperatorSkill, installPiWorkspaceLaneSkill } from './pi-operator-skill.ts';
 import type { PiMessageSegment } from '../shared/pi-message.ts';
+import { isValidOrchestrationData, type OrchestrationData } from '../shared/orchestration-envelope.ts';
 import { messagesFromPiEntries } from './pi-transcript-projection.ts';
+import { reconcileOrchestrationRows } from './pi-orchestration-store.ts';
 
 export type PiChatMessage = {
   role: 'user' | 'assistant';
@@ -12,6 +15,8 @@ export type PiChatMessage = {
   segments?: PiMessageSegment[];
   entryId?: string;
   status?: 'streaming' | 'stopped' | 'failed';
+  kind?: 'system_event' | 'orchestration';
+  orchestration?: OrchestrationData;
   createdAt?: string;
 };
 
@@ -88,6 +93,11 @@ function normalizeMessage(message: PiChatMessage, fallbackCreatedAt?: string): P
     ...(Array.isArray(message.segments) && message.segments.length ? { segments: message.segments } : {}),
     ...(message.entryId ? { entryId: message.entryId } : {}),
     ...(message.status ? { status: message.status } : {}),
+    ...(message.kind === 'orchestration' && isValidOrchestrationData(message.orchestration)
+      ? { kind: 'orchestration' as const, orchestration: message.orchestration }
+      : message.kind === 'system_event'
+        ? { kind: 'system_event' as const }
+        : {}),
     ...(message.createdAt || fallbackCreatedAt ? { createdAt: message.createdAt ?? fallbackCreatedAt } : {})
   };
 }
@@ -105,19 +115,6 @@ function previewFromMessages(messages: PiChatMessage[]): string {
     if (text) return text.length > 48 ? `${text.slice(0, 48)}…` : text;
   }
   return '暂无消息';
-}
-
-function visibleMessageSize(messages: PiChatMessage[]): number {
-  return messages.reduce((total, message) => total + message.text.length + (message.thinking?.length ?? 0)
-    + (message.segments ?? []).reduce((sum, segment) => sum + segment.text.length, 0), 0);
-}
-
-function preferProjectedMessages(stored: PiChatMessage[], projected: PiChatMessage[]): boolean {
-  const storedUsers = stored.filter((message) => message.role === 'user');
-  const projectedUsers = projected.filter((message) => message.role === 'user');
-  if (projectedUsers.length !== storedUsers.length) return projectedUsers.length > storedUsers.length;
-  if (projectedUsers.at(-1)?.text !== storedUsers.at(-1)?.text) return false;
-  return visibleMessageSize(projected) > visibleMessageSize(stored);
 }
 
 function recoverInterruptedTurn(messages: PiChatMessage[]): PiChatMessage[] {
@@ -174,7 +171,7 @@ async function writeIndex(dataRootPath: string, index: PiConversationIndex): Pro
   await writeFile(indexPath(dataRootPath), JSON.stringify(index, null, 2), 'utf8');
 }
 
-async function readConversationFile(dataRootPath: string, id: string): Promise<PiConversationSnapshot | null> {
+async function readConversationFile(dataRootPath: string, id: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot | null> {
   try {
     const raw = JSON.parse(await readFile(conversationFilePath(dataRootPath, id), 'utf8')) as Partial<PiConversationSnapshot>;
     if (typeof raw.id !== 'string') return null;
@@ -190,10 +187,10 @@ async function readConversationFile(dataRootPath: string, id: string): Promise<P
       try {
         const entries = (await readFile(raw.sessionFile, 'utf8')).split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as unknown);
         const projected = messagesFromPiEntries(entries);
-        if (projected.length && (preferProjectedMessages(messages, projected) || !messages.some((message) => message.segments?.length))) messages = projected;
+        if (projected.length) messages = reconcileOrchestrationRows(messages, projected);
       } catch { /* keep the stored snapshot when the Pi session is unavailable */ }
     }
-    messages = recoverInterruptedTurn(messages);
+    if (options.recoverInterrupted) messages = recoverInterruptedTurn(messages);
     return {
       id: raw.id,
       title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : titleFromMessages(messages),
@@ -217,15 +214,6 @@ async function writeConversationFile(dataRootPath: string, snapshot: PiConversat
     messages: snapshot.messages.map((message) => normalizeMessage(message, snapshot.updatedAt))
   };
   await writeFile(conversationFilePath(dataRootPath, normalized.id), JSON.stringify(normalized, null, 2), 'utf8');
-  // Keep legacy active pointer for older readers / diagnostics.
-  await writeFile(legacyConversationPath(dataRootPath), JSON.stringify({
-    id: normalized.id,
-    title: normalized.title,
-    sessionFile: normalized.sessionFile,
-    sessionId: normalized.sessionId,
-    messages: normalized.messages,
-    updatedAt: normalized.updatedAt
-  }, null, 2), 'utf8');
   return normalized;
 }
 
@@ -267,8 +255,13 @@ async function migrateLegacyConversation(dataRootPath: string): Promise<PiConver
     const id = typeof raw.id === 'string' && raw.id ? raw.id : randomUUID();
     const legacySession = typeof raw.sessionFile === 'string' ? raw.sessionFile : sessionFilePath(dataRootPath);
     const targetSession = sessionFilePath(dataRootPath, id);
-    if (legacySession !== targetSession && await pathExists(legacySession)) {
-      try { await rename(legacySession, targetSession); } catch { /* keep target if rename fails */ }
+    if (legacySession !== targetSession && await pathExists(legacySession) && !(await pathExists(targetSession))) {
+      await mkdir(path.dirname(targetSession), { recursive: true });
+      try {
+        await copyFile(legacySession, targetSession, fsConstants.COPYFILE_EXCL);
+      } catch (error) {
+        if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'EEXIST') throw error;
+      }
     }
     if (!(await pathExists(targetSession))) await writeFile(targetSession, '', 'utf8');
     const snapshot: PiConversationSnapshot = {
@@ -288,16 +281,16 @@ async function migrateLegacyConversation(dataRootPath: string): Promise<PiConver
   }
 }
 
-async function ensureActiveConversation(dataRootPath: string): Promise<PiConversationSnapshot> {
+async function ensureActiveConversation(dataRootPath: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot> {
   await ensurePiConversationLayout(dataRootPath);
   const index = await readIndex(dataRootPath);
   if (index.activeId) {
-    const existing = await readConversationFile(dataRootPath, index.activeId);
+    const existing = await readConversationFile(dataRootPath, index.activeId, options);
     if (existing) return existing;
   }
   const firstVisible = index.conversations.find((item) => !item.archivedAt);
   if (firstVisible) {
-    const existing = await readConversationFile(dataRootPath, firstVisible.id);
+    const existing = await readConversationFile(dataRootPath, firstVisible.id, options);
     if (existing) {
       await writeIndex(dataRootPath, { ...index, activeId: existing.id });
       return existing;
@@ -332,8 +325,8 @@ export async function ensurePiConversationLayout(dataRootPath: string): Promise<
   return { agentDir: root, sessionFile: sessionFilePath(dataRootPath), workspace };
 }
 
-export async function readPiConversation(dataRootPath: string): Promise<PiConversationSnapshot> {
-  return ensureActiveConversation(dataRootPath);
+export async function readPiConversation(dataRootPath: string, options: { recoverInterrupted?: boolean } = {}): Promise<PiConversationSnapshot> {
+  return ensureActiveConversation(dataRootPath, options);
 }
 
 export async function listPiConversations(dataRootPath: string): Promise<PiConversationSummary[]> {
@@ -431,8 +424,6 @@ export async function switchPiConversation(dataRootPath: string, conversationId:
   const target = await readConversationFile(dataRootPath, conversationId);
   if (!target) throw new Error('会话不存在。');
   await writeIndex(dataRootPath, { ...index, activeId: target.id });
-  // Refresh legacy active pointer.
-  await writeConversationFile(dataRootPath, target);
   await upsertIndexEntry(dataRootPath, target, true);
   return target;
 }

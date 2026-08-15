@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { failure, success, type CommandResult } from './result.ts';
-import { collectBoundXListTimeline } from './x-list-execution.ts';
+import {
+  persistBoundXListTimeline,
+  readBoundXListTimeline,
+  type BoundXListTimelineRead
+} from './x-list-execution.ts';
 import { getXListBinding, type XListBinding } from './x-lists.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
 import { readXListTimeline } from './platforms/x-list-browser.ts';
@@ -13,6 +19,7 @@ const windows = [
   { key: '180m', milliseconds: 180 * 60_000 }
 ] as const;
 const observationLifetimeMs = 24 * 60 * 60_000;
+const observationActor = { type: 'scheduler' as const, id: 'x-observation', label: 'x-observation' };
 
 export type XObservationPayload = {
   sessionId: string; requestId: string; selectedBindingIds: string[];
@@ -37,11 +44,27 @@ type JobRow = {
   started_at: string | null; finished_at: string | null;
 };
 
-export async function startXObservationSession(
+export type StartXObservationInput = { requestId: string; bindingIds: string[]; readTimeline?: typeof readXListTimeline };
+
+export type XObservationStartRead = {
+  requestId: string;
+  selectedBindingIds: string[];
+  workspaceId: string;
+  profileRevision: number;
+  sessionId: string;
+  existing: XObservationSession | null;
+  bindings: Array<{
+    binding: XListBinding;
+    startedAt: string;
+    timeline: CommandResult<BoundXListTimelineRead>;
+  }>;
+};
+
+export async function readXObservationSessionStart(
   database: DatabaseSync,
   config: XListBrowserConfig,
-  input: { requestId: string; bindingIds: string[]; readTimeline?: typeof readXListTimeline }
-): Promise<CommandResult<XObservationSession>> {
+  input: StartXObservationInput
+): Promise<CommandResult<XObservationStartRead>> {
   const requestId = input.requestId.trim();
   const selectedBindingIds = [...new Set(input.bindingIds.map((id) => id.trim()).filter(Boolean))].sort();
   if (!requestId || !selectedBindingIds.length) return failure('VALIDATION_ERROR', '观察请求和 List 不能为空。');
@@ -49,35 +72,90 @@ export async function startXObservationSession(
   const profile = readWorkspaceProfile(database);
   if (!workspaceId || !profile || config.workspaceId !== workspaceId) return failure('REVISION_CONFLICT', '活动工作空间或能力配置已变化。');
   const sessionId = createHash('sha256').update(`${workspaceId}\0${requestId}`).digest('hex');
-  const existing = listJobs(database, sessionId);
-  if (existing.length) {
-    if (JSON.stringify(existing[0].payload.selectedBindingIds) !== JSON.stringify(selectedBindingIds)) return failure('VALIDATION_ERROR', '同一 request_id 已绑定不同 List。');
-    return success(toSession(existing, true));
+  const existingJobs = listJobs(database, sessionId);
+  if (existingJobs.length) {
+    if (JSON.stringify(existingJobs[0].payload.selectedBindingIds) !== JSON.stringify(selectedBindingIds)) return failure('VALIDATION_ERROR', '同一 request_id 已绑定不同 List。');
+    return success({ requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision, sessionId, existing: toSession(existingJobs, true), bindings: [] });
   }
 
-  const bindings: XListBinding[] = [];
+  const bindings: XObservationStartRead['bindings'] = [];
   for (const bindingId of selectedBindingIds) {
     const identity = database.prepare('SELECT account_key AS accountKey, list_id AS listId FROM x_list_bindings WHERE id=?')
       .get(bindingId) as { accountKey: string; listId: string } | undefined;
     const binding = identity ? getXListBinding(database, identity.accountKey, identity.listId) : null;
     if (!binding?.enabled) return failure('INVALID_STATE', `List 绑定不可用：${bindingId}`);
     if (config.accountKey && config.accountKey.toLowerCase() !== binding.accountKey.toLowerCase()) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与所选 List 不一致。');
-    bindings.push(binding);
-  }
-
-  for (const binding of bindings) {
     const startedAt = new Date().toISOString();
-    const collected = await collectBoundXListTimeline(database, { ...config, workspaceId, accountKey: binding.accountKey }, {
+    const timeline = await readBoundXListTimeline(database, { ...config, workspaceId, accountKey: binding.accountKey }, {
       accountKey: binding.accountKey, listId: binding.listId,
       expectedBindingId: binding.id, expectedRevision: binding.revision,
       observationKey: `xobs:${sessionId}:${binding.id}:initial`, readTimeline: input.readTimeline
     });
-    scheduleCapture(database, config, { sessionId, requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision,
-      binding, capturedAt: collected.ok ? collected.data.capturedAt : startedAt,
+    bindings.push({ binding, startedAt, timeline });
+  }
+  return success({ requestId, selectedBindingIds, workspaceId, profileRevision: profile.revision, sessionId, existing: null, bindings });
+}
+
+export function persistXObservationSessionStart(
+  database: DatabaseSync,
+  config: XListBrowserConfig,
+  read: XObservationStartRead
+): CommandResult<XObservationSession> {
+  const workspaceId = workspaceIdentity(database);
+  const profile = readWorkspaceProfile(database);
+  if (!workspaceId || !profile || workspaceId !== read.workspaceId || profile.revision !== read.profileRevision || config.workspaceId !== workspaceId) {
+    return failure('REVISION_CONFLICT', '活动工作空间或能力配置已变化。');
+  }
+  const existingJobs = listJobs(database, read.sessionId);
+  if (existingJobs.length) {
+    if (JSON.stringify(existingJobs[0].payload.selectedBindingIds) !== JSON.stringify(read.selectedBindingIds)) return failure('VALIDATION_ERROR', '同一 request_id 已绑定不同 List。');
+    return success(toSession(existingJobs, true));
+  }
+  if (read.existing) return failure('REVISION_CONFLICT', '观察会话已变化，请重新加载。');
+
+  for (const item of read.bindings) {
+    const current = getXListBinding(database, item.binding.accountKey, item.binding.listId);
+    if (!current?.enabled || current.id !== item.binding.id || current.revision !== item.binding.revision
+      || (config.accountKey && config.accountKey.toLowerCase() !== current.accountKey.toLowerCase())) {
+      return failure('REVISION_CONFLICT', 'X List 来源或账号在读取期间已变化，未写入观察任务。');
+    }
+    const collected = item.timeline.ok
+      ? persistBoundXListTimeline(database, { ...config, workspaceId, accountKey: item.binding.accountKey }, {
+        accountKey: item.binding.accountKey, listId: item.binding.listId,
+        expectedBindingId: item.binding.id, expectedRevision: item.binding.revision,
+        observationKey: `xobs:${read.sessionId}:${item.binding.id}:initial`
+      }, item.timeline.data)
+      : item.timeline;
+    scheduleCapture(database, config, {
+      sessionId: read.sessionId, requestId: read.requestId, selectedBindingIds: read.selectedBindingIds,
+      workspaceId, profileRevision: profile.revision, binding: item.binding,
+      capturedAt: collected.ok ? collected.data.capturedAt : item.startedAt,
       sourceIds: collected.ok ? collected.data.sourceIds : [], snapshotIds: collected.ok ? collected.data.snapshotIds : []
     }, collected.ok ? 'pending' : needsUser(collected.error.code) ? 'needs_user' : 'failed', collected.ok ? null : `${collected.error.code}: ${collected.error.message}`);
   }
-  return success(toSession(listJobs(database, sessionId), false));
+  return success(toSession(listJobs(database, read.sessionId), false));
+}
+
+export async function startXObservationSession(
+  database: DatabaseSync,
+  config: XListBrowserConfig,
+  input: StartXObservationInput
+): Promise<CommandResult<XObservationSession>> {
+  const read = await readXObservationSessionStart(database, config, input);
+  if (!read.ok || read.data.existing) return read.ok ? success(read.data.existing!) : read;
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const persisted = persistXObservationSessionStart(database, config, read.data);
+    if (!persisted.ok) {
+      database.exec('ROLLBACK');
+      return persisted;
+    }
+    database.exec('COMMIT');
+    return persisted;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
+  }
 }
 
 export function scheduleXObservationCapture(database: DatabaseSync, config: XListBrowserConfig, input: {
@@ -98,6 +176,27 @@ export function scheduleXObservationCapture(database: DatabaseSync, config: XLis
   }, 'pending', null);
   return toSession(listJobs(database, sessionId), existing.length > 0);
 }
+export async function dispatchScheduleXObservationCapture(
+  dependency: ActiveWorkspaceRuntime | DatabaseSync,
+  config: XListBrowserConfig,
+  input: { requestId: string; selectedBindingIds: string[]; binding: XListBinding; capturedAt: string; sourceIds: string[]; snapshotIds: string[] },
+  taskId?: string,
+  workerLeaseId?: string
+): Promise<XObservationSession> {
+  const database = 'database' in dependency ? dependency.database : dependency;
+  if (!('database' in dependency)) return scheduleXObservationCapture(database, config, input);
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'x_observation.schedule', requestId: `${input.requestId}:${input.binding.id}:schedule`,
+    actor: { type: 'scheduler', id: 'daily-intelligence', label: 'daily-intelligence' },
+    input: { config, input }, boundIdentity: dependency.identity, taskId, workerLeaseId,
+    causation: taskId ? { taskId } : undefined, entityType: 'x_observation_session',
+    execute: (_database, normalized) => {
+      const session = scheduleXObservationCapture(database, normalized.config, normalized.input);
+      return { data: session, entityId: session.id };
+    }
+  });
+  return requireReceiptData(receipt);
+}
 
 export function getXObservationSession(database: DatabaseSync, sessionId: string): XObservationSession | null {
   const jobs = listJobs(database, sessionId);
@@ -112,43 +211,71 @@ export function stopXObservationSession(database: DatabaseSync, sessionId: strin
   return getXObservationSession(database, sessionId);
 }
 
-export function recoverRunningXObservationJobs(database: DatabaseSync): number {
-  const now = new Date().toISOString();
-  return Number(database.prepare(`UPDATE jobs SET status='pending', started_at=NULL, updated_at=?
-    WHERE kind='x_list_observation' AND status='running'`).run(now).changes ?? 0);
+export async function recoverRunningXObservationJobs(
+  dependency: ActiveWorkspaceRuntime | DatabaseSync,
+  generation = 0,
+  recoveredBefore = new Date().toISOString()
+): Promise<number> {
+  const database = 'database' in dependency ? dependency.database : dependency;
+  const execute = () => {
+    const now = new Date().toISOString();
+    const rows = database.prepare(`UPDATE jobs SET
+      status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,
+      last_error=CASE WHEN attempts>=3 THEN 'OBSERVATION_RETRY_EXHAUSTED' ELSE NULL END,
+      started_at=CASE WHEN attempts>=3 THEN started_at ELSE NULL END,
+      finished_at=CASE WHEN attempts>=3 THEN ? ELSE NULL END,
+      updated_at=?
+      WHERE kind='x_list_observation' AND status='running'
+        AND (started_at IS NULL OR started_at<?)
+      RETURNING status`).all(now, now, recoveredBefore) as Array<{ status: string }>;
+    return rows.filter((row) => row.status === 'pending').length;
+  };
+  if (!('database' in dependency)) return execute();
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'x_observation.jobs_recover', requestId: `${dependency.identity.runtimeEpoch}:xobs:recover:${generation}`,
+    actor: observationActor, input: { generation, recoveredBefore }, boundIdentity: dependency.identity, entityType: 'x_observation_job',
+    execute: () => ({ data: execute(), sideEffectState: 'committed' })
+  });
+  return requireReceiptData(receipt);
 }
 
-export async function processDueXObservationJobs(database: DatabaseSync, input: {
+export async function processDueXObservationJobs(dependency: ActiveWorkspaceRuntime | DatabaseSync, input: {
   now?: string;
+  generation?: number;
   getConfig: (payload: XObservationPayload) => Promise<XListBrowserConfig>;
   readTimeline?: typeof readXListTimeline;
   isCurrent?: () => boolean;
 }): Promise<{ processed: number; succeeded: number }> {
+  const database = 'database' in dependency ? dependency.database : dependency;
   const now = input.now ?? new Date().toISOString();
-  expireSupersededWindows(database, now);
+  await expireSupersededWindows(dependency, now, input.generation ?? 0);
   let processed = 0; let succeeded = 0;
   for (;;) {
-    const job = claimNext(database, now);
-    if (!job) break;
+    if (input.isCurrent && !input.isCurrent()) break;
+    const claimed = await claimNext(dependency, now, input.generation ?? 0);
+    if (!claimed) break;
+    const { job, requestId: claimRequestId } = claimed;
     processed += 1;
     const payload = job.payload;
     if (!frozenContextMatches(database, payload) || (input.isCurrent && !input.isCurrent())) {
-      finishJob(database, job.id, 'needs_user', 'OBSERVATION_CONTEXT_STALE');
+      await dispatchFinishJob(dependency, job, 'needs_user', 'OBSERVATION_CONTEXT_STALE', claimRequestId, input.generation ?? 0);
       continue;
     }
-    try {
-      const config = await input.getConfig(payload);
-      const collected = await collectBoundXListTimeline(database, { ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }, {
-        accountKey: payload.accountKey, listId: payload.listId,
-        expectedBindingId: payload.bindingId, expectedRevision: payload.bindingRevision,
-        expectedObservationJobId: job.id, observationKey: `xobs:${job.id}`,
-        scheduledFor: payload.scheduledFor, readTimeline: input.readTimeline, isCurrent: input.isCurrent
-      });
-      if (collected.ok) { finishJob(database, job.id, 'succeeded', null); succeeded += 1; }
-      else finishJob(database, job.id, needsUser(collected.error.code) ? 'needs_user' : 'failed', `${collected.error.code}: ${collected.error.message}`);
-    } catch (error) {
-      finishJob(database, job.id, 'needs_user', error instanceof Error ? error.message : String(error));
+    let config: XListBrowserConfig;
+    try { config = await input.getConfig(payload); }
+    catch (error) {
+      await dispatchFinishJob(dependency, job, 'needs_user', error instanceof Error ? error.message : String(error), claimRequestId, input.generation ?? 0);
+      continue;
     }
+    const timeline = await readBoundXListTimeline(database, { ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }, {
+      accountKey: payload.accountKey, listId: payload.listId,
+      expectedBindingId: payload.bindingId, expectedRevision: payload.bindingRevision,
+      expectedObservationJobId: job.id, observationKey: `xobs:${job.id}`,
+      scheduledFor: payload.scheduledFor, readTimeline: input.readTimeline, isCurrent: input.isCurrent
+    });
+    if (input.isCurrent && !input.isCurrent()) continue;
+    const committed = await dispatchObservationCapture(dependency, job, config, timeline, claimRequestId, input);
+    if (committed) succeeded += 1;
   }
   return { processed, succeeded };
 }
@@ -161,18 +288,14 @@ export function nextXObservationDueAt(database: DatabaseSync): string | null {
 
 function scheduleJobs(database: DatabaseSync, base: Omit<XObservationPayload, 'scheduledFor' | 'window'>, status: XObservationJob['status'], error: string | null): void {
   const baseMs = Date.parse(base.startedAt); const now = new Date().toISOString();
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    for (const window of windows) {
-      const scheduledFor = new Date(baseMs + window.milliseconds).toISOString();
-      database.prepare(`INSERT INTO jobs (id,kind,status,due_at,attempts,dedupe_key,payload_json,last_error,created_at,updated_at,started_at,finished_at)
-        VALUES (?,'x_list_observation',?,?,0,?,?,?, ?,?,NULL,?)`).run(
-        randomUUID(), status, scheduledFor, `xobs:${base.sessionId}:${base.bindingId}:${window.key}`,
-        JSON.stringify({ ...base, scheduledFor, window: window.key }), error, now, now, status === 'pending' ? null : now
-      );
-    }
-    database.exec('COMMIT');
-  } catch (error) { database.exec('ROLLBACK'); throw error; }
+  for (const window of windows) {
+    const scheduledFor = new Date(baseMs + window.milliseconds).toISOString();
+    database.prepare(`INSERT INTO jobs (id,kind,status,due_at,attempts,dedupe_key,payload_json,last_error,created_at,updated_at,started_at,finished_at)
+      VALUES (?,'x_list_observation',?,?,0,?,?,?, ?,?,NULL,?)`).run(
+      randomUUID(), status, scheduledFor, `xobs:${base.sessionId}:${base.bindingId}:${window.key}`,
+      JSON.stringify({ ...base, scheduledFor, window: window.key }), error, now, now, status === 'pending' ? null : now
+    );
+  }
 }
 
 function scheduleCapture(database: DatabaseSync, config: XListBrowserConfig, input: {
@@ -188,29 +311,78 @@ function scheduleCapture(database: DatabaseSync, config: XListBrowserConfig, inp
   }, status, error);
 }
 
-function expireSupersededWindows(database: DatabaseSync, nowIso: string): void {
+async function expireSupersededWindows(dependency: ActiveWorkspaceRuntime | DatabaseSync, nowIso: string, generation: number): Promise<void> {
+  const database = 'database' in dependency ? dependency.database : dependency;
   const nowMs = Date.parse(nowIso); const pending = listJobs(database).filter((job) => job.status === 'pending');
   const dueGroups = new Map<string, XObservationJob[]>();
   for (const job of pending) {
     const expired = !Number.isFinite(Date.parse(job.payload.expiresAt)) || nowMs > Date.parse(job.payload.expiresAt);
-    if (expired) { finishJob(database, job.id, 'failed', 'OBSERVATION_WINDOW_EXPIRED'); continue; }
+    if (expired) { await dispatchFinishJob(dependency, job, 'failed', 'OBSERVATION_WINDOW_EXPIRED', null, generation); continue; }
     if (Date.parse(job.dueAt) > nowMs) continue;
     const key = `${job.payload.sessionId}:${job.payload.bindingId}`;
     dueGroups.set(key, [...(dueGroups.get(key) ?? []), job]);
   }
   for (const jobs of dueGroups.values()) {
     jobs.sort((left, right) => left.dueAt.localeCompare(right.dueAt));
-    for (const job of jobs.slice(0, -1)) finishJob(database, job.id, 'failed', 'OBSERVATION_WINDOW_EXPIRED');
+    for (const job of jobs.slice(0, -1)) await dispatchFinishJob(dependency, job, 'failed', 'OBSERVATION_WINDOW_EXPIRED', null, generation);
   }
 }
 
-function claimNext(database: DatabaseSync, nowIso: string): XObservationJob | null {
-  const row = database.prepare(`SELECT * FROM jobs WHERE kind='x_list_observation' AND status='pending' AND due_at<=? ORDER BY due_at LIMIT 1`)
-    .get(nowIso) as JobRow | undefined;
+async function claimNext(dependency: ActiveWorkspaceRuntime | DatabaseSync, nowIso: string, generation: number): Promise<{ job: XObservationJob; requestId: string } | null> {
+  const database = 'database' in dependency ? dependency.database : dependency;
+  const row = database.prepare(`SELECT * FROM jobs WHERE kind='x_list_observation' AND status='pending' AND due_at<=? ORDER BY due_at LIMIT 1`).get(nowIso) as JobRow | undefined;
   if (!row) return null;
-  const updated = database.prepare(`UPDATE jobs SET status='running',attempts=attempts+1,started_at=?,updated_at=? WHERE id=? AND status='pending'`)
-    .run(nowIso, nowIso, row.id);
-  return Number(updated.changes ?? 0) === 1 ? parseJob(database.prepare('SELECT * FROM jobs WHERE id=?').get(row.id) as JobRow) : null;
+  const requestId = `${row.id}:claim:${row.attempts + 1}:generation:${generation}`;
+  const execute = () => {
+    const updated = database.prepare(`UPDATE jobs SET status='running',attempts=attempts+1,started_at=?,updated_at=? WHERE id=? AND status='pending' AND attempts=?`).run(nowIso, nowIso, row.id, row.attempts);
+    return Number(updated.changes ?? 0) === 1 ? parseJob(database.prepare('SELECT * FROM jobs WHERE id=?').get(row.id) as JobRow) : null;
+  };
+  if (!('database' in dependency)) { const job = execute(); return job ? { job, requestId } : null; }
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'x_observation.job_claim', requestId, actor: observationActor,
+    input: { jobId: row.id, expectedAttempts: row.attempts, nowIso, generation }, boundIdentity: dependency.identity,
+    causation: { sessionId: parseJob(row).payload.sessionId }, entityType: 'x_observation_job',
+    execute: () => ({ data: execute(), entityId: row.id })
+  });
+  const job = requireReceiptData(receipt);
+  return job ? { job, requestId } : null;
+}
+
+async function dispatchFinishJob(dependency: ActiveWorkspaceRuntime | DatabaseSync, job: XObservationJob, status: 'succeeded' | 'failed' | 'needs_user', error: string | null, claimRequestId: string | null, generation: number): Promise<void> {
+  const database = 'database' in dependency ? dependency.database : dependency;
+  const execute = () => finishJob(database, job.id, status, error);
+  if (!('database' in dependency)) return execute();
+  await dispatchBusinessCommand(dependency, {
+    command: 'x_observation.job_finish', requestId: `${job.id}:finish:${job.attempts}:${status}:${generation}`,
+    actor: observationActor, input: { jobId: job.id, attempts: job.attempts, status, error, generation },
+    boundIdentity: dependency.identity, causation: claimRequestId ? { requestId: claimRequestId } : { sessionId: job.payload.sessionId },
+    entityType: 'x_observation_job', execute: () => ({ data: execute(), entityId: job.id })
+  });
+}
+
+async function dispatchObservationCapture(dependency: ActiveWorkspaceRuntime | DatabaseSync, job: XObservationJob, config: XListBrowserConfig, timeline: CommandResult<BoundXListTimelineRead>, claimRequestId: string, input: { generation?: number; isCurrent?: () => boolean }): Promise<boolean> {
+  const database = 'database' in dependency ? dependency.database : dependency;
+  const persist = () => {
+    const current = database.prepare('SELECT * FROM jobs WHERE id=?').get(job.id) as JobRow | undefined;
+    if (!current || current.status !== 'running' || current.attempts !== job.attempts || !frozenContextMatches(database, job.payload) || (input.isCurrent && !input.isCurrent())) return false;
+    if (!timeline.ok) { finishJob(database, job.id, needsUser(timeline.error.code) ? 'needs_user' : 'failed', `${timeline.error.code}: ${timeline.error.message}`); return false; }
+    const collected = persistBoundXListTimeline(database, { ...config, workspaceId: job.payload.workspaceId, accountKey: job.payload.accountKey }, {
+      accountKey: job.payload.accountKey, listId: job.payload.listId,
+      expectedBindingId: job.payload.bindingId, expectedRevision: job.payload.bindingRevision,
+      expectedObservationJobId: job.id, observationKey: `xobs:${job.id}`, scheduledFor: job.payload.scheduledFor, isCurrent: input.isCurrent
+    }, timeline.data);
+    if (collected.ok) { finishJob(database, job.id, 'succeeded', null); return true; }
+    finishJob(database, job.id, needsUser(collected.error.code) ? 'needs_user' : 'failed', `${collected.error.code}: ${collected.error.message}`);
+    return false;
+  };
+  if (!('database' in dependency)) return persist();
+  const generation = input.generation ?? 0;
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'x_observation.capture_commit', requestId: `${job.id}:capture:${job.attempts}:generation:${generation}`,
+    actor: observationActor, input: { jobId: job.id, attempts: job.attempts, generation, timeline }, boundIdentity: dependency.identity,
+    causation: { requestId: claimRequestId }, entityType: 'x_observation_job', execute: () => ({ data: persist(), entityId: job.id })
+  });
+  return requireReceiptData(receipt);
 }
 
 function finishJob(database: DatabaseSync, id: string, status: 'succeeded' | 'failed' | 'needs_user', error: string | null): void {

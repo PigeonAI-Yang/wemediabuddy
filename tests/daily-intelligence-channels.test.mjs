@@ -3,17 +3,20 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
-import { startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
+import { completeAgentTask, agentRequestId, finishDailyIntelligenceFromReceipts, getAgentTask, getLatestAgentTask, readDailyReceiptAggregation, startAgentTask, updateAgentTaskPhase } from '../src/main/agent-tasks.ts';
+import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
+import { hasEnabledDailySources, startDailyChannelRun } from '../src/main/daily-intelligence-channels.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createWebsiteSource, recordSourceScanReceipt, setWebsiteSourceEnabled } from '../src/main/intelligence-channels.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
+import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { bindXList, setXListBindingEnabled } from '../src/main/x-lists.ts';
 import { collectBoundXListTimeline } from '../src/main/x-list-execution.ts';
 import { insertWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { startWorkspaceDailyIntelligence } from '../src/main/workspace-intelligence.ts';
 import { startMcp } from '../src/main/mcp.ts';
+import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 
 async function makeRoot(prefix = 'wmb-daily-channels-') {
   const root = await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -57,10 +60,13 @@ test('zero-item website receipt plus an empty saved plan completes daily intelli
       accountKey: '@owner', list: { listId: '900', canonicalUrl: 'https://x.com/i/lists/900', ownerHandle: '@owner', name: 'Ignored this run', kind: 'owned' }
     });
     assert.equal(ignoredX.ok, true);
+    const seenProcessed = [];
     const run = await startDailyChannelRun(current.database, {
       businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web']
     }, {
       scanWebsite: async (database, input) => {
+        const task = getAgentTask(database, input.taskId);
+        seenProcessed.push(task?.progress?.processed ?? null);
         recordWebsiteSuccess(database, input.taskId, input.workspaceId, source);
       }
     });
@@ -68,6 +74,11 @@ test('zero-item website receipt plus an empty saved plan completes daily intelli
     assert.equal(run.aggregation?.status, 'succeeded');
     assert.deepEqual(run.frozen.modules, ['official_web']);
     assert.equal(run.frozen.sources.length, 1);
+    assert.ok(seenProcessed.includes(0), 'scan start should report processed=0 before first receipt');
+    assert.equal(run.task.progress.processed, 1);
+    assert.equal(run.task.progress.planned, 1);
+    const events = run.task.events || [];
+    assert.ok(events.some((event) => String(event.message || '').includes('正在扫描官网')), 'should emit per-channel scanning message');
     savePlanReadback(current.database, run.task, '2026-08-03');
     const completed = completeAgentTask(current.database, run.task.id);
     assert.equal(completed.ok, true);
@@ -135,7 +146,7 @@ test('a later lane/runtime failure preserves trustworthy channel results as part
   }
 });
 
-test('all blocked sources persist needs_user before any injected lane runner starts', async () => {
+test('all blocked sources annotate absence but never block judgment', async () => {
   const current = await makeRoot('wmb-daily-blocked-');
   try {
     insertWorkspaceProfile(current.database, {
@@ -149,37 +160,87 @@ test('all blocked sources persist needs_user before any injected lane runner sta
     });
     assert.equal(binding.ok, true);
     let calls = 0;
-    const result = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
-      uk: async () => { calls += 1; throw new Error('lane runner must not start'); }
+    let readyCalls = 0;
+    const result = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', onTaskReady: async (taskId) => {
+      const task = getAgentTask(current.database, taskId);
+      if (task?.status !== 'running' || task.phase !== 'starting') {
+        throw Object.assign(new Error('TASK_NOT_ACTIVE: 无法为非运行中的任务绑定自动授权。'), { code: 'TASK_NOT_ACTIVE' });
+      }
+      readyCalls += 1;
+    } }, {
+      uk: async () => {
+        calls += 1;
+        const task = getLatestAgentTask(current.database, 'daily_scan', '2026-08-03')
+          || getLatestAgentTask(current.database, 'daily_intelligence', '2026-08-03');
+        assert.ok(task, 'judgment must start even when every channel is blocked');
+        assert.equal(task.phase, 'channel_scanned');
+        savePlanReadback(current.database, task, '2026-08-03');
+        const completed = completeAgentTask(current.database, task.id);
+        assert.equal(completed.ok, true);
+        return { task: completed.data, reused: false };
+      }
     });
-    assert.equal(result.task.status, 'needs_user');
-    assert.equal(result.task.errorCode, 'CHANNELS_NEEDS_USER');
+    assert.equal(calls, 1, 'judgment runs on inventory despite all channels blocked');
+    assert.equal(readyCalls, 1);
+    assert.equal(result.task.status, 'partial');
     assert.equal(result.task.progress.planned, 1);
     assert.equal(result.task.progress.processed, 1);
     assert.equal(result.task.progress.failed, 1);
-    assert.equal(calls, 0);
-    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count, 1);
+    const receipt = current.database.prepare('SELECT status, error_code AS errorCode FROM source_scan_receipts').get();
+    assert.equal(receipt.status, 'needs_user');
+    assert.equal(receipt.errorCode, 'CHANNEL_SOURCE_NOT_READY');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });
   }
 });
 
-test('an orchestration exception with no durable receipt fails instead of claiming success', async () => {
+test('a stale-context channel start fails truthfully without a task grant', async () => {
+  const current = await makeRoot('wmb-daily-stale-context-');
+  try {
+    const started = startAgentTask(current.database, {
+      intent: 'daily_scan', businessDate: '2026-08-03', contextRefs: {
+        workspaceId: current.workspaceId,
+        roleId: 'reporter',
+        intelligenceChannels: { workspaceId: 'other-workspace', profileRevision: 1, modules: ['official_web'], sources: [] }
+      }
+    });
+    assert.equal(started.ok, true);
+    // Keep stale frozen channels and mark resume so coordinator re-enters and fails context check before grant.
+    current.database.prepare("UPDATE agent_tasks SET phase='resume_pending', updated_at=? WHERE id=?").run(new Date().toISOString(), started.data.id);
+    let readyCalls = 0;
+    const run = await startDailyChannelRun(current.database, {
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1,
+      onTaskReady: async () => { readyCalls += 1; throw new Error('stale-context task must not bind a grant'); }
+    });
+    assert.equal(run.task.status, 'failed');
+    assert.equal(run.task.errorCode, 'CHANNEL_CONTEXT_STALE');
+    assert.equal(run.shouldRunJudgment, false);
+    assert.equal(readyCalls, 0);
+    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM task_grants WHERE task_id=?').get(run.task.id).count, 0);
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('a thrown orchestration scan records an accurate durable failure instead of claiming success', async () => {
   const current = await makeRoot('wmb-daily-failed-');
   try {
     const source = website(current.database, 'throw');
     const run = await startDailyChannelRun(current.database, {
       businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
     }, {
-      scanWebsite: async (database) => {
-        database.prepare('DELETE FROM website_sources WHERE id=?').run(source.id);
+      scanWebsite: async () => {
         throw new Error('scanner aborted before receipt');
       }
     });
-    assert.equal(run.shouldRunJudgment, false);
-    assert.equal(run.task.status, 'failed');
-    assert.equal(current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count, 0);
+    assert.equal(run.shouldRunJudgment, true, 'judgment continues on inventory even when every scan fails');
+    assert.equal(run.task.status, 'running');
+    const receipt = current.database.prepare('SELECT status, error_code AS errorCode, error_message AS errorMessage FROM source_scan_receipts WHERE task_id=? AND source_id=?').get(run.task.id, source.id);
+    assert.equal(receipt.status, 'failed');
+    assert.equal(receipt.errorCode, 'CHANNEL_SCAN_FAILED');
+    assert.equal(receipt.errorMessage, 'scanner aborted before receipt');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });
@@ -321,8 +382,9 @@ test('a resumed task with one completed source and one newly blocked source runs
     const finished = website(current.database, 'resume-finished');
     const blocked = website(current.database, 'resume-blocked');
     const started = startAgentTask(current.database, {
-      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+      intent: 'daily_scan', businessDate: '2026-08-03', contextRefs: {
         workspaceId: current.workspaceId,
+        roleId: 'reporter',
         intelligenceChannels: {
           workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web'],
           sources: [
@@ -337,7 +399,11 @@ test('a resumed task with one completed source and one newly blocked source runs
     updateAgentTaskPhase(current.database, started.data.id, 'resume_pending');
     setWebsiteSourceEnabled(current.database, { id: blocked.id, enabled: false, expectedRevision: blocked.revision });
     let laneCalls = 0;
-    const routed = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp' }, {
+    const routed = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', onTaskReady: async (taskId) => {
+      const task = getAgentTask(current.database, taskId);
+      assert.equal(task?.status, 'running', 'grant binds only for a running task');
+      assert.equal(task?.phase, 'resume_pending', 'grant binds before any channel scan progress');
+    } }, {
       uk: async () => {
         laneCalls += 1;
         const channelScanned = getAgentTask(current.database, started.data.id);
@@ -396,9 +462,98 @@ test('a duplicate start observes a preflight task without scanning the same sour
   }
 });
 
+test('plan saved through command_receipts (real plans.save path) also satisfies ownership validation', async () => {
+  const current = await makeRoot('wmb-daily-receipts-owned-');
+  try {
+    const source = website(current.database, 'receipts-owned');
+    const started = startAgentTask(current.database, {
+      intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: {
+        workspaceId: current.workspaceId,
+        intelligenceChannels: {
+          workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web'],
+          sources: [{ module: 'official_web', sourceId: source.id, sourceFeedId: source.sourceFeedId, revision: source.revision }]
+        }
+      }
+    });
+    assert.equal(started.ok, true);
+    recordWebsiteSuccess(current.database, started.data.id, current.workspaceId, source);
+    saveCurrentPlan(current.database, { planDate: '2026-08-03', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
+    const planRequestId = agentRequestId(started.data.id, 'plan');
+    const now = new Date().toISOString();
+    current.database.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash,
+      actor_type, actor_id, task_id, envelope_json, receipt_json, status, side_effect_state, created_at)
+      VALUES (?, ?, 'epoch', ?, 'plans.save', 'hash', 'pi', 'pi:worker', ?, '{}', '{}', 'ok', 'none', ?)`)
+      .run(`receipt-${planRequestId}`, current.workspaceId, planRequestId, started.data.id, now);
+    const completed = completeAgentTask(current.database, started.data.id);
+    assert.equal(completed.ok, true, 'command_receipts plans.save row must satisfy ownership validation');
+    assert.equal(completed.data.status, 'succeeded');
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('scanOnly finishes when nothing new lands, and judgeOnly routes straight to the judgment runner', async () => {
+  const current = await makeRoot('wmb-daily-scanonly-');
+  try {
+    insertWorkspaceProfile(current.database, {
+      profileId: 'profile.test.scanonly', revision: 1, officialTemplateId: null, officialTemplateVersion: null,
+      displayName: 'AI', audience: '受众', contentGoal: '内容', editorialBrief: '实用优先',
+      intelligencePackId: 'wemedia-intelligence-engine', intelligencePackVersion: 1,
+      creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x']
+    });
+    const binding = bindXList(current.database, {
+      accountKey: '@owner', list: { listId: '303', canonicalUrl: 'https://x.com/i/lists/303', ownerHandle: '@owner', name: 'Scan only', kind: 'owned' }
+    });
+    assert.equal(binding.ok, true);
+    const scanned = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', scanOnly: true });
+    assert.equal(scanned.savedCount, 0);
+    assert.equal(scanned.task.status, 'partial', 'no new sources finishes partial instead of leaving a zombie running task');
+    assert.equal(scanned.task.errorCode, 'CHANNELS_NEEDS_USER');
+    const receipt = current.database.prepare('SELECT status FROM source_scan_receipts WHERE task_id=?').get(scanned.task.id);
+    assert.equal(receipt.status, 'needs_user');
+
+    let aiCalls = 0;
+    const judged = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', judgeOnly: true }, {
+      ai: async () => { aiCalls += 1; return { task: scanned.task, reused: true }; }
+    });
+    assert.equal(aiCalls, 1, 'judgeOnly routes straight to the judgment runner');
+    assert.equal(judged.reused, true);
+    const receiptCount = current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count;
+    assert.equal(receiptCount, 1, 'judgeOnly does not create new scan receipts');
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
+test('hasEnabledDailySources gates scheduler ticks per module', async () => {
+  const current = await makeRoot('wmb-daily-precheck-');
+  try {
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), false, 'no sources at all');
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), false);
+
+    const web = website(current.database, 'precheck-web');
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), true);
+    setWebsiteSourceEnabled(current.database, { id: web.id, enabled: false, expectedRevision: web.revision });
+    assert.equal(hasEnabledDailySources(current.database, ['official_web']), false, 'disabled website does not count');
+
+    const binding = bindXList(current.database, {
+      accountKey: '@owner', list: { listId: '404', canonicalUrl: 'https://x.com/i/lists/404', ownerHandle: '@owner', name: 'Precheck', kind: 'owned' }
+    });
+    assert.equal(binding.ok, true);
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), true);
+    setXListBindingEnabled(current.database, { accountKey: '@owner', listId: '404', enabled: false, expectedRevision: binding.data.revision });
+    assert.equal(hasEnabledDailySources(current.database, ['x_lists']), false, 'disabled binding does not count');
+  } finally {
+    current.database.close();
+    await rm(current.root, { recursive: true, force: true });
+  }
+});
+
 test('plans.save MCP accepts an empty current plan and persists its readback', async () => {
   const current = await makeRoot('wmb-daily-mcp-empty-');
-  let mcp;
+  let mcp, runtime;
   try {
     insertWorkspaceProfile(current.database, {
       profileId: 'profile.test.mcp', revision: 1, officialTemplateId: null, officialTemplateVersion: null,
@@ -407,10 +562,17 @@ test('plans.save MCP accepts an empty current plan and persists its readback', a
       creationPackId: 'wmb-core-creation', creationPackVersion: 1, platforms: ['x']
     });
     current.database.close();
-    mcp = await startMcp(current.root);
+    runtime = ActiveWorkspaceRuntime.open(current.root, { openDatabase: migrateDatabase, createEpoch: () => 'daily-empty-plan-runtime' });
+    const task = (await dispatchStartAgentTask(runtime, { intent: 'daily_intelligence', businessDate: '2026-08-03', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'empty-plan-task' })).task;
+    const grant = await dispatchIssueTaskGrant(runtime, {
+      requestId: 'empty-plan-grant', taskId: task.id, ownerGoal: '保存空的当前方案', allowedCommands: ['plans.save'],
+      workers: [{ type: 'external_agent', id: 'mcp' }], expiresAt: new Date(Date.now() + 60_000).toISOString()
+    });
+    assert.equal(grant.ok, true);
+    mcp = await startMcp(current.root, runtime.gate, undefined, runtime);
     const initialized = await mcpRequest(mcp.url, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'daily-channel-test', version: '1' } });
     const response = await mcpRequest(mcp.url, 'tools/call', {
-      name: 'plans.save', arguments: { request_id: 'empty-plan', plan_date: '2026-08-03', summary: '今天没有可执行机会', items: [] }
+      name: 'plans.save', arguments: { request_id: 'empty-plan', task_id: task.id, grant_id: grant.data.id, plan_date: '2026-08-03', summary: '今天没有可执行机会', items: [] }
     }, initialized.sessionId);
     const payload = JSON.parse(response.data.content[0].text);
     assert.equal(payload.ok, true);
@@ -421,6 +583,7 @@ test('plans.save MCP accepts an empty current plan and persists its readback', a
     } finally { readback.close(); }
   } finally {
     await mcp?.close();
+    await runtime?.stop({ drain: false });
     await rm(current.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });

@@ -1,0 +1,198 @@
+/* ---- 班组概览：五角色等宽高卡（整卡 button，头像居中，进度轨主导） ---- */
+.agents-overview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+.agents-overview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 28px;
+}
+.agents-overview-note {
+  color: var(--muted-low);
+  font-size: 12px;
+}
+.agents-config-entry {
+  flex: none;
+  border: 1px solid var(--border-strong, var(--border));
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.agents-config-entry:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.agents-config-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 宽屏 5 等宽；窄屏 auto-fit 自动换行（min(100%,…) 单列保底，无横向溢出）。 */
+.agents-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* 整卡 button：无嵌套交互元素，键盘可达，暗亮主题统一。 */
+.agents-role-card {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 228px;
+  padding: 12px 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+.agents-role-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--surface-hover, color-mix(in srgb, var(--surface) 92%, var(--accent)));
+}
+.agents-role-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agents-role-card[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.agents-role-card.is-desk {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.agents-role-card.has-instances {
+  border-color: var(--border-strong, var(--border));
+}
+
+.agents-card-avatar {
+  justify-self: center;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border-strong, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised, var(--surface)));
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  font-weight: 700;
+  flex: none;
+}
+.agents-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.agents-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-card-room {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-card-progress {
+  display: block;
+  width: 100%;
+  margin: 2px 0 0;
+}
+.agents-card-progress .agents-work-progress {
+  display: block;
+}
+.agents-card-statusline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+.agents-card-statusline > .agents-status-word,
+.agents-card-statusline > .agents-role-empty {
+  white-space: nowrap;
+}
+.agents-card-pct {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agents-card-summary {
+  color: var(--muted-low);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.agents-role-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agents-overview-loading {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 活动区空态：当前无活动实例（紧凑一行，不占网格）。 */
+.agents-filter-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* 活动实例区角色节标题/计数徽标（与概览卡同页共享的既有样式）。 */
+.agents-role-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.agents-role-count {
+  margin-left: auto;
+  min-width: 1.6em;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+

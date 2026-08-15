@@ -1,6 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
-import { lateMigrations } from './late-migrations.ts';
+import { lateMigrations } from './late-migrations.ts'; import { topicMaintenanceMigrations } from './topic-maintenance-migrations.ts';
 import { knowledgeMigrations } from './knowledge-migrations.ts';
+import { knowledgeFlywheelMigrations } from './knowledge-flywheel-migrations.ts';
+import { sourceBodyRevisionMigrations } from './source-body-revision-migrations.ts';
+import { mediaBindingMigrations } from './media-binding-migrations.ts';
+import { mediaArchiveMigrations } from './media-archive-migrations.ts';
+import { mediaRecommendationMigrations } from './media-recommendation-migrations.ts';
+import { visualUnderstandingMigrations } from './visual-understanding-migrations.ts';
+import { mediaGovernanceMigrations } from './media-governance-migrations.ts';
+import { sourceBodyArchiveMigrations } from './source-body-archive-migrations.ts';
+import { wikiIndexMigrations } from './wiki-index-migrations.ts';
+import { registerSourceBodyRevisionPurgeGate } from '../source-body-cache.ts';
 
 export const migrations = [
   {
@@ -66,7 +76,7 @@ export const migrations = [
       CREATE TABLE content_notes (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES content_projects(id), body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);
       CREATE TABLE content_decisions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES content_projects(id), body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);
       CREATE TABLE content_versions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES content_projects(id), body TEXT NOT NULL, version_number INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE (project_id, version_number));
-      CREATE TABLE platform_versions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES content_projects(id), content_version_id TEXT NOT NULL REFERENCES content_versions(id), platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat')), format TEXT NOT NULL, title TEXT, body TEXT NOT NULL, asset_ids_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);
+      CREATE TABLE platform_versions (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES content_projects(id), content_version_id TEXT NOT NULL REFERENCES content_versions(id), platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')), format TEXT NOT NULL, title TEXT, body TEXT NOT NULL, asset_ids_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL);
     `
   },
   {
@@ -92,7 +102,7 @@ export const migrations = [
     sql: `
       CREATE TABLE platform_accounts (
         id TEXT PRIMARY KEY,
-        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat')) UNIQUE,
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')) UNIQUE,
         account_key TEXT NOT NULL,
         display_name TEXT NOT NULL,
         login_state TEXT NOT NULL CHECK (login_state IN ('authenticated', 'unauthenticated', 'challenge', 'unknown')),
@@ -110,7 +120,7 @@ export const migrations = [
         id TEXT PRIMARY KEY,
         platform_version_id TEXT NOT NULL REFERENCES platform_versions(id),
         platform_version_revision INTEGER NOT NULL,
-        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat')),
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')),
         account_id TEXT NOT NULL REFERENCES platform_accounts(id),
         account_key TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('draft', 'prepared', 'awaiting_confirmation', 'publishing', 'published', 'failed', 'needs_user', 'unknown')),
@@ -424,25 +434,226 @@ export const migrations = [
       CREATE INDEX x_list_timeline_cache_account_accessed ON x_list_timeline_cache(account_key, last_accessed_at);
     `
   },
-  ...lateMigrations
+  ...lateMigrations, ...topicMaintenanceMigrations, ...knowledgeFlywheelMigrations, ...sourceBodyRevisionMigrations, ...mediaBindingMigrations,
+  ...wikiIndexMigrations,
+  ...mediaArchiveMigrations,
+  ...mediaGovernanceMigrations,
+  ...mediaRecommendationMigrations,
+  ...visualUnderstandingMigrations,
+  {
+    version: 70,
+    sql: `
+      -- ===== WMB-5249：知乎成为一等发布平台 =====
+      -- 扩展全部平台 CHECK 约束：platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')。
+      -- 与 v44/v47/v48/v50/v54 的"改名→建新→复制→删影子"不同：本次重建的是 FK 父表
+      -- （platform_versions/platform_accounts/publications/publication_snapshots 被大量
+      -- 未重建的子表引用）。SQLite 的 ALTER TABLE RENAME 会无条件改写其他表中指向被改名表的
+      -- FK 子句（PRAGMA foreign_keys=OFF 也拦不住；legacy_alter_table 同样不保护 FK 子句）：
+      -- 若先改名旧表、复制后再删影子表，未重建子表（platform_media_bindings、publication_attempts/
+      -- confirmations/reconciliations/events/metric_snapshots/reviews、publication_browser_operations）
+      -- 的 FK 会悬空指向已删除的 *_v69，导致插入报 "no such table: main.*_v69"。
+      -- 因此这里改为：建新表(*_v69) → 原列复制 → 删旧表 → 改名回原名。引用方 FK 文本始终指向
+      -- 原名，改名步骤只会改写指向 *_v69 的引用（新表无引用方），原名最终解析到重建后的表。
+      -- 数据/列/约束原样保留，索引/触发器在改名后重建。
+
+      -- platform_versions（v5 建表；无索引/触发器；被 publications/publication_snapshots/
+      -- platform_media_bindings 引用）。
+      CREATE TABLE platform_versions_v69 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id),
+        content_version_id TEXT NOT NULL REFERENCES content_versions(id),
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')),
+        format TEXT NOT NULL,
+        title TEXT,
+        body TEXT NOT NULL,
+        asset_ids_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL
+      );
+      INSERT INTO platform_versions_v69 (id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision)
+        SELECT id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision
+        FROM platform_versions;
+      DROP TABLE platform_versions;
+      ALTER TABLE platform_versions_v69 RENAME TO platform_versions;
+
+      -- platform_accounts（v8 建表 + v39 浏览器绑定列）。
+      CREATE TABLE platform_accounts_v69 (
+        id TEXT PRIMARY KEY,
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')) UNIQUE,
+        account_key TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        login_state TEXT NOT NULL CHECK (login_state IN ('authenticated', 'unauthenticated', 'challenge', 'unknown')),
+        evidence_url TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        browser_profile_id TEXT,
+        browser_binding_revision INTEGER,
+        verified_at TEXT
+      );
+      INSERT INTO platform_accounts_v69 (id, platform, account_key, display_name, login_state, evidence_url,
+        created_at, updated_at, revision, browser_profile_id, browser_binding_revision, verified_at)
+        SELECT id, platform, account_key, display_name, login_state, evidence_url,
+          created_at, updated_at, revision, browser_profile_id, browser_binding_revision, verified_at
+        FROM platform_accounts;
+      DROP TABLE platform_accounts;
+      ALTER TABLE platform_accounts_v69 RENAME TO platform_accounts;
+
+      -- publications（v9 建表；被 publication_attempts/confirmations/reconciliations/events/
+      -- metric_snapshots/reviews/publication_snapshots 引用）。
+      CREATE TABLE publications_v69 (
+        id TEXT PRIMARY KEY,
+        platform_version_id TEXT NOT NULL REFERENCES platform_versions(id),
+        platform_version_revision INTEGER NOT NULL,
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')),
+        account_id TEXT NOT NULL REFERENCES platform_accounts(id),
+        account_key TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'prepared', 'awaiting_confirmation', 'publishing', 'published', 'failed', 'needs_user', 'unknown')),
+        prepared_title TEXT,
+        prepared_body TEXT,
+        prepared_assets_json TEXT NOT NULL,
+        prepared_evidence_url TEXT,
+        external_url TEXT,
+        external_id TEXT,
+        published_at TEXT,
+        last_error_code TEXT,
+        last_error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL
+      );
+      INSERT INTO publications_v69 (id, platform_version_id, platform_version_revision, platform, account_id, account_key,
+        status, prepared_title, prepared_body, prepared_assets_json, prepared_evidence_url, external_url, external_id,
+        published_at, last_error_code, last_error_message, created_at, updated_at, revision)
+        SELECT id, platform_version_id, platform_version_revision, platform, account_id, account_key,
+          status, prepared_title, prepared_body, prepared_assets_json, prepared_evidence_url, external_url, external_id,
+          published_at, last_error_code, last_error_message, created_at, updated_at, revision
+        FROM publications;
+      DROP TABLE publications;
+      ALTER TABLE publications_v69 RENAME TO publications;
+
+      -- publication_snapshots（v43 建表；不可变触发器 + 3 索引原样重建）。
+      CREATE TABLE publication_snapshots_v69 (
+        id TEXT PRIMARY KEY,
+        publication_id TEXT NOT NULL UNIQUE REFERENCES publications(id),
+        workspace_id TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        platform_version_id TEXT NOT NULL REFERENCES platform_versions(id),
+        platform_version_revision INTEGER NOT NULL CHECK (platform_version_revision >= 1),
+        platform TEXT NOT NULL CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')),
+        account_id TEXT NOT NULL REFERENCES platform_accounts(id),
+        account_key TEXT NOT NULL,
+        account_revision INTEGER NOT NULL CHECK (account_revision >= 1),
+        browser_binding_id TEXT NOT NULL CHECK (browser_binding_id = 'effective') REFERENCES workspace_browser_bindings(id),
+        browser_profile_id TEXT NOT NULL,
+        browser_binding_revision INTEGER NOT NULL CHECK (browser_binding_revision >= 1),
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+        assets_json TEXT NOT NULL,
+        assets_hash TEXT NOT NULL CHECK (length(assets_hash) = 64),
+        input_hash TEXT NOT NULL CHECK (length(input_hash) = 64),
+        causation_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO publication_snapshots_v69 (id, publication_id, workspace_id, runtime_epoch, platform_version_id,
+        platform_version_revision, platform, account_id, account_key, account_revision, browser_binding_id,
+        browser_profile_id, browser_binding_revision, payload_json, payload_hash, assets_json, assets_hash,
+        input_hash, causation_json, created_at)
+        SELECT id, publication_id, workspace_id, runtime_epoch, platform_version_id,
+          platform_version_revision, platform, account_id, account_key, account_revision, browser_binding_id,
+          browser_profile_id, browser_binding_revision, payload_json, payload_hash, assets_json, assets_hash,
+          input_hash, causation_json, created_at
+        FROM publication_snapshots;
+      DROP TABLE publication_snapshots;
+      ALTER TABLE publication_snapshots_v69 RENAME TO publication_snapshots;
+      CREATE INDEX publication_snapshots_input_hash ON publication_snapshots(input_hash);
+      CREATE INDEX publication_snapshots_workspace_created ON publication_snapshots(workspace_id, created_at DESC);
+      CREATE INDEX publication_snapshots_frozen_identity ON publication_snapshots(platform_version_id, account_id, browser_profile_id, browser_binding_revision);
+      CREATE TRIGGER publication_snapshots_immutable_update
+        BEFORE UPDATE ON publication_snapshots
+        BEGIN
+          SELECT RAISE(ABORT, 'PUBLICATION_SNAPSHOT_IMMUTABLE');
+        END;
+      CREATE TRIGGER publication_snapshots_immutable_delete
+        BEFORE DELETE ON publication_snapshots
+        BEGIN
+          SELECT RAISE(ABORT, 'PUBLICATION_SNAPSHOT_IMMUTABLE');
+        END;
+
+      -- studio_annotations（v55 建表；作用域 CHECK + 索引原样重建）。
+      CREATE TABLE studio_annotations_v69 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        document_kind TEXT NOT NULL CHECK (document_kind IN ('core', 'platform')),
+        document_id TEXT,
+        platform TEXT CHECK (platform IN ('x', 'xiaohongshu', 'wechat', 'zhihu')),
+        start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+        end_offset INTEGER NOT NULL CHECK (end_offset >= 0),
+        quoted_text TEXT NOT NULL,
+        prefix_context TEXT NOT NULL DEFAULT '',
+        suffix_context TEXT NOT NULL DEFAULT '',
+        body_fingerprint TEXT NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL CHECK (status IN ('open', 'resolved')),
+        resolved_reason TEXT CHECK (resolved_reason IN ('edited', 'deleted', 'ambiguous', 'user_removed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        resolved_at TEXT,
+        revision INTEGER NOT NULL DEFAULT 1,
+        CHECK (start_offset < end_offset),
+        CHECK (
+          (document_kind = 'core' AND platform IS NULL)
+          OR (document_kind = 'platform' AND platform IS NOT NULL AND document_id IS NOT NULL)
+        )
+      );
+      INSERT INTO studio_annotations_v69 (id, project_id, document_kind, document_id, platform, start_offset, end_offset,
+        quoted_text, prefix_context, suffix_context, body_fingerprint, note, status, resolved_reason,
+        created_at, updated_at, resolved_at, revision)
+        SELECT id, project_id, document_kind, document_id, platform, start_offset, end_offset,
+          quoted_text, prefix_context, suffix_context, body_fingerprint, note, status, resolved_reason,
+          created_at, updated_at, resolved_at, revision
+        FROM studio_annotations;
+      DROP TABLE studio_annotations;
+      ALTER TABLE studio_annotations_v69 RENAME TO studio_annotations;
+      CREATE INDEX studio_annotations_scope ON studio_annotations(project_id, document_kind, document_id, status);
+    `
+  },
+  ...sourceBodyArchiveMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {
   const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA foreign_keys = ON');
-  database.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
-  const applied = new Set(database.prepare('SELECT version FROM schema_migrations').all().map(({ version }) => Number(version)));
-  for (const migration of migrations) {
-    if (applied.has(migration.version)) continue;
-    database.exec('BEGIN IMMEDIATE');
-    try {
-      database.exec(migration.sql);
-      database.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(migration.version, new Date().toISOString());
-      database.exec('COMMIT');
-    } catch (error) {
-      database.exec('ROLLBACK');
-      throw error;
+  try {
+    database.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
+    const applied = new Set(database.prepare('SELECT version FROM schema_migrations').all().map(({ version }) => Number(version)));
+    const allMigrations = migrations as readonly { version: number; sql: string; run?: (database: DatabaseSync) => void }[];
+    for (const migration of allMigrations) {
+      if (applied.has(migration.version)) continue;
+      // SQLite forbids changing foreign_keys inside a transaction; table rebuilds that touch FK parents need FK off.
+      database.exec('PRAGMA foreign_keys = OFF');
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        database.exec(migration.sql);
+        migration.run?.(database);
+        database.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(migration.version, new Date().toISOString());
+        database.exec('COMMIT');
+      } catch (error) {
+        database.exec('ROLLBACK');
+        database.exec('PRAGMA foreign_keys = ON');
+        throw error;
+      }
+      database.exec('PRAGMA foreign_keys = ON');
     }
+    database.exec('PRAGMA foreign_keys = ON');
+    // WMB-5237：source_body_revisions 删除闸门 UDF 每次连接注册（schema_migrations 跳过已应用迁移时
+    // 不会再走 migration 61 的 run hook，但 DELETE 触发器 WHEN 仍引用该函数）。
+    registerSourceBodyRevisionPurgeGate(database);
+    return database;
+  } catch (error) {
+    // 迁移失败必须释放连接：否则数据库文件句柄残留（Windows 上 unlink 得 EBUSY），
+    // 并掩盖真正的迁移错误。成功路径由调用方负责 close()。
+    database.close();
+    throw error;
   }
-  return database;
 }
