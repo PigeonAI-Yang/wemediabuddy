@@ -8,7 +8,7 @@ import { helpers } from './harness.mjs';
 import { seedRichKnowledge, seedHealthIssue, openWorkspaceDb } from './fixture-knowledge.mjs';
 import { scheduleSourceBodyArchive } from '../../src/main/source-body-archive.ts';
 
-const { assert, step, waitForAppReady, navigateTo, openReadOnlyDb } = helpers;
+const { assert, step, waitForAppReady, navigateTo, openReadOnlyDb, captureEvidence } = helpers;
 
 const RICH = { seedFixture: async (ws) => seedRichKnowledge(ws.dataRoot, ws.workspaceId) };
 
@@ -17,7 +17,7 @@ export default [
     id: 'LB-001-library-saved-normal',
     journeyIds: ['LB-001-library-saved-normal'],
     launch: RICH,
-    run: async ({ page, evidence }) => {
+    run: async ({ app, page, evidence, artifactsDir }) => {
       await step(evidence, '启动就绪', () => waitForAppReady(page));
       await step(evidence, '保存资料按新鲜度分组渲染', async () => {
         await navigateTo(page, 'library');
@@ -42,6 +42,25 @@ export default [
         const title = await page.locator('.library-source-detail h1').textContent();
         assert(title.includes('AgentForge 发布 v2'), `详情标题错误：${title}`);
         assert(await page.locator('.library-source-detail section h2', { hasText: '证据贡献' }).count() >= 1, '详情应有证据贡献区');
+        const sourceIdentity = await page.evaluate(() => {
+          const meta = document.querySelector('.library-source-detail-meta');
+          const mark = meta?.querySelector('.source-platform-mark');
+          const metaStyle = meta ? getComputedStyle(meta) : null;
+          const rect = mark?.getBoundingClientRect();
+          return {
+            count: meta?.querySelectorAll('.source-platform-mark').length ?? 0,
+            fallback: Boolean(mark?.classList.contains('feed-source-platform-fallback')),
+            fontSize: metaStyle ? Number.parseFloat(metaStyle.fontSize) : 0,
+            width: rect?.width ?? 0,
+            height: rect?.height ?? 0,
+            overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+          };
+        });
+        assert(sourceIdentity.count === 1 && sourceIdentity.fallback, `未知独立站详情应显示唯一通用来源标，实际 ${JSON.stringify(sourceIdentity)}`);
+        assert(Math.abs(sourceIdentity.width - sourceIdentity.fontSize) <= 1 && Math.abs(sourceIdentity.height - sourceIdentity.fontSize) <= 1, `资料详情来源标应与元数据文字等高，实际 ${JSON.stringify(sourceIdentity)}`);
+        assert(sourceIdentity.overflowX === 0, `资料详情不应产生横向溢出，实际 ${sourceIdentity.overflowX}`);
+        assert(evidence.pageerrors.length === 0, `资料详情不应产生 page error：${JSON.stringify(evidence.pageerrors)}`);
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'library-source-platform-icon-detail' });
       });
       return { surface: 'library', journey: 'LB-001', rows: 3, detail: true };
     }
@@ -263,7 +282,7 @@ export default [
         }
       }
     },
-    run: async ({ page, evidence }) => {
+    run: async ({ app, page, evidence, artifactsDir }) => {
       await step(evidence, '启动就绪', () => waitForAppReady(page));
       await step(evidence, '采集异常展示分类、可重试边界与批量动作', async () => {
         await navigateTo(page, 'library');
@@ -277,6 +296,15 @@ export default [
         assert(text.includes('另有 1 项不可自动重试'), `应明确排除不可自动重试项：${text}`);
         const disabled = await page.locator('.capture-failure-item.is-not-retryable input[type="checkbox"]').isDisabled();
         assert(disabled, '安全拦截项不应允许自动批量选择');
+        const failureIdentity = await page.evaluate(() => ({
+          marksPerRow: [...document.querySelectorAll('.capture-failure-item')].map((row) => row.querySelectorAll('.capture-failure-head .source-platform-mark').length),
+          fallbackCount: document.querySelectorAll('.capture-failure-head .source-platform-mark.feed-source-platform-fallback').length,
+          overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+        }));
+        assert(failureIdentity.marksPerRow.every((count) => count === 1) && failureIdentity.fallbackCount === 2, `每条采集异常应显示唯一来源标，实际 ${JSON.stringify(failureIdentity)}`);
+        assert(failureIdentity.overflowX === 0, `采集异常来源标不应产生横向溢出，实际 ${failureIdentity.overflowX}`);
+        assert(evidence.pageerrors.length === 0, `采集异常不应产生 page error：${JSON.stringify(evidence.pageerrors)}`);
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'library-capture-failure-platform-icons' });
       });
       return { surface: 'library', journey: 'LB-008', failures: 2, retryable: 1, excluded: 1 };
     }

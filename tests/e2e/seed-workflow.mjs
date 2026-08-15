@@ -65,8 +65,8 @@ export async function seedWorkflowBase(dataRoot, workspaceId, options = {}) {
  * Seed a studio project with core versions and platform versions.
  * @returns {{ projectId, coreV1Id, coreV2Id, platXId, platWechatId, platXhsId }}
  */
-export function seedStudioProject(db, { title = 'E2E 创作项目 A', coreV1 = '核心 V1 正文', coreV2 = '核心 V2 正文（编辑保存）', platforms = ['x', 'wechat', 'xiaohongshu'] } = {}) {
-  const core1 = content.createContentProjectWithVersion(db, { title, body: coreV1 });
+export function seedStudioProject(db, { title = 'E2E 创作项目 A', coreV1 = '核心 V1 正文', coreV2 = '核心 V2 正文（编辑保存）', platforms = ['x', 'wechat', 'xiaohongshu'], sourceIds = [] } = {}) {
+  const core1 = content.createContentProjectWithVersion(db, { title, body: coreV1, sourceIds });
   const core2 = content.saveCoreVersion(db, { projectId: core1.id, body: coreV2, expectedRevision: 1 });
   if (!core2.ok) throw new Error(`seedStudioProject: core v2 保存失败 ${JSON.stringify(core2.error ?? core2)}`);
   const out = { projectId: core1.id, coreV1Id: core1.contentVersionId, coreV2Id: core2.data.id, platXId: null, platWechatId: null, platXhsId: null };

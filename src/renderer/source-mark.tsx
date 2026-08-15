@@ -73,7 +73,7 @@ export function SourcePlatformMark({ canonicalUrl, aiSourcePresentation }: {
   const platformId = platformIdFromUrl(canonicalUrl);
   const platformLogo = brandIconUrl(platformId);
   if (platformId && platformLogo) {
-    return <i className={`platform-mark pf-${platformId} feed-source-platform`} aria-hidden="true">
+    return <i className={`platform-mark pf-${platformId} source-platform-mark feed-source-platform`} aria-hidden="true">
       <img src={platformLogo} alt="" width={128} height={128} decoding="async"/>
     </i>;
   }
@@ -81,12 +81,12 @@ export function SourcePlatformMark({ canonicalUrl, aiSourcePresentation }: {
   const registered = aiSourcePresentation ? findSourceLogo(canonicalUrl, registeredSources) : null;
   const registeredLogoUrl = registered ? logoAssets[`../../images/source-logos/${registered.logo}`] : null;
   if (registeredLogoUrl) {
-    return <i className="feed-source-platform feed-source-platform-registered" aria-hidden="true">
+    return <i className="source-platform-mark feed-source-platform feed-source-platform-registered" aria-hidden="true">
       <img src={registeredLogoUrl} alt="" decoding="async"/>
     </i>;
   }
 
-  return <i className="feed-source-platform feed-source-platform-fallback" aria-hidden="true">
+  return <i className="source-platform-mark feed-source-platform feed-source-platform-fallback" aria-hidden="true">
     <svg viewBox="0 0 16 16"><path d="M5 2.5h6l2 2v9H5z"/><path d="M10.5 2.5v2.5H13M7 8h4M7 10.5h4"/></svg>
   </i>;
 }

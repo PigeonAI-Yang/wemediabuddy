@@ -55,3 +55,10 @@
   left: var(--page-space);
   right: var(--page-space);
 }
+
+/* Compact source/platform identity shared by metadata rows. */
+.source-platform-mark { display: inline-grid; place-items: center; box-sizing: border-box; width: 1em; height: 1em; flex: 0 0 1em; overflow: hidden; border-radius: 2px; }
+.source-platform-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.source-platform-mark.feed-source-platform-registered { background: var(--surface-raised); }
+.source-platform-mark.feed-source-platform-fallback { color: currentColor; }
+.source-platform-mark.feed-source-platform-fallback svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.25; }

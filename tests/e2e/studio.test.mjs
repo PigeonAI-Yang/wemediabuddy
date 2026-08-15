@@ -17,6 +17,7 @@ import { deflateSync } from 'node:zlib';
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { savePlatformVersion } from '../../src/main/content.ts';
 import { importAssetBytes, linkProjectAsset, markdownImageForAsset } from '../../src/main/assets.ts';
+import { seedSource } from './lib/seed.mjs';
 
 const seedBase = async ({ dataRoot, workspaceId }) => {
   await seedWorkflowBase(dataRoot, workspaceId);
@@ -26,7 +27,9 @@ const seedWithProject = async ({ dataRoot, workspaceId }) => {
   await seedWorkflowBase(dataRoot, workspaceId);
   const db = openWriteDb(dataRoot);
   try {
-    seedStudioProject(db, {});
+    const xSourceId = seedSource(db, { title: 'E2E X 资料', summary: 'X 来源摘要', author: '@wmb_e2e', originalUrl: 'https://x.com/wmb_e2e/status/100' });
+    const wechatSourceId = seedSource(db, { title: 'E2E 微信资料', summary: '微信来源摘要', author: 'WMB 测试公众号', originalUrl: 'https://mp.weixin.qq.com/s/wmb-e2e-source' });
+    seedStudioProject(db, { sourceIds: [xSourceId, wechatSourceId] });
   } finally {
     db.close();
   }
@@ -326,6 +329,35 @@ export default [
         assert(compact.titleVisible && compact.status.includes('字数') && /来源 \d+/.test(compact.status) && /素材 \d+/.test(compact.status), `最小窗口应保留标题与真实状态入口，实际 ${JSON.stringify(compact)}`);
         assert(compact.overflowX === 0, `1100×800 创作编辑器不应产生页面横向溢出，实际 ${compact.overflowX}`);
         await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-metadata-cleanup-1100' });
+      });
+      await step('关联来源详情统一显示紧凑平台身份', async () => {
+        await page.locator('button.studio-status-link', { hasText: '来源 2' }).click();
+        await page.waitForSelector('.studio-detail-list .studio-source-meta', { timeout: 15_000 });
+        const sourceIdentity = await page.evaluate(() => {
+          const articles = [...document.querySelectorAll('.studio-detail-list article')];
+          return {
+            articleCount: articles.length,
+            marksPerArticle: articles.map((article) => article.querySelectorAll('.source-platform-mark').length),
+            xMarks: document.querySelectorAll('.studio-detail-list .source-platform-mark.pf-x').length,
+            wechatMarks: document.querySelectorAll('.studio-detail-list .source-platform-mark.pf-wechat').length,
+            sizes: [...document.querySelectorAll('.studio-detail-list .studio-source-meta')].map((row) => {
+              const mark = row.querySelector('.source-platform-mark');
+              const rowStyle = getComputedStyle(row);
+              const rect = mark?.getBoundingClientRect();
+              return { fontSize: Number.parseFloat(rowStyle.fontSize), width: rect?.width ?? 0, height: rect?.height ?? 0 };
+            }),
+            statusBarMarks: document.querySelectorAll('.studio-writing-status .source-platform-mark').length,
+            overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+          };
+        });
+        assert(sourceIdentity.articleCount === 2, `应显示两条关联来源，实际 ${JSON.stringify(sourceIdentity)}`);
+        assert(sourceIdentity.marksPerArticle.every((count) => count === 1), `每条来源元数据只能有一个平台标，实际 ${JSON.stringify(sourceIdentity.marksPerArticle)}`);
+        assert(sourceIdentity.xMarks === 1 && sourceIdentity.wechatMarks === 1, `应识别 X 与微信来源，实际 ${JSON.stringify(sourceIdentity)}`);
+        assert(sourceIdentity.sizes.every(({ fontSize, width, height }) => Math.abs(width - fontSize) <= 1 && Math.abs(height - fontSize) <= 1), `平台标应与元数据文字等高，实际 ${JSON.stringify(sourceIdentity.sizes)}`);
+        assert(sourceIdentity.statusBarMarks === 0, '高密度 Studio 状态栏不应重复堆叠来源平台标');
+        assert(sourceIdentity.overflowX === 0, `来源详情不应产生横向溢出，实际 ${sourceIdentity.overflowX}`);
+        assert(evidence.pageerrors.length === 0, `来源详情不应产生 page error：${JSON.stringify(evidence.pageerrors)}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-source-platform-icons-1100' });
       });
       await step('持久化读回：DB 项目存在', () => {
         const { db, close } = openDb();

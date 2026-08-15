@@ -155,11 +155,6 @@
 .feed-sub { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 100%; color: var(--muted-low); font-size: 11.5px; cursor: pointer; width: fit-content; }
 .feed-source-origin { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .feed-source-origin > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.feed-sub .feed-source-platform { display: inline-grid; place-items: center; box-sizing: border-box; width: 1em; height: 1em; flex: 0 0 1em; overflow: hidden; border-radius: 2px; }
-.feed-sub .feed-source-platform img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.feed-sub .feed-source-platform-registered { background: var(--surface-raised); }
-.feed-sub .feed-source-platform-fallback { color: currentColor; }
-.feed-sub .feed-source-platform-fallback svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.25; }
 .feed-sub:hover { color: var(--ink-soft); }
 .feed-selection-bar { margin: 0 0 6px; color: var(--muted); font-size: 11.5px; font-weight: 650; flex: 0 0 auto; }
 .feed-context { margin: 0 0 6px; color: var(--muted); font-size: 11.5px; line-height: 1.45; flex: 0 0 auto; }

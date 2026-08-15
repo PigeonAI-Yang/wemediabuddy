@@ -13,6 +13,7 @@ import { annotationContextAround, annotationScopeKey, computeBodyFingerprint, le
 import { StudioAnnotationMenu, StudioAnnotationNoteInput, StudioAnnotationOverlay, bodyOffsetAtDomPoint, richMapping, type SourceHitTest } from './studio-annotation-layer';
 import { appConfirm } from './app-confirm';
 import { priorityGrade } from './today-view-parts';
+import { SourcePlatformMark } from './source-mark';
 
 type StudioSelectionSnapshot = { start: number; end: number; basis: string };
 type StudioFocusObject = {
@@ -48,12 +49,13 @@ function coreMediaBindingsEqual(a: ContentMediaBindingDraft[], b: ContentMediaBi
   return true;
 }
 
-export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, onFocusChange, onOpenSource, planDate, enabledPlatforms }: {
+export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, onFocusChange, onOpenSource, planDate, enabledPlatforms, aiSourcePresentation }: {
   openPublish: () => void; selectedId: string | null; onSelect: (projectId: string | null) => void;
   onContext: (project: { id: string; title: string } | null) => void;
   onFocusChange?: (focus: StudioFocusObject | null) => void;
   onOpenSource?: (sourceId: string) => void;
   planDate: string; enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
+  aiSourcePresentation: boolean;
 }): React.JSX.Element {
   const [projects, setProjects] = useState<ContentProjectSummary[]>([]); const [topics,setTopics]=useState<any[]>([]);
   const [listFocusId, setListFocusId] = useState<string | null>(null);
@@ -1811,7 +1813,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
             </span>
           </div>
         </>}
-        {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
+        {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small className="studio-source-meta"><SourcePlatformMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/><span>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</span></small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
         {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>素材指纹 {asset.sha256}</p><small>{asset.byteCount} 字节{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} 毫秒` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
       </> : <section className="empty-state editor-empty"><h2>{message ? '项目详情读取失败' : '选择一个内容项目'}</h2><p>{message || '左侧会显示符合当前条件的项目。'}</p>{selectedId && message && <button onClick={() => void loadDetail(selectedId)}>重新读取</button>}</section>}
     </main>

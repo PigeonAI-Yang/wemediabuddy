@@ -31,6 +31,9 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .library-source-detail > section {
   margin-top: 22px;

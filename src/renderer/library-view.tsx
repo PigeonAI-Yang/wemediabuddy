@@ -7,7 +7,7 @@ import type {
   KnowledgeHealthSeverity,
   KnowledgeUpdateReceiptRecord,
 } from '../shared/knowledge-flywheel';
-import { SourceMark } from './source-mark';
+import { SourceMark, SourcePlatformMark } from './source-mark';
 import { domainOf, formatSourcePublishedAt } from './today-view-parts';
 import { issueTypeLabel, severityLabel } from './knowledge-canvas-projection';
 import {
@@ -965,7 +965,7 @@ export function LibraryView(props: {
         ) : (
           <>
             <h1>{selectedKnowledge.title}</h1>
-            {metaBits.length ? <p className="library-source-detail-meta">{metaBits.join(' · ')}</p> : null}
+            {metaBits.length ? <p className="library-source-detail-meta"><SourcePlatformMark canonicalUrl={selectedKnowledge.originalUrl ?? null} aiSourcePresentation={aiSourcePresentation}/><span>{metaBits.join(' · ')}</span></p> : null}
           </>
         )}
         <div className="knowledge-status-controls">
@@ -1245,6 +1245,7 @@ export function LibraryView(props: {
                   />
                   <div className="capture-failure-main">
                     <div className="capture-failure-head">
+                      <SourcePlatformMark canonicalUrl={failure.url ?? null} aiSourcePresentation={aiSourcePresentation}/>
                       <span className="capture-failure-title">{failure.title}</span>
                       {failure.domain ? <span className="capture-failure-domain">{failure.domain}</span> : null}
                       <span className={`tag lib-inline ${captureCategoryCls(failure.reasonCategory)}`}>{sourceBodyReasonCategoryLabel(failure.reasonCategory)}</span>
