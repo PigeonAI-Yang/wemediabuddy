@@ -1,0 +1,546 @@
+{
+  "schemaVersion": 1,
+  "platform": "win32-x64",
+  "cpu": true,
+  "comment": "Immutable Windows x64 CPU media runtime contract. No mutable latest URLs; no PATH fallback. Prepared by scripts/prepare-media-runtime.mjs into .r/media-runtime/. SHA-256 values are the byte hashes of the frozen artifacts.",
+  "components": [
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg 8.1.2 essentials static build (Windows x64, CPU)",
+      "kind": "zip",
+      "version": "8.1.2",
+      "url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip",
+      "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+      "size": 109728040,
+      "license": "GPL-2.0-or-later",
+      "licenseUrl": "https://www.gyan.dev/ffmpeg/builds/",
+      "files": [
+        {
+          "from": "ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe",
+          "to": "ffmpeg/bin/ffmpeg.exe",
+          "sha256": "1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e",
+          "size": 101897728
+        },
+        {
+          "from": "ffmpeg-8.1.2-essentials_build/bin/ffprobe.exe",
+          "to": "ffmpeg/bin/ffprobe.exe",
+          "sha256": "b49ccc7c6547b141ad5a2f6ec69cc04323d7133d7704d70b331b904c63eecb07",
+          "size": 101692928
+        }
+      ]
+    },
+    {
+      "id": "whisper-cli",
+      "name": "whisper.cpp v1.9.2 CPU x64 Windows binary",
+      "kind": "zip",
+      "version": "v1.9.2",
+      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip",
+      "sha256": "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+      "size": 8194445,
+      "license": "MIT",
+      "licenseUrl": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.2/LICENSE",
+      "files": [
+        {
+          "from": "Release/whisper-cli.exe",
+          "to": "whisper/bin/whisper-cli.exe",
+          "sha256": "95e3c0b0e778ad9499eb0125f97c1dcf437dd9eb4ea77050b043574f93c2631d",
+          "size": 479232
+        },
+        {
+          "from": "Release/SDL2.dll",
+          "to": "whisper/bin/SDL2.dll",
+          "sha256": "de23db1694a3c7a4a735e7ecd3d214b2023cc2267922c6c35d30c7fc7370d677",
+          "size": 2500096
+        },
+        {
+          "from": "Release/ggml-base.dll",
+          "to": "whisper/bin/ggml-base.dll",
+          "sha256": "1482359d921b4c1b183d49db1d770f9b5e90d86a618b8b648d4845c2471ad6b0",
+          "size": 666624
+        },
+        {
+          "from": "Release/ggml-cpu-alderlake.dll",
+          "to": "whisper/bin/ggml-cpu-alderlake.dll",
+          "sha256": "d1c5411561361f7ce71ff8455ecf01f666f581b0608fa91a1dfe7d3fd6a25bd1",
+          "size": 809984
+        },
+        {
+          "from": "Release/ggml-cpu-cannonlake.dll",
+          "to": "whisper/bin/ggml-cpu-cannonlake.dll",
+          "sha256": "2ef36f05fa252ff4fdcb8d42ebce1ceba4f3d3de12b93bed15bdee6237dccd63",
+          "size": 853504
+        },
+        {
+          "from": "Release/ggml-cpu-cascadelake.dll",
+          "to": "whisper/bin/ggml-cpu-cascadelake.dll",
+          "sha256": "505899aaf3f99c5d714361640f561458ea97f8a09eb0614568a66bead2115cb0",
+          "size": 850944
+        },
+        {
+          "from": "Release/ggml-cpu-haswell.dll",
+          "to": "whisper/bin/ggml-cpu-haswell.dll",
+          "sha256": "f8cf2f35a06498d783d77fde42004dd54d2f8236b0d42ac323b94bba65a603c4",
+          "size": 811008
+        },
+        {
+          "from": "Release/ggml-cpu-icelake.dll",
+          "to": "whisper/bin/ggml-cpu-icelake.dll",
+          "sha256": "78ad143ee2e674d037b4840ef33b5748a0659762a26e0ae2b621c4f9451cbde8",
+          "size": 850944
+        },
+        {
+          "from": "Release/ggml-cpu-sandybridge.dll",
+          "to": "whisper/bin/ggml-cpu-sandybridge.dll",
+          "sha256": "ee47db7dc40fb30eca73e62a05306059c2c3c42aecddf2e8d6ad7e530069b815",
+          "size": 803328
+        },
+        {
+          "from": "Release/ggml-cpu-skylakex.dll",
+          "to": "whisper/bin/ggml-cpu-skylakex.dll",
+          "sha256": "164e2793897944a43ee071ce6c0b09018088bdf4dd8b14ac0755c58849cf8c50",
+          "size": 852992
+        },
+        {
+          "from": "Release/ggml-cpu-sse42.dll",
+          "to": "whisper/bin/ggml-cpu-sse42.dll",
+          "sha256": "7318a9a3b95a85b2453c437b274412bbbae89e5ecdf5babb19b99edc06ded063",
+          "size": 790016
+        },
+        {
+          "from": "Release/ggml-cpu-x64.dll",
+          "to": "whisper/bin/ggml-cpu-x64.dll",
+          "sha256": "af0f1c2f28ff9e3f472481dd969907bda85fa39d4fde17617d4bb0b389301b60",
+          "size": 794112
+        },
+        {
+          "from": "Release/ggml.dll",
+          "to": "whisper/bin/ggml.dll",
+          "sha256": "894c6237ee7849843213906a2b6a0b371aaa6234048d465f206d910ae846fafb",
+          "size": 67584
+        },
+        {
+          "from": "Release/parakeet.dll",
+          "to": "whisper/bin/parakeet.dll",
+          "sha256": "567c56a3c9b7383982e5777964f37f9f3cb930ef4a7ca907477e4e955f1cd0a4",
+          "size": 581632
+        },
+        {
+          "from": "Release/whisper.dll",
+          "to": "whisper/bin/whisper.dll",
+          "sha256": "792fc523c7ad16e6b9c348e30ad5e5f591165cbcf6a80ca8d0db02a38ce3eea2",
+          "size": 1368064
+        }
+      ]
+    },
+    {
+      "id": "whisper-small-model",
+      "name": "Whisper small multilingual model (ggml F16, segment timestamps, language auto)",
+      "kind": "file",
+      "version": "small@5359861c739e955e79d9a303bcbc70fb988958b1",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin",
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "size": 487601967,
+      "shaSource": "huggingface.co LFS blob oid (X-Repo-Commit 5359861c739e955e79d9a303bcbc70fb988958b1)",
+      "license": "MIT",
+      "licenseUrl": "https://huggingface.co/ggerganov/whisper.cpp/blob/5359861c739e955e79d9a303bcbc70fb988958b1/LICENSE",
+      "files": [
+        {
+          "from": "ggml-small.bin",
+          "to": "whisper/models/ggml-small.bin",
+          "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+          "size": 487601967
+        }
+      ]
+    },
+    {
+      "id": "tesseract",
+      "name": "Tesseract OCR 5.5.3 Windows x64 (UB-Mannheim build, silent NSIS install)",
+      "kind": "nsis",
+      "version": "5.5.3.20260724",
+      "url": "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+      "sha256": "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4",
+      "size": 26573224,
+      "installArgs": [
+        "/S"
+      ],
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/LICENSE",
+      "files": [
+        {
+          "from": "tesseract.exe",
+          "to": "tesseract/bin/tesseract.exe",
+          "sha256": "c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420",
+          "size": 1867784
+        },
+        {
+          "from": "libLerc.dll",
+          "to": "tesseract/bin/libLerc.dll",
+          "sha256": "6887fb5aeabf382a835a4cb693025e8d48d9c90e82ca4eae5d2d8ffb70c6ca9a",
+          "size": 804265
+        },
+        {
+          "from": "libarchive-13.dll",
+          "to": "tesseract/bin/libarchive-13.dll",
+          "sha256": "ddabddfdc98e1e1342ce4a7069fb4004de6c870d7bc9f4e95ef243dd18468e97",
+          "size": 972210
+        },
+        {
+          "from": "libb2-1.dll",
+          "to": "tesseract/bin/libb2-1.dll",
+          "sha256": "77bab532b5421d6cdddb96c3ae9a4bde144eb481ccaf243336c9f8c690a50987",
+          "size": 34653
+        },
+        {
+          "from": "libbrotlicommon.dll",
+          "to": "tesseract/bin/libbrotlicommon.dll",
+          "sha256": "ca7bc06ead80259971badf2cd0bfc688db9154dad65f139f49a38b4be9976f97",
+          "size": 143429
+        },
+        {
+          "from": "libbrotlidec.dll",
+          "to": "tesseract/bin/libbrotlidec.dll",
+          "sha256": "a142dc6cfa77cb907028aa9426f486f3d8de37855e8db2ae2894147908121881",
+          "size": 62461
+        },
+        {
+          "from": "libbz2-1.dll",
+          "to": "tesseract/bin/libbz2-1.dll",
+          "sha256": "b79cd3a7102e359ef6324e98966a67939e58ec2b651ae2847cae84a4dfa453f7",
+          "size": 100964
+        },
+        {
+          "from": "libcairo-2.dll",
+          "to": "tesseract/bin/libcairo-2.dll",
+          "sha256": "c474166543aed18b389b20122ca2741189504994dafd86cd5ed121e95bd82ce4",
+          "size": 1247164
+        },
+        {
+          "from": "libcurl-4.dll",
+          "to": "tesseract/bin/libcurl-4.dll",
+          "sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b",
+          "size": 1226963
+        },
+        {
+          "from": "libdatrie-1.dll",
+          "to": "tesseract/bin/libdatrie-1.dll",
+          "sha256": "2f784872e6404e57847201fe1e7e591bd5b5be4a319ef38ebcb36014ac7f385d",
+          "size": 35033
+        },
+        {
+          "from": "libdeflate.dll",
+          "to": "tesseract/bin/libdeflate.dll",
+          "sha256": "3f3fc3a73bc3623dc93b37bb321c484d3731d93006fd01c0495d15711826eb44",
+          "size": 99228
+        },
+        {
+          "from": "libexpat-1.dll",
+          "to": "tesseract/bin/libexpat-1.dll",
+          "sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153",
+          "size": 237603
+        },
+        {
+          "from": "libffi-8.dll",
+          "to": "tesseract/bin/libffi-8.dll",
+          "sha256": "390e4bf8abd037abd0e1dd1f311606715e43f8efe812e5c5b8775acf2cb2f21e",
+          "size": 40945
+        },
+        {
+          "from": "libfontconfig-1.dll",
+          "to": "tesseract/bin/libfontconfig-1.dll",
+          "sha256": "661c44249b9b06820554940a984b783b1daae9740a4a2eb265fe77205962486f",
+          "size": 502866
+        },
+        {
+          "from": "libfreetype-6.dll",
+          "to": "tesseract/bin/libfreetype-6.dll",
+          "sha256": "bbb3e6390ee229c867ef31f10e42a49a61a92e434a11d40c6139a2608ebc6194",
+          "size": 790651
+        },
+        {
+          "from": "libfribidi-0.dll",
+          "to": "tesseract/bin/libfribidi-0.dll",
+          "sha256": "84930fd86a3b46b62794a3bbaff21fbbaeaade5ff7cdc70be7f717ad29af87ed",
+          "size": 156403
+        },
+        {
+          "from": "libgcc_s_seh-1.dll",
+          "to": "tesseract/bin/libgcc_s_seh-1.dll",
+          "sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+          "size": 954773
+        },
+        {
+          "from": "libgif-7.dll",
+          "to": "tesseract/bin/libgif-7.dll",
+          "sha256": "5b3d837ccaab84683dd93fbaddf2d98e1a9f90e0ddb8ea73dc70157adb4d26f1",
+          "size": 45777
+        },
+        {
+          "from": "libgio-2.0-0.dll",
+          "to": "tesseract/bin/libgio-2.0-0.dll",
+          "sha256": "3dc3d4d477633cc9265b0796f9037a9fa387f4a1e8b7258890987a8c2c21eb0a",
+          "size": 1915159
+        },
+        {
+          "from": "libglib-2.0-0.dll",
+          "to": "tesseract/bin/libglib-2.0-0.dll",
+          "sha256": "43f2015fccfb10e22ecece61855d9ea21835f833b6533bc53ab77b54f4d66c34",
+          "size": 1566649
+        },
+        {
+          "from": "libgmodule-2.0-0.dll",
+          "to": "tesseract/bin/libgmodule-2.0-0.dll",
+          "sha256": "69cf44cda7756a6ec4a926e0cf9fe81721f05d65abfab88ff83004fa508bb0e7",
+          "size": 26748
+        },
+        {
+          "from": "libgobject-2.0-0.dll",
+          "to": "tesseract/bin/libgobject-2.0-0.dll",
+          "sha256": "acf20d5ddd3d2e4b4355576f5cf662c18f42746c50f43eaccc0596592616602a",
+          "size": 359475
+        },
+        {
+          "from": "libgraphite2.dll",
+          "to": "tesseract/bin/libgraphite2.dll",
+          "sha256": "063a9ad34a5ec87d038b4646660957395224ecf2cf707917256b7d251a7c5f57",
+          "size": 167155
+        },
+        {
+          "from": "libharfbuzz-0.dll",
+          "to": "tesseract/bin/libharfbuzz-0.dll",
+          "sha256": "54fb644a1143b3b81d494684f299aca9ff4b72134f12a7b1cfb2bd0f8fa9cef7",
+          "size": 1541957
+        },
+        {
+          "from": "libiconv-2.dll",
+          "to": "tesseract/bin/libiconv-2.dll",
+          "sha256": "7a282a854e01be726c6cccfe46f548c716aa45b3014818468253aaa4efbcd067",
+          "size": 1143148
+        },
+        {
+          "from": "libicudt78.dll",
+          "to": "tesseract/bin/libicudt78.dll",
+          "sha256": "47d19b605a28461d44e0d8c062c465e92c9edfb0244f023a8066f7337d317d0e",
+          "size": 33120806
+        },
+        {
+          "from": "libicuin78.dll",
+          "to": "tesseract/bin/libicuin78.dll",
+          "sha256": "af3341827897a41ab16667ee0699acdb2b0338c3bf4ecc7f510a324f18755422",
+          "size": 3186867
+        },
+        {
+          "from": "libicuuc78.dll",
+          "to": "tesseract/bin/libicuuc78.dll",
+          "sha256": "3186171e946552e2a5e371cd0bc68bf37bd6e229a85dbb0d3c40231cf0858b49",
+          "size": 1999466
+        },
+        {
+          "from": "libidn2-0.dll",
+          "to": "tesseract/bin/libidn2-0.dll",
+          "sha256": "9880b52651a0247640a2531d777380f7c35fac7efa7e3979b265ddcb78db8642",
+          "size": 247081
+        },
+        {
+          "from": "libintl-8.dll",
+          "to": "tesseract/bin/libintl-8.dll",
+          "sha256": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861",
+          "size": 298731
+        },
+        {
+          "from": "libjbig-0.dll",
+          "to": "tesseract/bin/libjbig-0.dll",
+          "sha256": "275a827ba6839d47cfdbe059db1b1b403a92ff26e2b76a29362915487868bef2",
+          "size": 62083
+        },
+        {
+          "from": "libjpeg-8.dll",
+          "to": "tesseract/bin/libjpeg-8.dll",
+          "sha256": "b564d34adaca83e73af0e2231719dd0198ea6cd074c64b2ba85bfd7182f27db7",
+          "size": 967968
+        },
+        {
+          "from": "libleptonica-6.dll",
+          "to": "tesseract/bin/libleptonica-6.dll",
+          "sha256": "1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1",
+          "size": 2850600
+        },
+        {
+          "from": "liblz4.dll",
+          "to": "tesseract/bin/liblz4.dll",
+          "sha256": "35f917274bca8f19677ba66f1b3cc3c83568c3249fc43215fc16e76439c8e856",
+          "size": 158649
+        },
+        {
+          "from": "liblzma-5.dll",
+          "to": "tesseract/bin/liblzma-5.dll",
+          "sha256": "dc9edb9bd83b0371fe68d96cb3e70cd17b7a5aba958326a18f8210cb812432e9",
+          "size": 191836
+        },
+        {
+          "from": "libopenjp2-7.dll",
+          "to": "tesseract/bin/libopenjp2-7.dll",
+          "sha256": "123587086cb1a25d2a338fb9b7c1d6bda10bf9062625b4f08c6a92b3d9cafe47",
+          "size": 519082
+        },
+        {
+          "from": "libpango-1.0-0.dll",
+          "to": "tesseract/bin/libpango-1.0-0.dll",
+          "sha256": "a7722692aa345f88cd0cb0296ad144e14b89a25c9926b5c3bac815331bba2127",
+          "size": 437317
+        },
+        {
+          "from": "libpangocairo-1.0-0.dll",
+          "to": "tesseract/bin/libpangocairo-1.0-0.dll",
+          "sha256": "f0efa65511bc8f35186e9adf4628fb9ed505b31435a93afe218ae6c348197954",
+          "size": 84876
+        },
+        {
+          "from": "libpangoft2-1.0-0.dll",
+          "to": "tesseract/bin/libpangoft2-1.0-0.dll",
+          "sha256": "adeeffc8438397998f449f8da1bd3832f4c031215415d7ed21109582dc6908a6",
+          "size": 112015
+        },
+        {
+          "from": "libpangowin32-1.0-0.dll",
+          "to": "tesseract/bin/libpangowin32-1.0-0.dll",
+          "sha256": "08a8ac72c621158d47eb713139e0ad9021c43bef1af01f1365a41fb7f33272c8",
+          "size": 112948
+        },
+        {
+          "from": "libpcre2-8-0.dll",
+          "to": "tesseract/bin/libpcre2-8-0.dll",
+          "sha256": "a499fb8a7eff453d6e4f0842576bc5171d40a1505d8f7f13fff6cee51b738a62",
+          "size": 717955
+        },
+        {
+          "from": "libpixman-1-0.dll",
+          "to": "tesseract/bin/libpixman-1-0.dll",
+          "sha256": "55ce45825eb8e825c635416171be4736147a6b0b690469f545d8c4ae8e85b4a3",
+          "size": 740378
+        },
+        {
+          "from": "libpng16-16.dll",
+          "to": "tesseract/bin/libpng16-16.dll",
+          "sha256": "3737838ee8d6b893df7bdabf7439775371a57dce7e17ee6b35586023c64bd9ab",
+          "size": 264269
+        },
+        {
+          "from": "libpsl-5.dll",
+          "to": "tesseract/bin/libpsl-5.dll",
+          "sha256": "b31fc70eda598a39b65fe2736d815518db0652d641346f75eac40c2a0499b058",
+          "size": 105304
+        },
+        {
+          "from": "libsharpyuv-0.dll",
+          "to": "tesseract/bin/libsharpyuv-0.dll",
+          "sha256": "ab0c9f61dc69b6bcdff1011e215f8d5fd6e5096aba9be3386ab87f217fbbeffe",
+          "size": 53757
+        },
+        {
+          "from": "libssh2-1.dll",
+          "to": "tesseract/bin/libssh2-1.dll",
+          "sha256": "ee7fe3e749859334c99e9261689481dd879811122598d22585421f95d29fc7ae",
+          "size": 271318
+        },
+        {
+          "from": "libstdc++-6.dll",
+          "to": "tesseract/bin/libstdc++-6.dll",
+          "sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+          "size": 26390974
+        },
+        {
+          "from": "libtesseract-5.dll",
+          "to": "tesseract/bin/libtesseract-5.dll",
+          "sha256": "54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46",
+          "size": 3501048
+        },
+        {
+          "from": "libthai-0.dll",
+          "to": "tesseract/bin/libthai-0.dll",
+          "sha256": "5d741974fdec19e0f6cddbcdb539428af0c7392740a056634714c2884157fdb9",
+          "size": 72294
+        },
+        {
+          "from": "libtiff-6.dll",
+          "to": "tesseract/bin/libtiff-6.dll",
+          "sha256": "47fe69165bf8e211aaa84224f51f145dc894e330fe7ca167f7c99419e0c8c894",
+          "size": 625178
+        },
+        {
+          "from": "libunistring-5.dll",
+          "to": "tesseract/bin/libunistring-5.dll",
+          "sha256": "b91e2850d3668d4931056a8f4d35783b8ec3eea3735485108a936a072cd16071",
+          "size": 2251328
+        },
+        {
+          "from": "libwebp-7.dll",
+          "to": "tesseract/bin/libwebp-7.dll",
+          "sha256": "c6c21a10f8cfe13270832e64640b82709e1d87b956b5f15af435a6c25acd6bbf",
+          "size": 749724
+        },
+        {
+          "from": "libwebpmux-3.dll",
+          "to": "tesseract/bin/libwebpmux-3.dll",
+          "sha256": "2c8a2e9d7901ec65330f31f9989c2a07ef0506e903b485fcd8b241a6bab9b88f",
+          "size": 82858
+        },
+        {
+          "from": "libwinpthread-1.dll",
+          "to": "tesseract/bin/libwinpthread-1.dll",
+          "sha256": "6a661d5846d80a91394dbb9b2dab87ba3cc705eac80ad45fe73677bff70cd6d2",
+          "size": 65955
+        },
+        {
+          "from": "libzstd.dll",
+          "to": "tesseract/bin/libzstd.dll",
+          "sha256": "b95c223a9548a9ecf51377c962e0bc8f0c51eb0c6f67a296dbc885996f0dd40d",
+          "size": 1218273
+        },
+        {
+          "from": "zlib1.dll",
+          "to": "tesseract/bin/zlib1.dll",
+          "sha256": "93e9243a44c29200eeacaf9658efe2558581770e4b11ca4b500e18e424a6e3b5",
+          "size": 128488
+        }
+      ]
+    },
+    {
+      "id": "tessdata-eng",
+      "name": "Tesseract English traineddata (best)",
+      "kind": "file",
+      "version": "tessdata@ced78752cc61322fb554c280d13360b35b8684e4",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata/ced78752cc61322fb554c280d13360b35b8684e4/eng.traineddata",
+      "sha256": "daa0c97d651c19fba3b25e81317cd697e9908c8208090c94c3905381c23fc047",
+      "size": 23466654,
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/tesseract-ocr/tessdata/blob/main/LICENSE",
+      "files": [
+        {
+          "from": "eng.traineddata",
+          "to": "tesseract/tessdata/eng.traineddata",
+          "sha256": "daa0c97d651c19fba3b25e81317cd697e9908c8208090c94c3905381c23fc047",
+          "size": 23466654
+        }
+      ]
+    },
+    {
+      "id": "tessdata-chi-sim",
+      "name": "Tesseract Simplified Chinese traineddata (best)",
+      "kind": "file",
+      "version": "tessdata@ced78752cc61322fb554c280d13360b35b8684e4",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata/ced78752cc61322fb554c280d13360b35b8684e4/chi_sim.traineddata",
+      "sha256": "fc05d89ab31d8b4e226910f16a8bcbf78e43bae3e2580bb5feefd052efdab363",
+      "size": 44366093,
+      "license": "Apache-2.0",
+      "licenseUrl": "https://github.com/tesseract-ocr/tessdata/blob/main/LICENSE",
+      "files": [
+        {
+          "from": "chi_sim.traineddata",
+          "to": "tesseract/tessdata/chi_sim.traineddata",
+          "sha256": "fc05d89ab31d8b4e226910f16a8bcbf78e43bae3e2580bb5feefd052efdab363",
+          "size": 44366093
+        }
+      ]
+    }
+  ]
+}

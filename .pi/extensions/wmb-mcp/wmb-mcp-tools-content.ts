@@ -147,7 +147,7 @@ const saveCoreVersion: ToolDefinition = {
 const savePlatformVersion: ToolDefinition = {
   name: 'wmb_save_platform_version',
   label: '保存 WMB 平台版本',
-  description: '把 X、小红书或公众号文案保存为指定内容项目和核心版本下的平台版本；不执行最终发布。',
+  description: '把 X、小红书、公众号或知乎文案保存为指定内容项目和核心版本下的平台版本；不执行最终发布。',
   parameters: {
     type: 'object',
     properties: {
@@ -155,7 +155,7 @@ const savePlatformVersion: ToolDefinition = {
       requestId: { type: 'string' },
       projectId: { type: 'string' },
       contentVersionId: { type: 'string' },
-      platform: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat'] },
+      platform: { type: 'string', enum: ['x', 'xiaohongshu', 'wechat', 'zhihu'] },
       format: { type: 'string' },
       title: { type: 'string' },
       body: { type: 'string' },

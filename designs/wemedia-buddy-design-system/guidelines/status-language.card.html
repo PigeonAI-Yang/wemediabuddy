@@ -1,0 +1,40 @@
+<!-- @dsCard group="Guidelines" viewport="700x260" name="StatusLanguage" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Status Language</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
+  .idle { color: var(--muted); background: var(--tag-bg); }
+  .warn { color: var(--status-running); background: var(--status-running-soft); }
+  .needs { color: var(--info); background: color-mix(in srgb, var(--info) 12%, transparent); }
+  .ok { color: var(--success); background: var(--success-soft); }
+  .bad { color: var(--danger); background: var(--danger-soft); }
+  .active { color: var(--accent-soft); background: var(--accent-faint); }
+  .warn .dot { background: var(--status-running); } .needs .dot { background: var(--info); }
+  .ok .dot { background: var(--success); } .bad .dot { background: var(--danger); } .active .dot { background: var(--accent); }
+  .note { margin-top: 12px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--tag-bg); color: var(--muted); font-size: 12.5px; }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Status — 点 + 词，永不只靠颜色</h1>
+<p>状态必须点/图标与文字双重编码（色盲与明暗主题下都成立）。语义词表：ok=success、warn=status-running、needs-user=info、bad=danger、active=accent、idle=muted。</p>
+<div class="row">
+  <span class="pill idle"><i class="dot"></i>空闲</span>
+  <span class="pill warn"><i class="dot"></i>扫描中</span>
+  <span class="pill needs"><i class="dot"></i>等你批</span>
+  <span class="pill ok"><i class="dot"></i>已完成</span>
+  <span class="pill bad"><i class="dot"></i>失败可重试</span>
+  <span class="pill active"><i class="dot"></i>运行中</span>
+</div>
+<p class="note">异步区域用 <code>role="status"</code> 礼貌播报；机器码（jobId/intent/路径/版本）只出现在「技术详情」折叠区，默认界面说人话。</p>
+</body>
+</html>

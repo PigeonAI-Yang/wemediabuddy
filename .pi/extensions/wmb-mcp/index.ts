@@ -7,7 +7,8 @@ import { workspaceTools } from './wmb-mcp-tools-workspaces.ts';
 import { intelligenceChannelTools } from './wmb-mcp-tools-intelligence-channels.ts';
 import { managerTools } from './wmb-mcp-tools-manager.ts';
 import { researchTools } from './wmb-mcp-tools-research.ts';
+import { wikiTools } from './wmb-mcp-tools-wiki.ts';
 
 export default function (pi: { registerTool(tool: ToolDefinition): void }) {
-  for (const tool of [...coreTools, ...contentTools, ...xListTools, ...xhsTools, ...workspaceTools, ...intelligenceChannelTools, ...managerTools, ...researchTools]) pi.registerTool(tool);
+  for (const tool of [...coreTools, ...contentTools, ...xListTools, ...xhsTools, ...workspaceTools, ...intelligenceChannelTools, ...managerTools, ...researchTools, ...wikiTools]) pi.registerTool(tool);
 }

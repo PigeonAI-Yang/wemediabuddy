@@ -79,15 +79,15 @@ function meta(requestId, workspaceId = 'ws-a') {
     VALUES (?, 'canvas-1', 'cn-1', 'cn-2', 'custom', ?, ?)`).run(canvasRelationId, canvasStamp, canvasStamp);
   const source = upsertSource(fixture, { originalUrl: 'https://legacy.example/1', title: '旧资料' });
 
-  // 第二次打开：migrateDatabase 只补 v56（幂等，不重跑已应用版本）
+  // 第二次打开：migrateDatabase 补齐剩余全部迁移（幂等，不重跑已应用版本）
   const migrated = migrateDatabase(directoryPath);
-  check('migrateDatabase 补齐 v56-v58', migrated.prepare('SELECT max(version) AS m FROM schema_migrations').get().m === 58);
+  check('migrateDatabase 补齐全部迁移', migrated.prepare('SELECT max(version) AS m FROM schema_migrations').get().m === migrations.length);
   check('画布 knowledge_relations 仍可读（无表名冲突）', migrated.prepare('SELECT relation_type AS t FROM knowledge_relations WHERE id = ?').get(canvasRelationId).t === 'custom');
   check('画布关系列语义未变（from_node_id）', migrated.prepare('SELECT from_node_id AS f FROM knowledge_relations WHERE id = ?').get(canvasRelationId).f === 'cn-1');  check('旧资料保留', migrated.prepare('SELECT id FROM source_items WHERE id = ?').get(source.id) !== undefined);
   check('正式关系表为 knowledge_formal_relations', migrated.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='knowledge_formal_relations'").get().c === 1);
-  check('迁移总数 = 58', count(migrated, 'schema_migrations') === 58);
+  check('迁移总数 = migrations.length', count(migrated, 'schema_migrations') === migrations.length);
   const reopened = migrateDatabase(directoryPath);
-  check('重开幂等', count(reopened, 'schema_migrations') === 58);
+  check('重开幂等', count(reopened, 'schema_migrations') === migrations.length);
   reopened.close();
   migrated.close();
   fixture.close();

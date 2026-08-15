@@ -20,7 +20,7 @@ const CONTEXT_LENGTH = 40;
 const REPLACEMENT_DEVIATION_BOUND = 48;
 
 const RESOLVED_REASONS: readonly StudioAnnotationResolveReason[] = ['edited', 'deleted', 'ambiguous', 'user_removed'];
-const PLATFORMS: readonly StudioPlatform[] = ['x', 'xiaohongshu', 'wechat'];
+const PLATFORMS: readonly StudioPlatform[] = ['x', 'xiaohongshu', 'wechat', 'zhihu'];
 
 // ---------------------------------------------------------------------------
 // 纯锚点算法（可用固定文本独立验证）

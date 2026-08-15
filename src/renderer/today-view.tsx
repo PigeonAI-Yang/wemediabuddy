@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SourceBodyCacheRecord } from '../main/source-body-cache';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import type { IntelligenceChannelsSummary } from '../main/intelligence-channels';
+import type { SourceMediaOverview } from '../shared/source-media';
+import type { PiFocusObject } from './app-types';
 import { SourceMark } from './source-mark';
 import {
-  MAX_SELECTED_SOURCES, Opportunity, SourceList,
-  bodyToSelectedFields, formatSourcePublishedAt, isHeartbeatSource,
+  MAX_SELECTED_SOURCES, Opportunity,
+  formatSourcePublishedAt, isHeartbeatSource,
   priorityGrade, sortFeedSources, sourceOriginLabel, type SelectedTodaySource
 } from './today-view-parts';
 import { FermentingRail, TodaySourceDetail } from './today-view-panels';
@@ -50,8 +53,15 @@ const RESEARCH_PARENT_ROLE_LABEL: Readonly<Record<'writer' | 'planner' | 'librar
   planner: '策划',
   librarian: '资料员'
 });
+export type TodayFermentingSelection = {
+  id: string;
+  objectType: string;
+  objectId: string;
+  title: string;
+};
 
-export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
+
+export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, onFocusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void; openStudio: (projectId?: string) => void;
   openLibrary: (sourceId?: string) => void;
@@ -59,14 +69,15 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   openTopic?: (topicId: string) => void;
   selectedItems: TodayPlanItem[]; onSelectionChange: (items: TodayPlanItem[]) => void;
   selectedSources: SelectedTodaySource[]; onSelectedSourcesChange: (sources: SelectedTodaySource[]) => void;
-  fermentSelectedItem?: any | null; onFermentSelectedItemChange?: (item: any | null) => void;
+  fermentSelectedItem?: TodayFermentingSelection | null; onFermentSelectedItemChange?: (item: TodayFermentingSelection | null) => void;
   planDate: string;
-  onStatusChange?: (status: { text: string; running?: boolean } | null) => void; aiSourcePresentation: boolean;
+  onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
+  onFocusChange?: (focus: PiFocusObject | null) => void;
+  aiSourcePresentation: boolean;
   intelligenceChannels: IntelligenceChannelsSummary | null; piConfigured: boolean;
   openProposals?: () => void;
 }): React.JSX.Element {
   const cachedRun = readTodayRunCache(planDate);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [running, setRunning] = useTodayRunningTransition(Boolean(cachedRun?.running));
   const [task, setTask] = useState<DailyTaskSnapshot | null>(cachedRun?.task ?? null);
   const [controlPending, setControlPending] = useState<'save_partial' | 'cancel' | null>(null);
@@ -81,7 +92,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const pool = today?.pool ?? null;
   const todayItems = todayPlan?.items ?? [];
   const pendingTopicMaintenance = today?.topicMaintenance?.pending ?? 0;
-  // 主席：pool > 今日非空 plan > 最近非空 plan；空 current 运行记录不得掏空主区。
+  // 主席只消费跨日期未终结 pool；历史 plan 不得绕过终态过滤后复活。
   const displayItems = resolveChairDisplayItems(pool, todayPlan, latestPlan);
   const primary = displayItems[0] ?? null;
   const sssCount = todayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
@@ -91,10 +102,14 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const [researchBusyId, setResearchBusyId] = useState<string | null>(null);
   const [researchMessage, setResearchMessage] = useState('');
   const [detailSource, setDetailSource] = useState<TodaySource | null>(null);
-  const [detailBody, setDetailBody] = useState<Awaited<ReturnType<typeof window.wmb.getSourceBodyCache>>>(null);
+  const [detailBody, setDetailBody] = useState<SourceBodyCacheRecord | null>(null);
   const [detailBodyLoading, setDetailBodyLoading] = useState(false);
   const [detailBodyError, setDetailBodyError] = useState('');
+  const [detailMedia, setDetailMedia] = useState<SourceMediaOverview | null>(null);
+  const [detailMediaLoading, setDetailMediaLoading] = useState(false);
+  const [detailMediaError, setDetailMediaError] = useState('');
   const feedListRef = useRef<HTMLDivElement | null>(null);
+  const detailReturnSourceIdRef = useRef<string | null>(null);
   const sourcesAreToday = today?.sourcesDate === planDate;
   const todaySourcesTotal = sourcesAreToday ? (today?.sourcesTotal ?? sources.length) : 0;
 
@@ -222,6 +237,49 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   }, [detailSource?.id]);
 
   useEffect(() => {
+    if (!onFocusChange) return;
+    if (!detailSource) {
+      onFocusChange(null);
+      return;
+    }
+    const bodyStatus = detailBody?.status ?? 'none';
+    const bodyExcerpt = bodyStatus === 'ready' && detailBody?.extractedText?.trim()
+      ? detailBody.extractedText.slice(0, 6000)
+      : null;
+    onFocusChange({
+      type: 'source',
+      id: detailSource.id,
+      title: detailSource.title,
+      summary: detailSource.summary,
+      url: detailSource.canonicalUrl,
+      bodyStatus,
+      bodyExcerpt,
+      bodyChars: bodyStatus === 'ready' ? detailBody?.extractedChars ?? bodyExcerpt?.length ?? 0 : 0,
+      meta: {
+        author: detailSource.author,
+        publishedAt: detailSource.publishedAt,
+        collectedAt: detailSource.collectedAt
+      }
+    });
+  }, [detailSource, detailBody, onFocusChange]);
+
+  // WMB-5254：当前来源的存档媒体读模型（revision 冻结集合；只读，不写库）。
+  useEffect(() => {
+    if (!detailSource) { setDetailMedia(null); setDetailMediaError(''); setDetailMediaLoading(false); return; }
+    let active = true;
+    setDetailMediaLoading(true);
+    setDetailMediaError('');
+    void window.wmb.getSourceMediaOverview({ sourceId: detailSource.id }).then((value) => {
+      if (!active) return;
+      setDetailMedia(value);
+    }).catch((error) => {
+      if (!active) return;
+      setDetailMediaError(error instanceof Error ? error.message : String(error));
+    }).finally(() => { if (active) setDetailMediaLoading(false); });
+    return () => { active = false; };
+  }, [detailSource?.id]);
+
+  useEffect(() => {
     const load = () => {
       void (async () => {
         try {
@@ -325,22 +383,29 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     if (selectedSources.length >= MAX_SELECTED_SOURCES) return;
     onSelectedSourcesChange([...selectedSources, { ...source, bodyStatus: 'none', bodyExcerpt: null, bodyChars: 0 }]);
   };
-  const attachBodyToSelection = async (source: TodaySource, force = false) => {
-    setDetailBodyLoading(true);
-    setDetailBodyError('');
-    try {
-      const body = await window.wmb.fetchSourceBody({ sourceId: source.id, force, maxChars: 20000 });
-      setDetailBody(body);
-      const fields = bodyToSelectedFields(body);
-      const exists = selectedSources.some((item) => item.id === source.id);
-      if (exists) onSelectedSourcesChange(selectedSources.map((item) => item.id === source.id ? { ...item, ...source, ...fields } : item));
-      else if (selectedSources.length < MAX_SELECTED_SOURCES) onSelectedSourcesChange([...selectedSources, { ...source, ...fields }]);
-    } catch (error) {
-      setDetailBodyError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setDetailBodyLoading(false);
-    }
+  const openSourceDetail = (source: TodaySource) => {
+    detailReturnSourceIdRef.current = source.id;
+    setDetailSource(source);
   };
+  const closeSourceDetail = () => {
+    const sourceId = detailReturnSourceIdRef.current;
+    setDetailSource(null);
+    window.requestAnimationFrame(() => {
+      if (!sourceId) return;
+      document.querySelector<HTMLElement>(`[data-source-open="${CSS.escape(sourceId)}"]`)?.focus();
+    });
+  };
+
+  useEffect(() => {
+    if (!detailSource) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeSourceDetail();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [detailSource?.id]);
 
   const startIntelligence = async () => {
     if (running || startingRef.current) return;
@@ -418,7 +483,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   };
 
   const onSecondary = (id: TodaySecondaryId) => {
-    if (id === 'view_sources') { setSourcesOpen(true); return; }
+    if (id === 'view_sources') { openLibrary(); return; }
     if (id === 'refresh') { refresh(); return; }
     if (id === 'open_studio') { openStudio(); return; }
     if (id === 'continue') { void startIntelligence(); return; }
@@ -502,7 +567,18 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
       onSelectedSourcesChange([]);
     }
   }}>
-    <section className="today-main">
+    {detailSource ? <TodaySourceDetail
+      onBack={closeSourceDetail}
+      openLibrary={openLibrary}
+      aiSourcePresentation={aiSourcePresentation}
+      detailSource={detailSource}
+      detailBody={detailBody}
+      detailBodyLoading={detailBodyLoading}
+      detailBodyError={detailBodyError}
+      detailMedia={detailMedia}
+      detailMediaLoading={detailMediaLoading}
+      detailMediaError={detailMediaError}
+    /> : <section className="today-main">
       <TodayCommandBar
         view={runView}
         taskId={task?.id}
@@ -549,12 +625,11 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
                         >
                           <SourceMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation} avatarUrl={source.avatarUrl}/>
                           <div className="feed-main">
-                            <div className="feed-title" title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) setDetailSource(source); }}>{source.title}</div>
-                            <div className="feed-sub" title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) setDetailSource(source); }}>
+                            <div className="feed-title" role="button" tabIndex={copy === 0 ? 0 : -1} data-source-open={copy === 0 ? source.id : undefined} title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) openSourceDetail(source); }} onKeyDown={(event) => { if (copy === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); openSourceDetail(source); } }}>{source.title}</div>
+                            <div className="feed-sub" role="button" tabIndex={copy === 0 ? 0 : -1} title="打开资料详情" onClick={(event) => { event.stopPropagation(); if (copy === 0) openSourceDetail(source); }} onKeyDown={(event) => { if (copy === 0 && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); openSourceDetail(source); } }}>
                               <span>{sourceOriginLabel({ ...source, pinned: pinnedSourceIds.has(source.id) })}</span>
                               <span>·</span>
                               <span>{formatSourcePublishedAt(source.publishedAt) ?? formatSourcePublishedAt(source.collectedAt) ?? '时间未知'}</span>
-                              {selected && selectedSources.find((item) => item.id === source.id)?.bodyStatus === 'ready' ? <span className="feed-body-pill">含正文</span> : null}
                             </div>
                           </div>
                         </div>;
@@ -600,9 +675,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         </section>
       ) : null}
       <FermentingRail fermenting={fermenting} createFromCarry={createFromCarry} selectedId={fermentSelectedItem?.id ?? null} onSelectItem={onFermentSelectedItemChange}/>
-    </section>
-    <button className={`drawer-backdrop${sourcesOpen || detailSource ? ' open' : ''}`} aria-label="关闭侧栏" onClick={() => { setSourcesOpen(false); setDetailSource(null); }}/>
-    <SourceList sources={sources} sourceDate={today?.sourcesDate ?? null} planDate={planDate} open={sourcesOpen} close={() => setSourcesOpen(false)} openLibrary={() => openLibrary()} aiSourcePresentation={aiSourcePresentation}/>
-    {detailSource ? <TodaySourceDetail detailSource={detailSource} detailBody={detailBody} detailBodyLoading={detailBodyLoading} detailBodyError={detailBodyError} selectedSources={selectedSources} onClose={() => setDetailSource(null)} onToggleSelection={toggleSourceSelection} onAttachBody={attachBodyToSelection} openLibrary={openLibrary}/> : null}
+    </section>}
   </div>;
 }

@@ -75,10 +75,20 @@ export const QUERY_WRITEBACK_ERROR_CODES = Object.freeze([
 
 export const QUERY_WRITEBACK_MANIFEST_KEY = 'wmb_query_writeback' as const;
 
+/** T-BR-2：每类冻结读取版本上限（manifest 与输入双面 fail-closed；超限零写）。 */
+export const QUERY_WRITEBACK_MAX_READ_PER_KIND = 64;
+
 export type QueryWritebackClassification = 'restatement' | 'new_synthesis' | 'user_experience';
 
 const CLASSIFICATIONS: Readonly<Record<string, true>> = Object.freeze({
   restatement: true, new_synthesis: true, user_experience: true
+});
+
+/** 回执摘要中的分类用户语言（仅展示，不影响判定）。 */
+const CLASSIFICATION_SUMMARY_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  restatement: '纯复述',
+  new_synthesis: '新综合',
+  user_experience: '用户经验'
 });
 
 const INSIGHT_KIND: NoteKind = 'insight';
@@ -142,6 +152,10 @@ export function normalizeQueryWritebackManifest(raw: unknown): QueryWritebackMan
   const readNoteVersionIds = asStringArray(value.readNoteVersionIds);
   const readEvidenceIds = asStringArray(value.readEvidenceIds);
   if (readWikiVersionIds === null || readNoteVersionIds === null || readEvidenceIds === null) return null;
+  // T-BR-2：每类冻结读取版本上限（超限清单非法 → 零写，不猜测截断）。
+  if (readWikiVersionIds.length > QUERY_WRITEBACK_MAX_READ_PER_KIND
+    || readNoteVersionIds.length > QUERY_WRITEBACK_MAX_READ_PER_KIND
+    || readEvidenceIds.length > QUERY_WRITEBACK_MAX_READ_PER_KIND) return null;
 
   const synthesisRaw = value.synthesis ?? null;
   const experienceRaw = value.experience ?? null;
@@ -357,7 +371,7 @@ function buildReceipt(
     id: deterministicId('qrec', input.requestId),
     triggerType: 'query',
     requestId: input.requestId,
-    summary: `Query 写回（${input.classification}）：${summary}读取冻结版本 wiki=${input.readWikiVersionIds?.length ?? 0} / note=${input.readNoteVersionIds?.length ?? 0} / evidence=${input.readEvidenceIds?.length ?? 0}。`,
+    summary: `Pi 对话（${CLASSIFICATION_SUMMARY_LABELS[input.classification] ?? input.classification}）：${summary}参考当时主题 ${input.readWikiVersionIds?.length ?? 0} / 结论 ${input.readNoteVersionIds?.length ?? 0} / 证据 ${input.readEvidenceIds?.length ?? 0}。`,
     counts: { ...counts },
     affectedSyntheses: extras.affectedSyntheses ?? [],
     wikiPageVersions: extras.wikiPageVersions ?? [],
@@ -696,6 +710,12 @@ export function prepareQueryWriteback(database: DatabaseSync, rawInput: Knowledg
   if (!CLASSIFICATIONS[input.classification]) writebackError('QUERY_WRITEBACK_INPUT_INVALID', `非法 classification：${String(input.classification)}。`);
   const scope = input.scope ?? 'global';
   if (scope !== 'global' && !scope.startsWith('lane:')) writebackError('QUERY_WRITEBACK_INPUT_INVALID', 'scope 必须为 global 或 lane:<key>。');
+  // T-BR-2：每类冻结读取版本上限（输入面 fail-closed；超限零写，不截断不猜测）。
+  if ((input.readWikiVersionIds?.length ?? 0) > QUERY_WRITEBACK_MAX_READ_PER_KIND
+    || (input.readNoteVersionIds?.length ?? 0) > QUERY_WRITEBACK_MAX_READ_PER_KIND
+    || (input.readEvidenceIds?.length ?? 0) > QUERY_WRITEBACK_MAX_READ_PER_KIND) {
+    writebackError('QUERY_WRITEBACK_INPUT_INVALID', `冻结读取版本超限（每类最多 ${QUERY_WRITEBACK_MAX_READ_PER_KIND} 个），零写。`);
+  }
 
   // 同问幂等：同 requestId 已持久化 Artifact → 零写返回既有记录（首次处理为准）。
   const prior = getQueryArtifactByRequest(database, input.requestId);

@@ -326,7 +326,7 @@ h1, h2, h3, p { text-wrap: pretty; }
   position: relative; z-index: 20; grid-row: 2; display: flex; min-width: 0; min-height: 0; flex-direction: column;
   border-left: 1px solid var(--border-soft); background: var(--panel-bg); overflow: visible;
 }
-.pi-resize-handle { position: absolute; z-index: 24; top: 0; bottom: 0; left: -5px; width: 10px; cursor: col-resize; touch-action: none; }
+.pi-resize-handle { position: absolute; z-index: 1001; top: 0; bottom: 0; left: -5px; width: 10px; cursor: col-resize; touch-action: none; }
 .pi-resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; transition: background 140ms ease; }
 .pi-resize-handle:hover::after, body.resizing-pi .pi-resize-handle::after { background: var(--accent); }
 body.resizing-pi { cursor: col-resize; user-select: none; }
@@ -383,8 +383,12 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  pointer-events: auto;
+  /* 展开态 rail 不拦截指针：resize 手柄（z-index 1001）必须可拖；折叠按钮自身保持可点 */
+  pointer-events: none;
   background: transparent;
+}
+.pi-dock-toggle-rail:not(.is-collapsed) .pi-dock-toggle {
+  pointer-events: auto;
 }
 .pi-dock-toggle-rail.is-collapsed {
   position: fixed;
@@ -395,6 +399,7 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
   width: 18px;
   z-index: 1000;
   justify-content: flex-end;
+  pointer-events: auto;
 }
 .pi-dock-toggle {
   position: relative;
@@ -443,6 +448,7 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 }
 .pi-dock-toggle-rail:hover .pi-dock-toggle,
 .pi-dock-toggle-rail:focus-within .pi-dock-toggle,
+.pi-dock-toggle:hover,
 .pi-dock-toggle:focus-visible {
   opacity: 1;
   pointer-events: auto;

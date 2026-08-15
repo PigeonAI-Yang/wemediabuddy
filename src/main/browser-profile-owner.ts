@@ -14,6 +14,7 @@ import { migrateLegacyBrowserProfile } from './browser-profile-migration.ts';
 import { assertBrowserProfileStopped } from './browser-profile-process-guard.ts';
 import { identifyXAccount } from './platforms/x.ts';
 import { identifyWechatAccount } from './platforms/wechat.ts';
+import { identifyZhihuAccount } from './platforms/zhihu.ts';
 import {
   markWorkspaceBrowserBindingNeedsUser,
   markWorkspaceBrowserBindingVerified,
@@ -23,7 +24,7 @@ import {
 } from './workspace-browser-binding.ts';
 import type { AccountIdentity } from './accounts.ts';
 
-export type OwnerBrowserPlatform = Extract<AccountIdentity['platform'], 'x' | 'wechat'>;
+export type OwnerBrowserPlatform = Extract<AccountIdentity['platform'], 'x' | 'wechat' | 'zhihu'>;
 export type OwnerBrowserCommand = {
   workspaceId: string;
   expectedBindingRevision: number;
@@ -69,7 +70,9 @@ export function createBrowserProfileOwner(dependencies: OwnerDependencies): Brow
     const runtime = await startBrowser(profile, { mode: 'visible' });
     dependencies.setBrowser(runtime);
     // Keep the managed browser open on failure so QR/login pages remain visible.
-    return platform === 'x' ? identifyXAccount(runtime.cdpUrl) : identifyWechatAccount(runtime.cdpUrl);
+    return platform === 'x' ? identifyXAccount(runtime.cdpUrl)
+      : platform === 'wechat' ? identifyWechatAccount(runtime.cdpUrl)
+        : identifyZhihuAccount(runtime.cdpUrl);
   };
 
   return {

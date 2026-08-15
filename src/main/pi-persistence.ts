@@ -69,14 +69,14 @@ function settleLatestAssistant(messages: PiChatMessage[], settlement: PiConversa
   }
   if (finalText) {
     const renderedText = segments.filter((segment) => segment.kind === 'text').map((segment) => segment.text).join('');
-    if (!renderedText.endsWith(finalText)) {
-      let lastTextIndex = -1;
-      for (let index = segments.length - 1; index >= 0; index -= 1) {
-        if (segments[index]?.kind === 'text') { lastTextIndex = index; break; }
-      }
-      const partial = lastTextIndex >= 0 ? segments[lastTextIndex]!.text : '';
-      if (lastTextIndex >= 0 && finalText.startsWith(partial)) segments[lastTextIndex] = { kind: 'text', text: finalText };
-      else segments.push({ kind: 'text', text: finalText });
+    // settlement 文本权威：围栏剥离/注解追加/续写收尾都会给出最终可见文本；
+    // 只要与当前流式文本不一致，就把文本段整体替换为 finalText（保留 thinking 段），
+    // 绝不把最终文本追加到原始流式文本之后（否则协议围栏会泄漏到用户可见正文）。
+    if (renderedText !== finalText) {
+      segments = [
+        ...segments.filter((segment) => segment.kind !== 'text').map((segment) => ({ ...segment })),
+        { kind: 'text', text: finalText }
+      ];
     }
   }
   const text = segments.filter((segment) => segment.kind === 'text').map((segment) => segment.text).join('') || finalText || current.text;

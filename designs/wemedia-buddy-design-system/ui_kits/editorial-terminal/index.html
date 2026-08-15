@@ -1,0 +1,569 @@
+<!-- @startingPoint section="WeMediaBuddy" subtitle="墨夜主编台：工作台、阅读页与 Pi 非挤压浮层" viewport="1440x880" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Editorial Terminal — WeMediaBuddy UI Kit</title>
+<link rel="stylesheet" href="../../styles.css"/>
+<style>
+  /* ============================================================
+   * Editorial Terminal — interactive starting point.
+   * All colors/spacing/motion via tokens; nothing below is a
+   * product component, only kit scaffolding over ds-* primitives.
+   * ============================================================ */
+  body { margin: 0; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  #demo-root { height: 100vh; }
+  .edt-shell { position: relative; }
+  .edt-shell .ds-brand .wmb-creature-mark { width: 22px; height: 22px; }
+  .edt-shell .ds-titlebar-actions .ds-icon-button { width: 46px; height: 100%; border: 0; border-radius: 0; background: transparent; }
+  .edt-shell .ds-titlebar-actions .ds-icon-button:hover:not(:disabled) { background: var(--surface-hover); }
+  .edt-shell .ds-titlebar-actions .ds-window-close:hover { background: var(--danger); color: var(--accent-ink); }
+
+  /* Pi = non-resizing overlay: opening never subtracts from the
+     workspace column (WMB-5258 §6). */
+  .edt-shell.ds-shell--pi-overlay { --pi-width: 0px; }
+  .edt-shell.ds-shell--pi-overlay .ds-pi-dock {
+    position: absolute;
+    inset: var(--topbar-height) 0 var(--status-height) auto;
+    width: var(--pi-open-width);
+    max-width: 100%;
+    z-index: 1500;
+    border-left: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-modal);
+    animation: edt-pi-in var(--dur-expand) var(--ease-out-expo);
+  }
+  @keyframes edt-pi-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .edt-shell.ds-shell--pi-overlay .ds-pi-dock { animation: none; } }
+
+  .edt-room { height: 100%; }
+  .edt-room .ds-page { padding: var(--page-space); }
+  .edt-stack { display: grid; gap: 8px; align-content: start; }
+  .edt-side { display: grid; gap: 12px; align-content: start; }
+  .edt-card { padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+  .edt-card h3 { margin: 0 0 8px; font-size: 13px; font-weight: var(--weight-semibold); color: var(--ink-soft); }
+  .edt-card p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+  .edt-meta { display: grid; grid-template-columns: 96px 1fr; gap: 6px 12px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+  .edt-meta dt { color: var(--muted); }
+  .edt-meta dd { margin: 0; color: var(--ink-soft); }
+  .edt-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .edt-role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .edt-role-grid .ds-role-card { min-height: 208px; }
+  .edt-role-grid .ds-role-card__avatar { width: 88px; height: 88px; font-size: 28px; }
+  .edt-note { margin: 14px 0 0; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--tag-bg); color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+  .edt-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 720px; }
+  @media (max-width: 720px) { .edt-fields { grid-template-columns: 1fr; } }
+  .edt-pane-list { display: grid; gap: 8px; }
+  .edt-pane-item { padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+  .edt-reading { max-width: 1080px; margin: 0 auto; padding: var(--page-space) var(--page-space) 64px; }
+</style>
+</head>
+<body>
+<div id="demo-root"></div>
+<script src="../../_ds_bundle.js"></script>
+<script>
+(function () {
+  var scripts = document.getElementsByTagName('script');
+  var rootUrl = '';
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].getAttribute('src') || '';
+    if (src.indexOf('_ds_bundle.js') !== -1) { rootUrl = src.slice(0, -'_ds_bundle.js'.length); break; }
+  }
+  var ns = null;
+  for (var key in window) { if (/^WemediaBuddyDesignSystem_[0-9a-f]{6}$/.test(key)) { ns = key; break; } }
+  if (!ns && window.location.protocol !== 'file:') {
+    try {
+      var req = new XMLHttpRequest();
+      req.open('GET', rootUrl + '_ds_manifest.json', false);
+      req.send(null);
+      var parsed = JSON.parse(req.responseText);
+      if (parsed && parsed.namespace && window[parsed.namespace]) ns = parsed.namespace;
+    } catch (e) { ns = null; }
+  }
+  window.__dsNs = ns;
+})();
+</script>
+<script>
+(function () {
+  var R = window.React;
+  var RD = window.ReactDOM;
+  var ns = window.__dsNs;
+  var host = document.getElementById('demo-root');
+  if (!ns || !R || !RD) { host.textContent = 'Design-system bundle not compiled yet (run compile-design-system.mjs).'; return; }
+  var C = window[ns];
+  var el = R.createElement;
+
+  /* ---- icon paths (stroke, 24 viewBox, aria-hidden) ---- */
+  var IC = {
+    desk: 'M3 7h8v6H3zM13 4h8v9h-8zM5 17h14v3H5z',
+    radar: 'M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0M12 12l5-5M12 9a3 3 0 1 1-3 3',
+    doc: 'M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6',
+    folder: 'M3 6h6l2 3h10v11H3z',
+    db: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+    pen: 'M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3',
+    send: 'M3 11l18-7-7 18-3-8-8-3zM11 14l10-10',
+    chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+    graph: 'M6 6l6 6M18 6l-6 6M6 18l6-6M18 18l-6-6M6 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M6 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
+    bot: 'M8 9h8v7H8zM5 12v-1h3M16 11h3v1M12 5V3M9 16v2a3 3 0 0 0 6 0v-2M9.5 12h.01M14.5 12h.01',
+    gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.03 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01A1.7 1.7 0 0 0 10 6.09V6a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03z',
+    min: 'M6 12h12', max: 'M7 7h10v10H7z', close: 'M7 7l10 10M17 7L7 17',
+    chevR: 'M9 5l7 7-7 7', chevL: 'M15 5l-7 7 7 7',
+    refresh: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5', plus: 'M12 5v14M5 12h14'
+  };
+  var icon = function (d, cls) { return el('svg', { className: cls || '', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, el('path', { d: d })); };
+
+  /* ---- shared label map: 页面 = 侧栏 = Pi = 房间 ---- */
+  var ROOMS = {
+    today: '今日 · 主编桌', discover: '发现 · 前线', proposals: '选题 · 策划组提案夹',
+    topics: '主题 · 专题组档案室', library: '资料库 · 资料室', studio: '创作 · 写字间',
+    publish: '发布 · 签发台', results: '结果 · 评报栏', agents: '智能体 · 班组', canvas: '画布 · 关系墙', settings: '设置 · 总机'
+  };
+  var NAV = [
+    { group: '编辑部', items: ['today', 'discover', 'proposals', 'topics', 'library', 'studio', 'publish', 'results', 'canvas'] },
+    { group: '系统', items: ['agents', 'settings'] }
+  ];
+
+  var ROLES = [
+    { labelZh: '桌助', roomZh: '主编台 · 值班', status: 'needs-user', word: '等你批', summary: '今日呈报待你定夺' },
+    { labelZh: '记者', roomZh: '前线 · 发现', status: 'running', word: '扫描中', percent: '42%', summary: 'X / 小红书 情报扫描' },
+    { labelZh: '策划', roomZh: '策划组 · 提案', status: 'running', word: '呈报中', percent: '68%', summary: '选题方案整理' },
+    { labelZh: '写手', roomZh: '写字间 · 创作', status: 'idle', word: '当前无任务' },
+    { labelZh: '资料员', roomZh: '资料室 · 整理', status: 'ok', word: '已完成', percent: '100%', summary: '主题档案整理待批' }
+  ];
+
+  var listCard = function (grade, title, time, body, extra) {
+    return el('article', { className: 'ds-list-card' },
+      el('div', { className: 'ds-list-card__head' },
+        el('strong', null, title),
+        el('time', null, time)),
+      el('div', { style: { display: 'flex', gap: '6px', marginTop: '6px' } },
+        el('span', { className: 'ds-grade', 'data-grade': grade }, grade)),
+      el('p', null, body),
+      extra || null
+    );
+  };
+
+  function App() {
+    var room = R.useState('today');
+    var theme = R.useState('dark');
+    var piOpen = R.useState(false);
+    var piDraft = R.useState('');
+    var piModel = R.useState('智能体 · 前台贴页');
+    var piMsgs = R.useState([
+      { role: 'agent', text: '早，主编。前台贴页，随叫随到。今日有 3 条呈报等你批。' }
+    ]);
+    var modalRole = R.useState(null);
+    var tab = R.useState('today');
+    var dTab = R.useState('rank');
+    var chip = R.useState('all');
+    var plat = R.useState('all');
+
+    var setRoom = room[1]; var setTheme = theme[1]; var setPiOpen = piOpen[1];
+    var setPiDraft = piDraft[1]; var setPiMsgs = piMsgs[1]; var setPiModel = piModel[1];
+    var setModalRole = modalRole[1]; var setTab = tab[1]; var setDTab = dTab[1]; var setChip = chip[1]; var setPlat = plat[1];
+
+    R.useEffect(function () {
+      document.documentElement.setAttribute('data-theme', theme[0]);
+      var rootNode = host.getRootNode ? host.getRootNode() : null;
+      if (rootNode && rootNode.host) rootNode.host.setAttribute('data-theme', theme[0]);
+    }, [theme[0]]);
+
+    R.useEffect(function () {
+      if (!piOpen[0]) return undefined;
+      var onKey = function (e) { if (e.key === 'Escape') setPiOpen(false); };
+      document.addEventListener('keydown', onKey);
+      return function () { document.removeEventListener('keydown', onKey); };
+    }, [piOpen[0]]);
+
+    var sendPi = function () {
+      var text = piDraft[0].trim();
+      if (!text) return;
+      setPiMsgs(piMsgs[0].concat(
+        { role: 'user', text: text },
+        { role: 'agent', text: '收到，已记入上下文。需要我落成可批呈报或直接开工，说一声。' }
+      ));
+      setPiDraft('');
+    };
+
+    var current = room[0];
+    var shellClass = 'ds-shell edt-shell' + (piOpen[0] ? ' ds-shell--pi-overlay' : ' ds-shell--pi-collapsed');
+    var PI_MSG = piMsgs[0];
+
+    var roomView = null;
+    if (current === 'today') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '今日主编台', summary: '今天什么值得做、为什么、怎么讲。',
+            stats: [
+              { key: 'today', label: '今日可批', value: 3, active: true },
+              { key: 'shelved', label: '待处理', value: 9 },
+              { key: 'approved', label: '已批', value: 21 }
+            ],
+            actions: [{ label: '开始今日情报', variant: 'primary' }, { label: '重新侦察' }]
+          }),
+          el('div', { className: 'ds-desk-grid', style: { marginTop: '16px' } },
+            el('div', { className: 'edt-stack' },
+              el('section', { className: 'ds-opp-hero' },
+                el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' } },
+                  el('span', { className: 'ds-grade', 'data-grade': 'SSS' }, 'SSS'),
+                  el(C.StatusPill, { tone: 'warn' }, '等你批')),
+                el('h2', null, 'AI 写作工具集体涨价：订阅制 vs 按量制重新洗牌'),
+                el('p', { className: 'ds-opp-why' }, '三条入库资料交叉验证（X 讨论量 2 小时 +180%、官方定价页变更、社群吐槽抽样），判断窗口今天成立，明天可能过时。'),
+                el('dl', { className: 'edt-meta' },
+                  el('dt', null, '角度'), el('dd', null, '个人创作者该选哪条成本曲线'),
+                  el('dt', null, '追溯'), el('dd', null, '资料库 · 3 条证据 · 主题「AI 工具定价」')),
+                el('div', { className: 'edt-actions' },
+                  el(C.Button, { variant: 'primary', size: 'sm' }, '批准并派写'),
+                  el(C.Button, { variant: 'secondary', size: 'sm' }, '改角度'),
+                  el(C.Button, { variant: 'text', size: 'sm' }, '查看证据')))
+            ),
+            el('div', { className: 'edt-side' },
+              el('div', { className: 'edt-card' },
+                el('h3', null, '今日值班'),
+                el(C.StatusPill, { tone: 'active', live: true }, '运行中'),
+                el('p', { style: { marginTop: '8px' } }, '后台流水线正常：扫描 → 判断 → 归主题。你只需批呈报、派工、终审。'),
+                el('div', { className: 'edt-actions' },
+                  el(C.IconButton, { label: '刷新值班状态', variant: 'ghost' }, icon(IC.refresh)))),
+              el('div', { className: 'edt-card' },
+                el('h3', null, '最近入库'),
+                el('p', null, '「X 讨论量异动」· 前线 · 12 分钟前'),
+                el('p', null, '「定价页变更快照」· 资料员 · 41 分钟前'))
+            )
+          )
+        )
+      );
+    } else if (current === 'discover') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '前线 · 发现', summary: '看看外面，不在此批稿主业。',
+            stats: [
+              { key: 'scanned', label: '今日已扫', value: 128 },
+              { key: 'fresh', label: '新入库', value: 9, active: true },
+              { key: 'topics', label: '新主题', value: 2 }
+            ],
+            actions: [{ label: '扫描一轮', variant: 'primary' }]
+          }),
+          el('div', { style: { display: 'grid', gap: '12px', marginTop: '16px' } },
+            el(C.TabList, {
+              tabs: [{ id: 'rank', label: '排行榜' }, { id: 'list', label: 'X 列表' }],
+              selectedId: dTab[0], onSelect: setDTab, ariaLabel: '发现视图'
+            }),
+            el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
+              [{ id: 'all', label: '全部' }, { id: 'xhs', label: '小红书' }, { id: 'wx', label: '微信' }, { id: 'x', label: 'X' }].map(function (p) {
+                return el(C.ChipFilter, { key: p.id, label: p.label, pressed: plat[0] === p.id, size: 'sm', onToggle: function () { setPlat(p.id); } });
+              })),
+            el('div', { className: 'edt-stack' },
+              listCard('S', 'AI 编程助手进入「会改自己代码」阶段', '09:12', '头部产品发布自修复工作流，社区实测讨论升温。', el(C.StatusPill, { tone: 'warn' }, '待判断')),
+              listCard('A', '小红书图文带货新规试行', '08:47', '官方公告 + 首批案例，影响内容合规与选题边界。', el(C.StatusPill, { tone: 'needs-user' }, '等你批')),
+              listCard('B', '海外长文平台流量分成上调', '07:20', '数据页与创作者公告双源确认，适合做对比选题。', el(C.StatusPill, { tone: 'idle' }, '已入库'))
+            )
+          )
+        )
+      );
+    } else if (current === 'proposals') {
+      var proposalPanels = {
+        today: [
+          { grade: 'SSS', title: 'AI 写作工具涨价：订阅 vs 按量怎么选', why: '三条证据交叉，判断窗口今天成立。', tone: 'needs-user', word: '等你批' },
+          { grade: 'S', title: '自修复代码时代，人工审稿的新位置', why: '头部动态 + 两篇实测，角度可写。', tone: 'needs-user', word: '等你批' },
+          { grade: 'A', title: '小红书带货新规：哪些话术要改', why: '官方公告 + 首批违规案例。', tone: 'needs-user', word: '等你批' }
+        ],
+        shelved: [
+          { grade: 'B', title: '海外长文平台分成上调观察', why: '数据单一，再等一轮交叉验证。', tone: 'idle', word: '观察中' }
+        ],
+        approved: [
+          { grade: 'S', title: '「先问为什么值得写」的选题方法拆解', why: '已批准，待派写。', tone: 'ok', word: '已批' }
+        ]
+      }[tab[0]] || [];
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '选题台账', summary: '今日值得批的方案，一屏一个主操作。',
+            stats: [
+              { key: 'today', label: '今日可批', value: 3, active: tab[0] === 'today' },
+              { key: 'shelved', label: '待处理', value: 9, active: tab[0] === 'shelved' },
+              { key: 'approved', label: '已批', value: 21, active: tab[0] === 'approved' }
+            ],
+            actions: [{ label: '新建选题', variant: 'primary' }, { label: '批量操作' }]
+          }),
+          el('div', { style: { display: 'grid', gap: '12px', marginTop: '16px' } },
+            el(C.TabList, {
+              tabs: [{ id: 'today', label: '今日可批', count: 3 }, { id: 'shelved', label: '待处理', count: 9 }, { id: 'approved', label: '已批', count: 21 }],
+              selectedId: tab[0], onSelect: setTab, ariaLabel: '选题台账'
+            }),
+            el('div', { role: 'tabpanel', id: 'tabpanel-' + tab[0], className: 'edt-stack' },
+              proposalPanels.map(function (p) {
+                return el('article', { key: p.title, className: 'ds-list-card' },
+                  el('div', { className: 'ds-list-card__head' },
+                    el('strong', null, p.title),
+                    el('span', { className: 'ds-grade', 'data-grade': p.grade }, p.grade)),
+                  el('p', null, p.why),
+                  el('div', { className: 'edt-actions' },
+                    el(C.StatusPill, { tone: p.tone }, p.word),
+                    el(C.Button, { variant: 'secondary', size: 'sm' }, '批'),
+                    el(C.Button, { variant: 'text', size: 'sm' }, '否掉')));
+              }))
+          )
+        )
+      );
+    } else if (current === 'topics') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'edt-reading' },
+          el('nav', { className: 'ds-breadcrumb' }, el('a', { href: '#topics' }, '专题组'), el('span', null, '/'), el('span', null, '档案室')),
+          el('h1', null, '持续关注 · 主题档案'),
+          el('p', { className: 'ds-reading-lede' }, '长期值得跟的正式容器：多资料、多选题、多稿、复盘都在这里；Agent 负责归纳归并，人确认长期跟或停。'),
+          el('span', { className: 'ds-honest-badge' }, '待整理 · 2 份资料未归档'),
+          el('div', { className: 'edt-stack', style: { marginTop: '18px' } },
+            el('div', { className: 'ds-list-card' },
+              el('div', { className: 'ds-list-card__head' }, el('strong', null, 'AI 工具定价'), el('time', null, '更新于 今天')),
+              el('p', null, '涨价/免费/按量三条线持续观察，已关联 3 份资料、2 条选题。'),
+              el('div', { className: 'edt-actions' }, el(C.StatusPill, { tone: 'active' }, '跟进中'))),
+            el('div', { className: 'ds-list-card' },
+              el('div', { className: 'ds-list-card__head' }, el('strong', null, '小红书内容合规'), el('time', null, '更新于 昨天')),
+              el('p', null, '新规试行后话术边界变化，待第一波真实案例。'),
+              el('div', { className: 'edt-actions' }, el(C.StatusPill, { tone: 'warn' }, '观察')))
+          )
+        )
+      );
+    } else if (current === 'library') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '资料室', summary: '证据与原件，Agent 采集整理、人抽查移出。',
+            stats: [{ key: 'in', label: '已入库', value: 42 }, { key: 'pending', label: '待整理', value: 6, active: true }, { key: 'archived', label: '已归档', value: 18 }],
+            actions: [{ label: '整理归档', variant: 'primary' }]
+          }),
+          el('div', { style: { display: 'grid', gap: '12px', marginTop: '16px' } },
+            el(C.TabList, {
+              tabs: [{ id: 'in', label: '已入库', count: 42 }, { id: 'pending', label: '待整理', count: 6 }, { id: 'archived', label: '已归档', count: 18 }],
+              selectedId: tab[0], onSelect: setTab, ariaLabel: '资料库'
+            }),
+            el('div', { role: 'tabpanel', id: 'tabpanel-' + tab[0], className: 'edt-stack' },
+              listCard('A', '官方定价页变更快照', '41 分钟前', '截图 + 正文，来源可溯。', el(C.StatusPill, { tone: 'ok' }, '已入库')),
+              listCard('S', 'X 讨论量异动导出（2h）', '12 分钟前', '话题 #AI写作 时间序列，记者采集。', el(C.StatusPill, { tone: 'warn' }, '待归主题')),
+              listCard('B', '社群吐槽抽样 20 条', '3 小时前', '匿名化后入库，仅供角度参考。', el(C.StatusPill, { tone: 'idle' }, '已归档'))
+            )
+          )
+        )
+      );
+    } else if (current === 'studio') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-panes' },
+          el('div', { className: 'ds-pane' },
+            el('div', { className: 'ds-pane__head' }, el('strong', null, '选题大纲'), el(C.IconButton, { label: '新建大纲', size: 'sm', variant: 'ghost' }, icon(IC.plus))),
+            el('div', { className: 'ds-pane__body edt-pane-list' },
+              el('div', { className: 'edt-pane-item' }, '1. 现象：涨价与订阅焦虑'),
+              el('div', { className: 'edt-pane-item' }, '2. 拆解：三条成本曲线'),
+              el('div', { className: 'edt-pane-item' }, '3. 结论：给个人创作者的选择框架'))),
+          el('div', { className: 'ds-pane' },
+            el('div', { className: 'ds-pane__head' }, el('strong', null, '稿纸'), el(C.StatusPill, { tone: 'warn' }, '草稿中')),
+            el('div', { className: 'ds-pane__body' },
+              el('div', { className: 'ds-editor-paper' },
+                el('h2', null, 'AI 写作工具涨价：订阅 vs 按量怎么选'),
+                el('p', null, '开场：两周内三家工具先后调价，创作者群里最焦虑的不是钱，是「以后到底怎么买」。'),
+                el('p', null, '正文：先给判断——按量制更适合把 AI 当生产资料的人，订阅制适合当辅助的人。'),
+                el('div', { className: 'edt-actions' },
+                  el(C.Button, { variant: 'primary', size: 'sm' }, '派写'),
+                  el(C.Button, { variant: 'secondary', size: 'sm' }, '保存草稿'))))),
+          el('div', { className: 'ds-pane' },
+            el('div', { className: 'ds-pane__head' }, el('strong', null, '素材'), el(C.IconButton, { label: '添加素材', size: 'sm', variant: 'ghost' }, icon(IC.plus))),
+            el('div', { className: 'ds-pane__body edt-pane-list' },
+              el('div', { className: 'edt-pane-item' }, '定价页变更快照 · 资料库'),
+              el('div', { className: 'edt-pane-item' }, 'X 讨论量异动 · 前线'))
+          )
+        )
+      );
+    } else if (current === 'publish') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '签发台', summary: '人工确认发出；最终点击不进任何角色自动权。',
+            stats: [{ key: 'ready', label: '待发布', value: 2, active: true }, { key: 'sent', label: '今日已发', value: 3 }],
+            actions: [{ label: '确认发布', variant: 'primary' }, { label: '预览' }]
+          }),
+          el('div', { className: 'edt-stack', style: { marginTop: '16px' } },
+            listCard('S', '「先问为什么值得写」— 小红书图文', '拟 18:00', '封面 + 正文 + 话题已备齐，发布前人工终审。', el(C.StatusPill, { tone: 'warn' }, '待确认')),
+            listCard('A', 'AI 工具定价观察 — 微信公众号', '拟 明天 08:00', '排版完成，等待选题批次。', el(C.StatusPill, { tone: 'idle' }, '排队'))
+          )
+        )
+      );
+    } else if (current === 'results') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '评报栏', summary: '指标与复盘，资产回流。',
+            stats: [{ key: 'w', label: '本周发布', value: 5 }, { key: 'r', label: '阅读', value: '12.4k', active: true }, { key: 'i', label: '互动', value: 860 }],
+            actions: [{ label: '生成复盘', variant: 'primary' }]
+          }),
+          el('div', { className: 'edt-stack', style: { marginTop: '16px' } },
+            listCard('S', 'AI 写作工具涨价：怎么选', '昨天', '阅读 8.1k / 互动 512，评论方向与选题假设一致。', el(C.StatusPill, { tone: 'ok' }, '已复盘')),
+            listCard('A', '小红书带货新规话术清单', '周一', '阅读 4.3k / 互动 348，收藏率高。', el(C.StatusPill, { tone: 'warn' }, '待复盘'))
+          )
+        )
+      );
+    } else if (current === 'agents') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el(C.PageCommand, {
+            title: '智能体班组', summary: '固定编制 × 授权能力注册表；实例按任务创建，终态退出活动视图。',
+            stats: [{ key: 'active', label: '活动中', value: 3, active: true }, { key: 'wait', label: '等你批', value: 1 }],
+            actions: [{ label: '派发新任务', variant: 'primary' }]
+          }),
+          el('div', { className: 'edt-role-grid', style: { marginTop: '16px' } },
+            ROLES.map(function (role) {
+              return el(C.RoleCard, {
+                key: role.labelZh, labelZh: role.labelZh, roomZh: role.roomZh,
+                status: role.status, word: role.word, percent: role.percent,
+                summary: role.summary, expanded: modalRole[0] === role.labelZh,
+                onOpen: function () { setModalRole(role.labelZh); }
+              });
+            }),
+            el(C.RoleCard, { labelZh: '主管席', roomZh: '主编台 · 软件内主管', status: 'ok', word: '授权在席', isDesk: true })
+          ),
+          el('p', { className: 'edt-note' }, '点任意角色卡打开详情。空角色显示「当前无任务」，不画空槽。发布/硬删红线只走人类 UI，对任何实例不可达。')
+        )
+      );
+    } else if (current === 'canvas') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el('div', { className: 'ds-room-heading' },
+            el('div', null,
+              el('div', { className: 'ds-room-eyebrow' }, '画布 · 全幅例外'),
+              el('h1', null, '关系墙'),
+              el('p', null, '理关系：主题、资料、选题、稿件的网状视图。')),
+            el(C.Button, { variant: 'primary' }, '展开全幅画布')),
+          el('div', { className: 'edt-stack' },
+            listCard('', '「AI 工具定价」主题中心', '活动节点 6 个', '资料 3 · 选题 2 · 稿件 1，关系已梳理。', el(C.StatusPill, { tone: 'active' }, '活跃')),
+            listCard('', '「小红书合规」观察区', '等待证据', '新规试行中，待真实案例入库后升级。', el(C.StatusPill, { tone: 'warn' }, '观察'))
+          ),
+          el('p', { className: 'edt-note' }, '画布是三种批准形态中的「工作区例外」：全幅多栏，但声明滚动属主并消费同一套 primitives / 弹窗 / 状态。')
+        )
+      );
+    } else if (current === 'settings') {
+      roomView = el('div', { className: 'edt-room' },
+        el('div', { className: 'ds-page' },
+          el('div', { className: 'ds-room-heading' },
+            el('div', null,
+              el('div', { className: 'ds-room-eyebrow' }, '总机'),
+              el('h1', null, '设置'),
+              el('p', null, '模型 / 渠道 / 账号。表单字段的 label 就是无障碍名。'))),
+          el('div', { className: 'edt-fields' },
+            el(C.FormField, { label: '工作区名称', htmlFor: 'kit-ws', required: true, helper: '给本地资料库起个名字' },
+              el('input', { id: 'kit-ws', defaultValue: 'PigeonYang 主编台' })),
+            el(C.FormField, { label: 'Pi API Key', htmlFor: 'kit-pi', helper: '仅存本机，永不上传' },
+              el('input', { id: 'kit-pi', type: 'password', defaultValue: 'sk-local-demo' })),
+            el(C.FormField, { label: '默认发布平台', htmlFor: 'kit-pf', helper: '最终点击仍逐次确认' },
+              el('select', { id: 'kit-pf' },
+                el('option', null, '小红书'), el('option', null, '微信公众号'), el('option', null, 'X')))
+          ),
+          el('div', { className: 'edt-actions' },
+            el(C.Button, { variant: 'primary' }, '保存设置'),
+            el(C.Button, { variant: 'text' }, '恢复默认'))
+        )
+      );
+    }
+
+    return el('div', { className: shellClass },
+      /* topbar */
+      el('header', { className: 'ds-topbar' },
+        el('div', { className: 'ds-brand' },
+          el(C.WmbCreatureMark, { state: 'idle' }),
+          el('strong', null, 'WeMediaBuddy'),
+          el('small', null, '自媒体协同终端')),
+        el('div', { className: 'ds-topbar-title' }, ROOMS[current]),
+        el('div', { className: 'ds-titlebar-actions' },
+          el(C.IconButton, { label: '最小化', variant: 'ghost' }, icon(IC.min)),
+          el(C.IconButton, { label: '最大化', variant: 'ghost' }, icon(IC.max)),
+          el(C.IconButton, { label: '关闭', variant: 'ghost', className: 'ds-window-close' }, icon(IC.close)))
+      ),
+      /* sidebar */
+      el('aside', { className: 'ds-sidebar', 'aria-label': '编辑部导航' },
+        el('nav', null,
+          NAV.map(function (group) {
+            return el('div', { key: group.group },
+              el('div', { className: 'ds-nav-group-label' }, group.group),
+              group.items.map(function (id) {
+                return el('button', {
+                  key: id, type: 'button', className: 'ds-nav-item',
+                  'aria-current': current === id ? 'page' : undefined,
+                  onClick: function () { setRoom(id); setTab(id === 'proposals' || id === 'library' ? 'today' : tab[0]); }
+                }, icon(IC[id] || IC.doc), el('span', null, (ROOMS[id].split(' · ')[1] || ROOMS[id])));
+              }));
+          })),
+        el('div', { className: 'ds-sidebar-bottom' },
+          el('button', { type: 'button', className: 'ds-nav-item', onClick: function () { setPiOpen(!piOpen[0]); } },
+            icon(IC.bot), el('span', null, '值班 Pi')))
+      ),
+      /* workspace */
+      el('main', { className: 'ds-workspace' }, roomView),
+      /* Pi dock — open as overlay, never compresses the room */
+      el('aside', { className: 'ds-pi-dock', 'aria-label': '值班 Pi' },
+        el('div', { className: 'ds-pi-toggle-rail' },
+          el('button', { type: 'button', className: 'ds-pi-toggle', 'aria-label': piOpen[0] ? '收起 Pi' : '展开 Pi', 'aria-expanded': piOpen[0] ? 'true' : 'false', onClick: function () { setPiOpen(!piOpen[0]); } }, icon(piOpen[0] ? IC.chevR : IC.chevL))),
+        el('div', { className: 'ds-pi-head' },
+          el(C.WmbCreatureMark, { state: 'working' }),
+          el('span', { className: 'ds-pi-title' }, '值班 Pi')),
+        el('p', { className: 'ds-pi-context' }, el('em', null, '当前房间'), el('span', null, ROOMS[current])),
+        el('div', { className: 'ds-pi-transcript', 'aria-live': 'polite' },
+          PI_MSG.map(function (m, i) {
+            return el('div', { key: i, className: 'ds-pi-msg ds-pi-msg--' + m.role }, m.text);
+          })),
+        el('div', { className: 'ds-pi-composer' },
+          el('textarea', {
+            'aria-label': '给 Pi 发消息', placeholder: '派活、纠偏、页内整理…',
+            value: piDraft[0],
+            onChange: function (e) { setPiDraft(e.target.value); },
+            onKeyDown: function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPi(); } }
+          }),
+          el('div', { className: 'ds-pi-composer-bar' },
+            el('div', { className: 'ds-pi-composer-meta' },
+              el('button', { type: 'button', className: 'ds-pi-model-trigger', onClick: function () { setPiModel(piModel[0] === '智能体 · 前台贴页' ? '外部 Agent · Codex' : '智能体 · 前台贴页'); } }, piModel[0]),
+              el('span', { style: { color: 'var(--muted-low)', fontSize: '11px' } }, '无静默平台副作用')),
+            el('button', { type: 'button', className: 'ds-pi-send', 'aria-label': '发送', disabled: !piDraft[0].trim(), onClick: sendPi }, icon(IC.send))))
+      ),
+      /* statusbar */
+      el('footer', { className: 'ds-statusbar' },
+        el('div', { className: 'ds-statusbar-left' },
+          el('span', { className: 'ds-status-item', 'data-phase': 'running' }, el('span', { className: 'ds-status-dot' }), '流水线运行中'),
+          el('span', { className: 'ds-status-item' }, el('span', { className: 'ds-status-dot idle' }), '情报库 42 条')),
+        el('div', { className: 'ds-statusbar-right' },
+          el('button', {
+            type: 'button', className: 'ds-status-theme', 'aria-pressed': theme[0] === 'light',
+            onClick: function () { setTheme(theme[0] === 'dark' ? 'light' : 'dark'); }
+          }, theme[0] === 'dark' ? '切换白昼' : '切换墨夜'),
+          el('span', { className: 'ds-status-clock' }, new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })))
+      ),
+      /* role detail modal */
+      modalRole[0]
+        ? el(C.AppModal, {
+            open: true,
+            title: ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0]
+              ? ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0].labelZh + '详情'
+              : '主管席详情',
+            size: 'standard',
+            onRequestClose: function () { setModalRole(null); },
+            footer: el('div', { style: { display: 'flex', gap: '10px' } },
+              el(C.Button, { variant: 'secondary', onClick: function () { setModalRole(null); } }, '关闭'),
+              el(C.Button, { variant: 'primary', onClick: function () { setModalRole(null); } }, '派发新任务'))
+          },
+          el('div', { className: 'edt-stack' },
+            el(C.StatusPill, { tone: ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0] ? ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0].status : 'ok', live: true },
+              ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0] ? ROLES.filter(function (r) { return r.labelZh === modalRole[0]; })[0].word : '授权在席'),
+            el('p', { style: { margin: 0 } }, '实例按任务创建、终态退出活动视图；任务精确授权 ∩ 角色能力 ∩ 资源边界。发布/硬删红线对任何实例不可达。')))
+        : null
+    );
+  }
+
+  var node = el(App);
+  var root = null;
+  if (RD.createRoot) {
+    root = RD.createRoot(host);
+    if (RD.flushSync) { RD.flushSync(function () { root.render(node); }); }
+    else { root.render(node); }
+  } else {
+    RD.render(node, host);
+  }
+})();
+</script>
+</body>
+</html>

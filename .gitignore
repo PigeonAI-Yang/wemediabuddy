@@ -4,3 +4,5 @@ out/
 .vite/
 /data/
 .wmb-*.log
+tests/e2e/.runtime/
+tests/e2e/.artifacts/

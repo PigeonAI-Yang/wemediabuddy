@@ -173,51 +173,45 @@
   line-height: 1.45;
 }
 
-/* ---- 运行明细抽屉（WMB-5195：复用 sources-panel/drawer-backdrop 既有视觉语言） ---- */
-.agents-detail-panel {
-  padding: 34px 18px 18px;
-  gap: 10px;
-}
-.agents-detail-head {
-  flex: none;
-}
-.agents-detail-head h2 {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.agents-detail-head h2 small {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-.agents-detail-avatar-edit {
-  align-self: flex-start;
+/* ---- 运行明细弹窗（WMB-5251：AppModal size=standard；面板/头部/滚动/遮罩由共享模态层承担） ---- */
+/* WMB-5273：大号当前头像 = 唯一的头像设置入口（按钮本身可键盘激活，带 aria-label/title）。 */
+.agents-detail-avatar {
+  justify-self: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border-radius: 50%;
   border: 1px solid var(--border-strong, var(--border));
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-  padding: 4px 12px;
-  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised, var(--surface)));
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   cursor: pointer;
 }
-.agents-detail-avatar-edit:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+.agents-detail-avatar:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
-.agents-detail-avatar-edit:focus-visible {
+.agents-detail-avatar:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.agents-detail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.agents-detail-avatar > span {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
 .agents-detail-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
   display: grid;
   align-content: start;
   gap: 12px;
-  padding-right: 4px;
+  min-width: 0;
 }
 .agents-detail-empty {
   margin: 0;

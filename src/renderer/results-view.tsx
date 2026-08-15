@@ -29,7 +29,7 @@ export function ResultsView({ publications, planDate, enabledPlatforms, onFocusC
   publications: Publications;
   refresh: () => void;
   planDate: string;
-  enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  enabledPlatforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
   onFocusChange?: (focus: PiFocusObject | null) => void;
 }): React.JSX.Element {
   const published = (publications ?? []).filter((item) => item.publication.status === 'published' && item.publication.publishedAt);

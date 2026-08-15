@@ -1,40 +1,35 @@
 {
-  "active_loop": "WMB-5226",
-  "status": "completed",
-  "symptom": "正式主题详情页未采用 Owner 批准的 HTML 结构，仍是七章节导航、散落空分区和旧页头。",
+  "active_loop": "worktree-regression-closeout",
+  "status": "blocked",
+  "symptom": "当前 WMB-5235–5243 未提交工作树导致 18 项完整测试失败。",
   "observation_packet": {
-    "url": "http://127.0.0.1:27391/",
-    "viewport": "1568x934",
-    "user_action": "进入主题，打开微 SaaS 主题详情",
-    "expected": "批准稿的工具行、20px 标题、四页签、当前认识主区、真实来源预览、最近变化",
-    "actual": "正式页面已显示四页签；概览含当前认识、2 条真实来源和最近变化；标题单行；Pi dock 保留",
-    "screenshot": "J:/Users/yangda01/Temp/omp-sshots-1554e0df3fbcb9b1.webp",
-    "console": "无 Vite overlay；页面交互可用",
-    "network_ws": "真实工作空间数据库与既有 read model",
-    "dom_selector": ".topic-layout-detail .topic-wiki-page",
-    "computed_style_layout": "标题20px/单行；body overflowX=0；唯一主CTA；四页签投影正常",
-    "state_store_snapshot": "真实 Topic/Wiki/receipt/source dossier 数据"
+    "url": "Electron production test surface; no replacement web server",
+    "viewport": "not applicable to contract/data regressions",
+    "user_action": "运行 npm test 并沿内容详情、Today、Pi 编排、设置与知识授权链路验收",
+    "expected": "内容详情查询数固定、终态机会不复活、编排任务卡优先路由、迁移/授权契约与 schema 63 对齐",
+    "actual": "修复前 1483 项中 18 失败；修复后完整测试 1485 项中 1482 通过，仅 3 项因 XHS 二进制被 Defender 删除而失败。",
+    "screenshot": "未涉及像素或布局改动；UNIT/CONTRACT-TEST-ONLY",
+    "console": "无 renderer console 取证；测试输出已定位契约断点",
+    "network_ws": "XHS MCP 被 Windows Defender 阻断，无法建立 loopback MCP 会话",
+    "dom_selector": "Pi orchestration branch: PiOrchestrationRow before pi-bubble-wrap",
+    "computed_style_layout": "未改样式；design token gate 5/5",
+    "state_store_snapshot": "schema migrations 1..63；Today pool 是未终结机会唯一权威"
   },
-  "hypotheses": [],
-  "breakpoint": "component DOM/style projection",
+  "hypotheses": [
+    {"hypothesis":"内容详情新增绑定读取形成 N+1","supports":"查询数从固定 9 增长为 9+核心版本数+平台版本数","would_disprove":"版本数增加而查询数不变","result":"confirmed-and-repaired-with-two-batch-queries"},
+    {"hypothesis":"其余非 XHS 失败主要是旧测试冻结旧 schema/能力/业务语义","supports":"新版生产链路专项测试通过，旧断言固定 58、14 capabilities 或历史 plan fallback","would_disprove":"真实生产链路缺失或聚焦测试仍失败","result":"confirmed-and-contracts-aligned"},
+    {"hypothesis":"XHS 三项失败由缺文件而非产品逻辑","supports":"恢复 HEAD 文件后 Defender 报病毒/潜在垃圾软件并再次删除，历史 ThreatDetection 命中打包资源","would_disprove":"可信签名二进制可读取并启动","result":"confirmed-external-security-blocker"}
+  ],
+  "breakpoint": "content data access N+1 plus stale test contracts; XHS vendor executable blocked by endpoint security",
   "owner_check": {
-    "user_blocked_on": "resolved",
+    "user_blocked_on": "XHS MCP only; remaining local product contracts repaired",
     "now_usable": true,
-    "real_data_or_state": "真实来源与回执",
-    "loading_empty_error_states": "空认识、来源加载、compile/risk/error 原路径保留",
+    "real_data_or_state": "real SQLite migrations and production modules exercised by focused tests",
+    "loading_empty_error_states": "Today empty authoritative pool and Pi orchestration states covered",
     "v1_v2_baseline_preserved": true,
     "regression_risk_checked": true,
-    "would_user_return_this": false
+    "would_user_return_this": true
   },
   "attempts": 1,
-  "last_gate": {
-    "focused": "13/13 pass",
-    "typecheck": "pass",
-    "electron": "pass",
-    "tabs": "4/4",
-    "source_rows": 2,
-    "overflow": 0,
-    "technical_copy": 0,
-    "primary_cta": 1
-  }
+  "last_gate": {"type":"focused contract/data regression","tests":1485,"passed":1482,"failed":3,"typecheck":"pass","design_and_source_hygiene":5,"xhs_blocked":3}
 }

@@ -246,7 +246,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
 
   server.registerTool('content.save_version', {
     description: '保存核心或平台版本；返回 CommandReceiptV1。',
-    inputSchema: { ...authoritySchema, project_id: z.string(), body: z.string(), content_version_id: z.string().optional(), platform: z.enum(['x', 'xiaohongshu', 'wechat']).optional(), format: z.string().optional(), expected_revision: z.number().optional(), version_id: z.string().optional(), title: z.string().optional() }
+    inputSchema: { ...authoritySchema, project_id: z.string(), body: z.string(), content_version_id: z.string().optional(), platform: z.enum(['x', 'xiaohongshu', 'wechat', 'zhihu']).optional(), format: z.string().optional(), expected_revision: z.number().optional(), version_id: z.string().optional(), title: z.string().optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, project_id, content_version_id, expected_revision, version_id, ...fields } = input;
     const commandInput = { ...fields, projectId: project_id, contentVersionId: content_version_id, expectedRevision: expected_revision, versionId: version_id };

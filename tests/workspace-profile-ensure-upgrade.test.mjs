@@ -32,16 +32,17 @@ const V2_OFFICIAL_AI_FIXTURE = {
 };
 const NEW_AI_AUDIENCE = '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人';
 
-test('new official.ai root gets template v3 commercial identity', async () => {
+test('new official.ai root gets template v4 with Zhihu publishing', async () => {
   await withDb((database) => {
     const profile = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(profile.displayName, 'AI × 商业化成长');
-    assert.equal(profile.officialTemplateVersion, 3);
+    assert.equal(profile.officialTemplateVersion, 4);
     assert.equal(profile.revision, 1);
     assert.equal(profile.audience, NEW_AI_AUDIENCE);
     assert.match(profile.contentGoal, /真实项目/);
     assert.match(profile.editorialBrief, /五维=时代认知/);
     assert.match(profile.editorialBrief, /迷茫诊断/);
+    assert.ok(profile.platforms.includes('zhihu'));
   });
 });
 
@@ -58,17 +59,17 @@ test('official.ai lineage with template v1 upgrades on ensure', async () => {
     };
     insertWorkspaceProfile(database, stale);
     const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
-    assert.equal(upgraded.officialTemplateVersion, 3);
+    assert.equal(upgraded.officialTemplateVersion, 4);
     assert.equal(upgraded.revision, 2);
     assert.equal(upgraded.displayName, 'AI × 商业化成长');
     assert.equal(upgraded.audience, NEW_AI_AUDIENCE);
     const again = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(again.revision, 2);
-    assert.equal(again.officialTemplateVersion, 3);
+    assert.equal(again.officialTemplateVersion, 4);
   });
 });
 
-test('official.ai lineage with existing v2 profile upgrades to v3 on ensure', async () => {
+test('official.ai lineage with existing v2 profile upgrades to v4 on ensure', async () => {
   await withDb((database) => {
     const stale = {
       ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'],
@@ -78,7 +79,7 @@ test('official.ai lineage with existing v2 profile upgrades to v3 on ensure', as
     };
     insertWorkspaceProfile(database, stale);
     const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
-    assert.equal(upgraded.officialTemplateVersion, 3);
+    assert.equal(upgraded.officialTemplateVersion, 4);
     assert.equal(upgraded.revision, 3);
     assert.equal(upgraded.displayName, 'AI × 商业化成长');
     assert.equal(upgraded.audience, NEW_AI_AUDIENCE);
@@ -86,8 +87,23 @@ test('official.ai lineage with existing v2 profile upgrades to v3 on ensure', as
     assert.doesNotMatch(upgraded.editorialBrief, /内容→信任→付费/);
     const again = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(again.revision, 3);
-    assert.equal(again.officialTemplateVersion, 3);
+    assert.equal(again.officialTemplateVersion, 4);
     assert.equal(readWorkspaceProfile(database)?.revision, 3);
+  });
+});
+
+test('official.ai v3 workspace upgrades to v4 and enables Zhihu', async () => {
+  await withDb((database) => {
+    insertWorkspaceProfile(database, {
+      ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'],
+      officialTemplateVersion: 3,
+      platforms: ['x', 'xiaohongshu', 'wechat'],
+      revision: 3
+    });
+    const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
+    assert.equal(upgraded.officialTemplateVersion, 4);
+    assert.equal(upgraded.revision, 4);
+    assert.deepEqual(upgraded.platforms, ['x', 'xiaohongshu', 'wechat', 'zhihu']);
   });
 });
 

@@ -1,0 +1,12 @@
+/* ============================================================
+ * WeMediaBuddy Design System — global CSS entry point.
+ * IMPORT-ONLY: consumers link this one file. Every rule lives
+ * in a file reached transitively from here; tokens are the
+ * `--*` custom properties under `:root` in this closure.
+ * ============================================================ */
+
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';
+@import './tokens/shape-motion.css';
+@import './styles/components.css';

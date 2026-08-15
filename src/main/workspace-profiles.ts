@@ -14,14 +14,14 @@ export type WorkspaceProfileV1 = {
   intelligencePackVersion: number;
   creationPackId: 'wmb-core-creation';
   creationPackVersion: number;
-  platforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+  platforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
 };
 
 export const OFFICIAL_WORKSPACE_TEMPLATES: Record<OfficialTemplateId, Omit<WorkspaceProfileV1, 'revision'>> = {
   'official.ai': {
     profileId: 'profile.ai.official',
     officialTemplateId: 'official.ai',
-    officialTemplateVersion: 3,
+    officialTemplateVersion: 4,
     displayName: 'AI × 商业化成长',
     audience: '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人',
     contentGoal: '帮中文普通人从迷茫走向明确：找到个人商业化方向，完成第一个真实项目并拿到真实反馈；不承诺收入',
@@ -30,7 +30,9 @@ export const OFFICIAL_WORKSPACE_TEMPLATES: Record<OfficialTemplateId, Omit<Works
     intelligencePackVersion: 1,
     creationPackId: 'wmb-core-creation',
     creationPackVersion: 1,
-    platforms: ['x', 'xiaohongshu', 'wechat']
+    // WMB-5249：v4 为 official.ai 存量工作空间启用知乎发布面；ensure 仅升级官方谱系，
+    // 自定义配方不受影响，运行中任务仍按既有保护跳过升级。
+    platforms: ['x', 'xiaohongshu', 'wechat', 'zhihu']
   },
   'official.uk': {
     profileId: 'profile.uk.official',

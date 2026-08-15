@@ -542,7 +542,7 @@ function buildTopicChangeSet(database: DatabaseSync, plan: LegacyInitPlan): {
       adoptedNoteVersionIds,
       businessObjectRefs: [`topic:${plan.topicId}`],
       flags: ['migration', 'derived-from-legacy'],
-      changeSummary: `历史初始化：为 Topic「${plan.topicTitle}」创建 derived-from-legacy 初始 Wiki（来源：topic.summary + 既有 dossier；采纳 ${adoptedNoteVersionIds.length} 个 legacy 知识版本；${promoted.length} 条明确证据晋升，其余保持 Raw/Evidence）。`,
+      changeSummary: `历史初始化：为主题「${plan.topicTitle}」建立初始档案（来源：topic.summary + 既有资料；采纳 ${adoptedNoteVersionIds.length} 个历史结论版本；${promoted.length} 条明确证据晋升，其余保持原始记录）。`,
       readableDiff: `legacy → migration v1（flags: migration, derived-from-legacy）。`,
       compileReason: '历史初始化（WMB-5217 legacy init）'
     }
@@ -566,7 +566,7 @@ function buildTopicChangeSet(database: DatabaseSync, plan: LegacyInitPlan): {
         adoptedNoteVersionIds: 0,
         note: '历史初始化：Topic Wiki 无任何来源证据，知识仅来自 topic.summary'
       },
-      suggestedAction: '通过后续来源摄取与增量编译接入证据链'
+      suggestedAction: '通过后续保存来源与整理接入证据链'
     });
   }
 
@@ -594,9 +594,9 @@ function buildTopicChangeSet(database: DatabaseSync, plan: LegacyInitPlan): {
     receipts: [{
       triggerType: 'migration' as const,
       requestId,
-      summary: `历史初始化 Topic「${plan.topicTitle}」：Wiki v1（migration/derived-from-legacy）；` +
-        `Source 候选 ${sourcesPromoted}/${plan.sources.length}、Review 候选 ${reviewsPromoted}/${plan.reviews.length}、` +
-        `Method Finding 候选 ${findingsPromoted}/${plan.findings.length}；其余保持 Raw/Evidence 交增量编译。`,
+      summary: `历史初始化主题「${plan.topicTitle}」：初始档案 v1 已建立；` +
+        `资料候选 ${sourcesPromoted}/${plan.sources.length}、复盘候选 ${reviewsPromoted}/${plan.reviews.length}、` +
+        `方法结论候选 ${findingsPromoted}/${plan.findings.length}；其余保持原始记录，交由后续增量整理。`,
       counts,
       affectedTopics: [plan.topicId],
       affectedMethods,
@@ -886,12 +886,25 @@ export type LegacyKnowledgeInitStartupResult = Readonly<{
 export async function runLegacyKnowledgeInitAtStartup(runtime: ActiveWorkspaceRuntime): Promise<LegacyKnowledgeInitStartupResult> {
   let pending: Array<{ id: string }> = [];
   try {
+    // WMB-5243：只有存在可迁移的历史证据（来源关联/历史摘要/旧计划/旧内容项目）的 Topic
+    // 才做 derived-from-legacy 初始化；全新空 Topic（无来源、无摘要、无计划/内容）保持
+    // uncompiled（等待整理），不被启动迁移冒充「初始档案」——诚实三态不被启动钩子破坏。
     pending = runtime.database.prepare(
       `SELECT t.id FROM topics t
        WHERE t.status IN ('active','watching')
          AND NOT EXISTS (
            SELECT 1 FROM knowledge_legacy_init_state s
            WHERE s.topic_id = t.id AND s.status = 'initialized'
+         )
+         AND (
+           EXISTS (
+             SELECT 1 FROM topic_source_links l
+             JOIN source_items si ON si.id = l.source_id
+             WHERE l.topic_id = t.id AND si.management_status != 'archived'
+           )
+           OR (t.summary IS NOT NULL AND trim(t.summary) != '')
+           OR EXISTS (SELECT 1 FROM plan_items pi WHERE pi.topic_id = t.id)
+           OR EXISTS (SELECT 1 FROM content_projects cp WHERE cp.topic_id = t.id)
          )
        ORDER BY t.last_seen_at DESC, t.id`
     ).all() as Array<{ id: string }>;

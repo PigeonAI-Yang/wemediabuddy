@@ -1,5 +1,12 @@
 import { broadcastDataChanged } from './data-changed.ts';
 import { listUpdateReceipts } from './knowledge-flywheel.ts';
+// WMB-5237：Source 删除生命周期清正文 revision 历史（不可变表经授权 purge 窗口删除，避免 FK cascade 触发 DELETE 守卫）。
+import { purgeSourceBodyHistory } from './source-body-cache.ts';
+// WMB-5247：删除门 —— 删除 Source 前读取其 Asset 被知识 Evidence/内容/平台 Binding/发布快照等引用的清单；有引用则阻止普通删除并要求显式确认（素材字节永不随删除消失）。
+import { sourceDeleteGate } from './media-governance.ts';
+import { CommandDispatchError } from './command-dispatcher.ts';
+// WMB-5238：Source/Topic 写路径增量索引与日志投影。
+import { projectSourceSaved, projectTopicSaved } from './wiki-index-triggers.ts';
 // WMB-5233：主题列表诚实三态（uncompiled / legacy_shell / compiled）。
 import { listTopicCompileStates } from './knowledge-compile-state.ts';
 import { randomUUID } from 'node:crypto';
@@ -96,17 +103,30 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
       input.id
     );
   if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
+  // WMB-5238：Source 状态/字段更新成功提交后增量投影（含归档 → 移除索引条目）。
+  projectSourceSaved(database, input.id);
   return { id: input.id, revision: next };
 }
 
-export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }, transaction = true, broadcast = true) {
+export function deleteKnowledgeSource(database: DatabaseSync, input: { id: string; expectedRevision: number }, transaction = true, broadcast = true, options: { forceReferencedDelete?: boolean } = {}) {
   const current = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.id) as { id: string; revision: number } | undefined;
   if (!current) throw new Error('SOURCE_NOT_FOUND');
   if (current.revision !== input.expectedRevision) throw new Error('REVISION_CONFLICT');
+  // WMB-5247 删除门：有外部 Asset 引用时阻止普通删除；forceReferencedDelete 仅表示用户显式
+  // 确认“仍删除 Source 关系”，Asset 字节永不删除（字节由引用感知 GC 另行保护）。
+  const gate = sourceDeleteGate(database, input.id, { forceReferencedDelete: options.forceReferencedDelete === true });
+  if (!gate.allowed) {
+    throw new CommandDispatchError(
+      'SOURCE_DELETE_BLOCKED_REFERENCED_ASSETS',
+      '该资料关联的素材仍被内容/平台版本、发布快照或知识证据引用；请先查看引用清单。确认后仍可删除资料（素材文件保留）。',
+      { summary: gate.summary }
+    );
+  }
   if (transaction) database.exec('BEGIN');
   try {
     database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(input.id);
     database.prepare('DELETE FROM content_project_sources WHERE source_id=?').run(input.id);
+    purgeSourceBodyHistory(database, input.id);
     database.prepare('DELETE FROM source_body_cache WHERE source_id=?').run(input.id);
     try {
       database.prepare("DELETE FROM knowledge_canvas_nodes WHERE object_type='source' AND object_id=?").run(input.id);
@@ -121,6 +141,8 @@ export function deleteKnowledgeSource(database: DatabaseSync, input: { id: strin
     throw error;
   }
   if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.delete' });
+  // WMB-5238：删除成功提交后移除索引条目（对象不存在 → projectSourceSaved 走 remove 分支）。
+  projectSourceSaved(database, input.id);
   return { id: input.id, deleted: true as const };
 }
 
@@ -175,11 +197,21 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
   if (!key || !input.title.trim()) throw new Error('TOPIC_REQUIRED');
   if (input.status && !topicStatuses.has(input.status)) throw new Error('INVALID_TOPIC_STATUS');
   const now = new Date().toISOString();
-  const existing = database.prepare('SELECT id, revision FROM topics WHERE canonical_key=?').get(key) as { id: string; revision: number } | undefined;
+  const existing = database.prepare('SELECT id, revision, title, kind, summary, status FROM topics WHERE canonical_key=?').get(key) as
+    | { id: string; revision: number; title: string; kind: string | null; summary: string | null; status: string }
+    | undefined;
   if (existing) {
+    const nextTitle = input.title.trim();
+    const nextKind = input.kind ?? 'theme';
+    const nextStatus = input.status ?? existing.status;
     database.prepare(`UPDATE topics SET title=?, kind=?, summary=coalesce(?, summary), status=coalesce(?, status),
       last_seen_at=?, updated_at=?, revision=revision+1 WHERE id=?`)
-      .run(input.title.trim(), input.kind ?? 'theme', input.summary ?? null, input.status ?? null, now, now, existing.id);
+      .run(nextTitle, nextKind, input.summary ?? null, nextStatus, now, now, existing.id);
+    // WMB-5238：Topic 更新成功提交后增量投影（含归档 → 移除索引条目）；无实质变化不重复投影/日志。
+    if (nextTitle !== existing.title || nextKind !== existing.kind || nextStatus !== existing.status
+      || (input.summary !== undefined && input.summary !== existing.summary)) {
+      projectTopicSaved(database, existing.id);
+    }
     return { id: existing.id, created: false, revision: existing.revision + 1 };
   }
   const id = randomUUID();
@@ -187,6 +219,8 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
     (id,title,created_at,updated_at,revision,canonical_key,kind,summary,status,first_seen_at,last_seen_at)
     VALUES (?,?,?,?,1,?,?,?,?,?,?)`)
     .run(id, input.title.trim(), now, now, key, input.kind ?? 'theme', input.summary ?? null, input.status ?? 'active', now, now);
+  // WMB-5238：新建 Topic 增量投影（索引 + 日志）。
+  projectTopicSaved(database, id);
   return { id, created: true, revision: 1 };
 }
 

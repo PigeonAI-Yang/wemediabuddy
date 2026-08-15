@@ -38,6 +38,13 @@ test('Owner browser mutations use native Main confirmation without renderer toke
   assert.match(settingsIpc, /BrowserWindow\.fromWebContents\(event\.sender\)/);
   for (const binding of ['command=', 'workspace=', 'bindingRevision=', 'registryRevision=', 'target=', 'platform=']) assert.match(settingsIpc, new RegExp(binding));
   assert.match(settingsIpc, /response !== 1/);
+  for (const message of [
+    '将创建独立登录环境，并绑定到当前工作空间。',
+    '将把当前工作空间切换到所选登录环境。',
+    '将使用当前登录环境验证账号，并更新该工作空间的账号验证状态。',
+    '将复制旧登录数据，创建新环境并绑定到当前工作空间。'
+  ]) assert.match(settingsIpc, new RegExp(message));
+  assert.doesNotMatch(settingsIpc, /此操作会修改当前工作空间的浏览器绑定/);
   assert.match(browserSettings, /aria-label="账号平台"/);
   assert.match(browserSettings, /platform: browserPlatform/g);
   assert.doesNotMatch(browserSettings, /platforms\.includes\('x'\) \? 'x' : 'wechat'/);

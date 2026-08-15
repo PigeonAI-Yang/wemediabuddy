@@ -787,7 +787,7 @@ function AnnotationCard({ row, selected, expanded, busy, onToggleExpanded, onSel
   );
 }
 
-const platformNameOf = (platform: string): string => ({ x: 'X', xiaohongshu: '小红书', wechat: '公众号' }[platform] ?? platform);
+const platformNameOf = (platform: string): string => ({ x: 'X', xiaohongshu: '小红书', wechat: '公众号', zhihu: '知乎' }[platform] ?? platform);
 const formatTime = (value: string): string => new Date(value).toLocaleString('zh-CN');
 const resolveReasonLabel = (reason: StudioAnnotation['resolvedReason']): string => {
   switch (reason) {

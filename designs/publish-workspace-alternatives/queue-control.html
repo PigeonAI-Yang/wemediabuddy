@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-scheme="A" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布队列 · A 队列总控 — WeMediaBuddy</title>
+<!-- React first — the bundle calls React.createElement -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/colors.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/shape-motion.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles/components.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles.css">
+<script src="_ds/wemedia-buddy-design-system/_ds_bundle.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+/* ============================================================
+ * Scheme A · 队列总控 — page-local layout for the queue control
+ * room. Brand/chrome color comes exclusively from DS tokens
+ * (var(--*)); layout rhythm is page-owned.
+ * ============================================================ */
+.qc-shell {
+  display: grid;
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr) var(--status-height);
+  height: 100vh;
+  min-height: 0;
+  background: var(--app-bg);
+}
+
+/* ---------- Topbar ---------- */
+.qc-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--line);
+}
+.qc-brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.qc-brand .wmb-creature-mark { width: 22px; height: 22px; }
+.qc-brand-name { font-size: 13.5px; font-weight: var(--weight-bold); color: var(--ink); white-space: nowrap; }
+.qc-brand-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.qc-room {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-left: 4px; padding-left: 16px;
+  border-left: 1px solid var(--line-strong);
+  min-width: 0;
+}
+.qc-room h1 { margin: 0; font-size: 14px; font-weight: var(--weight-bold); color: var(--ink-soft); white-space: nowrap; }
+.qc-room small { font-size: 11.5px; color: var(--muted-low); white-space: nowrap; }
+.qc-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.qc-compare {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: var(--weight-demi);
+  text-decoration: none;
+  transition: background-color var(--dur-base) var(--ease-base), color var(--dur-base) var(--ease-base), border-color var(--dur-base) var(--ease-base);
+}
+.qc-compare:hover { background: var(--surface-hover); color: var(--ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong)); }
+.qc-iconbtn {
+  display: inline-grid; place-items: center;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--muted);
+  transition: background-color var(--dur-base) var(--ease-base), color var(--dur-base) var(--ease-base), border-color var(--dur-base) var(--ease-base);
+}
+.qc-iconbtn:hover { background: var(--surface-hover); color: var(--ink); border-color: var(--border-strong); }
+.qc-iconbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Main three-pane workspace ---------- */
+.qc-main {
+  display: grid;
+  grid-template-columns: 372px minmax(0, 1fr) 300px;
+  min-height: 0;
+  background: var(--workspace-bg);
+}
+@media (max-width: 1280px) { .qc-main { grid-template-columns: 336px minmax(0, 1fr) 272px; } }
+@media (max-width: 1120px) { .qc-main { grid-template-columns: 304px minmax(0, 1fr) 248px; } }
+
+/* ---------- Left: dense queue ledger ---------- */
+.qc-ledger {
+  display: flex; flex-direction: column;
+  min-height: 0;
+  background: var(--panel-bg);
+  border-right: 1px solid var(--line);
+}
+.qc-ledger-head { flex: none; padding: 12px 14px 10px; border-bottom: 1px solid var(--line); }
+.qc-ledger-title-row { display: flex; align-items: baseline; gap: 8px; }
+.qc-ledger-title { margin: 0; font-size: 14px; font-weight: var(--weight-bold); color: var(--ink); }
+.qc-ledger-count {
+  min-width: 22px; padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-faint); color: var(--accent-soft);
+  font-size: 11px; font-weight: var(--weight-demi);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.qc-model-note { margin: 6px 0 0; font-size: 11.5px; color: var(--muted-low); line-height: 1.45; }
+.qc-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.qc-list-head {
+  flex: none;
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center;
+  padding: 7px 14px 5px;
+  color: var(--muted-low); font-size: 11px;
+  letter-spacing: .04em;
+}
+.qc-list-head .qc-lh-side { text-align: right; }
+.qc-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 2px 6px 12px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.qc-row {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color var(--dur-base) var(--ease-base), border-color var(--dur-base) var(--ease-base);
+}
+.qc-row:hover { background: var(--surface-hover); }
+.qc-row[aria-pressed="true"] {
+  background: var(--surface-selected);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.qc-row-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
+.qc-row[data-state="auth"]      .qc-row-dot { background: var(--info); }
+.qc-row[data-state="ready"]     .qc-row-dot { background: var(--accent); }
+.qc-row[data-state="takeover"]  .qc-row-dot { background: var(--status-running); }
+.qc-row[data-state="reconcile"] .qc-row-dot { background: var(--muted); }
+.qc-row[data-state="failed"]    .qc-row-dot { background: var(--danger); }
+.qc-row[data-state="done"]      .qc-row-dot { background: var(--success); }
+.qc-row-main { min-width: 0; }
+.qc-row-title {
+  font-size: 13px; font-weight: var(--weight-medium); color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.qc-row[aria-pressed="true"] .qc-row-title { font-weight: var(--weight-semibold); }
+.qc-row-meta {
+  margin-top: 2px;
+  font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.qc-row-meta b { color: var(--muted-low); font-weight: var(--weight-medium); }
+.qc-row-side { display: grid; gap: 3px; justify-items: end; }
+.qc-row-age { font-family: var(--mono); font-size: 11px; color: var(--muted-low); font-variant-numeric: tabular-nums; }
+.qc-row-next { font-size: 11.5px; font-weight: var(--weight-semibold); }
+.qc-row[data-state="auth"]      .qc-row-next { color: var(--info); }
+.qc-row[data-state="ready"]     .qc-row-next { color: var(--accent-soft); }
+.qc-row[data-state="takeover"]  .qc-row-next { color: var(--status-running); }
+.qc-row[data-state="reconcile"] .qc-row-next { color: var(--muted); }
+.qc-row[data-state="failed"]    .qc-row-next { color: var(--danger); }
+.qc-row[data-state="done"]      .qc-row-next { color: var(--success); }
+.qc-list-empty { padding: 26px 14px; text-align: center; color: var(--muted-low); font-size: 12.5px; line-height: 1.5; }
+
+/* ---------- Center: progressive operational detail ---------- */
+.qc-detail { min-height: 0; overflow-y: auto; background: var(--workspace-bg); }
+.qc-detail-inner { max-width: 780px; margin: 0 auto; padding: 20px 24px 56px; }
+.qc-detail-head { display: flex; gap: 14px; align-items: flex-start; }
+.qc-plat-badge {
+  flex: none;
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-lg);
+  font-size: 13px; font-weight: var(--weight-bold);
+  color: var(--accent-ink);
+}
+.qc-plat-badge[data-platform="x"] { background: transparent; border: 1px solid var(--border-strong); color: var(--ink-soft); }
+.qc-plat-badge[data-platform="xhs"]    { background: var(--pf-xhs); }
+.qc-plat-badge[data-platform="wechat"] { background: var(--pf-wx); }
+.qc-plat-badge[data-platform="zhihu"]  { background: var(--grade-a); }
+.qc-detail-titles { min-width: 0; }
+.qc-detail-title { margin: 0 0 4px; font-size: 22px; font-weight: var(--weight-bold); letter-spacing: -.02em; line-height: 1.25; color: var(--ink); }
+.qc-detail-idline {
+  font-family: var(--mono); font-size: 11px; color: var(--muted-low);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.qc-detail-idline time { font-variant-numeric: tabular-nums; }
+.qc-state-band { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.qc-state-line { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+
+/* Pipeline stage strip */
+.qc-stages { display: flex; align-items: center; gap: 4px; margin-top: 16px; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+.qc-stage { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.qc-stage-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); }
+.qc-stage-label { font-size: 11.5px; color: var(--muted-low); white-space: nowrap; }
+.qc-stage.is-passed .qc-stage-dot { background: var(--success); }
+.qc-stage.is-passed .qc-stage-label { color: var(--muted); }
+.qc-stage.is-current .qc-stage-dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.qc-stage.is-current .qc-stage-label { color: var(--accent-soft); font-weight: var(--weight-semibold); }
+.qc-stage.is-warn .qc-stage-dot { background: var(--status-running); box-shadow: 0 0 0 3px var(--status-running-soft); }
+.qc-stage.is-warn .qc-stage-label { color: var(--status-running); font-weight: var(--weight-semibold); }
+.qc-stage.is-bad .qc-stage-dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.qc-stage.is-bad .qc-stage-label { color: var(--danger); font-weight: var(--weight-semibold); }
+.qc-stage-link { flex: 1 1 14px; height: 1px; background: var(--line-strong); min-width: 8px; }
+
+/* Decision band */
+.qc-decision {
+  margin-top: 16px; padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+.qc-decision-eyebrow { font-size: 11px; font-weight: var(--weight-semibold); letter-spacing: 1.3px; color: var(--muted-low); }
+.qc-decision-title { margin: 5px 0 6px; font-size: 15px; font-weight: var(--weight-bold); color: var(--ink); }
+.qc-decision p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+
+/* Progressive detail sections */
+.qc-sections { margin-top: 14px; display: grid; gap: 8px; }
+.qc-section { border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); overflow: hidden; }
+.qc-section-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 11px 14px;
+  border: 0; background: transparent;
+  color: var(--ink-soft); font-size: 13px; font-weight: var(--weight-semibold);
+  text-align: left;
+}
+.qc-section-toggle:hover { color: var(--ink); }
+.qc-chev { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--dur-slow) var(--ease-base); }
+.qc-section.open .qc-chev { transform: rotate(90deg); }
+.qc-section-count { margin-left: auto; font-size: 11px; color: var(--muted-low); font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
+.qc-section-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-expand) var(--ease-out-expo); }
+.qc-section.open .qc-section-body { grid-template-rows: 1fr; }
+.qc-section-body > div { overflow: hidden; }
+.qc-section-content { padding: 2px 14px 14px 36px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.65; }
+.qc-section-content p { margin: 0 0 8px; }
+.qc-section-content p:last-child { margin-bottom: 0; }
+.qc-excerpt { color: var(--muted); }
+.qc-media-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.qc-media-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.qc-media-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.qc-media-dot.is-ready { background: var(--success); }
+.qc-media-dot.is-missing { background: var(--danger); }
+.qc-media-dot.is-pending { background: var(--muted-low); }
+.qc-media-item em { font-style: normal; color: var(--muted); font-size: 12px; }
+.qc-media-item .qc-media-state { margin-left: auto; font-size: 11.5px; }
+.qc-media-item .qc-media-state.is-ready { color: var(--success); }
+.qc-media-item .qc-media-state.is-missing { color: var(--danger); }
+.qc-media-item .qc-media-state.is-pending { color: var(--muted-low); }
+.qc-set-grid { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 13px; }
+.qc-set-grid dt { color: var(--muted); }
+.qc-set-grid dd { margin: 0; color: var(--ink-soft); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.qc-timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.qc-timeline li { display: grid; grid-template-columns: 64px 10px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.qc-tl-time { font-family: var(--mono); font-size: 11.5px; color: var(--muted-low); text-align: right; font-variant-numeric: tabular-nums; }
+.qc-tl-dot { position: relative; width: 10px; height: 10px; }
+.qc-tl-dot::before { content: ""; position: absolute; left: 4px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); }
+.qc-timeline li:not(:last-child) .qc-tl-dot::after { content: ""; position: absolute; left: 6px; top: 9px; bottom: -11px; width: 1px; background: var(--line-strong); }
+.qc-tl-text { font-size: 13px; color: var(--ink-soft); min-width: 0; }
+
+/* ---------- Right: action / exception rail ---------- */
+.qc-rail {
+  min-height: 0; overflow-y: auto;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--line);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.qc-action-card {
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-2xl);
+  background: var(--surface);
+  padding: 15px 16px;
+}
+.qc-action-eyebrow { font-size: 11px; font-weight: var(--weight-semibold); letter-spacing: 1.3px; color: var(--muted-low); }
+.qc-action-title { margin: 6px 0 4px; font-size: 17px; font-weight: var(--weight-bold); letter-spacing: -.01em; color: var(--ink); }
+.qc-action-body { margin: 0 0 12px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+.qc-action-card .ds-button { width: 100%; }
+.qc-action-hint { margin: 9px 0 0; font-size: 11.5px; color: var(--muted-low); line-height: 1.45; }
+.qc-exceptions { flex: none; border-top: 1px solid var(--line); padding-top: 10px; }
+.qc-exceptions-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px 6px; }
+.qc-exceptions-head strong { font-size: 12px; font-weight: var(--weight-semibold); color: var(--muted); }
+.qc-exceptions-head span { font-size: 11px; color: var(--muted-low); font-variant-numeric: tabular-nums; }
+.qc-ex-row {
+  display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  width: 100%; padding: 7px 8px;
+  border: 0; border-radius: var(--radius-lg);
+  background: transparent; color: inherit; text-align: left;
+}
+.qc-ex-row:hover { background: var(--surface-hover); }
+.qc-ex-dot { width: 6px; height: 6px; border-radius: 50%; }
+.qc-ex-row[data-state="takeover"] .qc-ex-dot { background: var(--status-running); }
+.qc-ex-row[data-state="failed"] .qc-ex-dot { background: var(--danger); }
+.qc-ex-title { font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qc-ex-next { font-size: 11.5px; font-weight: var(--weight-semibold); }
+.qc-ex-row[data-state="takeover"] .qc-ex-next { color: var(--status-running); }
+.qc-ex-row[data-state="failed"] .qc-ex-next { color: var(--danger); }
+.qc-ov { margin-top: auto; flex: none; border-top: 1px solid var(--line); padding-top: 11px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.qc-ov-cell { min-width: 0; }
+.qc-ov-value { font-size: 16px; font-weight: var(--weight-bold); color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.qc-ov-label { font-size: 11px; color: var(--muted-low); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Pi overlay (collapsed by default) ---------- */
+.qc-pi {
+  position: fixed; top: var(--topbar-height); right: 0; bottom: var(--status-height);
+  width: var(--pi-width);
+  z-index: 900;
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-modal);
+  transition: transform var(--dur-expand) var(--ease-out-expo);
+}
+.qc-pi.is-collapsed { transform: translateX(102%); box-shadow: none; }
+.qc-pi-rail {
+  position: fixed; top: var(--topbar-height); right: 0; bottom: var(--status-height);
+  width: 18px; z-index: 899;
+  display: grid; place-items: center;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  transition: color var(--dur-base) var(--ease-base), background-color var(--dur-base) var(--ease-base);
+}
+.qc-pi-rail:hover { color: var(--ink); background: var(--surface-raised); }
+.qc-pi-rail svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.qc-pi-close { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 0; border-radius: var(--radius-lg); background: transparent; color: var(--muted); }
+.qc-pi-close:hover { background: var(--surface-hover); color: var(--ink); }
+.qc-pi-close svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Statusbar ---------- */
+.qc-statusbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 14px;
+  background: var(--topbar-bg);
+  border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted);
+}
+.qc-status-left { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.qc-status-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+.qc-status-right { margin-left: auto; display: flex; align-items: center; gap: 14px; flex: none; }
+.qc-clock { font-family: var(--mono); font-size: var(--text-micro-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.qc-scheme-tag { font-family: var(--mono); font-size: var(--text-micro-mono); color: var(--muted-low); }
+
+/* ---------- Toast ---------- */
+.qc-toast {
+  position: fixed; left: 50%; bottom: calc(var(--status-height) + 16px);
+  transform: translateX(-50%);
+  z-index: 3000;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 10px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-size: 13px;
+  box-shadow: var(--shadow-modal);
+  animation: qc-toast-in var(--dur-base) var(--ease-out-expo);
+}
+@keyframes qc-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---------- Publish confirm modal content ---------- */
+.qc-modal-preview p { margin: 0 0 10px; }
+.qc-modal-lead { color: var(--ink-soft); }
+.qc-modal-checks { margin: 0 0 14px; padding: 0; list-style: none; display: grid; gap: 7px; }
+.qc-modal-checks li { display: flex; gap: 8px; align-items: baseline; font-size: 13.5px; color: var(--ink-soft); }
+.qc-modal-checks li::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); align-self: center; }
+.qc-modal-title { font-size: 15px; font-weight: var(--weight-bold); color: var(--ink); }
+.qc-modal-excerpt { color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qc-section-body { transition: none; }
+  .qc-pi { transition: none; }
+  .qc-chev { transition: none; }
+  .qc-row, .qc-iconbtn, .qc-compare, .qc-pi-rail { transition: none; }
+  .qc-toast { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const DS = window.WemediaBuddyDesignSystem_1c877c;
+const { AppModal, Button, ChipFilter, StatusPill, WmbCreatureMark } = DS;
+
+/* ---------------- Model: 队列总控 (Queue Control) ----------------
+ * The whole publishing operation is one queue. Left pane = dense
+ * ledger for fast scanning (state · title · platform/account/media ·
+ * age · next human decision). Center = progressive detail of the
+ * selected record. Right rail = exactly one decision per record,
+ * plus the exception lane. Pi stays collapsed until asked.
+ * ---------------------------------------------------------------- */
+
+const PLATFORMS = {
+  xhs:    { label: '小红书' },
+  wechat: { label: '公众号' },
+  zhihu:  { label: '知乎' },
+  x:      { label: 'X' },
+};
+
+const STATE_META = {
+  auth:      { label: '待授权',   tone: 'needs-user', next: '授权', primary: '确认授权',     hint: '授权后自动进入发布队列，AI 不会代发' },
+  ready:     { label: '待人工发布', tone: 'active',   next: '发布', primary: '打开并人工发布', hint: '最终发布由你手动完成' },
+  takeover:  { label: '需要接管', tone: 'warn',     next: '接管', primary: '接管处理',      hint: '接管修改后进入人工发布' },
+  reconcile: { label: '待对账',   tone: 'idle',     next: '对账', primary: '确认对账',      hint: '核对后台发布数据后确认' },
+  failed:    { label: '失败',     tone: 'bad',      next: '重试', primary: '重试发布',      hint: '重试成功后进入人工发布' },
+  done:      { label: '已发布',   tone: 'ok',       next: '完成', primary: '复制发布链接',  hint: '无待办事项' },
+};
+
+const INITIAL_RECORDS = [
+  {
+    id: 'pub-xhs-ai-course', title: '「AI 副业课，到底值不值得买」',
+    platform: 'xhs', account: '小雾AI', state: 'auth', media: '2/2', age: '12 分钟前',
+    statusLine: '内容已生成并通过自检，发布前需要你确认小红书账号授权。',
+    decision: '确认 @小雾AI 获得「发布 · 图文」权限后，稿件会自动进入发布队列，不需要你再搬运。',
+    hook: '我拆了 12 门课，结论可能和你想的不一样。',
+    excerpt: '最近「AI 副业」这个词快被讲烂了：299 的课、1999 的陪跑、9.9 的体验营……我把话术和交付拆开看了一遍。',
+    mediaItems: [
+      { n: '封面图（3:4 竖版）', k: '生成', ready: true },
+      { n: '正文配图', k: '生成', ready: true },
+    ],
+    settings: { win: '发布窗口 18:00–20:00', tags: '#AI副业 #信息差', extra: '首图带引导关注' },
+    timeline: [
+      { t: '14:02', s: '选题入库 · 来自选题台账' },
+      { t: '14:11', s: 'AI 生成图文初稿' },
+      { t: '14:19', s: '自检通过 · 等待授权' },
+    ],
+  },
+  {
+    id: 'pub-wechat-interview', title: '「与一位用 AI 改稿 300 次的编辑聊聊」',
+    platform: 'wechat', account: '雾灯', state: 'ready', media: '3/3', age: '25 分钟前',
+    statusLine: '稿件、封面与预览链接全部就绪，只差你在公众号后台做最终发布。',
+    decision: '打开公众号后台逐段确认后发布。发布清单与时间建议已为你准备好。',
+    hook: '他说：AI 不是用来偷懒的，是用来较真的。',
+    excerpt: '访谈正文 5200 字，三段问答结构：入行、改稿方法论、给新人的三条建议。',
+    mediaItems: [
+      { n: '封面 900×383', k: '就绪', ready: true },
+      { n: '头图', k: '就绪', ready: true },
+      { n: '文末二维码', k: '就绪', ready: true },
+    ],
+    settings: { win: '发布窗口 07:30', tags: '原创声明 · 已勾选', extra: '文中链接 3 条已核对' },
+    timeline: [
+      { t: '昨天 20:14', s: '选题入库' },
+      { t: '昨天 21:02', s: 'AI 生成访谈稿初稿' },
+      { t: '今天 09:30', s: '人工润色 2 轮 · 预览链接已生成' },
+    ],
+  },
+  {
+    id: 'pub-zhihu-devday', title: '「开发者日实录：本地模型这一年」',
+    platform: 'zhihu', account: '雾灯', state: 'takeover', media: '8/9', age: '1 小时前',
+    statusLine: 'AI 拟的标题与知乎热榜话题冲突，被平台规范拦下，需要你接管改题。',
+    decision: '接管本稿：在 3 个备选标题中挑一个，或放回 AI 重新生成。',
+    hook: '一年前没人信本地模型能跑成这样。',
+    excerpt: '长文 3100 字 + 8 张会场照片，配图缺 1 张会议合影（素材箱里有原图）。',
+    mediaItems: [
+      { n: '头图', k: '就绪', ready: true },
+      { n: '会场配图 7/8', k: '缺 1 张', ready: false },
+    ],
+    settings: { win: '发布后同步「发现」专栏', tags: '邀请 3 位与会者回答', extra: '草稿箱已有备份' },
+    timeline: [
+      { t: '11:40', s: 'AI 生成长文初稿' },
+      { t: '11:52', s: '热榜冲突被拦下 · 需要接管' },
+    ],
+  },
+  {
+    id: 'pub-x-karpathy', title: '「Karpathy 谈 AI 编程的尽头」',
+    platform: 'x', account: '@wudeng', state: 'reconcile', media: '1/1', age: '2 小时前',
+    statusLine: '帖子已在 X 发布成功，等待你确认后台数据与发布记录一致。',
+    decision: '核对 X 后台的曝光数、链接与发布记录，一致后确认对账。',
+    hook: '一句话总结：工具越强，判断越贵。',
+    excerpt: '短帖 + 3 条引用线，观点整理自 Karpathy 本周访谈。',
+    mediaItems: [ { n: '卡片图', k: '就绪', ready: true } ],
+    settings: { win: '已定时 09:30 发布', tags: '置顶 24h', extra: '回复折叠已开启' },
+    timeline: [
+      { t: '09:30', s: '定时发布成功' },
+      { t: '10:02', s: '等待对账确认' },
+    ],
+  },
+  {
+    id: 'pub-xhs-cursor', title: '「Cursor 提效的 5 个反直觉设置」',
+    platform: 'xhs', account: '小雾AI', state: 'failed', media: '1/2', age: '3 小时前',
+    statusLine: '封面图生成失败（图片服务超时），整稿被拦在发布前。',
+    decision: '重试封面生成；也可以换成备选封面（本地已备 2 张）。',
+    hook: '第 3 条你肯定没开。',
+    excerpt: '正文 1800 字已就绪，配图就绪，只差封面。',
+    mediaItems: [
+      { n: '封面 3:4', k: '生成失败', ready: false },
+      { n: '正文配图', k: '就绪', ready: true },
+    ],
+    settings: { win: '发布窗口 12:00', tags: '#Cursor #效率工具', extra: '已自动重试 1 次' },
+    timeline: [
+      { t: '11:10', s: '正文生成完成' },
+      { t: '11:14', s: '封面生成失败 · 自动重试 1 次' },
+      { t: '11:16', s: '再次失败 · 等待人工' },
+    ],
+  },
+  {
+    id: 'pub-wechat-weekly', title: '「雾灯周报 #17：模型降价周」',
+    platform: 'wechat', account: '雾灯', state: 'done', media: '2/2', age: '昨天',
+    statusLine: '已发布并完成对账，数据已归档。',
+    decision: '无待办事项。可查看发布数据或复制链接。',
+    hook: '本周各家模型集体降价，我帮你算了一笔账。',
+    excerpt: '周报正文 2600 字，含 4 张对比图，已归档到「雾灯周报」合集。',
+    mediaItems: [
+      { n: '封面', k: '就绪', ready: true },
+      { n: '头图', k: '就绪', ready: true },
+    ],
+    settings: { win: '已发布 08:00', tags: '阅读 1.2k · 涨粉 34', extra: '数据已归档' },
+    timeline: [
+      { t: '08:00', s: '人工确认发布' },
+      { t: '10:15', s: '对账完成 · 归档' },
+    ],
+  },
+  {
+    id: 'pub-zhihu-gpt5', title: '「GPT-5 之后，提示词还重要吗」',
+    platform: 'zhihu', account: '雾灯', state: 'auth', media: '0/2', age: '5 分钟前',
+    statusLine: '新账号绑定，发布前需要你完成知乎授权。',
+    decision: '授权「雾灯」使用知乎「发布文章」权限，之后 AI 才能继续备稿。',
+    hook: '一个老问题的新答案。',
+    excerpt: '待授权后生成正文与头图。',
+    mediaItems: [
+      { n: '头图', k: '待生成', ready: false },
+      { n: '正文配图', k: '待生成', ready: false },
+    ],
+    settings: { win: '未设定窗口', tags: '待授权后配置', extra: '' },
+    timeline: [ { t: '14:26', s: '选题入库 · 等待授权' } ],
+  },
+  {
+    id: 'pub-x-mcp', title: '「我把 MCP 接到了本地工作流」',
+    platform: 'x', account: '@wudeng', state: 'ready', media: '1/1', age: '40 分钟前',
+    statusLine: '帖子已定时，已到发布窗口，等待你手动确认发布。',
+    decision: '确认后立即发布（已到定时窗口 16:00）。',
+    hook: '工具链的最后一公里。',
+    excerpt: '短帖 + 1 张架构卡片图，正文 240 字。',
+    mediaItems: [ { n: '架构卡片图', k: '就绪', ready: true } ],
+    settings: { win: '定时 16:00 · 已到窗口', tags: '技术分享', extra: '' },
+    timeline: [ { t: '15:20', s: '定时设定完成' } ],
+  },
+  {
+    id: 'pub-xhs-loom', title: '「Loom 式工作流，到底适合谁」',
+    platform: 'xhs', account: '小雾AI', state: 'takeover', media: '1/2', age: '昨天',
+    statusLine: '正文含敏感词「培训」，与平台规范冲突，需你接管修改后放行。',
+    decision: '接管后替换 2 处敏感表述（已在正文标注），再放行进入发布。',
+    hook: '不是所有人需要 Loom，但需要的人缺不了它。',
+    excerpt: '正文 1500 字已生成，2 处敏感词已标注。',
+    mediaItems: [
+      { n: '封面', k: '就绪', ready: true },
+      { n: '配图', k: '待生成', ready: false },
+    ],
+    settings: { win: '未设定窗口', tags: '待放行后配置', extra: '' },
+    timeline: [ { t: '昨天 21:05', s: '敏感词拦截 · 需要接管' } ],
+  },
+  {
+    id: 'pub-wechat-newsletter', title: '「订阅迁移说明：把更新带回家」',
+    platform: 'wechat', account: '雾灯', state: 'reconcile', media: '2/2', age: '昨天',
+    statusLine: '已发布，等待对账确认迁移数据。',
+    decision: '核对迁移用户数与后台导出数据，一致后确认对账。',
+    hook: '一个链接，带走所有更新。',
+    excerpt: '迁移说明 900 字 + 操作指引长图。',
+    mediaItems: [
+      { n: '封面', k: '就绪', ready: true },
+      { n: '指引长图', k: '就绪', ready: true },
+    ],
+    settings: { win: '已发布 07:30', tags: '迁移用户 128', extra: '' },
+    timeline: [
+      { t: '07:30', s: '人工确认发布' },
+      { t: '09:12', s: '等待对账确认' },
+    ],
+  },
+  {
+    id: 'pub-x-demo', title: '「Demo 视频：30 秒生成一张图」',
+    platform: 'x', account: '@wudeng', state: 'failed', media: '0/1', age: '昨天',
+    statusLine: '视频转码失败（源格式不支持），需重试或换源文件。',
+    decision: '重试转码；或换成 MP4 源文件后重新入队。',
+    hook: '30 秒，从提示词到成品图。',
+    excerpt: '视频 12 秒 + 封面卡，转码未通过。',
+    mediaItems: [ { n: '视频转码', k: '失败', ready: false } ],
+    settings: { win: '未设定窗口', tags: '待转码成功后配置', extra: '' },
+    timeline: [ { t: '昨天 16:40', s: '转码失败 · 等待人工' } ],
+  },
+  {
+    id: 'pub-xhs-toolkit', title: '「AI 工具箱 8 月清单」',
+    platform: 'xhs', account: '小雾AI', state: 'done', media: '2/2', age: '周一',
+    statusLine: '已发布并完成对账。',
+    decision: '无待办事项。可查看数据或复制链接。',
+    hook: '这个月我留下的 9 个工具。',
+    excerpt: '清单图文 1400 字 + 2 张长图，已归档。',
+    mediaItems: [
+      { n: '封面', k: '就绪', ready: true },
+      { n: '长图清单', k: '就绪', ready: true },
+    ],
+    settings: { win: '已发布 19:02', tags: '收藏 320 · 涨粉 61', extra: '数据已归档' },
+    timeline: [
+      { t: '周一 19:02', s: '人工确认发布' },
+      { t: '周一 20:30', s: '对账完成 · 归档' },
+    ],
+  },
+];
+
+const STAGES = ['生成', '授权', '发布', '对账', '完成'];
+const STAGE_IDX = { auth: 1, ready: 2, takeover: 2, failed: 2, reconcile: 3, done: 4 };
+
+const FILTERS = [
+  { key: 'all',  label: '全部' },
+  { key: 'need', label: '需要你' },
+  { key: 'ex',   label: '异常' },
+  { key: 'done', label: '已完成' },
+];
+
+function matchesFilter(rec, key) {
+  if (key === 'need') return rec.state !== 'done';
+  if (key === 'ex') return rec.state === 'takeover' || rec.state === 'failed';
+  if (key === 'done') return rec.state === 'done';
+  return true;
+}
+
+function nowLabel() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function clockLabel() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+const INITIAL_PI = [
+  { who: 'agent', text: '队列扫描完成：12 条记录，4 条异常（2 接管 / 2 失败）。' },
+  { who: 'agent', text: '建议优先处理 pub-xhs-cursor：封面已自动重试 1 次，等你接管。' },
+];
+
+function DetailSection({ label, count, open, onToggle, children }) {
+  return (
+    <section className={'qc-section' + (open ? ' open' : '')}>
+      <button type="button" className="qc-section-toggle" onClick={onToggle} aria-expanded={open}>
+        <svg className="qc-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" /></svg>
+        <span>{label}</span>
+        {count != null && <span className="qc-section-count">{count}</span>}
+      </button>
+      <div className="qc-section-body"><div><div className="qc-section-content">{children}</div></div></div>
+    </section>
+  );
+}
+
+function QueueControlApp() {
+  const [records, setRecords] = React.useState(INITIAL_RECORDS);
+  const [filterKey, setFilterKey] = React.useState('all');
+  const [selectedId, setSelectedId] = React.useState('pub-xhs-ai-course');
+  const [themeMode, setThemeMode] = React.useState('dark');
+  const [piOpen, setPiOpen] = React.useState(false);
+  const [piMessages, setPiMessages] = React.useState(INITIAL_PI);
+  const [piDraft, setPiDraft] = React.useState('');
+  const [publishOpen, setPublishOpen] = React.useState(false);
+  const [retryingId, setRetryingId] = React.useState(null);
+  const [toastMsg, setToastMsg] = React.useState(null);
+  const [openSections, setOpenSections] = React.useState({ preview: true, media: false, settings: false, timeline: false });
+  const [clock, setClock] = React.useState(nowLabel());
+  const toastTimer = React.useRef(null);
+  const retryTimer = React.useRef(null);
+
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+  }, [themeMode]);
+
+  React.useEffect(() => {
+    const iv = setInterval(() => setClock(nowLabel()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const visibleRecords = records.filter(r => matchesFilter(r, filterKey));
+  const activeId = visibleRecords.some(r => r.id === selectedId)
+    ? selectedId
+    : (visibleRecords[0] ? visibleRecords[0].id : null);
+  const activeRecord = records.find(r => r.id === activeId) || null;
+
+  const counts = {
+    all: records.length,
+    need: records.filter(r => r.state !== 'done').length,
+    ex: records.filter(r => r.state === 'takeover' || r.state === 'failed').length,
+    done: records.filter(r => r.state === 'done').length,
+  };
+  const exceptions = records.filter(r => r.state === 'takeover' || r.state === 'failed');
+
+  function showToast(msg) {
+    setToastMsg(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMsg(null), 2800);
+  }
+
+  function advanceTo(recordId, nextState, note) {
+    setRecords(prev => prev.map(r => r.id === recordId
+      ? { ...r, state: nextState, age: '刚刚', timeline: [...r.timeline, { t: clockLabel(), s: note }] }
+      : r));
+  }
+
+  function handlePrimary() {
+    if (!activeRecord) return;
+    const st = activeRecord.state;
+    if (st === 'auth') {
+      advanceTo(activeRecord.id, 'ready', '已确认授权');
+      showToast('已授权，稿件进入待人工发布');
+    } else if (st === 'ready') {
+      setPublishOpen(true);
+    } else if (st === 'takeover') {
+      advanceTo(activeRecord.id, 'ready', '已接管并放行');
+      showToast('已接管，稿件进入待人工发布');
+    } else if (st === 'reconcile') {
+      advanceTo(activeRecord.id, 'done', '对账确认完成');
+      showToast('对账完成，记录已归档');
+    } else if (st === 'failed') {
+      if (retryingId) return;
+      setRetryingId(activeRecord.id);
+      clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(() => {
+        setRetryingId(null);
+        advanceTo(activeRecord.id, 'ready', '重试成功，素材已补齐');
+        showToast('重试成功，稿件进入待人工发布');
+      }, 1500);
+    } else if (st === 'done') {
+      const url = 'https://wmb.local/posts/' + activeRecord.id;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(() => showToast('发布链接已复制'))
+          .catch(() => showToast('链接已复制（演示）'));
+      } else {
+        showToast('链接已复制（演示）');
+      }
+    }
+  }
+
+  function confirmPublish() {
+    if (!activeRecord) return;
+    advanceTo(activeRecord.id, 'reconcile', '已手动确认发布');
+    setPublishOpen(false);
+    showToast('已发布，等待对账确认');
+  }
+
+  function sendPi() {
+    const text = piDraft.trim();
+    if (!text) return;
+    setPiMessages(m => [...m, { who: 'user', text }]);
+    setPiDraft('');
+    setTimeout(() => {
+      setPiMessages(m => [...m, {
+        who: 'agent',
+        text: '收到。已把「' + (activeRecord ? activeRecord.title : '当前记录') + '」加入关注列表，操作建议已同步到右侧行动卡。',
+      }]);
+    }, 700);
+  }
+
+  function toggleSection(sectionKey) {
+    setOpenSections(prev => ({ ...prev, [sectionKey]: !prev[sectionKey] }));
+  }
+
+  const meta = activeRecord ? STATE_META[activeRecord.state] : null;
+  const stageIdx = activeRecord ? STAGE_IDX[activeRecord.state] : 0;
+  const isRetrying = retryingId != null && retryingId === (activeRecord ? activeRecord.id : null);
+
+  return (
+    <div className="qc-shell">
+
+      {/* ============ Topbar ============ */}
+      <header className="qc-topbar">
+        <div className="qc-brand">
+          <WmbCreatureMark state={retryingId ? 'working' : (activeRecord && activeRecord.state === 'done' ? 'settling' : 'idle')} />
+          <span className="qc-brand-name">WeMediaBuddy</span>
+          <span className="qc-brand-sub">发布工作台</span>
+        </div>
+        <div className="qc-room">
+          <h1>发布队列</h1>
+          <small>A · 队列总控</small>
+        </div>
+        <div className="qc-topbar-right">
+          <a className="qc-compare" href="index.html">比较方案</a>
+          <button type="button" className="qc-iconbtn" data-testid="theme-toggle"
+                  aria-label={themeMode === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+                  title={themeMode === 'dark' ? '浅色主题' : '深色主题'}
+                  onClick={() => setThemeMode(m => (m === 'dark' ? 'light' : 'dark'))}>
+            {themeMode === 'dark' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3L19 19M19 5l-1.7 1.7M6.7 17.3L5 19" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 14.2A8.5 8.5 0 0 1 9.8 3.6a8.5 8.5 0 1 0 10.6 10.6z" /></svg>
+            )}
+          </button>
+          <button type="button" className="qc-iconbtn" data-testid="pi-toggle"
+                  aria-label={piOpen ? '收起 Pi 助手' : '展开 Pi 助手'}
+                  aria-expanded={piOpen}
+                  title={piOpen ? '收起 Pi' : '展开 Pi'}
+                  onClick={() => setPiOpen(v => !v)}>
+            {piOpen ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M15 4v16M3 8h5M3 16h5M21 8h-6M21 16h-6" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-6 16M21 12h-6M3 12h6M4 8h2M4 16h2M18 8h2M18 16h2" /></svg>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* ============ Three-pane workspace ============ */}
+      <div className="qc-main">
+
+        {/* ----- Left: dense queue ledger ----- */}
+        <section className="qc-ledger" aria-label="任务队列">
+          <div className="qc-ledger-head">
+            <div className="qc-ledger-title-row">
+              <h2 className="qc-ledger-title">任务队列</h2>
+              <span className="qc-ledger-count">{visibleRecords.length}</span>
+            </div>
+            <p className="qc-model-note">A · 队列总控 —— 左屏速扫全队，中屏递进详情，右轨单一决策。</p>
+            <div className="qc-chips" role="group" aria-label="按状态筛选">
+              {FILTERS.map(f => (
+                <ChipFilter key={f.key} size="sm" label={f.label} count={counts[f.key]}
+                            pressed={filterKey === f.key}
+                            onToggle={() => setFilterKey(f.key)} />
+              ))}
+            </div>
+          </div>
+          <div className="qc-list-head" aria-hidden="true">
+            <span>状态</span>
+            <span>标题 / 平台 · 账号 · 素材</span>
+            <span className="qc-lh-side">等待 · 下一步</span>
+          </div>
+          <div className="qc-list" data-testid="task-list">
+            {visibleRecords.length === 0 && (
+              <p className="qc-list-empty">当前筛选下没有记录，换个筛选看看。</p>
+            )}
+            {visibleRecords.map(rec => {
+              const selected = rec.id === activeId;
+              const m = STATE_META[rec.state];
+              return (
+                <button type="button" key={rec.id} className="qc-row"
+                        data-testid="task-row" data-state={rec.state}
+                        aria-pressed={selected}
+                        onClick={() => setSelectedId(rec.id)}>
+                  <span className="qc-row-dot" aria-hidden="true" />
+                  <span className="qc-row-main">
+                    <span className="qc-row-title">{rec.title}</span>
+                    <span className="qc-row-meta">
+                      {PLATFORMS[rec.platform].label} · <b>{rec.account}</b> · 素材 {rec.media}
+                    </span>
+                  </span>
+                  <span className="qc-row-side">
+                    <span className="qc-row-age">{rec.age}</span>
+                    <span className="qc-row-next">{m.next}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ----- Center: progressive operational detail ----- */}
+        <section className="qc-detail" data-testid="detail"
+                 data-current-state={activeRecord ? activeRecord.state : 'none'} aria-label="记录详情">
+          {activeRecord && meta ? (
+            <div className="qc-detail-inner">
+              <div className="qc-detail-head">
+                <span className="qc-plat-badge" data-platform={activeRecord.platform} aria-hidden="true">
+                  {PLATFORMS[activeRecord.platform].label.slice(0, 1)}
+                </span>
+                <div className="qc-detail-titles">
+                  <h2 className="qc-detail-title">{activeRecord.title}</h2>
+                  <div className="qc-detail-idline">
+                    <code>{activeRecord.id}</code>
+                    <time>{activeRecord.age}</time>
+                  </div>
+                </div>
+              </div>
+
+              <div className="qc-state-band">
+                <StatusPill tone={meta.tone} live={activeRecord.state !== 'done'}>{meta.label}</StatusPill>
+                <p className="qc-state-line">{activeRecord.statusLine}</p>
+              </div>
+
+              <div className="qc-stages" aria-label="发布流水线">
+                {STAGES.map((stageLabel, i) => {
+                  const passed = i < stageIdx;
+                  const current = i === stageIdx;
+                  const warn = current && (activeRecord.state === 'takeover' || activeRecord.state === 'failed');
+                  return (
+                    <React.Fragment key={stageLabel}>
+                      <span className={
+                        'qc-stage'
+                        + (passed ? ' is-passed' : '')
+                        + (current ? (warn ? (activeRecord.state === 'failed' ? ' is-bad' : ' is-warn') : ' is-current') : '')
+                      }>
+                        <span className="qc-stage-dot" aria-hidden="true" />
+                        <span className="qc-stage-label">{stageLabel}</span>
+                      </span>
+                      {i < STAGES.length - 1 && <span className="qc-stage-link" aria-hidden="true" />}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              <div className="qc-decision">
+                <div className="qc-decision-eyebrow">下一步决策</div>
+                <div className="qc-decision-title">{meta.label} · 需要你</div>
+                <p>{activeRecord.decision}</p>
+              </div>
+
+              <div className="qc-sections">
+                <DetailSection label="内容预览" count={activeRecord.media}
+                               open={openSections.preview}
+                               onToggle={() => toggleSection('preview')}>
+                  <p><b>{activeRecord.hook}</b></p>
+                  <p className="qc-excerpt">{activeRecord.excerpt}</p>
+                </DetailSection>
+
+                <DetailSection label="素材检查" count={activeRecord.mediaItems.length + ' 项'}
+                               open={openSections.media}
+                               onToggle={() => toggleSection('media')}>
+                  <ul className="qc-media-list">
+                    {activeRecord.mediaItems.map((item, i) => (
+                      <li className="qc-media-item" key={i}>
+                        <span className={'qc-media-dot ' + (item.ready ? 'is-ready' : 'is-missing')} aria-hidden="true" />
+                        <span>{item.n}</span>
+                        <em>{item.k}</em>
+                        <span className={'qc-media-state ' + (item.ready ? 'is-ready' : 'is-missing')}>
+                          {item.ready ? '就绪' : '缺失 / 待处理'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </DetailSection>
+
+                <DetailSection label="发布设置" count={activeRecord.settings.win}
+                               open={openSections.settings}
+                               onToggle={() => toggleSection('settings')}>
+                  <dl className="qc-set-grid">
+                    <dt>窗口</dt><dd>{activeRecord.settings.win}</dd>
+                    <dt>话题</dt><dd>{activeRecord.settings.tags}</dd>
+                    <dt>备注</dt><dd>{activeRecord.settings.extra || '—'}</dd>
+                  </dl>
+                </DetailSection>
+
+                <DetailSection label="操作时间线" count={activeRecord.timeline.length + ' 条'}
+                               open={openSections.timeline}
+                               onToggle={() => toggleSection('timeline')}>
+                  <ul className="qc-timeline">
+                    {activeRecord.timeline.map((entry, i) => (
+                      <li key={i}>
+                        <span className="qc-tl-time">{entry.t}</span>
+                        <span className="qc-tl-dot" aria-hidden="true" />
+                        <span className="qc-tl-text">{entry.s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </DetailSection>
+              </div>
+            </div>
+          ) : (
+            <div className="qc-detail-inner">
+              <p className="qc-list-empty">没有可查看的记录。</p>
+            </div>
+          )}
+        </section>
+
+        {/* ----- Right: action / exception rail ----- */}
+        <aside className="qc-rail" aria-label="行动与异常">
+          {activeRecord && meta ? (
+            <div className="qc-action-card" data-current-state={activeRecord.state}>
+              <div className="qc-action-eyebrow">下一步决策</div>
+              <div className="qc-action-title">{meta.label}</div>
+              <p className="qc-action-body">{activeRecord.decision}</p>
+              <span data-testid="primary-action">
+                <Button variant="primary" onClick={handlePrimary} disabled={isRetrying}>
+                  {isRetrying ? '重试中…' : meta.primary}
+                </Button>
+              </span>
+              <p className="qc-action-hint">{meta.hint}</p>
+            </div>
+          ) : null}
+
+          <section className="qc-exceptions" aria-label="异常通道">
+            <div className="qc-exceptions-head">
+              <strong>异常通道</strong>
+              <span>{counts.ex} 条</span>
+            </div>
+            {exceptions.length === 0 ? (
+              <p className="qc-list-empty" style={{ padding: '10px 4px', textAlign: 'left' }}>没有异常记录，队列畅通。</p>
+            ) : exceptions.map(rec => (
+              <button type="button" key={rec.id} className="qc-ex-row" data-state={rec.state}
+                      onClick={() => setSelectedId(rec.id)}>
+                <span className="qc-ex-dot" aria-hidden="true" />
+                <span className="qc-ex-title">{rec.title}</span>
+                <span className="qc-ex-next">{STATE_META[rec.state].next}</span>
+              </button>
+            ))}
+          </section>
+
+          <section className="qc-ov" aria-label="队列概况">
+            <div className="qc-ov-cell"><div className="qc-ov-value">{counts.need}</div><div className="qc-ov-label">需要你</div></div>
+            <div className="qc-ov-cell"><div className="qc-ov-value">{counts.ex}</div><div className="qc-ov-label">异常</div></div>
+            <div className="qc-ov-cell"><div className="qc-ov-value">{counts.done}</div><div className="qc-ov-label">今日已发布</div></div>
+          </section>
+        </aside>
+      </div>
+
+      {/* ============ Statusbar ============ */}
+      <footer className="qc-statusbar">
+        <span className="qc-status-left">
+          <span className="qc-status-dot" aria-hidden="true" />
+          发布通道运行中 · 队列扫描 3 分钟前
+        </span>
+        <span className="qc-status-right">
+          <span className="qc-scheme-tag">方案 A</span>
+          <span className="qc-clock">{clock}</span>
+        </span>
+      </footer>
+
+      {/* ============ Pi overlay (collapsed by default) ============ */}
+      <aside className={'qc-pi' + (piOpen ? '' : ' is-collapsed')} data-testid="pi-panel" aria-label="Pi 发布队列助手">
+        <div className="ds-pi-head">
+          <WmbCreatureMark state="scout" />
+          <span className="ds-pi-title">Pi · 队列助手</span>
+          <button type="button" className="qc-pi-close" aria-label="收起 Pi 助手" onClick={() => setPiOpen(false)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div className="ds-pi-context">
+          <em>当前记录</em>
+          <span>{activeRecord ? activeRecord.title : '—'}</span>
+        </div>
+        <div className="ds-pi-transcript">
+          {piMessages.map((msg, i) => (
+            <div key={i} className={'ds-pi-msg ds-pi-msg--' + msg.who}>{msg.text}</div>
+          ))}
+        </div>
+        <div className="ds-pi-composer">
+          <textarea value={piDraft} onChange={e => setPiDraft(e.target.value)}
+                    placeholder="问 Pi：这条队列该怎么处理？" aria-label="发给 Pi 的消息" />
+          <div className="ds-pi-composer-bar">
+            <span className="ds-pi-composer-meta">
+              <button type="button" className="ds-pi-model-trigger" disabled>本地模型</button>
+            </span>
+            <button type="button" className="ds-pi-send" aria-label="发送" disabled={!piDraft.trim()} onClick={sendPi}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-7-5 14-3.5-5.5L4 12z" /></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+      <button type="button" className="qc-pi-rail" aria-label="展开 Pi 助手" title="展开 Pi"
+              onClick={() => setPiOpen(true)}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5" /></svg>
+      </button>
+
+      {/* ============ Publish confirm modal (manual boundary) ============ */}
+      <AppModal open={publishOpen} title="人工发布确认" size="standard"
+                onRequestClose={() => setPublishOpen(false)}
+                footer={
+                  <React.Fragment>
+                    <Button variant="secondary" onClick={() => setPublishOpen(false)}>再检查一下</Button>
+                    <Button variant="primary" onClick={confirmPublish}>确认发布</Button>
+                  </React.Fragment>
+                }>
+        <div className="qc-modal-preview">
+          <p className="qc-modal-lead">最终发布由你手动完成 —— AI 不会自动代发。发布前请确认：</p>
+          <ul className="qc-modal-checks">
+            <li>授权 · 平台账号已授权且可发布</li>
+            <li>素材 · 封面 / 配图齐备（{activeRecord ? activeRecord.media : '—'}）</li>
+            <li>窗口 · {activeRecord ? activeRecord.settings.win : '—'}</li>
+          </ul>
+          <p className="qc-modal-title">{activeRecord ? activeRecord.title : ''}</p>
+          <p className="qc-modal-excerpt">{activeRecord ? activeRecord.excerpt : ''}</p>
+        </div>
+      </AppModal>
+
+      {/* ============ Toast ============ */}
+      {toastMsg && <div className="qc-toast" role="status">{toastMsg}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<QueueControlApp />);
+</script>
+</body>
+</html>

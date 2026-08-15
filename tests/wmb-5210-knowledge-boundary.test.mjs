@@ -111,10 +111,11 @@ test('preload pass-through: no arg guessing/defaulting/validation on flywheel me
 test('renderer global.d.ts type surface stays aligned with the preload methods', async () => {
   const [preload, globals, shared] = await Promise.all([readFile(PRELOAD_PATH, 'utf8'), readFile(GLOBALS_PATH, 'utf8'), readFile(SHARED_PATH, 'utf8')]);
 
-  // 提取 preload 中 M1 接线方法名（WMB-5210 注释块到 windowControl 之间）。
+  // 提取 preload 中 M1 接线方法名；显式结束标记防止后续能力块污染局部契约。
   const blockStart = preload.indexOf('// WMB-5210 M1');
   assert.ok(blockStart >= 0, 'preload 应含 WMB-5210 M1 注释块');
-  const blockEnd = preload.indexOf('windowControl:', blockStart);
+  const blockEnd = preload.indexOf('// END WMB-5210 M1', blockStart);
+  assert.ok(blockEnd > blockStart, 'preload 应含 WMB-5210 M1 结束标记');
   const block = preload.slice(blockStart, blockEnd);
   const methodNames = [...block.matchAll(/^  ([a-zA-Z][a-zA-Z0-9]*): \(/gm)].map((match) => match[1]);
 

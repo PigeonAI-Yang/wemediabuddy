@@ -42,7 +42,7 @@ export type AnnotationTargetType = 'free_note' | 'knowledge_entity' | 'knowledge
 export type AnnotationIntent = 'correction' | 'qualify' | 'downgrade' | 'emphasize' | 'research_request' | 'merge' | 'split' | 'restore' | 'comment';
 export type AnnotationMigrationState = 'none' | 'migrated' | 'deleted' | 'ambiguous' | 'user_removed';
 export type AnnotationProcessingState = 'open' | 'processed';
-export type HealthIssueType = 'stale_claim' | 'unresolved_contradiction' | 'unsupported_claim' | 'duplicate_entity' | 'duplicate_knowledge' | 'orphan_knowledge' | 'missing_wiki_page' | 'stale_wiki_page' | 'broken_reference' | 'unreturned_review' | 'underperforming_method' | 'overgeneralized_global' | 'unanswered_high_value_question';
+export type HealthIssueType = 'stale_claim' | 'unresolved_contradiction' | 'unsupported_claim' | 'duplicate_entity' | 'duplicate_knowledge' | 'orphan_knowledge' | 'missing_wiki_page' | 'stale_wiki_page' | 'broken_reference' | 'unreturned_review' | 'underperforming_method' | 'overgeneralized_global' | 'unanswered_high_value_question' | 'data_gap';
 export type HealthIssueSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export type HealthIssueStatus = 'open' | 'repairing' | 'resolved' | 'accepted_risk' | 'false_positive';
 export type ReceiptTriggerType = 'ingest' | 'query' | 'lint' | 'creation' | 'review' | 'migration';
@@ -789,6 +789,7 @@ export function applyKnowledgeChangeSet(
     const result = applyInsideTransaction(database, meta, input);
     if (transaction) database.exec('COMMIT');
     fireKnowledgeChangeSetLintTrigger(database, meta, input, result, !transaction);
+    fireKnowledgeChangeSetIndexTrigger(database, meta, input, result, !transaction);
     return result;
   } catch (error) {
     if (transaction) database.exec('ROLLBACK');
@@ -842,6 +843,56 @@ export function fireKnowledgeChangeSetLintTrigger(
     console.error('[knowledge-lint] post-commit local lint failed', error);
   } finally {
     knowledgeChangeSetLintTriggerDepth -= 1;
+  }
+}
+
+// ============================================================
+// 知识变更后索引/日志增量投影触发点（WMB-5238；默认 no-op，不改变既有契约）
+// ============================================================
+
+/**
+ * 与局部 Lint 触发点同构的 ChangeSet 提交后投影触发点（wiki-index-triggers.ts 注册）。
+ * 与 Lint 触发点的差异：
+ * - 对全部 ChangeSet 触发（含 triggerSource='lint' 的 Lint/维护写，事件同样要进索引/日志）；
+ * - 只在非重放（replay=零新增行）后触发，重复 requestId/同一输入重放不重复投影；
+ * - 深度守卫防止投影回调内部触发 ChangeSet 造成递归；
+ * - 回调异常被捕获并记录，绝不回滚已成功提交的业务 ChangeSet
+ *   （投影自身以 SAVEPOINT 嵌套提交，失败只回滚投影自己的写）。
+ */
+export type KnowledgeChangeSetIndexTriggerContext = Readonly<{
+  database: DatabaseSync;
+  meta: KnowledgeChangeSetMeta;
+  input: KnowledgeChangeSetInput;
+  result: ApplyChangeSetResult;
+  /** true = 调用方在既有事务内（transaction=false 路径），投影必须以 SAVEPOINT 嵌套提交。 */
+  nestedTransaction: boolean;
+}>;
+
+let knowledgeChangeSetIndexTrigger: ((ctx: KnowledgeChangeSetIndexTriggerContext) => void) | null = null;
+let knowledgeChangeSetIndexTriggerDepth = 0;
+
+export function setKnowledgeChangeSetIndexTrigger(trigger: ((ctx: KnowledgeChangeSetIndexTriggerContext) => void) | null): void {
+  knowledgeChangeSetIndexTrigger = trigger;
+}
+
+export function fireKnowledgeChangeSetIndexTrigger(
+  database: DatabaseSync,
+  meta: KnowledgeChangeSetMeta,
+  input: KnowledgeChangeSetInput,
+  result: ApplyChangeSetResult,
+  nestedTransaction: boolean
+): void {
+  if (!knowledgeChangeSetIndexTrigger || knowledgeChangeSetIndexTriggerDepth > 0) return;
+  if (result.replay) return;
+  knowledgeChangeSetIndexTriggerDepth += 1;
+  try {
+    knowledgeChangeSetIndexTrigger({ database, meta, input, result, nestedTransaction });
+  } catch (error) {
+    // 可观察：索引/日志投影失败不阻断/不回滚已成功业务 ChangeSet（投影 SAVEPOINT 已回滚；
+    // 索引可通过 rebuildWikiIndex 自愈重建）。
+    console.error('[wiki-index] post-commit index projection failed', error);
+  } finally {
+    knowledgeChangeSetIndexTriggerDepth -= 1;
   }
 }
 

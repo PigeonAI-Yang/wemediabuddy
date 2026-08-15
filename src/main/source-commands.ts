@@ -3,23 +3,43 @@ import { createCommandEnvelope, type CommandActorV1, type CommandReceiptV1 } fro
 import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { applyLaneGateBatch, restoreFilteredSource, type LaneGateBatchResult, type LaneJudgmentRecord, type LaneReasonCode, type LaneRestoreResult } from './lane-gate.ts';
 import { getSource, upsertSource, type SourceInput, type SourceRecord } from './sources.ts';
+import {
+  deriveCandidateChannel,
+  persistSourceMediaCandidates,
+  scheduleSourceMediaDiscovery,
+  validateMediaCandidates,
+  type SaveSourceMediaCandidate
+} from './source-media-candidates.ts';
+import { sourceRevisionKey } from '../shared/media-candidates.ts';
+import { scheduleSourceBodyArchive } from './source-body-archive.ts';
+import type { SourceBodyCandidate } from '../shared/source-body-archive.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 export const SOURCE_UPSERT_BATCH_COMMAND = 'sources.upsert_batch';
 export const SOURCE_LANE_GATE_COMMAND = 'sources.lane_gate';
 export const SOURCE_LANE_RESTORE_COMMAND = 'sources.lane_restore';
 
+/** WMB-5244：单条 Source 保存的媒体结果摘要（同一保存事务内落库的候选/Job 计数）。 */
+export type SourceMediaSaveResult = Readonly<{
+  sourceRevisionKey: string;
+  candidateCount: number;
+  archiveJobCount: number;
+  discoveryScheduled: boolean;
+}>;
+
 export type SourceUpsertBatchResult = Readonly<{
-  items: ReadonlyArray<Readonly<{ id: string; created: boolean; revision: number }>>;
+  items: ReadonlyArray<Readonly<{ id: string; created: boolean; revision: number; media?: SourceMediaSaveResult | null }>>;
   sources: ReadonlyArray<SourceRecord>;
 }>;
+
+export type SourceUpsertItemInput = SourceInput & { mediaCandidates?: SaveSourceMediaCandidate[]; bodyCandidate?: SourceBodyCandidate };
 
 export function dispatchSourceUpsertBatch(
   runtime: ActiveWorkspaceRuntime,
   input: {
     requestId: string;
     actor: CommandActorV1;
-    items: SourceInput[];
+    items: SourceUpsertItemInput[];
     taskId?: string;
     workerLeaseId?: string;
     grantId?: string;
@@ -40,7 +60,57 @@ export function dispatchSourceUpsertBatch(
     causation: input.causation
   });
   return runtime.dispatchCommand(envelope, () => {
-    const saved = envelope.input.items.map((item) => upsertSource(runtime.database, item, false));
+    // WMB-5244 §7.4：先整体校验媒体候选（fail before writes）——任一候选非法，整批零写回滚。
+    const validated = envelope.input.items.map((item) => ({
+      item,
+      candidates: validateMediaCandidates(item.mediaCandidates)
+    }));
+    const saved = validated.map(({ item, candidates }) => {
+      const source = upsertSource(runtime.database, item, false);
+      const revisionKey = sourceRevisionKey(source.id, source.revision);
+      // WMB-5269：同一保存事务内登记正文归档任务（结构化完整文本立即固化；URL-only 排队异步抓取）。
+      // 正文失败不回滚 Source 保存（任务登记与 Source 同事务；抓取在网络侧异步执行）。
+      scheduleSourceBodyArchive(runtime.database, {
+        sourceId: source.id,
+        sourceRevision: source.revision,
+        url: item.originalUrl ?? null,
+        structuredText: item.bodyCandidate?.text ?? null,
+        contentType: item.bodyCandidate?.contentType ?? null,
+        origin: item.bodyCandidate?.origin ?? null,
+        channel: deriveCandidateChannel(runtime.database, item)
+      });
+      let media: SourceMediaSaveResult | null = null;
+      if (candidates.length > 0) {
+        // 结构化候选：候选行 + 首个 Attempt + media_archive Job 与 Source 同事务落库（提交后异步归档）。
+        const persisted = persistSourceMediaCandidates(runtime.database, {
+          sourceId: source.id,
+          sourceRevisionKey: revisionKey,
+          channel: deriveCandidateChannel(runtime.database, item),
+          candidates,
+          requestId: envelope.requestId
+        });
+        media = {
+          sourceRevisionKey: revisionKey,
+          candidateCount: persisted.candidateIds.length,
+          archiveJobCount: persisted.inserted.length,
+          discoveryScheduled: false
+        };
+      } else if (item.originalUrl) {
+        // 无结构化候选：调度有界重发现（重抓固定原 URL；按 source revision 幂等，抓取失败不影响已保存 Source）。
+        const discovery = scheduleSourceMediaDiscovery(runtime.database, {
+          sourceId: source.id,
+          sourceRevisionKey: revisionKey,
+          originalUrl: item.originalUrl
+        });
+        media = {
+          sourceRevisionKey: revisionKey,
+          candidateCount: 0,
+          archiveJobCount: 0,
+          discoveryScheduled: discovery.scheduled
+        };
+      }
+      return media ? { ...source, media } : source;
+    });
     const sources = saved.map((item) => getSource(runtime.database, item.id)).filter((item): item is SourceRecord => item !== null);
     return {
       data: { items: saved, sources },

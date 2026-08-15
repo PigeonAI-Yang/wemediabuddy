@@ -569,5 +569,80 @@ export const knowledgeFlywheelMigrations = [
         BEFORE DELETE ON knowledge_update_receipts
         BEGIN SELECT RAISE(ABORT, 'KNOWLEDGE_RECEIPT_IMMUTABLE'); END;
     `
+  },
+  {
+    // WMB-5237：网页/本地图片可追溯视觉理解记录。
+    // 输入身份 = sourceId + sourceRevisionId（字符串契约，由 revision slice 提供）+ assetId + schemaVersion；
+    // 幂等 = 同一三元组 + schemaVersion + attempt（attempt=1 首次；失败重试创建新 attempt 行，旧行保留审计）；
+    // 成功输出（model/provider/prompt_version/observation_json/completed_at）写入一次后不可变
+    // （completed 行禁止任何 UPDATE，由触发器强制）。
+    version: 59,
+    sql: `
+      CREATE TABLE knowledge_visual_runs (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES source_items(id),
+        source_revision_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL REFERENCES assets(id),
+        schema_version INTEGER NOT NULL DEFAULT 1 CHECK (schema_version >= 1),
+        attempt INTEGER NOT NULL DEFAULT 1 CHECK (attempt >= 1),
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+        model TEXT,
+        provider TEXT,
+        prompt_version INTEGER NOT NULL DEFAULT 1 CHECK (prompt_version >= 1),
+        observation_json TEXT,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        UNIQUE (source_id, source_revision_id, asset_id, schema_version, attempt)
+      );
+      CREATE INDEX knowledge_visual_runs_status_created ON knowledge_visual_runs(status, created_at DESC);
+      CREATE INDEX knowledge_visual_runs_source_created ON knowledge_visual_runs(source_id, source_revision_id, created_at DESC);
+      CREATE TRIGGER knowledge_visual_runs_completed_immutable
+        BEFORE UPDATE ON knowledge_visual_runs
+        WHEN OLD.completed_at IS NOT NULL
+        BEGIN SELECT RAISE(ABORT, 'VISUAL_RUN_COMPLETED_IMMUTABLE'); END;
+    `
+  },
+  {
+    version: 60,
+    sql: `
+      -- ===== WMB-5237 M9：knowledge_health_issues issue_type 扩展 data_gap =====
+      -- 知识完整性七类检测新增 data_gap（业务意义缺口：captured FreeNote 超期未处理等）。
+      -- 重建表只为追加 CHECK 取值（同 v58 模式）；存量行原样保留（含终态与证据），
+      -- 索引与 delete 不可变触发器原样重建；不重写任何历史 migration。
+      CREATE TABLE knowledge_health_issues_v60 (
+        id TEXT PRIMARY KEY,
+        scope TEXT NOT NULL CHECK (scope = 'global' OR scope LIKE 'lane:%'),
+        issue_type TEXT NOT NULL CHECK (issue_type IN ('stale_claim','unresolved_contradiction','unsupported_claim','duplicate_entity','duplicate_knowledge','orphan_knowledge','missing_wiki_page','stale_wiki_page','broken_reference','unreturned_review','underperforming_method','overgeneralized_global','unanswered_high_value_question','data_gap')),
+        affected_object_type TEXT,
+        affected_object_id TEXT,
+        severity TEXT NOT NULL CHECK (severity IN ('info','low','medium','high','critical')),
+        evidence_json TEXT NOT NULL DEFAULT '{}',
+        suggested_action TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (status IN ('open','repairing','resolved','accepted_risk','false_positive')),
+        resolution_note TEXT,
+        resolved_change_set_id TEXT REFERENCES knowledge_change_sets(id),
+        detected_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        resolved_at TEXT,
+        revision INTEGER NOT NULL
+      );
+      INSERT INTO knowledge_health_issues_v60 (
+        id, scope, issue_type, affected_object_type, affected_object_id, severity, evidence_json, suggested_action,
+        status, resolution_note, resolved_change_set_id, detected_at, updated_at, resolved_at, revision
+      )
+      SELECT id, scope, issue_type, affected_object_type, affected_object_id, severity, evidence_json, suggested_action,
+        status, resolution_note, resolved_change_set_id, detected_at, updated_at, resolved_at, revision
+      FROM knowledge_health_issues;
+      DROP TABLE knowledge_health_issues;
+      ALTER TABLE knowledge_health_issues_v60 RENAME TO knowledge_health_issues;
+      CREATE INDEX knowledge_health_issues_status ON knowledge_health_issues(status, detected_at DESC);
+      CREATE INDEX knowledge_health_issues_scope_type ON knowledge_health_issues(scope, issue_type, status);
+      CREATE TRIGGER knowledge_health_issues_delete_immutable
+        BEFORE DELETE ON knowledge_health_issues
+        BEGIN SELECT RAISE(ABORT, 'KNOWLEDGE_HEALTH_DELETE_FORBIDDEN'); END;
+    `
   }
 ] as const;

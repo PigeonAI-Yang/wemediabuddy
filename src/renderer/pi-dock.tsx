@@ -2,7 +2,7 @@ import { pageAuthoritySpec } from '../shared/page-authority';
 import { ORCHESTRATION_SAFE_FIELDS, type OrchestrationSafeFields } from '../shared/orchestration-envelope';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
-import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge } from './pi-context-payload';
+import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge, type PiDirectCanvasContext } from './pi-context-payload';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 import { PiComposer } from './pi-composer';
 import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
@@ -382,7 +382,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     const timer = window.setInterval(() => { void pull(); }, 2500);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [context.page, context.objectId, phase]);
-  const buildPayload = (text: string, directContext?: { scope: string; items: Array<{ nodeId: string }>; relations: Array<{ id: string }>; estimatedCharacters: number }) =>
+  const buildPayload = (text: string, directContext?: PiDirectCanvasContext) =>
     buildPiContextPayload(context, text, directContext);
 
   const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields) => {
@@ -426,9 +426,14 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       setPhase('starting'); setStatusText(orchestration ? '正在安排主管' : '正在连接 Pi');
     }
     try {
+      // WMB-5243：发送时才取后端冻结选择清单（服务端校验/去重/限长）；框选本身不发送、不建包。
       const directContext = context.contextSelection?.nodeIds.length
-        ? await window.wmb.previewKnowledgeContextPackage({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
+        ? await window.wmb.validateKnowledgeSelectionManifest({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
         : undefined;
+      // WMB-5243：冻结包未纳入明示（重复/无效/限长裁剪后 Pi 实际只收到部分选中项）。
+      if (directContext && directContext.excludedCount > 0) {
+        showToast(`已纳入 ${directContext.items.length} 项 · 未纳入 ${directContext.excludedCount} 项`);
+      }
       const chatInput = orchestration ? { message: buildPayload(value, directContext), orchestration } : buildPayload(value, directContext);
       const result = await window.wmb.chatPi(chatInput, queued ? (delivery ?? 'steer') : undefined);
       if (result.queued) return;

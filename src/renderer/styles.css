@@ -1,4 +1,5 @@
 @import './styles-foundation.css';
+@import './styles-modal.css';
 @import './styles-pi.css';
 @import './styles-workflow.css';
 @import './styles-today-scout.css';
@@ -12,6 +13,7 @@
 @import './styles-studio.css';
 @import './styles-knowledge.css';
 @import './styles-knowledge-topic.css';
+@import './styles-knowledge-canvas.css';
 @import './styles-results.css';
 @import './styles-x-lists.css';
 @import './styles-x-lists-timeline.css';

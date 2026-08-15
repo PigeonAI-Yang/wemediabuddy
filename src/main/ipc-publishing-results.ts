@@ -9,7 +9,7 @@ import { dispatchClaimDueMetricJobs, dispatchCompleteMetricJob, dispatchFailMetr
 import { dispatchSaveReview, getReview, listReviewBacklinks, listReviews, type SaveReviewInput } from './reviews';
 import { requireReceiptData, receiptAsCommandResult } from './business-command.ts';
 import type { ActiveWorkspaceRuntime, WorkspaceRuntimeLease } from './workspace-runtime.ts';
-import { dispatchCreatePublicationSnapshot, dispatchManualWechatReadback, dispatchPreparePublicationEditor, dispatchReconcilePublication, readPublicationOperationContext } from './publication-commands.ts';
+import { dispatchCreatePublicationSnapshot, dispatchManualWechatReadback, dispatchPreparePublicationEditor, dispatchReconcilePublication, dispatchReturnPublicationToEdit, readPublicationOperationContext } from './publication-commands.ts';
 import { getPublicationBrowserOperation } from './publication-operations.ts';
 
 type Dependencies = {
@@ -192,5 +192,9 @@ export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: D
   ipcMain.handle('publish:reconcile-not-published', async (_event, publicationId: string, expectedRevision: number) => {
     const runtime = requireRuntime();
     return receiptAsCommandResult(await dispatchReconcilePublication(runtime, { publicationId, expectedRevision }));
+  });
+  ipcMain.handle('publish:return-to-edit', async (_event, publicationId: string, expectedRevision: number) => {
+    const runtime = requireRuntime();
+    return receiptAsCommandResult(await dispatchReturnPublicationToEdit(runtime, { publicationId, expectedRevision }));
   });
 }

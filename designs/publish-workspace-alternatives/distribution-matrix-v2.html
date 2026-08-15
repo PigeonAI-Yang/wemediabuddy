@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C · 发布工作台 · WeMediaBuddy</title>
+<!-- React first — the bundle calls React.createElement -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/colors.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/shape-motion.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles/components.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles.css">
+<script src="_ds/wemedia-buddy-design-system/_ds_bundle.js"></script>
+<style>
+/* ============================================================
+ * C · 发布工作台 — page-local layout. Brand/chrome colors come
+ * ONLY from the WeMediaBuddy DS token list (var(--*)); no
+ * one-off hex/rgb/hsl. Distinction via depth/scale/typography.
+ * ============================================================ */
+html, body, #root { height: 100%; }
+body {
+  background: var(--app-bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body-lh);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; border: 0; clip: rect(0 0 0 0); overflow: hidden; white-space: nowrap;
+}
+
+.c-app { height: 100%; display: flex; flex-direction: column; }
+
+/* ---------- slim topbar ---------- */
+.c-topbar {
+  flex: none; height: var(--topbar-height);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 var(--page-space);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--line-strong);
+}
+.c-brand { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--ink); }
+.c-brand strong { font-size: 14px; font-weight: var(--weight-bold); letter-spacing: .01em; white-space: nowrap; }
+.c-brand small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.c-topbar-divider { flex: none; width: 1px; height: 18px; background: var(--line-strong); }
+.c-topbar-title { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-topbar-title em { font-style: normal; color: var(--accent-soft); font-weight: var(--weight-demi); }
+.c-back {
+  margin-left: auto; flex: none;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 11px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  color: var(--muted); font-size: 12.5px; text-decoration: none;
+}
+.c-back:hover { color: var(--ink); background: var(--surface-hover); border-color: var(--border); }
+.c-back svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.c-top-actions { display: flex; gap: 6px; flex: none; }
+.c-icon-btn {
+  width: 32px; height: 32px; display: inline-grid; place-items: center;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.c-icon-btn:hover { color: var(--ink); background: var(--surface-hover); border-color: var(--border); }
+.c-icon-btn[aria-pressed="true"] { color: var(--accent-soft); background: var(--accent-faint); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.c-icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- publish-local navigation (room identity + views) ---------- */
+.c-localnav {
+  flex: none;
+  display: flex; align-items: flex-end; gap: 20px;
+  padding: 8px var(--page-space) 0;
+  background: var(--topbar-bg);
+}
+.c-localnav-id { display: flex; align-items: baseline; gap: 9px; min-width: 0; padding: 2px 0 12px; }
+.c-localnav-id .c-eyebrow { font-size: 11px; letter-spacing: .09em; white-space: nowrap; }
+.c-localnav-room { font-size: 14px; font-weight: var(--weight-bold); color: var(--ink); white-space: nowrap; letter-spacing: .01em; }
+.c-localnav .ds-tablist { flex: 1 1 auto; min-width: 0; margin: 0; border-bottom-color: var(--line-strong); }
+
+/* ---------- main content (full width, no side rail) ---------- */
+.c-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.c-tabpanels { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.c-tabpanels > [role="tabpanel"] { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.c-tabpanels > [role="tabpanel"][hidden] { display: none; }
+
+.c-board {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: var(--page-space);
+}
+.c-board[hidden] { display: none; }
+
+/* ---------- room heading ---------- */
+.c-room-head { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.c-eyebrow { color: var(--accent-soft); font-size: 13px; font-weight: var(--weight-demi); letter-spacing: .05em; }
+.c-room-head h1 { margin: 3px 0 3px; font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); color: var(--ink); }
+.c-room-head p { margin: 0; max-width: 60ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.c-head-stats { display: flex; gap: 8px; flex: none; }
+.c-stat {
+  min-width: 62px; display: grid; gap: 1px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+.c-stat strong { font-size: 16px; font-weight: var(--weight-bold); color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.c-stat span { font-size: 10.5px; color: var(--muted); }
+.c-stat--warn strong { color: var(--amber); }
+
+/* ---------- controls (matrix filters — chip grammar, not nav) ---------- */
+.c-controls { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.c-filter-label { flex: none; color: var(--muted-low); font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: 1.2px; }
+.c-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.c-scan { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.c-scan-hint { color: var(--muted-low); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- anomaly strip ---------- */
+.c-strip { flex: none; display: flex; align-items: center; gap: 6px; min-height: 32px; overflow: hidden; }
+.c-strip-label { flex: none; color: var(--muted-low); font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: 1.2px; }
+.c-strip-scroll { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.c-anom {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--ink-soft); font-size: 12px; cursor: pointer;
+}
+.c-anom:hover { background: var(--surface-hover); border-color: var(--border); color: var(--ink); }
+.c-anom[aria-pressed="true"] { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 55%, var(--border)); color: var(--amber); }
+.c-anom .sev { font-family: var(--mono); font-size: 9.5px; font-weight: var(--weight-bold); }
+.c-anom .sev[data-sev="高"] { color: var(--danger); }
+.c-anom .sev[data-sev="中"] { color: var(--amber); }
+.c-anom .sev[data-sev="低"] { color: var(--muted); }
+.c-strip-note { flex: none; color: var(--muted-low); font-size: 11px; font-family: var(--mono); white-space: nowrap; }
+
+/* ---------- matrix (dominant canvas) ---------- */
+.c-matrix-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--panel-bg); }
+.mx { width: 100%; min-width: 880px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.mx th, .mx td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.mx th { font-weight: var(--weight-medium); text-align: left; }
+.mx thead th { position: sticky; top: 0; z-index: 4; background: var(--panel-bg); border-bottom: 1px solid var(--border-soft); padding: 9px 10px 8px; }
+.mx thead .mx-corner { z-index: 6; }
+.mx tbody th.mx-rowhead { position: sticky; left: 0; z-index: 3; background: var(--panel-bg); width: 208px; min-width: 208px; max-width: 208px; padding: 8px 10px; }
+.mx thead .mx-corner { width: 208px; min-width: 208px; max-width: 208px; }
+.mx tbody tr:last-child td, .mx tbody tr:last-child th { border-bottom: 0; }
+.mx tbody tr:hover td { background: color-mix(in srgb, var(--surface-hover) 32%, transparent); }
+
+.mx-corner span { display: block; font-size: 10.5px; color: var(--muted-low); font-weight: var(--weight-semibold); letter-spacing: .8px; }
+.mx-corner .mx-corner-sub { margin-top: 2px; color: var(--muted); letter-spacing: 0; font-weight: var(--weight-regular); }
+.mx-colname { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12.5px; font-weight: var(--weight-bold); white-space: nowrap; }
+.mx-colacct { display: block; margin-top: 2px; color: var(--muted); font-family: var(--mono); font-size: 10px; white-space: nowrap; }
+.mx-colstat { display: block; margin-top: 3px; font-family: var(--mono); font-size: 9.5px; color: var(--success); font-variant-numeric: tabular-nums; }
+.mx-colstat.has { color: var(--amber); }
+
+/* row head doubles as the content-drilldown affordance */
+.mx-rowopen { display: block; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.mx-rowopen:focus-visible { outline: var(--focus-ring-soft); outline-offset: -2px; border-radius: var(--radius-lg); }
+.mx-rowtitle { display: flex; align-items: baseline; gap: 5px; color: var(--ink-soft); font-size: 12.5px; font-weight: var(--weight-semibold); line-height: 1.35; }
+.mx-rowopen:hover .mx-rowtitle, .mx-rowopen:focus-visible .mx-rowtitle { color: var(--accent-soft); }
+.mx-rowgo { flex: none; align-self: center; display: inline-flex; color: var(--muted-low); opacity: 0; transition: opacity var(--dur-base) var(--ease-base); }
+.mx-rowgo svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.mx-rowopen:hover .mx-rowgo, .mx-rowopen:focus-visible .mx-rowgo { opacity: 1; }
+.mx-rowmeta { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.mx-version { color: var(--muted-low); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cell {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  width: 100%; min-height: 56px; padding: 7px 9px;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+}
+.cell:hover { background: var(--surface-hover); }
+.cell:focus-visible { outline: var(--focus-ring-soft); outline-offset: -2px; }
+.cell.is-selected { background: var(--selected); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cell.is-selected:hover { background: var(--selected); }
+.cell.is-hl { background: var(--amber-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--amber) 60%, transparent); }
+.cell.is-hl.is-selected { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.cell.is-dimmed { opacity: .26; pointer-events: none; }
+.cell-line1 { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; max-width: 100%; }
+.cell-tag {
+  flex: none; padding: 1px 5px; border-radius: var(--radius-xs);
+  background: var(--amber-soft); color: var(--amber);
+  font-family: var(--mono); font-size: 9px; font-weight: var(--weight-bold);
+}
+.cell-at { font-family: var(--mono); font-size: 10px; color: var(--muted-low); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cell.is-selected .cell-at { color: var(--muted); }
+.cell-empty { display: grid; place-items: center; min-height: 56px; color: var(--muted-low); font-size: 12px; }
+
+/* ---------- secondary views: 待我处理 / 发布记录 ---------- */
+.c-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: var(--page-space); overflow: hidden; }
+.c-view-head { flex: none; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.c-view-head h1 { margin: 3px 0 3px; font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); color: var(--ink); }
+.c-view-head p { margin: 0; max-width: 64ch; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+.c-todo-list, .c-log-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--panel-bg);
+}
+.c-todo-row, .c-log-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
+}
+.c-todo-row:last-child, .c-log-row:last-child { border-bottom: 0; }
+.c-todo-row:hover, .c-log-row:hover { background: var(--surface-hover); }
+.c-plat-id { flex: none; display: flex; align-items: center; gap: 7px; min-width: 178px; }
+.c-plat-id strong { color: var(--ink); font-size: 13px; font-weight: var(--weight-bold); white-space: nowrap; }
+.c-plat-id em { font-style: normal; color: var(--muted); font-family: var(--mono); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-todo-open {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px;
+  border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer;
+}
+.c-todo-open strong { color: var(--ink-soft); font-size: 13px; font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-todo-open span { color: var(--muted-low); font-size: 10.5px; flex: none; }
+.c-todo-open:hover strong { color: var(--accent-soft); }
+.c-todo-open:focus-visible { outline: var(--focus-ring-soft); outline-offset: 2px; border-radius: var(--radius-lg); }
+.c-item-note { flex: 1 1 auto; min-width: 120px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-log-title { flex: 1 1 auto; min-width: 0; color: var(--ink-soft); font-size: 13px; font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-log-metrics { flex: none; color: var(--muted); font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.c-log-at { flex: none; color: var(--muted-low); font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+/* ---------- content detail (in-page subpage replacing the matrix) ---------- */
+.c-detail { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: var(--page-space); overflow-y: auto; }
+.c-detail .ds-breadcrumb { flex: none; margin: 0; }
+.c-crumb-sep { color: var(--muted-low); font-size: 11px; }
+.c-detail-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.c-detail-title h1 { margin: 0 0 4px; font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); color: var(--ink); }
+.c-detail-title h1:focus-visible { outline: var(--focus-ring-soft); outline-offset: 4px; border-radius: var(--radius-lg); }
+.c-detail-meta { color: var(--muted-low); font-family: var(--mono); font-size: 10.5px; }
+.c-detail-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.c-detail-card { min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--panel-bg); padding: 14px 16px; }
+.c-detail-card h2 { margin: 0 0 10px; font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: .9px; color: var(--muted-low); }
+.c-detail-card.c-span2 { grid-column: 1 / -1; }
+.c-detail-defs { display: grid; gap: 6px; margin: 0 0 10px; }
+.c-detail-defs > div { display: grid; grid-template-columns: 56px 1fr; gap: 8px; font-size: 12.5px; line-height: 1.5; }
+.c-detail-defs dt { color: var(--muted-low); font-family: var(--mono); font-size: 10.5px; padding-top: 1px; }
+.c-detail-defs dd { margin: 0; color: var(--ink-soft); }
+.c-detail-excerpt { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.65; }
+.c-adapt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.c-adapt-list li { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.c-adapt-list strong { flex: none; color: var(--ink); font-size: 12.5px; font-weight: var(--weight-semibold); }
+.c-adapt-list span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.c-detail-count { color: var(--accent-soft); font-size: 11px; font-family: var(--mono); }
+.c-dt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.c-dt-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+.c-dt-row--none { opacity: .55; }
+.c-dt-plat { flex: none; display: flex; align-items: center; gap: 7px; min-width: 168px; }
+.c-dt-plat strong { color: var(--ink); font-size: 12.5px; font-weight: var(--weight-bold); white-space: nowrap; }
+.c-dt-plat em { font-style: normal; color: var(--muted); font-family: var(--mono); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-dt-state { flex: none; }
+.c-dt-at { flex: none; color: var(--muted-low); font-family: var(--mono); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.c-dt-note { flex: 1 1 auto; min-width: 0; color: var(--amber); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-dt-none { color: var(--muted-low); font-size: 12px; }
+
+/* anomaly refs (reused inside content detail) */
+.c-anom-refs { display: flex; flex-direction: column; gap: 5px; }
+.c-anom-ref {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--ink-soft); font-size: 12px; text-align: left; cursor: pointer;
+}
+.c-anom-ref:hover { background: var(--surface-hover); border-color: var(--border); color: var(--ink); }
+.c-anom-ref[aria-pressed="true"] { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 55%, var(--border)); color: var(--amber); }
+.c-anom-ref .sev { font-family: var(--mono); font-size: 9.5px; font-weight: var(--weight-bold); }
+.c-anom-ref .sev[data-sev="高"] { color: var(--danger); }
+.c-anom-ref .sev[data-sev="中"] { color: var(--amber); }
+.c-anom-ref .sev[data-sev="低"] { color: var(--muted); }
+
+/* ---------- toasts ---------- */
+.c-toasts { position: fixed; right: 18px; bottom: 18px; z-index: 6000; display: flex; flex-direction: column; gap: 8px; }
+.c-toast {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 13px; border: 1px solid var(--border); border-radius: var(--radius-xl);
+  background: var(--surface-raised); box-shadow: var(--shadow-modal);
+  color: var(--ink-soft); font-size: 12.5px;
+  animation: c-toast-in var(--dur-base) var(--ease-base);
+}
+.c-toast i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+@keyframes c-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Pi overlay (fixed, never consumes layout) ---------- */
+.c-pi {
+  position: fixed; top: var(--topbar-height); right: 0; bottom: 0;
+  width: var(--pi-width); max-width: calc(100vw - 32px);
+  z-index: 2000;
+  display: flex; flex-direction: column;
+  background: var(--panel-bg); border-left: 1px solid var(--border);
+  transform: translateX(105%);
+  visibility: hidden;
+  transition: transform var(--dur-expand) var(--ease-out-expo), visibility 0s linear var(--dur-expand);
+}
+.c-pi.is-open { transform: none; visibility: visible; box-shadow: var(--shadow-modal); transition: transform var(--dur-expand) var(--ease-out-expo); }
+
+/* ---------- modal internals ---------- */
+.c-auth-steps { display: grid; gap: 8px; margin: 0 0 2px; padding: 0; list-style: none; }
+.c-auth-steps li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.c-auth-steps .no { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+.c-warn-note { margin: 10px 0 0; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--border-soft)); border-radius: var(--radius-xl); background: var(--amber-soft); color: var(--amber); font-size: 12.5px; line-height: 1.55; }
+.c-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.c-metric { padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+.c-metric strong { display: block; color: var(--ink); font-size: 18px; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.c-metric span { color: var(--muted); font-size: 11px; }
+.c-ratio-line { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 12.5px; }
+.c-ratio-line strong { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.c-ratio-line .ok { color: var(--success); }
+.c-ratio-line .warn { color: var(--amber); }
+.c-ratio-line .bad { color: var(--danger); }
+.c-recon-steps { display: grid; gap: 7px; }
+.c-recon-step { display: flex; align-items: center; gap: 9px; color: var(--ink-soft); font-size: 12.5px; }
+.c-recon-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted-low); }
+.c-recon-step.done .c-recon-dot { background: var(--success); }
+.c-recon-step.done { color: var(--muted); }
+.c-recon-step.active .c-recon-dot { background: var(--accent); animation: c-pulse 1s ease-in-out infinite; }
+.c-recon-step.active { color: var(--ink); }
+@keyframes c-pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+.c-preview-excerpt { color: var(--ink-soft); font-size: 13.5px; line-height: 1.7; }
+.c-preview-adapt { margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.6; }
+.c-preview-adapt strong { color: var(--ink-soft); font-weight: var(--weight-semibold); }
+
+/* task context strip — modal header showing content × platform × version × media × status */
+.c-taskctx { display: grid; gap: 8px; margin-bottom: 14px; padding: 11px 13px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+.c-taskctx-plat { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.c-taskctx-plat strong { color: var(--ink); font-size: 13px; font-weight: var(--weight-bold); white-space: nowrap; }
+.c-taskctx-plat span { color: var(--muted); font-family: var(--mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-taskctx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 16px; }
+.c-taskctx-grid dl { margin: 0; display: flex; align-items: baseline; gap: 7px; min-width: 0; font-size: 12px; line-height: 1.5; }
+.c-taskctx-grid dt { flex: none; color: var(--muted-low); font-family: var(--mono); font-size: 10px; }
+.c-taskctx-grid dd { margin: 0; color: var(--ink-soft); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-taskctx-grid dd.c-taskctx-status { display: flex; align-items: center; gap: 7px; }
+
+@media (max-width: 1100px) {
+  .c-localnav { flex-wrap: wrap; gap: 4px 20px; }
+  .c-room-head, .c-view-head { flex-wrap: wrap; gap: 10px; }
+  .c-detail-cols { grid-template-columns: 1fr; }
+  .c-detail-card.c-span2 { grid-column: auto; }
+  .c-dt-row, .c-todo-row, .c-log-row { flex-wrap: wrap; gap: 8px 12px; }
+  .c-todo-open, .c-log-title { flex: 1 1 200px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-pi, .c-pi.is-open { transition: none; }
+  .c-toast { animation: none; }
+  .c-recon-step.active .c-recon-dot { animation: none; }
+  .mx-rowgo { opacity: 1; }
+}
+</style>
+</head>
+<body data-scheme="C">
+<div id="root"></div>
+
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+const { AppModal, Button, ChipFilter, StatePanel, StatusPill, TabList, WmbCreatureMark } = window.WemediaBuddyDesignSystem_1c877c;
+
+/* ---------------- data ---------------- */
+const PLATFORMS = [
+  { id: 'xhs',    name: '小红书',   acct: '@AI工具观察局',        tone: 'xhs' },
+  { id: 'wx',     name: '公众号',   acct: 'WeMediaBuddy 主编台',   tone: 'wx' },
+  { id: 'zhihu',  name: '知乎',     acct: '专栏 · AI 工作流',      tone: 'neutral' },
+  { id: 'x',      name: 'X',        acct: '@wmb_buddy',           tone: 'x' },
+  { id: 'sp',     name: '视频号',   acct: 'WeMediaBuddy',         tone: 'neutral' },
+];
+
+const STATE_META = {
+  auth:      { label: '待授权',   tone: 'needs-user', action: '去授权',
+               desc: '账号尚未完成授权。内容已生成并通过校对，连接后即可进入人工发布队列。' },
+  manual:    { label: '待人工发布', tone: 'warn',     action: '人工发布',
+               desc: '内容与发布清单已就绪。AI 不代发——请在平台后台完成手动发布，再回到这里标记。' },
+  takeover:  { label: '需要接管', tone: 'warn',      action: '接管处理',
+               desc: '发布被平台干预或素材不合规，需要人工修正素材后重新发布。' },
+  reconcile: { label: '待对账',   tone: 'idle',      action: '开始对账',
+               desc: '内容已发布，等待互动数据回流。对账会拉取指标并与同频道中位线比较。' },
+  failed:    { label: '失败',     tone: 'bad',       action: '重试发布',
+               desc: '发布任务执行失败，原因与重试次数已记录。可重试，或先检查平台授权。' },
+  published: { label: '已发布',   tone: 'ok',        action: '查看数据',
+               desc: '内容已发布且数据已确认。可查看指标，或重新发起对账。' },
+  retrying:  { label: '重试中…',  tone: 'active',    action: null,
+               desc: '正在重新连接平台并尝试发布，完成后会自动同步矩阵。' },
+};
+const PENDING_KEYS = ['auth', 'manual', 'takeover', 'reconcile', 'failed', 'retrying'];
+const FILTER_ORDER = ['auth', 'manual', 'takeover', 'reconcile', 'failed', 'published'];
+
+const ROWS = [
+  { id: 'pub-xhs-ai-course', title: 'AI 入门课：30 天从工具到工作流', grade: 'S', version: '图文 · 主版本',
+    excerpt: '从「会用工具」到「搭出自己的工作流」：30 天路线图，覆盖选题、写作、分发与复盘四个阶段。',
+    cells: {
+      xhs:    { st: 'auth',      at: '—' },
+      wx:     { st: 'published', at: '今天 09:42', metrics: { read: 1820, like: 96,  comment: 14 } },
+      zhihu:  { st: 'published', at: '3d 前',      metrics: { read: 2400, like: 120, comment: 31 } },
+      x:      { st: 'manual',    at: '待发布' },
+      sp:     { st: 'takeover',  at: '昨天 21:18', note: '限流：封面含二维码' },
+    } },
+  { id: 'pub-wechat-interview', title: '访谈：我与 AI 的对话 · 第 12 期', grade: 'A', version: '播客 · 对话版',
+    excerpt: '和 AI 产品经理聊了 90 分钟：模型选择、上下文管理，以及「AI 越聪明，人越要守边界」。',
+    cells: {
+      xhs:    { st: 'published', at: '1d 前',      metrics: { read: 960, like: 44, comment: 8 } },
+      wx:     { st: 'manual',    at: '待发布' },
+      zhihu:  { st: null },
+      x:      { st: 'published', at: '今天 08:05', metrics: { read: 410, like: 52, comment: 6 } },
+      sp:     { st: 'reconcile', at: '发布 26h',   note: '超时：数据未回流' },
+    } },
+  { id: 'pub-zhihu-devday', title: '开发者日见闻：本地模型的一天', grade: 'B', version: '图文 · 主版本',
+    excerpt: '开发者日现场速写：本地模型跑通的一天——量化、RAG、端侧推理的坑与解法。',
+    cells: {
+      xhs:    { st: 'published', at: '2d 前',      metrics: { read: 1330, like: 71, comment: 19 } },
+      wx:     { st: 'published', at: '2d 前',      metrics: { read: 1560, like: 88, comment: 22 } },
+      zhihu:  { st: 'manual',    at: '待发布' },
+      x:      { st: 'auth',      at: '—' },
+      sp:     { st: null },
+    } },
+  { id: 'pub-x-karpathy', title: 'Karpathy 谈 token 效率：三条速记', grade: 'S', version: '长文 · 编译版',
+    excerpt: 'Karpathy 关于 token 效率的三条速记：短输入、少噪音、让模型只读该读的。',
+    cells: {
+      xhs:    { st: 'published', at: '1d 前',      metrics: { read: 2150, like: 134, comment: 27 } },
+      wx:     { st: 'published', at: '1d 前',      metrics: { read: 1980, like: 102, comment: 18 } },
+      zhihu:  { st: null },
+      x:      { st: 'failed',    at: '失败 2 次',  note: '401 token 过期' },
+      sp:     { st: null },
+    } },
+  { id: 'pub-xhs-cursor', title: 'Cursor 补全策略：让 AI 少改错', grade: 'A', version: '图文 · 主版本',
+    excerpt: 'Cursor 补全不听话？三种提示姿势 + 一份拒绝清单，让 AI 少改错。',
+    cells: {
+      xhs:    { st: 'manual',    at: '待发布' },
+      wx:     { st: null },
+      zhihu:  { st: 'published', at: '5d 前',      metrics: { read: 880, like: 39, comment: 5 } },
+      x:      { st: 'published', at: '今天 07:20', metrics: { read: 530, like: 61, comment: 9 } },
+      sp:     { st: null },
+    } },
+  { id: 'pub-wechat-weekly', title: '本周 AI 情报周报 W33', grade: 'A', version: '合集 · 周报',
+    excerpt: '本周 AI 情报周报 W33：模型发布、工具更新、值得跟的三条线索。',
+    cells: {
+      xhs:    { st: 'reconcile', at: '发布 2h',    note: '数据异常：0.3× 中位线' },
+      wx:     { st: 'manual',    at: '待发布' },
+      zhihu:  { st: 'published', at: '今天 06:12', metrics: { read: 640, like: 28, comment: 4 } },
+      x:      { st: 'published', at: '今天 06:12', metrics: { read: 320, like: 35, comment: 3 } },
+      sp:     { st: 'published', at: '今天 06:12', metrics: { read: 1510, like: 83, comment: 12 } },
+    } },
+  { id: 'pub-xhs-ai-course-video', title: 'AI 入门课：视频版 · 第 1 集', grade: 'A', version: '视频 · 派生版本',
+    excerpt: '视频版第一集：30 天入门路线图，从工作台到分发矩阵，一次讲清。',
+    cells: {
+      xhs:    { st: 'manual',    at: '待发布' },
+      wx:     { st: null },
+      zhihu:  { st: null },
+      x:      { st: null },
+      sp:     { st: 'published', at: '1d 前',      metrics: { read: 2700, like: 156, comment: 41 } },
+    } },
+];
+
+const PLATFORM_ADAPT = {
+  xhs:   '封面 3:4 · 正文 ≤1000 字 · 标签 ≤6 个',
+  wx:    '正文 ≤3000 字 · 外链转文末引用 · 配图 16:9',
+  zhihu: '支持 Markdown 长文 · 回答体改写 · 引用规范',
+  x:     '线程 ≤8 条 · 单条 ≤280 字符 · 首条含图',
+  sp:    '竖屏 1080×1920 · 字幕随视频 · 封面无二维码',
+};
+
+const ANOMALIES = [
+  { id: 'a1', sev: '高', title: '同源内容跨平台不同步', detail: '《AI 入门课》公众号已发布 6h，小红书主版本仍未发布',
+    cells: ['pub-xhs-ai-course:xhs', 'pub-xhs-ai-course:wx'],
+    live: (r) => r['pub-xhs-ai-course'].cells.xhs.st !== 'published' && r['pub-xhs-ai-course'].cells.wx.st === 'published' },
+  { id: 'a2', sev: '高', title: 'X 发布失败 2 次', detail: '《Karpathy 三条速记》401 token 过期，重试前需检查授权',
+    cells: ['pub-x-karpathy:x'],
+    live: (r) => r['pub-x-karpathy'].cells.x.st === 'failed' },
+  { id: 'a3', sev: '中', title: '阅读量异常 0.3×', detail: '《周报 W33》小红书阅读量仅中位线 0.3×，疑似限流',
+    cells: ['pub-wechat-weekly:xhs'],
+    live: (r) => r['pub-wechat-weekly'].cells.xhs.st === 'reconcile' && r['pub-wechat-weekly'].cells.xhs.note === '数据异常：0.3× 中位线' },
+  { id: 'a4', sev: '中', title: '视频号限流待接管', detail: '《AI 入门课》预告片封面含二维码被限流',
+    cells: ['pub-xhs-ai-course:sp'],
+    live: (r) => r['pub-xhs-ai-course'].cells.sp.st === 'takeover' },
+  { id: 'a5', sev: '低', title: '对账超时 24h', detail: '《访谈 12 期》视频号数据 26h 未回流',
+    cells: ['pub-wechat-interview:sp'],
+    live: (r) => r['pub-wechat-interview'].cells.sp.st === 'reconcile' && r['pub-wechat-interview'].cells.sp.note === '超时：数据未回流' },
+];
+
+function seedMetrics(key) {
+  let h = 0;
+  for (let idx = 0; idx < key.length; idx++) h = (h * 31 + key.charCodeAt(idx)) % 9973;
+  return { read: 120 + (h % 420), like: 8 + (h % 38), comment: h % 9, ratio: (0.55 + ((h >> 3) % 9) / 20) };
+}
+
+function keyOf(rowId, platId) { return rowId + ':' + platId; }
+const mediaOf = (row) => row.version.split(' · ')[0];
+function kindFor(st) {
+  switch (st) {
+    case 'auth': return 'auth';
+    case 'manual': return 'manual';
+    case 'takeover': return 'takeover';
+    case 'reconcile': return 'reconcile';
+    case 'failed': return 'failed';
+    case 'published': return 'published';
+    default: return 'retrying';
+  }
+}
+
+/* ---------------- content detail subpage ---------------- */
+function ContentDetail({ row, onBack, openModal, openCell, visibleAnomalies, activeAnomaly, toggleAnomaly, headRef }) {
+  const media = mediaOf(row);
+  const words = 560 + ((row.id.length * 131 + row.id.charCodeAt(row.id.length - 1) * 17) % 2400);
+  const cells = PLATFORMS.map((p) => ({ p, cell: row.cells[p.id] }));
+  const pending = cells.filter(({ cell }) => cell && PENDING_KEYS.includes(cell.st)).length;
+  const rowAnoms = visibleAnomalies.filter((a) => a.cells.some((k) => k.split(':')[0] === row.id));
+  const previewKey = row.id + ':' + (PLATFORMS.find((p) => row.cells[p.id] && row.cells[p.id].st) || PLATFORMS[0]).id;
+
+  return (
+    <div className="c-detail" data-testid="content-detail">
+      <nav className="ds-breadcrumb" aria-label="面包屑">
+        <span>发布工作台</span>
+        <span className="c-crumb-sep" aria-hidden="true">/</span>
+        <a href="#board" onClick={(e) => { e.preventDefault(); onBack(); }}>分发总盘</a>
+        <span className="c-crumb-sep" aria-hidden="true">/</span>
+        <span aria-current="page">{row.title}</span>
+      </nav>
+
+      <header className="c-detail-head">
+        <div className="c-detail-title">
+          <h1 tabIndex={-1} ref={headRef}>{row.title}</h1>
+          <span className="c-detail-meta">{row.id} · {row.version} · 校对已完成</span>
+        </div>
+        <Button variant="text" size="sm" onClick={() => openModal('preview', previewKey)}>预览全文</Button>
+      </header>
+
+      <div className="c-detail-cols">
+        <section className="c-detail-card" aria-labelledby="ov-head">
+          <h2 id="ov-head">版本与媒体</h2>
+          <dl className="c-detail-defs">
+            <div><dt>版本</dt><dd>{row.version}</dd></div>
+            <div><dt>媒体</dt><dd>{media}</dd></div>
+            <div><dt>字数</dt><dd>{words} 字</dd></div>
+            <div><dt>校对</dt><dd>已完成 · 2 处修订</dd></div>
+            <div><dt>分级</dt><dd><span className="ds-grade" data-grade={row.grade}>{row.grade}</span></dd></div>
+          </dl>
+          <p className="c-detail-excerpt">{row.excerpt}</p>
+        </section>
+
+        <section className="c-detail-card" aria-labelledby="adapt-head">
+          <h2 id="adapt-head">媒体适配清单</h2>
+          <ul className="c-adapt-list">
+            {PLATFORMS.map((p) => (
+              <li key={p.id}><i className="c-pdot" data-tone={p.tone} /><strong>{p.name}</strong><span>{PLATFORM_ADAPT[p.id]}</span></li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="c-detail-card c-span2" aria-labelledby="tasks-head">
+          <h2 id="tasks-head">平台任务 <span className="c-detail-count">{pending}/{cells.length} 待处理</span></h2>
+          <ul className="c-dt-list">
+            {cells.map(({ p, cell }) => {
+              const key = keyOf(row.id, p.id);
+              if (!cell || cell.st === null) {
+                return (
+                  <li key={p.id} className="c-dt-row c-dt-row--none">
+                    <span className="c-dt-plat"><i className="c-pdot" data-tone={p.tone} /><strong>{p.name}</strong><em>{p.acct}</em></span>
+                    <span className="c-dt-none">未安排</span>
+                  </li>
+                );
+              }
+              const meta = STATE_META[cell.st] || STATE_META.published;
+              const action = meta.action || (cell.st === 'retrying' ? '查看状态' : '查看');
+              return (
+                <li key={p.id} className="c-dt-row">
+                  <span className="c-dt-plat"><i className="c-pdot" data-tone={p.tone} /><strong>{p.name}</strong><em>{p.acct}</em></span>
+                  <span className="c-dt-state"><StatusPill tone={meta.tone}>{meta.label}</StatusPill></span>
+                  <span className="c-dt-at">{cell.at}</span>
+                  {cell.note ? <span className="c-dt-note" title={cell.note}>{cell.note}</span> : null}
+                  <Button size="sm" variant="secondary" onClick={() => openCell(key)}>{action}</Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {rowAnoms.length > 0 && (
+          <section className="c-detail-card c-span2" aria-labelledby="anom-head">
+            <h2 id="anom-head">关联侦察</h2>
+            <div className="c-anom-refs">
+              {rowAnoms.map((a) => (
+                <button key={a.id} type="button" className="c-anom-ref"
+                  aria-pressed={activeAnomaly === a.id} onClick={() => toggleAnomaly(a.id)}>
+                  <span className="sev" data-sev={a.sev}>{a.sev}</span>
+                  <span>{a.title}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- secondary view: 待我处理 ---------------- */
+function TodoView({ matrixRows, openCell }) {
+  const items = [];
+  matrixRows.forEach((r) => PLATFORMS.forEach((p) => {
+    const c = r.cells[p.id];
+    if (c && PENDING_KEYS.includes(c.st)) items.push({ r, p, c });
+  }));
+  const stateRank = (st) => { const i = FILTER_ORDER.indexOf(st); return i === -1 ? 99 : i; };
+  items.sort((a, b) => stateRank(a.c.st) - stateRank(b.c.st) || PLATFORMS.indexOf(a.p) - PLATFORMS.indexOf(b.p));
+  const platCount = new Set(items.map((it) => it.p.id)).size;
+
+  return (
+    <div className="c-view">
+      <header className="c-view-head">
+        <div>
+          <h1>待我处理</h1>
+          <p>需要你手动介入的跨平台任务：授权、人工发布、接管与对账。AI 不代发——每个任务都只做「准备好，等你点」。</p>
+        </div>
+        <div className="c-head-stats">
+          <div className="c-stat c-stat--warn"><strong>{items.length}</strong><span>待处理任务</span></div>
+          <div className="c-stat"><strong>{platCount}</strong><span>涉及平台</span></div>
+        </div>
+      </header>
+      {items.length === 0 ? (
+        <StatePanel state="empty" title="没有待处理任务" body="所有跨平台任务都已就绪或完成，回到「分发总盘」看看矩阵全貌。" minHeight={240} />
+      ) : (
+        <div className="c-todo-list">
+          {items.map(({ r, p, c }) => {
+            const key = keyOf(r.id, p.id);
+            const meta = STATE_META[c.st] || STATE_META.published;
+            return (
+              <div key={key} className="c-todo-row">
+                <span className="c-plat-id"><i className="c-pdot" data-tone={p.tone} /><strong>{p.name}</strong><em>{p.acct}</em></span>
+                <button type="button" className="c-todo-open" onClick={() => openCell(key)}>
+                  <strong>{r.title}</strong>
+                  <span>{r.version}</span>
+                </button>
+                <span className="c-dt-state"><StatusPill tone={meta.tone}>{meta.label}</StatusPill></span>
+                <span className="c-item-note" title={c.note || c.at}>{c.note || c.at}</span>
+                <Button size="sm" variant="secondary" onClick={() => openCell(key)}>{meta.action || '查看状态'}</Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- secondary view: 发布记录 ---------------- */
+function LogView({ matrixRows, openCell }) {
+  const items = [];
+  matrixRows.forEach((r) => PLATFORMS.forEach((p) => {
+    const c = r.cells[p.id];
+    if (c && c.st === 'published') items.push({ r, p, c });
+  }));
+  const coveredRows = new Set(items.map((it) => it.r.id)).size;
+
+  return (
+    <div className="c-view">
+      <header className="c-view-head">
+        <div>
+          <h1>发布记录</h1>
+          <p>已发布内容的对账结果与指标回放。点「查看数据」可对比同频道中位线。</p>
+        </div>
+        <div className="c-head-stats">
+          <div className="c-stat"><strong>{items.length}</strong><span>发布条目</span></div>
+          <div className="c-stat"><strong>{coveredRows}</strong><span>覆盖内容</span></div>
+        </div>
+      </header>
+      {items.length === 0 ? (
+        <StatePanel state="empty" title="还没有发布记录" body="完成人工发布并标记后，对账记录会出现在这里。" minHeight={240} />
+      ) : (
+        <div className="c-log-list">
+          {items.map(({ r, p, c }) => {
+            const key = keyOf(r.id, p.id);
+            const m = c.metrics;
+            return (
+              <div key={key} className="c-log-row">
+                <span className="c-plat-id"><i className="c-pdot" data-tone={p.tone} /><strong>{p.name}</strong><em>{p.acct}</em></span>
+                <span className="c-log-title">{r.title}</span>
+                <span className="c-log-at">{c.at}</span>
+                <span className="c-log-metrics">{m ? `${m.read} 读 · ${m.like} 赞 · ${m.comment} 评` : '—'}</span>
+                <span className="c-dt-state"><StatusPill tone="ok">已发布</StatusPill></span>
+                <Button size="sm" variant="secondary" onClick={() => openCell(key)}>查看数据</Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- app ---------------- */
+function App() {
+  const [matrixRows, setMatrixRows] = React.useState(ROWS);
+  const [selKey, setSelKey] = React.useState('pub-x-karpathy:x');
+  const [view, setView] = React.useState('board');
+  const [detailRowId, setDetailRowId] = React.useState(null);
+  const [activeFilter, setActiveFilter] = React.useState('all');
+  const [anomOnly, setAnomOnly] = React.useState(false);
+  const [scanning, setScanning] = React.useState(false);
+  const [activeAnomaly, setActiveAnomaly] = React.useState(null);
+  const [modalState, setModalState] = React.useState(null); /* {kind, key} */
+  const [toastList, setToastList] = React.useState([]);
+  const [piOpen, setPiOpen] = React.useState(false);
+  const [piDraft, setPiDraft] = React.useState('');
+  const [piMsgList, setPiMsgList] = React.useState([
+    { role: 'agent', text: '矩阵侦察完成：发现 4 处异常，其中 2 处高优先（跨平台不同步、X 发布失败）。' },
+    { role: 'agent', text: '建议先处理 pub-x-karpathy × X 的 401 重试，我会盯着结果并同步对账。' },
+  ]);
+  const [themeMode, setThemeMode] = React.useState('dark');
+  const titleBtnRef = React.useRef({});
+  const detailHeadRef = React.useRef(null);
+
+  const rowMap = {};
+  matrixRows.forEach((r) => { rowMap[r.id] = r; });
+  const cellOf = (key) => { const [rid, pid] = key.split(':'); return rowMap[rid] ? rowMap[rid].cells[pid] : null; };
+
+  const visibleAnomalies = ANOMALIES.filter((a) => a.live(rowMap));
+  const anomKeys = new Set(visibleAnomalies.flatMap((a) => a.cells));
+  const resolvedCount = ANOMALIES.length - visibleAnomalies.length;
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeMode);
+  }, [themeMode]);
+
+  /* drop highlight when the linked anomaly resolves (e.g. after a successful retry) */
+  React.useEffect(() => {
+    if (activeAnomaly && !visibleAnomalies.some((a) => a.id === activeAnomaly)) setActiveAnomaly(null);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [visibleAnomalies.length]);
+
+  /* move focus into the detail subpage when it opens */
+  React.useEffect(() => {
+    if (detailRowId) detailHeadRef.current?.focus();
+  }, [detailRowId]);
+
+  /* global keys: F9 rescan, Esc leaves the detail subpage */
+  const runScanRef = React.useRef(null);
+  const stateRef = React.useRef({ detailRowId, modalState });
+  const closeDetailRef = React.useRef(null);
+  runScanRef.current = runScan;
+  stateRef.current = { detailRowId, modalState };
+  closeDetailRef.current = closeDetail;
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'F9') { e.preventDefault(); runScanRef.current(); }
+      if (e.key === 'Escape' && stateRef.current.detailRowId && !stateRef.current.modalState) closeDetailRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  function pushToast(text) {
+    const id = Date.now() + Math.random().toString(36).slice(2);
+    setToastList((prev) => [...prev, { id, text }]);
+    setTimeout(() => setToastList((prev) => prev.filter((t) => t.id !== id)), 3400);
+  }
+
+  function applyCell(key, patch) {
+    const [rid, pid] = key.split(':');
+    setMatrixRows((prev) => prev.map((r) => (
+      r.id === rid ? { ...r, cells: { ...r.cells, [pid]: { ...r.cells[pid], ...patch } } } : r
+    )));
+  }
+
+  function openModal(kind, key) {
+    setModalState({ kind, key: key || selKey });
+  }
+  function closeModal() { setModalState(null); }
+
+  /* clicking a status cell = that content × platform task, straight into the modal.
+     Filter dimming only applies to the matrix canvas; task rows in other views open freely. */
+  function openCell(key) {
+    const cell = cellOf(key);
+    if (!cell || cell.st === null) return;
+    if (view === 'board' && !detailRowId) {
+      if (activeFilter !== 'all' && cell.st !== activeFilter && !(cell.st === 'retrying' && activeFilter === 'failed')) return;
+      if (anomOnly && !anomKeys.has(key)) return;
+    }
+    setSelKey(key);
+    setModalState({ kind: kindFor(cell.st), key });
+  }
+
+  function openDetail(rowId) {
+    setDetailRowId(rowId);
+  }
+  function closeDetail() {
+    const rid = detailRowId;
+    setDetailRowId(null);
+    setTimeout(() => titleBtnRef.current[rid]?.focus(), 0);
+  }
+
+  function selectView(id) {
+    setView(id);
+    setDetailRowId(null);
+  }
+
+  function toggleFilter(fk) {
+    setActiveFilter(activeFilter === fk ? 'all' : fk);
+  }
+
+  function runScan() {
+    if (scanning) return;
+    const n = visibleAnomalies.length;
+    setScanning(true);
+    setTimeout(() => {
+      setScanning(false);
+      pushToast('矩阵侦察完成：' + n + ' 处异常待处理');
+    }, 950);
+  }
+
+  function toggleAnomaly(aId) {
+    if (activeAnomaly === aId) { setActiveAnomaly(null); return; }
+    setActiveAnomaly(aId);
+    const anom = ANOMALIES.find((a) => a.id === aId);
+    if (anom && anom.cells.length > 0) setSelKey(anom.cells[0]);
+  }
+
+  /* ---- state transitions ---- */
+  function confirmAuth() {
+    const key = modalState.key;
+    const [, pid] = key.split(':');
+    const plat = PLATFORMS.find((p) => p.id === pid);
+    closeModal();
+    applyCell(key, { st: 'manual', at: '待发布' });
+    pushToast('授权完成：' + plat.name + ' 已就绪，进入人工发布队列');
+  }
+  function confirmManual() {
+    const key = modalState.key;
+    const [rid, pid] = key.split(':');
+    const plat = PLATFORMS.find((p) => p.id === pid);
+    closeModal();
+    applyCell(key, { st: 'published', at: '刚刚', metrics: seedMetrics(key) });
+    pushToast('已标记发布：' + rowMap[rid].title + ' × ' + plat.name);
+  }
+  function confirmTakeover() {
+    const key = modalState.key;
+    const [rid, pid] = key.split(':');
+    const plat = PLATFORMS.find((p) => p.id === pid);
+    closeModal();
+    applyCell(key, { st: 'reconcile', at: '已发布 0h', note: '重新发布' });
+    pushToast('接管完成：' + plat.name + ' 已替换封面并重新发布');
+  }
+  function confirmRetry() {
+    const key = modalState.key;
+    const [rid, pid] = key.split(':');
+    const plat = PLATFORMS.find((p) => p.id === pid);
+    closeModal();
+    applyCell(key, { st: 'retrying', at: '重试中' });
+    setTimeout(() => {
+      applyCell(key, { st: 'published', at: '刚刚', metrics: seedMetrics(key) });
+      pushToast('重试成功：' + rowMap[rid].title + ' 已发布到 ' + plat.name);
+    }, 1500);
+  }
+  function finishReconcile(key) {
+    const [, pid] = key.split(':');
+    const plat = PLATFORMS.find((p) => p.id === pid);
+    closeModal();
+    applyCell(key, { st: 'published', at: '刚刚', metrics: seedMetrics(key) });
+    pushToast('对账完成：' + plat.name + ' 3 项指标已回流');
+  }
+
+  function sendPi() {
+    const text = piDraft.trim();
+    if (!text) return;
+    setPiDraft('');
+    setPiMsgList((prev) => [...prev, { role: 'user', text }]);
+    const [rid, pid] = selKey ? selKey.split(':') : [];
+    const row = rowMap[rid]; const plat = PLATFORMS.find((p) => p.id === pid);
+    const title = row ? row.title.slice(0, 16) + '…' : '全矩阵';
+    const label = row && plat && cellOf(selKey) ? (STATE_META[cellOf(selKey).st] || {}).label || '—' : '—';
+    setTimeout(() => {
+      setPiMsgList((prev) => [...prev, { role: 'agent', text: '收到。我会跟进「' + title + ' × ' + (plat ? plat.name : '') + '」的' + label + '进度，状态变化会同步到矩阵。' }]);
+    }, 800);
+  }
+
+  /* ---- derived numbers ---- */
+  function countState(st) {
+    let n = 0;
+    matrixRows.forEach((r) => PLATFORMS.forEach((p) => { const c = r.cells[p.id]; if (c && c.st === st) n++; }));
+    return n;
+  }
+  const totalCells = matrixRows.reduce((acc, r) => acc + PLATFORMS.filter((p) => r.cells[p.id] && r.cells[p.id].st !== null).length, 0);
+
+  let todoCount = 0; let logCount = 0;
+  matrixRows.forEach((r) => PLATFORMS.forEach((p) => {
+    const c = r.cells[p.id];
+    if (c && PENDING_KEYS.includes(c.st)) todoCount++;
+    if (c && c.st === 'published') logCount++;
+  }));
+
+  function pendingCount(pid) {
+    let n = 0;
+    matrixRows.forEach((r) => { const c = r.cells[pid]; if (c && PENDING_KEYS.includes(c.st)) n++; });
+    return n;
+  }
+
+  const VIEW_TABS = [
+    { id: 'board', label: '分发总盘', count: totalCells },
+    { id: 'todo',  label: '待我处理', count: todoCount },
+    { id: 'log',   label: '发布记录', count: logCount },
+  ];
+
+  const selRow = selKey ? rowMap[selKey.split(':')[0]] : null;
+  const selPlat = selKey ? PLATFORMS.find((p) => p.id === selKey.split(':')[1]) : null;
+
+  function cellClasses(key, st) {
+    const cls = ['cell'];
+    if (selKey === key) cls.push('is-selected');
+    if (activeAnomaly && ANOMALIES.find((a) => a.id === activeAnomaly).cells.indexOf(key) !== -1) cls.push('is-hl');
+    let dim = false;
+    if (activeFilter !== 'all') dim = dim || (st !== activeFilter && !(st === 'retrying' && activeFilter === 'failed'));
+    if (anomOnly) dim = dim || !anomKeys.has(key);
+    if (dim) cls.push('is-dimmed');
+    return cls.join(' ');
+  }
+
+  /* ---- modal content ---- */
+  const modalKey = modalState ? modalState.key : selKey;
+  const modalRow = modalKey ? rowMap[modalKey.split(':')[0]] : null;
+  const modalPlat = modalKey ? PLATFORMS.find((p) => p.id === modalKey.split(':')[1]) : null;
+  const modalCell = modalKey ? cellOf(modalKey) : null;
+
+  let modalTitle = '操作';
+  if (modalState && modalPlat) {
+    switch (modalState.kind) {
+      case 'auth':      modalTitle = '连接账号 · ' + modalPlat.name; break;
+      case 'manual':    modalTitle = '人工发布 · ' + modalPlat.name; break;
+      case 'takeover':  modalTitle = '接管处理 · ' + modalPlat.name; break;
+      case 'reconcile': modalTitle = '开始对账 · ' + modalPlat.name; break;
+      case 'failed':    modalTitle = '重试发布 · ' + modalPlat.name; break;
+      case 'published': modalTitle = '数据对账 · ' + modalPlat.name; break;
+      case 'retrying':  modalTitle = '重试中 · ' + modalPlat.name; break;
+      case 'preview':   modalTitle = '内容预览 · ' + modalPlat.name; break;
+      default: break;
+    }
+  }
+
+  const taskContext = modalRow && modalPlat ? (
+    <div className="c-taskctx">
+      <div className="c-taskctx-plat">
+        <i className="c-pdot" data-tone={modalPlat.tone} />
+        <strong>{modalPlat.name}</strong>
+        <span>{modalPlat.acct}</span>
+      </div>
+      <div className="c-taskctx-grid">
+        <dl><dt>内容</dt><dd title={modalRow.title}>{modalRow.title}</dd></dl>
+        <dl><dt>版本</dt><dd>{modalRow.version}</dd></dl>
+        <dl><dt>媒体</dt><dd>{mediaOf(modalRow)}</dd></dl>
+        <dl><dt>状态</dt>
+          <dd className="c-taskctx-status">
+            {modalCell && modalCell.st
+              ? <React.Fragment><StatusPill tone={STATE_META[modalCell.st].tone}>{STATE_META[modalCell.st].label}</StatusPill><span style={{ color: 'var(--muted-low)', fontFamily: 'var(--mono)', fontSize: '10.5px' }}>{modalCell.at}</span></React.Fragment>
+              : <span>未安排</span>}
+          </dd>
+        </dl>
+      </div>
+    </div>
+  ) : null;
+
+  let modalBody = null;
+  let modalFooter = null;
+  if (modalState && modalRow && modalPlat) {
+    if (modalState.kind === 'auth') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p style={{ margin: '0 0 12px' }}>连接 <strong>{modalPlat.name} · {modalPlat.acct}</strong>，让内容进入该平台的发布队列：</p>
+          <ol className="c-auth-steps">
+            <li><span className="no">1</span><span>在平台后台打开「开发者 / 创作者」设置</span></li>
+            <li><span className="no">2</span><span>完成 OAuth 授权并回填密钥</span></li>
+            <li><span className="no">3</span><span>回到矩阵，该格自动变为「待人工发布」</span></li>
+          </ol>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>取消</Button>
+          <span data-testid="primary-action"><Button variant="primary" onClick={confirmAuth}>已完成授权</Button></span>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'manual') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p style={{ margin: '0 0 10px' }}>「{modalRow.title}」的分发材料与发布清单已就绪。AI 不代发——</p>
+          <p style={{ margin: '0' }}>请打开 <strong>{modalPlat.name} · {modalPlat.acct}</strong> 后台，按清单完成手动发布，然后回到这里标记。</p>
+          <p className="c-warn-note">此步由你亲自执行：自动发布权限默认关闭，任何智能体都不会代你点击「发布」。</p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>稍后</Button>
+          <span data-testid="primary-action"><Button variant="primary" onClick={confirmManual}>我已手动发布</Button></span>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'takeover') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p style={{ margin: '0 0 10px' }}>平台干预原因：<strong>{modalCell ? modalCell.note : '素材不合规'}</strong>。</p>
+          <p style={{ margin: '0' }}>处理方案：替换封面（去掉二维码）→ 重新提交审核 → 发布后回到矩阵对账。</p>
+          <p className="c-warn-note">限流期间请勿重复提交；处理完成后该格会进入「待对账」。</p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>取消</Button>
+          <span data-testid="primary-action"><Button variant="primary" onClick={confirmTakeover}>替换封面并重发</Button></span>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'failed') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p style={{ margin: '0 0 10px' }}>失败原因：<strong>{modalCell ? modalCell.note : '未知'}</strong>，已重试 2 次。</p>
+          <p style={{ margin: '0' }}>重试会重新连接平台并提交发布；若仍失败，请先检查授权状态。</p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>检查授权</Button>
+          <span data-testid="primary-action"><Button variant="primary" onClick={confirmRetry}>重试发布</Button></span>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'reconcile') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <ReconcileProgress onDone={finishReconcile.bind(null, modalState.key)} />
+        </div>
+      );
+      modalFooter = null;
+    } else if (modalState.kind === 'retrying') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p style={{ margin: '0 0 10px' }}>发布重试已发起，正在重新连接平台并提交。</p>
+          <p style={{ margin: '0' }}>完成后该格会自动同步为「已发布」并进入对账，无需你再操作。</p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>关闭</Button>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'published') {
+      const m = (modalCell && modalCell.metrics) || { read: 0, like: 0, comment: 0, ratio: 0.6 };
+      const ratioCls = m.ratio >= 0.8 ? 'ok' : (m.ratio >= 0.55 ? 'warn' : 'bad');
+      modalBody = (
+        <div>
+          {taskContext}
+          <div className="c-metrics">
+            <div className="c-metric"><strong>{m.read}</strong><span>阅读 / 曝光</span></div>
+            <div className="c-metric"><strong>{m.like}</strong><span>点赞 / 互动</span></div>
+            <div className="c-metric"><strong>{m.comment}</strong><span>评论</span></div>
+          </div>
+          <p className="c-ratio-line">相对同频道中位线 <strong className={ratioCls}>{m.ratio.toFixed(1)}×</strong>
+            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>（对账完成于对账批次 #238）</span></p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>关闭</Button>
+        </React.Fragment>
+      );
+    } else if (modalState.kind === 'preview') {
+      modalBody = (
+        <div>
+          {taskContext}
+          <p className="c-preview-excerpt">{modalRow.excerpt}</p>
+          <p className="c-preview-excerpt" style={{ color: 'var(--muted)' }}>（正文已在内容库完成校对，此处为预览摘要。完整稿见内容库对应记录。）</p>
+          <p className="c-preview-adapt"><strong>{modalPlat.name} 适配清单：</strong>{PLATFORM_ADAPT[modalPlat.id]}</p>
+        </div>
+      );
+      modalFooter = (
+        <React.Fragment>
+          <Button variant="secondary" onClick={closeModal}>关闭</Button>
+        </React.Fragment>
+      );
+    }
+  }
+
+  /* ---- render ---- */
+  const piContextText = selRow && selPlat ? selRow.title.slice(0, 14) + '… × ' + selPlat.name : '全矩阵';
+
+  return (
+    <div className="c-app">
+      <header className="c-topbar">
+        <div className="c-brand">
+          <WmbCreatureMark state={scanning ? 'working' : (piOpen ? 'settling' : 'idle')} />
+          <strong>WeMediaBuddy</strong>
+          <small>发布工作台</small>
+        </div>
+        <span className="c-topbar-divider" />
+        <span className="c-topbar-title">发布工作台 <em>· 方案 C</em></span>
+        <a className="c-back" href="index.html">
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
+          比较方案
+        </a>
+        <div className="c-top-actions">
+          <button type="button" className="c-icon-btn" data-testid="theme-toggle"
+            aria-pressed={themeMode === 'light'} title="切换主题"
+            onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}>
+            {themeMode === 'dark'
+              ? <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" /></svg>
+              : <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>}
+          </button>
+          <button type="button" className="c-icon-btn" data-testid="pi-toggle"
+            aria-pressed={piOpen} title={piOpen ? '收起 Pi' : '展开 Pi'}
+            onClick={() => setPiOpen(!piOpen)}>
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <nav className="c-localnav" aria-label="发布工作台导航">
+        <div className="c-localnav-id">
+          <span className="c-eyebrow">C · 发布工作台</span>
+          <strong className="c-localnav-room">发布台</strong>
+        </div>
+        <TabList tabs={VIEW_TABS} selectedId={view} onSelect={selectView} ariaLabel="发布工作台二级视图" className="c-viewtabs" />
+      </nav>
+
+      <main className="c-main">
+        <div className="c-tabpanels">
+          <div id="tabpanel-board" role="tabpanel" aria-labelledby="tab-board" hidden={view !== 'board'}>
+            <section className="c-board" aria-label="分发矩阵工作台" hidden={detailRowId !== null}>
+              <div className="c-room-head">
+                <div>
+                  <div className="c-eyebrow">C · 分发矩阵</div>
+                  <h1>全平台分发矩阵</h1>
+                  <p>以内容 × 平台为轴：格子即状态与新鲜度。点任意格子直达该平台任务，点内容标题进入详情页。</p>
+                </div>
+                <div className="c-head-stats">
+                  <div className="c-stat"><strong>{matrixRows.length}</strong><span>内容 / 版本</span></div>
+                  <div className="c-stat"><strong>{PLATFORMS.length}</strong><span>平台账号</span></div>
+                  <div className="c-stat c-stat--warn"><strong>{visibleAnomalies.length}</strong><span>矩阵异常</span></div>
+                </div>
+              </div>
+
+              <div className="c-controls">
+                <span className="c-filter-label">筛选</span>
+                <div className="c-chips">
+                  <ChipFilter label="全部" count={totalCells} pressed={activeFilter === 'all'} size="sm"
+                    onToggle={() => setActiveFilter('all')} />
+                  {FILTER_ORDER.map((fk) => (
+                    <ChipFilter key={fk} label={STATE_META[fk].label} count={countState(fk)}
+                      pressed={activeFilter === fk} size="sm"
+                      onToggle={() => toggleFilter(fk)} />
+                  ))}
+                  <ChipFilter label="仅异常" count={visibleAnomalies.length} pressed={anomOnly} size="sm"
+                    onToggle={() => setAnomOnly(!anomOnly)} />
+                </div>
+                <div className="c-scan">
+                  <span className="c-scan-hint">{scanning ? '扫描中…' : 'F9 · 侦察'}</span>
+                  <Button variant="secondary" size="sm" disabled={scanning} aria-keyshortcuts="F9" onClick={runScan}>扫描矩阵</Button>
+                </div>
+              </div>
+
+              <div className="c-strip">
+                <span className="c-strip-label">矩阵侦察</span>
+                <div className="c-strip-scroll">
+                  {visibleAnomalies.length === 0 && <span className="c-strip-note">全矩阵无异常</span>}
+                  {visibleAnomalies.map((a) => (
+                    <button key={a.id} type="button" className="c-anom" aria-pressed={activeAnomaly === a.id}
+                      title={a.detail} onClick={() => toggleAnomaly(a.id)}>
+                      <span className="sev" data-sev={a.sev}>{a.sev}</span>
+                      <span>{a.title}</span>
+                    </button>
+                  ))}
+                </div>
+                <span className="c-strip-note">{resolvedCount > 0 ? resolvedCount + ' 处已解决 · ' : ''}{visibleAnomalies.length} 处待处理</span>
+              </div>
+
+              <div className="c-matrix-scroll" data-testid="task-list">
+                <table className="mx">
+                  <caption className="visually-hidden">内容 × 平台分发矩阵：行是内容与版本，列是平台账号，格子是发布状态与新鲜度</caption>
+                  <thead>
+                    <tr>
+                      <th className="mx-corner">
+                        <span>内容 / 版本</span>
+                        <span className="mx-corner-sub">平台 →</span>
+                      </th>
+                      {PLATFORMS.map((p) => {
+                        const pc = pendingCount(p.id);
+                        return (
+                          <th key={p.id} scope="col">
+                            <span className="mx-colname"><i className="c-pdot" data-tone={p.tone} />{p.name}</span>
+                            <span className="mx-colacct">{p.acct}</span>
+                            <span className={"mx-colstat" + (pc ? " has" : "")}>{pc ? pc + ' 待处理' : '正常'}</span>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrixRows.map((r) => (
+                      <tr key={r.id} data-testid="task-row" data-record-id={r.id}>
+                        <th className="mx-rowhead" scope="row">
+                          <button type="button" className="mx-rowopen" data-testid="content-detail-open"
+                            ref={(n) => { titleBtnRef.current[r.id] = n; }}
+                            onClick={() => openDetail(r.id)}>
+                            <span className="mx-rowtitle">
+                              <span>{r.title}</span>
+                              <span className="mx-rowgo" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
+                              </span>
+                            </span>
+                            <span className="mx-rowmeta">
+                              <span className="ds-grade" data-grade={r.grade}>{r.grade}</span>
+                              <span className="mx-version">{r.version}</span>
+                            </span>
+                          </button>
+                        </th>
+                        {PLATFORMS.map((p) => {
+                          const cell = r.cells[p.id];
+                          const key = keyOf(r.id, p.id);
+                          if (!cell || cell.st === null) {
+                            return <td key={p.id}><div className="cell-empty">—</div></td>;
+                          }
+                          const meta = STATE_META[cell.st] || STATE_META.published;
+                          return (
+                            <td key={p.id}>
+                              <button type="button" className={cellClasses(key, cell.st)} data-state={cell.st}
+                                aria-pressed={selKey === key} onClick={() => openCell(key)}>
+                                <span className="cell-line1">
+                                  <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+                                  {anomKeys.has(key) && <span className="cell-tag">异</span>}
+                                </span>
+                                <span className="cell-at">{cell.at}</span>
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {detailRowId && rowMap[detailRowId] && (
+              <ContentDetail row={rowMap[detailRowId]} onBack={closeDetail}
+                openModal={openModal} openCell={openCell}
+                visibleAnomalies={visibleAnomalies} activeAnomaly={activeAnomaly}
+                toggleAnomaly={toggleAnomaly} headRef={detailHeadRef} />
+            )}
+          </div>
+
+          <div id="tabpanel-todo" role="tabpanel" aria-labelledby="tab-todo" hidden={view !== 'todo'}>
+            <TodoView matrixRows={matrixRows} openCell={openCell} />
+          </div>
+
+          <div id="tabpanel-log" role="tabpanel" aria-labelledby="tab-log" hidden={view !== 'log'}>
+            <LogView matrixRows={matrixRows} openCell={openCell} />
+          </div>
+        </div>
+      </main>
+
+      <AppModal open={modalState !== null} title={modalTitle} size="standard" onRequestClose={closeModal}
+        footer={modalFooter} ariaDescription={modalTitle}>
+        {modalBody}
+      </AppModal>
+
+      <aside className={"c-pi" + (piOpen ? " is-open" : "")} data-testid="pi-panel" aria-hidden={!piOpen} aria-label="Pi 主编助理">
+        <div className="ds-pi-head">
+          <WmbCreatureMark state={scanning ? 'working' : 'idle'} />
+          <span className="ds-pi-title">Pi · 主编助理</span>
+        </div>
+        <div className="ds-pi-context"><em>聚焦</em><span>{piContextText}</span></div>
+        <div className="ds-pi-transcript">
+          {piMsgList.map((m, idx) => (
+            <div key={idx} className={"ds-pi-msg ds-pi-msg--" + m.role}>{m.text}</div>
+          ))}
+        </div>
+        <div className="ds-pi-composer">
+          <textarea value={piDraft} rows={2} placeholder="询问矩阵状态…"
+            onChange={(e) => setPiDraft(e.target.value)} />
+          <div className="ds-pi-composer-bar">
+            <span className="ds-pi-composer-meta">
+              <button type="button" className="ds-pi-model-trigger">Pi · 主编助理</button>
+            </span>
+            <button type="button" className="ds-pi-send" aria-label="发送" onClick={sendPi}>
+              <svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2 15 22l-4-9-9-4Z" /></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="c-toasts" role="status" aria-live="polite">
+        {toastList.map((t) => (
+          <div key={t.id} className="c-toast"><i aria-hidden="true" />{t.text}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReconcileProgress({ onDone }) {
+  const STEPS = ['连接平台数据接口', '拉取阅读 / 点赞 / 转发', '与同频道中位线比较', '写入对账记录'];
+  const [step, setStep] = React.useState(0);
+  React.useEffect(() => {
+    if (step >= STEPS.length) {
+      const t = setTimeout(onDone, 400);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setStep((s) => s + 1), 420);
+    return () => clearTimeout(t);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [step]);
+  return (
+    <div className="c-recon-steps">
+      {STEPS.map((s, idx) => (
+        <div key={s} className={"c-recon-step" + (idx < step ? " done" : (idx === step ? " active" : ""))}>
+          <span className="c-recon-dot" />
+          <span>{s}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

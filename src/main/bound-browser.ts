@@ -3,6 +3,7 @@ import { startBrowser, type BrowserRuntime, type StartBrowserOptions } from './b
 import { requireBrowserProfile, type BrowserProfile } from './browser-config.ts';
 import { identifyXAccount } from './platforms/x.ts';
 import { identifyWechatAccount } from './platforms/wechat.ts';
+import { identifyZhihuAccount } from './platforms/zhihu.ts';
 import {
   assertWorkspaceBrowserIdentity,
   readWorkspaceBrowserBinding,
@@ -10,7 +11,7 @@ import {
 } from './workspace-browser-binding.ts';
 import type { AccountIdentity } from './accounts.ts';
 
-export type BoundBrowserPlatform = Extract<AccountIdentity['platform'], 'x' | 'wechat'>;
+export type BoundBrowserPlatform = Extract<AccountIdentity['platform'], 'x' | 'wechat' | 'zhihu'>;
 export type ResolvedBrowserBinding = { profile: BrowserProfile; binding: WorkspaceBrowserBinding };
 export type VerifiedBoundBrowser = ResolvedBrowserBinding & { runtime: BrowserRuntime; identity: AccountIdentity };
 
@@ -43,7 +44,9 @@ export async function startVerifiedBoundBrowser(
   const runtime = await startBrowser(resolved.profile, options);
   const identity = platform === 'x'
     ? await identifyXAccount(runtime.cdpUrl)
-    : await identifyWechatAccount(runtime.cdpUrl);
+    : platform === 'wechat'
+      ? await identifyWechatAccount(runtime.cdpUrl)
+      : await identifyZhihuAccount(runtime.cdpUrl);
   assertWorkspaceBrowserIdentity(database, {
     profileId: resolved.profile.id,
     bindingRevision: resolved.binding.bindingRevision,

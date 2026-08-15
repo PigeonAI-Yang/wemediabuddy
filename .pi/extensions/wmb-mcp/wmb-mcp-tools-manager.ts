@@ -41,6 +41,44 @@ const getJob: ToolDefinition = {
   }
 };
 
+export function buildSpawnJobPayload(params: Record<string, unknown>): Record<string, unknown> {
+  const roleId = String(params.roleId ?? '');
+  const common = {
+    role_id: roleId,
+    brief: String(params.brief ?? '')
+  };
+  if (roleId === 'reporter') {
+    return {
+      ...common,
+      business_date: params.businessDate ? String(params.businessDate) : undefined,
+      channel_ids: Array.isArray(params.channelIds) ? params.channelIds.map(String) : undefined,
+      source_feed_ids: Array.isArray(params.sourceFeedIds) ? params.sourceFeedIds.map(String) : undefined
+    };
+  }
+  if (roleId === 'planner') {
+    return {
+      ...common,
+      business_date: params.businessDate ? String(params.businessDate) : undefined
+    };
+  }
+  if (roleId === 'writer') {
+    return {
+      ...common,
+      business_date: params.businessDate ? String(params.businessDate) : undefined,
+      project_id: params.projectId ? String(params.projectId) : undefined,
+      writer_task: params.writerTask ? String(params.writerTask) : undefined
+    };
+  }
+  if (roleId === 'librarian') {
+    return {
+      ...common,
+      source_ids: Array.isArray(params.sourceIds) ? params.sourceIds.map(String) : undefined,
+      scope: params.scope ? String(params.scope) : undefined
+    };
+  }
+  throw new Error(`Unsupported employee role: ${roleId || '(empty)'}`);
+}
+
 const spawnJob: ToolDefinition = {
   name: 'wmb_spawn_job',
   label: '主管派工',
@@ -48,7 +86,7 @@ const spawnJob: ToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      roleId: { type: 'string', description: 'reporter | planner | writer | librarian' },
+      roleId: { type: 'string', enum: ['reporter', 'planner', 'writer', 'librarian'], description: 'reporter | planner | writer | librarian' },
       brief: { type: 'string' },
       businessDate: { type: 'string', description: 'reporter/planner 业务日期（缺省今日）' },
       channelIds: { type: 'array', items: { type: 'string' }, description: 'reporter 可选：限定扫描渠道' },
@@ -62,17 +100,7 @@ const spawnJob: ToolDefinition = {
     additionalProperties: false
   },
   async execute(_id, params) {
-    return textResult(await callTool('jobs.spawn', {
-      role_id: String(params.roleId),
-      brief: String(params.brief),
-      business_date: params.businessDate ? String(params.businessDate) : undefined,
-      channel_ids: Array.isArray(params.channelIds) ? params.channelIds.map(String) : undefined,
-      source_feed_ids: Array.isArray(params.sourceFeedIds) ? params.sourceFeedIds.map(String) : undefined,
-      project_id: params.projectId ? String(params.projectId) : undefined,
-      writer_task: params.writerTask ? String(params.writerTask) : undefined,
-      source_ids: Array.isArray(params.sourceIds) ? params.sourceIds.map(String) : undefined,
-      scope: params.scope ? String(params.scope) : undefined
-    }));
+    return textResult(await callTool('jobs.spawn', buildSpawnJobPayload(params)));
   }
 };
 

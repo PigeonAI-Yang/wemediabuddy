@@ -551,7 +551,7 @@ export function compileSourceKnowledge(database: DatabaseSync, rawInput: Knowled
       versionCount: adoptedNoteVersionIds.length
     };
     const title = (input.topicCompile?.title ?? topicRow.title).trim();
-    const changeSummary = `Source ${input.sourceId} r${input.sourceRevision} 编译：新增 ${notesCreated} 条知识、更新 ${notesUpdated} 条、重编译 Topic Wiki（采纳 ${adoptedNoteVersionIds.length} 个知识版本）。`;
+    const changeSummary = `来源 ${input.sourceId} r${input.sourceRevision} 已整理：新增 ${notesCreated} 条认识、更新 ${notesUpdated} 条、主题认识已更新（采纳 ${adoptedNoteVersionIds.length} 个结论版本）。`;
     const readableDiff = `采纳版本 ${previousAdopted.length} → ${adoptedNoteVersionIds.length}（本次晋升 ${promoted.length}：${promoted.map((entry) => entry.canonicalKey).join('、') || '无'}）。`;
     const businessObjectRefs = [`source:${input.sourceId}:r${input.sourceRevision}`];
     wikiPageVersionId = deterministicId('wver', `${input.requestId}|wiki-topic|${input.topicId}`);
@@ -591,7 +591,7 @@ export function compileSourceKnowledge(database: DatabaseSync, rawInput: Knowled
     receipts: [{
       triggerType: 'ingest' as ReceiptTriggerType,
       requestId: receiptRequestId,
-      summary: `Source ${input.sourceId} r${input.sourceRevision} 知识编译：新增 ${notesCreated} 条、更新 ${notesUpdated} 条、跳过 ${skipped.length} 条低价值/复述、Entity 匹配 ${entitiesMatched} 个/新建 ${entitiesCreated} 个、重编译 Topic Wiki ${wikiPagesCompiled} 个。`,
+      summary: `来源 ${input.sourceId} r${input.sourceRevision} 已整理：新增 ${notesCreated} 条认识、更新 ${notesUpdated} 条、跳过 ${skipped.length} 条低价值/复述、实体匹配 ${entitiesMatched} 个/新建 ${entitiesCreated} 个、主题认识更新 ${wikiPagesCompiled} 个。`,
       counts: {
         entitiesCreated, entitiesMatched, notesCreated, notesUpdated,
         notesSkippedLowValue: skipped.length, noteVersionsCreated: promoted.length,

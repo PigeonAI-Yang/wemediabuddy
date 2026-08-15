@@ -41,7 +41,7 @@ export type WorkspaceCapabilitySnapshot = {
     fixedAiLists: boolean;
     rankings: boolean;
     sourceWire: boolean;
-    publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'>;
+    publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'>;
   };
 };
 
@@ -88,7 +88,7 @@ export function registerWorkspaceApplicationMcp(server: McpServer, rootPath: str
       request_id: z.string(), target: z.enum(['current', 'new']), purpose: z.string(), display_name: z.string(), audience: z.string(),
       content_goal: z.string(), editorial_brief: z.string(), intelligence_pack_id: z.enum(['wemedia-intelligence-engine', 'uk-life-content-radar', 'game-news-radar']),
       intelligence_pack_version: z.number().int(), creation_pack_id: z.literal('wmb-core-creation'), creation_pack_version: z.number().int(),
-      platforms: z.array(z.enum(['x', 'xiaohongshu', 'wechat'])).min(1)
+      platforms: z.array(z.enum(['x', 'xiaohongshu', 'wechat', 'zhihu'])).min(1)
     }
   }, async (input) => {
     const current = input.target === 'current' ? await currentWorkspace() : null;

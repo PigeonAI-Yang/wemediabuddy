@@ -13,6 +13,13 @@ import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-pr
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
 import { deletePiSkill, listPiSkills, savePiSkill, syncPiSkillsForDataRoots, type PiSkillInput } from './pi-skill-library';
 
+const OWNER_BROWSER_CONFIRMATION_MESSAGES = {
+  create: '将创建独立登录环境，并绑定到当前工作空间。',
+  rebind: '将把当前工作空间切换到所选登录环境。',
+  verify: '将使用当前登录环境验证账号，并更新该工作空间的账号验证状态。',
+  'migrate-legacy': '将复制旧登录数据，创建新环境并绑定到当前工作空间。'
+} as const;
+
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
   chooseDataRoot: () => Promise<DataRoot | null>;
@@ -76,7 +83,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
   };
   const confirmOwnerCommand = async (
     event: IpcMainInvokeEvent,
-    command: 'create' | 'rebind' | 'verify' | 'migrate-legacy',
+    command: keyof typeof OWNER_BROWSER_CONFIRMATION_MESSAGES,
     input: OwnerBrowserCommand & { profileId?: string; platform?: OwnerBrowserPlatform; label?: string }
   ) => {
     const dataRoot = await requireRoot();
@@ -86,7 +93,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     if ((state.binding?.bindingRevision ?? 0) !== input.expectedBindingRevision) throw ownerIpcError('PROFILE_STALE', '浏览器 binding 已变化。');
     if (!Number.isInteger(input.expectedRegistryRevision) || state.registry.revision !== input.expectedRegistryRevision) throw ownerIpcError('PROFILE_STALE', '浏览器档案注册表已变化。');
     const platform = command === 'verify' || command === 'migrate-legacy' ? input.platform : undefined;
-    if ((command === 'verify' || command === 'migrate-legacy') && platform !== 'x' && platform !== 'wechat') throw ownerIpcError('BROWSER_PROFILE_MISMATCH', 'Owner 命令缺少有效目标平台。');
+    if ((command === 'verify' || command === 'migrate-legacy') && platform !== 'x' && platform !== 'wechat' && platform !== 'zhihu') throw ownerIpcError('BROWSER_PROFILE_MISMATCH', 'Owner 命令缺少有效目标平台。');
     if (platform && !workspace.profile.platforms.includes(platform)) throw ownerIpcError('BROWSER_PROFILE_MISMATCH', `当前工作空间未启用 ${platform}。`);
     const targetProfileId = command === 'rebind' ? input.profileId : state.binding?.profileId;
     const targetProfile = targetProfileId ? state.registry.profiles.find((profile) => profile.id === targetProfileId) : null;
@@ -104,7 +111,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       `target=${target}`,
       `platform=${platform ?? 'none'}`
     ].join('\n');
-    const options = { type: 'warning' as const, title: '确认 Owner 浏览器操作', message: '此操作会修改当前工作空间的浏览器绑定。', detail, buttons: ['取消', '确认'], defaultId: 0, cancelId: 0, noLink: true };
+    const options = { type: 'warning' as const, title: '确认 Owner 浏览器操作', message: OWNER_BROWSER_CONFIRMATION_MESSAGES[command], detail, buttons: ['取消', '确认'], defaultId: 0, cancelId: 0, noLink: true };
     // Packaged acceptance is headless and cannot click native dialogs; keep the real
     // confirmation gate for normal Owner UI while auto-accepting only under the
     // explicit acceptance env used by EVAL-029 / package runners.

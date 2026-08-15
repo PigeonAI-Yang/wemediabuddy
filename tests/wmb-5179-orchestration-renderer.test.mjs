@@ -106,7 +106,7 @@ test('transcript routes orchestration before assistant/user catch-all with no ac
   assert.match(rowBlock, /<details className="pi-orchestration-details">\s*<summary>查看任务要求<\/summary>/);
   assert.doesNotMatch(rowBlock, /aria-live|<button|pi-bubble-actions|onCopy|onFork|onRetry|role="status"/);
   assert.equal(transcript.match(/aria-live/g)?.length ?? 0, 2, 'aria-live 仅 pi-activity 与 pi-native-queue 两处，orchestration 不加');
-  assert.match(transcript, /isOrchestration\n\s*\? <PiOrchestrationRow key=\{messageKey\} message=\{message\} \/>\n\s*: \(/, 'orchestration 真分支只渲染该组件（无 meta/动作区）');
+  assert.match(transcript, /return isOrchestration\s*\? <PiOrchestrationRow key=\{messageKey\} message=\{message\} \/>\s*: \(\s*<div className=\{`pi-bubble-wrap/, 'orchestration 真分支只渲染该组件，并在普通角色分支之前返回');
   assert.match(transcript, /\{!activityOnly && <div className="pi-bubble-meta">/);
 });
 

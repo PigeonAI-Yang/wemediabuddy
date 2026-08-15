@@ -14,10 +14,12 @@ import { SettingsView } from './settings-view';
 import { OnboardingView } from './onboarding-view';
 import { AgentsRosterView } from './agents-roster-view';
 import { PiDock } from './pi-dock';
-import { XListOperationTray } from './x-list-operation-tray';
+import { XListOperationModal } from './x-list-operation-modal';
 import { AppConfirmHost } from './app-confirm'; import { AppUpdateBanner } from './app-update-banner';
 import type { PiContextRef, PiFocusObject, RankingContext, Theme, View, XListPiContext } from './app-types';
-import { logoUrl, views } from './app-types';
+import { logoUrl, views, WMB_NAVIGATE_WIKI_OBJECT_EVENT } from './app-types';
+import type { TodayFermentingSelection } from './today-view';
+import type { KnowledgeDeepLinkPayload } from '../shared/knowledge-topic-library';
 import { workspaceStorageKey } from './workspace-storage';
 import './styles.css';
 
@@ -81,11 +83,11 @@ function App(): React.JSX.Element {
   const [todaySelectedItems, setTodaySelectedItems] = useState<TodayPlanItem[]>([]);
   const [todaySelectedSources, setTodaySelectedSources] = useState<Array<TodaySource & { bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number }>>([]);
   const [proposalsSelectedItem, setProposalsSelectedItem] = useState<TodayPlanItem | null>(null);
-  const [fermentSelectedItem, setFermentSelectedItem] = useState<any | null>(null);
+  const [fermentSelectedItem, setFermentSelectedItem] = useState<TodayFermentingSelection | null>(null);
   const [rankingContext, setRankingContext] = useState<RankingContext>({ boards: [], items: [] });
   const [xListContext, setXListContext] = useState<XListPiContext | null>(null);
   const [canvasOpenId, setCanvasOpenId] = useState<string | null>(null);
-  const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'current_page' | 'selected'; title: string } | null>(null);
+  const [canvasContext, setCanvasContext] = useState<{ canvasId: string; nodeIds: string[]; mode: 'selected'; title: string } | null>(null);
   const [studioSelectedId, setStudioSelectedId] = useState<string | null>(null);
   const [studioContext, setStudioContext] = useState<{ id: string; title: string } | null>(null);
   const [libraryTopicContext, setLibraryTopicContext] = useState<{ id: string; title: string } | null>(null);
@@ -232,12 +234,34 @@ function App(): React.JSX.Element {
     navigate('topic');
     window.dispatchEvent(new CustomEvent('wmb-open-library-topic', { detail: { topicId } }));
   };
+  useEffect(() => {
+    // WMB-5239：跨页深链统一导航（wiki-discovery 组件派发 CustomEvent，detail.payload=KnowledgeDeepLinkPayload）。
+    // topic→openTopic(payload.objectId)（objectId=主题 ID；targetId 可能是 Wiki 页 ID，不能用于主题定位）；
+    // source→写 libraryFocusSourceId+navigate('library')；knowledge_object→知识网络（画布本体卡降级）。
+    // 非法/缺字段载荷 fail-closed 忽略（不导航、不抛错）；不新增顶层路由/View。
+    const onNavigateWikiObject = (event: Event) => {
+      const detail = (event as CustomEvent<{ payload?: KnowledgeDeepLinkPayload }>).detail;
+      const payload = detail?.payload;
+      if (!payload || typeof payload !== 'object' || typeof payload.targetType !== 'string') return;
+      if (payload.targetType === 'topic_wiki' && payload.objectId) {
+        openTopic(payload.objectId);
+      } else if (payload.targetType === 'source' && payload.objectId) {
+        if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), payload.objectId);
+        navigate('library');
+      } else if (payload.targetType === 'knowledge_object') {
+        navigate('canvas');
+      }
+    };
+    window.addEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT, onNavigateWikiObject);
+    return () => window.removeEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT, onNavigateWikiObject);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
   const openStudio = (projectId?: string | null) => {
     if (projectId) setStudioSelectedId(projectId);
     navigate('studio');
   };
   const nav = [{ id: 'today', label: '今日' }, { id: 'agents', label: '智能体' }, { id: 'discover', label: '发现' }, { id: 'proposals', label: '选题' }, { id: 'studio', label: '创作' }, { id: 'publish', label: '发布' }, { id: 'results', label: '结果' }] as const;
-  const pageLabels: Record<View, string> = { today: '今日内容', agents: '智能体班组', discover: '发现', proposals: '选题台账', topic: '主题', library: '资料库', canvas: '关系画布', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
+  const pageLabels: Record<View, string> = { today: '今日内容', agents: '智能体班组', discover: '发现', proposals: '选题台账', topic: '主题', library: '资料库', canvas: '知识网络', studio: '创作', publish: '发布', results: '结果', settings: '设置' };
   const publishSelected = publications.find((item) => item.publication.id === publishSelectedId) ?? publications[0] ?? null;
   const piContext: PiContextRef = useMemo(() => {
     if (view === 'today') {
@@ -247,9 +271,10 @@ function App(): React.JSX.Element {
       return {
         page: view,
         pageLabel: pageLabels[view],
-        objectType: first ? 'plan_item' : firstSource ? 'source' : (fermenting.items[0] ? 'fermenting' : null),
-        objectId: first?.id ?? firstSource?.id ?? fermenting.items[0]?.id ?? null,
-        objectTitle: first?.title ?? firstSource?.title ?? fermenting.items[0]?.title ?? null,
+        objectType: pageFocus?.type ?? (first ? 'plan_item' : firstSource ? 'source' : (fermenting.items[0] ? 'fermenting' : null)),
+        objectId: pageFocus?.id ?? first?.id ?? firstSource?.id ?? fermenting.items[0]?.id ?? null,
+        objectTitle: pageFocus?.title ?? first?.title ?? firstSource?.title ?? fermenting.items[0]?.title ?? null,
+        focus: pageFocus,
         selectedItems: todaySelectedItems,
         selectedSources: todaySelectedSources,
         fermenting
@@ -382,7 +407,7 @@ function App(): React.JSX.Element {
     </header><AppUpdateBanner openSettings={() => navigate('settings')}/>
     <aside className="sidebar"><div><nav aria-label="工作流"><div className="nav-group-label">工作流</div><button className={view === 'today' ? 'active' : ''} onClick={() => navigate('today')} title="今日"><Icon name="today"/><span>今日</span></button>{nav.slice(1).map((item) => <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => navigate(item.id)} title={item.label}><Icon name={item.id}/><span>{item.label}</span></button>)}</nav><nav aria-label="知识资产"><div className="nav-group-label">知识资产</div><button className={view === 'topic' ? 'active' : ''} onClick={() => navigate('topic')} title="主题"><Icon name="knowledge"/><span>主题</span></button><button className={view === 'library' ? 'active' : ''} onClick={() => navigate('library')} title="资料库"><Icon name="library"/><span>资料库</span></button><button className={view === 'canvas' ? 'active' : ''} onClick={() => navigate('canvas')} title="关系画布"><Icon name="canvas"/><span>关系画布</span></button></nav></div><nav className="sidebar-bottom"><button className={view === 'settings' ? 'active' : ''} onClick={() => navigate('settings')} title="设置"><Icon name="settings"/><span>设置</span></button></nav></aside>
     <section className="workspace">
-      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={openStudio} openTopic={openTopic} openProposals={() => navigate('proposals')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} openSettings={(section) => { if (section) sessionStorage.setItem('wmb.settingsSection', section); navigate('settings'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} fermentSelectedItem={fermentSelectedItem} onFermentSelectedItemChange={setFermentSelectedItem} planDate={planDate} onStatusChange={setPageStatus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} intelligenceChannels={settings?.workspace.intelligenceChannels ?? null} piConfigured={settings?.pi.configured === true}/>}
+      {view === 'today' && <TodayView today={today} refresh={refreshToday} openStudio={openStudio} openTopic={openTopic} openProposals={() => navigate('proposals')} openLibrary={(sourceId) => { if (sourceId && workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), sourceId); navigate('library'); }} openSettings={(section) => { if (section) sessionStorage.setItem('wmb.settingsSection', section); navigate('settings'); }} selectedItems={todaySelectedItems} onSelectionChange={setTodaySelectedItems} selectedSources={todaySelectedSources} onSelectedSourcesChange={setTodaySelectedSources} fermentSelectedItem={fermentSelectedItem} onFermentSelectedItemChange={setFermentSelectedItem} planDate={planDate} onStatusChange={setPageStatus} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} intelligenceChannels={settings?.workspace.intelligenceChannels ?? null} piConfigured={settings?.pi.configured ?? false}/>} 
       {view === 'agents' && <AgentsRosterView onOpenSettings={() => { sessionStorage.setItem('wmb.settingsSection', 'agent'); navigate('settings'); }}/>}
       {view === 'discover' && <DiscoverView key={workspaceId ?? 'discover-loading'} workspace={settings?.workspace ?? null} workspaceId={workspaceId} rankingContext={rankingContext} onRankingContextChange={setRankingContext} onStatusChange={setPageStatus} onXListContextChange={setXListContext}/>}
       {view === 'proposals' && <ProposalsView planDate={planDate} openStudio={openStudio} openTopic={openTopic} onOpenProject={(projectId) => { setStudioSelectedId(projectId); navigate('studio'); }} openToday={() => navigate('today')} selectedItem={proposalsSelectedItem} onSelectedItemChange={setProposalsSelectedItem}/>}
@@ -395,12 +420,14 @@ function App(): React.JSX.Element {
           onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }}
           onOpenPi={() => setPiDockCollapsed(false)}
           piConfigured={settings?.pi.configured ?? false}
+          aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true}
         />
       )}
       {view === 'library' && workspaceId && <LibraryView key={workspaceId} onOpenTopic={(topicId) => openTopic(topicId)} onOpenStudio={(id) => { setStudioSelectedId(id); navigate('studio'); }} onOpenCanvas={(canvasId) => { if (canvasId) setCanvasOpenId(canvasId); navigate('canvas'); }} focusSourceId={localStorage.getItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusSourceConsumed={() => localStorage.removeItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'))} onFocusChange={setPageFocus} aiSourcePresentation={settings?.workspace.capabilities.sourceWire === true} sectionStorageKey={workspaceStorageKey(workspaceId, 'librarySection')}/>}
       {view === 'canvas' && <KnowledgeCanvasView key={workspaceId ?? 'canvas-loading'} initialCanvasId={canvasOpenId} onContextChange={setCanvasContext} onDiscuss={()=>setPiDockCollapsed(false)} onOpenDetail={(target) => {
         if (target.type === 'topic' && target.id) openTopic(target.id);
         else if (target.type === 'source' && target.id) { if (workspaceId) localStorage.setItem(workspaceStorageKey(workspaceId, 'libraryFocusSourceId'), target.id); navigate('library'); }
+        else if (target.type === 'source' && !target.id) navigate('library');
         else if (target.type === 'studio' && target.id) { setStudioSelectedId(target.id); navigate('studio'); }
         else if (target.type === 'results') navigate('results');
       }}/>}
@@ -418,7 +445,7 @@ function App(): React.JSX.Element {
         <span className="status-item"><span className={`status-dot ${settings?.mcp?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.mcp?.status === 'ready' ? 'AI 接入已就绪' : 'AI 接入未启动'}</span>
         <span className="status-item"><span className={`status-dot ${settings?.browser?.status === 'ready' ? 'ok' : 'idle'}`}/>{settings?.browser?.status === 'ready' ? '浏览器已连接' : '浏览器未启动'}</span>
         {pageStatus?.text && <span className="status-item status-page" data-running={pageStatus.running ? 'true' : 'false'} title={pageStatus.text}><span className={`status-dot ${pageStatus.running ? 'ok' : 'idle'}`}/>{pageStatus.text}</span>}
-        <XListOperationTray/>
+        <XListOperationModal/>
       </div>
       <div className="status-bar-right">
         <button type="button" className="status-theme" title={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} aria-label={theme === 'dark' ? '切换到白昼紫罗兰' : '切换到黑夜紫罗兰'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? '☾' : '☀'} <span>{theme === 'dark' ? '黑夜紫罗兰' : '白昼紫罗兰'}</span></button>

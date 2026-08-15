@@ -1,0 +1,57 @@
+<!-- @dsCard group="Guidelines" viewport="700x300" name="OneViolet" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>One Violet</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .demo { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); padding: 0 16px; border-radius: var(--radius-lg); font-size: var(--text-ui); font-weight: 650; }
+  .primary { border: 0; background: var(--accent); color: var(--accent-ink); }
+  .secondary { border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink); }
+  .text { border: 0; background: transparent; color: var(--accent-soft); }
+  .danger { border: 0; background: var(--danger-button); color: var(--accent-ink); }
+  .sm { min-height: var(--control-h-sm); padding: 0 12px; font-size: 12.5px; border-radius: var(--radius-md); }
+  .dodont { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .dodont { grid-template-columns: 1fr; } }
+  .do, .dont { padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid var(--border-soft); background: var(--surface); }
+  .do h2, .dont h2 { margin: 0 0 6px; font-size: 13px; }
+  .do h2 { color: var(--success); } .dont h2 { color: var(--danger); }
+  .do ul, .dont ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>One Violet — 一屏一主操作</h1>
+<p>紫罗兰是「决策」的颜色，不是装饰：每个视图状态至多一个 primary；语义色只表达状态、不抢主操作。密度：primary 40px、compact 32px、导航行 38px（外壳例外）。</p>
+<div class="demo">
+  <button type="button" class="btn primary">开始今日情报</button>
+  <button type="button" class="btn secondary">重新侦察</button>
+  <button type="button" class="btn text">查看台账</button>
+  <button type="button" class="btn danger sm">删除并归档</button>
+</div>
+<div class="dodont">
+  <div class="do">
+    <h2>Do</h2>
+    <ul>
+      <li>每屏先问：这屏要人做什么？只给一个首选</li>
+      <li>PageCommand 的 actions 中至多一个 <code>variant: primary</code></li>
+      <li>次要动作用 secondary / text 退后</li>
+      <li>危险破坏性确认用 danger primary（alertdialog）</li>
+    </ul>
+  </div>
+  <div class="dont">
+    <h2>Don't</h2>
+    <ul>
+      <li>同一视图两个以上紫罗兰主按钮</li>
+      <li>用语义色（success/danger）冒充主操作</li>
+      <li>把 accent 当强调装饰色到处用</li>
+      <li>同语义按钮在不同房间不同密度</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

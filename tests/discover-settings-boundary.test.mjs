@@ -9,7 +9,7 @@ test('Discover shows content while Settings owns channel configuration', async (
   const listSettings = await readFile(new URL('../src/renderer/x-list-display-settings.tsx', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
   const piDock = await readFile(new URL('../src/renderer/pi-dock.tsx', import.meta.url), 'utf8');
-  const operationTray = await readFile(new URL('../src/renderer/x-list-operation-tray.tsx', import.meta.url), 'utf8');
+  const operationModal = await readFile(new URL('../src/renderer/x-list-operation-modal.tsx', import.meta.url), 'utf8');
   const ipc = await readFile(new URL('../src/main/ipc-x-lists.ts', import.meta.url), 'utf8');
   const prd = await readFile(new URL('../PRD.md', import.meta.url), 'utf8');
   const spec = await readFile(new URL('../SPEC.md', import.meta.url), 'utf8');
@@ -24,11 +24,11 @@ test('Discover shows content while Settings owns channel configuration', async (
   assert.match(listSettings, /操作记录/);
   assert.doesNotMatch(listSettings, /Promise\.all\(\[\s*window\.wmb\.listXListBindings/);
   assert.match(listSettings, /nextOperations\[0\] \?\? null/);
-  assert.doesNotMatch(piDock, /XListOperationTray|confirmXListOperation/);
-  assert.match(main, /XListOperationTray/);
-  assert.match(operationTray, /confirmXListOperation/);
-  assert.match(operationTray, /确认执行/);
-  assert.doesNotMatch(operationTray, /确认并交给 Pi 执行/);
+  assert.doesNotMatch(piDock, /XListOperationModal|confirmXListOperation/);
+  assert.match(main, /XListOperationModal/);
+  assert.match(operationModal, /confirmXListOperation/);
+  assert.match(operationModal, /确认执行/);
+  assert.doesNotMatch(operationModal, /确认并交给 Pi 执行/);
   assert.match(ipc, /x-lists:confirm[\s\S]*currentXListContext[\s\S]*dispatchAcceptXListOperation/);
   assert.match(ipc, /void runAcceptedXListOperation/);
   assert.match(prd, /Discover 不包含来源配置，只呈现榜单、所选 List 动态/);

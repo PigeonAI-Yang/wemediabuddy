@@ -1,0 +1,54 @@
+<!-- @dsCard group="Guidelines" viewport="700x340" name="ShapeElevationMotion" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Shape · Elevation · Motion</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .group { margin-bottom: 14px; }
+  .group h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-low); font-weight: 650; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .r { display: inline-grid; place-items: center; height: 34px; min-width: 34px; padding: 0 8px; border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--ink-soft); font-size: 11px; font-family: var(--mono); }
+  .pill { border-radius: var(--radius-pill); }
+  .motion { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink-soft); font-size: 12.5px; }
+  .motion i { display: block; width: 34px; height: 3px; border-radius: 2px; background: var(--accent); }
+  .motion.slow i { animation: pulse 1.4s ease infinite; }
+  .motion.base i { animation: pulse .8s ease infinite; }
+  .motion.exp i { animation: pulse 1.9s cubic-bezier(.22,1,.36,1) infinite; }
+  @keyframes pulse { 0%,100% { transform: scaleX(.35); opacity: .5; } 50% { transform: scaleX(1); opacity: 1; } }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+  .note { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-lg); background: var(--tag-bg); color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<h1>Shape · Elevation · Motion</h1>
+<p>圆角来自 25 个存量值收敛的有限刻度；产品基本扁平——1px 边框 + color-mix 着色承担层级，阴影只留给浮层。所有非必要动效都有 reduced-motion 静态等价物。</p>
+<div class="group">
+  <h2>Radius</h2>
+  <div class="row">
+    <span class="r">5</span><span class="r">6</span><span class="r">7</span><span class="r">8</span><span class="r">10</span><span class="r">12</span><span class="r">14</span><span class="r pill">999</span>
+  </div>
+</div>
+<div class="group">
+  <h2>Elevation</h2>
+  <div class="row">
+    <span class="r" style="box-shadow:var(--shadow-modal)">modal</span>
+    <span class="r" style="box-shadow:var(--shadow-press)">press</span>
+    <span class="r" style="outline:var(--focus-ring);outline-offset:2px">focus</span>
+  </div>
+</div>
+<div class="group">
+  <h2>Motion</h2>
+  <div class="row">
+    <span class="motion slow"><i/>slow 140ms</span>
+    <span class="motion base"><i/>base 120ms</span>
+    <span class="motion exp"><i/>expand 200ms</span>
+  </div>
+</div>
+<p class="note">按压缩态：<code>translateY(1px) scale(.98)</code> 于 80ms；creature 动效统一 <code>cubic-bezier(.25,1,.5,1)</code>。prefers-reduced-motion 下动画全部冻结为静态帧。</p>
+</body>
+</html>

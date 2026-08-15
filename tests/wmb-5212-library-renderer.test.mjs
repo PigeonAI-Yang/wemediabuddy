@@ -1,6 +1,6 @@
 // WMB-5212 资料库知识面原位改造 —— renderer 聚焦合同测试。
 // 覆盖：library-view-parts 纯函数（段迁移/标签/回执消化/质量画像/健康严重度/刷新 scope/
-// 详情信封归一）与渲染层合同（资料/待处理/知识健康/移出 tabs、Source 详情 Raw/质量/回执/
+// 详情信封归一）与渲染层合同（资料/观察中/待处理/知识健康/移出 tabs、Source 详情 Raw/质量/回执/
 // Evidence/关联/批注、持久内联回执、深链、dataChanged 订阅替代轮询、键盘/aria、无平行知识 CRUD）。
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -31,6 +31,7 @@ import {
 test('WMB-5212 UI: migrateLibrarySection maps old rediscovery section to pending', () => {
   assert.equal(migrateLibrarySection('rediscovery'), 'pending');
   assert.equal(migrateLibrarySection('saved'), 'saved');
+  assert.equal(migrateLibrarySection('watching'), 'watching');
   assert.equal(migrateLibrarySection('pending'), 'pending');
   assert.equal(migrateLibrarySection('health'), 'health');
   assert.equal(migrateLibrarySection('removed'), 'removed');
@@ -85,10 +86,10 @@ test('WMB-5212 UI: conclusion status and body status labels cover states', () =>
   }
   assert.equal(conclusionStatusLabel('disputed'), '有争议');
   assert.equal(conclusionStatusLabel('inference'), '推断');
-  assert.equal(bodyStatusLabel('ready'), '正文已抓取');
-  assert.equal(bodyStatusLabel('failed'), '抓取失败');
+  assert.equal(bodyStatusLabel('ready'), '正文已保存');
+  assert.equal(bodyStatusLabel('failed'), '正文归档失败');
   assert.equal(bodyStatusLabel('empty'), '无正文');
-  assert.equal(bodyStatusLabel('none'), '尚未抓取');
+  assert.equal(bodyStatusLabel('none'), '正文归档中');
 });
 
 test('WMB-5212 UI: annotation intent labels cover intent taxonomy', () => {
@@ -160,12 +161,12 @@ test('WMB-5212 UI: sourceListBadges composes inline body/digest/health badges', 
   assert.deepEqual(sourceListBadges({}), []);
   const badges = sourceListBadges({ bodyStatus: 'ready', digested: true, openHealthIssues: 2 });
   assert.deepEqual(badges, [
-    { cls: 'green', text: '正文已抓取' },
+    { cls: 'green', text: '正文已保存' },
     { cls: 'green', text: '已消化' },
     { cls: 'amber', text: '健康问题 2' }
   ]);
   const failed = sourceListBadges({ bodyStatus: 'failed', openHealthIssues: 0 });
-  assert.deepEqual(failed, [{ cls: 'amber', text: '正文抓取失败' }]);
+  assert.deepEqual(failed, [{ cls: 'amber', text: '正文归档失败' }]);
 });
 
 test('WMB-5212 UI: sourceQualityProfile maps verification/management into visible labels', () => {
@@ -229,22 +230,47 @@ const parts = await readFile(new URL('../src/renderer/library-view-parts.ts', im
 const css = await readFile(new URL('../src/renderer/styles-workflow-library.css', import.meta.url), 'utf8');
 const mainTsx = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
 
-test('WMB-5212 UI: library navigation is 资料/待处理/知识健康/移出 with tablist semantics', () => {
+test('WMB-5212 UI: library navigation is 资料/观察中/待处理/知识健康/移出 with tablist semantics', () => {
   assert.match(view, /role="tablist"/);
   assert.match(view, /role="tab"/);
   assert.match(view, /aria-selected=\{section === item\.id\}/);
-  for (const label of ['资料', '待处理', '知识健康', '移出']) {
+  for (const label of ['资料', '观察中', '待处理', '知识健康', '移出']) {
     assert.ok(view.includes(label), `缺少 tab 文案 ${label}`);
   }
-  assert.ok(view.includes("id: 'saved'"));
-  assert.ok(view.includes("id: 'pending'"));
-  assert.ok(view.includes("id: 'health'"));
-  assert.ok(view.includes("id: 'removed'"));
+  const ids = ['saved', 'watching', 'pending', 'health', 'removed'];
+  const positions = ids.map((id) => view.indexOf(`id: '${id}'`));
+  assert.ok(positions.every((pos) => pos >= 0), '缺少 section id');
+  for (let index = 1; index < positions.length; index += 1) {
+    assert.ok(positions[index] > positions[index - 1], `section 顺序错误：${ids[index - 1]} 应排在 ${ids[index]} 前`);
+  }
   // 键盘 tab 导航：方向键/Home/End
   assert.match(view, /ArrowLeft/);
   assert.match(view, /ArrowRight/);
   assert.match(view, /'Home'/);
   assert.match(view, /'End'/);
+});
+
+test('WMB-5212 UI: watching is a top-level tab reusing standard rows, old top board removed', () => {
+  assert.ok(view.includes("id: 'watching'"));
+  assert.ok(view.includes("label: '观察中'"));
+  // 观察中页是独立分支，直接复用标准资料行（lib-row），不再有顶部卡片板块
+  assert.match(view, /section === 'watching' \?/);
+  assert.match(view, /watching\.map\(renderLibraryRow\)/);
+  assert.match(view, /watching\.length \? <div className="library-list">/);
+  // 旧顶部观察卡片板块及其专用样式已删除
+  assert.doesNotMatch(view, /library-watching-board/);
+  assert.doesNotMatch(view, /library-watching-card/);
+  assert.doesNotMatch(view, /library-watching-list/);
+  assert.doesNotMatch(css, /library-watching-board/);
+  assert.doesNotMatch(css, /library-watching-card/);
+  assert.doesNotMatch(css, /library-watching-list/);
+  // 数据源仍是既有 watching 查询，且观察中页有自己的 dataChanged 订阅
+  assert.match(view, /window\.wmb\.listWatchingSources\(\{ limit: 100 \}\)/);
+  assert.match(view, /void loadWatching\(\)/);
+  assert.match(view, /观察中已自动更新/);
+  // 空态清晰：引导用户把资料设为观察中
+  assert.ok(view.includes('没有观察中的资料'));
+  assert.ok(view.includes('在资料详情中把管理状态设为「观察中」后，会出现在这里；支持打开详情与原文。'));
 });
 
 test('WMB-5212 UI: dataChanged subscription replaces polling as the refresh path', () => {
@@ -288,7 +314,7 @@ test('WMB-5212 UI: persistent inline receipts are collapsible but always visible
 test('WMB-5212 UI: source detail has Raw/质量/Evidence/关联/批注/健康 regions', () => {
   assert.ok(view.includes('来源质量'));
   assert.ok(view.includes('正文'));
-  assert.ok(view.includes('Evidence 贡献'));
+  assert.ok(view.includes('证据贡献'));
   assert.ok(view.includes('关联'));
   assert.ok(view.includes('批注'));
   assert.ok(view.includes('健康问题'));
@@ -306,7 +332,7 @@ test('WMB-5212 UI: source detail has Raw/质量/Evidence/关联/批注/健康 re
 
 test('WMB-5212 UI: stale/failed/disputed/inference are visible via labels, not color alone', () => {
   assert.ok(view.includes('有争议')); // disputed（核验下拉与徽标）
-  assert.ok(view.includes('抓取失败')); // failed body
+  assert.ok(view.includes('正文归档失败')); // failed body
   // 推断/stale 语义标签定义在映射并在视图中被使用（不只用颜色）
   assert.match(parts, /inference: '推断'/);
   assert.match(parts, /contradicted: '被反驳'/);
@@ -324,7 +350,7 @@ test('WMB-5212 UI: existing source management flows stay intact', () => {
   assert.match(view, /window\.wmb\.fetchSourceBody\(\{ sourceId: source\.id, force, maxChars: 20000 \}\)/);
   assert.match(view, /window\.wmb\.getSourceBodyCache\(source\.id\)/);
   assert.match(view, /window\.wmb\.getKnowledgeContext\(\{ sourceId: source\.id \}\)/);
-  assert.match(view, /window\.wmb\.listWatchingSources\(\{ limit: 30 \}\)/);
+  assert.match(view, /window\.wmb\.listWatchingSources\(\{ limit: 100 \}\)/);
   assert.match(view, /window\.wmb\.getRediscovery\(\)/);
   assert.match(view, /window\.wmb\.openExternal\(/);
 });

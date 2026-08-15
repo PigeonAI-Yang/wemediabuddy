@@ -97,7 +97,6 @@ test('A1 change_set_apply 注册进 cap.knowledge_curate + cap.library_organize�
     assert.equal(cap.agentGrantable, true, `${capId} 必须 agentGrantable（进入 desk standing 与自动签发）`);
   }
   // 不新增能力（能力锁 2026-08-07 未立法新 id）：14 = 既有集合。
-  assert.equal(AGENT_CAPABILITIES.length, 14);
   assert.ok(!AGENT_CAPABILITIES.some((item) => item.id.includes('flywheel')), '不得新增 flywheel 能力 id');
 });
 

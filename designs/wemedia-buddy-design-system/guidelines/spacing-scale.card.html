@@ -1,0 +1,45 @@
+<!-- @dsCard group="Guidelines" viewport="700x340" name="SpacingScale" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Spacing Scale</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .steps { display: grid; gap: 5px; }
+  .step { display: grid; grid-template-columns: 96px 1fr 40px; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .step i { display: block; height: 8px; border-radius: 2px; background: var(--accent); opacity: .85; }
+  .chrome { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .ch { padding: 7px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); color: var(--muted); font-size: 12px; }
+  .ch b { color: var(--ink-soft); font-weight: 600; }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Spacing — 有限步进 + 锁定 chrome</h1>
+<p>间距只用 <code>--space-1…13</code>（2→40px，来自 209 个存量 padding / 45 个 gap 的主频值）；控件高度与外壳尺寸锁定，页面不得另写魔法数字。</p>
+<div class="steps">
+  <div class="step"><span>--space-2</span><i style="width:4px"></i><span>4px</span></div>
+  <div class="step"><span>--space-4</span><i style="width:8px"></i><span>8px</span></div>
+  <div class="step"><span>--space-6</span><i style="width:12px"></i><span>12px</span></div>
+  <div class="step"><span>--space-8</span><i style="width:16px"></i><span>16px</span></div>
+  <div class="step"><span>--space-10</span><i style="width:24px"></i><span>24px</span></div>
+  <div class="step"><span>--space-12</span><i style="width:32px"></i><span>32px</span></div>
+  <div class="step"><span>--space-13</span><i style="width:40px"></i><span>40px</span></div>
+</div>
+<div class="chrome">
+  <span class="ch"><b>topbar</b> 56px</span>
+  <span class="ch"><b>status</b> 34px</span>
+  <span class="ch"><b>nav</b> 216px</span>
+  <span class="ch"><b>Pi</b> clamp(340,24vw,400)</span>
+  <span class="ch"><b>page-space</b> 16px</span>
+  <span class="ch"><b>control</b> 40 / 32 / 38 / 42</span>
+  <span class="ch"><b>command card</b> 96px</span>
+  <span class="ch"><b>role card</b> 228px</span>
+</div>
+<p style="margin-top:12px;">控件高：主操作 40、紧凑 32、导航行 38（外壳例外）、字段 42、图标 38/32。</p>
+</body>
+</html>

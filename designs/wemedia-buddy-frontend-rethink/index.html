@@ -1,0 +1,2881 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark" data-demo="content">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>WeMediaBuddy · 全产品前端重构原型</title>
+<style>
+/* ============================================================================
+ * WeMediaBuddy — 全产品前端重构原型 (WMB-5260)
+ * 设计产物 · 非生产 UI
+ * Tokens 与产品 foundation 逐字节一致（墨夜/白昼 双主题同一语义变量）。
+ * 34 / 25 / 18 / 14 / 13 / 12px 唯一字阶；12px 只用于元数据。
+ * 三种房间形态：桌台清单 / 阅读详情 / 工作区例外。
+ * Pi 为右侧浮层，开合不改变工作区几何。
+ * ========================================================================== */
+
+/* ---------- 1 · Tokens（墨夜 / 白昼） ---------- */
+:root {
+  color-scheme: dark;
+
+  --app-bg: #0b0b0b;
+  --topbar-bg: #0f0f0f;
+  --sidebar-bg: #111111;
+  --workspace-bg: #0d0d0d;
+  --panel-bg: #131313;
+  --surface: #171717;
+  --surface-raised: #1c1c1c;
+  --surface-hover: #242424;
+  --surface-selected: #2a2a2a;
+  --tag-bg: #202020;
+
+  --ink: #f1f1f1;
+  --ink-soft: #d2d2d2;
+  --muted: #aaaaaa;
+  --muted-low: #767676;
+
+  --border: #363636;
+  --border-soft: #292929;
+  --border-strong: #484848;
+  --line: rgb(255 255 255 / 6.5%);
+  --line-strong: rgb(255 255 255 / 13%);
+
+  --accent: #8b7cff;
+  --accent-hover: #a495ff;
+  --accent-ink: #fff;
+  --accent-soft: #a495ff;
+  --accent-faint: rgb(139 124 255 / 13%);
+  --selected: rgb(139 124 255 / 13%);
+  --link: #7aa8f0;
+
+  --amber: #f0b45a;
+  --amber-soft: rgb(240 180 90 / 12%);
+  --success: #4cc38a;
+  --success-soft: rgb(76 195 138 / 12%);
+  --warning: #f0b45a;
+  --danger: #e5636f;
+  --danger-soft: rgb(229 99 111 / 12%);
+  --status-running: #c98300;
+  --status-running-soft: rgb(201 131 0 / 12%);
+  --info: #5aa9f0;
+
+  --grade-sss: #c9a7ff;
+  --grade-s: #8b7cff;
+  --grade-a: #5aa9f0;
+  --grade-b: #4cc38a;
+  --grade-c: #a7adc0;
+
+  --pf-x: #e9ebf3;
+  --pf-xhs: #f04a5e;
+  --pf-wx: #3fb575;
+
+  --canvas-bg: #0f0f0f;
+  --mark-bg: #f2f4f7;
+  --mark-ink: #111111;
+  --scroll-thumb: #505050;
+  --scroll-hover: #707070;
+  --overlay: rgb(0 0 0 / 55%);
+
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+
+  --topbar-height: 56px;
+  --status-height: 34px;
+  --nav-width: 204px;
+  --nav-width-collapsed: 64px;
+  --pi-width: 360px;
+
+  --radius-xs: 5px;
+  --radius-sm: 6px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 14px;
+
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 42%);
+  --focus-ring: 2px solid var(--accent);
+  --dur-base: 120ms;
+  --dur-slow: 140ms;
+  --dur-expand: 200ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --app-bg: #f6f5fa;
+  --topbar-bg: #fff;
+  --sidebar-bg: #f9f8fc;
+  --workspace-bg: #f6f5fa;
+  --panel-bg: #f9f8fc;
+  --surface: #fff;
+  --surface-raised: #fbfaff;
+  --surface-hover: #f0ecfa;
+  --surface-selected: #ebe6f8;
+  --tag-bg: #eeeaf7;
+
+  --ink: #221e2c;
+  --ink-soft: #3e384a;
+  --muted: #625b70;
+  --muted-low: #857d93;
+
+  --border: #d9d4e4;
+  --border-soft: #e6e3ee;
+  --border-strong: #bbb3ca;
+  --line: rgb(31 25 43 / 8%);
+  --line-strong: rgb(31 25 43 / 16%);
+
+  --accent: #6d51e8;
+  --accent-hover: #5733c7;
+  --accent-ink: #fff;
+  --accent-soft: #6d51e8;
+  --accent-faint: rgb(109 81 232 / 10%);
+  --selected: rgb(109 81 232 / 10%);
+  --link: #315fba;
+
+  --amber: #b97c1e;
+  --amber-soft: rgb(185 124 30 / 12%);
+  --success: #1f9d63;
+  --success-soft: rgb(31 157 99 / 10%);
+  --danger: #c4304b;
+  --danger-soft: rgb(196 48 75 / 10%);
+  --status-running: #9a5f00;
+  --status-running-soft: rgb(154 95 0 / 12%);
+  --info: #2f7fd4;
+
+  --grade-sss: #7b4fd6;
+  --grade-s: #6d51e8;
+  --grade-a: #2f7fd4;
+  --grade-b: #1f9d63;
+  --grade-c: #857d93;
+
+  --pf-x: #221e2c;
+  --pf-xhs: #d43a4e;
+  --pf-wx: #1f9d63;
+
+  --canvas-bg: #f0eef7;
+  --mark-bg: #eee9fa;
+  --mark-ink: #4f2eb7;
+  --scroll-thumb: #aaa2b8;
+  --scroll-hover: #81798f;
+  --overlay: rgb(31 25 43 / 35%);
+}
+
+/* ---------- 2 · Reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  min-width: 1100px;
+  overflow: hidden;
+  background: var(--app-bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+::selection { background: var(--selected); }
+:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+svg { display: block; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+[hidden] { display: none !important; }
+
+/* 细滚动条：悬停才显 */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover, *:focus-within { scrollbar-color: color-mix(in srgb, var(--scroll-thumb) 72%, transparent) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: transparent; border-radius: 5px; border: 3px solid transparent; background-clip: content-box; }
+*:hover::-webkit-scrollbar-thumb, *:focus-within::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 3px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover); border: 3px solid transparent; background-clip: content-box; }
+
+/* ---------- 3 · Shell ---------- */
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr) var(--status-height);
+  height: 100vh;
+  background: var(--app-bg);
+}
+
+/* ---------- 4 · Topbar（56px） ---------- */
+.topbar {
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 14px 0 16px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--line);
+  z-index: 20;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark { width: 26px; height: 26px; flex: none; }
+.brand-text { display: grid; line-height: 1.2; }
+.brand-text strong { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+.brand-text span { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.04em; }
+.topbar-spacer { flex: 1; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- 5 · Rail（分组房间导航） ---------- */
+.shell { position: relative; display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); min-height: 0; }
+.rail {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 10px 16px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  min-height: 0;
+}
+.nav-group {
+  margin: 14px 10px 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--muted-low); text-transform: uppercase;
+}
+.nav-group:first-child { margin-top: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; min-height: 36px;
+  padding: 0 10px;
+  border: 0; border-radius: 7px;
+  background: transparent; color: var(--muted);
+  font-size: 13.5px; text-align: left;
+  transition: background var(--dur-base) ease, color var(--dur-base) ease;
+}
+.nav-item:hover { background: var(--surface-hover); color: var(--ink); }
+.nav-item[aria-current="page"] {
+  background: var(--accent-faint); color: var(--accent-soft); font-weight: 600;
+}
+.nav-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+.nav-item { position: relative; }
+.nav-ic { flex: none; width: 18px; height: 18px; }
+.nav-ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.nav-lbl { white-space: nowrap; }
+
+/* ---------- 6 · Workspace（唯一滚动属主） ---------- */
+.workspace {
+  min-width: 0; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  background: var(--workspace-bg);
+  scroll-behavior: smooth;
+}
+.room { padding: 0 0 72px; }
+.room--wide { padding-bottom: 0; }
+.room-inner { max-width: 1216px; margin: 0 auto; padding: 0 32px; }
+.room--reading .room-inner { max-width: 1080px; }
+
+/* ---------- 7 · Masthead（一房一 H1） ---------- */
+.room-head { padding: 30px 0 16px; }
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.1em;
+  color: var(--accent-soft); text-transform: uppercase;
+}
+.room-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.room-h1 {
+  margin: 0;
+  font-size: 34px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.16;
+}
+.room-h1:focus { outline: none; }
+.room-actions { display: flex; align-items: center; gap: 8px; flex: none; padding-bottom: 3px; }
+.room-desc { margin: 8px 0 0; max-width: 64ch; color: var(--ink-soft); font-size: 14px; }
+.dateline { margin: 10px 0 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ---------- 8 · Tabs（语义 tablist） ---------- */
+.tabs {
+  display: flex; align-items: stretch; gap: 2px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  position: relative;
+  padding: 9px 16px 11px;
+  border: 0; background: transparent;
+  color: var(--muted); font-size: 14px;
+  transition: color var(--dur-base) ease;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+.tab[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 2px; border-radius: 1px; background: var(--accent);
+}
+.tab-cnt { margin-left: 7px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tab[aria-selected="true"] .tab-cnt { color: var(--muted); }
+
+/* ---------- 9 · Toolbar（搜索 / 筛选） ---------- */
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 0 4px;
+}
+.search {
+  position: relative; display: flex; align-items: center;
+  flex: 0 1 300px; min-width: 200px;
+}
+.search svg { position: absolute; left: 10px; width: 15px; height: 15px; fill: none; stroke: var(--muted-low); stroke-width: 1.8; stroke-linecap: round; pointer-events: none; }
+.search input {
+  width: 100%; height: 34px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--border-soft); border-radius: 7px;
+  background: var(--surface); color: var(--ink);
+  font-size: 13.5px;
+}
+.search input::placeholder { color: var(--muted-low); }
+.search input:focus { border-color: var(--border-strong); }
+.field-select {
+  height: 34px; padding: 0 26px 0 10px;
+  border: 1px solid var(--border-soft); border-radius: 7px;
+  background: var(--surface); color: var(--ink-soft);
+  font-size: 13px; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23767676' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.toolbar-count { margin-left: auto; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.toolbar-count b { color: var(--ink-soft); font-weight: 600; }
+
+/* ---------- 10 · 在办操作条（细条，非大卡） ---------- */
+.op-strip {
+  display: flex; align-items: center; gap: 14px;
+  margin: 10px 0 2px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.op-strip[data-state="done"] { border-color: var(--line); }
+.op-pulse {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted-low);
+}
+.op-strip[data-state="run"] .op-pulse { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-faint); }
+.op-strip[data-state="done"] .op-pulse { background: var(--success); }
+.op-info { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.op-info .t { color: var(--ink-soft); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-info .pct { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.op-progress { flex: none; width: 168px; height: 3px; border-radius: 2px; background: var(--border-soft); overflow: hidden; }
+.op-progress i { display: block; height: 100%; border-radius: 2px; background: var(--accent); width: var(--p, 40%); transition: width 400ms var(--ease-out); }
+.op-strip[data-state="done"] .op-progress i { background: var(--success); width: 100%; }
+.op-actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
+
+/* ---------- 11 · Buttons（一套 owner） ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 36px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--ink-soft);
+  font-size: 13.5px; font-weight: 500;
+  transition: background var(--dur-base) ease, color var(--dur-base) ease, border-color var(--dur-base) ease;
+}
+.btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--ink); border-color: var(--border-strong); }
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn--primary, [data-variant="primary"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+}
+.btn--primary:hover:not(:disabled), [data-variant="primary"]:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-ink); }
+.btn--ghost { border-color: transparent; background: transparent; }
+.btn--ghost:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; }
+.btn--sm { height: 30px; padding: 0 10px; border-radius: 6px; font-size: 13px; }
+.icon-btn {
+  display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  transition: background var(--dur-base) ease, color var(--dur-base) ease;
+}
+.icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:hover { background: var(--surface-hover); color: var(--ink); }
+.icon-btn--sm { width: 28px; height: 28px; border-radius: 6px; }
+.icon-btn--sm svg { width: 14px; height: 14px; }
+.icon-btn--bordered { border-color: var(--border-soft); background: var(--surface); }
+.row-act {
+  padding: 2px 0; border: 0; background: none;
+  color: var(--link); font-size: 13px;
+}
+.row-act:hover { text-decoration: underline; }
+
+/* ---------- 12 · 状态（点 + 词，永不只靠颜色） ---------- */
+.status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.status::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
+.status[data-s="ok"]::before { background: var(--success); }
+.status[data-s="run"] { color: var(--ink-soft); }
+.status[data-s="run"]::before { background: var(--accent); }
+.status[data-s="wait"]::before { background: var(--amber); }
+.status[data-s="wait"] { color: var(--amber); }
+.status[data-s="err"] { color: var(--danger); }
+.status[data-s="err"]::before { background: var(--danger); }
+.status[data-s="quiet"]::before { background: var(--muted-low); }
+
+/* ---------- 13 · 表格（列表房间） ---------- */
+.table-wrap { overflow-x: auto; padding-bottom: 4px; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  padding: 10px 12px 8px;
+  text-align: left; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--muted); border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+.table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr { transition: background var(--dur-base) ease; }
+.table tbody tr:hover { background: var(--surface-hover); }
+.table tbody tr[hidden] { display: none; }
+.src-title {
+  display: block; padding: 0; border: 0; background: none;
+  color: var(--ink); font-size: 15px; font-weight: 550; text-align: left;
+  letter-spacing: -0.01em; line-height: 1.4;
+}
+.src-title:hover { color: var(--link); text-decoration: underline; }
+.src-sub { margin-top: 2px; color: var(--muted); font-size: 12px; }
+.cell-acts { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.pf-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.pf-tag::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--muted-low); }
+.pf-tag[data-pf="x"]::before { background: var(--pf-x); }
+.pf-tag[data-pf="xhs"]::before { background: var(--pf-xhs); }
+.pf-tag[data-pf="wx"]::before { background: var(--pf-wx); }
+.pf-tag[data-pf="web"]::before { background: var(--info); }
+.num { font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.grade { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.grade[data-g="SSS"] { color: var(--grade-sss); }
+.grade[data-g="S"] { color: var(--grade-s); }
+.grade[data-g="A"] { color: var(--grade-a); }
+.grade[data-g="B"] { color: var(--grade-b); }
+.grade[data-g="C"] { color: var(--grade-c); }
+.table-foot { padding: 10px 12px 0; color: var(--muted); font-size: 12px; }
+.tbl-pane { display: none; }
+.tbl-pane[aria-hidden="false"] { display: block; }
+
+/* ---------- 14 · 四态区域（loading / error / empty / content） ---------- */
+.state-region { min-height: 160px; }
+.sv { display: none; }
+.sv-loading { padding: 34px 4px 8px; }
+.sv-loading .load-line { margin: 0 0 22px; color: var(--muted); font-size: 13px; }
+.sk-row { display: grid; grid-template-columns: 1fr 90px 90px 130px; gap: 18px; align-items: center; padding: 13px 12px; border-bottom: 1px solid var(--line); }
+.sk-row i { display: block; height: 11px; border-radius: 4px; background: var(--border-soft); animation: sk 1.3s ease-in-out infinite; }
+.sk-row i:nth-child(1) { width: 58%; height: 13px; }
+.sk-row i:nth-child(2) { width: 62%; }
+.sk-row i:nth-child(3) { width: 55%; }
+@keyframes sk { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.sv-error, .sv-empty {
+  margin-top: 14px;
+  padding: 34px 22px;
+  border: 1px dashed var(--border-soft); border-radius: 12px;
+  text-align: center;
+}
+.sv-error .ic, .sv-empty .ic {
+  width: 30px; height: 30px; margin: 0 auto 12px;
+  color: var(--muted-low);
+}
+.sv-error .ic svg, .sv-empty .ic svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sv-error h3, .sv-empty h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.sv-error p, .sv-empty p { margin: 0 auto 16px; max-width: 46ch; color: var(--muted); font-size: 14px; }
+[data-demo="content"] .sv-content { display: block; }
+[data-demo="loading"] .sv-loading { display: block; }
+[data-demo="error"] .sv-error { display: block; }
+[data-demo="empty"] .sv-empty { display: block; }
+[data-demo="loading"] .room-head [data-variant="primary"] { opacity: 0.45; pointer-events: none; }
+[data-demo="error"] .room:has(.sv-error [data-variant="primary"]) .room-head [data-variant="primary"],
+[data-demo="empty"] .room:has(.sv-empty [data-variant="primary"]) .room-head [data-variant="primary"] { display: none; }
+
+/* ---------- 15 · 阅读形态 ---------- */
+.crumb { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; color: var(--muted); font-size: 13px; }
+.crumb button { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; }
+.crumb button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.crumb button:hover { color: var(--ink); }
+.crumb .sep { color: var(--muted-low); }
+.reading { max-width: 1080px; margin: 0 auto; padding: 0 32px 72px; }
+.reading-head { padding: 26px 0 18px; border-bottom: 1px solid var(--line); }
+.reading-head .room-title-row { align-items: flex-start; }
+.reading h2 { margin: 34px 0 12px; font-size: 25px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
+.reading h3 { margin: 26px 0 10px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.reading p { margin: 0 0 14px; color: var(--ink-soft); font-size: 15px; line-height: 1.75; max-width: 72ch; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.timeline { margin: 0; padding: 0; list-style: none; }
+.timeline li { position: relative; padding: 0 0 18px 22px; border-left: 1px solid var(--line-strong); }
+.timeline li::before { content: ""; position: absolute; left: -4.5px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.timeline li:last-child { border-left-color: transparent; }
+.timeline .d { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.timeline .t { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 14px; }
+.trace-list { margin: 0; padding: 0; list-style: none; }
+.trace-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+
+/* ---------- 16 · 工作区例外：创作（写字间） ---------- */
+.room--wide .room-inner { max-width: none; padding: 0; }
+.room--wide .room-head { padding-left: 32px; padding-right: 32px; }
+.studio-view { display: grid; grid-template-columns: minmax(0, 1fr) 296px; height: calc(100vh - 228px); min-height: 460px; }
+.studio-doc { overflow-y: auto; padding: 0 36px 72px; background: var(--workspace-bg); }
+.paper {
+  max-width: 720px; margin: 22px auto 0;
+  padding: 44px 52px 64px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 2%) inset;
+}
+.paper .doc-label { margin: 0 0 18px; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; }
+.paper h2 { margin: 0 0 10px; font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
+.paper .doc-meta { margin: 0 0 22px; color: var(--muted); font-size: 12px; }
+.paper p { margin: 0 0 14px; color: var(--ink-soft); font-size: 15px; line-height: 1.8; }
+.paper .lead { color: var(--ink); font-size: 15.5px; }
+.rail-sec .op-progress { width: 104px; }
+.rail-sec .op-strip { gap: 10px; }
+.studio-rail { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--panel-bg); }
+.rail-sec { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.rail-sec h3 { margin: 0 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+.rail-sec--scroll { overflow-y: auto; flex: 1; }
+.ver-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ver-item:last-child { border-bottom: 0; }
+.ver-info { min-width: 0; flex: 1; }
+.ver-info b { display: block; font-size: 13.5px; font-weight: 550; }
+.ver-info span { color: var(--muted); font-size: 12px; }
+.ver-item[data-cur="true"] .ver-info b { color: var(--accent-soft); }
+.note-item { display: grid; gap: 3px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+.note-item:last-child { border-bottom: 0; }
+.note-item .w { color: var(--muted); font-size: 12px; }
+
+/* ---------- 17 · 工作区例外：画布（关系墙） ---------- */
+.canvas-view { position: relative; height: calc(100vh - 208px); min-height: 480px; background: var(--canvas-bg); overflow: hidden; }
+.canvas-view svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.canvas-status { position: absolute; top: 14px; left: 16px; display: inline-flex; align-items: center; gap: 10px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel-bg) 88%, transparent); backdrop-filter: blur(4px); }
+.canvas-controls { position: absolute; top: 14px; right: 16px; display: flex; gap: 6px; padding: 5px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--panel-bg) 88%, transparent); backdrop-filter: blur(4px); }
+.cn { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.2; }
+.cn[data-k="theme"] { fill: var(--accent-faint); stroke: var(--accent); stroke-width: 1.4; }
+.cn[data-k="idea"] { fill: var(--amber-soft); stroke: var(--amber); }
+.cn[data-k="src"] { fill: var(--surface-raised); }
+.cn-label { fill: var(--muted); font-size: 11.5px; font-family: var(--font-sans); }
+.cn-label[data-k="theme"] { fill: var(--accent-soft); font-weight: 600; }
+.cn-edge { stroke: var(--border-soft); stroke-width: 1.1; }
+.cn-edge--strong { stroke: var(--border-strong); }
+
+/* ---------- 18 · 设置（总机） ---------- */
+.settings-form { max-width: 720px; }
+.fgroup { margin: 26px 0; }
+.fgroup > h2 { margin: 0 0 14px; font-size: 25px; font-weight: 650; letter-spacing: -0.02em; }
+.fgroup .fgroup-sub { margin: -8px 0 14px; color: var(--muted); font-size: 13px; }
+.frow { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.frow:last-child { border-bottom: 0; }
+.frow label { color: var(--ink-soft); font-size: 14px; }
+.frow .hint { grid-column: 2; margin: -6px 0 0; color: var(--muted); font-size: 12px; }
+.frow input[type="text"], .frow select {
+  width: 100%; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border-soft); border-radius: 7px;
+  background: var(--surface); color: var(--ink); font-size: 13.5px;
+}
+.frow select { cursor: pointer; }
+
+/* ---------- 19 · Pi（右侧浮层，不占宽） ---------- */
+.pi-dock {
+  position: absolute; z-index: 60;
+  top: 0; right: 0; bottom: 0;
+  width: var(--pi-width); max-width: 100%;
+  display: flex; flex-direction: column;
+  background: var(--panel-bg);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-modal);
+  transform: translateX(104%);
+  transition: transform 260ms var(--ease-out);
+}
+.pi-dock.open { transform: none; }
+.pi-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.pi-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pi-brand .brand-mark { width: 24px; height: 24px; }
+.pi-brand b { display: block; font-size: 14px; font-weight: 600; }
+.pi-brand .status { margin-top: 2px; font-size: 12px; }
+.pi-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 20px; }
+.pi-body h3 { margin: 0 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+.pi-sec + .pi-sec { margin-top: 22px; }
+.pi-msg { margin: 0 0 8px; padding: 10px 12px; border-radius: 4px 10px 10px 10px; background: var(--surface); color: var(--ink-soft); font-size: 13.5px; line-height: 1.6; }
+.pi-msg--user { border-radius: 10px 4px 10px 10px; background: var(--accent-faint); color: var(--ink); margin-left: 26px; }
+.suggest-row {
+  display: block; width: 100%; text-align: left;
+  padding: 9px 10px; margin: 0 0 6px;
+  border: 1px solid var(--border-soft); border-radius: 8px;
+  background: var(--surface); color: var(--ink-soft); font-size: 13px;
+  transition: border-color var(--dur-base) ease, color var(--dur-base) ease;
+}
+.suggest-row:hover { border-color: var(--border-strong); color: var(--ink); }
+.suggest-row .s-tag { display: block; margin-bottom: 3px; color: var(--accent-soft); font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; }
+.pi-composer { padding: 12px 14px 14px; border-top: 1px solid var(--line); background: var(--topbar-bg); }
+.pi-composer textarea {
+  width: 100%; resize: none;
+  padding: 9px 10px; margin-bottom: 8px;
+  border: 1px solid var(--border-soft); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font-size: 13.5px; line-height: 1.5;
+}
+.pi-composer textarea:focus { border-color: var(--border-strong); }
+.pi-composer .composer-actions { display: flex; justify-content: flex-end; }
+.pi-reopen {
+  position: absolute; z-index: 55; top: 50%; right: 0;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 84px; padding: 0 9px;
+  transform: translateY(-50%);
+  border: 1px solid var(--border-strong); border-left: 0;
+  border-radius: 0 9px 9px 0;
+  background: var(--panel-bg); color: var(--muted);
+  font-size: 12px; letter-spacing: 0.14em; writing-mode: vertical-rl;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+.pi-reopen svg { width: 15px; height: 15px; fill: none; stroke: var(--accent-soft); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pi-reopen:hover { color: var(--ink); }
+
+/* ---------- 20 · Modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: grid; place-items: center;
+  background: var(--overlay);
+  padding: 32px;
+}
+.modal {
+  display: flex; flex-direction: column;
+  width: min(660px, calc(100vw - 64px));
+  max-height: min(720px, calc(100vh - 64px));
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-modal);
+  animation: modal-in 180ms var(--ease-out);
+}
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.99); } to { opacity: 1; transform: none; } }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 14px; border-bottom: 1px solid var(--line); }
+.modal-head h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.modal-body { overflow-y: auto; padding: 18px 20px 22px; }
+.modal-body h3 { margin: 22px 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+.modal-body h3:first-child { margin-top: 0; }
+.modal-body p { margin: 0 0 12px; color: var(--ink-soft); font-size: 14px; line-height: 1.7; }
+.modal-body .src-title { margin-bottom: 2px; }
+.modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 20px 16px; border-top: 1px solid var(--line); }
+.modal-foot .note { margin-right: auto; color: var(--muted); font-size: 12px; }
+.check-list { margin: 0; padding: 0; list-style: none; }
+.check-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); font-size: 14px; }
+.check-list input { width: 15px; height: 15px; accent-color: var(--accent); }
+.form-error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+.principle-list { margin: 0; padding: 0; list-style: none; counter-reset: pr; }
+.principle-list li { counter-increment: pr; position: relative; padding: 12px 0 12px 44px; border-bottom: 1px solid var(--line); }
+.principle-list li::before { content: counter(pr, decimal-leading-zero); position: absolute; left: 0; top: 13px; width: 30px; color: var(--accent-soft); font-family: var(--mono); font-size: 12px; }
+.principle-list b { display: block; margin-bottom: 3px; font-size: 14px; font-weight: 600; }
+.principle-list span { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* ---------- 21 · 技术详情（展开区） ---------- */
+.tech { margin-top: 26px; border-top: 1px solid var(--line); }
+.tech summary {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 12px 0; cursor: pointer; list-style: none;
+  color: var(--muted); font-size: 12px; font-family: var(--mono); letter-spacing: 0.02em;
+}
+.tech summary::-webkit-details-marker { display: none; }
+.tech summary svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--dur-base) ease; }
+.tech[open] summary svg { transform: rotate(90deg); }
+.tech summary:hover { color: var(--ink-soft); }
+.tech-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; padding: 4px 0 14px; }
+.tech-grid dt { color: var(--muted-low); font-size: 12px; }
+.tech-grid dd { margin: 0 0 4px; color: var(--ink-soft); font-size: 12px; font-family: var(--mono); word-break: break-all; }
+
+/* ---------- 22 · Status bar（34px） ---------- */
+.statusbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 14px;
+  background: var(--topbar-bg);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.sb-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sb-left time { color: var(--muted); font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sb-sep { width: 1px; height: 14px; background: var(--line-strong); }
+.sb-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.demo-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
+.ds-btn { height: 22px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; }
+.ds-btn:hover { color: var(--ink); }
+.ds-btn[aria-pressed="true"] { background: var(--accent-faint); color: var(--accent-soft); font-weight: 600; }
+.sb-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.sb-item b { color: var(--ink-soft); font-weight: 600; }
+
+/* ---------- 23 · 响应式（< 1280 折叠导航标签；Pi 始终浮层） ---------- */
+@media (max-width: 1280px) {
+  body { min-width: 1100px; }
+  .shell { grid-template-columns: var(--nav-width-collapsed) minmax(0, 1fr); }
+  .nav-group { text-align: center; margin: 14px 0 4px; font-size: 10px; letter-spacing: 0.14em; }
+  .nav-item { justify-content: center; padding: 0; min-height: 40px; }
+  .nav-item::before { left: -10px; }
+  .nav-lbl { display: none; }
+  .nav-item[aria-current="page"]::before { left: -10px; }
+  .studio-view { grid-template-columns: minmax(0, 1fr) 248px; }
+  .col-topic, .col-time { display: none; }
+  .decide-row { flex-direction: column; gap: 12px; }
+  .decide-side {
+    flex-direction: row; align-items: center; justify-content: space-between;
+    width: 100%; min-width: 0; padding-left: 0; border-left: 0;
+  }
+  .crew-row { flex-wrap: wrap; row-gap: 4px; }
+  .stat-line { gap: 6px 16px; }
+}
+@media (max-width: 1180px) {
+  .studio-view { grid-template-columns: 1fr; }
+  .studio-rail { border-left: 0; border-top: 1px solid var(--line); max-height: 280px; }
+  .studio-doc { overflow-y: auto; }
+  .paper { padding: 30px 26px 44px; }
+}
+
+/* ---------- 24 · 核心房间形态（主编桌 / 班组 / 评报栏） ---------- */
+/* 章节标题：18px 阶梯末级（34 / 25 / 18） */
+.sec-title {
+  margin: 24px 0 12px;
+  font-size: 18px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3;
+}
+.sv-content > .op-strip + .sec-title { margin-top: 16px; }
+
+/* ---- 主编桌 · 待你批复（决定行：等级 / 标题 / 理由 / 依据 / 动作） ---- */
+.decide-list { display: flex; flex-direction: column; }
+.decide-row {
+  display: flex; align-items: flex-start; gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color var(--dur-base) ease, background var(--dur-base) ease;
+}
+.decide-row:hover { border-color: var(--border); background: var(--surface-raised); }
+.decide-row + .decide-row { margin-top: 10px; }
+.decide-main { flex: 1; min-width: 0; }
+.decide-top { display: flex; align-items: baseline; gap: 10px; }
+.decide-top .grade { flex: none; }
+.decide-reason { margin: 7px 0 0; max-width: 64ch; color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
+.decide-trace { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.decide-trace .row-act { font-size: 12px; }
+.decide-side {
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 12px;
+  flex: none; min-width: 72px;
+  padding-left: 18px; border-left: 1px solid var(--line);
+}
+
+/* ---- 主编桌 · 在写 / 今日须知（紧凑行） ---- */
+.slim-list { display: flex; flex-direction: column; }
+.slim-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 2px; min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+.slim-row:last-child { border-bottom: 0; }
+.slim-main { flex: 1; min-width: 0; }
+.slim-main b {
+  display: block; font-size: 14px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slim-main span {
+  display: block; margin-top: 1px; color: var(--muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.slim-row .status, .slim-row .btn { flex: none; }
+
+/* ---- 智能体 · 班组（编辑部名册：角色标记 + 职责 / 状态层级） ---- */
+.crew { display: flex; flex-direction: column; }
+.crew-group { padding: 15px 0 2px; border-top: 1px solid var(--line); }
+.crew-group:first-child { border-top: 0; padding-top: 4px; }
+.crew-group .sec-title { margin: 0 0 7px; }
+.crew-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 0; min-width: 0;
+}
+.crew-badge {
+  flex: none; display: inline-grid; place-items: center;
+  width: 26px; height: 26px;
+  border: 1px solid var(--border-soft); border-radius: 6px;
+  background: var(--surface); color: var(--muted);
+  font-size: 12px; font-weight: 600;
+}
+.crew-row .status { flex: none; }
+.crew-empty { margin: 0; padding: 8px 0; color: var(--muted); font-size: 13px; }
+
+/* ---- 结果 · 评报栏（统计一行式，非 KPI 卡） ---- */
+.stat-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 24px;
+  margin: 18px 0 0; padding: 12px 2px 13px;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  color: var(--muted); font-size: 13px;
+}
+.stat-line b {
+  color: var(--ink); font-size: 18px; font-weight: 650;
+  letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 25 · 减弱动效 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  .pi-dock { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ Topbar ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
+        <path d="M5 3.5h16a2.6 2.6 0 0 1 2.6 2.6v14A2.6 2.6 0 0 1 21 22.7H5a2.6 2.6 0 0 1-2.6-2.6V6.1A2.6 2.6 0 0 1 5 3.5z" fill="var(--accent-faint)" stroke="var(--accent)" stroke-width="1.5"/>
+        <circle cx="9.6" cy="12" r="1.8" fill="var(--accent)"/>
+        <circle cx="16.4" cy="12" r="1.8" fill="var(--accent)"/>
+        <path d="M7.4 17.4c2 1.6 4.6 1.7 6.6.2" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-text">
+        <strong>WeMediaBuddy</strong>
+        <span>主编台 · 原型 5260</span>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-actions">
+      <button class="btn btn--ghost" id="principlesBtn" data-icon="info">设计原则</button>
+      <button class="btn btn--ghost" id="themeBtn" data-icon="moon" aria-label="切换主题"><span id="themeLabel">白昼</span></button>
+      <button class="btn" id="piToggle" data-icon="pi" aria-expanded="false" aria-controls="piDock"><span>Pi 主管</span></button>
+    </div>
+  </header>
+
+  <div class="shell">
+
+    <!-- ============ Room rail ============ -->
+    <nav class="rail" id="rail" aria-label="房间导航"></nav>
+
+    <!-- ============ Workspace（唯一滚动属主） ============ -->
+    <main class="workspace" id="workspace" aria-label="工作区">
+
+      <!-- ========== 01 今日 · 主编桌 ========== -->
+      <section class="room" id="room-today" data-room="today" hidden aria-labelledby="h1-today">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">主编桌 · 今日</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-today" tabindex="-1">今日</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="todayDecide">逐条批复 <span id="todayPending">2</span> 项</button>
+              </div>
+            </div>
+            <p class="room-desc">只放需要你决定或知悉的呈报。判断都带理由，且能追溯到入库资料。</p>
+            <p class="dateline" id="todayDate"></p>
+          </header>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="op-strip" data-state="run" id="op-today">
+                <span class="op-pulse"></span>
+                <div class="op-info"><span class="t">策划 #1 正在汇总今日选题呈报</span><span class="pct">3 / 5</span></div>
+                <div class="op-progress"><i style="--p:60%"></i></div>
+                <div class="op-actions"><button class="btn btn--sm btn--ghost">暂停</button></div>
+              </div>
+
+              <h2 class="sec-title">待你批复</h2>
+              <div class="decide-list" id="todayPendingList">
+                <article class="decide-row">
+                  <div class="decide-main">
+                    <div class="decide-top">
+                      <span class="grade" data-g="SSS">SSS</span>
+                      <button class="src-title" data-src="t1">「AI 编程课测评」—— 为什么都在劝退</button>
+                    </div>
+                    <p class="decide-reason">今日小红书「AI 编程课」话题讨论升温，评论区高频质疑与课程宣传冲突明显；素材最齐，可当日成稿。</p>
+                    <p class="decide-trace">依据 <button class="row-act" data-src="lib1">「AI 编程课测评」合集拆解</button> ·
+                      <button class="row-act" data-src="lib4">「值不值」评论区高频质疑</button> ·
+                      <button class="row-act" data-src="lib6">Karpathy 新视频要点</button></p>
+                  </div>
+                  <div class="decide-side">
+                    <span class="status" data-s="wait">待批</span>
+                    <button class="btn btn--sm" data-src="t1">查看</button>
+                  </div>
+                </article>
+                <article class="decide-row">
+                  <div class="decide-main">
+                    <div class="decide-top">
+                      <span class="grade" data-g="S">S</span>
+                      <button class="src-title" data-src="t2">「前端工程师还学不学 AI 编程课」—— 双面访谈</button>
+                    </div>
+                    <p class="decide-reason">公众号读者在「前端周刊 #182」下追问工具替代话题，已约到两位一线工程师口述素材。</p>
+                    <p class="decide-trace">依据 <button class="row-act" data-src="lib3">前端周刊 #182 工具节选</button></p>
+                  </div>
+                  <div class="decide-side">
+                    <span class="status" data-s="wait">待批</span>
+                    <button class="btn btn--sm" data-src="t2">查看</button>
+                  </div>
+                </article>
+              </div>
+
+              <h2 class="sec-title">在写</h2>
+              <div class="slim-list" id="todayWritingList">
+                <div class="slim-row">
+                  <span class="status" data-s="run">写手中</span>
+                  <div class="slim-main"><b>「Karpathy 新视频要点逐条拆」</b><span>写手 #1 · 草稿已出 70%</span></div>
+                  <button class="btn btn--sm btn--ghost">去写字间</button>
+                </div>
+              </div>
+
+              <h2 class="sec-title">今日须知</h2>
+              <div class="slim-list">
+                <div class="slim-row">
+                  <span class="status" data-s="ok">新进展</span>
+                  <div class="slim-main"><b>主题「AI 工具测评」</b><span>2 条新来源已并入，资料员正在整理</span></div>
+                  <button class="btn btn--sm btn--ghost" id="gotoTopics">打开主题</button>
+                </div>
+                <div class="slim-row">
+                  <span class="status" data-s="quiet">值班</span>
+                  <div class="slim-main"><b>桌助 #1 值班中</b><span>记者 #2 前线扫描，写手 #1 空闲</span></div>
+                </div>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>今日快照 jobId</dt><dd>snap-20260814-082200</dd>
+                  <dt>呈报生成</dt><dd>策划 #1 · job-24218</dd>
+                  <dt>合并口径</dt><dd>topic-progress 投影（非 carry 直堆）</dd>
+                  <dt>管线相位</dt><dd>idle · 下次扫描 09:30</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载今日呈报">
+              <p class="load-line">正在加载今日呈报…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>呈报加载失败</h3>
+              <p>后台管线没有返回今日快照。可以重试一次，或先去看已入库的资料。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="clip"></div>
+              <h3>今日暂无待办</h3>
+              <p>没有需要你决定或知悉的呈报。记者与策划会在有新线索时重新上桌。</p>
+              <button class="btn" data-variant="primary" data-action="go-discover">看看前线在做什么</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 02 智能体 · 班组 ========== -->
+      <section class="room" id="room-agents" data-room="agents" hidden aria-labelledby="h1-agents">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">班组 · 固定编制</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-agents" tabindex="-1">智能体</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="agentsScan" data-icon="radar">发起扫描</button>
+              </div>
+            </div>
+            <p class="room-desc">五个工种：桌助、记者、策划、写手、资料员。实例按任务存在，任务终态即退出活动视图；空角色只显示「当前无任务」，不画空槽。</p>
+          </header>
+
+          <div class="op-strip" data-state="run" id="op-agents">
+            <span class="op-pulse"></span>
+            <div class="op-info"><span class="t">记者 #2 正在扫描 6 个信源</span><span class="pct">62%</span></div>
+            <div class="op-progress"><i style="--p:62%"></i></div>
+            <div class="op-actions"><button class="btn btn--sm btn--ghost">暂停</button></div>
+          </div>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="crew" id="crewList">
+                <section class="crew-group" data-role="desk">
+                  <h2 class="sec-title">桌助</h2>
+                  <div class="crew-row">
+                    <span class="crew-badge">助</span>
+                    <div class="slim-main"><b>桌助 #1 · 值班中</b><span>今日 2 项呈报待批，已为你排好顺序</span></div>
+                    <span class="status" data-s="run">值班中</span>
+                  </div>
+                </section>
+                <section class="crew-group" data-role="reporter">
+                  <h2 class="sec-title">记者</h2>
+                  <div class="crew-row">
+                    <span class="crew-badge">记</span>
+                    <div class="slim-main"><b>记者 #2 · 前线扫描</b><span>扫描 6 个信源 · 榜单 / X 列表</span></div>
+                    <span class="status" data-s="run">进行中</span>
+                  </div>
+                  <div class="crew-row">
+                    <span class="crew-badge">记</span>
+                    <div class="slim-main"><b>记者 #3 · 整理观察中来源</b><span>6 条来源等待归并确认，已形成 1 份整理提案</span></div>
+                    <span class="status" data-s="wait">等你批</span>
+                  </div>
+                </section>
+                <section class="crew-group" data-role="planner">
+                  <h2 class="sec-title">策划</h2>
+                  <div class="crew-row">
+                    <span class="crew-badge">策</span>
+                    <div class="slim-main"><b>策划 #1 · 汇总选题呈报</b><span>今日 2 条呈报已上桌</span></div>
+                    <span class="status" data-s="run">进行中</span>
+                  </div>
+                </section>
+                <section class="crew-group" data-role="writer">
+                  <h2 class="sec-title">写手</h2>
+                  <p class="crew-empty">当前无任务</p>
+                </section>
+                <section class="crew-group" data-role="archivist">
+                  <h2 class="sec-title">资料员</h2>
+                  <div class="crew-row">
+                    <span class="crew-badge">资</span>
+                    <div class="slim-main"><b>资料员 #1 · 主题归并提案</b><span>把 2 条来源并入「AI 工具测评」，等你确认后整批生效</span></div>
+                    <span class="status" data-s="wait">等你批</span>
+                  </div>
+                </section>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>实例身份</dt><dd>jobId（角色编号仅活动期显示）</dd>
+                  <dt>共享并发池</dt><dd>2 / 7 工单占用</dd>
+                  <dt>权限模型</dt><dd>grant ∩ 角色能力 ∩ 资源边界</dd>
+                  <dt>红线可达性</dt><dd>三类红线：任何实例不可达</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载班组状态">
+              <p class="load-line">正在读取班组状态…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>班组状态读取失败</h3>
+              <p>工单状态没有返回。这不会影响正在执行的任务。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="bot"></div>
+              <h3>当前没有活动实例</h3>
+              <p>五个工种都在待命。点「发起扫描」派记者去前线，或直接通过 Pi 点名派工。</p>
+              <button class="btn" data-variant="primary" data-action="scan">发起扫描</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 03 发现 · 前线 ========== -->
+      <section class="room" id="room-discover" data-room="discover" hidden aria-labelledby="h1-discover">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">前线 · 看看外面</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-discover" tabindex="-1">发现</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="discoverIngest">收录 <span id="discPending">6</span> 条新来源</button>
+              </div>
+            </div>
+            <p class="room-desc">榜单、X 列表与监测中的原始信号。这里只看、只收录；定题与写作回到策划组和写字间。</p>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="发现分区">
+            <button class="tab" role="tab" id="disc-t1" aria-selected="true" aria-controls="disc-p1">榜单<span class="tab-cnt">6</span></button>
+            <button class="tab" role="tab" id="disc-t2" aria-selected="false" aria-controls="disc-p2" tabindex="-1">X 列表<span class="tab-cnt">4</span></button>
+            <button class="tab" role="tab" id="disc-t3" aria-selected="false" aria-controls="disc-p3" tabindex="-1">监测中<span class="tab-cnt">3</span></button>
+          </div>
+
+          <div class="toolbar">
+            <div class="search"><span data-icon="search"></span><input id="discSearch" type="search" placeholder="搜索标题或来源…" aria-label="搜索前线来源"/></div>
+            <select class="field-select" id="discPf" aria-label="按平台筛选">
+              <option value="all">全部平台</option>
+              <option value="xhs">小红书</option>
+              <option value="x">X</option>
+              <option value="wx">公众号</option>
+              <option value="web">网页</option>
+            </select>
+            <span class="toolbar-count" id="discCount"><b>6</b> 条来源</span>
+          </div>
+
+          <div class="state-region" id="discRegion">
+            <div class="sv sv-content">
+              <div class="op-strip" data-state="run" id="op-discover">
+                <span class="op-pulse"></span>
+                <div class="op-info"><span class="t">记者 #2 正在抓取 X 时间线</span><span class="pct">12 / 18</span></div>
+                <div class="op-progress"><i style="--p:66%"></i></div>
+                <div class="op-actions"><button class="btn btn--sm btn--ghost">暂停</button></div>
+              </div>
+
+              <div class="tbl-pane" id="disc-p1" role="tabpanel" aria-labelledby="disc-t1" aria-hidden="false">
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">发现 · 榜单</caption>
+                    <thead><tr><th scope="col">来源</th><th scope="col">平台</th><th scope="col">热度</th><th scope="col">状态</th><th scope="col" class="col-time">采集时间</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="d1" data-pf="xhs" data-q="「AI 编程课测评」合集拆解 科技自习室 小红书"><td><button class="src-title" data-src="d1">「AI 编程课测评」合集拆解</button><span class="src-sub">作者 科技自习室 · 3.2 万赞</span></td><td><span class="pf-tag" data-pf="xhs">小红书</span></td><td class="num">84</td><td><span class="status" data-s="wait">新到</span></td><td class="col-time num">今天 09:12</td><td class="cell-acts"><button class="row-act" data-src="d1">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                      <tr data-src="d2" data-pf="x" data-q="OpenAI 官方开发者日直播笔记 X"><td><button class="src-title" data-src="d2">OpenAI 官方开发者日直播笔记</button><span class="src-sub">X · @openai</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">91</td><td><span class="status" data-s="wait">新到</span></td><td class="col-time num">今天 08:47</td><td class="cell-acts"><button class="row-act" data-src="d2">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                      <tr data-src="d3" data-pf="xhs" data-q="AI 编程课到底值不值 评论区 高频质疑 小红书 话题页"><td><button class="src-title" data-src="d3">「AI 编程课到底值不值」评论区高频质疑</button><span class="src-sub">小红书 · 话题页</span></td><td><span class="pf-tag" data-pf="xhs">小红书</span></td><td class="num">78</td><td><span class="status" data-s="quiet">待整理</span></td><td class="col-time num">昨天 21:30</td><td class="cell-acts"><button class="row-act" data-src="d3">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                      <tr data-src="d4" data-pf="wx" data-q="前端周刊 182 工具节选 前端早读课 公众号"><td><button class="src-title" data-src="d4">前端周刊 #182 工具节选</button><span class="src-sub">公众号 · 前端早读课</span></td><td><span class="pf-tag" data-pf="wx">公众号</span></td><td class="num">55</td><td><span class="status" data-s="ok">已归档</span></td><td class="col-time num">昨天 18:02</td><td class="cell-acts"><button class="row-act" data-src="d4">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                      <tr data-src="d5" data-pf="x" data-q="Karpathy 新视频要点 X"><td><button class="src-title" data-src="d5">Karpathy 新视频要点</button><span class="src-sub">X · @karpathy</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">88</td><td><span class="status" data-s="wait">新到</span></td><td class="col-time num">昨天 14:26</td><td class="cell-acts"><button class="row-act" data-src="d5">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                      <tr data-src="d6" data-pf="web" data-q="某课程销量页快照 网页"><td><button class="src-title" data-src="d6">某课程销量页快照</button><span class="src-sub">网页 · 快照</span></td><td><span class="pf-tag" data-pf="web">网页</span></td><td class="num">—</td><td><span class="status" data-s="quiet">待整理</span></td><td class="col-time num">08-12</td><td class="cell-acts"><button class="row-act" data-src="d6">打开</button><button class="row-act" data-action="ingest">收录</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="disc-p2" role="tabpanel" aria-labelledby="disc-t2" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">发现 · X 列表</caption>
+                    <thead><tr><th scope="col">来源</th><th scope="col">平台</th><th scope="col">热度</th><th scope="col">状态</th><th scope="col" class="col-time">采集时间</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="d7" data-pf="x" data-q="LangChain 周报 X"><td><button class="src-title" data-src="d7">LangChain 周报</button><span class="src-sub">X · 长列表 #ai-tools</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">63</td><td><span class="status" data-s="quiet">待整理</span></td><td class="col-time num">今天 10:02</td><td class="cell-acts"><button class="row-act" data-src="d7">打开</button></td></tr>
+                      <tr data-src="d8" data-pf="x" data-q="官方开发者日逐条回应 X"><td><button class="src-title" data-src="d8">官方开发者日逐条回应</button><span class="src-sub">X · @openai</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">74</td><td><span class="status" data-s="wait">新到</span></td><td class="col-time num">今天 08:50</td><td class="cell-acts"><button class="row-act" data-src="d8">打开</button></td></tr>
+                      <tr data-src="d9" data-pf="x" data-q="提示词工程师现状 X"><td><button class="src-title" data-src="d9">「提示词工程师还值钱吗」讨论串</button><span class="src-sub">X · 讨论串</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">69</td><td><span class="status" data-s="wait">新到</span></td><td class="col-time num">昨天 22:41</td><td class="cell-acts"><button class="row-act" data-src="d9">打开</button></td></tr>
+                      <tr data-src="d10" data-pf="x" data-q="周报节选 前端 X"><td><button class="src-title" data-src="d10">周报节选：本周工具向</button><span class="src-sub">X · 长列表</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">51</td><td><span class="status" data-s="quiet">待整理</span></td><td class="col-time num">08-11</td><td class="cell-acts"><button class="row-act" data-src="d10">打开</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="disc-p3" role="tabpanel" aria-labelledby="disc-t3" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">发现 · 监测中</caption>
+                    <thead><tr><th scope="col">监测对象</th><th scope="col">平台</th><th scope="col">最近变化</th><th scope="col">状态</th><th scope="col" class="col-time">下次检查</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="d11" data-pf="xhs"><td><button class="src-title" data-src="d11">「AI 编程课」话题</button><span class="src-sub">24 小时内 3 条高热帖</span></td><td><span class="pf-tag" data-pf="xhs">小红书</span></td><td class="num">+38</td><td><span class="status" data-s="run">监测中</span></td><td class="col-time num">今天 11:00</td><td class="cell-acts"><button class="row-act" data-src="d11">打开</button></td></tr>
+                      <tr data-src="d12" data-pf="x"><td><button class="src-title" data-src="d12">@karpathy 动态</button><span class="src-sub">新视频发布</span></td><td><span class="pf-tag" data-pf="x">X</span></td><td class="num">+91</td><td><span class="status" data-s="run">监测中</span></td><td class="col-time num">今天 12:00</td><td class="cell-acts"><button class="row-act" data-src="d12">打开</button></td></tr>
+                      <tr data-src="d13" data-pf="wx"><td><button class="src-title" data-src="d13">前端早读课</button><span class="src-sub">每周日 8 点更新</span></td><td><span class="pf-tag" data-pf="wx">公众号</span></td><td class="num">—</td><td><span class="status" data-s="run">监测中</span></td><td class="col-time num">周日 08:00</td><td class="cell-acts"><button class="row-act" data-src="d13">打开</button></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在抓取前线内容">
+              <p class="load-line">记者 #2 正在抓取信源…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>抓取失败</h3>
+              <p>X 时间线没有返回数据。可能是平台限流，稍后重试，或先看榜单缓存。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="radar"></div>
+              <h3>前线暂无声响</h3>
+              <p>信源与关键词都在监测中，有变化会第一时间上榜。你也可以通过 Pi 指定新的信源。</p>
+              <button class="btn" data-variant="primary" data-action="open-pi">指定新信源</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 04 选题 · 策划组 ========== -->
+      <section class="room" id="room-proposals" data-room="proposals" hidden aria-labelledby="h1-proposals">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">策划组 · 提案夹</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-proposals" tabindex="-1">选题</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="proposalApprove">批复 <span id="propPending">3</span> 条待批</button>
+              </div>
+            </div>
+            <p class="room-desc">全量决策台账。每条都带角度、理由与资料追溯；批或不批，都是你的决定。</p>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="选题分区">
+            <button class="tab" role="tab" id="prop-t1" aria-selected="true" aria-controls="prop-p1">待批<span class="tab-cnt">3</span></button>
+            <button class="tab" role="tab" id="prop-t2" aria-selected="false" aria-controls="prop-p2" tabindex="-1">已批<span class="tab-cnt">2</span></button>
+            <button class="tab" role="tab" id="prop-t3" aria-selected="false" aria-controls="prop-p3" tabindex="-1">已否<span class="tab-cnt">1</span></button>
+          </div>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="op-strip" data-state="done" id="op-proposals">
+                <span class="op-pulse"></span>
+                <div class="op-info"><span class="t">今晨呈报已上桌，等待你的批复</span></div>
+                <div class="op-progress"><i style="--p:100%"></i></div>
+              </div>
+
+              <div class="tbl-pane" id="prop-p1" role="tabpanel" aria-labelledby="prop-t1" aria-hidden="false">
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">选题 · 待批</caption>
+                    <thead><tr><th scope="col">选题</th><th scope="col">优先级</th><th scope="col">平台</th><th scope="col">依据</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="p1" data-g="SSS">
+                        <td><button class="src-title" data-src="p1">「AI 编程课测评」—— 为什么都在劝退</button><span class="src-sub">对比课程宣传与真实体验，素材最齐</span></td>
+                        <td><span class="grade" data-g="SSS">SSS</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td class="num">3 条资料</td>
+                        <td class="cell-acts"><button class="row-act" data-src="p1">查看</button><button class="row-act" data-action="reject">否</button></td>
+                      </tr>
+                      <tr data-src="p2" data-g="S">
+                        <td><button class="src-title" data-src="p2">「前端工程师还学不学 AI 编程课」—— 双面访谈</button><span class="src-sub">两位一线工程师口述，读者追问密集</span></td>
+                        <td><span class="grade" data-g="S">S</span></td>
+                        <td><span class="pf-tag" data-pf="wx">公众号</span></td>
+                        <td class="num">2 条资料</td>
+                        <td class="cell-acts"><button class="row-act" data-src="p2">查看</button><button class="row-act" data-action="reject">否</button></td>
+                      </tr>
+                      <tr data-src="p3" data-g="A">
+                        <td><button class="src-title" data-src="p3">「Karpathy 新视频」逐条拆解</button><span class="src-sub">长文向，可沉淀为「AI 工具测评」资料</span></td>
+                        <td><span class="grade" data-g="A">A</span></td>
+                        <td><span class="pf-tag" data-pf="x">X</span></td>
+                        <td class="num">2 条资料</td>
+                        <td class="cell-acts"><button class="row-act" data-src="p3">查看</button><button class="row-act" data-action="reject">否</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="prop-p2" role="tabpanel" aria-labelledby="prop-t2" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">选题 · 已批</caption>
+                    <thead><tr><th scope="col">选题</th><th scope="col">优先级</th><th scope="col">平台</th><th scope="col">批复</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-g="SSS">
+                        <td><button class="src-title" data-src="p4">「Cursor 类工具的真实成本」</button><span class="src-sub">已在写，稿子归写字间</span></td>
+                        <td><span class="grade" data-g="SSS">SSS</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="ok">已批</span></td>
+                        <td class="cell-acts"><button class="row-act" data-src="p4">查看</button></td>
+                      </tr>
+                      <tr data-g="S">
+                        <td><button class="src-title" data-src="p5">「开发者日，普通开发者该关心什么」</button><span class="src-sub">已发，等评报栏数据</span></td>
+                        <td><span class="grade" data-g="S">S</span></td>
+                        <td><span class="pf-tag" data-pf="x">X</span></td>
+                        <td><span class="status" data-s="ok">已批</span></td>
+                        <td class="cell-acts"><button class="row-act" data-src="p5">查看</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="prop-p3" role="tabpanel" aria-labelledby="prop-t3" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">选题 · 已否</caption>
+                    <thead><tr><th scope="col">选题</th><th scope="col">优先级</th><th scope="col">平台</th><th scope="col">批复</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-g="B">
+                        <td><button class="src-title" data-src="p6">「每月 99 美元值不值」</button><span class="src-sub">角度与已批选题重叠，否</span></td>
+                        <td><span class="grade" data-g="B">B</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="quiet">已否</span></td>
+                        <td class="cell-acts"><button class="row-act" data-src="p6">查看</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载选题台账">
+              <p class="load-line">正在加载选题台账…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>台账读取失败</h3>
+              <p>选题台账没有返回。之前的批复不会丢失。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="idea"></div>
+              <h3>提案夹是空的</h3>
+              <p>策划还没有呈报。有值得做的信号时，提案会先出现在主编桌。</p>
+              <button class="btn" data-variant="primary" data-action="go-discover">去前线看看</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 05 主题 · 专题组 ========== -->
+      <section class="room room--reading" id="room-topics" data-room="topics" hidden aria-labelledby="h1-topics">
+        <!-- 列表态 -->
+        <div class="room-inner" id="topicsList">
+          <header class="room-head">
+            <p class="eyebrow">专题组 · 长期线档案室</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-topics" tabindex="-1">主题</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="topicNew" data-icon="plus">新建主题</button>
+              </div>
+            </div>
+            <p class="room-desc">值得长期跟的正式容器。资料、选题、稿件都归在主题名下；一炮就结束的，不必强行建主题。</p>
+          </header>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="table-wrap">
+                <table class="table">
+                <caption class="visually-hidden">主题列表</caption>
+                  <thead><tr><th scope="col">主题</th><th scope="col">简介</th><th scope="col">家底</th><th scope="col">状态</th><th scope="col" class="col-time">最近更新</th><th scope="col">操作</th></tr></thead>
+                  <tbody>
+                    <tr data-topic="ai-tools">
+                      <td><button class="src-title" id="topicAiTools" data-topic-open="ai-tools">AI 工具测评</button><span class="src-sub">核心线 · 含选题「AI 编程课测评」</span></td>
+                      <td class="num">资料 12 · 选题 4 · 稿 3</td>
+                      <td><span class="status" data-s="run">跟进中</span></td>
+                      <td class="col-time num">今天</td>
+                      <td class="cell-acts"><button class="btn btn--sm" data-topic-open="ai-tools">打开主题</button></td>
+                    </tr>
+                    <tr data-topic="fe">
+                      <td><button class="src-title" data-topic-open="fe">前端视角</button><span class="src-sub">工具与工程向，周更</span></td>
+                      <td class="num">资料 8 · 选题 2 · 稿 1</td>
+                      <td><span class="status" data-s="run">跟进中</span></td>
+                      <td class="col-time num">昨天</td>
+                      <td class="cell-acts"><button class="btn btn--sm" data-topic-open="fe">打开主题</button></td>
+                    </tr>
+                    <tr data-topic="rival">
+                      <td><button class="src-title" data-topic-open="rival">竞品观察</button><span class="src-sub">课程与工具定价、销量快照</span></td>
+                      <td class="num">资料 5 · 选题 1 · 稿 0</td>
+                      <td><span class="status" data-s="wait">待确认</span></td>
+                      <td class="col-time num">08-12</td>
+                      <td class="cell-acts"><button class="btn btn--sm" data-topic-open="rival">打开主题</button></td>
+                    </tr>
+                    <tr data-topic="xhs-method">
+                      <td><button class="src-title" data-topic-open="xhs-method">小红书运营方法论</button><span class="src-sub">选题节奏与标题规律</span></td>
+                      <td class="num">资料 15 · 选题 6 · 稿 4</td>
+                      <td><span class="status" data-s="run">跟进中</span></td>
+                      <td class="col-time num">08-11</td>
+                      <td class="cell-acts"><button class="btn btn--sm" data-topic-open="xhs-method">打开主题</button></td>
+                    </tr>
+                    <tr data-topic="sea">
+                      <td><button class="src-title" data-topic-open="sea">出海工具</button><span class="src-sub">已停 · 素材保留</span></td>
+                      <td class="num">资料 4 · 选题 0 · 稿 0</td>
+                      <td><span class="status" data-s="quiet">已停</span></td>
+                      <td class="col-time num">07-30</td>
+                      <td class="cell-acts"><button class="btn btn--sm" data-topic-open="sea">打开主题</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>归纳引擎</dt><dd>LLM 编辑判断（非正则匹配）</dd>
+                  <dt>整理生效方式</dt><dd>资料员提案 → 你批准 → 整批生效</dd>
+                  <dt>冲突处理</dt><dd>自动退回资料员按最新现场重提</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载主题档案">
+              <p class="load-line">正在加载主题档案…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>档案读取失败</h3>
+              <p>主题索引没有返回。长期线的资料仍然安全。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="folder"></div>
+              <h3>还没有长期线</h3>
+              <p>Agent 认为值得长期跟的来源会先归入主题；你也可以手动建第一条长期线。</p>
+              <button class="btn" data-variant="primary" data-action="new-topic">新建主题</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详情态（阅读形态） -->
+        <div class="reading" id="topicsDetail" hidden>
+          <div class="crumb">
+            <button id="topicBack" data-icon="arrow-l">主题</button>
+            <span class="sep">/</span>
+            <span id="topicCrumbName">主题详情</span>
+          </div>
+          <header class="reading-head">
+            <p class="eyebrow">专题组 · 长期线档案室</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-topic-detail" tabindex="-1">AI 工具测评</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="topicFollow">继续跟进</button>
+              </div>
+            </div>
+            <p class="room-desc">工具与测评向的长期关注线：谁在讲、讲什么、我们的判断是否仍成立。</p>
+            <div class="meta-row">
+              <span class="status" data-s="run">跟进中</span>
+              <span>资料 12 · 选题 4 · 稿 3</span>
+              <span>整理人 资料员 #1</span>
+              <span>最近更新 今天</span>
+            </div>
+          </header>
+
+          <h2>最新进展</h2>
+          <ul class="timeline">
+            <li><span class="d">今天 09:20</span><span class="t">2 条新来源并入：评论区高频质疑 + 课程销量页快照；资料员已整理为 1 份提案，待你确认。</span></li>
+            <li><span class="d">昨天 21:40</span><span class="t">选题「AI 编程课测评」上桌，标注优先级 SSS，依据 3 条资料。</span></li>
+            <li><span class="d">08-13 15:10</span><span class="t">「开发者日，普通开发者该关心什么」已发布，等待评报数据回流。</span></li>
+          </ul>
+
+          <h2>相关选题</h2>
+          <ul class="trace-list">
+            <li><button class="row-act" data-src="p1">「AI 编程课测评」—— 为什么都在劝退</button><span class="mono">SSS · 待批</span></li>
+            <li><button class="row-act" data-src="p4">「Cursor 类工具的真实成本」</button><span class="mono">SSS · 在写</span></li>
+          </ul>
+
+          <h2>相关资料</h2>
+          <ul class="trace-list" id="topicSources">
+            <li><button class="row-act" data-src="lib1">「AI 编程课测评」合集拆解</button><span class="mono">小红书 · 今天</span></li>
+            <li><button class="row-act" data-src="lib4">「值不值」评论区高频质疑</button><span class="mono">小红书 · 昨天</span></li>
+            <li><button class="row-act" data-src="lib6">Karpathy 新视频要点</button><span class="mono">X · 昨天</span></li>
+            <li><button class="row-act" data-src="lib2">某课程销量页快照</button><span class="mono">网页 · 08-12</span></li>
+          </ul>
+
+          <details class="tech">
+            <summary data-icon="chev-r">技术详情</summary>
+            <dl class="tech-grid">
+              <dt>topicId</dt><dd>topic_ai_tools_01</dd>
+              <dt>归属资料员</dt><dd>archivist-01</dd>
+              <dt>最近整理批</dt><dd>batch-20260814-0920</dd>
+              <dt>冲突重提计数</dt><dd>0</dd>
+            </dl>
+          </details>
+        </div>
+      </section>
+
+      <!-- ========== 06 资料库 · 资料室（默认） ========== -->
+      <section class="room" id="room-library" data-room="library" aria-labelledby="h1-library">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">资料室 · 原件与整理</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-library" tabindex="-1">资料库</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="libAdd" data-icon="plus">添加资料</button>
+              </div>
+            </div>
+            <p class="room-desc">证据与原件。Agent 负责采集整理，你负责抽查或移出；每一条判断都必须能追溯到这里的资料。</p>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="资料库分区">
+            <button class="tab" role="tab" id="lib-t1" aria-selected="true" aria-controls="lib-p1">观察中<span class="tab-cnt">6</span></button>
+            <button class="tab" role="tab" id="lib-t2" aria-selected="false" aria-controls="lib-p2" tabindex="-1">已入库<span class="tab-cnt">8</span></button>
+            <button class="tab" role="tab" id="lib-t3" aria-selected="false" aria-controls="lib-p3" tabindex="-1">已移出<span class="tab-cnt">3</span></button>
+          </div>
+
+          <div class="toolbar">
+            <div class="search"><span data-icon="search"></span><input id="libSearch" type="search" placeholder="搜索标题或来源…" aria-label="搜索资料"/></div>
+            <select class="field-select" id="libPf" aria-label="按平台筛选">
+              <option value="all">全部平台</option>
+              <option value="xhs">小红书</option>
+              <option value="x">X</option>
+              <option value="wx">公众号</option>
+              <option value="web">网页</option>
+            </select>
+            <select class="field-select" id="libType" aria-label="按类型筛选">
+              <option value="all">全部类型</option>
+              <option value="post">帖子</option>
+              <option value="article">文章</option>
+              <option value="video">视频</option>
+            </select>
+            <span class="toolbar-count" id="libCount"><b>6</b> 条来源</span>
+          </div>
+
+          <div class="op-strip" data-state="run" id="op-library">
+            <span class="op-pulse"></span>
+            <div class="op-info"><span class="t">记者 #3 正在整理 <b>4</b> 条新来源</span><span class="pct">12 / 16</span></div>
+            <div class="op-progress"><i style="--p:75%"></i></div>
+            <div class="op-actions"><button class="btn btn--sm btn--ghost" data-icon="pause">暂停</button></div>
+          </div>
+
+          <div class="state-region" id="libRegion">
+            <div class="sv sv-content">
+              <div class="tbl-pane" id="lib-p1" role="tabpanel" aria-labelledby="lib-t1" aria-hidden="false">
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">资料库 · 观察中</caption>
+                    <thead><tr><th scope="col">来源</th><th scope="col">平台</th><th scope="col">状态</th><th scope="col" class="col-time">入库时间</th><th scope="col" class="col-topic">相关主题</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="lib1" data-pf="xhs" data-type="post" data-q="AI 编程课测评 合集拆解 科技自习室 小红书 帖子">
+                        <td><button class="src-title" data-src="lib1">「AI 编程课测评」合集拆解</button><span class="src-sub">小红书 · 科技自习室</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="wait">新到</span></td>
+                        <td class="col-time num">今天 09:12</td>
+                        <td class="col-topic">AI 工具测评</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib1">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="lib2" data-pf="web" data-type="article" data-q="课程销量页快照 网页 文章">
+                        <td><button class="src-title" data-src="lib2">某课程销量页快照</button><span class="src-sub">网页 · 快照</span></td>
+                        <td><span class="pf-tag" data-pf="web">网页</span></td>
+                        <td><span class="status" data-s="wait">新到</span></td>
+                        <td class="col-time num">今天 09:05</td>
+                        <td class="col-topic">竞品观察</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib2">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="lib3" data-pf="wx" data-type="article" data-q="前端周刊 182 工具节选 公众号 文章">
+                        <td><button class="src-title" data-src="lib3">前端周刊 #182 工具节选</button><span class="src-sub">公众号 · 前端早读课</span></td>
+                        <td><span class="pf-tag" data-pf="wx">公众号</span></td>
+                        <td><span class="status" data-s="quiet">待整理</span></td>
+                        <td class="col-time num">昨天 18:02</td>
+                        <td class="col-topic">前端视角</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib3">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="lib4" data-pf="xhs" data-type="post" data-q="AI 编程课 值不值 评论区 高频质疑 小红书 帖子">
+                        <td><button class="src-title" data-src="lib4">「AI 编程课到底值不值」评论区高频质疑</button><span class="src-sub">小红书 · 话题页</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="quiet">待整理</span></td>
+                        <td class="col-time num">昨天 21:30</td>
+                        <td class="col-topic">AI 工具测评</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib4">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="lib5" data-pf="x" data-type="video" data-q="Karpathy 新视频要点 X 视频">
+                        <td><button class="src-title" data-src="lib5">Karpathy 新视频要点</button><span class="src-sub">X · @karpathy · 视频</span></td>
+                        <td><span class="pf-tag" data-pf="x">X</span></td>
+                        <td><span class="status" data-s="wait">新到</span></td>
+                        <td class="col-time num">昨天 14:26</td>
+                        <td class="col-topic">AI 工具测评</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib5">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="lib6" data-pf="web" data-type="article" data-q="开发者日直播笔记 网页 文章">
+                        <td><button class="src-title" data-src="lib6">OpenAI 官方开发者日直播笔记</button><span class="src-sub">网页 · 笔记整理</span></td>
+                        <td><span class="pf-tag" data-pf="web">网页</span></td>
+                        <td><span class="status" data-s="wait">新到</span></td>
+                        <td class="col-time num">今天 08:47</td>
+                        <td class="col-topic">—</td>
+                        <td class="cell-acts"><button class="row-act" data-src="lib6">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="lib-p2" role="tabpanel" aria-labelledby="lib-t2" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">资料库 · 已入库</caption>
+                    <thead><tr><th scope="col">来源</th><th scope="col">平台</th><th scope="col">状态</th><th scope="col" class="col-time">入库时间</th><th scope="col" class="col-topic">相关主题</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-src="l2-1" data-pf="xhs" data-type="post" data-q="Cursor 类工具 真实成本 小红书 帖子">
+                        <td><button class="src-title" data-src="l2-1">「Cursor 类工具的真实成本」讨论串</button><span class="src-sub">小红书 · 科技自习室</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="ok">已归档</span></td>
+                        <td class="col-time num">08-13</td>
+                        <td class="col-topic">AI 工具测评</td>
+                        <td class="cell-acts"><button class="row-act" data-src="l2-1">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="l2-2" data-pf="wx" data-type="article" data-q="开发者日 普通开发者 该关心什么 公众号 文章">
+                        <td><button class="src-title" data-src="l2-2">「开发者日，普通开发者该关心什么」底稿依据</button><span class="src-sub">公众号 · 整理</span></td>
+                        <td><span class="pf-tag" data-pf="wx">公众号</span></td>
+                        <td><span class="status" data-s="ok">已归档</span></td>
+                        <td class="col-time num">08-12</td>
+                        <td class="col-topic">前端视角</td>
+                        <td class="cell-acts"><button class="row-act" data-src="l2-2">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                      <tr data-src="l2-3" data-pf="xhs" data-type="post" data-q="小红书 运营 方法论 帖子">
+                        <td><button class="src-title" data-src="l2-3">高赞标题规律抽样</button><span class="src-sub">小红书 · 抽样 40 条</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="ok">已归档</span></td>
+                        <td class="col-time num">08-11</td>
+                        <td class="col-topic">小红书运营方法论</td>
+                        <td class="cell-acts"><button class="row-act" data-src="l2-3">详情</button><button class="row-act" data-action="remove">移出</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="lib-p3" role="tabpanel" aria-labelledby="lib-t3" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">资料库 · 已移出</caption>
+                    <thead><tr><th scope="col">来源</th><th scope="col">平台</th><th scope="col">状态</th><th scope="col" class="col-time">移出时间</th><th scope="col" class="col-topic">原因</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-pf="xhs" data-type="post" data-q="无来源热榜 截图 小红书 帖子">
+                        <td><button class="src-title" data-src="l3-1">无来源热榜截图</button><span class="src-sub">小红书 · 无法追溯</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="quiet">已移出</span></td>
+                        <td class="col-time num">08-10</td>
+                        <td class="col-topic">无法溯源</td>
+                        <td class="cell-acts"><button class="row-act" data-src="l3-1">详情</button><button class="row-act" data-action="restore">恢复</button></td>
+                      </tr>
+                      <tr data-pf="web" data-type="article" data-q="课程广告页 网页 文章">
+                        <td><button class="src-title" data-src="l3-2">某课程广告页</button><span class="src-sub">网页 · 广告素材</span></td>
+                        <td><span class="pf-tag" data-pf="web">网页</span></td>
+                        <td><span class="status" data-s="quiet">已移出</span></td>
+                        <td class="col-time num">08-06</td>
+                        <td class="col-topic">与判断无关</td>
+                        <td class="cell-acts"><button class="row-act" data-src="l3-2">详情</button><button class="row-act" data-action="restore">恢复</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>最近入库 jobId</dt><dd>ingest-20260814-084700</dd>
+                  <dt>信源</dt><dd>X 时间线 · 小红书话题 · 公众号订阅</dd>
+                  <dt>文本模型</dt><dd>wmb-text-1 · 摘要与归并</dd>
+                  <dt>原始路径</dt><dd>~/wmb/sources/2026/08/14/*.md</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载资料列表">
+              <p class="load-line">正在加载资料列表…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>资料列表加载失败</h3>
+              <p>没有读取到来源记录。这通常只是读取失败，资料本身没有丢。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="archive"></div>
+              <h3>资料室还没有来源</h3>
+              <p>记者扫到的新线索会先停在「观察中」。你也可以粘贴链接，由资料员整理入库。</p>
+              <button class="btn" data-variant="primary" data-action="add-source">添加资料</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 07 创作 · 写字间 ========== -->
+      <section class="room room--wide" id="room-studio" data-room="studio" hidden aria-labelledby="h1-studio">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">写字间 · Agent 主写，人监工</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-studio" tabindex="-1">创作</h1>
+              <div class="room-actions">
+                <button class="btn btn--ghost" data-icon="doc">存为版本</button>
+                <button class="btn" data-variant="primary" id="studioAssign" data-icon="pen">派写新稿</button>
+              </div>
+            </div>
+            <p class="room-desc">稿面与版本都在这里。写手主笔，你监工；深度改稿是旁路，不是默认上班方式。</p>
+          </header>
+        </div>
+
+        <div class="studio-view">
+          <div class="studio-doc">
+            <article class="paper">
+              <p class="doc-label">草稿 · 第一稿</p>
+              <h2>「AI 编程课测评」—— 为什么都在劝退</h2>
+              <p class="doc-meta">写手 #1 · 今天 14:20 · 约 1200 字 · 供小红书图文</p>
+              <p class="lead">「AI 编程课」正在变成一门靠焦虑成交的生意。我们对照了课程宣传与真实体验，整理出三个反复出现的问题。</p>
+              <p>第一，宣传里的「零基础一个月做项目」几乎都省略了前置成本：数学、英语、硬件与每周至少二十小时的练习时间。评论区的高频质疑指向的正是这段落差。</p>
+              <p>第二，案例样本高度雷同。同一套截图出现在不同价位的课程里，评价与「学员作品」也经常来自同一批素材。</p>
+              <p>第三，退款与售后条款往往不在首屏。买家在付款前看到的承诺，与协议正文之间存在距离。</p>
+              <p>我们不是劝退编程课，而是劝退「被包装成捷径的编程课」。判断依据全部来自资料库，可在评报栏与主题页追溯。</p>
+            </article>
+          </div>
+          <aside class="studio-rail">
+            <section class="rail-sec">
+              <h3>写作状态</h3>
+              <div class="op-strip" data-state="run" id="op-studio">
+                <span class="op-pulse"></span>
+                <div class="op-info"><span class="t">写手 #1 正在写稿</span><span class="pct">62%</span></div>
+                <div class="op-progress"><i style="--p:62%"></i></div>
+                <div class="op-actions"><button class="btn btn--sm btn--ghost">暂停</button></div>
+              </div>
+            </section>
+            <section class="rail-sec rail-sec--scroll">
+              <h3>版本</h3>
+              <div class="ver-item" data-cur="true">
+                <div class="ver-info"><b>v3 · 当前</b><span>今天 14:20 · 写手 #1</span></div>
+                <button class="btn btn--sm btn--ghost" data-action="restore">还原</button>
+              </div>
+              <div class="ver-item">
+                <div class="ver-info"><b>v2</b><span>今天 13:05 · 写手 #1</span></div>
+                <button class="btn btn--sm btn--ghost" data-action="restore">还原</button>
+              </div>
+              <div class="ver-item">
+                <div class="ver-info"><b>v1</b><span>昨天 20:11 · 策划转交</span></div>
+                <button class="btn btn--sm btn--ghost" data-action="restore">还原</button>
+              </div>
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>projectId</dt><dd>proj_ai_course_review</dd>
+                  <dt>写手 jobId</dt><dd>job-24219</dd>
+                  <dt>模型</dt><dd>wmb-writer-1</dd>
+                  <dt>资料权限</dt><dd>只读借阅</dd>
+                </dl>
+              </details>
+            </section>
+            <section class="rail-sec rail-sec--scroll">
+              <h3>批注</h3>
+              <div class="note-item"><span>「评论区的质疑集中在价格落差，建议前置到第二段」</span><span class="w">主编 · 10:40</span></div>
+              <div class="note-item"><span>「案例部分需要补一张资料库对照表」</span><span class="w">策划 #1 · 09:15</span></div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ========== 08 发布 · 签发台 ========== -->
+      <section class="room" id="room-publish" data-room="publish" hidden aria-labelledby="h1-publish">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">签发台 · 人工确认边界</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-publish" tabindex="-1">发布</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="publishStart">进入签发</button>
+              </div>
+            </div>
+            <p class="room-desc">最终发布只由你在这里亲手确认。任何智能体都无法触达平台最终点击；这里只做准备与签发。</p>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="发布分区">
+            <button class="tab" role="tab" id="pub-t1" aria-selected="true" aria-controls="pub-p1">待签发<span class="tab-cnt">2</span></button>
+            <button class="tab" role="tab" id="pub-t2" aria-selected="false" aria-controls="pub-p2" tabindex="-1">已签发<span class="tab-cnt">1</span></button>
+          </div>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="op-strip" data-state="done" id="op-publish">
+                <span class="op-pulse"></span>
+                <div class="op-info"><span class="t">2 条稿件已准备好，等待你签发</span></div>
+                <div class="op-progress"><i style="--p:100%"></i></div>
+              </div>
+
+              <div class="tbl-pane" id="pub-p1" role="tabpanel" aria-labelledby="pub-t1" aria-hidden="false">
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">发布 · 待签发</caption>
+                    <thead><tr><th scope="col">稿件</th><th scope="col">目标平台</th><th scope="col">适配</th><th scope="col">素材</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr data-pub="pub1" data-pf-label="小红书">
+                        <td><button class="src-title" data-src="pub1">「AI 编程课测评」—— 为什么都在劝退</button><span class="src-sub">第一稿 · 约 1200 字</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td><span class="status" data-s="ok">已适配</span></td>
+                        <td class="num">3 图 + 话题</td>
+                        <td><span class="status" data-s="wait">待签发</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm" data-action="review">签发</button></td>
+                      </tr>
+                      <tr data-pub="pub2" data-pf-label="公众号">
+                        <td><button class="src-title" data-src="pub2">「前端工程师还学不学 AI 编程课」</button><span class="src-sub">访谈稿 · 约 2600 字</span></td>
+                        <td><span class="pf-tag" data-pf="wx">公众号</span></td>
+                        <td><span class="status" data-s="quiet">待适配</span></td>
+                        <td class="num">封面待定</td>
+                        <td><span class="status" data-s="wait">待签发</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm" data-action="review">签发</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="tbl-pane" id="pub-p2" role="tabpanel" aria-labelledby="pub-t2" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">发布 · 已签发</caption>
+                    <thead><tr><th scope="col">稿件</th><th scope="col">目标平台</th><th scope="col">状态</th><th scope="col" class="col-time">签发时间</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td><button class="src-title" data-src="pub3">「Karpathy 新视频要点」</button><span class="src-sub">短图文</span></td>
+                        <td><span class="pf-tag" data-pf="x">X</span></td>
+                        <td><span class="status" data-s="ok">已发布</span></td>
+                        <td class="col-time num">昨天 16:40</td>
+                        <td class="cell-acts"><button class="row-act" data-src="pub3">查看</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>签发记录</dt><dd>sig-20260813-164000</dd>
+                  <dt>适配管线</dt><dd>图文适配 · 话题建议 · 封面裁切</dd>
+                  <dt>红线执行</dt><dd>仅人类 UI 新鲜确认可达</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载签发列表">
+              <p class="load-line">正在加载签发列表…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>签发列表读取失败</h3>
+              <p>没有读取到稿件状态。已签发记录不受影响。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="send"></div>
+              <h3>没有待签发的稿件</h3>
+              <p>写字间出稿并完成适配后，稿件会出现在这里等你终审。</p>
+              <button class="btn" data-variant="primary" data-action="go-studio">去写字间</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 09 结果 · 评报栏 ========== -->
+      <section class="room" id="room-results" data-room="results" hidden aria-labelledby="h1-results">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">评报栏 · 复盘</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-results" tabindex="-1">结果</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="resultsReview" data-icon="chart">生成本周复盘</button>
+              </div>
+            </div>
+            <p class="room-desc">发布之后的复盘台。数字只是入口，重点是：哪些判断成立、素材沉淀回了哪条线。</p>
+          </header>
+
+          <div class="stat-line">本周发布 <b>3</b> 条 · 阅读 <b>2.4k</b> · 互动 <b>186</b> · <b>1</b> 条待复盘</div>
+
+          <div class="tabs" role="tablist" aria-label="结果分区">
+            <button class="tab" role="tab" id="res-t1" aria-selected="true" aria-controls="res-p1">近 7 天<span class="tab-cnt">3</span></button>
+            <button class="tab" role="tab" id="res-t2" aria-selected="false" aria-controls="res-p2" tabindex="-1">更早<span class="tab-cnt">2</span></button>
+          </div>
+
+          <div class="state-region">
+            <div class="sv sv-content">
+              <div class="tbl-pane" id="res-p1" role="tabpanel" aria-labelledby="res-t1" aria-hidden="false">
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">结果 · 近 7 天</caption>
+                    <thead><tr><th scope="col">稿件</th><th scope="col">平台</th><th scope="col">阅读</th><th scope="col">赞藏</th><th scope="col">评论</th><th scope="col">表现</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td><button class="src-title" data-src="r1">「开发者日，普通开发者该关心什么」</button><span class="src-sub">长文 · 08-13</span></td>
+                        <td><span class="pf-tag" data-pf="x">X</span></td>
+                        <td class="num">1.8k</td><td class="num">92</td><td class="num">41</td>
+                        <td><span class="status" data-s="ok">超预期</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm btn--ghost">复盘</button></td>
+                      </tr>
+                      <tr>
+                        <td><button class="src-title" data-src="r2">「Karpathy 新视频要点」</button><span class="src-sub">短图文 · 08-12</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td class="num">420</td><td class="num">58</td><td class="num">12</td>
+                        <td><span class="status" data-s="quiet">正常</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm btn--ghost">复盘</button></td>
+                      </tr>
+                      <tr>
+                        <td><button class="src-title" data-src="r3">「Cursor 类工具的真实成本」</button><span class="src-sub">图文 · 08-11</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td class="num">180</td><td class="num">21</td><td class="num">8</td>
+                        <td><span class="status" data-s="wait">待复盘</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm btn--ghost">复盘</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="tbl-pane" id="res-p2" role="tabpanel" aria-labelledby="res-t2" aria-hidden="true" hidden>
+                <div class="table-wrap">
+                  <table class="table">
+                  <caption class="visually-hidden">结果 · 更早</caption>
+                    <thead><tr><th scope="col">稿件</th><th scope="col">平台</th><th scope="col">阅读</th><th scope="col">赞藏</th><th scope="col">评论</th><th scope="col">表现</th><th scope="col">操作</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td><button class="src-title" data-src="r4">「零基础学 AI 编程，三个月后我放弃了」</button><span class="src-sub">图文 · 07-28</span></td>
+                        <td><span class="pf-tag" data-pf="xhs">小红书</span></td>
+                        <td class="num">3.1k</td><td class="num">240</td><td class="num">88</td>
+                        <td><span class="status" data-s="ok">超预期</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm btn--ghost">复盘</button></td>
+                      </tr>
+                      <tr>
+                        <td><button class="src-title" data-src="r5">「我用 AI 写周报的第三周」</button><span class="src-sub">图文 · 07-21</span></td>
+                        <td><span class="pf-tag" data-pf="wx">公众号</span></td>
+                        <td class="num">260</td><td class="num">14</td><td class="num">6</td>
+                        <td><span class="status" data-s="quiet">正常</span></td>
+                        <td class="cell-acts"><button class="btn btn--sm btn--ghost">复盘</button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <details class="tech">
+                <summary data-icon="chev-r">技术详情</summary>
+                <dl class="tech-grid">
+                  <dt>指标回源</dt><dd>平台公开页 · 每日一次</dd>
+                  <dt>复盘草稿</dt><dd>策划 #1 · job-24230</dd>
+                  <dt>口径</dt><dd>阅读 / 赞藏 / 评论，不含私信</dd>
+                </dl>
+              </details>
+            </div>
+
+            <div class="sv sv-loading" role="status" aria-label="正在加载结果数据">
+              <p class="load-line">正在同步平台数据…</p>
+              <div class="sk-row"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="sv sv-error">
+              <div class="ic" data-icon="alert"></div>
+              <h3>指标同步失败</h3>
+              <p>平台公开页没有返回数据。稍后重试，本地已存的指标不受影响。</p>
+              <button class="btn sv-retry" data-variant="primary">重试</button>
+            </div>
+            <div class="sv sv-empty">
+              <div class="ic" data-icon="chart"></div>
+              <h3>还没有发布记录</h3>
+              <p>从签发台发出的稿件会在这里形成第一条复盘记录。</p>
+              <button class="btn" data-variant="primary" data-action="go-publish">去签发台</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 10 画布 · 关系墙 ========== -->
+      <section class="room room--wide" id="room-canvas" data-room="canvas" hidden aria-labelledby="h1-canvas">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">关系墙 · 理关系</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-canvas" tabindex="-1">画布</h1>
+              <div class="room-actions">
+                <button class="btn btn--ghost" id="canvasExport" data-icon="fit">适配视图</button>
+                <button class="btn" data-variant="primary" id="canvasSave" data-icon="check">保存布局</button>
+              </div>
+            </div>
+            <p class="room-desc">主题、选题与资料的关系图。这里是整理视野的地方，不是写作画布；改动通过提案生效。</p>
+          </header>
+        </div>
+
+        <div class="canvas-view" id="canvasView">
+          <div class="canvas-status">
+            <span class="status" data-s="ok">已同步</span>
+            <span class="mono">5 主题 · 4 选题 · 14 资料</span>
+          </div>
+          <div class="canvas-controls">
+            <button class="icon-btn icon-btn--sm" data-icon="zoom-in" aria-label="放大"></button>
+            <button class="icon-btn icon-btn--sm" data-icon="zoom-out" aria-label="缩小"></button>
+            <button class="icon-btn icon-btn--sm" data-icon="max" aria-label="全屏"></button>
+          </div>
+          <svg viewBox="0 0 960 520" preserveAspectRatio="xMidYMid meet" role="img" aria-label="主题关系图">
+            <line class="cn-edge" x1="480" y1="120" x2="200" y2="280"/>
+            <line class="cn-edge" x1="480" y1="120" x2="760" y2="280"/>
+            <line class="cn-edge" x1="200" y1="280" x2="480" y2="420"/>
+            <line class="cn-edge" x1="760" y1="280" x2="480" y2="420"/>
+            <line class="cn-edge--strong" x1="480" y1="120" x2="480" y2="260"/>
+            <line class="cn-edge" x1="480" y1="260" x2="340" y2="420"/>
+            <line class="cn-edge" x1="480" y1="260" x2="620" y2="420"/>
+            <rect class="cn" data-k="theme" x="404" y="92" width="152" height="56" rx="10"/>
+            <text class="cn-label" data-k="theme" x="480" y="118" text-anchor="middle">AI 工具测评</text>
+            <text class="cn-label" x="480" y="134" text-anchor="middle" font-size="10">跟进中</text>
+            <rect class="cn" data-k="theme" x="124" y="252" width="152" height="56" rx="10"/>
+            <text class="cn-label" data-k="theme" x="200" y="278" text-anchor="middle">前端视角</text>
+            <text class="cn-label" x="200" y="294" text-anchor="middle" font-size="10">跟进中</text>
+            <rect class="cn" data-k="theme" x="684" y="252" width="152" height="56" rx="10"/>
+            <text class="cn-label" data-k="theme" x="760" y="278" text-anchor="middle">竞品观察</text>
+            <text class="cn-label" x="760" y="294" text-anchor="middle" font-size="10">待确认</text>
+            <circle class="cn" data-k="idea" cx="480" cy="260" r="30"/>
+            <text class="cn-label" x="480" y="264" text-anchor="middle" font-size="10.5">AI 编程课测评</text>
+            <circle class="cn" data-k="src" cx="340" cy="420" r="18"/>
+            <circle class="cn" data-k="src" cx="480" cy="420" r="18"/>
+            <circle class="cn" data-k="src" cx="620" cy="420" r="18"/>
+            <text class="cn-label" x="340" y="424" text-anchor="middle" font-size="10">资料</text>
+            <text class="cn-label" x="480" y="424" text-anchor="middle" font-size="10">资料</text>
+            <text class="cn-label" x="620" y="424" text-anchor="middle" font-size="10">资料</text>
+          </svg>
+        </div>
+      </section>
+
+      <!-- ========== 11 设置 · 总机 ========== -->
+      <section class="room" id="room-settings" data-room="settings" hidden aria-labelledby="h1-settings">
+        <div class="room-inner">
+          <header class="room-head">
+            <p class="eyebrow">总机 · 模型 / 渠道 / 账号</p>
+            <div class="room-title-row">
+              <h1 class="room-h1" id="h1-settings" tabindex="-1">设置</h1>
+              <div class="room-actions">
+                <button class="btn" data-variant="primary" id="settingsSave" data-icon="check">保存更改</button>
+              </div>
+            </div>
+            <p class="room-desc">从「资料库」进入总机。改完保存后，返回你进来的房间继续干活。</p>
+            <p class="dateline"><button class="row-act" id="settingsBack" data-icon="arrow-l">返回 资料库</button></p>
+          </header>
+
+          <form class="settings-form" id="settingsForm">
+            <section class="fgroup" id="sec-model">
+              <h2>模型</h2>
+              <p class="fgroup-sub">前台 Pi 与后台管线共用同一组模型设置。</p>
+              <div class="frow">
+                <label for="setText">文本模型</label>
+                <select id="setText">
+                  <option>wmb-text-1 · 默认</option>
+                  <option>wmb-text-1 · 快速</option>
+                  <option>wmb-text-2 · 深度</option>
+                </select>
+              </div>
+              <div class="frow">
+                <label for="setVision">视觉模型</label>
+                <select id="setVision">
+                  <option>wmb-vision-1 · 默认</option>
+                  <option>wmb-vision-2 · 高精度</option>
+                </select>
+              </div>
+              <div class="frow">
+                <label for="setStream">流式输出</label>
+                <select id="setStream">
+                  <option>开启</option>
+                  <option>关闭</option>
+                </select>
+                <p class="hint">开启后，Pi 与写字间的回复逐字呈现。</p>
+              </div>
+            </section>
+
+            <section class="fgroup" id="sec-channel">
+              <h2>渠道</h2>
+              <p class="fgroup-sub">发布与采集的公开标签：小红书渠道、公众号、X。</p>
+              <div class="frow">
+                <label>小红书渠道</label>
+                <span class="status" data-s="ok">已连接</span>
+                <p class="hint">只读采集 + 人工签发的发布通道；最终点击永远在签发台。</p>
+              </div>
+              <div class="frow">
+                <label>公众号</label>
+                <span class="status" data-s="wait">未连接</span>
+              </div>
+              <div class="frow">
+                <label>X</label>
+                <span class="status" data-s="ok">已连接</span>
+              </div>
+            </section>
+
+            <section class="fgroup" id="sec-account">
+              <h2>账号</h2>
+              <div class="frow">
+                <label for="setOwner">主编席名称</label>
+                <input id="setOwner" type="text" value="Owner"/>
+                <p class="hint">出现在呈报与签发记录里的署名。</p>
+              </div>
+            </section>
+          </form>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ============ Pi（右侧浮层） ============ -->
+    <aside class="pi-dock" id="piDock" aria-label="Pi 主管助手" hidden>
+      <header class="pi-head">
+        <div class="pi-brand">
+          <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
+            <path d="M5 3.5h16a2.6 2.6 0 0 1 2.6 2.6v14A2.6 2.6 0 0 1 21 22.7H5a2.6 2.6 0 0 1-2.6-2.6V6.1A2.6 2.6 0 0 1 5 3.5z" fill="var(--accent-faint)" stroke="var(--accent)" stroke-width="1.5"/>
+            <circle cx="9.6" cy="12" r="1.8" fill="var(--accent)"/>
+            <circle cx="16.4" cy="12" r="1.8" fill="var(--accent)"/>
+            <path d="M7.4 17.4c2 1.6 4.6 1.7 6.6.2" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <div>
+            <b>Pi 主管</b>
+            <span class="status" data-s="ok">在线 · 可派工</span>
+          </div>
+        </div>
+        <button class="icon-btn" id="piClose" data-icon="x" aria-label="收起 Pi"></button>
+      </header>
+      <div class="pi-body">
+        <section class="pi-sec">
+          <h3>当前房间</h3>
+          <p id="piRoom" class="pi-msg" style="margin-bottom:0;">资料库 · 资料室</p>
+        </section>
+        <section class="pi-sec">
+          <h3>会话</h3>
+          <div class="pi-msg">桌助：今日 2 项呈报待批，其中「AI 编程课测评」素材最齐，可先批。</div>
+          <div class="pi-msg">记者 #3：观察中来源整理完成 12/16，形成 1 份归并提案待你确认。</div>
+          <div class="pi-msg pi-msg--user">把「AI 编程课测评」的选题理由再压一行，直接给结论。</div>
+        </section>
+        <section class="pi-sec">
+          <h3>Pi 建议</h3>
+          <button class="suggest-row" id="piSuggestApprove"><span class="s-tag">呈报</span>批复「AI 编程课测评」选题</button>
+          <button class="suggest-row" id="piSuggestTopic"><span class="s-tag">整理</span>把 2 条来源并入「AI 工具测评」</button>
+        </section>
+      </div>
+      <footer class="pi-composer">
+        <label class="visually-hidden" for="piInput">给 Pi 留言</label>
+        <textarea id="piInput" rows="2" placeholder="给 Pi 留言，或直接派工…"></textarea>
+        <div class="composer-actions">
+          <button class="btn btn--sm" id="piSend">发送</button>
+        </div>
+      </footer>
+    </aside>
+    <button class="pi-reopen" id="piReopen" data-icon="pi" aria-label="展开 Pi 主管">Pi</button>
+
+  </div>
+
+  <!-- ============ Status bar ============ -->
+  <footer class="statusbar">
+    <div class="sb-left">
+      <span class="status" data-s="idle" id="sbStatus">后台管线 空闲</span>
+      <span class="sb-sep"></span>
+      <time id="sbClock"></time>
+    </div>
+    <div class="sb-right">
+      <div class="demo-switch" role="group" aria-label="演示状态切换">
+        <button class="ds-btn" data-demo="content" aria-pressed="true">内容</button>
+        <button class="ds-btn" data-demo="loading" aria-pressed="false">加载</button>
+        <button class="ds-btn" data-demo="error" aria-pressed="false">错误</button>
+        <button class="ds-btn" data-demo="empty" aria-pressed="false">空</button>
+      </div>
+      <span class="sb-item">演示状态：<b id="sbDemo">内容</b></span>
+      <span class="sb-sep"></span>
+      <span class="sb-item" id="sbTheme">墨夜</span>
+      <span class="sb-item">WMB · 全产品原型</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ============ Source detail modal ============ -->
+<div class="modal-backdrop" id="sourceModal" hidden role="dialog" aria-modal="true" aria-labelledby="srcTitle">
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="srcTitle">来源详情</h2>
+      <button class="icon-btn modal-close" data-icon="x" aria-label="关闭"></button>
+    </header>
+    <div class="modal-body">
+      <p class="eyebrow" id="srcEyebrow">资料室 · 原件</p>
+      <button class="src-title" id="srcLinkTitle">来源标题</button>
+      <div class="meta-row" id="srcMeta"></div>
+      <h3>内容摘要</h3>
+      <p id="srcSummary"></p>
+      <h3>相关主题</h3>
+      <p id="srcRelated"></p>
+      <details class="tech" id="srcTech">
+        <summary data-icon="chev-r">技术详情</summary>
+        <dl class="tech-grid" id="srcTechGrid"></dl>
+      </details>
+    </div>
+    <footer class="modal-foot">
+      <span class="note">原文保存在本地资料库，可随时抽查原件</span>
+      <button class="btn" id="srcRemove">移出资料库</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ Decide (today) modal ============ -->
+<div class="modal-backdrop" id="decideModal" hidden role="dialog" aria-modal="true" aria-labelledby="decideTitle">
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="decideTitle">批复选题</h2>
+      <button class="icon-btn modal-close" data-icon="x" aria-label="关闭"></button>
+    </header>
+    <div class="modal-body">
+      <p class="eyebrow" id="decideGrade">SSS · 小红书</p>
+      <p style="font-size:16px;font-weight:600;letter-spacing:-0.01em;color:var(--ink);" id="decideHeadline">「AI 编程课测评」—— 为什么都在劝退</p>
+      <p id="decideReason">今日小红书「AI 编程课」话题讨论升温，评论区高频质疑与课程宣传冲突明显；素材最齐，可当日成稿。</p>
+      <h3>可追溯依据</h3>
+      <div id="decideSources"></div>
+      <h3>批后动作</h3>
+      <p>批复后由策划转交写手开稿，稿子进入写字间，你可以随时监工。</p>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn" id="decideNo">否 · 退回策划</button>
+      <button class="btn btn--primary" id="decideYes" data-icon="check">批呈报</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ Publish review modal ============ -->
+<div class="modal-backdrop" id="publishModal" hidden role="dialog" aria-modal="true" aria-labelledby="pubTitle">
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="pubTitle">签发确认</h2>
+      <button class="icon-btn modal-close" data-icon="x" aria-label="关闭"></button>
+    </header>
+    <div class="modal-body">
+      <p class="eyebrow" id="pubEyebrow">签发台 · 人工确认边界</p>
+      <p style="font-size:16px;font-weight:600;letter-spacing:-0.01em;color:var(--ink);" id="pubHeadline">稿件标题</p>
+      <p id="pubPlatformNote"></p>
+      <h3>发布前检查</h3>
+      <ul class="check-list" id="pubChecks">
+        <li><input type="checkbox" id="chk1" checked/><label for="chk1">标题与话题已按平台规范适配</label></li>
+        <li><input type="checkbox" id="chk2" checked/><label for="chk2">配图、封面与素材已就位</label></li>
+        <li><input type="checkbox" id="chk3" checked/><label for="chk3">已确认定时时间或立即发布</label></li>
+      </ul>
+      <p class="form-error" id="pubError" hidden>还有检查项未完成，先补齐再签发。</p>
+      <h3>边界声明</h3>
+      <p>最终发布点击只发生在这份确认里。任何智能体都无权替你按下最终发布。</p>
+    </div>
+    <footer class="modal-foot">
+      <span class="note">本次确认 90 秒内有效</span>
+      <button class="btn btn--primary" id="pubConfirm" data-icon="send">确认发布</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ Principles modal ============ -->
+<div class="modal-backdrop" id="principlesModal" hidden role="dialog" aria-modal="true" aria-labelledby="principlesTitle">
+  <div class="modal">
+    <header class="modal-head">
+      <h2 id="principlesTitle">设计原则 · 本次删改清单</h2>
+      <button class="icon-btn modal-close" data-icon="x" aria-label="关闭"></button>
+    </header>
+    <div class="modal-body">
+      <ol class="principle-list">
+        <li><b>删除：嵌套选中 chips</b><span>选区状态只出现在语义 tab 行——选中一次、出现一处，不再同时出现在 tab、筛选 chip 与卡片里。</span></li>
+        <li><b>删除：重复页面身份</b><span>一房一个 H1，来自同一标签映射；顶栏、侧栏、内容区不再各写一遍房间名。</span></li>
+        <li><b>删除：巨型工作流状态容器</b><span>活动操作收敛为一条细进度条 + 有意义计数 + 暂停副操作的窄条，不再占用整张卡片。</span></li>
+        <li><b>删除：仅颜色状态</b><span>状态永远等于点/图标 + 词（新到、进行中、等你批…），颜色只是辅助。</span></li>
+        <li><b>删除：主视图里的机器字段</b><span>jobId、路径、模型等只出现在「技术详情」展开区，主视图只讲业务语言。</span></li>
+        <li><b>删除：页面自造按钮方言</b><span>按钮、标签、状态只有一套 owner 与有限变体；页面不再各自定义同名组件。</span></li>
+        <li><b>删除：常驻占宽 Pi</b><span>Pi 是右侧浮层，开合不改变工作区几何；窄窗口下也不挤压主工作区。</span></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  /* ---------------- Icons（内联 SVG，无 emoji / 无外链） ---------------- */
+  var ICONS = {
+    desk:   '<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>',
+    bot:    '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5M9 4.5h6M9 13h.01M15 13h.01M9 16.5c1.8 1.2 4.2 1.2 6 0"/>',
+    radar:  '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M12 12l7-6"/>',
+    idea:   '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.7 1 1.3 1 2.5h6c0-1.2.2-1.8 1-2.5A6 6 0 0 0 12 3z"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    archive:'<path d="M4 8h16v11H4zM4 8l1.5-3h13L20 8M10 12h4"/>',
+    pen:    '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1zM13.5 7.5l3 3"/>',
+    send:   '<path d="M21 3L10.5 13.5M21 3l-7 18-3.5-7.5L3 10z"/>',
+    chart:  '<path d="M4 20h16M7 16v-5M12 16V8M17 16v-7"/>',
+    nodes:  '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="13" cy="18" r="2.5"/><path d="M8.4 8.2l2.4 7.6M16 8.2l-2.4 7.6M8.4 7.6l7.2-1.2"/>',
+    sliders:'<path d="M4 8h10M18 8h2M4 16h2M10 16h10M14 5.5v5M6 13.5v5"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+    x:      '<path d="M6 6l12 12M18 6L6 18"/>',
+    plus:   '<path d="M12 5v14M5 12h14"/>',
+    'chev-r': '<path d="M9 6l6 6-6 6"/>',
+    'arrow-l': '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+    pause:  '<path d="M9 6v12M15 6v12"/>',
+    moon:   '<path d="M20 13.5A8 8 0 1 1 10.5 4 6.5 6.5 0 0 0 20 13.5z"/>',
+    sun:    '<circle cx="12" cy="12" r="4"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/>',
+    pi:     '<path d="M4 6h16v11H9l-4 4v-4H4z"/><path d="M12 8.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+    check:  '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    alert:  '<path d="M12 4L2.5 20h19zM12 10v4.5M12 17.2v.1"/>',
+    refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>',
+    info:   '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/>',
+    doc:    '<path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6"/>',
+    'zoom-in': '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
+    'zoom-out': '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M8.5 11h5"/>',
+    max:    '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    fit:    '<path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/>',
+    clip:   '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a3 3 0 0 1 6 0M9 12l2 2 4-4"/>'
+  };
+  function fillIcons(root) {
+    $$("[data-icon]", root).forEach(function (el) {
+      var name = el.getAttribute("data-icon");
+      if (!ICONS[name]) return;
+      var svg = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + ICONS[name] + "</svg>";
+      if (el.textContent.trim()) {
+        /* 有文字标签的按钮 / summary：图标前置，保留标签 */
+        el.insertAdjacentHTML("afterbegin", svg);
+      } else {
+        el.innerHTML = svg;
+        if (el.tagName === "BUTTON" && !el.getAttribute("aria-label")) {
+          el.setAttribute("aria-label", name);
+        }
+      }
+    });
+  }
+
+  /* ---------------- Rooms（同一标签映射） ---------------- */
+  var ROOMS = [
+    { id: "today",     noun: "今日",   meta: "主编桌", group: "主编席", icon: "desk" },
+    { id: "agents",    noun: "智能体", meta: "班组",   group: "科室",   icon: "bot" },
+    { id: "discover",  noun: "发现",   meta: "前线",   group: "科室",   icon: "radar" },
+    { id: "proposals", noun: "选题",   meta: "策划组", group: "科室",   icon: "idea" },
+    { id: "topics",    noun: "主题",   meta: "专题组", group: "科室",   icon: "folder" },
+    { id: "library",   noun: "资料库", meta: "资料室", group: "科室",   icon: "archive" },
+    { id: "studio",    noun: "创作",   meta: "写字间", group: "生产",   icon: "pen" },
+    { id: "publish",   noun: "发布",   meta: "签发台", group: "生产",   icon: "send" },
+    { id: "results",   noun: "结果",   meta: "评报栏", group: "生产",   icon: "chart" },
+    { id: "canvas",    noun: "画布",   meta: "关系墙", group: "系统",   icon: "nodes" },
+    { id: "settings",  noun: "设置",   meta: "总机",   group: "系统",   icon: "sliders" }
+  ];
+  var rail = $("#rail");
+  var html = "", lastGroup = "";
+  ROOMS.forEach(function (r) {
+    if (r.group !== lastGroup) { html += '<div class="nav-group">' + r.group + "</div>"; lastGroup = r.group; }
+    html += '<button class="nav-item" data-room="' + r.id + '" title="' + r.noun + " · " + r.meta + '" aria-current="false">' +
+            '<span class="nav-ic" data-icon="' + r.icon + '"></span><span class="nav-lbl">' + r.noun + "</span></button>";
+  });
+  rail.innerHTML = html;
+
+  var workspace = $("#workspace");
+  var currentRoom = "library";
+
+  function switchRoom(id, focusH1) {
+    currentRoom = id;
+    $$(".room").forEach(function (r) { r.hidden = r.getAttribute("data-room") !== id; });
+    $$(".nav-item").forEach(function (b) {
+      b.setAttribute("aria-current", b.getAttribute("data-room") === id ? "page" : "false");
+    });
+    if (id !== "topics") resetTopics();
+    workspace.scrollTop = 0;
+    var room = null;
+    ROOMS.forEach(function (r) { if (r.id === id) room = r; });
+    $("#piRoom").textContent = room.noun + " · " + room.meta;
+    if (focusH1) {
+      var h1 = $("#room-" + id + " .room-h1");
+      if (h1) h1.focus();
+    }
+  }
+  rail.addEventListener("click", function (e) {
+    var btn = e.target.closest(".nav-item");
+    if (btn) switchRoom(btn.getAttribute("data-room"), true);
+  });
+
+  /* ---------------- Tabs（语义 tablist：Arrow / Home / End） ---------------- */
+  function initTablist(tl) {
+    var tabs = $$('[role="tab"]', tl);
+    var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute("aria-controls")); });
+    function activate(tab) {
+      tabs.forEach(function (t, i) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        panels[i].setAttribute("aria-hidden", on ? "false" : "true");
+        panels[i].hidden = !on;
+      });
+      if (tl.dataset.hook) { /* room hooks via tabchange below */ }
+      var ev = new CustomEvent("tabchange", { detail: { tab: tab } });
+      tl.dispatchEvent(ev);
+    }
+    tl.addEventListener("keydown", function (e) {
+      var i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      var n = i;
+      if (e.key === "ArrowRight") n = (i + 1) % tabs.length;
+      else if (e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length;
+      else if (e.key === "Home") n = 0;
+      else if (e.key === "End") n = tabs.length - 1;
+      else return;
+      e.preventDefault();
+      tabs[n].focus();
+      activate(tabs[n]);
+    });
+    tabs.forEach(function (t) { t.addEventListener("click", function () { activate(t); }); });
+    return { tabs: tabs, activate: activate };
+  }
+
+  /* ---------------- 表格行内的打开 / 移出（事件委托） ---------------- */
+  document.addEventListener("click", function (e) {
+    var act = e.target.closest("[data-action]");
+    if (act) {
+      var action = act.getAttribute("data-action");
+      var tr = act.closest("tr");
+      var ver = act.closest(".ver-item");
+      if (tr && action === "remove") {
+        moveRow(tr, "lib-p3", "已移出", "quiet");
+        act.setAttribute("data-action", "restore");
+        act.textContent = "恢复";
+        bumpLib();
+      } else if (tr && action === "restore") {
+        moveRow(tr, "lib-p1", "新到", "wait");
+        act.setAttribute("data-action", "remove");
+        act.textContent = "移出";
+        bumpLib();
+      } else if (tr && action === "ingest") {
+        var st = tr.querySelector(".status");
+        st.setAttribute("data-s", "ok");
+        st.textContent = "已入库";
+        act.remove();
+        setOp("discover", "已收录 1 条来源，转交资料员整理", false);
+      } else if (tr && action === "reject") {
+        var metaCell = tr.querySelectorAll("td")[3];
+        if (metaCell) metaCell.innerHTML = '<span class="status" data-s="quiet">已否</span>';
+        moveRow(tr, "prop-p3", "已否", "quiet");
+        bumpProp();
+        setOp("proposals", "已否 1 条，退回策划", true);
+      } else if (ver && action === "restore") {
+        $$(".ver-item").forEach(function (v) { v.setAttribute("data-cur", v === ver ? "true" : "false"); });
+      } else if (tr && action === "review") {
+        openPublishReview(tr);
+      } else if (action === "go-discover") {
+        switchRoom("discover", true);
+      } else if (action === "go-studio") {
+        switchRoom("studio", true);
+      } else if (action === "go-publish") {
+        switchRoom("publish", true);
+      } else if (action === "scan") {
+        document.getElementById("agentsScan").click();
+      } else if (action === "new-topic") {
+        document.getElementById("topicNew").click();
+      } else if (action === "add-source") {
+        document.getElementById("libAdd").click();
+      } else if (action === "open-pi") {
+        openPi();
+      }
+      return;
+    }
+    var src = e.target.closest("[data-src]");
+    if (src) { openSource(src.getAttribute("data-src"), src); return; }
+    var topicBtn = e.target.closest("[data-topic-open]");
+    if (topicBtn) { openTopic(topicBtn.getAttribute("data-topic-open"), topicBtn); return; }
+    var go = e.target.closest("#gotoTopics");
+    if (go) { switchRoom("topics", true); setTimeout(function () { openTopic("ai-tools", null); }, 0); return; }
+    var toLib = e.target.closest("#settingsBack");
+    if (toLib) { switchRoom("library", true); }
+  });
+
+  function moveRow(tr, targetPanelId, statusWord, sKind) {
+    var target = document.getElementById(targetPanelId);
+    if (!target) return;
+    var st = tr.querySelector(".status");
+    if (st) { st.setAttribute("data-s", sKind); st.textContent = statusWord; }
+    var acts = tr.querySelectorAll(".cell-acts .row-act[data-action='reject'], .cell-acts .row-act[data-action='no']");
+    acts.forEach(function (a) { a.remove(); });
+    target.querySelector("tbody").appendChild(tr);
+  }
+
+  function tabCount(tabId, n) {
+    var tab = document.getElementById(tabId);
+    if (tab) tab.querySelector(".tab-cnt").textContent = String(n);
+  }
+  function panelCount(panelId) {
+    var p = document.getElementById(panelId);
+    return p ? p.querySelectorAll("tbody tr").length : 0;
+  }
+
+  function bumpLib() {
+    tabCount("lib-t1", panelCount("lib-p1"));
+    tabCount("lib-t2", panelCount("lib-p2"));
+    tabCount("lib-t3", panelCount("lib-p3"));
+    applyLibFilter();
+  }
+  function bumpProp() {
+    tabCount("prop-t1", panelCount("prop-p1"));
+    tabCount("prop-t2", panelCount("prop-p2"));
+    tabCount("prop-t3", panelCount("prop-p3"));
+    var n = panelCount("prop-p1");
+    $("#propPending").textContent = String(n);
+    $("#proposalApprove").disabled = n === 0;
+  }
+
+  /* ---------------- 操作条 ---------------- */
+  function setOp(roomId, text, done) {
+    var strip = document.getElementById("op-" + roomId);
+    if (!strip) return;
+    strip.setAttribute("data-state", done ? "done" : "run");
+    var t = strip.querySelector(".op-info .t");
+    if (t) t.textContent = text;
+  }
+
+  /* ---------------- 搜索 / 筛选（资料库） ---------------- */
+  var libSearch = $("#libSearch"), libPf = $("#libPf"), libType = $("#libType");
+  function applyLibFilter() {
+    var q = libSearch.value.trim().toLowerCase();
+    var pf = libPf.value, ty = libType.value;
+    var panel = null;
+    $$("#libRegion .tbl-pane").forEach(function (p) { if (!p.hidden) panel = p; });
+    var total = 0;
+    if (panel) {
+      $$("tbody tr", panel).forEach(function (tr) {
+        var qm = !q || (tr.getAttribute("data-q") || "").indexOf(q) !== -1;
+        var pfm = pf === "all" || tr.getAttribute("data-pf") === pf;
+        var tym = ty === "all" || tr.getAttribute("data-type") === ty;
+        tr.hidden = !(qm && pfm && tym);
+        if (!tr.hidden) total++;
+      });
+    }
+    $("#libCount").innerHTML = "<b>" + total + "</b> 条来源";
+  }
+  libSearch.addEventListener("input", applyLibFilter);
+  libPf.addEventListener("change", applyLibFilter);
+  libType.addEventListener("change", applyLibFilter);
+
+  var discSearch = $("#discSearch"), discPf = $("#discPf");
+  function applyDiscFilter() {
+    var q = discSearch.value.trim().toLowerCase();
+    var pf = discPf.value;
+    var panel = null;
+    $$("#discRegion .tbl-pane").forEach(function (p) { if (!p.hidden) panel = p; });
+    var total = 0;
+    if (panel) {
+      $$("tbody tr", panel).forEach(function (tr) {
+        var qm = !q || (tr.getAttribute("data-q") || "").indexOf(q) !== -1;
+        var pfm = pf === "all" || tr.getAttribute("data-pf") === pf;
+        tr.hidden = !(qm && pfm);
+        if (!tr.hidden) total++;
+      });
+    }
+    $("#discCount").innerHTML = "<b>" + total + "</b> 条来源";
+  }
+  discSearch.addEventListener("input", applyDiscFilter);
+  discPf.addEventListener("change", applyDiscFilter);
+
+  /* 切 tab 后重新计数 */
+  $$(".tabs").forEach(function (tl) {
+    tl.addEventListener("tabchange", function () {
+      if (tl.contains($("#lib-t1"))) applyLibFilter();
+      if (tl.contains($("#disc-t1"))) applyDiscFilter();
+    });
+  });
+
+  /* ---------------- 选题批量批复 ---------------- */
+  $("#proposalApprove").addEventListener("click", function () {
+    var rows = $$("#prop-p1 tbody tr");
+    if (!rows.length) return;
+    rows.forEach(function (tr) {
+      tr.querySelectorAll("[data-action='reject']").forEach(function (a) { a.remove(); });
+      var metaCell = tr.querySelectorAll("td")[3];
+      if (metaCell) metaCell.innerHTML = '<span class="status" data-s="ok">已批</span>';
+      $("#prop-p2 tbody").appendChild(tr);
+    });
+    bumpProp();
+    setOp("proposals", "已批复 " + rows.length + " 条选题，转交写字间", true);
+  });
+
+  /* ---------------- 今日：批复流程 ---------------- */
+  var decideQueue = ["t1", "t2"];
+  function updateTodayPending() {
+    $("#todayPending").textContent = String(decideQueue.length);
+    $("#todayDecide").disabled = decideQueue.length === 0;
+    $("#todayDecide").innerHTML = '逐条批复 <span id="todayPending">' + decideQueue.length + "</span> 项";
+  }
+  $("#todayDecide").addEventListener("click", function () {
+    if (!decideQueue.length) return;
+    openDecide(decideQueue[0], this);
+  });
+  function openDecide(id, trigger) {
+    var d = DECIDES[id];
+    if (!d) return;
+    $("#decideGrade").textContent = d.grade;
+    $("#decideHeadline").textContent = d.headline;
+    $("#decideReason").textContent = d.reason;
+    $("#decideSources").innerHTML = d.sources.map(function (s) {
+      return '<button class="row-act" data-src="' + s.id + '">' + s.title + "</button>";
+    }).join("<br/>");
+    openModal($("#decideModal"), trigger);
+  }
+  $("#decideYes").addEventListener("click", function () {
+    var id = decideQueue.shift();
+    if (id === "t1") {
+      var row = $("#todayPendingList article");
+      if (row) {
+        row.querySelector(".decide-side .status").setAttribute("data-s", "run");
+        row.querySelector(".decide-side .status").textContent = "在写";
+        row.querySelector(".decide-side .btn").remove();
+        $("#todayWritingList").appendChild(row);
+      }
+      setOp("today", "「AI 编程课测评」已批，转交写手 #1 开稿", true);
+    } else {
+      setOp("today", "「双面访谈」已批，等待素材补齐后开稿", true);
+    }
+    updateTodayPending();
+    closeModal($("#decideModal"));
+  });
+  $("#decideNo").addEventListener("click", function () {
+    var id = decideQueue.shift();
+    setOp("today", "已退回策划：" + id, true);
+    updateTodayPending();
+    closeModal($("#decideModal"));
+  });
+
+  /* ---------------- 发布：签发流程 ---------------- */
+  var pubRow = null;
+  function openPublishReview(tr) {
+    pubRow = tr;
+    var title = tr.querySelector(".src-title").textContent;
+    var pfLabel = tr.getAttribute("data-pf-label");
+    $("#pubHeadline").textContent = title;
+    $("#pubEyebrow").textContent = "签发台 · " + pfLabel;
+    $("#pubPlatformNote").textContent = "发布前检查只针对「" + pfLabel + "」的目标规范。";
+    $("#pubError").hidden = true;
+    $$("#pubChecks input").forEach(function (c) { c.checked = true; });
+    openModal($("#publishModal"), tr.querySelector("[data-action='review']"));
+  }
+  $("#pubConfirm").addEventListener("click", function () {
+    var ok = $$("#pubChecks input").every(function (c) { return c.checked; });
+    if (!ok) { $("#pubError").hidden = false; return; }
+    if (!pubRow) return;
+    var pfLabel = pubRow.getAttribute("data-pf-label");
+    var title = pubRow.querySelector(".src-title").textContent;
+    pubRow.querySelectorAll("[data-action='review']").forEach(function (b) { b.remove(); });
+    var st = null;
+    pubRow.querySelectorAll(".status").forEach(function (s) { if (s.textContent === "待签发") st = s; });
+    if (st) { st.setAttribute("data-s", "ok"); st.textContent = "已签发"; }
+    $("#pub-p2 tbody").appendChild(pubRow);
+    tabCount("pub-t1", panelCount("pub-p1"));
+    tabCount("pub-t2", panelCount("pub-p2"));
+    setOp("publish", "已人工确认发布到 " + pfLabel + "：「" + title + "」", true);
+    closeModal($("#publishModal"));
+  });
+  $("#publishStart").addEventListener("click", function () {
+    var row = $("#pub-p1 tbody tr");
+    if (row) openPublishReview(row);
+    else setOp("publish", "没有待签发的稿件，去写字间看看", true);
+  });
+
+  /* ---------------- 主题：列表 ⇄ 阅读详情 ---------------- */
+  var TOPICS = {
+    "ai-tools": {
+      name: "AI 工具测评",
+      desc: "工具与测评向的长期关注线：谁在讲、讲什么、我们的判断是否仍成立。",
+      status: ["run", "跟进中"], stats: "资料 12 · 选题 4 · 稿 3", owner: "资料员 #1", updated: "今天"
+    },
+    fe: { name: "前端视角", desc: "工具与工程向，周更。", status: ["run", "跟进中"], stats: "资料 8 · 选题 2 · 稿 1", owner: "资料员 #1", updated: "昨天" },
+    rival: { name: "竞品观察", desc: "课程与工具定价、销量快照。", status: ["wait", "待确认"], stats: "资料 5 · 选题 1 · 稿 0", owner: "资料员 #1", updated: "08-12" },
+    "xhs-method": { name: "小红书运营方法论", desc: "选题节奏与标题规律。", status: ["run", "跟进中"], stats: "资料 15 · 选题 6 · 稿 4", owner: "资料员 #1", updated: "08-11" },
+    sea: { name: "出海工具", desc: "已停 · 素材保留。", status: ["quiet", "已停"], stats: "资料 4 · 选题 0 · 稿 0", owner: "—", updated: "07-30" }
+  };
+  var topicReturnFocus = null;
+  function openTopic(id, trigger) {
+    var t = TOPICS[id];
+    if (!t) return;
+    topicReturnFocus = trigger || $("#topicsList .room-h1");
+    $("#topicsList").hidden = true;
+    $("#topicsDetail").hidden = false;
+    $("#topicCrumbName").textContent = t.name;
+    var h1 = $("#h1-topic-detail");
+    h1.textContent = t.name;
+    h1.focus();
+    workspace.scrollTop = 0;
+  }
+  function resetTopics() {
+    $("#topicsList").hidden = false;
+    $("#topicsDetail").hidden = true;
+  }
+  $("#topicBack").addEventListener("click", function () {
+    resetTopics();
+    if (topicReturnFocus && topicReturnFocus.focus) topicReturnFocus.focus();
+    else $("#topicsList .room-h1").focus();
+  });
+  $("#topicFollow").addEventListener("click", function () {
+    setOp("topics", "", true);
+    this.textContent = "已确认";
+    setTimeout(function () { $("#topicFollow").textContent = "继续跟进"; }, 1400);
+  });
+
+  /* ---------------- 其余 masthead 主操作（原型演示） ---------------- */
+  $("#agentsScan").addEventListener("click", function () {
+    setOp("agents", "记者 #2 已派发，正在扫描 6 个信源", false);
+    $("#sbStatus").textContent = "后台管线 扫描中";
+    $("#sbStatus").setAttribute("data-s", "run");
+  });
+  $("#discoverIngest").addEventListener("click", function () {
+    var n = 0;
+    $$("#discRegion tbody tr").forEach(function (tr) {
+      var act = tr.querySelector("[data-action='ingest']");
+      if (act) {
+        var st = tr.querySelector(".status");
+        if (st && st.textContent === "新到") { st.setAttribute("data-s", "ok"); st.textContent = "已入库"; n++; }
+        act.remove();
+      }
+    });
+    if (n) {
+      $("#discPending").textContent = String(n);
+      setOp("discover", "已收录 " + n + " 条新来源，转交资料员整理", true);
+    } else {
+      setOp("discover", "榜单里没有新到来源了", true);
+    }
+  });
+  $("#resultsReview").addEventListener("click", function () {
+    setOp("results", "策划 #1 正在汇总本周复盘", false);
+    var b = this;
+    b.disabled = true;
+    setTimeout(function () {
+      b.disabled = false;
+      setOp("results", "本周复盘已生成，归档到评报栏", true);
+    }, 1200);
+  });
+  $("#topicNew").addEventListener("click", function () { setOp("topics", "", false); });
+  $("#libAdd").addEventListener("click", function () { setOp("library", "添加资料：粘贴链接后由资料员整理入库", false); });
+  $("#studioAssign").addEventListener("click", function () { setOp("studio", "写手 #1 已接新稿，正在列提纲", false); });
+  $("#canvasSave").addEventListener("click", function () {
+    $("#canvasSave").textContent = "已保存";
+    setTimeout(function () { $("#canvasSave").innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>保存布局'; }, 1200);
+  });
+  $("#settingsSave").addEventListener("click", function () {
+    var b = this;
+    b.textContent = "已保存";
+    $("#sbStatus").textContent = "设置已保存 · 返回 资料库";
+    setTimeout(function () { b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>保存更改'; }, 1400);
+  });
+
+  /* ---------------- 来源详情 modal ---------------- */
+  var SOURCES = {
+    lib1: { title: "「AI 编程课测评」合集拆解", eyebrow: "资料室 · 原件", meta: "小红书 · 科技自习室 · 今天 09:12", summary: "头部博主对三门主流 AI 编程课的真实体验拆解：内容重合度、答疑质量、退款条款逐项对比，评论区 320+ 条真实反馈。", related: "AI 工具测评（跟进中）", tech: [["jobId", "ingest-20260814-091200"], ["原始路径", "~/wmb/sources/2026/08/14/xhs-0912.md"], ["摘要模型", "wmb-text-1"], ["字数", "2,840"]] },
+    lib2: { title: "某课程销量页快照", eyebrow: "资料室 · 原件", meta: "网页 · 快照 · 今天 09:05", summary: "销量、价格与宣传口径的存档快照，用于后续对比「宣传 vs 真实体验」。", related: "竞品观察（待确认）", tech: [["jobId", "ingest-20260814-090500"], ["原始路径", "~/wmb/sources/2026/08/14/web-0905.md"], ["快照", "1 页"], ["字数", "620"]] },
+    lib3: { title: "前端周刊 #182 工具节选", eyebrow: "资料室 · 原件", meta: "公众号 · 前端早读课 · 昨天 18:02", summary: "本周工具向内容节选，含读者对「AI 编程课值不值」的追问节选。", related: "前端视角（跟进中）", tech: [["jobId", "ingest-20260813-180200"], ["原始路径", "~/wmb/sources/2026/08/13/wx-1802.md"], ["类型", "文章"], ["字数", "1,160"]] },
+    lib4: { title: "「AI 编程课到底值不值」评论区高频质疑", eyebrow: "资料室 · 原件", meta: "小红书 · 话题页 · 昨天 21:30", summary: "话题页下高频质疑分类：价格落差、案例雷同、售后条款缺失，附代表性评论原文。", related: "AI 工具测评（跟进中）", tech: [["jobId", "ingest-20260813-213000"], ["原始路径", "~/wmb/sources/2026/08/13/xhs-2130.md"], ["类型", "帖子"], ["字数", "980"]] },
+    lib5: { title: "Karpathy 新视频要点", eyebrow: "资料室 · 原件", meta: "X · @karpathy · 视频 · 昨天 14:26", summary: "新视频逐段要点与时间戳，观点与既有「工具测评」线直接相关。", related: "AI 工具测评（跟进中）", tech: [["jobId", "ingest-20260813-142600"], ["原始路径", "~/wmb/sources/2026/08/13/x-1426.md"], ["类型", "视频"], ["时长", "38 分钟"]] },
+    lib6: { title: "OpenAI 官方开发者日直播笔记", eyebrow: "资料室 · 原件", meta: "网页 · 笔记整理 · 今天 08:47", summary: "开发者日直播的结构化笔记：发布项、开发者影响、社区反应摘录。", related: "尚未归主题", tech: [["jobId", "ingest-20260814-084700"], ["原始路径", "~/wmb/sources/2026/08/14/web-0847.md"], ["类型", "文章"], ["字数", "2,100"]] },
+    d1: { title: "「AI 编程课测评」合集拆解", eyebrow: "前线 · 榜单", meta: "小红书 · 科技自习室 · 热度 84 · 今天 09:12", summary: "榜单来源。与「AI 编程课测评」选题直接相关，已建议资料员收录。", related: "建议归入 AI 工具测评", tech: [["采集任务", "scan-20260814-0900"], ["信源", "小红书话题"], ["热度口径", "赞 + 藏 + 评论加权"]] },
+    d2: { title: "OpenAI 官方开发者日直播笔记", eyebrow: "前线 · 榜单", meta: "X · @openai · 热度 91 · 今天 08:47", summary: "开发者日官方动态，热度最高来源之一。", related: "未归主题", tech: [["采集任务", "scan-20260814-0840"], ["信源", "X 时间线"]] },
+    d3: { title: "「AI 编程课到底值不值」评论区高频质疑", eyebrow: "前线 · 榜单", meta: "小红书 · 话题页 · 热度 78 · 昨天 21:30", summary: "话题页下高频质疑分类，与「AI 编程课测评」选题互为佐证。", related: "建议归入 AI 工具测评", tech: [["采集任务", "scan-20260813-2130"], ["信源", "小红书话题"]] },
+    d4: { title: "前端周刊 #182 工具节选", eyebrow: "前线 · 榜单", meta: "公众号 · 前端早读课 · 热度 55 · 昨天 18:02", summary: "订阅源节选，读者追问密集。", related: "前端视角", tech: [["采集任务", "scan-20260813-1800"], ["信源", "公众号订阅"]] },
+    d5: { title: "Karpathy 新视频要点", eyebrow: "前线 · 榜单", meta: "X · @karpathy · 热度 88 · 昨天 14:26", summary: "高热度信源，观点与工具测评线直接相关。", related: "建议归入 AI 工具测评", tech: [["采集任务", "scan-20260813-1420"], ["信源", "X 时间线"]] },
+    d6: { title: "某课程销量页快照", eyebrow: "前线 · 榜单", meta: "网页 · 快照 · 08-12", summary: "销量与价格存档，竞品观察素材。", related: "竞品观察", tech: [["采集任务", "scan-20260812-1830"], ["信源", "手动指定"]] },
+    d7: { title: "LangChain 周报", eyebrow: "前线 · X 列表", meta: "X · 长列表 #ai-tools · 热度 63 · 今天 10:02", summary: "工具向周报，话题源之一。", related: "AI 工具测评", tech: [["采集任务", "scan-20260814-1000"], ["信源", "X 列表 #ai-tools"]] },
+    d8: { title: "官方开发者日逐条回应", eyebrow: "前线 · X 列表", meta: "X · @openai · 热度 74 · 今天 08:50", summary: "开发者日发布项的逐条回应串。", related: "未归主题", tech: [["采集任务", "scan-20260814-0845"], ["信源", "X 时间线"]] },
+    d9: { title: "「提示词工程师还值钱吗」讨论串", eyebrow: "前线 · X 列表", meta: "X · 讨论串 · 热度 69 · 昨天 22:41", summary: "职业向讨论串，可能与「前端视角」交叉。", related: "前端视角", tech: [["采集任务", "scan-20260813-2240"], ["信源", "X 时间线"]] },
+    d10: { title: "周报节选：本周工具向", eyebrow: "前线 · X 列表", meta: "X · 长列表 · 热度 51 · 08-11", summary: "工具向周报节选。", related: "AI 工具测评", tech: [["采集任务", "scan-20260811-1830"], ["信源", "X 列表"]] },
+    d11: { title: "「AI 编程课」话题", eyebrow: "前线 · 监测中", meta: "小红书 · 24h 内 3 条高热帖 · 下次检查 今天 11:00", summary: "持续监测对象，热度上升中。", related: "AI 工具测评", tech: [["监测项", "xhs-topic-ai-course"], ["检查间隔", "2 小时"]] },
+    d12: { title: "@karpathy 动态", eyebrow: "前线 · 监测中", meta: "X · 新视频发布 · 下次检查 今天 12:00", summary: "高价值信源持续监测。", related: "AI 工具测评", tech: [["监测项", "x-user-karpathy"], ["检查间隔", "1 小时"]] },
+    d13: { title: "前端早读课", eyebrow: "前线 · 监测中", meta: "公众号 · 每周日 8 点更新", summary: "订阅源固定监测。", related: "前端视角", tech: [["监测项", "wx-frontend-weekly"], ["检查间隔", "每周"]] },
+    p1: { title: "「AI 编程课测评」—— 为什么都在劝退", eyebrow: "策划组 · 待批", meta: "优先级 SSS · 小红书 · 依据 3 条资料", summary: "对比课程宣传与真实体验。评论区高频质疑与课程宣传冲突明显，素材最齐，可当日成稿。", related: "AI 工具测评", tech: [["呈报 jobId", "job-24218"], ["起草", "策划 #1"], ["依据", "lib1 / lib4 / lib5"]] },
+    p2: { title: "「前端工程师还学不学 AI 编程课」—— 双面访谈", eyebrow: "策划组 · 待批", meta: "优先级 S · 公众号 · 依据 2 条资料", summary: "两位一线工程师口述，读者追问密集，适合公众号长文。", related: "前端视角", tech: [["呈报 jobId", "job-24220"], ["起草", "策划 #1"], ["依据", "lib3 / d9"]] },
+    p3: { title: "「Karpathy 新视频」逐条拆解", eyebrow: "策划组 · 待批", meta: "优先级 A · X · 依据 2 条资料", summary: "长文向拆解，可沉淀为「AI 工具测评」资料。", related: "AI 工具测评", tech: [["呈报 jobId", "job-24221"], ["起草", "策划 #1"], ["依据", "lib5 / d12"]] },
+    p4: { title: "「Cursor 类工具的真实成本」", eyebrow: "策划组 · 已批", meta: "优先级 SSS · 小红书 · 在写", summary: "已在写字间写作中。", related: "AI 工具测评", tech: [["呈报 jobId", "job-24198"]] },
+    p5: { title: "「开发者日，普通开发者该关心什么」", eyebrow: "策划组 · 已批", meta: "优先级 S · X · 已发布", summary: "已发布，等评报栏数据回流。", related: "前端视角", tech: [["呈报 jobId", "job-24190"]] },
+    p6: { title: "「每月 99 美元值不值」", eyebrow: "策划组 · 已否", meta: "优先级 B · 小红书", summary: "角度与已批选题重叠，否。", related: "—", tech: [["呈报 jobId", "job-24177"]] },
+    t1: { title: "「AI 编程课测评」—— 为什么都在劝退", eyebrow: "主编桌 · 呈报", meta: "优先级 SSS · 小红书 · 今天 09:30 上桌", summary: "今日小红书「AI 编程课」话题讨论升温，评论区高频质疑与课程宣传冲突明显；素材最齐，可当日成稿。", related: "AI 工具测评（跟进中）", tech: [["呈报 jobId", "job-24218"], ["素材完整度", "3 / 3"], ["上桌时间", "2026-08-14 09:30"]] },
+    t2: { title: "「前端工程师还学不学 AI 编程课」—— 双面访谈", eyebrow: "主编桌 · 呈报", meta: "优先级 S · 公众号 · 今天 09:30 上桌", summary: "公众号读者在「前端周刊 #182」下追问工具替代话题，已约到两位一线工程师口述素材。", related: "前端视角（跟进中）", tech: [["呈报 jobId", "job-24220"], ["素材完整度", "2 / 2"], ["上桌时间", "2026-08-14 09:30"]] },
+    pub1: { title: "「AI 编程课测评」—— 为什么都在劝退", eyebrow: "签发台 · 待签发", meta: "小红书 · 第一稿 · 约 1200 字", summary: "图文稿，已适配话题与封面，等待人工签发。", related: "AI 工具测评", tech: [["projectId", "proj_ai_course_review"], ["适配批次", "adapt-20260814-1030"], ["素材", "3 图 + 话题"]] },
+    pub2: { title: "「前端工程师还学不学 AI 编程课」", eyebrow: "签发台 · 待签发", meta: "公众号 · 访谈稿 · 约 2600 字", summary: "公众号长文，封面与摘要待定稿后签发。", related: "前端视角", tech: [["projectId", "proj_fe_interview"], ["适配批次", "adapt-20260814-1040"]] },
+    pub3: { title: "「Karpathy 新视频要点」", eyebrow: "签发台 · 已签发", meta: "X · 短图文 · 昨天 16:40", summary: "短图文，已发布，数据在评报栏。", related: "AI 工具测评", tech: [["签发记录", "sig-20260813-164000"]] },
+    r1: { title: "「开发者日，普通开发者该关心什么」", eyebrow: "评报栏 · 近 7 天", meta: "X · 08-13 · 阅读 1.8k · 赞藏 92 · 评论 41", summary: "表现超预期：长文在 X 上获转发扩散，评论区出现 3 条有效追问可沉淀为选题。", related: "前端视角", tech: [["指标回源", "platform-page-20260814"]] },
+    r2: { title: "「Karpathy 新视频要点」", eyebrow: "评报栏 · 近 7 天", meta: "小红书 · 08-12 · 阅读 420 · 赞藏 58 · 评论 12", summary: "表现正常，收藏率高于均值，适合继续做视频拆解向。", related: "AI 工具测评", tech: [["指标回源", "platform-page-20260814"]] },
+    r3: { title: "「Cursor 类工具的真实成本」", eyebrow: "评报栏 · 近 7 天", meta: "小红书 · 08-11 · 阅读 180 · 赞藏 21 · 评论 8", summary: "待复盘：阅读低于预期，需判断是选题还是封面问题。", related: "AI 工具测评", tech: [["指标回源", "platform-page-20260813"]] },
+    r4: { title: "「零基础学 AI 编程，三个月后我放弃了」", eyebrow: "评报栏 · 更早", meta: "小红书 · 07-28 · 阅读 3.1k · 赞藏 240 · 评论 88", summary: "历史高点，评论区沉淀了「课程测评」方向的强需求信号。", related: "AI 工具测评", tech: [["指标回源", "platform-page-20260728"]] },
+    r5: { title: "「我用 AI 写周报的第三周」", eyebrow: "评报栏 · 更早", meta: "公众号 · 07-21 · 阅读 260 · 赞藏 14 · 评论 6", summary: "表现正常。", related: "小红书运营方法论", tech: [["指标回源", "platform-page-20260721"]] },
+    "l2-1": { title: "「Cursor 类工具的真实成本」讨论串", eyebrow: "资料室 · 已入库", meta: "小红书 · 08-13", summary: "讨论串原文，写作依据之一。", related: "AI 工具测评", tech: [["jobId", "ingest-20260813-0930"]] },
+    "l2-2": { title: "「开发者日，普通开发者该关心什么」底稿依据", eyebrow: "资料室 · 已入库", meta: "公众号 · 08-12", summary: "底稿素材整理。", related: "前端视角", tech: [["jobId", "ingest-20260812-1530"]] },
+    "l2-3": { title: "高赞标题规律抽样", eyebrow: "资料室 · 已入库", meta: "小红书 · 08-11", summary: "40 条高赞帖标题抽样与规律。", related: "小红书运营方法论", tech: [["jobId", "ingest-20260811-1120"]] },
+    "l3-1": { title: "无来源热榜截图", eyebrow: "资料室 · 已移出", meta: "小红书 · 08-10", summary: "无法溯源，已移出。", related: "—", tech: [["移出原因", "无法溯源"]] },
+    "l3-2": { title: "某课程广告页", eyebrow: "资料室 · 已移出", meta: "网页 · 08-06", summary: "广告素材，与判断无关，已移出。", related: "—", tech: [["移出原因", "与判断无关"]] }
+  };
+  var DECIDES = {
+    t1: { grade: "SSS · 小红书", headline: "「AI 编程课测评」—— 为什么都在劝退", reason: "今日小红书「AI 编程课」话题讨论升温，评论区高频质疑与课程宣传冲突明显；素材最齐，可当日成稿。", sources: [{ id: "lib1", title: "「AI 编程课测评」合集拆解" }, { id: "lib4", title: "评论区高频质疑" }, { id: "lib5", title: "Karpathy 新视频要点" }] },
+    t2: { grade: "S · 公众号", headline: "「前端工程师还学不学 AI 编程课」—— 双面访谈", reason: "公众号读者在「前端周刊 #182」下追问工具替代话题，已约到两位一线工程师口述素材。", sources: [{ id: "lib3", title: "前端周刊 #182 工具节选" }, { id: "d9", title: "提示词工程师讨论串" }] }
+  };
+
+  function openSource(id, trigger) {
+    var s = SOURCES[id];
+    if (!s) return;
+    $("#srcTitle").textContent = "来源详情";
+    $("#srcEyebrow").textContent = s.eyebrow;
+    $("#srcLinkTitle").textContent = s.title;
+    $("#srcMeta").innerHTML = '<span class="mono">' + s.meta + "</span>";
+    $("#srcSummary").textContent = s.summary;
+    $("#srcRelated").textContent = s.related;
+    $("#srcTechGrid").innerHTML = s.tech.map(function (kv) {
+      return "<dt>" + kv[0] + "</dt><dd>" + kv[1] + "</dd>";
+    }).join("");
+    openModal($("#sourceModal"), trigger);
+  }
+
+  /* ---------------- Modal 基础设施 ---------------- */
+  function openModal(m, trigger) {
+    m.__lastFocus = trigger || document.activeElement;
+    m.hidden = false;
+    var first = $(".modal-close, [data-autofocus]", m) || $("button", m);
+    if (first) first.focus();
+  }
+  function closeModal(m) {
+    m.hidden = true;
+    if (m.__lastFocus && m.__lastFocus.focus) m.__lastFocus.focus();
+  }
+  $$(".modal-backdrop").forEach(function (m) {
+    m.addEventListener("click", function (e) { if (e.target === m) closeModal(m); });
+    m.addEventListener("keydown", function (e) {
+      if (e.key === "Tab") {
+        var els = $$("button, [href], input, select, textarea", m).filter(function (el) { return !el.disabled && el.offsetParent !== null; });
+        if (!els.length) return;
+        var first = els[0], last = els[els.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+    $$(".modal-close", m).forEach(function (b) { b.addEventListener("click", function () { closeModal(m); }); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var open = $$(".modal-backdrop").filter(function (m) { return !m.hidden; });
+    if (open.length) { closeModal(open[open.length - 1]); return; }
+    if (piDock.classList.contains("open")) closePi();
+  });
+
+  /* ---------------- Pi 浮层 ---------------- */
+  var piDock = $("#piDock"), piToggle = $("#piToggle"), piReopen = $("#piReopen");
+  function openPi() {
+    piDock.hidden = false;
+    piDock.classList.add("open");
+    piReopen.hidden = true;
+    piToggle.setAttribute("aria-expanded", "true");
+    $("#piInput").focus();
+  }
+  function closePi() {
+    piDock.classList.remove("open");
+    piDock.hidden = true;
+    piReopen.hidden = false;
+    piToggle.setAttribute("aria-expanded", "false");
+    piToggle.focus();
+  }
+  piToggle.addEventListener("click", function () {
+    if (piDock.classList.contains("open")) closePi(); else openPi();
+  });
+  piReopen.addEventListener("click", openPi);
+  $("#piClose").addEventListener("click", closePi);
+  $("#piSend").addEventListener("click", function () {
+    var v = $("#piInput").value.trim();
+    if (!v) return;
+    var secs = $$("#piDock .pi-sec");
+    var sec = secs[1];
+    var msg = document.createElement("div");
+    msg.className = "pi-msg pi-msg--user";
+    msg.textContent = v;
+    sec.appendChild(msg);
+    $("#piInput").value = "";
+    sec.scrollTop = sec.scrollHeight;
+    setOp(currentRoom, "Pi 已把「" + v.slice(0, 12) + "…」派给桌助", false);
+  });
+  $("#piSuggestApprove").addEventListener("click", function () {
+    if (currentRoom === "today") openDecide("t1", this);
+    else { switchRoom("today", false); setTimeout(function () { openDecide("t1", null); }, 30); }
+  });
+  $("#piSuggestTopic").addEventListener("click", function () {
+    if (currentRoom !== "topics") switchRoom("topics", false);
+    setOp("topics", "", true);
+  });
+
+  /* ---------------- 主题 / 演示状态 / 主题切换 ---------------- */
+  var root = document.documentElement;
+  function syncTheme() {
+    var light = root.getAttribute("data-theme") === "light";
+    $("#themeLabel").textContent = light ? "墨夜" : "白昼";
+    $("#themeBtn").setAttribute("aria-label", light ? "切换到墨夜" : "切换到白昼");
+    $("#sbTheme").textContent = light ? "白昼" : "墨夜";
+    var iconEl = $("#themeBtn svg");
+    if (iconEl) iconEl.innerHTML = ICONS[light ? "sun" : "moon"];
+  }
+  $("#themeBtn").addEventListener("click", function () {
+    root.setAttribute("data-theme", root.getAttribute("data-theme") === "light" ? "dark" : "light");
+    syncTheme();
+  });
+
+  function setDemo(v) {
+    root.setAttribute("data-demo", v);
+    $$(".ds-btn").forEach(function (x) {
+      x.setAttribute("aria-pressed", x.getAttribute("data-demo") === v ? "true" : "false");
+    });
+    $("#sbDemo").textContent = { content: "内容", loading: "加载", error: "错误", empty: "空" }[v];
+    if (v === "loading") $("#sbStatus").setAttribute("data-s", "run");
+    else $("#sbStatus").setAttribute("data-s", "idle");
+  }
+  $$(".ds-btn").forEach(function (b) {
+    b.addEventListener("click", function () { setDemo(b.getAttribute("data-demo")); });
+  });
+  $$(".sv-retry").forEach(function (b) {
+    b.addEventListener("click", function () { setDemo("content"); });
+  });
+
+  $("#principlesBtn").addEventListener("click", function () { openModal($("#principlesModal"), this); });
+
+  /* ---------------- 时钟 / 日期 ---------------- */
+  function tick() {
+    var d = new Date();
+    var hh = ("0" + d.getHours()).slice(-2), mm = ("0" + d.getMinutes()).slice(-2), ss = ("0" + d.getSeconds()).slice(-2);
+    $("#sbClock").textContent = hh + ":" + mm + ":" + ss;
+  }
+  tick();
+  setInterval(tick, 1000);
+  var now = new Date();
+  $("#todayDate").textContent = (now.getMonth() + 1) + " 月 " + now.getDate() + " 日 · 星期" + "日一二三四五六".charAt(now.getDay());
+
+  /* ---------------- Init ---------------- */
+  fillIcons(document);
+  $$(".tabs").forEach(initTablist);
+
+  switchRoom("library", false);
+  updateTodayPending();
+  bumpProp();
+  syncTheme();
+})();
+</script>
+</body>
+</html>

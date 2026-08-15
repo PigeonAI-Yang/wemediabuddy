@@ -140,6 +140,23 @@ export function buildSaveSourcePayload(params: Record<string, unknown>): Record<
     }
   }
   const excerpt = params.excerpt ? String(params.excerpt) : undefined;
+  // WMB-5244 §7.4：可选结构化远程媒体候选（研究/记者保存时冻结发现的图片/视频槽位）。
+  // 只透传数组形状；URL/scheme/限额的最终校验在服务端（sources.upsert_batch）执行，
+  // 拒绝 file:/wmb-asset:/本地路径等非 http(s) 身份。空数组按「无候选」处理。
+  const mediaCandidates = Array.isArray(params.mediaCandidates)
+    ? (params.mediaCandidates as Array<Record<string, unknown>>).map((candidate) => {
+        const mapped: Record<string, unknown> = {
+          kind: candidate.kind,
+          url: candidate.url
+        };
+        if (candidate.postKind !== undefined) mapped.postKind = candidate.postKind;
+        if (candidate.parentUrl !== undefined) mapped.parentUrl = candidate.parentUrl;
+        if (candidate.ordinal !== undefined) mapped.ordinal = candidate.ordinal;
+        if (candidate.captionHint !== undefined) mapped.captionHint = candidate.captionHint;
+        if (candidate.surroundingText !== undefined) mapped.surroundingText = candidate.surroundingText;
+        return mapped;
+      })
+    : undefined;
   return {
     request_id: String(params.requestId ?? ''),
     task_id: String(params.taskId ?? ''),
@@ -155,7 +172,8 @@ export function buildSaveSourcePayload(params: Record<string, unknown>): Record<
       categories: research ? ['研究补料'] : ['Pi 协作'],
       keywords: research ? ['research'] : ['Pi', 'WMB', 'MCP'],
       priority: 1,
-      clientLabel: params.clientLabel ? String(params.clientLabel) : 'WMB built-in Pi'
+      clientLabel: params.clientLabel ? String(params.clientLabel) : 'WMB built-in Pi',
+      ...(mediaCandidates && mediaCandidates.length > 0 ? { mediaCandidates } : {})
     }]
   };
 }
@@ -177,7 +195,26 @@ const saveSource: ToolDefinition = {
       workerLeaseId: { type: 'string' },
       publishedAt: { type: 'string' },
       excerpt: { type: 'string' },
-      clientLabel: { type: 'string' }
+      clientLabel: { type: 'string' },
+      mediaCandidates: {
+        type: 'array',
+        maxItems: 24,
+        description: '可选结构化远程媒体候选（http(s) URL；服务端重新验证并拒绝 file:/wmb-asset:/本地路径）',
+        items: {
+          type: 'object',
+          properties: {
+            kind: { type: 'string', enum: ['image', 'video', 'video_poster'] },
+            url: { type: 'string', maxLength: 2048 },
+            postKind: { type: 'string', enum: ['tweet', 'repost', 'quote', 'web'] },
+            parentUrl: { type: 'string', maxLength: 2048 },
+            ordinal: { type: 'number', minimum: 0, maximum: 255 },
+            captionHint: { type: 'string', maxLength: 500 },
+            surroundingText: { type: 'string', maxLength: 2000 }
+          },
+          required: ['kind', 'url'],
+          additionalProperties: false
+        }
+      }
     },
     required: ['requestId', 'taskId', 'grantId', 'workerLeaseId', 'title', 'originalUrl', 'summary'],
     additionalProperties: false
@@ -244,6 +281,36 @@ const getKnowledgeContext: ToolDefinition = {
   parameters: { type: 'object', properties: { topicId: { type: 'string' }, sourceId: { type: 'string' }, query: { type: 'string' }, limit: { type: 'number' } }, additionalProperties: false },
   async execute(_toolCallId, params) {
     return textResult(await callTool('knowledge.get_context', { topic_id: params.topicId, source_id: params.sourceId, query: params.query, limit: params.limit }));
+  }
+};
+
+/** WMB-5240：固定版本 Query 读面（「基于这些版本回答」的只读入口）。 */
+const getFixedVersions: ToolDefinition = {
+  name: 'wmb_get_fixed_versions', label: '读取固定版本知识',
+  description: '按固定版本引用（wiki_page:<pageId>:<versionId> / knowledge_note:<noteId>:<versionId> / evidence:<id>）或版本 id 读取冻结 Wiki 页版本、Note 版本与 Evidence（只读；版本删除、归属漂移或跨 workspace 一律 fail-closed 返回错误，零部分结果）。用户说「基于这些版本回答」时先调用本工具冻结读取指定版本，再基于返回内容回答，并可按 wmb_query_writeback 协议写回。',
+  parameters: {
+    type: 'object',
+    properties: {
+      wikiVersionRefs: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      noteVersionRefs: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      evidenceRefs: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      wikiVersionIds: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      noteVersionIds: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      evidenceIds: { type: 'array', items: { type: 'string' }, maxItems: 64 },
+      question: { type: 'string' }
+    },
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('knowledge.fixed_versions_get', {
+      wiki_version_refs: params.wikiVersionRefs,
+      note_version_refs: params.noteVersionRefs,
+      evidence_refs: params.evidenceRefs,
+      wiki_version_ids: params.wikiVersionIds,
+      note_version_ids: params.noteVersionIds,
+      evidence_ids: params.evidenceIds,
+      question: params.question
+    }));
   }
 };
 
@@ -384,4 +451,4 @@ const updateSourceStatus: ToolDefinition = {
   }))
 };
 
-export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, suggestKnowledge, judgeSources, restoreSource, updateSourceStatus];
+export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, getFixedVersions, suggestKnowledge, judgeSources, restoreSource, updateSourceStatus];

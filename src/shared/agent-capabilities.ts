@@ -33,6 +33,7 @@ export type AgentCapabilityId =
   | 'cap.review'
   | 'cap.desk'
   | 'cap.internal_prepare'
+  | 'cap.wiki_maintain'
   | 'cap.publish_prep'
   | 'cap.hard_delete'
   | 'cap.platform_mutation';
@@ -251,6 +252,22 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     agentGrantable: true,
     owner: 'desk',
     since: '2026-08-10'
+  }),
+  Object.freeze({
+    id: 'cap.wiki_maintain',
+    displayName: '全库维护与 Lint',
+    description: 'WMB-5240 全 Wiki 操作：维护 run 生命周期（start/pause/resume）与全局 Lint 有界步进；仅主管 standing；Ingest 复用 cap.collect/research 的 sources.upsert_batch',
+    commands: Object.freeze([
+      'knowledge.maintenance',
+      'knowledge.lint'
+    ] as const),
+    readProfiles: Object.freeze(['knowledge'] as const),
+    defaultRoleBindings: Object.freeze({ desk: true }),
+    grantKinds: Object.freeze({ page: Object.freeze(['library', 'topic'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'desk',
+    since: '2026-08-14'
   }),
   Object.freeze({
     id: 'cap.publish_prep',

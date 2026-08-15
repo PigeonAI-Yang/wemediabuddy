@@ -1,0 +1,48 @@
+<!-- @dsCard group="Guidelines" viewport="700x360" name="RoomForms" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Room Forms</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  .forms { display: grid; gap: 10px; }
+  .form { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--surface); }
+  .form b { color: var(--accent-soft); font-size: 13px; }
+  .form span { color: var(--ink-soft); font-size: 12.5px; line-height: 1.55; }
+  .diagram { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: 10px 26px 10px; gap: 2px; margin-top: 4px; }
+  .diagram i { display: block; border-radius: 2px; }
+  .diagram .top { grid-column: 1 / -1; background: var(--topbar-bg); border: 1px solid var(--border-soft); }
+  .diagram .nav { background: var(--sidebar-bg); border: 1px solid var(--border-soft); }
+  .diagram .work { background: var(--workspace-bg); border: 1px solid var(--border-soft); }
+  .diagram .pi { background: var(--panel-bg); border: 1px solid var(--border-soft); }
+  .diagram .stat { grid-column: 1 / -1; background: var(--topbar-bg); border: 1px solid var(--border-soft); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Room Forms — 三种批准形态</h1>
+<p>产品只有三种房间骨架（WMB-5258 §2），没有第四种临时页：</p>
+<div class="forms">
+  <div class="form">
+    <b>1 · Desk/list</b>
+    <span>外壳 + 单一滚动属主（.ds-page）+ 规范 page command/header + 内容分区。今日 / 发现 / 选题 / 智能体 / 结果 / 资料库。</span>
+  </div>
+  <div class="form">
+    <b>2 · Reading/detail</b>
+    <span>居中限宽阅读列（≤1080px），显式返回/面包屑，一个标题，文档层级。主题 Wiki 与资料详情。</span>
+  </div>
+  <div class="form">
+    <b>3 · Workspace exception</b>
+    <span>画布 / 创作可全幅多栏，但必须声明各 pane 的滚动属主，并消费同一套 primitive、弹窗、状态、主题与响应式外壳。</span>
+  </div>
+</div>
+<div class="diagram">
+  <i class="top"></i><i class="nav"></i><i class="work"></i><i class="pi"></i><i class="stat"></i>
+</div>
+<p style="margin-top:10px;">外壳：216 侧栏 · 弹性工作区 · Pi clamp(340px,24vw,400px)；顶栏 56px；状态栏 34px。</p>
+</body>
+</html>

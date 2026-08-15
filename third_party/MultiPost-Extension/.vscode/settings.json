@@ -1,0 +1,32 @@
+{
+  //#region 格式化
+  "editor.codeActionsOnSave": {
+    "source.fixAll.stylelint": "explicit"
+  },
+
+  "editor.defaultFormatter": "esbenp.prettier-vscode", // 默认使用 prettier 进行格式化
+
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true // 保存的时候自动格式化
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true // 保存的时候自动格式化
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true // 保存的时候自动格式化
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true // 保存的时候自动格式化
+  },
+
+  "i18n-ally.enabledFrameworks": ["chrome-ext", "react"],
+  "i18n-ally.localesPaths": ["locales"],
+  "i18n-ally.dirStructure": "auto",
+  "i18n-ally.keystyle": "nested",
+  "i18n-ally.enabledParsers": ["json"],
+  "makefile.configureOnOpen": false
+}

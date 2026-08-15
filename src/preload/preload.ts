@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { StudioAnnotation, StudioAnnotationResolveReason, StudioCommandResult, StudioDocumentScope, StudioReconcileMode } from '../shared/studio-annotations.ts';
+import type { ContentMediaBindingDraft, CropRegion, PlatformClipPayload, PlatformCropPayload, PlatformMediaBindingDraft } from '../shared/media-bindings.ts';
 import {
   KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS,
   KNOWLEDGE_FLYWHEEL_WRITE_IPC_CHANNEL,
@@ -54,6 +55,15 @@ import {
   type KnowledgeCanvasSelectionManifest,
   type KnowledgeCanvasSelectionManifestInput
 } from '../shared/knowledge-canvas.ts';
+// WMB-5243：全局 Wiki 知识网络只读投影（无 canvasId；稳定节点 ID；正式对象只读投影）。
+import {
+  KNOWLEDGE_NETWORK_NODE_DETAIL_IPC_CHANNEL,
+  KNOWLEDGE_NETWORK_PROJECTION_IPC_CHANNEL,
+  type KnowledgeNetworkNodeDetail,
+  type KnowledgeNetworkNodeDetailInput,
+  type KnowledgeNetworkProjection,
+  type KnowledgeNetworkProjectionInput
+} from '../shared/knowledge-network.ts';
 import {
   KNOWLEDGE_DEEP_LINK_IPC_CHANNEL,
   KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL,
@@ -65,6 +75,57 @@ import {
   type TopicWikiDetail,
   type TopicWikiDetailInput
 } from '../shared/knowledge-topic-library.ts';
+import {
+  KNOWLEDGE_MAINTENANCE_IPC_CHANNELS,
+  type KnowledgeMaintenanceRun,
+  type KnowledgeMaintenanceStartInput,
+  type KnowledgeMaintenanceStartResult,
+  type KnowledgeMaintenanceStatusView
+} from '../shared/knowledge-maintenance.ts';
+// WMB-5238：统一全文搜索 / 索引摘要 / 有界 hot cache 只读（类型见 src/shared/knowledge-search.ts）。
+import {
+  WIKI_SEARCH_READ_IPC_CHANNELS,
+  type WikiHotCacheStatus,
+  type WikiIndexSummary,
+  type WikiSearchFilter,
+  type WikiSearchPage
+} from '../shared/knowledge-search.ts';
+// WMB-5238：全局知识时间日志只读（类型见 src/shared/knowledge-global-log.ts）。
+import {
+  KNOWLEDGE_GLOBAL_LOG_READ_IPC_CHANNELS,
+  type KnowledgeLogEntry,
+  type KnowledgeLogPage,
+  type KnowledgeLogReadFilter
+} from '../shared/knowledge-global-log.ts';
+// WMB-5244：Source 媒体读模型投影 + 用户重试/全局暂停（通道常量与类型见 src/shared/source-media.ts）。
+import {
+  SOURCE_MEDIA_ARCHIVE_PAUSE_IPC_CHANNEL,
+  SOURCE_MEDIA_OPEN_ORIGINAL_IPC_CHANNEL,
+  SOURCE_MEDIA_OVERVIEW_IPC_CHANNEL,
+  SOURCE_MEDIA_RETRY_IPC_CHANNEL,
+  type SourceMediaArchivePauseInput,
+  type SourceMediaOpenOriginalInput,
+  type SourceMediaOverview,
+  type SourceMediaOverviewInput,
+  type SourceMediaRetryInput
+} from '../shared/source-media.ts';
+// WMB-5246：创作媒体建议（生成/决定/读模型；通道常量与类型见 src/shared/media-recommendations.ts）。
+import {
+  MEDIA_RECOMMENDATIONS_DECIDE_IPC_CHANNEL,
+  MEDIA_RECOMMENDATIONS_GENERATE_IPC_CHANNEL,
+  MEDIA_RECOMMENDATIONS_LIST_IPC_CHANNEL,
+  type MediaRecommendation,
+  type MediaRecommendationsReadModel
+} from '../shared/media-recommendations.ts';
+// WMB-5269：正文归档失败统一异常中心（列表读模型 + 新周期重试；通道常量与类型见 src/shared/source-body-archive.ts）。
+import {
+  SOURCES_LIST_BODY_CAPTURE_FAILURES_IPC_CHANNEL,
+  SOURCES_RETRY_BODY_CAPTURE_FAILURES_IPC_CHANNEL,
+  type SourceBodyCaptureFailureListInput,
+  type SourceBodyCaptureFailureListResult,
+  type SourceBodyCaptureRetryInput,
+  type SourceBodyCaptureRetryResult
+} from '../shared/source-body-archive.ts';
 type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 contextBridge.exposeInMainWorld('wmb', {
@@ -133,7 +194,12 @@ contextBridge.exposeInMainWorld('wmb', {
   collectXListTimeline: (input: { accountKey: string; listId: string; limit?: number }) => ipcRenderer.invoke('x-lists:collect-timeline', input),
   listKnowledgeSources: (input = {}) => ipcRenderer.invoke('knowledge:list-sources', input),
   updateKnowledgeSource: (input: unknown) => ipcRenderer.invoke('knowledge:update-source', input),
-  deleteKnowledgeSource: (input: { id: string; expectedRevision: number }) => ipcRenderer.invoke('knowledge:delete-source', input),
+  deleteKnowledgeSource: (input: { id: string; expectedRevision: number; confirmReferencedDelete?: boolean }) => ipcRenderer.invoke('knowledge:delete-source', input),
+  // WMB-5247：情报媒体治理（owner UI 显式动作；无 Agent grant）。
+  mediaOverrideRestricted: (input: { bindingId: string; reason: string }) => ipcRenderer.invoke('media:rights-override', input),
+  mediaRunGc: (input: { dryRun?: boolean; retentionDays?: number }) => ipcRenderer.invoke('media:gc-run', input),
+  mediaRunStagingCleanup: (input?: { dryRun?: boolean; maxStaleMs?: number }) => ipcRenderer.invoke('media:staging-cleanup', input),
+  mediaSourceDeleteGate: (input: { sourceId: string }) => ipcRenderer.invoke('media:delete-gate', input),
   laneRestoreSource: (input: { sourceId: string; expectedRevision: number; reason?: string }) => ipcRenderer.invoke('knowledge:lane-restore', input),
   listWatchingSources: (input: { limit?: number } = {}) => ipcRenderer.invoke('knowledge:list-watching', input),
   markSourcesWatching: (input: { sourceIds: string[] }) => ipcRenderer.invoke('knowledge:mark-watching', input),
@@ -141,6 +207,18 @@ contextBridge.exposeInMainWorld('wmb', {
   listSourceBodyCaches: (sourceIds: string[] = []) => ipcRenderer.invoke('sources:list-body-cache', sourceIds),
   fetchSourceBody: (input: { sourceId: string; force?: boolean; maxChars?: number }) => ipcRenderer.invoke('sources:fetch-body', input),
   getWireHealthLedger: (input: { businessDate?: string } = {}) => ipcRenderer.invoke('sources:wire-health', input),
+  // WMB-5269：正文归档失败统一异常中心（列表读模型 + 新周期重试；通道/类型见 src/shared/source-body-archive.ts）。
+  listSourceBodyCaptureFailures: (input?: SourceBodyCaptureFailureListInput) => ipcRenderer.invoke(SOURCES_LIST_BODY_CAPTURE_FAILURES_IPC_CHANNEL, input) as Promise<SourceBodyCaptureFailureListResult>,
+  retrySourceBodyCaptureFailures: (input: SourceBodyCaptureRetryInput) => ipcRenderer.invoke(SOURCES_RETRY_BODY_CAPTURE_FAILURES_IPC_CHANNEL, input) as Promise<SourceBodyCaptureRetryResult>,
+  // WMB-5244：Source 媒体当前 revision 读模型 + 用户动作（类型/通道见 src/shared/source-media.ts）。
+  getSourceMediaOverview: (input: SourceMediaOverviewInput) => ipcRenderer.invoke(SOURCE_MEDIA_OVERVIEW_IPC_CHANNEL, input) as Promise<SourceMediaOverview>,
+  retrySourceMedia: (input: SourceMediaRetryInput) => ipcRenderer.invoke(SOURCE_MEDIA_RETRY_IPC_CHANNEL, input),
+  setMediaArchivePaused: (input: SourceMediaArchivePauseInput) => ipcRenderer.invoke(SOURCE_MEDIA_ARCHIVE_PAUSE_IPC_CHANNEL, input),
+  openSourceMediaOriginal: (input: SourceMediaOpenOriginalInput) => ipcRenderer.invoke(SOURCE_MEDIA_OPEN_ORIGINAL_IPC_CHANNEL, input),
+  // WMB-5246：创作媒体建议（生成/决定/读模型；接受仍是独立 Studio 保存边界）。
+  listMediaRecommendations: (input: { contentVersionId: string; projectId?: string }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_LIST_IPC_CHANNEL, input) as Promise<MediaRecommendationsReadModel>,
+  generateMediaRecommendations: (input: { contentVersionId: string; projectId: string; sourceRevisionKeys: string[]; allowGeneratedCover?: boolean; requestId?: string }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_GENERATE_IPC_CHANNEL, input),
+  decideMediaRecommendation: (input: { id: string; expectedRevision: number; decision: 'accept' | 'reject'; confirmedByOwner?: boolean }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_DECIDE_IPC_CHANNEL, input) as Promise<{ ok: boolean; data?: MediaRecommendation; error?: unknown }>,
   getXhsStatus: () => ipcRenderer.invoke('xhs:status'),
   ensureXhs: () => ipcRenderer.invoke('xhs:ensure'),
   startXhsLogin: () => ipcRenderer.invoke('xhs:start-login'),
@@ -169,6 +247,9 @@ contextBridge.exposeInMainWorld('wmb', {
   // WMB-5213：三模式投影 / 节点详情深链 / selected-only 清单（只读；类型见 src/shared/knowledge-canvas.ts）。
   getKnowledgeCanvasProjection: (input: KnowledgeCanvasProjectionInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_PROJECTION_IPC_CHANNEL, input) as Promise<KnowledgeCanvasProjection>,
   getCanvasNodeDetail: (input: KnowledgeCanvasNodeDetailInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_DETAIL_IPC_CHANNEL, input) as Promise<KnowledgeCanvasNodeDetail>,
+  // WMB-5243：全局 Wiki 知识网络只读投影 / 节点知识本体详情（类型见 src/shared/knowledge-network.ts）。
+  getKnowledgeNetworkProjection: (input: KnowledgeNetworkProjectionInput) => ipcRenderer.invoke(KNOWLEDGE_NETWORK_PROJECTION_IPC_CHANNEL, input) as Promise<KnowledgeNetworkProjection>,
+  getKnowledgeNetworkNodeDetail: (input: KnowledgeNetworkNodeDetailInput) => ipcRenderer.invoke(KNOWLEDGE_NETWORK_NODE_DETAIL_IPC_CHANNEL, input) as Promise<KnowledgeNetworkNodeDetail>,
   validateKnowledgeSelectionManifest: (input: KnowledgeCanvasSelectionManifestInput) => ipcRenderer.invoke(KNOWLEDGE_CANVAS_SELECTION_MANIFEST_IPC_CHANNEL, input) as Promise<KnowledgeCanvasSelectionManifest>,
   previewKnowledgeContextPackage: (input: unknown) => ipcRenderer.invoke('knowledge-context:preview-package', input),
   listKnowledgeContextPackages: (input?: unknown) => ipcRenderer.invoke('knowledge-context:list-packages', input),
@@ -219,13 +300,29 @@ contextBridge.exposeInMainWorld('wmb', {
   listKnowledgeUsagePackages: (input?: KnowledgeUsagePackageReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listUsagePackages, input) as Promise<KnowledgeFlywheelListResult<KnowledgeUsagePackageRecord>>,
   getKnowledgeUsageRecord: (input: KnowledgeObjectIdRead) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.getUsageRecord, input) as Promise<KnowledgeUsageRecordRecord | null>,
   listKnowledgeUsageRecords: (input?: KnowledgeUsageRecordReadFilter) => ipcRenderer.invoke(KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS.listUsageRecords, input) as Promise<KnowledgeFlywheelListResult<KnowledgeUsageRecordRecord>>,
+  // END WMB-5210 M1
+  // WMB-5236：全库维护 run（start/status/pause/resume；类型见 src/shared/knowledge-maintenance.ts）。
+  // start 幂等（活动 run 重复 start 返回同一 run）；status 含持久报告读模型。
+  startKnowledgeMaintenance: (input?: KnowledgeMaintenanceStartInput) => ipcRenderer.invoke(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.start, input) as Promise<KnowledgeMaintenanceStartResult>,
+  getKnowledgeMaintenanceStatus: () => ipcRenderer.invoke(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.status) as Promise<KnowledgeMaintenanceStatusView>,
+  pauseKnowledgeMaintenance: () => ipcRenderer.invoke(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.pause) as Promise<KnowledgeMaintenanceRun | null>,
+  resumeKnowledgeMaintenance: () => ipcRenderer.invoke(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.resume) as Promise<KnowledgeMaintenanceRun>,
+  // WMB-5238：统一全文搜索 / 索引摘要 / 有界 hot cache（只读；类型见 src/shared/knowledge-search.ts）。
+  // 入参纯 JSON 透传；空查询 → 空结果 total 0；非法游标/未知类型由 main boundary 拒绝。
+  searchWikiIndex: (input: WikiSearchFilter) => ipcRenderer.invoke(WIKI_SEARCH_READ_IPC_CHANNELS.search, input) as Promise<WikiSearchPage>,
+  getWikiIndexSummary: () => ipcRenderer.invoke(WIKI_SEARCH_READ_IPC_CHANNELS.summary) as Promise<WikiIndexSummary>,
+  getWikiHotCache: () => ipcRenderer.invoke(WIKI_SEARCH_READ_IPC_CHANNELS.hotCache) as Promise<WikiHotCacheStatus>,
+  // WMB-5238：全局知识时间日志（只读派生读模型；类型见 src/shared/knowledge-global-log.ts）。
+  // list 分页信封带 keyset 游标（before/after）；get 按 `${eventType}:${objectId}` 单条读取。
+  listKnowledgeLogEntries: (input?: KnowledgeLogReadFilter) => ipcRenderer.invoke(KNOWLEDGE_GLOBAL_LOG_READ_IPC_CHANNELS.list, input) as Promise<KnowledgeLogPage>,
+  getKnowledgeLogEntry: (id: string) => ipcRenderer.invoke(KNOWLEDGE_GLOBAL_LOG_READ_IPC_CHANNELS.get, id) as Promise<KnowledgeLogEntry | null>,
   windowControl: (action: 'minimize' | 'maximize' | 'close') => ipcRenderer.invoke('window:control', action),
   listBrowserProfiles: () => ipcRenderer.invoke('browser-profiles:list'),
   getWorkspaceBrowserBinding: () => ipcRenderer.invoke('workspace-browser:get-binding'),
   createBrowserProfile: (input: OwnerBrowserCommand & { label?: string }) => ipcRenderer.invoke('browser-profiles:create', input),
   rebindBrowserProfile: (input: OwnerBrowserCommand & { profileId: string }) => ipcRenderer.invoke('workspace-browser:rebind', input),
-  verifyBrowserAccount: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:verify', input),
-  migrateLegacyBrowserProfile: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }) => ipcRenderer.invoke('workspace-browser:migrate-legacy', input),
+  verifyBrowserAccount: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }) => ipcRenderer.invoke('workspace-browser:verify', input),
+  migrateLegacyBrowserProfile: (input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }) => ipcRenderer.invoke('workspace-browser:migrate-legacy', input),
   savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
@@ -377,7 +474,7 @@ contextBridge.exposeInMainWorld('wmb', {
   restoreProposal: (input: { planItemId: string; reason?: string }) => ipcRenderer.invoke('proposals:restore', input),
   createProjectFromPlanItem: (planItemId: string) => ipcRenderer.invoke('today:create-project', planItemId),
   getStudio: () => ipcRenderer.invoke('studio:get'),
-  listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),
+  listStudioProjects: (input: { query?: string; status?: 'idea' | 'drafting' | 'review' | 'ready' | 'completed'; archived?: boolean; order?: 'recent' | 'oldest' | 'versions'; platform?: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu'; limit?: number; offset?: number }) => ipcRenderer.invoke('studio:list', input),
   getStudioSummary: () => ipcRenderer.invoke('studio:summary'),
   getStudioProject: (projectId: string) => ipcRenderer.invoke('studio:get-detail', projectId),
   createStudioProject: (input: { title: string; body: string }) => ipcRenderer.invoke('studio:create-project', input),
@@ -385,8 +482,8 @@ contextBridge.exposeInMainWorld('wmb', {
   deleteStudioProject: (input: { projectId: string; expectedRevision: number }) => ipcRenderer.invoke('studio:delete-project', input),
   saveDiscoveredSource: (input: { requestId: string; title: string; originalUrl?: string; summary?: string; author?: string; categories?: string[] }) => ipcRenderer.invoke('sources:save-discovered', input),
   copyStudioVersionToProject: (input: { sourceProjectId: string; contentVersionId: string; title: string }) => ipcRenderer.invoke('studio:copy-version', input),
-  saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number }) => ipcRenderer.invoke('studio:save-core', input),
-  saveStudioPlatform: (input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string }) => ipcRenderer.invoke('studio:save-platform', input),
+  saveStudioCore: (input: { projectId: string; title: string; body: string; expectedRevision: number; mediaBindings?: ContentMediaBindingDraft[] }) => ipcRenderer.invoke('studio:save-core', input),
+  saveStudioPlatform: (input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu'; format: string; title?: string; body: string; assetIds?: string[]; mediaBindings?: PlatformMediaBindingDraft[]; cropPayloads?: PlatformCropPayload[]; clipPayloads?: PlatformClipPayload[]; expectedRevision?: number; versionId?: string }) => ipcRenderer.invoke('studio:save-platform', input),
   listStudioAnnotations: (input: StudioDocumentScope & { includeResolved?: boolean }) => ipcRenderer.invoke('studio-annotations:list', input) as Promise<StudioAnnotation[]>,
   createStudioAnnotation: (input: StudioDocumentScope & { body: string; startOffset: number; endOffset: number; note?: string | null }) => ipcRenderer.invoke('studio-annotations:create', input) as Promise<StudioCommandResult<StudioAnnotation>>,
   updateStudioAnnotation: (input: { id: string; expectedRevision: number; note: string | null }) => ipcRenderer.invoke('studio-annotations:update', input) as Promise<StudioCommandResult<StudioAnnotation>>,
@@ -402,6 +499,9 @@ contextBridge.exposeInMainWorld('wmb', {
     bytesBase64?: string;
     alt?: string;
   }) => ipcRenderer.invoke('studio:import-image', input),
+  deriveStudioAsset: (input: { sourceAssetId: string; cropRegion: CropRegion; pngBase64: string }) => ipcRenderer.invoke('studio:derive-asset', input),
+  deriveStudioAnnotation: (input: { sourceAssetId: string; annotationSpec: unknown; pngBase64: string }) => ipcRenderer.invoke('studio:derive-annotation', input),
+  deriveStudioClip: (input: { sourceAssetId: string; startMs: number; endMs: number }) => ipcRenderer.invoke('studio:derive-clip', input),
   getPublications: () => ipcRenderer.invoke('publish:list'),
   collectXMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:collect-x', publicationId),
   schedulePublicationMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:schedule', publicationId),
@@ -429,6 +529,8 @@ contextBridge.exposeInMainWorld('wmb', {
   getPublicationBrowserOperation: (operationId: string) => ipcRenderer.invoke('publish:operation-get', operationId),
   prepareXPublication: (platformVersionId: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId }),
   prepareWechatArticlePublication: (platformVersionId: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId }),
+  prepareZhihuArticlePublication: (platformVersionId: string) => ipcRenderer.invoke('publish:snapshot-create', { platformVersionId }),
   readBackWechatPublication: (publicationId: string, expectedRevision: number, articleUrl: string) => ipcRenderer.invoke('publish:readback-wechat', publicationId, expectedRevision, articleUrl),
-  reconcileNotPublished: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:reconcile-not-published', publicationId, expectedRevision)
+  reconcileNotPublished: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:reconcile-not-published', publicationId, expectedRevision),
+  returnPublicationToEdit: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:return-to-edit', publicationId, expectedRevision)
 });

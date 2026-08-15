@@ -62,6 +62,9 @@ jobs:
         run: |
           npm run typecheck
           npm test
+          npm run package
+          npm run e2e
+          npm run e2e:gate
 
       - name: Build installer and upload draft release
         run: npm run publish

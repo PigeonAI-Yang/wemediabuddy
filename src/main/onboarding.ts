@@ -124,14 +124,18 @@ export function hasActivePiConfig(config: PiConfig): boolean {
 /** Resume step derived from real prerequisites, never a cosmetic page counter:
  * missing workspace → `workspace` (unless still on `welcome`); no active configured
  * Pi profile → `ai`; both met → `complete` when completed else the persisted anchor
- * (a satisfied `welcome`/`workspace` advances to `ai` instead of parking). */
+ * (a satisfied `welcome`/`workspace` advances to `ai` instead of parking).
+ *
+ * 已完成向导的用户（completedAt 已写）不会因后续移除/失配 Pi 配置被重新赶进向导：
+ * shell 已对未配置 Pi 诚实降级（状态栏「Pi 未配置」、composer 引导配置），
+ * 只有工作空间缺失（应用无法运行）才把已完成用户拉回向导。 */
 export function deriveCurrentStep(
   state: Pick<StoredOnboardingState, 'currentStep' | 'completedAt'>,
   prereqs: OnboardingPrerequisites
 ): OnboardingStep {
   if (!prereqs.workspaceReady) return state.currentStep === 'welcome' ? 'welcome' : 'workspace';
-  if (!prereqs.aiReady) return state.currentStep === 'welcome' ? 'welcome' : 'ai';
   if (state.completedAt) return 'complete';
+  if (!prereqs.aiReady) return state.currentStep === 'welcome' ? 'welcome' : 'ai';
   if (state.currentStep === 'welcome' || state.currentStep === 'workspace') return 'ai';
   return state.currentStep === 'complete' ? 'platforms' : state.currentStep;
 }

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -14,6 +14,7 @@ import { migratePiConfigToInstallation, readPiConfig, resolvePiConfigChain, save
 import { startPiRuntimeWithFallback } from './pi-config-fallback';
 import { setSourceKnowledgeCompileDeps, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
 import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, type KnowledgeBackfillDeps } from './knowledge-backfill';
+import { getMaintenanceRun, KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
 import { piModelsJson, WMB_VISION_MODEL } from './pi-model';
@@ -54,6 +55,7 @@ import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
+import { startMediaGovernanceScheduler } from './media-governance-lifecycle.ts';
 import { setDeskJobNotifyBridges } from './manager-job-notify.ts';
 import { registerPublishingResultsIpc } from './ipc-publishing-results';
 import { dispatchRecoverInterruptedPublications } from './publication-commands.ts';
@@ -69,6 +71,9 @@ import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals'; import { createWorkspaceConfirmation } from './workspace-confirmation';
 import { XObservationScheduler } from './x-observation-scheduler'; import { disposeXListSessions } from './platforms/x-list-session'; import { createBrowserProfileOwner } from './browser-profile-owner';
 import { KnowledgeLintScheduler, registerKnowledgeChangeSetLintTrigger } from './knowledge-health';
+import { MediaArchiveScheduler } from './media-archive-worker';
+import { SourceBodyArchiveScheduler } from './source-body-archive';
+import { installProductionWikiIndexProjection } from './wiki-index-triggers';
 import { runLegacyKnowledgeInitAtStartup } from './legacy-knowledge-init';
 import { handleSquirrelLifecycle } from './squirrel-lifecycle';
 import { createDesktopLifecycle } from './desktop-lifecycle';
@@ -156,85 +161,100 @@ if (!hasSingleInstanceLock) {
     window.focus();
   });
 }
+/**
+ * 在飞的 desk 启动承诺：同一时刻只启动一次 Pi worker，并发的 ensurePi 调用复用同一
+ * 启动过程（否则 pi:chat 内 authorize→ensurePageAuthority 与主路径两次 ensurePi 会竞争
+ * desk 独占 lease，第二次拿到「当前 Pi worker lease 尚未释放」）。
+ */
+let deskStartup: Promise<PiRpcSupervisor> | null = null;
 async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable<string> } = {}): Promise<PiRpcSupervisor> {
   const runtime = activeRuntime;
   if (!runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
   const running = currentPi();
   if (running?.isRunning && !options.skipProfileIds) return running;
-  if (running?.isRunning && options.skipProfileIds) await runtime.stopWorker().catch(() => {});
-  const lease = runtime.acquireWorkerLease(null, null, 'desk');
-  const chain = resolvePiConfigChain(undefined, { skipProfileIds: options.skipProfileIds });
-  const failures: string[] = [];
-  let lastError: unknown;
-  try {
-    const layout = await ensurePiConversationLayout(dataRoot.path);
-    const conversation = await readPiConversation(dataRoot.path, { recoverInterrupted: true });
-    runtime.setPiSessionFile(conversation.sessionFile || layout.sessionFile);
-    const runtimeRoot = await resolvePiRuntimeRoot(dataRoot.path);
-    const mcp = currentMcp();
-    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
-    const extensionPath = await preparePiExtension(layout.agentDir);
-    for (let index = 0; index < chain.length; index += 1) {
-      const config = chain[index]!;
-      let worker: PiRpcSupervisor | null = null;
-      try {
-        await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
-        worker = new PiRpcSupervisor(process.execPath, [piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', runtime.getPiSessionFile() || layout.sessionFile, '-e', extensionPath, '-e', piVisionExtensionFromRuntimeRoot(runtimeRoot), '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []), '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT], {
-          ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: WMB_VISION_MODEL, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
-        }, (event) => {
-          runtime.guardLease(lease, () => {
-            broadcastPiRuntimeProgress(event, 'dock');
-            if (event.type === 'wmb_process_crashed') {
-              broadcastPiEvent({ type: 'failed', error: String(event.error ?? 'Pi 进程已退出，可重新发送。'), scope: 'dock' });
-              runtime.releaseWorker(lease);
-            }
-          });
-        }, layout.workspace);
-        await worker.start();
-        runtime.bindWorker(lease, worker);
-        const state = await worker.getState();
-        const stateData = state.data;
-        let sessionId = '';
-        if (stateData && typeof stateData === 'object' && 'sessionId' in stateData) {
-          const value = (stateData as { sessionId?: unknown }).sessionId;
-          if (typeof value === 'string') sessionId = value;
-        }
-        await writePiConversation(dataRoot.path, { id: conversation.id, title: conversation.title, sessionFile: conversation.sessionFile || layout.sessionFile, sessionId: sessionId || conversation.sessionId, messages: conversation.messages, createdAt: conversation.createdAt });
-        runtime.setPiSessionFile(conversation.sessionFile || layout.sessionFile);
-        lastEnsuredPiProfileId = config.id;
-        if (failures.length) {
+  if (deskStartup) return deskStartup;
+  const startup = (async () => {
+    if (running?.isRunning && options.skipProfileIds) await runtime.stopWorker().catch(() => {});
+    const lease = runtime.acquireWorkerLease(null, null, 'desk');
+    const chain = resolvePiConfigChain(undefined, { skipProfileIds: options.skipProfileIds });
+    const failures: string[] = [];
+    let lastError: unknown;
+    try {
+      const layout = await ensurePiConversationLayout(dataRoot.path);
+      const conversation = await readPiConversation(dataRoot.path, { recoverInterrupted: true });
+      runtime.setPiSessionFile(conversation.sessionFile || layout.sessionFile);
+      const runtimeRoot = await resolvePiRuntimeRoot(dataRoot.path);
+      const mcp = currentMcp();
+      if (!mcp) throw new Error('WMB MCP 尚未就绪。');
+      const extensionPath = await preparePiExtension(layout.agentDir);
+      for (let index = 0; index < chain.length; index += 1) {
+        const config = chain[index]!;
+        let worker: PiRpcSupervisor | null = null;
+        try {
+          await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+          worker = new PiRpcSupervisor(process.execPath, [piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', runtime.getPiSessionFile() || layout.sessionFile, '-e', extensionPath, '-e', piVisionExtensionFromRuntimeRoot(runtimeRoot), '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []), '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT], {
+            ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: WMB_VISION_MODEL, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
+          }, (event) => {
+            runtime.guardLease(lease, () => {
+              broadcastPiRuntimeProgress(event, 'dock');
+              if (event.type === 'wmb_process_crashed') {
+                broadcastPiEvent({ type: 'failed', error: String(event.error ?? 'Pi 进程已退出，可重新发送。'), scope: 'dock' });
+                runtime.releaseWorker(lease);
+              }
+            });
+          }, layout.workspace);
+          await worker.start();
+          runtime.bindWorker(lease, worker);
+          const state = await worker.getState();
+          const stateData = state.data;
+          let sessionId = '';
+          if (stateData && typeof stateData === 'object' && 'sessionId' in stateData) {
+            const value = (stateData as { sessionId?: unknown }).sessionId;
+            if (typeof value === 'string') sessionId = value;
+          }
+          await writePiConversation(dataRoot.path, { id: conversation.id, title: conversation.title, sessionFile: conversation.sessionFile || layout.sessionFile, sessionId: sessionId || conversation.sessionId, messages: conversation.messages, createdAt: conversation.createdAt });
+          runtime.setPiSessionFile(conversation.sessionFile || layout.sessionFile);
+          lastEnsuredPiProfileId = config.id;
+          if (failures.length) {
+            broadcastPiEvent({
+              type: 'fallback',
+              scope: 'dock',
+              profileId: config.id,
+              profileName: config.name,
+              model: config.model,
+              text: `主服务不可用，已降级到 ${config.name}（${config.model}）`,
+              failures
+            });
+          }
+          return worker;
+        } catch (error) {
+          lastError = error;
+          const message = humanizePiProviderError(error instanceof Error ? error.message : String(error));
+          failures.push(`${config.name}: ${message}`);
+          await worker?.stop().catch(() => {});
+          const hasNext = index < chain.length - 1 && isPiProviderFallbackError(error);
+          if (!hasNext) break;
           broadcastPiEvent({
-            type: 'fallback',
+            type: 'fallback-try',
             scope: 'dock',
             profileId: config.id,
             profileName: config.name,
-            model: config.model,
-            text: `主服务不可用，已降级到 ${config.name}（${config.model}）`,
-            failures
+            text: `${config.name} 失败，正在尝试下一个 AI 服务…`,
+            error: message
           });
         }
-        return worker;
-      } catch (error) {
-        lastError = error;
-        const message = humanizePiProviderError(error instanceof Error ? error.message : String(error));
-        failures.push(`${config.name}: ${message}`);
-        await worker?.stop().catch(() => {});
-        const hasNext = index < chain.length - 1 && isPiProviderFallbackError(error);
-        if (!hasNext) break;
-        broadcastPiEvent({
-          type: 'fallback-try',
-          scope: 'dock',
-          profileId: config.id,
-          profileName: config.name,
-          text: `${config.name} 失败，正在尝试下一个 AI 服务…`,
-          error: message
-        });
       }
+      throw lastError instanceof Error ? lastError : new Error(failures.at(-1) || 'Pi 模型服务不可用。');
+    } catch (error) {
+      runtime.releaseWorker(lease);
+      throw error;
     }
-    throw lastError instanceof Error ? lastError : new Error(failures.at(-1) || 'Pi 模型服务不可用。');
-  } catch (error) {
-    runtime.releaseWorker(lease);
-    throw error;
+  })();
+  deskStartup = startup;
+  try {
+    return await startup;
+  } finally {
+    if (deskStartup === startup) deskStartup = null;
   }
 }
 
@@ -315,6 +335,11 @@ function createKnowledgeBackfillDeps(dataRootPath: string): KnowledgeBackfillDep
   };
 }
 
+// WMB-5236：全库维护 run 依赖（scan_compile 阶段复用上述回溯编译 deps）。
+function createMaintenanceDeps(dataRootPath: string): KnowledgeMaintenanceDeps {
+  return { backfill: createKnowledgeBackfillDeps(dataRootPath) };
+}
+
 async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   if (activeRuntime?.isActive && activeRuntime.identity.rootPath === path.resolve(dataRoot.path)) return;
   const runtime = ActiveWorkspaceRuntime.open(dataRoot.path, { openDatabase: migrateDatabase });
@@ -334,6 +359,8 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     runtime.setMcp(mcp);
     stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
     stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
+    // WMB-5247：媒体治理自动调度（启动立即一轮 + 每 6h 一轮：staging 清理 + 30 天无引用派生缓存 GC）。
+    stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = startMediaGovernanceScheduler(runtime);
     const xhs = await refreshXhsRuntime(readWorkspaceIntelligenceProfile(dataRoot.path, runtime).platforms.includes('xiaohongshu') ? dataRoot : null, null);
     runtime.setXhs(xhs);
     // MCP 就绪后再接力：扫完 channel_scanned 且无协调器时优先 judgeOnly。
@@ -402,6 +429,21 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     const scheduler = new XObservationScheduler({ runtime, loadSelectedDataRoot, isCurrent: () => activeRuntime === runtime && runtime.isActive });
     runtime.setScheduler(scheduler);
     scheduler.start();
+    // WMB-5244：媒体归档调度（渠道媒体冻结异步下载；启动恢复孤儿 running → DOWNLOAD_INTERRUPTED）。
+    mediaArchiveSchedulerRef?.stop();
+    mediaArchiveSchedulerRef = new MediaArchiveScheduler({
+      runtime,
+      isCurrent: () => activeRuntime === runtime && runtime.isActive
+    });
+    mediaArchiveSchedulerRef.start();
+    // WMB-5269：Source 正文归档调度（结构化文本已同事务固化；URL-only 排队异步安全抓取；
+    // 启动恢复孤儿 running + 历史缺失正文补抓，new_source 优先、历史至多 1 claim/分钟）。
+    sourceBodyArchiveSchedulerRef?.stop();
+    sourceBodyArchiveSchedulerRef = new SourceBodyArchiveScheduler({
+      runtime,
+      isCurrent: () => activeRuntime === runtime && runtime.isActive
+    });
+    sourceBodyArchiveSchedulerRef.start();
     const scanScheduler = new DailyScanScheduler({
       isCurrent: () => activeRuntime === runtime && runtime.isActive,
       run: (modules) => {
@@ -456,17 +498,41 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     scanScheduler.start();
     // WMB-5216：统一 ChangeSet 提交后局部 Lint 触发注册 + 周期 Lint 走既有 jobs 表驱动。
     registerKnowledgeChangeSetLintTrigger();
+    // WMB-5238：ChangeSet 提交后索引增量投影生产接线（动态导入 IndexStore；模块未就绪不阻断启动）。
+    void installProductionWikiIndexProjection().catch((error) => {
+      console.error('[wiki-index] production projection wiring failed', error);
+    });
     // WMB-5217：历史初始化（经 CommandDispatcher 授权写；幂等续跑；失败不阻断启动）。
     void runLegacyKnowledgeInitAtStartup(runtime).catch((error) => {
       console.error('[knowledge-init] startup legacy init failed', error);
     });
     // WMB-5230：存量高价值 Raw Source 分批回溯编译（有界单批；checkpoint 续跑；不阻断启动）。
-    void runKnowledgeBackfillBatch().catch((error) => {
-      console.error('[knowledge-backfill] startup backfill failed', error);
-    });
+    // WMB-5236：存在进行中的维护 run 时由维护调度器连续驱动回溯（启动单批让位，避免双驱动同一 checkpoint）。
+    const maintenanceRunAtStartup = getMaintenanceRun(runtime.database);
+    if (!maintenanceRunAtStartup || maintenanceRunAtStartup.status !== 'running') {
+      void runKnowledgeBackfillBatch().catch((error) => {
+        console.error('[knowledge-backfill] startup backfill failed', error);
+      });
+    }
     lintSchedulerRef?.stop();
     lintSchedulerRef = new KnowledgeLintScheduler({ runtime, isCurrent: () => activeRuntime === runtime && runtime.isActive });
     lintSchedulerRef.start();
+    // WMB-5236：全库维护调度器（单飞；重启后自动恢复 persisted running run 并继续；
+    // 执行期间挂起滚动周期 Lint，避免双驱动同一 lint checkpoint；paused/completed/failed 恢复滚动 Lint）。
+    maintenanceSchedulerRef?.stop();
+    maintenanceSchedulerRef = new KnowledgeMaintenanceScheduler({
+      runtime,
+      deps: () => createMaintenanceDeps(dataRoot.path),
+      isCurrent: () => activeRuntime === runtime && runtime.isActive,
+      onExecutionChange: (executing) => {
+        if (executing) {
+          lintSchedulerRef?.stop();
+        } else if (maintenanceSchedulerRef && !maintenanceSchedulerRef.isExecuting()) {
+          lintSchedulerRef?.start();
+        }
+      }
+    });
+    maintenanceSchedulerRef.start();
     if (orphanSweepTimer) clearInterval(orphanSweepTimer);
     orphanSweepTimer = setInterval(() => { void sweepOrphanDailyTasks('interval'); }, 60_000);
   } catch (error) {
@@ -474,6 +540,12 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     scanSchedulerRef = null;
     lintSchedulerRef?.stop();
     lintSchedulerRef = null;
+    maintenanceSchedulerRef?.stop();
+    maintenanceSchedulerRef = null;
+    mediaArchiveSchedulerRef?.stop();
+    mediaArchiveSchedulerRef = null;
+    sourceBodyArchiveSchedulerRef?.stop();
+    sourceBodyArchiveSchedulerRef = null;
     if (activeRuntime === runtime) activeRuntime = null;
     setSourceKnowledgeCompileDeps(null);
     setKnowledgeBackfillDeps(null);
@@ -483,7 +555,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   }
 }
 type TimerHandle = ReturnType<typeof setInterval>;
-let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null;
+let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null, stopMediaGovernanceScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null; let maintenanceSchedulerRef: KnowledgeMaintenanceScheduler | null = null; let mediaArchiveSchedulerRef: MediaArchiveScheduler | null = null; let sourceBodyArchiveSchedulerRef: SourceBodyArchiveScheduler | null = null;
 async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
   const dataRootPath = runtime?.identity.rootPath;
@@ -582,7 +654,7 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null; mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null; sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -602,7 +674,7 @@ const desktopLifecycle = createDesktopLifecycle({
   defaultBrowserProfileId,
   getActiveRuntime: () => activeRuntime,
   clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
-  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; },
+  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null; mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null; sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null; },
   abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
   setShuttingDown: (value) => { shuttingDown = value; },
   restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,
@@ -656,12 +728,45 @@ app.whenReady().then(async () => {
         const asset = getAsset(database, assetId);
         if (!asset) return new Response('Asset not found', { status: 404 });
         const absolute = path.join(dataRoot.path, ...asset.relativePath.split('/'));
+        // WMB-5246：视频播放/定位需要 HTTP Range（206 部分内容）。媒体元素 seek 时 Chromium
+        // 发 `Range: bytes=start-end`；这里按请求切片返回，并始终声明 Accept-Ranges。
+        const mimeType = asset.mimeType || guessImageMime(absolute);
+        const size = (await stat(absolute)).size;
+        const range = request.headers.get('Range');
+        const rangeMatch = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+        if (rangeMatch) {
+          const requestedStart = rangeMatch[1] === '' ? null : Number(rangeMatch[1]);
+          const requestedEnd = rangeMatch[2] === '' ? null : Number(rangeMatch[2]);
+          const start = Number.isFinite(requestedStart as number) && (requestedStart as number) >= 0 ? (requestedStart as number) : 0;
+          const end = Number.isFinite(requestedEnd as number) && (requestedEnd as number) >= start && (requestedEnd as number) < size
+            ? (requestedEnd as number)
+            : size - 1;
+          if (start >= size) {
+            return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+          }
+          const length = end - start + 1;
+          const handle = await open(absolute, 'r');
+          try {
+            const buffer = Buffer.alloc(length);
+            await handle.read(buffer, 0, length, start);
+            return new Response(buffer, {
+              status: 206,
+              headers: {
+                'Content-Type': mimeType,
+                'Content-Length': String(length),
+                'Content-Range': `bytes ${start}-${end}/${size}`,
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'no-cache',
+                'Access-Control-Allow-Origin': '*'
+              }
+            });
+          } finally {
+            await handle.close();
+          }
+        }
         const bytes = await readFile(absolute);
         return new Response(bytes, {
-          headers: {
-            'Content-Type': asset.mimeType || guessImageMime(absolute),
-            'Cache-Control': 'no-cache'
-          }
+          headers: { 'Content-Type': mimeType, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*' }
         });
       } finally {
         database.close();

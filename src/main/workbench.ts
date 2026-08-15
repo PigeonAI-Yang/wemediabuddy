@@ -150,6 +150,7 @@ export function getToday(database: DatabaseSync, planDate: string): {
   /** 有效资料库口径：当日已移出（archived）条数，供 feed 行尾「另有 N 条与本赛道无关」计数。 */
   archivedTodayCount: number;
 } {
+
   // Freshness rail: prefer sources collected on the plan date.
   // Fermenting rail (cross-day) is separate and returned as fermenting.*.
   // 有效资料库口径：今日统计/列表只数未移出（archived）资料；已移出条目以 archivedTodayCount 计数呈现。
@@ -346,7 +347,11 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
 
     const timelinessClass = classifyTimeliness(row.timeliness);
     const windowHours = TIMELINESS_WINDOW_HOURS[timelinessClass];
-    const expiresAt = windowHours === null ? null : new Date(Date.parse(row.createdAt) + windowHours * 3_600_000).toISOString();
+    // 坏日期（created_at 不可解析）不炸整页：视为无时效窗（不推进过期判断），其余字段照常渲染。
+    const createdMs = Date.parse(row.createdAt);
+    const expiresAt = windowHours === null || !Number.isFinite(createdMs)
+      ? null
+      : new Date(createdMs + windowHours * 3_600_000).toISOString();
     if (expiresAt && Date.parse(expiresAt) <= now.getTime()) continue;
 
     pool.push({

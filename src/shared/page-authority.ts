@@ -42,6 +42,7 @@ export type PageAuthorityCommand =
   | 'plans.save'
   | 'content.create'
   | 'content.save_version'
+  | 'media.recommendations_generate'
   | 'reviews.save'
   | 'x_lists.observation_start'
   | 'x_lists.observation_stop';
@@ -152,7 +153,8 @@ export const PAGE_TASK_GRANT_SCOPES: Readonly<Record<PageAuthorityView, PageAuth
     writeScope: Object.freeze([
       'agent_tasks.report_progress',
       'content.create',
-      'content.save_version'
+      'content.save_version',
+      'media.recommendations_generate'
     ] as const),
     chipLabel: '写正文/新建项目',
     chipTone: 'write'

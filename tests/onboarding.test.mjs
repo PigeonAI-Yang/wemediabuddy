@@ -126,7 +126,7 @@ test('resume step is corrected from real prerequisites, never a cosmetic counter
   const table = [
     [{ currentStep: 'welcome', completedAt: null }, { workspaceReady: false, aiReady: false }, 'welcome'],
     [{ currentStep: 'ai', completedAt: null }, { workspaceReady: false, aiReady: true }, 'workspace'],
-    [{ currentStep: 'complete', completedAt: FIXED_NOW }, { workspaceReady: true, aiReady: false }, 'ai'],
+    [{ currentStep: 'complete', completedAt: FIXED_NOW }, { workspaceReady: true, aiReady: false }, 'complete'],
     [{ currentStep: 'platforms', completedAt: null }, { workspaceReady: true, aiReady: false }, 'ai'],
     [{ currentStep: 'welcome', completedAt: null }, satisfied, 'ai'],
     [{ currentStep: 'workspace', completedAt: null }, satisfied, 'ai'],
@@ -146,7 +146,7 @@ test('resume step is corrected from real prerequisites, never a cosmetic counter
   assert.equal(done.completed, true);
   piConfig.activeId = null;
   piConfig.configured = false;
-  assert.equal((await h.manager.inspectStatus()).currentStep, 'ai', 'completed wizard regresses when Pi is removed');
+  assert.equal((await h.manager.inspectStatus()).currentStep, 'complete', 'completed wizard stays complete when Pi is later removed');
   registry.activeWorkspaceId = null;
   assert.equal((await h.manager.inspectStatus()).currentStep, 'workspace', 'completed wizard regresses when workspace is removed');
 }));

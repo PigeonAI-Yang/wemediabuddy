@@ -23,6 +23,8 @@ import type { UpdateState } from '../main/app-update';
 import type { OrchestrationData } from '../shared/orchestration-envelope';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { StudioAnnotation, StudioCommandResult, StudioDocumentScope } from '../shared/studio-annotations';
+import type { ContentMediaBindingDraft, CropRegion, PlatformClipPayload, PlatformCropPayload, PlatformMediaBindingDraft } from '../shared/media-bindings';
+import type { MediaRecommendation, MediaRecommendationsReadModel } from '../shared/media-recommendations';
 import type {
   KnowledgeAnnotationReadFilter, KnowledgeAnnotationRecord, KnowledgeChangeSetApplyInput, KnowledgeChangeSetApplyResult,
   KnowledgeChangeSetReadFilter, KnowledgeChangeSetRecord, KnowledgeEntityReadFilter, KnowledgeEntityRecord,
@@ -43,6 +45,25 @@ import type {
   KnowledgeDeepLinkInput, KnowledgeDeepLinkPayload, KnowledgeInboxPool, SourceKnowledgeDetail,
   SourceKnowledgeDetailInput, TopicWikiDetail, TopicWikiDetailInput
 } from '../shared/knowledge-topic-library';
+import type {
+  KnowledgeNetworkNodeDetail, KnowledgeNetworkNodeDetailInput,
+  KnowledgeNetworkProjection, KnowledgeNetworkProjectionInput
+} from '../shared/knowledge-network';
+import type {
+  KnowledgeMaintenanceRun, KnowledgeMaintenanceStartInput, KnowledgeMaintenanceStartResult, KnowledgeMaintenanceStatusView
+} from '../shared/knowledge-maintenance';
+import type {
+  WikiHotCacheStatus, WikiIndexSummary, WikiSearchFilter, WikiSearchPage
+} from '../shared/knowledge-search';
+import type {
+  KnowledgeLogEntry, KnowledgeLogPage, KnowledgeLogReadFilter
+} from '../shared/knowledge-global-log';
+import type {
+  SourceMediaArchivePauseInput, SourceMediaOpenOriginalInput, SourceMediaOverview, SourceMediaOverviewInput, SourceMediaRetryInput
+} from '../shared/source-media';
+import type {
+  SourceBodyCaptureFailureListInput, SourceBodyCaptureFailureListResult, SourceBodyCaptureRetryInput, SourceBodyCaptureRetryResult
+} from '../shared/source-body-archive';
 type OwnerBrowserCommand = { workspaceId: string; expectedBindingRevision: number; expectedRegistryRevision: number };
 
 type XListCommand<T> = CommandResult<T>;
@@ -108,7 +129,12 @@ declare global {
       collectXListTimeline(input: { accountKey: string; listId: string; limit?: number }): Promise<XListCommand<{ binding: { id: string; accountKey: string; listId: string; canonicalUrl: string; ownerHandle: string; name: string; kind: 'owned' | 'following' | 'member'; sourceFeedId: string; enabled: boolean; lastObservedAt: string | null; lastObservation: Record<string, unknown>; createdAt: string; updatedAt: string; revision: number }; sourceIds: string[] }>>;
       listKnowledgeSources(input?: { query?: string; verificationStatus?: string; managementStatus?: string; includeArchived?: boolean; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean } | null>;
       updateKnowledgeSource(input: { id: string; expectedRevision: number; verificationStatus?: string; managementStatus?: string; title?: string; summary?: string | null; author?: string | null }): Promise<{ id: string; revision: number }>;
-      deleteKnowledgeSource(input: { id: string; expectedRevision: number }): Promise<{ id: string; deleted: true }>;
+      deleteKnowledgeSource(input: { id: string; expectedRevision: number; confirmReferencedDelete?: boolean }): Promise<{ id: string; deleted: true } | { blocked: true; id: string; expectedRevision: number; summary: Record<string, unknown> }>;
+      // WMB-5247：情报媒体治理（owner UI 显式动作；无 Agent grant）。
+      mediaOverrideRestricted(input: { bindingId: string; reason: string }): Promise<Record<string, unknown>>;
+      mediaRunGc(input: { dryRun?: boolean; retentionDays?: number }): Promise<Record<string, unknown>>;
+      mediaRunStagingCleanup(input?: { dryRun?: boolean; maxStaleMs?: number }): Promise<Record<string, unknown>>;
+      mediaSourceDeleteGate(input: { sourceId: string }): Promise<Record<string, unknown>>;
       laneRestoreSource(input: { sourceId: string; expectedRevision: number; reason?: string }): Promise<{
         restored: boolean;
         source: { id: string; revision: number; managementStatus: string };
@@ -175,6 +201,9 @@ declare global {
         fetchedAt: string;
         updatedAt: string;
       }>;
+      // WMB-5269：正文归档失败统一异常中心（列表读模型 + 新周期重试；类型见 ../shared/source-body-archive）。
+      listSourceBodyCaptureFailures(input?: SourceBodyCaptureFailureListInput): Promise<SourceBodyCaptureFailureListResult>;
+      retrySourceBodyCaptureFailures(input: SourceBodyCaptureRetryInput): Promise<SourceBodyCaptureRetryResult>;
       getXhsStatus(): Promise<{
         status: 'not_started' | 'starting' | 'ready' | 'needs_user' | 'process_failed' | 'tool_mismatch';
         url: string | null;
@@ -196,6 +225,11 @@ declare global {
         entries: Array<{ key: string; kind: 'registry' | 'x_list' | 'other'; ok: boolean; at: string; error?: string; saved: number }>;
         summary: { total: number; ok: number; failed: number; saved: number };
       }>;
+      // WMB-5244：Source 媒体当前 revision 读模型 + 用户重试/全局暂停（类型见 src/shared/source-media.ts）。
+      getSourceMediaOverview(input: SourceMediaOverviewInput): Promise<SourceMediaOverview>;
+      retrySourceMedia(input: SourceMediaRetryInput): Promise<{ ok: boolean; candidate?: unknown; job?: unknown; code?: string; message?: string }>;
+      setMediaArchivePaused(input: SourceMediaArchivePauseInput): Promise<{ paused: boolean }>;
+      openSourceMediaOriginal(input: SourceMediaOpenOriginalInput): Promise<{ ok: boolean }>;
       listKnowledgeTopics(input?: { query?: string; status?: string; limit?: number; offset?: number }): Promise<{ items: Array<{ id: string; title: string; canonicalKey: string; kind: string; summary: string | null; status: string; firstSeenAt: string | null; lastSeenAt: string | null; revision: number; sourceCount: number; opportunityCount: number; contentCount: number; publicationCount: number }>; total: number; limit: number; offset: number; hasMore: boolean }>;
       listTopicMaintenanceProposals(input?: { status?: string; limit?: number; offset?: number }): Promise<{ items: any[]; total: number; limit: number; offset: number; hasMore: boolean }>;
       approveTopicMaintenanceProposal(input: { id: string; expectedRevision: number; requestId?: string }): Promise<{ ok: boolean; data: any; error: { code: string; message: string } | null } | null>;
@@ -219,6 +253,9 @@ declare global {
       decideKnowledgeSuggestion(input:{requestId:string;id:string;expectedRevision:number;decision:'confirm'|'reject'}):Promise<any>;
       getKnowledgeCanvasProjection(input: KnowledgeCanvasProjectionInput): Promise<KnowledgeCanvasProjection>;
       getCanvasNodeDetail(input: KnowledgeCanvasNodeDetailInput): Promise<KnowledgeCanvasNodeDetail>;
+      // WMB-5243：全局 Wiki 知识网络只读投影（类型见 src/shared/knowledge-network.ts）。
+      getKnowledgeNetworkProjection(input: KnowledgeNetworkProjectionInput): Promise<KnowledgeNetworkProjection>;
+      getKnowledgeNetworkNodeDetail(input: KnowledgeNetworkNodeDetailInput): Promise<KnowledgeNetworkNodeDetail>;
       validateKnowledgeSelectionManifest(input: KnowledgeCanvasSelectionManifestInput): Promise<KnowledgeCanvasSelectionManifest>;
       previewKnowledgeContextPackage(input:{canvasId:string;nodeIds:string[];excludedNodeIds?:string[];excludedRelationIds?:string[]}):Promise<any>;
       listKnowledgeContextPackages(input?:{query?:string;archived?:boolean;limit?:number;offset?:number}):Promise<any>;
@@ -238,8 +275,8 @@ declare global {
       getWorkspaceBrowserBinding(): Promise<OwnerBrowserState>;
       createBrowserProfile(input: OwnerBrowserCommand & { label?: string }): Promise<unknown>;
       rebindBrowserProfile(input: OwnerBrowserCommand & { profileId: string }): Promise<unknown>;
-      verifyBrowserAccount(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
-      migrateLegacyBrowserProfile(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' }): Promise<unknown>;
+      verifyBrowserAccount(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }): Promise<unknown>;
+      migrateLegacyBrowserProfile(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }): Promise<unknown>;
       savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
@@ -492,7 +529,7 @@ declare global {
         archived?: boolean;
         topicId?: string | null;
         order?: 'recent' | 'oldest' | 'versions';
-        platform?: 'x' | 'xiaohongshu' | 'wechat';
+        platform?: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
         limit?: number;
         offset?: number;
       }): Promise<{
@@ -501,7 +538,7 @@ declare global {
           archivedAt: string | null; revision: number; createdAt: string; updatedAt: string; versionCount: number;
           planItemPriority: number | null;
           latestVersion: { id: string; number: number; createdAt: string; author: 'user' | 'ai' } | null;
-          platforms: { x: number; xiaohongshu: number; wechat: number };
+          platforms: { x: number; xiaohongshu: number; wechat: number; zhihu: number };
         }>;
         limit: number; offset: number; hasMore: boolean;
       } | null>;
@@ -525,8 +562,8 @@ declare global {
       copyStudioVersionToProject(input: {
         sourceProjectId: string; contentVersionId: string; title: string;
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
-      saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      saveStudioPlatform(input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat'; format: string; title?: string; body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string }): Promise<{ ok: boolean; data: { id: string; revision: number } | null; error: { code: string; message: string } | null }>;
+      saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number; mediaBindings?: ContentMediaBindingDraft[] }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      saveStudioPlatform(input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu'; format: string; title?: string; body: string; assetIds?: string[]; mediaBindings?: PlatformMediaBindingDraft[]; cropPayloads?: PlatformCropPayload[]; clipPayloads?: PlatformClipPayload[]; expectedRevision?: number; versionId?: string }): Promise<{ ok: boolean; data: { id: string; revision: number } | null; error: { code: string; message: string } | null }>;
       listStudioAssets(projectId: string): Promise<Array<{
         id: string;
         relativePath: string;
@@ -576,6 +613,18 @@ declare global {
       listKnowledgeUsagePackages(input?: KnowledgeUsagePackageReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeUsagePackageRecord>>;
       getKnowledgeUsageRecord(input: KnowledgeObjectIdRead): Promise<KnowledgeUsageRecordRecord | null>;
       listKnowledgeUsageRecords(input?: KnowledgeUsageRecordReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeUsageRecordRecord>>;
+      // WMB-5236：全库维护 run（start/status/pause/resume；类型见 ../shared/knowledge-maintenance）。
+      startKnowledgeMaintenance(input?: KnowledgeMaintenanceStartInput): Promise<KnowledgeMaintenanceStartResult>;
+      getKnowledgeMaintenanceStatus(): Promise<KnowledgeMaintenanceStatusView>;
+      pauseKnowledgeMaintenance(): Promise<KnowledgeMaintenanceRun | null>;
+      resumeKnowledgeMaintenance(): Promise<KnowledgeMaintenanceRun>;
+      // WMB-5238：统一全文搜索 / 索引摘要 / 有界 hot cache（只读；类型见 ../shared/knowledge-search）。
+      searchWikiIndex(input: WikiSearchFilter): Promise<WikiSearchPage>;
+      getWikiIndexSummary(): Promise<WikiIndexSummary>;
+      getWikiHotCache(): Promise<WikiHotCacheStatus>;
+      // WMB-5238：全局知识时间日志（只读派生读模型；类型见 ../shared/knowledge-global-log）。
+      listKnowledgeLogEntries(input?: KnowledgeLogReadFilter): Promise<KnowledgeLogPage>;
+      getKnowledgeLogEntry(id: string): Promise<KnowledgeLogEntry | null>;
       listStudioAnnotations(input: StudioDocumentScope & { includeResolved?: boolean }): Promise<StudioAnnotation[]>;
       createStudioAnnotation(input: StudioDocumentScope & { body: string; startOffset: number; endOffset: number; note?: string | null }): Promise<StudioCommandResult<StudioAnnotation>>;
       updateStudioAnnotation(input: { id: string; expectedRevision: number; note: string | null }): Promise<StudioCommandResult<StudioAnnotation>>;
@@ -593,11 +642,26 @@ declare global {
         | { ok: true; asset: { id: string; relativePath: string; mimeType: string; byteCount: number; sha256: string; origin: string; width: number | null; height: number | null; durationMs: number | null; createdAt: string }; markdown: string; reused: boolean }
         | { ok: false; cancelled: true }
       >;
+      deriveStudioAsset(input: { sourceAssetId: string; cropRegion: CropRegion; pngBase64: string }): Promise<
+        | { ok: true; data: { assetId: string; reused: boolean; sha256: string }; error: null }
+        | { ok: false; data: null; error: { code: string; message: string; details: Record<string, unknown> } }
+      >;
+      deriveStudioAnnotation(input: { sourceAssetId: string; annotationSpec: unknown; pngBase64: string }): Promise<
+        | { ok: true; data: { assetId: string; reused: boolean; sha256: string }; error: null }
+        | { ok: false; data: null; error: { code: string; message: string; details: Record<string, unknown> } }
+      >;
+      deriveStudioClip(input: { sourceAssetId: string; startMs: number; endMs: number }): Promise<
+        | { ok: true; data: { assetId: string; reused: boolean; sha256: string; durationMs: number; codec: string; copyOrTranscode: 'copy' | 'transcode' }; error: null }
+        | { ok: false; data: null; error: { code: string; message: string; details: Record<string, unknown> } }
+      >;
+      listMediaRecommendations(input: { contentVersionId: string; projectId?: string }): Promise<MediaRecommendationsReadModel>;
+      generateMediaRecommendations(input: { contentVersionId: string; projectId: string; sourceRevisionKeys: string[]; allowGeneratedCover?: boolean; requestId?: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }>;
+      decideMediaRecommendation(input: { id: string; expectedRevision: number; decision: 'accept' | 'reject'; confirmedByOwner?: boolean }): Promise<{ ok: boolean; data?: MediaRecommendation; error?: { code?: string; message?: string; details?: unknown } | null }>;
       getPublications(): Promise<Array<{
         publication: {
           id: string;
           platformVersionId: string;
-          platform: 'x' | 'xiaohongshu' | 'wechat';
+          platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
           accountKey: string;
           status: string;
           revision: number;
@@ -655,8 +719,10 @@ declare global {
       }>>;
       prepareXPublication(platformVersionId: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       prepareWechatArticlePublication(platformVersionId: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      prepareZhihuArticlePublication(platformVersionId: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       readBackWechatPublication(publicationId: string, expectedRevision: number, articleUrl: string): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       reconcileNotPublished(publicationId: string, expectedRevision: number): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
+      returnPublicationToEdit(publicationId: string, expectedRevision: number): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
     };
   }
 }

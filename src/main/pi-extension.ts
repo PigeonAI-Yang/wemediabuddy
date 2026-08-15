@@ -13,7 +13,8 @@ const files = [
   'wmb-mcp-tools-research.ts',
   'wmb-mcp-tools-workspaces.ts',
   'wmb-mcp-tools-x-lists.ts',
-  'wmb-mcp-tools-xhs.ts'
+  'wmb-mcp-tools-xhs.ts',
+  'wmb-mcp-tools-wiki.ts'
 ];
 const staleFlatFiles = [
   'wmb-mcp.ts',

@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 
 export type AccountIdentity = {
-  platform: 'x' | 'xiaohongshu' | 'wechat';
+  platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
   accountKey: string;
   displayName: string;
   loginState: 'authenticated' | 'unauthenticated' | 'challenge' | 'unknown';

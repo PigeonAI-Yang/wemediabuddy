@@ -12,6 +12,8 @@ export type PublicationSnapshotAssetV1 = Readonly<{
   sha256: string;
   relativePath: string;
   mimeType: string;
+  /** 冻结的资产字节数（投影后 asset ids/bytes 一并冻结）。 */
+  byteCount: number;
 }>;
 
 export type PublicationSnapshotV1 = Readonly<{
@@ -59,8 +61,13 @@ export type PublicationBrowserOperationV1 = Readonly<{
 
 type SnapshotPayloadInput = Readonly<{
   title: string | null;
+  /** 编译后的可发布正文（发布正文编译结果；源 platform version 正文见 sourceBody）。 */
   body: string;
   assets: readonly (string | Readonly<{ id: string; sha256?: string }>)[];
+  /** 源 platform version 标题（stale 锚点；缺省回退到 title）。 */
+  sourceTitle?: string | null;
+  /** 源 platform version 正文（stale 锚点；缺省回退到 body）。 */
+  sourceBody?: string;
 }>;
 
 export type CreatePublicationSnapshotInput = Readonly<{
@@ -116,7 +123,12 @@ export function createPublicationSnapshot(
     expected_account_snapshot_json AS expectedAccounts FROM workspace_browser_bindings WHERE id='effective'`).get() as BindingRow | undefined;
   const bindingError = validateBrowserBinding(input, version, account, binding);
   if (bindingError) return bindingError;
-  if (input.payload.title !== version.title || input.payload.body !== version.body) {
+  // stale 合同：载荷必须与「源 platform version + compiler result」一致。
+  // payload.body 是编译后的正文；stale 锚点是源 platform version 正文（缺省回退到编译正文，
+  // 兼容无图片 token 的直接调用方）。
+  const sourceTitle = input.payload.sourceTitle === undefined ? input.payload.title : input.payload.sourceTitle;
+  const sourceBody = input.payload.sourceBody === undefined ? input.payload.body : input.payload.sourceBody;
+  if (sourceTitle !== version.title || sourceBody !== version.body) {
     return failure('CONFIRMATION_STALE', '发布载荷与平台版本不一致。');
   }
   let assetIds: string[];
@@ -132,7 +144,7 @@ export function createPublicationSnapshot(
   }
   const assets: PublicationSnapshotAssetV1[] = [];
   for (let index = 0; index < assetIds.length; index += 1) {
-    const asset = database.prepare(`SELECT id, sha256, relative_path AS relativePath, mime_type AS mimeType
+    const asset = database.prepare(`SELECT id, sha256, relative_path AS relativePath, mime_type AS mimeType, byte_count AS byteCount
       FROM assets WHERE id=?`).get(assetIds[index]) as PublicationSnapshotAssetV1 | undefined;
     if (!asset) return failure('NOT_FOUND', `发布素材不存在：${assetIds[index]}`);
     if (suppliedAssets[index].sha256 !== undefined && suppliedAssets[index].sha256 !== asset.sha256) {
@@ -141,13 +153,14 @@ export function createPublicationSnapshot(
     assets.push(Object.freeze(asset));
   }
 
-  const payload = Object.freeze({ title: version.title, body: version.body, format: version.format });
+  const payload = Object.freeze({ title: input.payload.title, body: input.payload.body, format: version.format });
   const causation = JSON.parse(canonicalJson(input.causation ?? {})) as Readonly<Record<string, unknown>>;
   const payloadJson = canonicalJson(payload); const assetsJson = canonicalJson(assets);
   const payloadHash = sha256(payloadJson); const assetsHash = sha256(assetsJson);
   const frozenInput = {
     version: 'PublicationSnapshotV1', workspaceId: input.workspaceId, runtimeEpoch: input.runtimeEpoch,
     platformVersion: { id: version.id, revision: version.revision, platform: version.platform },
+    source: { title: version.title, body: version.body },
     account: { id: account.id, key: account.accountKey, revision: account.revision },
     browserBinding: { id: 'effective', profileId: input.browserProfileId, revision: input.browserBindingRevision },
     payload, payloadHash, assets, assetsHash, causation
@@ -328,6 +341,8 @@ function validateIdentityInput(input: CreatePublicationSnapshotInput): CommandRe
   if (!input.workspaceId?.trim() || !input.runtimeEpoch?.trim() || !input.platformVersionId?.trim() || !input.accountId?.trim() || !input.browserProfileId?.trim()) return failure('VALIDATION_ERROR', '发布快照身份字段不能为空。');
   if (!Number.isInteger(input.browserBindingRevision) || input.browserBindingRevision < 1) return failure('VALIDATION_ERROR', '浏览器 binding revision 无效。');
   if (!input.payload || typeof input.payload.body !== 'string' || (input.payload.title !== null && typeof input.payload.title !== 'string') || !Array.isArray(input.payload.assets)) return failure('VALIDATION_ERROR', '发布载荷无效。');
+  if (input.payload.sourceBody !== undefined && typeof input.payload.sourceBody !== 'string') return failure('VALIDATION_ERROR', '发布载荷无效。');
+  if (input.payload.sourceTitle !== undefined && input.payload.sourceTitle !== null && typeof input.payload.sourceTitle !== 'string') return failure('VALIDATION_ERROR', '发布载荷无效。');
   return null;
 }
 

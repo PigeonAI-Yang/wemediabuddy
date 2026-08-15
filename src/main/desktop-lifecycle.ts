@@ -79,7 +79,10 @@ export function createDesktopLifecycle(input: DesktopLifecycleInput): DesktopLif
     registerIpcAndStartUpdater() {
       registerOnboardingIpc(ipcMain, onboardingManager);
       registerAppUpdateIpc(ipcMain, updateManager);
-      if (!app.isPackaged && !acceptanceFeedUrl) return;
+      // 非打包形态（dev / dev-E2E）没有 Squirrel 更新器：启动 autoUpdater 只会报
+      // 「Can not find Squirrel」并在界面常驻错误横幅（还会遮住内容点击）。
+      // 打包形态（含 packaged E2E 的 acceptance feed）才启动自动更新检查。
+      if (!app.isPackaged) return;
       try {
         updateManager.start();
         setTimeout(() => void updateManager.checkForUpdates().catch((error) => console.error('[app-update-check]', error)), 10_000);

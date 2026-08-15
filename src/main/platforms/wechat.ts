@@ -3,6 +3,7 @@ import type * as PlaywrightCore from 'playwright-core';
 import type { App } from 'electron';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { assertInlineAssetImageDeliverable, assertNoInternalMediaToken } from '../platform-body-compile.ts';
 import { validateWechatArticleUrl } from './wechat-url.ts';
 
 export type WechatIdentity = { platform: 'wechat'; accountKey: string; displayName: string; loginState: 'authenticated'; evidenceUrl: string };
@@ -24,6 +25,10 @@ export async function identifyWechatAccount(cdpUrl: string, options: { loginTime
 }
 
 export async function prepareWechatArticle(cdpUrl: string, title: string, body: string) {
+  // 只消费已编译正文：内部 markdown token 一律拒绝；正文含真实图片表示但当前适配器
+  // 仅支持纯文本编辑器时，发布前 fail-closed（绝不发布字面 token，也绝不静默删图）。
+  assertNoInternalMediaToken(body);
+  assertInlineAssetImageDeliverable(body);
   const browser = await connect(cdpUrl);
   try {
     const context = browser.contexts()[0];

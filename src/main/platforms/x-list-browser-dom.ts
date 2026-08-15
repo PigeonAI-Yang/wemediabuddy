@@ -385,7 +385,7 @@ export function normalizeStatusUrl(value: string): string | null {
   }
 }
 
-export function normalizeMediaUrl(value: string, size: 'thumb' | 'small' | 'medium' | 'large' = 'thumb'): string {
+export function normalizeMediaUrl(value: string, size: 'thumb' | 'small' | 'medium' | 'large' | 'orig' = 'thumb'): string {
   try {
     const url = new URL(value);
     if (!/twimg\.com$/i.test(url.hostname) && !/\.twimg\.com$/i.test(url.hostname)) return value;

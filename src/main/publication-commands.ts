@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import type { BrowserRuntime } from './browser.ts';
 import { startVerifiedBoundBrowser, type BoundBrowserPlatform } from './bound-browser.ts';
 import { dispatchBusinessCommand, requireCommandResultData, requireReceiptData } from './business-command.ts';
@@ -10,17 +11,22 @@ import {
   recoverInterruptedPublicationBrowserOperations, transitionPublicationBrowserOperation, type CreatePublicationSnapshotInput, type PublicationBrowserOperationV1,
   type PublicationSnapshotV1
 } from './publication-operations.ts';
-import { getPublicationDetail, recoverInterruptedPublications, reconcileAsNotPublished, transitionPublication, type PublicationRecord } from './publishing.ts';
+import { getPublication, getPublicationDetail, recoverInterruptedPublications, reconcileAsNotPublished, transitionPublication, type PublicationRecord } from './publishing.ts';
 import { prepareWechatArticle, readBackWechatArticle } from './platforms/wechat.ts';
 import { prepareXImage, prepareXText, prepareXVideo } from './platforms/x.ts';
+import { prepareZhihuArticle } from './platforms/zhihu.ts';
+import { compilePlatformBody } from './platform-body-compile.ts';
+import type { MediaKind, PlatformMediaBinding } from '../shared/media-bindings.ts';
 import { readWorkspaceBrowserBinding } from './workspace-browser-binding.ts';
 import type { ActiveWorkspaceRuntime, WorkspaceRuntimeLease } from './workspace-runtime.ts';
 
 const OWNER: CommandActorV1 = Object.freeze({ type: 'owner_ui', id: 'renderer', label: 'Owner UI' });
 export const PUBLICATION_SNAPSHOT_CREATE_COMMAND = 'publication.snapshot_create';
 export const PUBLICATION_EDITOR_PREPARE_COMMAND = 'publication.editor_prepare_execute';
+export const PUBLICATION_RETURN_TO_EDIT_COMMAND = 'publication.return_to_edit';
 type SnapshotCreateInput = Readonly<{ platformVersionId: string; requestId?: string }>;
 type EditorPrepareInput = Readonly<{ publicationId: string; expectedRevision: number; requestId?: string }>;
+type ReturnToEditInput = Readonly<{ publicationId: string; expectedRevision: number }>;
 type BrowserSetter = (runtime: BrowserRuntime) => WorkspaceRuntimeLease;
 export type PublicationEditorPrepareDependencies = Readonly<{
   startBrowser?: typeof startVerifiedBoundBrowser;
@@ -36,13 +42,16 @@ export function dispatchCreatePublicationSnapshot(
   authority?: PublicationSnapshotAuthority
 ): Promise<CommandReceiptV1<PublicationOperationContext>> {
   const version = runtime.database.prepare(`SELECT id, platform, title, body, format, asset_ids_json AS assetIds FROM platform_versions WHERE id=?`).get(input.platformVersionId) as { id: string; platform: BoundBrowserPlatform; title: string | null; body: string; format: string; assetIds: string } | undefined;
-  if (!version || !['x', 'wechat'].includes(version.platform)) throw new CommandDispatchError('NOT_FOUND', '平台版本不存在或暂不支持发布。');
+  if (!version || !['x', 'wechat', 'zhihu'].includes(version.platform)) throw new CommandDispatchError('NOT_FOUND', '平台版本不存在或暂不支持发布。');
   const binding = requireVerifiedBinding(runtime, version.platform);
   const expected = binding.expectedAccountSnapshot[version.platform];
   if (!expected) throw new CommandDispatchError('ACCOUNT_MISMATCH', '当前浏览器绑定没有冻结的平台账号。');
   const account = runtime.database.prepare(`SELECT id FROM platform_accounts WHERE platform=? AND account_key=? AND browser_profile_id=? AND browser_binding_revision=?`).get(version.platform, expected.accountKey, binding.profileId, binding.bindingRevision) as { id: string } | undefined;
   if (!account) throw new CommandDispatchError('ACCOUNT_MISMATCH', '当前平台账号与浏览器绑定不一致。');
-  const commandInput = { platformVersionId: version.id, accountId: account.id, browserProfileId: binding.profileId, browserBindingRevision: binding.bindingRevision, workspaceId: runtime.identity.workspaceId, runtimeEpoch: runtime.identity.runtimeEpoch, payload: { title: version.title, body: version.body, assets: parseAssetIds(version.assetIds) } };
+  const assetIds = parseAssetIds(version.assetIds);
+  // 发布正文编译：源 platform version 正文 + 平台媒体绑定 → 可发布正文 + 冻结附件顺序。
+  const compiled = compilePlatformBody({ platform: version.platform, body: version.body, bindings: readPlatformMediaBindings(runtime.database, version.id, assetIds) });
+  const commandInput = { platformVersionId: version.id, accountId: account.id, browserProfileId: binding.profileId, browserBindingRevision: binding.bindingRevision, workspaceId: runtime.identity.workspaceId, runtimeEpoch: runtime.identity.runtimeEpoch, payload: { title: version.title, body: compiled.body, assets: compiled.assetIds, sourceTitle: version.title, sourceBody: version.body } };
   const actor = authority ? (authority.workerLeaseId
     ? Object.freeze({ type: 'pi' as const, id: 'pi', label: 'Pi worker' })
     : Object.freeze({ type: 'external_agent' as const, id: 'mcp', label: 'External Agent' })) : OWNER;
@@ -58,7 +67,7 @@ export async function dispatchRecoverInterruptedPublications(runtime: ActiveWork
     input: { runtimeEpoch: runtime.identity.runtimeEpoch },
     boundIdentity: runtime.identity,
     entityType: 'publication_browser_operation',
-    execute: (database) => ({ data: recoverInterruptedPublications(database) + recoverInterruptedPublicationBrowserOperations(database), sideEffectState: 'committed' })
+    execute: (database) => ({ data: recoverInterruptedPublications(database, false) + recoverInterruptedPublicationBrowserOperations(database), sideEffectState: 'committed' })
   });
   return requireReceiptData(receipt);
 }
@@ -180,7 +189,34 @@ function assertSnapshotIdentity(runtime: ActiveWorkspaceRuntime, snapshot: Publi
   if (!expected || expected.accountKey !== snapshot.accountKey || expected.accountRevision !== snapshot.accountRevision) throw new CommandDispatchError('ACCOUNT_MISMATCH', '发布快照账号身份已变化。');
 }
 function parseAssetIds(value: string): string[] { try { const parsed = JSON.parse(value); if (!Array.isArray(parsed) || parsed.some((id) => typeof id !== 'string')) throw new Error(); return parsed; } catch { throw new CommandDispatchError('VALIDATION_ERROR', '平台版本素材绑定无效。'); } }
+/** 读取 platform version 的媒体绑定（migration v62 表）；旧版本无绑定行时按 asset_ids_json 投影顺序合成。 */
+function readPlatformMediaBindings(database: DatabaseSync, platformVersionId: string, fallbackAssetIds: string[]): PlatformMediaBinding[] {
+  let rows: Array<{ id: string; assetId: string; ordinal: number; caption: string | null; isCover: number; cropRegionJson: string | null; derivedAssetId: string | null; mediaKind: MediaKind; posterAssetId: string | null; clipRangeJson: string | null; durationMs: number | null; createdAt: string; updatedAt: string }>;
+  try {
+    rows = database.prepare(`SELECT id, asset_id AS assetId, ordinal, caption, is_cover AS isCover, crop_region_json AS cropRegionJson,
+      derived_asset_id AS derivedAssetId, media_kind AS mediaKind, poster_asset_id AS posterAssetId,
+      clip_range_json AS clipRangeJson, duration_ms AS durationMs, created_at AS createdAt, updated_at AS updatedAt
+      FROM platform_media_bindings WHERE platform_version_id=? ORDER BY ordinal, id`).all(platformVersionId) as typeof rows;
+  } catch {
+    throw new CommandDispatchError('VALIDATION_ERROR', '平台版本媒体绑定读取失败。');
+  }
+  if (rows.length === 0) {
+    return fallbackAssetIds.map((assetId, ordinal) => ({
+      id: `${platformVersionId}:${assetId}`, platformVersionId, assetId, ordinal,
+      caption: null, isCover: false, cropRegion: null, derivedAssetId: null,
+      mediaKind: 'image', posterAssetId: null, clipRange: null, durationMs: null, createdAt: '', updatedAt: ''
+    }));
+  }
+  return rows.map((row) => ({
+    id: row.id, platformVersionId, assetId: row.assetId, ordinal: row.ordinal, caption: row.caption,
+    isCover: row.isCover === 1, cropRegion: row.cropRegionJson ? JSON.parse(row.cropRegionJson) : null,
+    derivedAssetId: row.derivedAssetId, mediaKind: row.mediaKind, posterAssetId: row.posterAssetId,
+    clipRange: row.clipRangeJson ? JSON.parse(row.clipRangeJson) : null,
+    durationMs: row.durationMs == null ? null : Number(row.durationMs), createdAt: row.createdAt, updatedAt: row.updatedAt
+  }));
+}
 async function invokeEditorAdapter(runtime: ActiveWorkspaceRuntime, snapshot: PublicationSnapshotV1, cdpUrl: string): Promise<{ title: string | null; body: string; assetIds: string[]; evidenceUrl: string }> {
+  if (snapshot.platform === 'zhihu') return prepareZhihuArticle(cdpUrl, snapshot.payload.title ?? '', snapshot.payload.body, snapshot.assets.map((asset) => ({ assetId: asset.id, assetPath: path.join(runtime.identity.rootPath, asset.relativePath), mimeType: asset.mimeType })));
   if (snapshot.platform === 'wechat') return prepareWechatArticle(cdpUrl, snapshot.payload.title ?? '', snapshot.payload.body);
   const asset = snapshot.assets[0];
   if (!asset) return prepareXText(cdpUrl, snapshot.payload.body);
@@ -191,8 +227,31 @@ export async function dispatchManualWechatReadback(runtime: ActiveWorkspaceRunti
   const detail = getPublicationDetail(runtime.database, input.publicationId);
   if (!detail || detail.publication.platform !== 'wechat' || !detail.payload?.title) throw new CommandDispatchError('NOT_FOUND', '微信公众号发布记录或标题不存在。');
   const readback = await runtime.runExternalBrowserWork(runtime.bindBrowser(browser), () => readBackWechatArticle(browser.cdpUrl, input.articleUrl, detail.payload!.title!));
-  return dispatchBusinessCommand(runtime, { command: 'publication.manual_readback', requestId: `${input.publicationId}:manual-readback:${input.expectedRevision}`, actor: OWNER, input: { ...input, readback }, boundIdentity: { publicationId: input.publicationId, expectedRevision: input.expectedRevision, externalUrl: readback.externalUrl, externalId: readback.externalId }, entityType: 'publication', execute: (database, normalized) => { const data = requireCommandResultData(transitionPublication(database, normalized.publicationId, 'published', { expectedRevision: normalized.expectedRevision, externalUrl: normalized.readback.externalUrl, externalId: normalized.readback.externalId, reason: 'manual publication URL readback matched' })); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
+  return dispatchBusinessCommand(runtime, { command: 'publication.manual_readback', requestId: `${input.publicationId}:manual-readback:${input.expectedRevision}`, actor: OWNER, input: { ...input, readback }, boundIdentity: { publicationId: input.publicationId, expectedRevision: input.expectedRevision, externalUrl: readback.externalUrl, externalId: readback.externalId }, entityType: 'publication', execute: (database, normalized) => { const data = requireCommandResultData(transitionPublication(database, normalized.publicationId, 'published', { expectedRevision: normalized.expectedRevision, externalUrl: normalized.readback.externalUrl, externalId: normalized.readback.externalId, reason: 'manual publication URL readback matched' }, false)); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
 }
 export function dispatchReconcilePublication(runtime: ActiveWorkspaceRuntime, input: { publicationId: string; expectedRevision: number }) {
-  return dispatchBusinessCommand(runtime, { command: 'publication.reconcile_not_published', requestId: `${input.publicationId}:reconcile:${input.expectedRevision}`, actor: OWNER, input, boundIdentity: { publicationId: input.publicationId, expectedRevision: input.expectedRevision }, entityType: 'publication', execute: (database, normalized) => { const data = requireCommandResultData(reconcileAsNotPublished(database, { ...normalized, evidence: { actor: 'ui', decision: 'not_published' } })); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
+  return dispatchBusinessCommand(runtime, { command: 'publication.reconcile_not_published', requestId: `${input.publicationId}:reconcile:${input.expectedRevision}`, actor: OWNER, input, boundIdentity: { publicationId: input.publicationId, expectedRevision: input.expectedRevision }, entityType: 'publication', execute: (database, normalized) => { const data = requireCommandResultData(reconcileAsNotPublished(database, { ...normalized, evidence: { actor: 'ui', decision: 'not_published' } }, false)); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; } });
+}
+/** WMB-5253：Owner 审稿不通过 → 复用既有 awaiting_confirmation → draft 迁移退回创作修改。
+ *  显式拒绝非 awaiting_confirmation（prepared/draft 等不得经通用迁移退回），陈旧 revision 仍由迁移 CAS 保护；
+ *  不动不可变快照与浏览器编辑器草稿，无任何发布/浏览器副作用。 */
+export function dispatchReturnPublicationToEdit(runtime: ActiveWorkspaceRuntime, input: ReturnToEditInput) {
+  return dispatchBusinessCommand(runtime, {
+    command: PUBLICATION_RETURN_TO_EDIT_COMMAND,
+    requestId: `${input.publicationId}:return-to-edit:${input.expectedRevision}`,
+    actor: OWNER,
+    input,
+    boundIdentity: { publicationId: input.publicationId, expectedRevision: input.expectedRevision },
+    entityType: 'publication',
+    execute: (database, normalized) => {
+      const current = getPublication(database, normalized.publicationId);
+      if (!current) throw new CommandDispatchError('NOT_FOUND', '发布记录不存在。');
+      if (current.status !== 'awaiting_confirmation') throw new CommandDispatchError('INVALID_STATE', '仅等待人工发布的发布记录可以退回创作修改。');
+      const data = requireCommandResultData(transitionPublication(database, normalized.publicationId, 'draft', {
+        expectedRevision: normalized.expectedRevision,
+        reason: 'Owner preflight rejection: returned to creation'
+      }, false));
+      return { data, entityId: data.id, beforeRevision: current.revision, afterRevision: data.revision, readback: data };
+    }
+  });
 }

@@ -27,6 +27,8 @@ test('task grants expose the canonical internal business command IDs', () => {
     'knowledge.domain_create',
     'knowledge.domain_update',
     'knowledge_flywheel.change_set_apply',
+    'knowledge.lint',
+    'knowledge.maintenance',
     'knowledge.record_batch',
     'knowledge.topic_maintenance_propose',
     'knowledge.topic_maintenance_approve',

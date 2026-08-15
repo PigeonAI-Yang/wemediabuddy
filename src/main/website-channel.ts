@@ -13,7 +13,12 @@ import {
 } from './intelligence-channels.ts';
 import { extractOfficialItems } from './intelligence-wire.ts';
 import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
+import { scheduleSourceBodyArchive } from './source-body-archive.ts';
+import { extractReadableText } from './source-body-cache.ts';
 import { canonicalizeUrl, upsertSource } from './sources.ts';
+import { sourceRevisionKey } from '../shared/media-candidates.ts';
+import { enqueueMediaDiscoverJob } from './db/media-archive-store.ts';
+import { persistWebsiteMediaCandidates } from './website-media-discovery.ts';
 
 const SEARCH_TIMEOUT_MS = 15_000;
 const READ_TIMEOUT_MS = 15_000;
@@ -185,6 +190,39 @@ export function persistWebsiteSourceScan(database: DatabaseSync, input: ScanWebs
       });
       savedSources.push({ id: saved.id, revision: saved.revision });
       sourceIds.push(saved.id);
+      // WMB-5269：同一扫描事务内登记正文归档任务。item 即当前扫描页本身（canonical URL 相等）时
+      // 扫描已持有完整页面文本 → 结构化文本立即固化；其余 item 为子页链接 → URL-only 排队异步抓取。
+      const isPageItself = canonicalizeUrl(item.url) === current.canonicalUrl;
+      scheduleSourceBodyArchive(database, {
+        sourceId: saved.id,
+        sourceRevision: saved.revision,
+        url: item.url,
+        structuredText: isPageItself && page.body ? extractReadableText(page.body, page.trialRead.contentType ?? null, 20_000).trim() || null : null,
+        contentType: page.trialRead.contentType ?? 'text/html',
+        origin: 'official_web_scan',
+        channel: 'official_web'
+      });
+      // WMB-5244：官网媒体冻结（设计 §7.1/§7.3；Main 2026-08-14 绑定规则）。
+      // 媒体候选只绑定 canonical URL 拥有所抓 DOM 的 Source；列表页 item Source
+      // （URL 不等于抓取页规范 URL）不复制页面级媒体，按 item 原 URL 入队重发现。
+      const revisionKey = sourceRevisionKey(saved.id, saved.revision);
+      if (canonicalizeUrl(item.url) === current.canonicalUrl) {
+        persistWebsiteMediaCandidates(database, {
+          sourceId: saved.id,
+          sourceRevisionKey: revisionKey,
+          requestId: `${input.taskId}:website:${saved.id}:${saved.revision}`,
+          discoveredAt: checkedAt,
+          html: page.body ?? '',
+          baseUrl: page.trialRead.url
+        });
+      } else {
+        enqueueMediaDiscoverJob(database, {
+          workspaceId: input.workspaceId,
+          sourceId: saved.id,
+          sourceRevisionKey: revisionKey,
+          originalUrl: item.url
+        });
+      }
     }
     const source = updateWebsiteSourceResolution(database, {
       id: current.id,
@@ -412,6 +450,8 @@ export type WebFetchedText = {
   finalUrl: string;
   requestedUrl: string;
   hops: string[];
+  /** Retry-After 秒数（响应头；429/503 限流提示），无则 null。 */
+  retryAfterSeconds: number | null;
 };
 
 /**
@@ -496,7 +536,8 @@ export async function fetchWebText(input: {
       body: await readBodyCapped(response, maxBytes),
       finalUrl,
       requestedUrl: hops[0],
-      hops
+      hops,
+      retryAfterSeconds: parseRetryAfter(response.headers.get('retry-after'))
     };
   }
 }
@@ -523,6 +564,22 @@ async function readBodyCapped(response: Response, maxBytes: number): Promise<str
     await reader.cancel().catch(() => {});
   }
   return chunks.join('');
+}
+
+/** Retry-After 头：秒数或 HTTP-date；无法解析返回 null。 */
+export function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : null;
+  }
+  const dateMs = Date.parse(trimmed);
+  if (Number.isFinite(dateMs)) {
+    return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
+  }
+  return null;
 }
 
 function unreadableTrial(url: string, code: string, message: string, httpStatus?: number, contentType?: string | null, requestedUrl = url): WebsitePage {

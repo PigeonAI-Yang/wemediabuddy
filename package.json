@@ -11,10 +11,14 @@
     "start": "electron-forge start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "e2e": "node tests/e2e/runner.mjs",
+    "e2e:smoke": "node tests/e2e/runner.mjs --file tests/e2e/navigation.test.mjs --scenario smoke-launch-exit",
+    "e2e:gate": "node tests/e2e/coverage-gate.mjs",
     "sync:design": "node scripts/sync-design-doc-from-foundation.mjs",
-    "package": "node scripts/prepare-pi-runtime.mjs && electron-forge package",
-    "build": "node scripts/prepare-pi-runtime.mjs && electron-forge make",
-    "publish": "node scripts/prepare-pi-runtime.mjs && electron-forge publish",
+    "verify:xhs-resources": "node scripts/verify-xiaohongshu-mcp-resources.mjs",
+    "package": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge package",
+    "build": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge make",
+    "publish": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge publish",
     "icons:brand": "node scripts/build-brand-icons.mjs"
   },
   "devDependencies": {

@@ -3,12 +3,16 @@
 // 后端投影消费（getTopicWikiDetail）、stale/failed/disputed/inference 可见、版本恢复走既有
 // ChangeSet 写路径（restoreFromVersionId 追加新版本）、dataChanged 订阅替代手动刷新、
 // 深链保持 topicId 开详情、原 dossier 仍可达、键盘/响应式/主题、无新顶层路由/平行 Topic。
+// WMB-5242：产品语言锁定 —— 顶级“主题”保留、不新增 Wiki 路由、四页签保留、主用户文案
+// （资料员持续维护/当前认识/已整理或等待整理）存在、主流程不出现 尚无正式 Wiki/正式编译/编译失败/知识风险。
 // 不做项目级 formatter/linter/全量测试；由主 Agent 集成后统一执行。
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const topicView = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+const appShell = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
+const appTypes = await readFile(new URL('../src/renderer/app-types.ts', import.meta.url), 'utf8');
 const topicCss = await readFile(new URL('../src/renderer/styles-knowledge-topic.css', import.meta.url), 'utf8');
 const sharedTypes = await readFile(new URL('../src/shared/knowledge-topic-library.ts', import.meta.url), 'utf8');
 
@@ -68,6 +72,37 @@ test('WMB-5226 UI: four product tabs (概览/资料/变化/版本) replace the s
   assert.doesNotMatch(topicView, /尚无编译 Wiki/);
 });
 
+test('WMB-5242 UI: product language locked (主题 nav kept, no wiki route, 资料员持续维护/当前认识/已整理或等待整理 present, engineering phrases absent)', () => {
+  // 顶级导航仍叫“主题”，且不新增 Wiki 路由/视图（View 联合类型与 pageLabels 均无 wiki）。
+  assert.match(appShell, /topic: '主题'/);
+  const viewTypeLine = appTypes.split('\n').find((line) => line.includes('type View ='));
+  assert.ok(viewTypeLine, 'app-types 必须声明 View 联合类型');
+  assert.match(viewTypeLine ?? '', /'topic'/);
+  assert.doesNotMatch(viewTypeLine ?? '', /'wiki'/);
+  const pageLabelsLine = appShell.split('\n').find((line) => line.includes('const pageLabels'));
+  assert.ok(pageLabelsLine, 'main.tsx 必须声明 pageLabels');
+  assert.doesNotMatch(pageLabelsLine ?? '', /wiki:/);
+  // 主用户文案必须存在：资料员持续维护 / 当前认识 / 整理状态语言（已整理 或 等待整理）。
+  assert.match(topicView, /资料员持续维护/);
+  assert.match(topicView, /当前认识/);
+  assert.match(topicView, /已整理/);
+  assert.match(topicView, /等待整理/);
+  // 整理状态映射：compiling→正在整理新资料，stale→有新资料待更新，failed→整理失败。
+  assert.match(topicView, /compiling: '正在整理新资料'/);
+  assert.match(topicView, /stale: '有新资料待更新'/);
+  assert.match(topicView, /failed: '整理失败'/);
+  // 主流程不得出现工程/失败措辞：尚无正式 Wiki / 正式编译 / 编译失败 / 知识风险。
+  assert.doesNotMatch(topicView, /尚无正式 Wiki/);
+  assert.doesNotMatch(topicView, /正式编译/);
+  assert.doesNotMatch(topicView, /编译失败/);
+  assert.doesNotMatch(topicView, /知识风险/);
+  // 列表与详情保留 当前综合/更新时间/整理状态 的用户可见钩子（DOM 钩子不漂移）。
+  assert.match(topicView, /topic-object-card-summary/);
+  assert.match(topicView, /topic-object-card-meta/);
+  assert.match(topicView, /topic-compile-state/);
+  assert.match(topicView, /topic-object-meta/);
+});
+
 test('WMB-5212 UI: default detail consumes the frozen backend projection getTopicWikiDetail', () => {
   assert.match(topicView, /window\.wmb\.getTopicWikiDetail\(\{ topicId, \.\.\.WIKI_DETAIL_LIMITS \}\)/);
   // 有界投影：五类列表全部限流，不无界拉取。
@@ -79,8 +114,9 @@ test('WMB-5212 UI: default detail consumes the frozen backend projection getTopi
 });
 
 test('WMB-5212 UI: stale/failed/disputed/inference all have observable UI (semantic labels, not color-only)', () => {
-  // 编译状态：stale/failed/compiling 显式横幅 + 原因（不显示半成品正文）。
-  assert.match(topicView, /COMPILE_STATUS_LABELS: Record<string, string> = \{[\s\S]*?stale: '待重编译',[\s\S]*?failed: '编译失败'/);
+  // 整理状态：stale/failed/compiling 显式横幅 + 原因（不显示半成品正文）。
+  // WMB-5242：stale→有新资料待更新，failed→整理失败（不再出现 待重编译/编译失败）。
+  assert.match(topicView, /COMPILE_STATUS_LABELS: Record<string, string> = \{[\s\S]*?stale: '有新资料待更新',[\s\S]*?failed: '整理失败'/);
   assert.match(topicView, /topic-wiki-compile-banner/);
   assert.match(topicView, /wikiDetail\.wiki\?\.compileNote/);
   // 风险汇总：disputed / contradicted / inference 计数 + stale/failed 布尔（语义标签）。
@@ -140,13 +176,13 @@ test('WMB-5212 UI: original dossier stays reachable (deep mode + fallback when n
   assert.match(topicView, /打开完整档案/);
   assert.match(topicView, /setDeepMode\(true\)/);
   // 无编译 Wiki 时兜底显示既有档案，不显示半成品（WMB-5226 去除技术文案；WMB-5233 诚实三态）。
-  // uncompiled 用户语言 =「尚未编译」：空壳不显示已编译/当前。
-  assert.match(topicView, /尚未编译/);
+  // uncompiled 用户语言 =「尚未整理」（WMB-5242 去除 尚未编译）：空壳不显示已编译/当前。
+  assert.match(topicView, /尚未整理/);
   assert.match(topicView, /以下为现有档案/);
   // WMB-5233：三态用户语言与诚实空壳横幅（legacy_shell = 初始档案，绝不显示已编译/当前）。
   assert.match(topicView, /COMPILE_STATE_LABELS/);
   assert.match(topicView, /legacy_shell: '初始档案'/);
-  assert.match(topicView, /uncompiled: '尚未编译'/);
+  assert.match(topicView, /uncompiled: '等待整理'/);
   assert.match(topicView, /compile-state-\$\{compileState\}/);
   assert.match(topicView, /isMigration \? COMPILE_STATE_LABELS\.legacy_shell : '当前'/);
   // 既有八类 dossier 分类与 deep 模式原样保留。

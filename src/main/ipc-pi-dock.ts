@@ -29,6 +29,14 @@ import {
   type KnowledgeQueryWritebackInput,
   type KnowledgeQueryWritebackResult
 } from './query-writeback.ts';
+import {
+  extractWikiActionManifest,
+  hasWikiActionFence,
+  stripWikiActionBlock,
+  type WikiActionManifest,
+  type WikiActionReject
+} from '../shared/wiki-operator-protocol.ts';
+import { executeWikiAction, type WikiActionResult } from './pi-wiki-actions.ts';
 const { ipcMain } = electron;
 
 type Dependencies = {
@@ -180,6 +188,74 @@ export async function settleQueryWritebackForRound(
       reason: message.length > 240 ? `${message.slice(0, 240)}…` : message
     });
     return { text, writeback: null };
+  }
+}
+
+/** 用户可见的 wiki 动作结算行（成功/部分/低价值/失败；T-EL-1：不含路径/SQL/堆栈）。 */
+function wikiActionOutcomeLine(result: WikiActionResult): string {
+  if (!result.ok) return `${result.action} 未执行（${result.error.code}：${result.error.message}）。`;
+  if (result.overall === 'partial') return `${result.action} 部分成功：${String((result.data as { failed?: number } | undefined)?.failed ?? '部分项')} 项失败，其余成功。`;
+  if (result.overall === 'no_op') return `${result.action} 无变化（低价值，原始资料已保留）。`;
+  return `${result.action} 成功。`;
+}
+
+/**
+ * WMB-5240：Pi 轮次完成后的 Wiki 操作清单 settle hook（不依赖自由文本猜测）。
+ * 只认回复文本中严格 `{"wmb_wiki_action": …}` 围栏（shared 解析器 fail-closed）：
+ * - 无围栏 → 零执行，正文原样返回（wiki=null, reject=null）；
+ * - 有围栏但清单非法/缺授权 → 零执行，正文保留围栏，返回 reject（调用方追加用户可见原因）；
+ * - 有合法清单 → 经 executeWikiAction（写动作走 dispatcher + grant；只读直达 store）执行；
+ *   失败不阻断已完成的轮次；返回剥离围栏后的正文 + 执行结果。
+ */
+export async function settleWikiActionForRound(
+  deps: Pick<Dependencies, 'getActiveRuntime'>,
+  dataRoot: DataRoot,
+  input: { conversationId: string; question: string; answerText: string }
+): Promise<{ text: string; wiki: WikiActionResult | null; reject: WikiActionReject | null }> {
+  const parsed = extractWikiActionManifest(input.answerText);
+  const text = parsed.manifest ? stripWikiActionBlock(input.answerText) : input.answerText;
+  if (!parsed.manifest) {
+    // 无任何围栏 = Pi 本轮未声明 Wiki 操作（常态，静默）；有围栏但清单非法/缺授权 → reject 可见。
+    return hasWikiActionFence(input.answerText)
+      ? { text, wiki: null, reject: parsed.reject }
+      : { text, wiki: null, reject: null };
+  }
+  const runtime = deps.getActiveRuntime?.() ?? null;
+  if (!runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) {
+    return {
+      text,
+      wiki: {
+        ok: false,
+        requestId: parsed.manifest.requestId,
+        action: parsed.manifest.action,
+        overall: 'failed',
+        data: null,
+        error: { code: 'WIKI_ACTION_RUNTIME_UNAVAILABLE', message: '工作空间运行时不可用，Wiki 操作未执行（零写）。' }
+      },
+      reject: null
+    };
+  }
+  try {
+    const wiki = await executeWikiAction(
+      { runtime, database: runtime.database },
+      parsed.manifest as WikiActionManifest,
+      { actor: 'pi' }
+    );
+    return { text, wiki, reject: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      text,
+      wiki: {
+        ok: false,
+        requestId: parsed.manifest.requestId,
+        action: parsed.manifest.action,
+        overall: 'failed',
+        data: null,
+        error: { code: 'WIKI_ACTION_FAILED', message: message.length > 240 ? `${message.slice(0, 240)}…` : message }
+      },
+      reject: null
+    };
   }
 }
 
@@ -434,16 +510,27 @@ export async function runDockManagerPrompt(input: {
         }
       }
     });
-    // WMB-5214：轮次完成后的显式结构化写回 hook（无清单零写；剥离协议块再落 transcript）。
-    const settled = await settleQueryWritebackForRound(deps, dataRoot, {
+    // WMB-5240：轮次完成后先结算 Wiki 操作清单（wmb_wiki_action；无清单零执行），
+    // 再走 WMB-5214 查询写回（wmb_query_writeback；无清单零写）；各自剥离自己的协议围栏。
+    const wikiSettled = await settleWikiActionForRound(deps, dataRoot, {
       conversationId: conversation.id,
       question: extractVisiblePrompt(wrapped),
       answerText: result.text
     });
-    const synced = await syncPiConversation(dataRoot.path, conversation, runtime, { status: result.stopped ? 'stopped' : undefined, thinking: result.thinking, text: settled.text });
+    const settled = await settleQueryWritebackForRound(deps, dataRoot, {
+      conversationId: conversation.id,
+      question: extractVisiblePrompt(wrapped),
+      answerText: wikiSettled.text
+    });
+    const settledText = wikiSettled.wiki
+      ? `${settled.text}\n\n[Wiki 操作] ${wikiActionOutcomeLine(wikiSettled.wiki)}`
+      : wikiSettled.reject
+        ? `${settled.text}\n\n[Wiki 操作] 未执行（${wikiSettled.reject.code}：${wikiSettled.reject.reason}）。`
+        : settled.text;
+    const synced = await syncPiConversation(dataRoot.path, conversation, runtime, { status: result.stopped ? 'stopped' : undefined, thinking: result.thinking, text: settledText });
     if (synced) deps.setPiSessionFile(synced.sessionFile);
-    broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: settled.text, thinking: result.thinking, scope: 'dock' });
-    return { text: settled.text, stopped: result.stopped, conversation: synced };
+    broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: settledText, thinking: result.thinking, scope: 'dock' });
+    return { text: settledText, stopped: result.stopped, conversation: synced };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (orchestration) {
@@ -621,16 +708,27 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
           }
         }
       });
-      // WMB-5214：轮次完成后的显式结构化写回 hook（无清单零写；剥离协议块再落 transcript）。
-      const settled = await settleQueryWritebackForRound({ getActiveRuntime }, dataRoot, {
+      // WMB-5240：轮次完成后先结算 Wiki 操作清单（wmb_wiki_action；无清单零执行），
+      // 再走 WMB-5214 查询写回（wmb_query_writeback；无清单零写）；各自剥离自己的协议围栏。
+      const wikiSettled = await settleWikiActionForRound({ getActiveRuntime }, dataRoot, {
         conversationId: conversation.id,
         question: extractVisiblePrompt(raw),
         answerText: result.text
       });
-      const synced = await syncPiConversation(dataRoot.path, conversation, runtime, { status: result.stopped ? 'stopped' : undefined, thinking: result.thinking, text: settled.text });
+      const settled = await settleQueryWritebackForRound({ getActiveRuntime }, dataRoot, {
+        conversationId: conversation.id,
+        question: extractVisiblePrompt(raw),
+        answerText: wikiSettled.text
+      });
+      const settledText = wikiSettled.wiki
+        ? `${settled.text}\n\n[Wiki 操作] ${wikiActionOutcomeLine(wikiSettled.wiki)}`
+        : wikiSettled.reject
+          ? `${settled.text}\n\n[Wiki 操作] 未执行（${wikiSettled.reject.code}：${wikiSettled.reject.reason}）。`
+          : settled.text;
+      const synced = await syncPiConversation(dataRoot.path, conversation, runtime, { status: result.stopped ? 'stopped' : undefined, thinking: result.thinking, text: settledText });
       if (synced) setPiSessionFile(synced.sessionFile);
-      broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: settled.text, thinking: result.thinking, scope: 'dock' });
-      return { ...result, queued: false, conversation: synced, text: settled.text };
+      broadcastPiEvent({ type: result.stopped ? 'stopped' : 'idle', text: settledText, thinking: result.thinking, scope: 'dock' });
+      return { ...result, queued: false, conversation: synced, text: settledText };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (orchestration) {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { projectTopicSaved } from './wiki-index-triggers.ts';
 import { fingerprintTopic } from './ferment.ts';
 import { buildTopicConflictContract, evaluateTopicConflictContract, type TopicConflictContractV2, type TopicConflictEvidence } from './topic-maintenance-conflict.ts';
 import { completeTopicReproposal, enqueueTopicReproposal, getTopicReproposal } from './topic-maintenance-reproposal.ts';
@@ -107,11 +108,11 @@ function currentMatches(database: DatabaseSync, snapshot: TopicSnapshot, changes
 function executeFrozen(database: DatabaseSync, proposal: ReturnType<typeof parse>): void {
   const { changes, snapshot } = proposal; const now = snapshot.frozenAt;
   for (const change of changes) {
-    if (change.kind === 'create') database.prepare('INSERT INTO topics(id,title,created_at,updated_at,revision,canonical_key,kind,summary,status,first_seen_at,last_seen_at) VALUES(?,?,?,?,1,?,?,?,?,?,?)').run(change.topicId!, change.after.title.trim(), now, now, normalKey(change.after.canonicalKey ?? change.after.title), change.after.kind ?? 'theme', change.after.summary ?? null, change.after.status ?? 'active', now, now);
-    if (change.kind === 'update') database.prepare('UPDATE topics SET title=?,canonical_key=?,kind=?,summary=?,status=?,updated_at=?,last_seen_at=?,revision=revision+1 WHERE id=?').run(change.after.title.trim(), normalKey(change.after.canonicalKey ?? change.after.title), change.after.kind ?? 'theme', change.after.summary ?? null, change.after.status ?? 'active', now, now, change.topicId);
-    if (change.kind === 'archive') database.prepare("UPDATE topics SET status='archived',updated_at=?,revision=revision+1 WHERE id=?").run(now, change.topicId);
+    if (change.kind === 'create') { database.prepare('INSERT INTO topics(id,title,created_at,updated_at,revision,canonical_key,kind,summary,status,first_seen_at,last_seen_at) VALUES(?,?,?,?,1,?,?,?,?,?,?)').run(change.topicId!, change.after.title.trim(), now, now, normalKey(change.after.canonicalKey ?? change.after.title), change.after.kind ?? 'theme', change.after.summary ?? null, change.after.status ?? 'active', now, now); projectTopicSaved(database, change.topicId!); }
+    if (change.kind === 'update') { database.prepare('UPDATE topics SET title=?,canonical_key=?,kind=?,summary=?,status=?,updated_at=?,last_seen_at=?,revision=revision+1 WHERE id=?').run(change.after.title.trim(), normalKey(change.after.canonicalKey ?? change.after.title), change.after.kind ?? 'theme', change.after.summary ?? null, change.after.status ?? 'active', now, now, change.topicId); projectTopicSaved(database, change.topicId); }
+    if (change.kind === 'archive') { database.prepare("UPDATE topics SET status='archived',updated_at=?,revision=revision+1 WHERE id=?").run(now, change.topicId); projectTopicSaved(database, change.topicId); }
     if (change.kind === 'reassign') applySourceMove(database, snapshot.before.sourceLinks, change.fromTopicId, change.toTopicId, change.sourceId, change.relation, now);
-    if (change.kind === 'merge') { applyMerge(database, snapshot.before, change.mergedTopicId, change.retainedTopicId, now); database.prepare("UPDATE topics SET status='archived',updated_at=?,revision=revision+1 WHERE id=?").run(now, change.mergedTopicId); assertNoFormalReferences(database, change.mergedTopicId); }
+    if (change.kind === 'merge') { applyMerge(database, snapshot.before, change.mergedTopicId, change.retainedTopicId, now); database.prepare("UPDATE topics SET status='archived',updated_at=?,revision=revision+1 WHERE id=?").run(now, change.mergedTopicId); assertNoFormalReferences(database, change.mergedTopicId); projectTopicSaved(database, change.mergedTopicId); }
   }
 }
 function applySourceMove(database: DatabaseSync, links: RecordRow[], oldId: string, newId: string, sourceId: string, relation: string | undefined, now: string): void { for (const row of links.filter((row) => String(row.topic_id) === oldId && String(row.source_id) === sourceId && (relation === undefined || String(row.relation) === relation))) { database.prepare('DELETE FROM topic_source_links WHERE topic_id=? AND source_id=? AND relation=?').run(oldId, sourceId, row.relation as any); database.prepare('INSERT OR IGNORE INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at) VALUES(?,?,?,?,?)').run(newId, sourceId, row.relation as any, row.created_at as any, now); } }

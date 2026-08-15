@@ -1,0 +1,54 @@
+/* ============================================================
+ * WeMediaBuddy Design System — Shape, elevation, motion tokens
+ * Machine SSOT: src/renderer/styles-foundation.css and
+ * styles-workflow.css dominant values; WMB-5258 census
+ * (25 radii, 60 !important, 28 z-index → finite scales below).
+ * ============================================================ */
+
+:root {
+  /* ------------------------------------------------------------
+   * Radius scale — DS normalization of dominant current values.
+   * 5 status chip · 6 tag · 7 inputs/filters · 8 buttons/sidebar ·
+   * 10 panels · 12 cards/page-command · 14 dialogs · 999 pills.
+   * ------------------------------------------------------------ */
+  --radius-xs: 5px;
+  --radius-sm: 6px;
+  --radius-md: 7px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 14px;
+  --radius-pill: 999px;
+
+  /* ------------------------------------------------------------
+   * Elevation — the product is mostly flat: 1px borders plus
+   * color-mix tints carry hierarchy; drop shadows are reserved
+   * for overlays. Exact source values below.
+   * ------------------------------------------------------------ */
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 42%); /* .app-confirm-dialog */
+  --shadow-press: inset 0 1px 0 color-mix(in srgb, var(--overlay) 18%, transparent); /* secondary :active */
+
+  /* Focus ring — foundation `button:focus-visible` */
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 2px;
+  --focus-ring-soft: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* ------------------------------------------------------------
+   * Motion — durations and easings from source.
+   * base 120ms ease (buttons/fields) · slow 140ms (sidebar nav,
+   * pi resize handle) · expand 200ms cubic-bezier(.22,1,.36,1)
+   * (shell grid, view transitions) · instant 80ms (press).
+   * Creature motion uses cubic-bezier(.25,1,.5,1).
+   * Press state: translateY(1px) scale(0.98) on 80ms.
+   * Every nonessential transition has a reduced-motion static
+   * equivalent (see styles/components.css).
+   * ------------------------------------------------------------ */
+  --dur-instant: 80ms; /* @kind other */
+  --dur-base: 120ms; /* @kind other */
+  --dur-slow: 140ms; /* @kind other */
+  --dur-expand: 200ms; /* @kind other */
+  --ease-base: ease; /* @kind other */
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1); /* @kind other */
+  --ease-creature: cubic-bezier(0.25, 1, 0.5, 1); /* @kind other */
+  --press-transform: translateY(1px) scale(0.98);
+}

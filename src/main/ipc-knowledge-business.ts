@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
+import type { DatabaseSync } from 'node:sqlite';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireReceiptData } from './business-command.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import {
@@ -12,17 +14,29 @@ import {
 import {
   KNOWLEDGE_DEEP_LINK_IPC_CHANNEL, KNOWLEDGE_SOURCE_KNOWLEDGE_DETAIL_IPC_CHANNEL, KNOWLEDGE_TOPIC_WIKI_DETAIL_IPC_CHANNEL
 } from '../shared/knowledge-topic-library.ts';
+// WMB-5243：全局 Wiki 知识网络只读投影（无 canvasId；稳定节点 ID；正式对象只读投影）。
+import {
+  KNOWLEDGE_NETWORK_NODE_DETAIL_IPC_CHANNEL, KNOWLEDGE_NETWORK_PROJECTION_IPC_CHANNEL,
+  type KnowledgeNetworkProjection, type KnowledgeNetworkProjectionInput
+} from '../shared/knowledge-network.ts';
 import {
   addKnowledgeCanvasNode, createContentProjectFromBrief, createCreativeBrief, createKnowledgeCanvas, createKnowledgeRelation,
   decideKnowledgeSuggestion, getCanvasNodeDetail, getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage,
-  getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeCanvasProjection, getKnowledgeContextPackage, listKnowledgeCanvases,
+  getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeCanvasProjection, getKnowledgeContextPackage, getKnowledgeNetworkNodeDetail,
+  getKnowledgeNetworkProjection, listKnowledgeCanvases,
   listKnowledgeContextPackages, moveKnowledgeCanvasNodes, previewKnowledgeContextPackage, removeKnowledgeCanvasNode,
   updateCreativeBrief, updateKnowledgeCanvas, updateKnowledgeRelation, validateKnowledgeSelectionManifest
 } from './knowledge-canvas.ts';
-import { freshRequestId, ownerUiActor, readWorkspaceDatabase, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
+import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
 import { ensureJobsSpawner } from './ipc-jobs.ts';
 import { kickTopicReproposals, resumeTopicReproposal } from './topic-maintenance-reproposal.ts';
 import { recordCreativeBriefUsage } from './knowledge-usage-integration.ts';
+import {
+  emptyMaintenanceStatus, getMaintenanceStatus, pauseMaintenanceRun, resumeMaintenanceRun, startMaintenanceRun
+} from './knowledge-maintenance.ts';
+import {
+  KNOWLEDGE_MAINTENANCE_IPC_CHANNELS, type KnowledgeMaintenanceStartInput
+} from '../shared/knowledge-maintenance.ts';
 
 export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependencies): void {
   ipcMain.handle('knowledge:list-topics', (_event, input = {}) => readWorkspaceDatabase(dependencies,
@@ -62,6 +76,14 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
   // WMB-5213：三模式投影 / 节点详情深链 / selected-only 清单（只读；复用 v56 读模型，不造表）。
   ipcMain.handle('knowledge-canvas:projection', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeCanvasProjection(database, input)));
   ipcMain.handle('knowledge-canvas:detail', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getCanvasNodeDetail(database, input)));
+  // WMB-5243：全局 Wiki 知识网络只读投影（无 canvasId；分页有界；正式对象；空库返回有效空投影）。
+  ipcMain.handle(KNOWLEDGE_NETWORK_PROJECTION_IPC_CHANNEL, (_event, input) => readWorkspaceDatabase(dependencies,
+    (): KnowledgeNetworkProjection => ({
+      networkId: 'global', nodes: [], relations: [], filters: { nodeTypes: [], relationTypes: [] },
+      totalNodes: 0, totalRelations: 0, limit: 500, offset: 0, hasMore: false, updatedAt: ''
+    }),
+    database => getKnowledgeNetworkProjection(database, input as KnowledgeNetworkProjectionInput | undefined)));
+  ipcMain.handle(KNOWLEDGE_NETWORK_NODE_DETAIL_IPC_CHANNEL, (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => getKnowledgeNetworkNodeDetail(database, input)));
   ipcMain.handle('knowledge-context:selection-manifest', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => validateKnowledgeSelectionManifest(database, input)));
   ipcMain.handle('knowledge-context:preview-package', (_event, input) => readWorkspaceDatabase(dependencies, () => null, database => previewKnowledgeContextPackage(database, input)));
   ipcMain.handle('knowledge-context:list-packages', (_event, input = {}) => readWorkspaceDatabase(dependencies,
@@ -132,4 +154,49 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
     if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'content.create_from_brief' });
     return receiptAsCommandResult(receipt);
   });
+}
+
+// ============================================================
+// WMB-5236：全库维护 run IPC（start/status/pause/resume）
+// 写面（start/pause/resume）经 dispatcher 授权；status 走只读投影。
+// ============================================================
+
+function boundWorkspaceIdOf(database: DatabaseSync): string | null {
+  try {
+    const row = database.prepare("SELECT value AS workspaceId FROM app_meta WHERE key='workspace_id'").get() as { workspaceId?: string } | undefined;
+    return row?.workspaceId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 注册维护 run 的 start/status/pause/resume 通道（复用 BusinessIpcDependencies 与 dispatcher）。 */
+export function registerKnowledgeMaintenanceIpc(dependencies: BusinessIpcDependencies): void {
+  const maintenanceMutation = <T>(command: string, execute: (database: DatabaseSync, workspaceId: string, input: unknown) => T) =>
+    async (_event: IpcMainInvokeEvent, input: unknown): Promise<T> => {
+      const runtime = await requireBusinessRuntime(dependencies);
+      const receipt = await dispatchBusinessCommand(runtime, {
+        command,
+        requestId: `knowledge-maintenance:${command}:${Date.now()}`,
+        actor: ownerUiActor,
+        input: { workspaceId: runtime.identity.workspaceId, input },
+        boundIdentity: { entityType: 'knowledge_maintenance_run' },
+        entityType: 'knowledge_maintenance_run',
+        execute: (database: DatabaseSync, value) => ({ data: execute(database, runtime.identity.workspaceId, value.input) })
+      });
+      return requireReceiptData(receipt);
+    };
+
+  ipcMain.handle(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.start, maintenanceMutation('start', (database, workspaceId, input) =>
+    startMaintenanceRun(database, { workspaceId, ...((input ?? {}) as KnowledgeMaintenanceStartInput) })));
+
+  ipcMain.handle(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.pause, maintenanceMutation('pause', (database, workspaceId) => pauseMaintenanceRun(database, workspaceId)));
+
+  ipcMain.handle(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.resume, maintenanceMutation('resume', (database, workspaceId) => resumeMaintenanceRun(database, workspaceId)));
+
+  ipcMain.handle(KNOWLEDGE_MAINTENANCE_IPC_CHANNELS.status, () => readWorkspaceDatabase(dependencies,
+    () => emptyMaintenanceStatus(), (database) => {
+      const workspaceId = boundWorkspaceIdOf(database);
+      return workspaceId ? getMaintenanceStatus(database, workspaceId) : emptyMaintenanceStatus();
+    }));
 }

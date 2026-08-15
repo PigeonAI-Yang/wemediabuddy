@@ -13,6 +13,25 @@ import type {
   KnowledgeCanvasProjection, KnowledgeCanvasProjectionInput, KnowledgeCanvasNodeDetail, KnowledgeCanvasNodeDetailInput,
   KnowledgeCanvasSelectionManifest, KnowledgeCanvasSelectionManifestInput, KnowledgeCanvasHealthIssueProjection
 } from '../shared/knowledge-canvas.ts';
+// WMB-5243：全局 Wiki 知识网络只读投影（无 canvasId；稳定节点 ID = `<objectType>:<objectId>`）。
+import {
+  KNOWLEDGE_NETWORK_CANVAS_ID,
+  KNOWLEDGE_NETWORK_DEFAULT_LIMIT,
+  KNOWLEDGE_NETWORK_DEFAULT_NODE_TYPES,
+  KNOWLEDGE_NETWORK_MAX_LIMIT,
+  KNOWLEDGE_NETWORK_NODE_TYPE_LABELS,
+  knowledgeNetworkNodeId,
+  parseKnowledgeNetworkNodeId,
+  type KnowledgeNetworkEvidenceEntry,
+  type KnowledgeNetworkNode,
+  type KnowledgeNetworkNodeDetail,
+  type KnowledgeNetworkNodeDetailInput,
+  type KnowledgeNetworkNodeType,
+  type KnowledgeNetworkProjection,
+  type KnowledgeNetworkProjectionInput,
+  type KnowledgeNetworkRelatedEntry,
+  type KnowledgeNetworkVersionRef
+} from '../shared/knowledge-network.ts';
 import type {
   KnowledgeChangeSetRecord, KnowledgeEntityRecord, KnowledgeHealthIssueRecord, KnowledgeNoteRecord,
   KnowledgeUpdateReceiptRecord as SharedKnowledgeUpdateReceiptRecord, KnowledgeWikiPageRecord, KnowledgeWikiPageVersionRecord
@@ -585,6 +604,10 @@ export function getCanvasNodeDetail(database: DatabaseSync, input: KnowledgeCanv
  * 越界/重复节点拒绝；UI 展示的清单与正式写（preview/create 包）必须为同一份。
  */
 export function validateKnowledgeSelectionManifest(database: DatabaseSync, input: KnowledgeCanvasSelectionManifestInput): KnowledgeCanvasSelectionManifest {
+  // WMB-5243：全局知识网络选择清单（canvasId='global'；nodeIds 为稳定网络节点 ID，冻结正文包）。
+  if (input.canvasId === KNOWLEDGE_NETWORK_CANVAS_ID) {
+    return buildGlobalSelection(database, input.nodeIds).manifest;
+  }
   const canvas = getKnowledgeCanvas(database, input.canvasId) as unknown as ProjectedCanvasRows;
   const candidateIds = [...new Set(input.nodeIds)];
   if (!candidateIds.length) throw new Error('PACKAGE_ITEMS_REQUIRED');
@@ -599,7 +622,10 @@ export function validateKnowledgeSelectionManifest(database: DatabaseSync, input
     }));
   const estimatedCharacters = JSON.stringify({ items }).length;
   return {
-    scope: 'selected_only', canvasId: input.canvasId, items, estimatedCharacters,
+    scope: 'selected_only', canvasId: input.canvasId, items,
+    // 旧画布路径：无效节点拒绝、无限长裁剪；未纳入仅来自静默去重（重复正式身份）。
+    excludedCount: input.nodeIds.length - candidateIds.length,
+    estimatedCharacters,
     limitCharacters: KNOWLEDGE_PACKAGE_CHARACTER_LIMIT, overLimit: estimatedCharacters > KNOWLEDGE_PACKAGE_CHARACTER_LIMIT
   };
 }
@@ -744,6 +770,10 @@ export const KNOWLEDGE_PACKAGE_CHARACTER_LIMIT=30000;
 export function previewKnowledgeContextPackage(database:DatabaseSync,input:{
   canvasId:string;nodeIds:string[];excludedNodeIds?:string[];excludedRelationIds?:string[];
 }){
+  // WMB-5243：全局知识网络冻结选择包（canvasId='global'；稳定网络节点 ID；有界字符 + excluded）。
+  if (input.canvasId === KNOWLEDGE_NETWORK_CANVAS_ID) {
+    return previewGlobalKnowledgeContextPackage(database, input);
+  }
   // WMB-5213：preview/create 与 selected-only 清单同源（validateKnowledgeSelectionManifest），
   // 保证 UI 展示的选中对象清单与服务端实际使用的对象集合完全一致。
   const manifest=validateKnowledgeSelectionManifest(database,{canvasId:input.canvasId,nodeIds:input.nodeIds});
@@ -760,13 +790,18 @@ export function previewKnowledgeContextPackage(database:DatabaseSync,input:{
     ...internal.filter((relation:any)=>excludedRelationIds.has(relation.id)).map((relation:any)=>({kind:'relation',id:relation.id,relationType:relation.relationType,reason:'user_excluded'}))
   ];
   const estimatedCharacters=JSON.stringify({items,relations}).length;
-  return {scope:'selected_only',items,relations,excluded,truncated:false,estimatedCharacters,limitCharacters:KNOWLEDGE_PACKAGE_CHARACTER_LIMIT,overLimit:estimatedCharacters>KNOWLEDGE_PACKAGE_CHARACTER_LIMIT};
+  return {scope:'selected_only',items,relations,excluded,excludedCount:excluded.length,truncated:false,estimatedCharacters,limitCharacters:KNOWLEDGE_PACKAGE_CHARACTER_LIMIT,overLimit:estimatedCharacters>KNOWLEDGE_PACKAGE_CHARACTER_LIMIT};
 }
 
 export function createKnowledgeContextPackage(database: DatabaseSync, input: {
   canvasId: string; name: string; objective: string; instruction?: string; nodeIds: string[];
   excludedNodeIds?:string[];excludedRelationIds?:string[];familyId?:string;
 }, transaction = true) {
+  // WMB-5243：全局知识网络为只读投影；正式创作包仍是画布作用域遗留能力（canvas_id FK 要求真实画布，
+  // 不造 'global' 伪画布行）。全局网络选择只经 manifest/preview（Pi 上下文），不创建包。
+  if (input.canvasId === KNOWLEDGE_NETWORK_CANVAS_ID) {
+    throw new Error('PACKAGE_GLOBAL_CREATE_UNSUPPORTED');
+  }
   if (!input.name.trim() || !input.objective.trim()) throw new Error('PACKAGE_DETAILS_REQUIRED');
   const preview=previewKnowledgeContextPackage(database,input);
   if(preview.overLimit)throw new Error('PACKAGE_TOO_LARGE');
@@ -985,3 +1020,665 @@ export function createContentProjectFromBrief(database:DatabaseSync,input:{brief
   database.prepare('INSERT INTO creative_brief_projects(brief_id,project_id,created_at) VALUES(?,?,?)').run(brief.id,project.id,now);
   return getCreativeBriefLineage(database,brief.id);
 }
+
+// ============================================================
+// WMB-5243：全局 Wiki 知识网络只读投影 + 知识本体详情 + 冻结选择包（canvasId='global'）
+// 稳定节点 ID = `<objectType>:<objectId>`（topic/knowledge_note/knowledge_entity）；
+// 只读复用正式表与 v56 读 API（topics / knowledge_notes / knowledge_entities /
+// knowledge_note_versions / knowledge_wiki_pages / knowledge_formal_relations + registry /
+// knowledge_evidence_links），不造第二套 store/schema；旧画布接口保留仅供兼容已有数据。
+// 投影分页有界（默认 500 / 上限 2000），节点 UNION 一次查询 + 关系一次查询 + 版本映射一批，
+// 无 N+1。
+// WMB-5255：关系集合 = 活动正式关系 + 当前版本派生采纳边（active 笔记 current_version 的
+// adoptedTopicIds/adoptedEntityIds → note -> 主题/实体 about 边，稳定确定性 ID；
+// 与正式关系同 from/to/relationType 时正式优先去重）；度数/filters/totalRelations/updatedAt
+// 均以合并可见集合为口径。
+// ============================================================
+
+const NETWORK_DETAIL_EVIDENCE_LIMIT = 10;
+const NETWORK_DETAIL_RELATED_LIMIT = 10;
+
+/** 知识优先级（选择包超限时按此 + 选中顺序裁剪；topic > note > entity）。 */
+const NETWORK_NODE_PRIORITY: Readonly<Record<string, number>> = Object.freeze({ topic: 0, knowledge_note: 1, knowledge_entity: 2 });
+
+/** 可见端点类型（正式关系两端可出现的网络节点类型；knowledge_note_version 解析到其笔记）。 */
+const NETWORK_VISIBLE_ENDPOINT_TYPES = "('topic','knowledge_note','knowledge_note_version','knowledge_entity')";
+
+/** 三类节点 UNION（不带头尾 ORDER BY/LIMIT；列名：objectType/objectId/shortTitle/summary/updatedAt）。 */
+function networkNodesUnion(nodeTypes: readonly KnowledgeNetworkNodeType[]): string {
+  const branches: string[] = [];
+  const types = new Set(nodeTypes);
+  if (types.has('topic')) {
+    branches.push(`SELECT 'topic' AS objectType, id AS objectId, title AS shortTitle, coalesce(summary,'') AS summary, updated_at AS updatedAt
+      FROM topics WHERE status != 'archived'`);
+  }
+  if (types.has('knowledge_note')) {
+    branches.push(`SELECT 'knowledge_note' AS objectType, n.id AS objectId, n.title AS shortTitle, coalesce(v.statement,'') AS summary, n.updated_at AS updatedAt
+      FROM knowledge_notes n LEFT JOIN knowledge_note_versions v ON v.id = n.current_version_id
+      WHERE n.lifecycle = 'active'`);
+  }
+  if (types.has('knowledge_entity')) {
+    branches.push(`SELECT 'knowledge_entity' AS objectType, id AS objectId, canonical_name AS shortTitle, '' AS summary, updated_at AS updatedAt
+      FROM knowledge_entities WHERE lifecycle = 'active'`);
+  }
+  return branches.map((sql) => `SELECT * FROM (${sql})`).join(' UNION ALL ');
+}
+
+type ResolvedNetworkRelation = {
+  id: string;
+  relationKey: string;
+  from: string;
+  to: string;
+  displayName: string;
+};
+
+/**
+ * 活动正式关系解析：knowledge_formal_relations 活动行，端点类型 ∈ 网络可见类型，
+ * knowledge_note_version 端点经一批版本映射解析到其笔记；两端均映射到可见节点才算有效。
+ * objectIds 为 null → 全图；否则只取触及任一对象的行（对象详情/选择包用，有界）。
+ */
+function resolveActiveNetworkRelations(database: DatabaseSync, objectIds: readonly string[] | null): ResolvedNetworkRelation[] {
+  const select = `SELECT r.id, r.relation_key AS relationKey, r.from_object_type AS fromObjectType, r.from_object_id AS fromObjectId,
+    r.to_object_type AS toObjectType, r.to_object_id AS toObjectId, coalesce(reg.display_name, r.relation_key) AS displayName
+    FROM knowledge_formal_relations r
+    LEFT JOIN knowledge_relation_registry reg ON reg.relation_key = r.relation_key`;
+  const rows = objectIds === null
+    ? database.prepare(`${select}
+        WHERE r.ended_change_set_id IS NULL
+          AND r.from_object_type IN ${NETWORK_VISIBLE_ENDPOINT_TYPES}
+          AND r.to_object_type IN ${NETWORK_VISIBLE_ENDPOINT_TYPES}`).all()
+    : (() => {
+        const ids = [...new Set(objectIds)];
+        const placeholders = ids.map(() => '?').join(',');
+        return database.prepare(`${select}
+          WHERE r.ended_change_set_id IS NULL
+            AND (r.from_object_type IN ${NETWORK_VISIBLE_ENDPOINT_TYPES} OR r.to_object_type IN ${NETWORK_VISIBLE_ENDPOINT_TYPES})
+            AND (r.from_object_id IN (${placeholders}) OR r.to_object_id IN (${placeholders}))`).all(...ids, ...ids);
+      })() as Array<Record<string, unknown>>;
+
+  const versionIds = [...new Set(rows.flatMap((row) => {
+    const ids: string[] = [];
+    if (String(row.fromObjectType) === 'knowledge_note_version') ids.push(String(row.fromObjectId));
+    if (String(row.toObjectType) === 'knowledge_note_version') ids.push(String(row.toObjectId));
+    return ids;
+  }))];
+  const versionNoteMap = new Map<string, string>();
+  if (versionIds.length) {
+    const placeholders = versionIds.map(() => '?').join(',');
+    for (const row of database.prepare(`SELECT id, note_id AS noteId FROM knowledge_note_versions WHERE id IN (${placeholders})`).all(...versionIds) as Array<Record<string, unknown>>) {
+      versionNoteMap.set(String(row.id), String(row.noteId));
+    }
+  }
+  const endpointNodeId = (objectType: string, objectId: string): string | null => {
+    if (objectType === 'knowledge_note_version') {
+      const noteId = versionNoteMap.get(objectId);
+      return noteId ? knowledgeNetworkNodeId('knowledge_note', noteId) : null;
+    }
+    if (objectType === 'topic') return knowledgeNetworkNodeId('topic', objectId);
+    if (objectType === 'knowledge_note') return knowledgeNetworkNodeId('knowledge_note', objectId);
+    if (objectType === 'knowledge_entity') return knowledgeNetworkNodeId('knowledge_entity', objectId);
+    return null;
+  };
+  const resolved: ResolvedNetworkRelation[] = [];
+  for (const row of rows) {
+    const from = endpointNodeId(String(row.fromObjectType), String(row.fromObjectId));
+    const to = endpointNodeId(String(row.toObjectType), String(row.toObjectId));
+    if (!from || !to) continue;
+    resolved.push({ id: String(row.id), relationKey: String(row.relationKey), from, to, displayName: String(row.displayName ?? row.relationKey ?? '') });
+  }
+  return resolved;
+}
+
+/**
+ * WMB-5255：派生采纳边稳定确定性 ID（与正式关系 ID 命名空间区分；同 note+dest 恒等）。
+ */
+function derivedAdoptionRelationId(noteId: string, destType: 'topic' | 'knowledge_entity', destId: string): string {
+  return `derived:about:${noteId}:${destType}:${destId}`;
+}
+
+/**
+ * WMB-5255：当前版本派生采纳关系（只读投影，不写表）。
+ * 活动笔记 current_version 的 adoptedTopicIds/adoptedEntityIds → note -> 主题/实体 about 边；
+ * 一次有界批量 UNION（json_each 展开当前版本 JSON，不触历史版本）。两端都必须落在
+ * collectionNodeIds（≤2000 可见集合）：inactive/缺失目的地、集合外笔记一律不发射
+ * （端点永不悬空）。relationType=about、displayName=registry 'about' 的 display_name（'关于'）。
+ */
+function resolveDerivedAdoptionRelations(database: DatabaseSync, collectionNodeIds: ReadonlySet<string>): ResolvedNetworkRelation[] {
+  const noteIds = [...collectionNodeIds]
+    .filter((id) => id.startsWith('knowledge_note:'))
+    .map((id) => id.slice('knowledge_note:'.length));
+  if (!noteIds.length) return [];
+  const rows = database.prepare(`
+    WITH collection_notes(id) AS (SELECT value FROM json_each(?))
+    SELECT n.id AS noteId, 'topic' AS destType, j.value AS destId
+    FROM collection_notes c JOIN knowledge_notes n ON n.id = c.id
+      JOIN knowledge_note_versions v ON v.id = n.current_version_id,
+      json_each(v.adopted_topic_ids_json) j
+    WHERE n.lifecycle = 'active'
+    UNION ALL
+    SELECT n.id AS noteId, 'knowledge_entity' AS destType, j.value AS destId
+    FROM collection_notes c JOIN knowledge_notes n ON n.id = c.id
+      JOIN knowledge_note_versions v ON v.id = n.current_version_id,
+      json_each(v.adopted_entity_ids_json) j
+    WHERE n.lifecycle = 'active'`).all(JSON.stringify(noteIds)) as Array<Record<string, unknown>>;
+  const resolved: ResolvedNetworkRelation[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const noteId = String(row.noteId);
+    const destType = String(row.destType) === 'topic' ? 'topic' : 'knowledge_entity';
+    const destId = String(row.destId);
+    if (!noteId || !destId) continue;
+    const from = knowledgeNetworkNodeId('knowledge_note', noteId);
+    const to = knowledgeNetworkNodeId(destType, destId);
+    if (!collectionNodeIds.has(from) || !collectionNodeIds.has(to)) continue;
+    const key = `${from}|${to}|about`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    resolved.push({ id: derivedAdoptionRelationId(noteId, destType, destId), relationKey: 'about', from, to, displayName: '关于' });
+  }
+  return resolved;
+}
+
+/**
+ * WMB-5255：合并可见关系集合 = 活动正式关系 + 当前版本派生采纳边。
+ * 相同 from/to/relationType 时正式关系优先（正式身份/ID 保留，派生边不翻倍）；
+ * 其余正式关系身份原样保留。
+ */
+function mergeNetworkRelations(formal: readonly ResolvedNetworkRelation[], derived: readonly ResolvedNetworkRelation[]): ResolvedNetworkRelation[] {
+  const formalKeys = new Set<string>();
+  for (const relation of formal) formalKeys.add(`${relation.from}|${relation.to}|${relation.relationKey}`);
+  return [...formal, ...derived.filter((relation) => !formalKeys.has(`${relation.from}|${relation.to}|${relation.relationKey}`))];
+}
+
+/** 一批正式引用解析为网络节点（按正式对象批量查询；lifecycle/status 过滤；无 N+1）。 */
+function resolveNetworkNodesBulk(database: DatabaseSync, refs: ReadonlyArray<{ objectType: KnowledgeNetworkNodeType; objectId: string }>): Map<string, KnowledgeNetworkNode> {
+  const map = new Map<string, KnowledgeNetworkNode>();
+  const topics = [...new Set(refs.filter((ref) => ref.objectType === 'topic').map((ref) => ref.objectId))];
+  const notes = [...new Set(refs.filter((ref) => ref.objectType === 'knowledge_note').map((ref) => ref.objectId))];
+  const entities = [...new Set(refs.filter((ref) => ref.objectType === 'knowledge_entity').map((ref) => ref.objectId))];
+  const push = (objectType: KnowledgeNetworkNodeType, objectId: string, shortTitle: string, summary: string, updatedAt: string) => {
+    const id = knowledgeNetworkNodeId(objectType, objectId);
+    map.set(id, { id, objectType, objectId, shortTitle, summary, weight: 0, updatedAt });
+  };
+  if (topics.length) {
+    const rows = database.prepare(`SELECT id, title AS shortTitle, coalesce(summary,'') AS summary, updated_at AS updatedAt
+      FROM topics WHERE id IN (${topics.map(() => '?').join(',')}) AND status != 'archived'`).all(...topics) as Array<Record<string, unknown>>;
+    for (const row of rows) push('topic', String(row.id), String(row.shortTitle ?? ''), String(row.summary ?? ''), String(row.updatedAt ?? ''));
+  }
+  if (notes.length) {
+    const rows = database.prepare(`SELECT n.id, n.title AS shortTitle, coalesce(v.statement,'') AS summary, n.updated_at AS updatedAt
+      FROM knowledge_notes n LEFT JOIN knowledge_note_versions v ON v.id = n.current_version_id
+      WHERE n.id IN (${notes.map(() => '?').join(',')}) AND n.lifecycle = 'active'`).all(...notes) as Array<Record<string, unknown>>;
+    for (const row of rows) push('knowledge_note', String(row.id), String(row.shortTitle ?? ''), String(row.summary ?? ''), String(row.updatedAt ?? ''));
+  }
+  if (entities.length) {
+    const rows = database.prepare(`SELECT id, canonical_name AS shortTitle, updated_at AS updatedAt
+      FROM knowledge_entities WHERE id IN (${entities.map(() => '?').join(',')}) AND lifecycle = 'active'`).all(...entities) as Array<Record<string, unknown>>;
+    for (const row of rows) push('knowledge_entity', String(row.id), String(row.shortTitle ?? ''), '', String(row.updatedAt ?? ''));
+  }
+  return map;
+}
+
+/**
+ * WMB-5243/WMB-5255：全局 Wiki 知识网络只读投影。分页有界（limit 默认 500 / 上限 2000，offset 分页）；
+ * 节点 = topic/knowledge_note/knowledge_entity 正式对象（短标题 + 知识摘要来自既有正式字段）；
+ * 关系 = 合并可见关系集合（活动正式知识关系 + 当前版本派生采纳 about 边；正式同
+ * from/to/relationType 优先去重；两端映射到投影节点集合 ≤2000；跨页关系不丢失，每页返回同一集合关系）；
+ * filters = 可用类型及关系分组（合并可见集合口径，不受本页 limit/offset 影响）；无第二真源。
+ */
+export function getKnowledgeNetworkProjection(database: DatabaseSync, rawInput: KnowledgeNetworkProjectionInput = {}): KnowledgeNetworkProjection {
+  const input = rawInput ?? {};
+  const nodeTypes = (input.nodeTypes ?? KNOWLEDGE_NETWORK_DEFAULT_NODE_TYPES).filter(
+    (type): type is KnowledgeNetworkNodeType => type === 'topic' || type === 'knowledge_note' || type === 'knowledge_entity');
+  if (!nodeTypes.length) throw new Error('NETWORK_NODE_TYPES_REQUIRED');
+  const limit = Math.min(Math.max(input.limit ?? KNOWLEDGE_NETWORK_DEFAULT_LIMIT, 1), KNOWLEDGE_NETWORK_MAX_LIMIT);
+  const offset = Math.max(input.offset ?? 0, 0);
+  const relationKeySet = input.relationKeys ? new Set([...new Set(input.relationKeys)].filter(Boolean)) : null;
+
+  const union = networkNodesUnion(nodeTypes);
+  const countRow = database.prepare(`SELECT count(*) AS count, coalesce(max(updatedAt),'') AS updatedAt FROM (${union})`).get() as { count: number; updatedAt: string };
+  const totalNodes = Number(countRow.count);
+  const nodeRows = database.prepare(`${union} ORDER BY updatedAt DESC, objectType, objectId LIMIT ? OFFSET ?`).all(limit, offset) as Array<Record<string, unknown>>;
+
+  // 集合级关系：投影合同节点上限 = KNOWLEDGE_NETWORK_MAX_LIMIT（2000），一次取得完整节点集合
+  // （与分页同排序；渲染端合并上限一致），关系只要求两端都在该集合内 —— 端点落在分页边界两侧
+  // 的正式关系不因分页丢失；每页返回同一集合关系（渲染合并按 id 去重），端点永不悬空。
+  const collectionRows = database.prepare(`${union} ORDER BY updatedAt DESC, objectType, objectId LIMIT ?`).all(KNOWLEDGE_NETWORK_MAX_LIMIT) as Array<Record<string, unknown>>;
+  const collectionNodeIds = new Set(collectionRows.map((row) => knowledgeNetworkNodeId(row.objectType as KnowledgeNetworkNodeType, String(row.objectId))));
+
+  // WMB-5255：合并可见关系集合 = 活动正式关系 + 当前版本派生采纳边
+  // （正式同 from/to/relationType 优先去重；两端均在 ≤2000 投影节点集合内，跨页不丢失）。
+  const visibleRelations = mergeNetworkRelations(
+    resolveActiveNetworkRelations(database, null),
+    resolveDerivedAdoptionRelations(database, collectionNodeIds)
+  ).filter((relation) => collectionNodeIds.has(relation.from) && collectionNodeIds.has(relation.to));
+  const degreeByNode = new Map<string, number>();
+  for (const relation of visibleRelations) {
+    degreeByNode.set(relation.from, (degreeByNode.get(relation.from) ?? 0) + 1);
+    degreeByNode.set(relation.to, (degreeByNode.get(relation.to) ?? 0) + 1);
+  }
+  const nodes = nodeRows.map((row) => {
+    const objectType = row.objectType as KnowledgeNetworkNodeType;
+    const objectId = String(row.objectId);
+    const id = knowledgeNetworkNodeId(objectType, objectId);
+    return {
+      id, objectType, objectId,
+      shortTitle: String(row.shortTitle ?? ''),
+      summary: String(row.summary ?? ''),
+      weight: degreeByNode.get(id) ?? 0,
+      updatedAt: String(row.updatedAt ?? '')
+    } satisfies KnowledgeNetworkNode;
+  });
+
+  // 关系：relationKeys 过滤；集合级关系每页返回同一集合（渲染合并按 id 去重；端点永不悬空）。
+  const relations = visibleRelations
+    .filter((relation) => !relationKeySet || relationKeySet.has(relation.relationKey))
+    .map((relation) => ({ id: relation.id, from: relation.from, to: relation.to, relationType: relation.relationKey, displayName: relation.displayName }));
+
+  // filters：合并可见集合口径（不受本页 limit/offset 影响；relationKeys 过滤时仍展示全量可选分组）。
+  const typeCountRows = database.prepare(`SELECT objectType, count(*) AS count FROM (${networkNodesUnion(KNOWLEDGE_NETWORK_DEFAULT_NODE_TYPES)}) GROUP BY objectType`).all() as Array<Record<string, unknown>>;
+  const typeCounts = new Map(typeCountRows.map((row) => [String(row.objectType), Number(row.count)]));
+  const nodeTypeFilters = KNOWLEDGE_NETWORK_DEFAULT_NODE_TYPES
+    .map((type) => ({ id: type, label: KNOWLEDGE_NETWORK_NODE_TYPE_LABELS[type], count: typeCounts.get(type) ?? 0 }))
+    .filter((entry) => entry.count > 0);
+  const registryRows = database.prepare(`SELECT relation_key AS relationKey, display_name AS displayName FROM knowledge_relation_registry`).all() as Array<Record<string, unknown>>;
+  const displayByKey = new Map(registryRows.map((row) => [String(row.relationKey), String(row.displayName)]));
+  const relationTypeCounts = new Map<string, number>();
+  for (const relation of visibleRelations) {
+    relationTypeCounts.set(relation.relationKey, (relationTypeCounts.get(relation.relationKey) ?? 0) + 1);
+  }
+  const relationTypeFilters = [...relationTypeCounts.entries()]
+    .map(([key, count]) => ({ id: key, label: displayByKey.get(key) ?? key, count }))
+    .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+
+  const totalRelations = relationKeySet
+    ? visibleRelations.filter((relation) => relationKeySet.has(relation.relationKey)).length
+    : visibleRelations.length;
+  const maxRelationCreatedAt = String((database.prepare(`SELECT coalesce(max(created_at),'') AS maxCreatedAt FROM knowledge_formal_relations WHERE ended_change_set_id IS NULL`).get() as { maxCreatedAt: string }).maxCreatedAt ?? '');
+  // WMB-5255：版本采纳变化也要刷新投影时间戳（新版本 created_at 可能晚于笔记 updated_at 的写路径）。
+  const maxVersionCreatedAt = String((database.prepare(`SELECT coalesce(max(v.created_at),'') AS maxCreatedAt
+    FROM knowledge_notes n JOIN knowledge_note_versions v ON v.id = n.current_version_id
+    WHERE n.lifecycle = 'active'`).get() as { maxCreatedAt: string }).maxCreatedAt ?? '');
+  const updatedAt = [String(countRow.updatedAt ?? ''), maxRelationCreatedAt, maxVersionCreatedAt].filter(Boolean).sort().pop() ?? '';
+
+  return {
+    networkId: 'global', nodes, relations,
+    filters: { nodeTypes: nodeTypeFilters, relationTypes: relationTypeFilters },
+    totalNodes, totalRelations, limit, offset,
+    hasMore: offset + nodes.length < totalNodes, updatedAt
+  };
+}
+
+// ===== 知识本体详情（知识卡片第一屏字段） =====
+
+/** 证据边界统计（关系/来源性质分布；全部证据行口径，摘要列表另行有界）。 */
+function collectEvidenceBoundary(rows: readonly Record<string, unknown>[]): KnowledgeNetworkNodeDetail['knowledge']['evidenceBoundary'] {
+  const byRelation: Record<string, number> = {};
+  const bySourceNature: Record<string, number> = {};
+  for (const row of rows) {
+    const relation = String(row.relation ?? '');
+    const sourceNature = String(row.sourceNature ?? '');
+    if (relation) byRelation[relation] = (byRelation[relation] ?? 0) + 1;
+    if (sourceNature) bySourceNature[sourceNature] = (bySourceNature[sourceNature] ?? 0) + 1;
+  }
+  return { evidenceCount: rows.length, byRelation, bySourceNature };
+}
+
+/** 证据摘要有界列表；source 标题一批解析（其余对象类型诚实为 null）。 */
+function evidenceEntries(database: DatabaseSync, rows: readonly Record<string, unknown>[], limit: number): KnowledgeNetworkEvidenceEntry[] {
+  // 局部可变条目类型：sourceTitle 需后置批量回填，最终按共享契约（readonly）边界返回。
+  type MutableEvidenceEntry = { relation: string; sourceNature: string; excerpt: string | null; locator: string | null; sourceTitle: string | null };
+  const items: MutableEvidenceEntry[] = rows.slice(0, limit).map((row) => ({
+    relation: String(row.relation ?? ''),
+    sourceNature: String(row.sourceNature ?? ''),
+    excerpt: (row.excerpt as string | null) ?? null,
+    locator: (row.locator as string | null) ?? null,
+    sourceTitle: null
+  }));
+  const sourceIds = [...new Set(rows.slice(0, limit)
+    .filter((row) => String(row.evidenceObjectType) === 'source')
+    .map((row) => String(row.evidenceObjectId)))];
+  if (sourceIds.length) {
+    const placeholders = sourceIds.map(() => '?').join(',');
+    const titles = new Map((database.prepare(`SELECT id, title FROM source_items WHERE id IN (${placeholders})`).all(...sourceIds) as Array<Record<string, unknown>>)
+      .map((row) => [String(row.id), String(row.title ?? '')]));
+    rows.slice(0, limit).forEach((row, index) => {
+      if (String(row.evidenceObjectType) === 'source') items[index].sourceTitle = titles.get(String(row.evidenceObjectId)) ?? null;
+    });
+  }
+  return items as unknown as KnowledgeNetworkEvidenceEntry[];
+}
+
+function dedupeRelated(entries: KnowledgeNetworkRelatedEntry[], limit: number): KnowledgeNetworkRelatedEntry[] {
+  const seen = new Set<string>();
+  const result: KnowledgeNetworkRelatedEntry[] = [];
+  for (const entry of entries) {
+    if (seen.has(entry.nodeId)) continue;
+    seen.add(entry.nodeId);
+    result.push(entry);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+/** 相关认识：正式关系另一端点（端点解析到可见节点；knowledge_note_version 端点映射到其笔记）。 */
+function pushRelationEndpoints(database: DatabaseSync, node: KnowledgeNetworkNode, entries: KnowledgeNetworkRelatedEntry[]) {
+  const objectIds = [node.objectId];
+  if (node.objectType === 'knowledge_note') {
+    const row = database.prepare('SELECT current_version_id AS versionId FROM knowledge_notes WHERE id = ?').get(node.objectId) as { versionId: string | null } | undefined;
+    if (row?.versionId) objectIds.push(row.versionId);
+  }
+  const relations = resolveActiveNetworkRelations(database, objectIds);
+  const firstByEndpoint = new Map<string, ResolvedNetworkRelation>();
+  for (const relation of relations) {
+    const other = relation.from === node.id ? relation.to : relation.from;
+    if (!firstByEndpoint.has(other)) firstByEndpoint.set(other, relation);
+  }
+  const refs: Array<{ objectType: KnowledgeNetworkNodeType; objectId: string }> = [];
+  for (const other of firstByEndpoint.keys()) {
+    const parsed = parseKnowledgeNetworkNodeId(other);
+    if (parsed) refs.push(parsed);
+  }
+  const endpointNodes = resolveNetworkNodesBulk(database, refs);
+  for (const [other, relation] of firstByEndpoint) {
+    const endpoint = endpointNodes.get(other);
+    if (!endpoint) continue;
+    entries.push({ nodeId: endpoint.id, objectType: endpoint.objectType, objectId: endpoint.objectId, title: endpoint.shortTitle, relationKey: relation.relationKey });
+  }
+}
+
+/** 实体/主题的 wiki 当前版本固定引用（无正式页面 → null；精简 fixture 缺表 → null）。 */
+function wikiVersionRefFor(database: DatabaseSync, subjectType: 'topic' | 'entity', objectType: KnowledgeNetworkNodeType, subjectId: string): KnowledgeNetworkVersionRef | null {
+  try {
+    const page = database.prepare(`SELECT id FROM knowledge_wiki_pages WHERE subject_type=? AND subject_id=? AND lifecycle='active' ORDER BY updated_at DESC LIMIT 1`).get(subjectType, subjectId) as { id: string } | undefined;
+    if (!page) return null;
+    const detail = getWikiPage(database, page.id);
+    if (!detail?.version) return null;
+    return { versionKind: 'wiki_page_version', versionId: detail.version.id, objectType, objectId: subjectId, createdAt: detail.version.createdAt };
+  } catch {
+    return null; // 精简 fixture 缺 v56 表
+  }
+}
+
+const NETWORK_EVIDENCE_SELECT = `SELECT el.id, el.evidence_object_type AS evidenceObjectType, el.evidence_object_id AS evidenceObjectId,
+  el.relation, el.source_nature AS sourceNature, el.excerpt, el.locator, el.created_at AS createdAt
+  FROM knowledge_evidence_links el`;
+
+type NetworkKnowledgeBundle = {
+  knowledge: KnowledgeNetworkNodeDetail['knowledge'];
+  versionRef: KnowledgeNetworkVersionRef | null;
+};
+
+function topicKnowledgeBundle(database: DatabaseSync, node: KnowledgeNetworkNode): NetworkKnowledgeBundle {
+  const evidenceRows = database.prepare(`${NETWORK_EVIDENCE_SELECT} JOIN knowledge_note_versions v ON v.id = el.knowledge_note_version_id,
+    json_each(v.adopted_topic_ids_json) j WHERE j.value = ? ORDER BY el.created_at DESC, el.id DESC`).all(node.objectId) as Array<Record<string, unknown>>;
+  const entries: KnowledgeNetworkRelatedEntry[] = [];
+  const adopted = database.prepare(`SELECT DISTINCT n.id, n.title, n.updated_at AS updatedAt FROM knowledge_note_versions v
+    JOIN knowledge_notes n ON n.id = v.note_id, json_each(v.adopted_topic_ids_json) j
+    WHERE j.value = ? AND n.lifecycle = 'active' ORDER BY n.updated_at DESC, n.id LIMIT ?`).all(node.objectId, NETWORK_DETAIL_RELATED_LIMIT) as Array<Record<string, unknown>>;
+  for (const row of adopted) {
+    entries.push({ nodeId: knowledgeNetworkNodeId('knowledge_note', String(row.id)), objectType: 'knowledge_note', objectId: String(row.id), title: String(row.title ?? ''), relationKey: 'about' });
+  }
+  pushRelationEndpoints(database, node, entries);
+  return {
+    knowledge: {
+      primary: node.summary,
+      scope: '',
+      evidenceBoundary: collectEvidenceBoundary(evidenceRows),
+      evidenceSummary: evidenceEntries(database, evidenceRows, NETWORK_DETAIL_EVIDENCE_LIMIT),
+      related: dedupeRelated(entries, NETWORK_DETAIL_RELATED_LIMIT),
+      updatedAt: node.updatedAt
+    },
+    versionRef: wikiVersionRefFor(database, 'topic', 'topic', node.objectId)
+  };
+}
+
+function noteKnowledgeBundle(database: DatabaseSync, node: KnowledgeNetworkNode): NetworkKnowledgeBundle {
+  const row = database.prepare(`SELECT v.id AS versionId, v.statement, v.applies_to AS appliesTo, v.created_at AS createdAt
+    FROM knowledge_notes n LEFT JOIN knowledge_note_versions v ON v.id = n.current_version_id WHERE n.id = ?`).get(node.objectId) as Record<string, unknown> | undefined;
+  const versionId = row?.versionId ? String(row.versionId) : null;
+  const evidenceRows = versionId
+    ? database.prepare(`${NETWORK_EVIDENCE_SELECT} WHERE el.knowledge_note_version_id = ? ORDER BY el.created_at DESC, el.id DESC`).all(versionId) as Array<Record<string, unknown>>
+    : [];
+  const entries: KnowledgeNetworkRelatedEntry[] = [];
+  if (versionId) {
+    const adoptedEntityIds = (database.prepare(`SELECT j.value AS id FROM knowledge_note_versions v, json_each(v.adopted_entity_ids_json) j WHERE v.id = ?`).all(versionId) as Array<Record<string, unknown>>).map((item) => String(item.id));
+    const adoptedTopicIds = (database.prepare(`SELECT j.value AS id FROM knowledge_note_versions v, json_each(v.adopted_topic_ids_json) j WHERE v.id = ?`).all(versionId) as Array<Record<string, unknown>>).map((item) => String(item.id));
+    const adoptedNodes = resolveNetworkNodesBulk(database, [
+      ...adoptedEntityIds.map((objectId) => ({ objectType: 'knowledge_entity' as const, objectId })),
+      ...adoptedTopicIds.map((objectId) => ({ objectType: 'topic' as const, objectId }))
+    ]);
+    for (const adoptedNode of adoptedNodes.values()) {
+      entries.push({ nodeId: adoptedNode.id, objectType: adoptedNode.objectType, objectId: adoptedNode.objectId, title: adoptedNode.shortTitle, relationKey: 'about' });
+    }
+  }
+  pushRelationEndpoints(database, node, entries);
+  return {
+    knowledge: {
+      primary: row?.statement ? String(row.statement) : node.summary,
+      scope: row?.appliesTo ? String(row.appliesTo) : '',
+      evidenceBoundary: collectEvidenceBoundary(evidenceRows),
+      evidenceSummary: evidenceEntries(database, evidenceRows, NETWORK_DETAIL_EVIDENCE_LIMIT),
+      related: dedupeRelated(entries, NETWORK_DETAIL_RELATED_LIMIT),
+      updatedAt: node.updatedAt
+    },
+    versionRef: versionId ? { versionKind: 'note_version', versionId, objectType: node.objectType, objectId: node.objectId, createdAt: String(row?.createdAt ?? '') } : null
+  };
+}
+
+function entityKnowledgeBundle(database: DatabaseSync, node: KnowledgeNetworkNode): NetworkKnowledgeBundle {
+  // 实体核心说明：entity 主题 wiki 页正文 summary（诚实）；无正文 → canonical_name 诚实回退。
+  let primary = node.shortTitle;
+  let wikiPageId: string | null = null;
+  try {
+    const page = database.prepare(`SELECT id FROM knowledge_wiki_pages WHERE subject_type='entity' AND subject_id=? AND lifecycle='active' ORDER BY updated_at DESC LIMIT 1`).get(node.objectId) as { id: string } | undefined;
+    wikiPageId = page?.id ?? null;
+    if (wikiPageId) {
+      const detail = getWikiPage(database, wikiPageId);
+      const body = detail?.version?.body;
+      if (body && typeof body === 'object') {
+        const summary = String((body as Record<string, unknown>).summary ?? '').trim();
+        if (summary) primary = summary;
+      }
+    }
+  } catch {
+    // 精简 fixture 缺 v56 表 → 无 wiki 页
+  }
+  const evidenceRows = database.prepare(`${NETWORK_EVIDENCE_SELECT} JOIN knowledge_note_versions v ON v.id = el.knowledge_note_version_id,
+    json_each(v.adopted_entity_ids_json) j WHERE j.value = ? ORDER BY el.created_at DESC, el.id DESC`).all(node.objectId) as Array<Record<string, unknown>>;
+  const entries: KnowledgeNetworkRelatedEntry[] = [];
+  const adopted = database.prepare(`SELECT DISTINCT n.id, n.title, n.updated_at AS updatedAt FROM knowledge_note_versions v
+    JOIN knowledge_notes n ON n.id = v.note_id, json_each(v.adopted_entity_ids_json) j
+    WHERE j.value = ? AND n.lifecycle = 'active' ORDER BY n.updated_at DESC, n.id LIMIT ?`).all(node.objectId, NETWORK_DETAIL_RELATED_LIMIT) as Array<Record<string, unknown>>;
+  for (const row of adopted) {
+    entries.push({ nodeId: knowledgeNetworkNodeId('knowledge_note', String(row.id)), objectType: 'knowledge_note', objectId: String(row.id), title: String(row.title ?? ''), relationKey: 'about' });
+  }
+  pushRelationEndpoints(database, node, entries);
+  let versionRef: KnowledgeNetworkVersionRef | null = null;
+  if (wikiPageId) {
+    try {
+      const detail = getWikiPage(database, wikiPageId);
+      if (detail?.version) versionRef = { versionKind: 'wiki_page_version', versionId: detail.version.id, objectType: node.objectType, objectId: node.objectId, createdAt: detail.version.createdAt };
+    } catch {
+      // 精简 fixture
+    }
+  }
+  return {
+    knowledge: {
+      primary, scope: '',
+      evidenceBoundary: collectEvidenceBoundary(evidenceRows),
+      evidenceSummary: evidenceEntries(database, evidenceRows, NETWORK_DETAIL_EVIDENCE_LIMIT),
+      related: dedupeRelated(entries, NETWORK_DETAIL_RELATED_LIMIT),
+      updatedAt: node.updatedAt
+    },
+    versionRef
+  };
+}
+
+function networkNodeKnowledge(database: DatabaseSync, node: KnowledgeNetworkNode): NetworkKnowledgeBundle {
+  if (node.objectType === 'topic') return topicKnowledgeBundle(database, node);
+  if (node.objectType === 'knowledge_note') return noteKnowledgeBundle(database, node);
+  return entityKnowledgeBundle(database, node);
+}
+
+function networkNodeDeepLink(node: KnowledgeNetworkNode): KnowledgeNetworkNodeDetail['deepLink'] {
+  return { route: node.objectType === 'topic' ? 'topic' : 'object', objectType: node.objectType, objectId: node.objectId, title: node.shortTitle };
+}
+
+/**
+ * WMB-5243：节点知识本体详情（知识卡片第一屏：完整认识/适用范围/证据边界/依据摘要/相关认识/
+ * 最近更新时间；对象 ID/表名/ChangeSet/编译状态不进入第一屏）。nodeId 为稳定网络节点 ID。
+ */
+export function getKnowledgeNetworkNodeDetail(database: DatabaseSync, rawInput: KnowledgeNetworkNodeDetailInput): KnowledgeNetworkNodeDetail {
+  const input = rawInput ?? {};
+  const parsed = parseKnowledgeNetworkNodeId(String(input.nodeId ?? ''));
+  if (!parsed) throw new Error('NETWORK_NODE_NOT_FOUND');
+  const node = resolveNetworkNodesBulk(database, [{ objectType: parsed.objectType, objectId: parsed.objectId }]).get(knowledgeNetworkNodeId(parsed.objectType, parsed.objectId)) ?? null;
+  if (!node) throw new Error('NETWORK_NODE_NOT_FOUND');
+  // 位置权重 = 该对象相关活动正式关系度数（知识本体关联同一关系源；note 含当前版本端点）。
+  const objectIds = [parsed.objectId];
+  if (parsed.objectType === 'knowledge_note') {
+    const row = database.prepare('SELECT current_version_id AS versionId FROM knowledge_notes WHERE id = ?').get(parsed.objectId) as { versionId: string | null } | undefined;
+    if (row?.versionId) objectIds.push(row.versionId);
+  }
+  const relations = resolveActiveNetworkRelations(database, objectIds);
+  const nodeId = node.id;
+  const withWeight = { ...node, weight: relations.filter((relation) => relation.from === nodeId || relation.to === nodeId).length };
+  const bundle = networkNodeKnowledge(database, withWeight);
+  return { node: withWeight, knowledge: bundle.knowledge, versionRef: bundle.versionRef, deepLink: networkNodeDeepLink(withWeight) };
+}
+
+// ===== 冻结选择包（canvasId='global'；复用既有 preview/清单通道，PiDock 不变） =====
+
+/** 自动展开的冻结知识正文包（不是节点名称清单；Pi 获得正文/适用范围/证据边界/摘要/固定版本引用）。 */
+type FrozenKnowledgeContent = Readonly<{
+  coreStatement: string;
+  appliesTo: string;
+  evidenceBoundary: Readonly<{ evidenceCount: number; byRelation: Readonly<Record<string, number>>; bySourceNature: Readonly<Record<string, number>> }>;
+  evidenceSummary: string;
+  versionRef: Readonly<{ versionKind: 'note_version' | 'wiki_page_version'; versionId: string; createdAt: string }> | null;
+}>;
+
+type GlobalSelectionExcluded = { kind: 'object'; id: string; objectType: string | null; reason: 'duplicate' | 'invalid' | 'over_limit' };
+
+/** 未纳入明细有界上限（excludedReasons 只带前 N 条；excludedCount 恒为全量）。 */
+const SELECTION_EXCLUDED_REASONS_LIMIT = 20;
+
+function formatEvidenceSummary(entries: readonly KnowledgeNetworkEvidenceEntry[]): string {
+  return entries
+    .map((entry) => entry.excerpt ? `[${entry.relation}@${entry.sourceNature}]${entry.sourceTitle ? `（${entry.sourceTitle}）` : ''} ${entry.excerpt}` : null)
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
+/**
+ * 全局网络冻结选择包：解析稳定节点 ID（工作空间校验：无效/已消失节点不中断清单，
+ * 进 excluded(reason=invalid) 并在 excludedCount 明示）→ 按正式知识身份去重 →
+ * 自动展开冻结正文 → 有界字符（按知识优先级 + 选中顺序裁剪，未纳入项进 excluded
+ * 并带 reason；不得静默换成全图）。全部未纳入项（invalid + duplicate + over_limit）
+ * 计入 manifest.excludedCount，excludedReasons 提供有界明细；全部无效时无内容可冻结。
+ */
+function buildGlobalSelection(database: DatabaseSync, nodeIds: string[]): { manifest: KnowledgeCanvasSelectionManifest; excluded: GlobalSelectionExcluded[] } {
+  if (!nodeIds.length) throw new Error('PACKAGE_ITEMS_REQUIRED');
+  const refs: Array<{ objectType: KnowledgeNetworkNodeType; objectId: string }> = [];
+  for (const nodeId of nodeIds) {
+    const parsed = parseKnowledgeNetworkNodeId(nodeId);
+    if (parsed) refs.push(parsed);
+  }
+  const nodes = resolveNetworkNodesBulk(database, refs);
+  const resolved: Array<{ nodeId: string; objectType: string; objectId: string; title: string; content: FrozenKnowledgeContent }> = [];
+  const excluded: GlobalSelectionExcluded[] = [];
+  for (const nodeId of nodeIds) {
+    const parsed = parseKnowledgeNetworkNodeId(nodeId);
+    if (!parsed) {
+      excluded.push({ kind: 'object', id: nodeId, objectType: null, reason: 'invalid' });
+      continue;
+    }
+    const node = nodes.get(nodeId);
+    if (!node) {
+      excluded.push({ kind: 'object', id: nodeId, objectType: parsed.objectType, reason: 'invalid' });
+      continue;
+    }
+    const bundle = networkNodeKnowledge(database, node);
+    resolved.push({
+      nodeId: node.id,
+      objectType: node.objectType,
+      objectId: node.objectId,
+      title: node.shortTitle,
+      content: {
+        coreStatement: bundle.knowledge.primary,
+        appliesTo: bundle.knowledge.scope,
+        evidenceBoundary: bundle.knowledge.evidenceBoundary,
+        evidenceSummary: formatEvidenceSummary(bundle.knowledge.evidenceSummary),
+        versionRef: bundle.versionRef ? { versionKind: bundle.versionRef.versionKind, versionId: bundle.versionRef.versionId, createdAt: bundle.versionRef.createdAt } : null
+      }
+    });
+  }
+  // 去重：稳定节点 ID = 正式知识身份（重复选中只保留一份）。
+  const seen = new Set<string>();
+  const unique: typeof resolved = [];
+  for (const item of resolved) {
+    if (seen.has(item.nodeId)) {
+      excluded.push({ kind: 'object', id: item.nodeId, objectType: item.objectType, reason: 'duplicate' });
+      continue;
+    }
+    seen.add(item.nodeId);
+    unique.push(item);
+  }
+  // 有界字符：按知识优先级（topic > note > entity）贪心容纳；同级保持选中顺序（稳定排序）。
+  const ordered = [...unique].sort((a, b) => NETWORK_NODE_PRIORITY[a.objectType] - NETWORK_NODE_PRIORITY[b.objectType]);
+  const items: Array<{ nodeId: string; objectType: string; objectId: string | null; title: string; snapshot: Readonly<Record<string, unknown>> | null }> = [];
+  let accumulated = 0;
+  const limitCharacters = KNOWLEDGE_PACKAGE_CHARACTER_LIMIT;
+  for (const item of ordered) {
+    const itemChars = JSON.stringify({ snapshot: item.content }).length;
+    if (items.length && accumulated + itemChars > limitCharacters) {
+      excluded.push({ kind: 'object', id: item.nodeId, objectType: item.objectType, reason: 'over_limit' });
+      continue;
+    }
+    items.push({ nodeId: item.nodeId, objectType: item.objectType, objectId: item.objectId, title: item.title, snapshot: item.content as unknown as Readonly<Record<string, unknown>> });
+    accumulated += itemChars;
+  }
+  if (!items.length) throw new Error('PACKAGE_ITEMS_REQUIRED');
+  const manifest: KnowledgeCanvasSelectionManifest = {
+    scope: 'selected_only', canvasId: KNOWLEDGE_NETWORK_CANVAS_ID, items,
+    excludedCount: excluded.length,
+    excludedReasons: excluded.slice(0, SELECTION_EXCLUDED_REASONS_LIMIT).map((entry) => ({
+      nodeId: entry.id, objectType: entry.objectType, reason: entry.reason
+    })),
+    estimatedCharacters: JSON.stringify({ items }).length,
+    limitCharacters, overLimit: JSON.stringify({ items }).length > limitCharacters
+  };
+  return { manifest, excluded };
+}
+
+/** 全局网络预览包（previewKnowledgeContextPackage 的 canvasId='global' 分支；与清单同源）。 */
+function previewGlobalKnowledgeContextPackage(database: DatabaseSync, input: {
+  canvasId: string; nodeIds: string[]; excludedNodeIds?: string[]; excludedRelationIds?: string[];
+}) {
+  const { manifest, excluded: selectionExcluded } = buildGlobalSelection(database, input.nodeIds);
+  const excludedNodeIds = new Set(input.excludedNodeIds ?? []);
+  const excludedRelationIds = new Set(input.excludedRelationIds ?? []);
+  const selected = manifest.items.filter((item) => !excludedNodeIds.has(item.nodeId));
+  if (!selected.length) throw new Error('PACKAGE_ITEMS_REQUIRED');
+  const selectedSet = new Set(selected.map((item) => item.nodeId));
+  // 正式关系：两端都在选中集合（knowledge_note_version 端点解析到其笔记）。
+  const relations = resolveActiveNetworkRelations(database, null)
+    .filter((relation) => selectedSet.has(relation.from) && selectedSet.has(relation.to) && !excludedRelationIds.has(relation.id))
+    .map((relation) => ({
+      id: relation.id, fromNodeId: relation.from, toNodeId: relation.to, relationType: relation.relationKey,
+      label: relation.displayName, state: 'active', hidden: 0, createdBy: 'formal', revision: 1
+    }));
+  const items = selected.map((item, index) => ({ nodeId: item.nodeId, objectType: item.objectType, objectId: item.objectId ?? null, sortOrder: index, snapshot: item.snapshot }));
+  const excluded = [
+    ...selectionExcluded,
+    ...manifest.items.filter((item) => excludedNodeIds.has(item.nodeId)).map((item) => ({ kind: 'object', id: item.nodeId, objectType: item.objectType, reason: 'user_excluded' }))
+  ];
+  const estimatedCharacters = JSON.stringify({ items, relations }).length;
+  return {
+    scope: 'selected_only', items, relations, excluded, excludedCount: excluded.length, truncated: false,
+    estimatedCharacters, limitCharacters: KNOWLEDGE_PACKAGE_CHARACTER_LIMIT,
+    overLimit: estimatedCharacters > KNOWLEDGE_PACKAGE_CHARACTER_LIMIT
+  };
+}
+

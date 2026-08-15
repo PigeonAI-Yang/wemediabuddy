@@ -14,6 +14,7 @@ import { listPublicationMetricSnapshots } from './metrics.ts';
 import * as z from 'zod';
 import { getAgentTask } from './agent-tasks.ts';
 import { getKnowledgeContext, getKnowledgeDomain, getKnowledgeTopicDossier, listKnowledgeDomains, topicDossierCategories } from './knowledge.ts';
+import { runFixedVersionQuery } from './fixed-version-query.ts';
 import { registerTopicMaintenanceReadMcp } from './mcp-topic-maintenance.ts';
 import { getContentProjectContextPackages, getCreativeBriefForContext, getCreativeBriefForPackage, getCreativeBriefLineage, getKnowledgeCanvas, getKnowledgeContextPackage, listKnowledgeContextPackages, previewKnowledgeContextPackage } from './knowledge-canvas.ts';
 import { registerXListTools } from './mcp-x-list.ts';
@@ -27,6 +28,7 @@ import { registerTaskGrantMcp } from './mcp-task-grants.ts';
 import { registerExecutionGrantMcp } from './mcp-execution-grants.ts';
 import { registerBusinessMutationMcp } from './mcp-business-commands.ts';
 import { registerJobToolsMcp } from './mcp-job-tools.ts';
+import { registerWikiActionsMcp } from './mcp-wiki-actions.ts';
 import { continueAfterScan, describeDailyReadiness, runManagerDailyStage } from './manager-orchestration.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { shanghaiDate } from './ferment.ts';
@@ -49,6 +51,7 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'sources.upsert_batch': 'wmb_save_source',
   'plans.save': 'wmb_save_plan',
   'knowledge.get_context': 'wmb_get_knowledge_context',
+  'knowledge.fixed_versions_get': 'wmb_get_fixed_versions',
   'knowledge.suggestion_create': 'wmb_suggest_knowledge',
   'sources.lane_gate': 'wmb_judge_sources',
   'sources.lane_restore': 'wmb_restore_source',
@@ -84,6 +87,16 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'x_lists.observation_start': 'wmb_start_x_list_observation',
   'x_lists.observation_get': 'wmb_get_x_list_observation',
   'x_lists.observation_stop': 'wmb_stop_x_list_observation',
+  'wiki.maintenance_start': 'wmb_wiki_maintenance_start',
+  'wiki.maintenance_status': 'wmb_wiki_maintenance_status',
+  'wiki.maintenance_pause': 'wmb_wiki_maintenance_pause',
+  'wiki.maintenance_resume': 'wmb_wiki_maintenance_resume',
+  'wiki.maintenance_report': 'wmb_wiki_maintenance_report',
+  'wiki.ingest': 'wmb_wiki_ingest',
+  'wiki.lint': 'wmb_wiki_lint',
+  'wiki.search': 'wmb_wiki_search',
+  'wiki.log': 'wmb_wiki_log',
+  'wiki.report': 'wmb_wiki_report',
   'agents.roster': 'wmb_list_agents_roster',
   'jobs.list': 'wmb_list_jobs',
   'jobs.get': 'wmb_get_job',
@@ -213,6 +226,7 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   registerExecutionGrantMcp(server, database, runtime);
   registerTopicMaintenanceReadMcp(server, database);
   registerResearchWebMcp(server);
+  registerWikiActionsMcp(server, database, runtime);
 
   server.registerTool('context.get_workbench', { description: '读取今日工作、待办、最近资料与当前运营方案。' }, async () => {
     const db = database(); try { return text(getToday(db, new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()))); } finally { db.close(); }
@@ -268,6 +282,28 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     inputSchema: { topic_id: z.string().optional(), source_id: z.string().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(50).optional() }
   }, async (input) => {
     const db = database(); try { return text(getKnowledgeContext(db, { topicId: input.topic_id, sourceId: input.source_id, query: input.query, limit: input.limit })); } finally { db.close(); }
+  });
+  server.registerTool('knowledge.fixed_versions_get', {
+    description: '按固定版本引用或版本 ID 读取冻结 Wiki 页版本 / Note 版本 / Evidence（只读；版本删除、归属漂移或跨 workspace 一律 fail-closed 返回错误，零部分结果）。支持自然语言「基于这些版本回答」：先用本工具读取指定固定版本，再基于返回内容回答并在末条回复携带 wmb_query_writeback 清单。',
+    inputSchema: {
+      wiki_version_refs: z.array(z.string()).max(64).optional(),
+      note_version_refs: z.array(z.string()).max(64).optional(),
+      evidence_refs: z.array(z.string()).max(64).optional(),
+      wiki_version_ids: z.array(z.string()).max(64).optional(),
+      note_version_ids: z.array(z.string()).max(64).optional(),
+      evidence_ids: z.array(z.string()).max(64).optional(),
+      question: z.string().optional()
+    }
+  }, async (input) => {
+    const db = database(); try { return text(runFixedVersionQuery(db, {
+      wikiVersionRefs: input.wiki_version_refs,
+      noteVersionRefs: input.note_version_refs,
+      evidenceRefs: input.evidence_refs,
+      wikiVersionIds: input.wiki_version_ids,
+      noteVersionIds: input.note_version_ids,
+      evidenceIds: input.evidence_ids,
+      question: input.question
+    })); } finally { db.close(); }
   });
   server.registerTool('knowledge.domains_list',{
     description:'分页读取长期领域及真实主题、资料和近期变化计数。',

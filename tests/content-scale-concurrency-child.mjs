@@ -75,7 +75,7 @@ try {
   }
   const detailCounter = measured(db);
   const detail = getContentProject(detailCounter.database, 'project-1001');
-  if (!detail || detail.revisions.length !== 3 || detail.revisions[0].body.length !== 1500 || detailCounter.count() !== 9) {
+  if (!detail || detail.revisions.length !== 3 || detail.revisions[0].body.length !== 1500 || detailCounter.count() !== 11) {
     throw new Error(`fixed detail query count mismatch ${JSON.stringify({found:Boolean(detail),revisions:detail?.revisions.length,body:detail?.revisions[0]?.body.length,queries:detailCounter.count()})}`);
   }
 

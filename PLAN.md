@@ -931,3 +931,20 @@ Order (freeze shared contracts first; then run independent consumers concurrentl
 Dependencies: WMB-5210 freezes all shared schemas and interfaces. WMB-5211 and WMB-5213 may proceed after 5210. WMB-5212 and WMB-5214 require the compiler read/write slice from 5211. WMB-5215 requires 5210 and may proceed independently of renderer work. WMB-5216 requires Query and creation lineage. WMB-5217 requires all user-facing writers to be migrated. WMB-5218 is the final gate.
 
 Gate: one existing Topic visibly changes after ingesting one real Source; the update is sparse, evidence-located, atomic, versioned, reversible and idempotent; Pi writes back only reusable synthesis; Studio records actual fixed knowledge versions; Review does not fabricate causality; deterministic health defects auto-repair while real disputes remain visible; existing business IDs and contribution chains survive; no external Wiki dependency, parallel Topic/Wiki identity, user-managed knowledge tables, partial ChangeSet, cross-data-root leakage or relaxation of publication red lines. `TASKS.md` status `doing` remains the construction permit for each slice.
+
+## M-5240 Karpathy LLM Wiki 非退化对齐（CAP-002 / CAP-003 / CAP-014 / CAP-027）
+
+Scope: WMB 必须覆盖 Karpathy 原始 LLM Wiki 的全部核心能力，并将其 optional UI/tooling 能力在 WMB 内提供等价能力。SQLite 保持唯一真源；现有主题、资料库、关系画布、Pi、创作是产品表面，不引入 Obsidian、Markdown Wiki 目录或第二套 Topic/Source/知识身份。核心原则：Raw 输入按 revision 不可变；AI 拥有 Wiki 编译；知识被持续整合而非问答时临时重建；单条/批量 Ingest、Query 写回、Lint、Index、Log、Search、Graph 和视觉来源都可观察、可恢复、可追溯。
+
+Order:
+
+1. `WMB-5235` — 原始能力矩阵与机器可证伪基线。
+2. `WMB-5236` — 持久化全库维护运行与全局报告。
+3. `WMB-5237` — 完整 Lint、Raw revision 不可变、图片感知摄取。
+4. `WMB-5238` — SQLite Wiki Index/Log/Hot 等价读模型与统一全文搜索。
+5. `WMB-5239` — 资料库原位全库维护/日志/搜索/批量摄取 UI。
+6. `WMB-5240` — Pi/operator 自然语言全 Wiki 操作。
+7. `WMB-5241` — 真实工作空间非退化最终验收。
+
+Gate: 一条真实 Source 可更新多个既有 Wiki 页面；一批 Sources 可断点摄取；高价值 Query 固定引用并写回；全库维护可由 Owner 或 Pi 启动、暂停、继续并在重启后恢复；Lint 实际检测矛盾、陈旧、孤立、缺页、缺交叉引用、重复、无证据和研究缺口；统一搜索命中 Wiki 正文与固定版本知识；全局 index/log/report 可读；图片结论绑定资产与 Source revision；关系图可导航；所有变化具备 ChangeSet、Receipt、版本和恢复路径。任何一项只存在于设计文档、测试 fixture 或单轮 Pi 文本均不算完成。
+

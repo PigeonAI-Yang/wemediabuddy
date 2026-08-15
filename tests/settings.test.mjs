@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { openDataRoot } from '../src/main/data-root.ts';
-import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { migrateDatabase, migrations } from '../src/main/db/migrations.ts';
 import { readSettings } from '../src/main/settings.ts';
 
 test('settings reports actual configured paths, bytes, counts, and current health', async () => {
@@ -21,7 +21,7 @@ test('settings reports actual configured paths, bytes, counts, and current healt
     const settings = await readSettings(root.path, { boundBrowserProfilePath: boundProfile });
     assert.equal(settings.paths.logs, path.join(root.path, 'logs'));
     assert.equal(settings.usage.logs, 3);
-    assert.equal(settings.counts.migrations, 58);
+    assert.equal(settings.counts.migrations, migrations.length);
     assert.equal(settings.paths.boundBrowserProfile, boundProfile);
     assert.equal(settings.paths.legacyBrowserProfile, path.join(root.path, 'browser-profile'));
     assert.equal(settings.usage.boundBrowserProfile, 5);

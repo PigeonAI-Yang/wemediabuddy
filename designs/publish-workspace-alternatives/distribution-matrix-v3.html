@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>发布 · WeMediaBuddy</title>
+<!--
+WMB-5265 · Baoyu corrective redesign
+Assumptions: Owner is a chief editor scanning many content-platform tasks, then entering one task to verify account/version/media before manual final publication.
+Context: Existing WMB shell, foundation tokens, and the bound WeMediaBuddy Design System remain authoritative.
+Decision: Keep the content × platform matrix, but remove stacked chrome, tiny pills, duplicated counts, and empty dashboard framing. One compact room header, one work queue statement, one readable matrix.
+Boundary: Prototype only. No platform call, automatic publication, schema, permission, capability, dependency, or brand-token change.
+-->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/colors.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/shape-motion.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles/components.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles.css">
+<script src="_ds/wemedia-buddy-design-system/_ds_bundle.js"></script>
+<style>
+*{box-sizing:border-box}html,body,#root{height:100%;margin:0}body{overflow:hidden;background:var(--app-bg);color:var(--ink);font-family:var(--font-sans);font-size:14px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}button{font:inherit}.app{height:100%;display:grid;grid-template-rows:var(--topbar-height) minmax(0,1fr);background:var(--app-bg)}
+.topbar{display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--border-soft);background:var(--topbar-bg)}.brand{display:flex;align-items:center;gap:10px;min-width:190px}.brand strong{font-size:14px;letter-spacing:-.01em}.brand span{color:var(--muted);font-size:12px}.top-context{color:var(--muted);font-size:13px}.top-actions{margin-left:auto;display:flex;align-items:center;gap:6px}.icon{width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:var(--radius-lg);background:transparent;color:var(--muted);cursor:pointer}.icon:hover{background:var(--surface-hover);color:var(--ink)}.icon:focus-visible,.nav-item:focus-visible,.matrix-cell:focus-visible,.project-open:focus-visible,.quiet-action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.icon svg,.nav-item svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.shell{min-height:0;display:grid;grid-template-columns:216px minmax(0,1fr);transition:grid-template-columns var(--dur-expand) var(--ease-out-expo)}.sidebar{min-width:0;display:flex;flex-direction:column;padding:14px 10px 10px;border-right:1px solid var(--border-soft);background:var(--sidebar-bg)}.nav-label{padding:8px 10px;color:var(--muted-low);font-size:11px}.nav{display:grid;gap:3px}.nav-item{height:40px;display:flex;align-items:center;gap:11px;padding:0 11px;border:0;border-radius:var(--radius-lg);background:transparent;color:var(--muted);text-align:left;cursor:pointer}.nav-item:hover{background:var(--surface-hover);color:var(--ink)}.nav-item.active{background:var(--surface-selected);color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}.nav-item.active svg{color:var(--accent-soft)}.nav-bottom{margin-top:auto;border-top:1px solid var(--border-soft);padding-top:8px}
+.work-area{min-width:0;min-height:0;display:flex}.workspace{min-width:0;min-height:0;flex:1;display:flex;flex-direction:column;background:var(--workspace-bg)}.room-head{flex:none;min-height:88px;display:flex;align-items:center;gap:24px;padding:16px 22px;border-bottom:1px solid var(--border-soft)}.room-copy{min-width:0}.room-titleline{display:flex;align-items:baseline;gap:12px}.room-titleline h1{margin:0;font-size:25px;line-height:1.25;letter-spacing:-.02em}.room-titleline strong{color:var(--amber);font-size:13px;font-weight:650}.room-copy p{margin:6px 0 0;color:var(--muted);font-size:13px}.room-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}.quiet-action{height:36px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:transparent;color:var(--ink-soft);cursor:pointer}.quiet-action:hover{background:var(--surface-hover);color:var(--ink)}
+.board{flex:1;min-height:0;display:flex;flex-direction:column;padding:16px 22px 18px}.board-bar{flex:none;display:flex;align-items:center;min-height:42px;margin-bottom:12px}.view-tabs{display:flex;align-items:center;gap:18px}.view-tab{position:relative;height:38px;padding:0;border:0;background:transparent;color:var(--muted);font-weight:650;cursor:pointer}.view-tab:hover{color:var(--ink)}.view-tab.active{color:var(--ink)}.view-tab.active:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;background:var(--accent)}.view-tab b{margin-left:5px;color:var(--muted-low);font-size:11px;font-weight:650}.view-tab.active b{color:var(--accent-soft)}.board-tools{margin-left:auto;display:flex;align-items:center;gap:8px}.selectlike{height:34px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);color:var(--ink-soft);font-size:12px}.selectlike span{color:var(--muted)}
+.matrix-frame{flex:1;min-height:280px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--panel-bg)}.matrix{width:100%;min-width:1000px;display:grid;grid-template-columns:minmax(288px,1.45fr) repeat(4,minmax(178px,1fr))}.matrix-head{display:contents}.corner,.platform-head{position:sticky;top:0;z-index:4;min-width:0;min-height:72px;padding:13px 16px;border-bottom:1px solid var(--border);border-right:1px solid var(--border-soft);background:var(--panel-bg)}.corner{left:0;z-index:6;display:flex;flex-direction:column;justify-content:center}.corner strong{font-size:13px}.corner span{margin-top:4px;color:var(--muted);font-size:12px}.platform-head{display:flex;align-items:center;gap:10px}.platform-head>span:last-child{min-width:0}.platform-mark{width:30px;height:30px;display:grid;place-items:center;flex:none;border-radius:8px;background:var(--surface-raised);color:var(--ink);font-size:12px;font-weight:750}.platform-mark.x{background:var(--ink);color:var(--app-bg)}.platform-mark.red{background:var(--danger-soft);color:var(--danger)}.platform-mark.green{background:var(--success-soft);color:var(--success)}.platform-head strong{display:block;font-size:13px}.platform-head small{display:block;margin-top:3px;overflow:hidden;color:var(--muted);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}.project-row{display:contents}.project-row:hover>.project-cell,.project-row:hover>.task-slot{background:var(--surface-hover)}.project-cell,.task-slot{min-width:0;min-height:108px;border-bottom:1px solid var(--border-soft);border-right:1px solid var(--border-soft);background:var(--surface);transition:background var(--dur-base) var(--ease-base)}.project-cell{position:sticky;left:0;z-index:2;padding:15px 16px;background:var(--surface)}.project-open{width:100%;min-height:78px;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.project-open strong{display:block;max-width:32ch;overflow-wrap:anywhere;font-size:14px;line-height:1.45}.project-open:hover strong{color:var(--accent-soft)}.project-meta{display:flex;align-items:center;gap:8px;margin-top:9px;color:var(--muted);font-size:11.5px}.grade{display:inline-flex;align-items:center;justify-content:center;min-width:25px;height:20px;padding:0 6px;border-radius:5px;background:var(--tag-bg);color:var(--ink-soft);font-size:10.5px;font-weight:750}.task-slot{padding:8px}.task-slot.empty{background:color-mix(in srgb,var(--surface) 65%,var(--workspace-bg));color:var(--muted-low);display:grid;place-items:center}.matrix-cell{width:100%;min-width:0;height:100%;min-height:92px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;padding:10px;border:0;border-radius:var(--radius-lg);background:transparent;color:inherit;text-align:left;cursor:pointer}.matrix-cell:hover{background:var(--surface-raised)}.cell-status{display:flex;width:100%;min-width:0;align-items:center;gap:7px;font-size:12.5px;font-weight:700}.dot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--muted)}.dot.warn{background:var(--amber)}.dot.bad{background:var(--danger)}.dot.ok{background:var(--success)}.dot.info{background:var(--info)}.cell-action{color:var(--ink-soft);font-size:12px;line-height:1.35}.cell-meta{max-width:100%;overflow-wrap:anywhere;color:var(--muted);font-size:11.5px;line-height:1.35}.cell-more{margin-left:auto;color:var(--muted-low)}
+.pi-panel{width:0;min-width:0;overflow:hidden;border-left:0 solid var(--border-soft);background:var(--panel-bg);transition:width var(--dur-expand) var(--ease-out-expo)}.work-area.pi-open .pi-panel{width:360px;border-left-width:1px}.pi-inner{width:360px;height:100%;display:flex;flex-direction:column}.pi-head{height:56px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border-soft)}.pi-head strong{font-size:14px}.pi-head span{margin-left:8px;color:var(--muted);font-size:12px}.pi-body{padding:18px 16px;color:var(--muted);line-height:1.6}.pi-compose{margin:auto 12px 12px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-xl);color:var(--muted-low);min-height:92px}.statusbar{display:flex;align-items:center;gap:14px;padding:0 12px;border-top:1px solid var(--border-soft);background:var(--topbar-bg);color:var(--muted-low);font-size:10.5px}.statusbar span:before{content:"";display:inline-block;width:5px;height:5px;margin-right:6px;border-radius:50%;background:var(--success)}
+.detail{flex:1;min-height:0;overflow:auto;padding:20px 22px}.detail-back{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0;border:0;background:transparent;color:var(--muted);cursor:pointer}.detail-back:hover{color:var(--ink)}.detail h2{margin:20px 0 6px;font-size:25px;letter-spacing:-.02em}.detail>p{margin:0 0 22px;color:var(--muted)}.detail-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.5fr);gap:16px}.detail-section{border-top:1px solid var(--border);padding-top:14px}.detail-section h3{margin:0 0 12px;font-size:14px}.detail-list{display:grid}.detail-row{display:grid;grid-template-columns:150px 150px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:58px;border-bottom:1px solid var(--border-soft)}.detail-row:last-child{border-bottom:0}.detail-row small{color:var(--muted)}
+.modal-summary{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft)}.fact{padding:13px 0}.fact:nth-child(even){padding-left:18px;border-left:1px solid var(--border-soft)}.fact span{display:block;color:var(--muted);font-size:11.5px}.fact strong{display:block;margin-top:4px;font-size:13px}.confirm-note{margin:16px 0 0;padding:12px 14px;border-radius:var(--radius-lg);background:var(--amber-soft);color:var(--ink-soft);font-size:12.5px;line-height:1.5}.toast{position:fixed;right:18px;bottom:42px;z-index:30;padding:10px 14px;border-radius:var(--radius-lg);background:var(--ink);color:var(--app-bg);font-weight:650}
+@media(max-width:1250px){.shell{grid-template-columns:76px minmax(0,1fr)}.brand{min-width:0}.brand span,.nav-label,.nav-item span{display:none}.nav-item{justify-content:center;padding:0}.room-head{padding-inline:16px}.board,.detail{padding-inline:16px}.room-copy p{display:none}.work-area.pi-open .pi-panel{width:320px}.pi-inner{width:320px}.matrix{min-width:920px;grid-template-columns:minmax(260px,1.4fr) repeat(4,minmax(165px,1fr))}}
+@media(max-width:900px){.room-head{min-height:80px;gap:14px}.room-actions .quiet-action{display:none}.room-titleline h1{font-size:22px}.board{padding:12px}.board-tools .selectlike:first-child{display:none}.matrix-frame{min-height:240px}.matrix{min-width:880px;grid-template-columns:minmax(240px,1.35fr) repeat(4,minmax(160px,1fr))}.corner,.platform-head{min-height:68px;padding-inline:12px}.project-cell,.task-slot{min-height:104px}.project-cell{padding-inline:12px}.matrix-cell{min-height:88px}.detail-grid{grid-template-columns:1fr}.work-area.pi-open .pi-panel{position:absolute;right:0;top:var(--topbar-height);bottom:0;width:min(360px,calc(100vw - 76px));z-index:15;box-shadow:-8px 0 0 color-mix(in srgb,var(--app-bg) 40%,transparent)}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition-duration:0.01ms!important;animation-duration:0.01ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { AppModal, Button, WmbCreatureMark } = window.WemediaBuddyDesignSystem_1c877c;
+const NAV_ITEMS = [
+  ['今日','calendar'],['智能体','people'],['发现','compass'],['选题','note'],['创作','pen'],['发布','send'],['结果','chart'],['主题','nodes'],['资料库','folder'],['关系画布','share']
+];
+const PLATFORM_DATA = [
+  {id:'x',name:'X',account:'@PigeonYang',mark:'X',tone:'x'},
+  {id:'xiaohongshu',name:'小红书',account:'PigeonYang',mark:'小',tone:'red'},
+  {id:'wechat',name:'公众号',account:'雾灯财经',mark:'微',tone:'green'},
+  {id:'zhihu',name:'知乎',account:'PigeonYang',mark:'知',tone:''}
+];
+const STATE_DATA = {
+  authorize:{action:'去登录',meta:'还没有登录',tone:'warn'},
+  manual:{action:'打开并发布',meta:'内容已准备好',tone:'warn'},
+  takeover:{action:'打开页面',meta:'需要你完成验证',tone:'warn'},
+  reconcile:{action:'看看结果',meta:'还没确认是否发布',tone:'info'},
+  failed:{action:'再试一次',meta:'上次没有发出',tone:'bad'},
+  published:{action:'查看内容',meta:'今天 09:42 已发布',tone:'ok'}
+};
+const INITIAL_ROWS = [
+  {id:'karpathy',title:'Karpathy：真正限制 Agent 的不是模型，而是上下文工程',cells:{x:'authorize',xiaohongshu:'manual',wechat:'published',zhihu:'reconcile'}},
+  {id:'openai',title:'GPT-5.4 发布后，内容团队最该重做的三个工作习惯',cells:{x:'published',xiaohongshu:'failed',wechat:'manual',zhihu:null}},
+  {id:'uk-ai',title:'英国 AI 创业者正在重新计算算力成本',cells:{x:'takeover',xiaohongshu:null,wechat:'authorize',zhihu:'published'}},
+  {id:'memory',title:'为什么“更长的记忆”不等于更懂你的 AI',cells:{x:'published',xiaohongshu:'reconcile',wechat:null,zhihu:'manual'}}
+];
+function NavGlyph({kind}){const paths={calendar:'M5 3v3M19 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1',people:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',compass:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M16 8l-2 6-6 2 2-6 6-2',note:'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',pen:'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z',send:'M22 2 11 13M22 2l-7 20-4-9-9-4z',chart:'M4 19V9M10 19V5M16 19v-7M22 19H2',nodes:'M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M8 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6M10.5 6.5l5 7M10.5 19.5l5-2.5',folder:'M3 5h7l2 2h9v12H3z',share:'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6M8.6 13.5l6.8-4M8.6 16.5l6.8 4'};return <svg viewBox="0 0 24 24"><path d={paths[kind]}/></svg>}
+function App(){
+  const [themeMode,setThemeMode]=React.useState('dark');
+  const [piOpen,setPiOpen]=React.useState(false);
+  const [activeView,setActiveView]=React.useState('board');
+  const [rowsData,setRowsData]=React.useState(INITIAL_ROWS);
+  const [detailId,setDetailId]=React.useState(null);
+  const [selectedTask,setSelectedTask]=React.useState(null);
+  const [toastText,setToastText]=React.useState('');
+  React.useEffect(()=>{document.documentElement.dataset.theme=themeMode},[themeMode]);
+  React.useEffect(()=>{if(!toastText)return;const timer=setTimeout(()=>setToastText(''),1800);return()=>clearTimeout(timer)},[toastText]);
+  const visibleRows=React.useMemo(()=>rowsData.filter(row=>activeView==='todo'?Object.values(row.cells).some(value=>value&&value!=='published'):activeView==='history'?Object.values(row.cells).some(value=>value==='published'):true),[rowsData,activeView]);
+  const detailRow=rowsData.find(row=>row.id===detailId)||null;
+  const selectedRow=selectedTask?rowsData.find(row=>row.id===selectedTask.rowId):null;
+  const selectedPlatform=selectedTask?PLATFORM_DATA.find(platform=>platform.id===selectedTask.platformId):null;
+  const selectedStateKey=selectedTask&&selectedRow?selectedRow.cells[selectedTask.platformId]:null;
+  const selectedState=selectedStateKey?STATE_DATA[selectedStateKey]:null;
+  function openTask(rowId,platformId){setSelectedTask({rowId,platformId})}
+  function completeTask(){if(!selectedTask||!selectedPlatform||!selectedStateKey)return;const shouldWait=selectedStateKey!=='published'&&selectedStateKey!=='reconcile';if(shouldWait)setRowsData(current=>current.map(row=>row.id===selectedTask.rowId?{...row,cells:{...row.cells,[selectedTask.platformId]:'reconcile'}}:row));setSelectedTask(null);setToastText('已打开 '+selectedPlatform.name)}
+  return <div className="app">
+    <header className="topbar">
+      <div className="brand"><WmbCreatureMark state="idle"/><strong>WeMediaBuddy</strong></div>
+      <div className="top-actions">
+        <button className="icon" aria-label="切换主题" title="切换主题" onClick={()=>setThemeMode(themeMode==='dark'?'light':'dark')}><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg></button>
+        <button className="icon" aria-label={piOpen?'收起 Pi':'展开 Pi'} title={piOpen?'收起 Pi':'展开 Pi'} aria-pressed={piOpen} onClick={()=>setPiOpen(!piOpen)}><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg></button>
+      </div>
+    </header>
+    <div className="shell">
+      <aside className="sidebar"><div className="nav-label">工作流</div><nav className="nav">{NAV_ITEMS.slice(0,7).map(([label,kind])=><button key={label} className={'nav-item '+(label==='发布'?'active':'')}><NavGlyph kind={kind}/><span>{label}</span></button>)}</nav><div className="nav-label">知识资产</div><nav className="nav">{NAV_ITEMS.slice(7).map(([label,kind])=><button key={label} className="nav-item"><NavGlyph kind={kind}/><span>{label}</span></button>)}</nav><div className="nav-bottom"><button className="nav-item"><NavGlyph kind="note"/><span>设置</span></button></div></aside>
+      <div className={'work-area '+(piOpen?'pi-open':'')}>
+        <main className="workspace">
+          {!detailRow?<>
+            <section className="room-head">
+              <div className="room-copy"><div className="room-titleline"><h1>发布</h1></div><p>选择一篇内容，再选择要发布的平台。</p></div>
+              <div className="room-actions"><button className="quiet-action" onClick={()=>setToastText('已刷新')}>刷新</button><Button variant="primary" size="sm" onClick={()=>{const row=rowsData.find(item=>Object.values(item.cells).some(value=>value&&value!=='published'));if(row){const platformId=Object.keys(row.cells).find(key=>row.cells[key]&&row.cells[key]!=='published');openTask(row.id,platformId)}}}>继续发布</Button></div>
+            </section>
+            <section className="board">
+              <div className="board-bar"><div className="view-tabs" role="tablist" aria-label="发布内容">{[['board','全部'],['todo','待我处理'],['history','已发布']].map(([id,label])=><button key={id} role="tab" aria-selected={activeView===id} className={'view-tab '+(activeView===id?'active':'')} onClick={()=>setActiveView(id)}>{label}</button>)}</div></div>
+              <div className="matrix-frame"><div className="matrix" role="table" aria-label="内容和发布平台">
+                <div className="matrix-head"><div className="corner" role="columnheader"><strong>内容</strong></div>{PLATFORM_DATA.map(platform=><div className="platform-head" role="columnheader" key={platform.id}><span className={'platform-mark '+platform.tone}>{platform.mark}</span><span><strong>{platform.name}</strong><small>{platform.account}</small></span></div>)}</div>
+                {visibleRows.map(row=><div className="project-row" role="row" key={row.id}><div className="project-cell" role="rowheader"><button className="project-open" onClick={()=>setDetailId(row.id)}><strong>{row.title}</strong></button></div>{PLATFORM_DATA.map(platform=>{const rawStateKey=row.cells[platform.id];const stateKey=activeView==='todo'&&rawStateKey==='published'||activeView==='history'&&rawStateKey!=='published'?null:rawStateKey;if(!stateKey)return <div key={platform.id} className="task-slot empty" role="cell">—</div>;const state=STATE_DATA[stateKey];return <div className="task-slot" role="cell" key={platform.id}><button className="matrix-cell" onClick={()=>openTask(row.id,platform.id)}><span className="cell-status"><i className={'dot '+state.tone}/>{state.action}<span className="cell-more">›</span></span><span className="cell-meta">{state.meta}</span></button></div>})}</div>)}
+              </div></div>
+            </section>
+          </>:<section className="detail"><button className="detail-back" onClick={()=>setDetailId(null)}>← 返回发布</button><h2>{detailRow.title}</h2><p>选择一个平台继续</p><div className="detail-grid"><div className="detail-section"><h3>发布到</h3><div className="detail-list">{PLATFORM_DATA.map(platform=>{const stateKey=detailRow.cells[platform.id];const state=stateKey?STATE_DATA[stateKey]:null;return <div className="detail-row" key={platform.id}><strong>{platform.name}</strong><small>{platform.account}</small><span>{state?state.meta:'—'}</span>{state?<Button variant="text" size="sm" onClick={()=>openTask(detailRow.id,platform.id)}>{state.action}</Button>:<span/>}</div>})}</div></div><div className="detail-section"><h3>内容</h3><p>标题、正文和图片都已准备好。</p><p>打开平台后，预览无误即可发布。</p></div></div></section>}
+        </main>
+        <aside className="pi-panel" aria-hidden={!piOpen}><div className="pi-inner"><div className="pi-head"><strong>Pi</strong></div><div className="pi-body">要我帮你检查哪一篇？</div><div className="pi-compose">问问 Pi…</div></div></aside>
+      </div>
+    </div>
+    <AppModal open={Boolean(selectedTask)} title={selectedPlatform&&selectedState?selectedState.action+' · '+selectedPlatform.name:'发布'} size="large" onRequestClose={()=>setSelectedTask(null)} footer={selectedState?<><Button variant="secondary" onClick={()=>setSelectedTask(null)}>取消</Button><Button variant="primary" onClick={completeTask}>{selectedState.action==='查看内容'?'关闭':selectedState.action}</Button></>:null}>
+      {selectedRow&&selectedPlatform&&selectedState?<div><h3 style={{margin:'0 0 6px',fontSize:'18px'}}>{selectedRow.title}</h3><p style={{margin:'0 0 16px',color:'var(--muted)'}}>将用 {selectedPlatform.account} 打开 {selectedPlatform.name}。</p><div className="modal-summary"><div className="fact"><span>账号</span><strong>{selectedPlatform.account}</strong></div><div className="fact"><span>准备好的内容</span><strong>{selectedPlatform.id==='xiaohongshu'?'正文和 3 张图片':'正文和封面'}</strong></div></div><div className="confirm-note">打开后请先预览，确认无误再发布。</div></div>:null}
+    </AppModal>
+    {toastText?<div className="toast" role="status">{toastText}</div>:null}
+  </div>
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body></html>

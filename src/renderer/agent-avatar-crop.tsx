@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 type Props = {
   roleId: string;
   roleLabel: string;
+  /** 当前已保存头像（wmb-asset://）；进入即预载入裁切画布，避免已头像角色打开成空白。 */
+  initialImage?: string | null;
   onClose: () => void;
   onSaved: (url: string) => void;
 };
@@ -13,8 +15,8 @@ const OUT = 256;
 const cssToken = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-/** 圆形头像：选图 → 拖移缩放 → 裁切正方形 PNG → 保存 */
-export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: Props): JSX.Element {
+/** 圆形头像：选图 → 拖移缩放 → 裁切正方形 PNG → 保存；进入时预载当前头像（若有）。 */
+export function AgentAvatarCropDialog({ roleId, roleLabel, initialImage, onClose, onSaved }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [scale, setScale] = useState(1);
@@ -62,6 +64,23 @@ export function AgentAvatarCropDialog({ roleId, roleLabel, onClose, onSaved }: P
   useEffect(() => {
     paint();
   }, [scale, offset, hasImage]);
+
+  // 进入即预载当前头像：与「选择图片」同一加载路径（imgRef + paint），失败则保持
+  // 可用的空画布（可重新选图），不阻塞裁切弹窗。
+  useEffect(() => {
+    if (!initialImage) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      imgRef.current = img;
+      setScale(1);
+      setOffset({ x: 0, y: 0 });
+      setHasImage(true);
+      requestAnimationFrame(paint);
+    };
+    img.onerror = () => { /* 当前头像不可读：保留空白画布，仍可重新选图 */ };
+    img.src = initialImage;
+  }, [initialImage]);
 
   const onFile = (file: File | null) => {
     if (!file) return;

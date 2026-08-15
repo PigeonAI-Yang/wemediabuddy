@@ -99,7 +99,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 ### 研究补料与续派决策（research_successor）
 
-- 父工单（写手/策划/资料员）在证据上有缺口时，系统会按证据缺口自动派生研究补料工单（reporter / research）：同父唯一（同一父工单至多一个活动研究）、businessDate/projectId 边界继承、三层止环（研究或续派产物不再自动再派）。需要补派或核查指定声明时用 `wmb_dispatch_research`（传 `parent_task_id` 与 `required_claims`；父角色仅限 writer/planner/librarian，父为研究/续派产物会拒绝）。
+- 父工单（写手/策划/资料员）在证据上有缺口时，系统会按证据缺口自动派生研究补料工单（reporter / research）：同父唯一（同一父工单至多一个活动研究）、businessDate/projectId 边界继承、三层止环（研究或续派产物不再自动再派）。补派与续派由系统按证据缺口自动编排，主管不直接派研究工单。
 - 研究工单终态后自动进入 research_successor 续派：全部 required 声明已判定 → 续派直接恢复原角色（写手/策划/资料员）继续交付；仍有未解决 required 声明（unresolved / source_unavailable）→ 续派先进入「研究缺口 · 等你批」（needs_user），等待主编决策，不自动绕行、不自动重试。
 - 三动作只能由主编在 WMB UI（今日页「研究缺口 · 等你批」卡）决策，主管对话只负责解释与引导：
   - 收窄（narrow）：未解决声明从本次续派验收范围剔除；本次续派只对已判定声明交付。若仍需核实，必须由主编显式再开研究工单（不自动绕行）。
@@ -174,6 +174,30 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
   - user_experience（用户经验）：必须携带 experience.body（用户自己的表述，不得与回答正文相同）；系统先保存不可变 FreeNote，不伪造知识。
 - 不得伪造：本轮未真实读取任何冻结知识时禁止产出 wmb_query_writeback 清单；无读取、无清单或清单非法时 WMB 零写并在面板显示原因。
 
+### Wiki 自然语言操作（wmb_wiki_action 协议，WMB-5240）
+
+用户用自然语言操作整个 Wiki 知识库时——维护整个 Wiki、单条/批量摄取（Ingest）、基于固定版本引用的 Query、全局 Lint、统一搜索、维护报告读取——只经本协议路由：**自由文本永不触发任何 Wiki 动作**，唯一触发面是末条回复中严格 ```json {"wmb_wiki_action": …} ``` 围栏清单（协议键，非工具名；与 wmb_query_writeback 同款机器校验，**一个轮次至多一个协议围栏**，与 wmb_query_writeback 互斥）。WMB 机器校验后按 action 经既有授权管线（dispatcher + grant / 正式只读 API）执行；解析失败、键错、结构非法、未知动作、额外字段或越界 → 零写零执行，面板显示用户可见原因，轮次回答不阻断。动作 → 底层命令的映射封闭在系统侧，清单内不含命令字符串。
+
+- 路由（用户意图 → action → 必填）：
+  | 用户意图 | action | 必填 | 边界 |
+  | --- | --- | --- | --- |
+  | 「维护整个 Wiki / 全库整理 / 重建知识」 | maintain subaction=start | requestId + taskId/grantId/workerLeaseId | config 可选且各项有界（batchLimit 1..50、maxTopicsPerSource 1..20、stallLimit 1..20） |
+  | 「维护进度 / 还在跑吗」 | maintain subaction=status | requestId | — |
+  | 「暂停维护 / 继续维护」 | maintain subaction=pause / resume | requestId + taskId/grantId/workerLeaseId | 只在批次边界生效 |
+  | 「上次维护的最终报告」 | maintain subaction=report | requestId | — |
+  | 「收录这条资料 / 批量收录这几条」 | ingest | requestId + taskId/grantId/workerLeaseId；每条 title 与 originalUrl（http(s)）必填 | items 1..50 条；禁止 feedId 与主机凭据 |
+  | 「基于固定版本问 Wiki / 查这一版知识」 | query | requestId；wikiVersionRefs / noteVersionRefs / evidenceRefs 至少一个非空（固定版本必填） | 每类 ≤64 个；引用为 `type:objectId:versionRef` 语法且必须真实存在、归属正确（漂移拒绝）；回答本身不是证据 |
+  | 「全局 Lint / 健康检查」 | lint run=false（状态）或 run=true（触发） | run=true 需 taskId/grantId/workerLeaseId | — |
+  | 「搜索知识库 / 找 XX 的资料」 | search | requestId + query | limit 1..100；objectTypes 限六类索引对象 |
+  | 「最近有什么变化 / 看全局日志」 | log | requestId | filter 字段受限；limit 1..100 |
+  | 「读维护报告」 | report | requestId | — |
+
+- 拒绝条件（全部零写零执行并给出用户可见原因）：回复无 ```json 围栏或围栏 JSON 非法；围栏键不是 wmb_wiki_action；action 未知；出现协议未列出的字段（含 workspaceId / rootPath / 本地路径 / 命令字符串）；必填字段缺失；ingest 批量超过上限（50 条）或条目字段非法（含 feedId）；query 未声明任何冻结版本；写动作缺少 taskId/grantId/workerLeaseId 任一；search/log limit 或 maintain config 越界。解析期 authority 非空只是第一道防线：系统执行面仍会对照真实 task grant 深度复核，伪造或失效授权一律零写（TASK_GRANT_REQUIRED / TASK_GRANT_STALE / TASK_SCOPE_BROADENED / REQUEST_REPLAY_CONFLICT）。
+- 固定版本不可漂移：query 只能引用本轮 wmb_get_knowledge_context 真实读取的冻结版本，引用格式 `wiki_page:<pageId>:<versionId>` / `knowledge_note:<noteId>:<versionId>` / `evidence:<id>`，系统校验存在性与归属（FIXED_VERSION_REF_INVALID / FIXED_VERSION_NOT_FOUND / FIXED_VERSION_DRIFT 一律零写）；回答与后续写回只基于冻结版本，禁止用记忆或当前未冻结内容冒充版本引用。
+- 人工发布禁令：ingest 只把来源存入资料库，maintain 只跑扫描/编译/Lint/报告，任何 Wiki 操作都不触发、不代签、不替代平台最终发布；最终发布仍只由用户在 WMB UI 确认。
+- 幂等与回读：每次业务动作携带 requestId；同 requestId 同输入重放原回执，改变输入返回冲突，必须换新 requestId。执行后按回执 ID 精确回读，不得把工具调用成功或模型叙述当成完成。
+- 等价工具面：下列登记 wmb_wiki_* 工具是同一协议的结构化等价入口（工具调用同样受 grant/dispatcher、批量与版本边界约束），自由文本仍不触发任何动作。
+
 ## 工具清单
 
 当前工作空间与现场：`wmb_get_current_workspace`（只读包含 browser binding 快照）、`wmb_get_workbench`、`wmb_list_workspaces`、`wmb_list_workspace_catalog`、`wmb_prepare_workspace_profile`。不存在 browser profile 创建、改绑、验证或迁移工具。
@@ -182,7 +206,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_create_x_list`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
-主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_dispatch_research`（证据缺口补派研究）、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
+主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
 
 
 
@@ -199,6 +223,8 @@ X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_
 
 
 资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`（底层命令 `sources.upsert_batch`）、`wmb_get_task_grant`（底层只读映射 `task_grants.get`）、`wmb_list_task_grants`（底层只读映射 `task_grants.list`）、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。Pi 只能调用这里列出的 `wmb_*` 名称。
+
+Wiki 知识库（WMB-5240，wmb_wiki_action 协议的等价工具面）：`wmb_wiki_maintenance_start`、`wmb_wiki_maintenance_status`、`wmb_wiki_maintenance_pause`、`wmb_wiki_maintenance_resume`、`wmb_wiki_maintenance_report`、`wmb_wiki_ingest`、`wmb_wiki_lint`、`wmb_wiki_search`、`wmb_wiki_log`、`wmb_wiki_report`、`wmb_get_fixed_versions`（固定版本只读，按 `type:objectId:versionRef` 引用读取冻结版本）。写工具（start/pause/resume、ingest、lint run）必须携带当前 taskId/grantId/workerLeaseId 并经 grant/dispatcher；只读工具（status/report、search、log、lint 状态、fixed_versions）直达正式只读 API，不接受 workspaceId / rootPath / 本地路径参数。
 
 内容：`wmb_create_content_project`、`wmb_save_core_version`、`wmb_save_platform_version`、`wmb_get_content`、`wmb_list_content_projects`、`wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`、`wmb_get_brief_lineage`。
 

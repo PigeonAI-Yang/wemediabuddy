@@ -106,7 +106,7 @@ try {
   assert.equal(publication.status, 'awaiting_confirmation');
   assert.equal(publication.title, 'Frozen orchestration title');
   assert.equal(publication.body, 'Frozen orchestration body');
-  assert.deepEqual(JSON.parse(publication.assets), [{ id: assetId, mimeType: 'image/png', relativePath: 'assets/orchestration.png', sha256: 'c'.repeat(64) }]);
+  assert.deepEqual(JSON.parse(publication.assets), [{ id: assetId, mimeType: 'image/png', relativePath: 'assets/orchestration.png', sha256: 'c'.repeat(64), byteCount: 13 }]);
   assert.equal(JSON.parse(operation.readback).title, 'Frozen orchestration title');
   assert.equal(JSON.parse(operation.evidence).editorEvidenceUrl, 'https://x.com/compose/orchestration');
   assert.equal(runtime.database.prepare('SELECT COUNT(*) AS count FROM publication_attempts WHERE publication_id=?').get(prepared.publication.id).count, 0);

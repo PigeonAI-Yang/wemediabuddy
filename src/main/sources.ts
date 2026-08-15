@@ -1,4 +1,5 @@
 import { broadcastDataChanged } from './data-changed.ts';
+import { projectSourceSaved } from './wiki-index-triggers.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -171,6 +172,8 @@ export function upsertSource(database: DatabaseSync, input: SourceInput, notify 
       WHERE id=?`)
       .run(...values, now, revision, existing.id);
     if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+    // WMB-5238：重复触发（同内容重存）不重复投影/日志；只有实质字段变化才增量投影。
+    if (sourceMateriallyChanged(values, existing)) projectSourceSaved(database, existing.id);
     return { id: existing.id, created: false, revision };
   }
 
@@ -183,7 +186,37 @@ export function upsertSource(database: DatabaseSync, input: SourceInput, notify 
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, ...values.slice(0, 7), now, ...values.slice(7), now, now, 1);
   if (notify) broadcastDataChanged({ scopes: ['sources', 'library', 'today'], reason: 'source.upsert' });
+  // WMB-5238：新建 Source 增量投影（索引 + 日志）。
+  projectSourceSaved(database, id);
   return { id, created: true, revision: 1 };
+}
+
+/** WMB-5238：判断一次 upsert 是否造成实质字段变化（排除 revision/updated_at 等派生字段）。 */
+function sourceMateriallyChanged(values: unknown[], existing: {
+  feedId: string | null; originalUrl: string | null; title: string; author: string | null; publishedAt: string | null;
+  summary: string | null; categories: string; keywords: string; valueJudgment: string | null; ipRelevance: string | null;
+  creationAngles: string | null; recommendedPlatforms: string; recommendedFormats: string; timeliness: string | null;
+  priority: number | null; evidence: string | null; clientLabel: string | null; verificationStatus: string; managementStatus: string;
+}): boolean {
+  return values[0] !== existing.feedId
+    || values[1] !== existing.originalUrl
+    || values[4] !== existing.title
+    || values[5] !== existing.author
+    || values[6] !== existing.publishedAt
+    || values[7] !== existing.summary
+    || values[8] !== existing.categories
+    || values[9] !== existing.keywords
+    || values[10] !== existing.valueJudgment
+    || values[11] !== existing.ipRelevance
+    || values[12] !== existing.creationAngles
+    || values[13] !== existing.recommendedPlatforms
+    || values[14] !== existing.recommendedFormats
+    || values[15] !== existing.timeliness
+    || values[16] !== existing.priority
+    || values[17] !== existing.evidence
+    || values[18] !== existing.clientLabel
+    || values[19] !== existing.verificationStatus
+    || values[20] !== existing.managementStatus;
 }
 
 export function getSource(database: DatabaseSync, id: string): SourceRecord | null {

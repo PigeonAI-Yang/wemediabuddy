@@ -32,11 +32,9 @@ function poolItem(id, title) {
   };
 }
 
-test('chair keeps latest non-empty plan when pool is empty array', () => {
-  const latestPlan = { items: [{ id: 'old-1', title: '上一份可批' }] };
-  const items = resolveChairDisplayItems([], null, latestPlan);
-  assert.equal(items.length, 1);
-  assert.equal(items[0].title, '上一份可批');
+test('chair does not revive latest-plan items when authoritative pool is empty', () => {
+  const latestPlan = { items: [{ id: 'old-1', title: '上一份已终结方案' }] };
+  assert.deepEqual(resolveChairDisplayItems([], null, latestPlan), []);
 });
 
 test('chair prefers non-empty pool over plans', () => {
@@ -47,12 +45,10 @@ test('chair prefers non-empty pool over plans', () => {
   assert.equal(items[0].title, '池内可批');
 });
 
-test('empty current plan does not blank chair when latest non-empty exists', () => {
+test('empty current plan relies on cross-date pool instead of latest-plan fallback', () => {
   const todayPlan = { items: [], summary: '今日空方案保档' };
-  const latestPlan = { items: [{ id: 'amd', title: 'AMD 收购 Taalas' }] };
-  const items = resolveChairDisplayItems([], todayPlan, latestPlan);
-  assert.equal(items.length, 1);
-  assert.equal(items[0].title, 'AMD 收购 Taalas');
+  const latestPlan = { items: [{ id: 'amd', title: '已终结历史方案' }] };
+  assert.deepEqual(resolveChairDisplayItems([], todayPlan, latestPlan), []);
 });
 
 test('chair empty only when pool and non-empty plans are absent', () => {

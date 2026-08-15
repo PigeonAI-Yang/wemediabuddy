@@ -28,12 +28,12 @@ export type WmbSettingsSnapshot = {
   workspace: {
     id: string; displayName: string; rootPath: string;
     dataRoot: { workspaceId: string; path: string };
-    profile: { profileId: string; revision: number; intelligencePackId: string; creationPackId: string; platforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
+    profile: { profileId: string; revision: number; intelligencePackId: string; creationPackId: string; platforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'> };
     intelligenceChannels: IntelligenceChannelsSummary;
     browserProfileId: string | null;
     bindingRevision: number | null;
     state: WorkspaceBrowserBinding['state'] | 'missing';
     expectedAccountSnapshots: WorkspaceBrowserBinding['expectedAccountSnapshot'];
-    capabilities: { xLists: true; aiIntelligence: boolean; fixedAiLists: boolean; rankings: boolean; sourceWire: boolean; publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat'> };
+    capabilities: { xLists: true; aiIntelligence: boolean; fixedAiLists: boolean; rankings: boolean; sourceWire: boolean; publishingPlatforms: Array<'x' | 'xiaohongshu' | 'wechat' | 'zhihu'> };
   };
 };

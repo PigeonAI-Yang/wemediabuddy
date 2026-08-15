@@ -43,7 +43,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [workspaceNote, setWorkspaceNote] = useState('');
   const [workspaces, setWorkspaces] = useState<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>({ activeWorkspaceId: null, workspaces: [] });
   const [workspaceProposals, setWorkspaceProposals] = useState<Awaited<ReturnType<typeof window.wmb.listWorkspaceProposals>>>([]);
-  const selectPiProfile = (id: string) => {
+  const selectPiProfile = (id: string, { keepNote = false } = {}) => {
     const profile = settings?.pi.profiles.find((item) => item.id === id);
     setPiProfileId(id);
     setPiName(profile?.name ?? '');
@@ -55,10 +55,12 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiNativeSearch(profile?.nativeSearch === true);
     setPiApiKey('');
     setPiModels([]);
-    setPiConfigNote('');
+    if (!keepNote) setPiConfigNote('');
   };
   useEffect(() => {
-    selectPiProfile(settings?.pi.activeId ?? '');
+    // 保存/激活后的 settings 刷新也会走这里：保留刚写入的配置反馈（如「已保存并切换到此配置」），
+    // 只在用户手动切换预设时由 selectPiProfile 清空提示。
+    selectPiProfile(settings?.pi.activeId ?? '', { keepNote: true });
   }, [settings?.pi.activeId, settings?.pi.profiles]);
   useEffect(() => { if (section === 'data') void Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]).then(([listed, proposals]) => { setWorkspaces(listed); setWorkspaceProposals(proposals); }); }, [section, dataRoot]);
   const saveProfile = async () => {

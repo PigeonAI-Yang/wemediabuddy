@@ -1,0 +1,54 @@
+/* ============================================================
+ * WeMediaBuddy Design System — Layout / spacing tokens
+ * Machine SSOT: src/renderer/styles-foundation.css chrome values;
+ * WMB-5258 unified contract §6 (one scroll owner per room,
+ * compact Pi preserves workspace width).
+ * ============================================================ */
+
+:root {
+  /* ------------------------------------------------------------
+   * Canonical shell chrome — exact foundation values.
+   * Grid: 216px sidebar · flexible workspace · Pi
+   * clamp(340px, 24vw, 400px); topbar 56px; status bar 34px.
+   * ------------------------------------------------------------ */
+  --topbar-height: 56px;
+  --status-height: 34px;
+  --nav-width: 216px;
+  --pi-width: clamp(340px, 24vw, 400px);
+  --pi-width-collapsed: 0px;
+  --pi-open-width: var(--pi-width); /* runtime-resizable in product */
+  --page-space: 16px;
+
+  /* ------------------------------------------------------------
+   * Spacing scale — DS normalization of dominant current values
+   * (WMB-5258 census: 209 padding values, 45 gaps → the dominant
+   * steps below). Product pages may keep page-owned rhythm; new
+   * generic spacing uses these steps.
+   * ------------------------------------------------------------ */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 18px;
+  --space-10: 24px;
+  --space-11: 28px;
+  --space-12: 32px;
+  --space-13: 40px;
+
+  /* Interaction geometry — source-anchored */
+  --control-h-md: 40px;    /* primary action, normal density (WMB-5258 §4) */
+  --control-h-sm: 32px;    /* compact density */
+  --control-h-nav: 38px;   /* sidebar row — shell exception */
+  --control-h-tab: 40px;   /* tab row (styles-proposals .proposal-tab) */
+  --control-h-field: 42px; /* settings form inputs (styles-studio) */
+  --icon-btn: 38px;        /* styles-workflow .icon-button */
+  --icon-btn-sm: 32px;
+
+  /* Component heights — source-anchored */
+  --card-command-h: 96px;  /* .page-command (108px under 1100px) */
+  --card-role-h: 228px;    /* .agents-role-card */
+}

@@ -71,17 +71,18 @@ export function poolItemToPlanItem(item: PoolItemLike): TodayPlanItem {
 }
 
 /**
- * 主席清单投影：pool（未终结）优先；否则今日非空方案；否则最近非空方案。
- * 当日空 current plan 只是运行记录，不得把主区掏空。
+ * 主席清单投影：选题池（未终结 open 项）是主区的唯一数据源。
+ * getToday 的 pool = 跨日期未终结 plan_items 并集（已采纳/已否掉/已过期/超窗全部被排除），
+ * 因此池为空即意味着没有任何可展示的机会。回退到今日/最近非空方案会把这些已被终结的
+ * 条目重新搬回主区（否掉最后一条机会后卡片“复活”），故不再回退。
+ * 当日空 current plan 只是运行记录，由 pool 跨日并集兜底，主区不会被掏空。
  */
 export function resolveChairDisplayItems<TPool extends PoolItemLike, TPlan extends { items: TodayPlanItem[] }>(
   pool: TPool[] | null | undefined,
-  todayPlan: TPlan | null | undefined,
-  latestPlan: TPlan | null | undefined
+  _todayPlan: TPlan | null | undefined,
+  _latestPlan: TPlan | null | undefined
 ): TodayPlanItem[] {
   if (pool && pool.length > 0) return pool.map(poolItemToPlanItem);
-  if (todayPlan && todayPlan.items.length > 0) return todayPlan.items;
-  if (latestPlan && latestPlan.items.length > 0) return latestPlan.items;
   return [];
 }
 

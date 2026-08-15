@@ -3,7 +3,7 @@
 // UI / Pi 侧只消费本文件类型，不持有数据层实现。
 
 export type StudioDocumentKind = 'core' | 'platform';
-export type StudioPlatform = 'x' | 'xiaohongshu' | 'wechat';
+export type StudioPlatform = 'x' | 'xiaohongshu' | 'wechat' | 'zhihu';
 
 export type StudioDocumentScope = {
   projectId: string;

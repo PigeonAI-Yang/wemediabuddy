@@ -1,0 +1,37 @@
+<!-- @dsCard group="Guidelines" viewport="700x300" name="OverlaysContract" -->
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<title>Overlays Contract</title>
+<link rel="stylesheet" href="../styles.css"/>
+<style>
+  body { padding: 18px 20px; background: var(--app-bg); color: var(--ink); font-family: var(--font-sans); }
+  h1 { margin: 0 0 6px; font-size: var(--text-title); letter-spacing: -.02em; }
+  p { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.55; max-width: 64ch; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); text-align: left; color: var(--ink-soft); }
+  th { color: var(--muted-low); font-weight: 650; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  td code { font-family: var(--mono); color: var(--accent-soft); font-size: .95em; }
+  .list { margin: 10px 0 0; padding-left: 20px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.7; }
+  .list b { color: var(--ink); }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent-soft); }
+</style>
+</head>
+<body>
+<h1>Overlays — 一个弹窗层</h1>
+<p>AppModal 是全产品唯一弹窗层：一个焦点陷阱、Esc/背景点击策略、body 滚动锁、关闭归还焦点、800×700 以下降级全屏。特征代码只定制 children/footer/className。</p>
+<table>
+  <tr><th>尺寸</th><th>宽度</th><th>用途</th></tr>
+  <tr><td>confirm</td><td>520px</td><td>危险确认（role=alertdialog）</td></tr>
+  <tr><td>standard</td><td>700px</td><td>常规详情/表单</td></tr>
+  <tr><td>large</td><td>min(1040px, vw−64)</td><td>密集工作弹窗</td></tr>
+  <tr><td>fullscreen</td><td>100vw × 100vh</td><td>整页例外</td></tr>
+</table>
+<ul class="list">
+  <li><b>禁止</b> <code>window.confirm</code> 与页面自有焦点陷阱</li>
+  <li>危险确认 = confirm 尺寸 + alertdialog + footer 内 danger primary</li>
+  <li>不锁焦的 popover 走轻契约：Esc、焦点归还、外点关闭、<code>aria-expanded</code>+<code>aria-controls</code></li>
+</ul>
+</body>
+</html>

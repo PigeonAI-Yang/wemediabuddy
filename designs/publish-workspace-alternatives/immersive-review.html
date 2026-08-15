@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark" data-scheme="b-immersive-review">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B · 沉浸终审 — WeMediaBuddy 发布工作台</title>
+<!-- React first — the bundle calls React.createElement -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/colors.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/tokens/shape-motion.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles/components.css">
+<link rel="stylesheet" href="_ds/wemedia-buddy-design-system/styles.css">
+<script src="_ds/wemedia-buddy-design-system/_ds_bundle.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  /* ============================================================
+   * B · 沉浸终审 — page-local layout only.
+   * Brand/chrome color: exclusively var(--*) tokens (DS contract).
+   * ============================================================ */
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; }
+  .wmb-app {
+    display: flex; flex-direction: column;
+    height: 100vh;
+    background: var(--app-bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body-lh);
+  }
+  button { font-family: inherit; }
+  :focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+
+  /* ---------- Topbar ---------- */
+  .wmb-topbar {
+    flex: none; display: flex; align-items: center; gap: 14px;
+    height: var(--topbar-height); padding: 0 var(--page-space);
+    border-bottom: 1px solid var(--line);
+    background: var(--topbar-bg);
+    min-width: 0;
+  }
+  .wmb-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .wmb-brand-name { font-size: 14px; font-weight: var(--weight-bold); letter-spacing: .01em; white-space: nowrap; }
+  .wmb-room {
+    display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+    padding: 4px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
+    background: var(--surface); color: var(--ink-soft); font-size: 12.5px; font-weight: var(--weight-demi);
+    white-space: nowrap;
+  }
+  .wmb-room i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .wmb-topbar-spacer { flex: 1 1 auto; }
+  .wmb-topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
+  .wmb-iconbtn {
+    display: inline-grid; place-items: center;
+    width: 34px; height: 34px;
+    border: 1px solid transparent; border-radius: var(--radius-lg);
+    background: transparent; color: var(--muted);
+    transition: background-color var(--dur-base) var(--ease-base), color var(--dur-base) var(--ease-base), border-color var(--dur-base) var(--ease-base);
+  }
+  .wmb-iconbtn:hover { background: var(--surface-hover); color: var(--ink); border-color: var(--border-soft); }
+  .wmb-iconbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .wmb-iconbtn.is-active { color: var(--accent-soft); background: var(--accent-faint); border-color: color-mix(in srgb, var(--accent) 35%, var(--border-soft)); }
+  .wmb-link { color: var(--link); font-size: 13px; font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; }
+  .wmb-link:hover { text-decoration: underline; }
+  .wmb-topbar-divider { width: 1px; height: 18px; background: var(--line-strong); }
+
+  /* ---------- Shell: strip + canvas ---------- */
+  .wmb-shell { flex: 1 1 auto; min-height: 0; display: flex; }
+
+  /* ---------- Board strip (all-platform queue) ---------- */
+  .wmb-strip {
+    flex: none; width: 340px; min-height: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--line);
+    background: var(--panel-bg);
+  }
+  .wmb-strip__head { flex: none; padding: 14px 16px 10px; }
+  .wmb-strip__title { display: flex; align-items: baseline; gap: 8px; font-size: 15px; font-weight: var(--weight-bold); }
+  .wmb-strip__count { color: var(--muted-low); font-size: 12px; font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
+  .wmb-strip__sub { margin-top: 3px; color: var(--muted); font-size: 12px; }
+  .wmb-strip__filters { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 12px; }
+  .wmb-strip__filters .ds-chip { min-height: var(--control-h-sm); padding: 0 11px; font-size: 12px; }
+  .wmb-strip__list {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    list-style: none; margin: 0; padding: 2px 10px 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .wmb-row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 9px 10px;
+    border: 1px solid transparent; border-radius: var(--radius-xl);
+    background: transparent; color: inherit; font: inherit; text-align: left;
+    cursor: pointer;
+    transition: background-color var(--dur-base) var(--ease-base), border-color var(--dur-base) var(--ease-base);
+  }
+  .wmb-row:hover { background: var(--surface-hover); }
+  .wmb-row.is-selected { background: var(--accent-faint); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  .wmb-row__mark {
+    flex: none; display: grid; place-items: center;
+    width: 26px; height: 26px; border-radius: var(--radius-lg);
+    background: var(--plat-color, var(--muted-low));
+    color: var(--accent-ink); font-size: 11px; font-weight: var(--weight-bold);
+  }
+  .wmb-row__copy { flex: 1 1 auto; min-width: 0; }
+  .wmb-row__title { font-size: 13px; font-weight: var(--weight-semibold); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-row__meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--muted); font-size: 11.5px; min-width: 0; }
+  .wmb-row__meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-row__ex { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+  .wmb-row__pill { flex: none; }
+  .wmb-strip__foot {
+    flex: none; padding: 10px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted-low); font-size: 11.5px; line-height: 1.55;
+  }
+
+  /* ---------- Canvas ---------- */
+  .wmb-canvas { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--workspace-bg); }
+
+  /* Overview (no selection) */
+  .wmb-overview { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 28px 32px 40px; }
+  .wmb-ov-eyebrow { color: var(--accent-soft); font-size: 13px; font-weight: var(--weight-demi); }
+  .wmb-ov-title { margin: 8px 0 6px; font-size: var(--text-display); line-height: var(--text-display-lh); letter-spacing: var(--text-display-ls); }
+  .wmb-ov-lede { max-width: 68ch; margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+  .wmb-ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; margin-top: 22px; }
+  .wmb-stat {
+    display: grid; gap: 5px; padding: 14px 16px;
+    border: 1px solid var(--border-soft); border-radius: var(--radius-2xl);
+    background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer;
+    transition: border-color var(--dur-base) var(--ease-base), background var(--dur-base) var(--ease-base);
+  }
+  .wmb-stat:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--surface-hover); }
+  .wmb-stat strong { font-size: 22px; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+  .wmb-stat span { color: var(--muted); font-size: 12.5px; }
+  .wmb-ov-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 26px; }
+  .wmb-guide {
+    padding: 16px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl);
+    background: var(--panel-bg);
+  }
+  .wmb-guide b { display: block; margin-bottom: 6px; font-size: 13.5px; font-weight: var(--weight-semibold); }
+  .wmb-guide b em { font-style: normal; color: var(--accent-soft); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+  .wmb-guide p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+
+  /* Review workspace */
+  .wmb-review { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .wmb-review__head {
+    flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 20px; border-bottom: 1px solid var(--line);
+    background: var(--panel-bg);
+  }
+  .wmb-review__title { font-size: 16px; font-weight: var(--weight-bold); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-review__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wmb-plat {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: var(--radius-pill);
+    background: var(--tag-bg); color: var(--ink-soft);
+    font-size: 11.5px; font-weight: var(--weight-demi); white-space: nowrap;
+  }
+  .wmb-plat i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--plat-color, var(--muted-low)); }
+  .wmb-review__time { color: var(--muted); font-size: 12px; white-space: nowrap; font-family: var(--mono); }
+  .wmb-review__actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .wmb-rail-toggle { display: none; }
+  .wmb-review__tabs { flex: none; padding: 0 20px; background: var(--panel-bg); }
+  .wmb-review__tabs .ds-tablist { margin-bottom: 0; border-bottom: 0; }
+  .wmb-review__body { flex: 1 1 auto; min-height: 0; display: flex; }
+  .wmb-review__main { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px; }
+
+  /* Rail — calm contextual column */
+  .wmb-review__rail {
+    flex: none; width: 280px; min-height: 0; overflow-y: auto;
+    border-left: 1px solid var(--line); background: var(--panel-bg);
+    padding: 14px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .wmb-rail-sec { display: grid; gap: 8px; }
+  .wmb-rail-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .wmb-rail-sec__head strong { font-size: 12px; font-weight: var(--weight-semibold); color: var(--muted); letter-spacing: .4px; }
+  .wmb-rail-sec__head span { color: var(--muted-low); font-size: 11px; }
+  .wmb-facts { display: grid; gap: 5px; margin: 0; }
+  .wmb-facts div { display: grid; grid-template-columns: 64px 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .wmb-facts dt { color: var(--muted); }
+  .wmb-facts dd { margin: 0; color: var(--ink-soft); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-grade { display: inline-grid; place-items: center; min-width: 22px; height: 20px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 11px; font-weight: var(--weight-bold); }
+
+  /* Exception card — calm, contextual */
+  .wmb-ex { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--radius-xl); }
+  .wmb-ex--auth, .wmb-ex--captcha { background: var(--amber-soft); border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--border-soft)); }
+  .wmb-ex--asset { background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border-soft)); }
+  .wmb-ex__title { font-size: 12.5px; font-weight: var(--weight-semibold); color: var(--ink); }
+  .wmb-ex--auth .wmb-ex__title, .wmb-ex--captcha .wmb-ex__title { color: var(--amber); }
+  .wmb-ex--asset .wmb-ex__title { color: var(--danger); }
+  .wmb-ex p { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+  .wmb-ex__hint { color: var(--muted); font-size: 11.5px; }
+  .wmb-calm-ok { display: flex; align-items: center; gap: 7px; color: var(--success); font-size: 12.5px; font-weight: var(--weight-medium); }
+  .wmb-calm-ok svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Annotation (核对记录) rows */
+  .wmb-ann-row { display: grid; gap: 6px; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+  .wmb-ann-row.is-selected { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent); }
+  .wmb-ann-row.is-done { opacity: .62; }
+  .wmb-ann-kinds { display: flex; align-items: center; gap: 6px; }
+  .wmb-ann-kind { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 11px; font-weight: var(--weight-demi); }
+  .wmb-ann-kind svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .wmb-ann-kind--check { color: var(--success); background: var(--success-soft); }
+  .wmb-ann-kind--suggest { color: var(--accent-soft); background: var(--accent-faint); }
+  .wmb-ann-kind--risk { color: var(--amber); background: var(--amber-soft); }
+  .wmb-ann-kind--issue { color: var(--danger); background: var(--danger-soft); }
+  .wmb-ann-row p { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+  .wmb-ann-actions { display: flex; align-items: center; gap: 6px; }
+  .wmb-ann-actions .ds-button { min-height: 26px; padding: 0 10px; font-size: 11.5px; border-radius: var(--radius-md); }
+  .wmb-ann-state { color: var(--success); font-size: 11.5px; font-weight: var(--weight-demi); }
+  .wmb-ann-state.is-muted { color: var(--muted-low); }
+
+  /* Receipt metrics */
+  .wmb-receipt { display: grid; gap: 6px; }
+  .wmb-receipt div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; padding-bottom: 5px; border-bottom: 1px dashed var(--line-strong); }
+  .wmb-receipt dt { color: var(--muted); }
+  .wmb-receipt dd { margin: 0; color: var(--ink); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+  .wmb-receipt-ok { display: inline-flex; align-items: center; gap: 5px; color: var(--success); font-size: 11.5px; font-weight: var(--weight-demi); }
+
+  /* ---------- Content proofreading paper ---------- */
+  .wmb-paper {
+    max-width: 720px; margin: 0 auto;
+    padding: 30px 36px 36px;
+    border: 1px solid var(--border-soft); border-radius: var(--radius-2xl);
+    background: var(--surface);
+  }
+  .wmb-paper__title { margin: 0 0 6px; font-size: 20px; font-weight: var(--weight-bold); line-height: 1.35; letter-spacing: -.01em; }
+  .wmb-paper__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; color: var(--muted); font-size: 12px; }
+  .wmb-paper__meta .wmb-paper__divider { width: 1px; height: 12px; background: var(--line-strong); }
+  .wmb-paper__prose { color: var(--ink-soft); font-size: 14.5px; line-height: 1.8; }
+  .wmb-paper__prose > * + * { margin-top: 12px; }
+  .wmb-paper__prose h2 { margin: 22px 0 8px; font-size: 16px; font-weight: var(--weight-semibold); color: var(--ink); }
+  .wmb-paper__prose p { margin: 0; }
+  .wmb-paper-quote {
+    margin: 0; padding: 12px 16px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-faint); border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    color: var(--ink); font-size: 14.5px; line-height: 1.7;
+  }
+  .wmb-paper__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .wmb-tag { padding: 2px 10px; border-radius: var(--radius-pill); background: var(--tag-bg); color: var(--muted); font-size: 11.5px; }
+  .wmb-paper__hint { margin-top: 16px; color: var(--muted-low); font-size: 11.5px; }
+
+  /* Inline annotation marks */
+  .wmb-ann {
+    display: inline; margin: 0; padding: 1px 3px;
+    border: 0; border-radius: var(--radius-sm);
+    border-bottom: 1px dashed transparent;
+    color: inherit; font: inherit; cursor: pointer;
+    transition: filter var(--dur-base) var(--ease-base);
+  }
+  .wmb-ann:hover { filter: brightness(1.12); }
+  .wmb-ann--check { background: var(--success-soft); color: var(--success); border-bottom-color: color-mix(in srgb, var(--success) 55%, transparent); }
+  .wmb-ann--suggest { background: var(--accent-faint); color: var(--accent-soft); border-bottom-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+  .wmb-ann--risk { background: var(--amber-soft); color: var(--amber); border-bottom-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+  .wmb-ann--issue { background: var(--danger-soft); color: var(--danger); border-bottom-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+  .wmb-ann.is-resolved { opacity: .55; text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 60%, transparent); }
+  .wmb-ann.is-selected { box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 30%, transparent); }
+
+  /* ---------- Platform preview ---------- */
+  .wmb-prevwrap { max-width: 720px; margin: 0 auto; display: grid; gap: 12px; }
+  .wmb-prevshell { padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--panel-bg); }
+  .wmb-prevshell__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight: var(--weight-demi); }
+  .wmb-prevshell__bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--plat-color, var(--muted-low)); }
+  .wmb-prev { border: 1px solid var(--border-soft); border-radius: var(--radius-2xl); background: var(--surface); overflow: hidden; }
+  .wmb-prev--wechat .wmb-prev__brand { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .wmb-prev--wechat .wmb-prev__brand span { font-size: 13px; font-weight: var(--weight-bold); color: var(--pf-wx); }
+  .wmb-prev--wechat .wmb-prev__body { padding: 18px 20px; }
+  .wmb-prev--wechat .wmb-prev__title { margin: 0 0 8px; font-size: 17px; font-weight: var(--weight-bold); line-height: 1.4; }
+  .wmb-prev--wechat .wmb-prev__meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .wmb-prev--wechat .wmb-prev__body p { margin: 0 0 10px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.75; }
+  .wmb-prev--wechat .wmb-prev__foot { display: flex; gap: 14px; padding: 10px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .wmb-prev--xhs { display: grid; grid-template-columns: 132px 1fr; }
+  .wmb-prev--xhs .wmb-prev__cover { aspect-ratio: 3/4; display: grid; place-items: center; color: var(--accent-ink); font-size: 12px; font-weight: var(--weight-bold); }
+  .wmb-prev--xhs .wmb-prev__cap { padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+  .wmb-prev--xhs .wmb-prev__title { font-size: 13.5px; font-weight: var(--weight-bold); line-height: 1.5; }
+  .wmb-prev--xhs .wmb-prev__cap p { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.7; }
+  .wmb-prev--xhs .wmb-prev__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wmb-prev--xhs .wmb-prev__tags i { color: var(--pf-xhs); font-style: normal; font-size: 12px; }
+  .wmb-prev--xhs .wmb-prev__acts { display: flex; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .wmb-prev--zhihu .wmb-prev__q { padding: 14px 16px; background: color-mix(in srgb, var(--info) 8%, var(--surface)); border-bottom: 1px solid var(--line); }
+  .wmb-prev--zhihu .wmb-prev__q span { color: var(--muted); font-size: 12px; }
+  .wmb-prev--zhihu .wmb-prev__q p { margin: 4px 0 0; font-size: 15px; font-weight: var(--weight-bold); }
+  .wmb-prev--zhihu .wmb-prev__a { padding: 14px 16px; }
+  .wmb-prev--zhihu .wmb-prev__who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .wmb-prev--zhihu .wmb-prev__avatar { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, var(--info) 22%, var(--surface-raised)); color: var(--info); font-size: 12px; font-weight: var(--weight-bold); }
+  .wmb-prev--zhihu .wmb-prev__who span { font-size: 12.5px; font-weight: var(--weight-semibold); }
+  .wmb-prev--zhihu .wmb-prev__a p { margin: 0 0 8px; color: var(--ink-soft); font-size: 13px; line-height: 1.7; }
+  .wmb-prev--zhihu .wmb-prev__more { color: var(--link); font-size: 12.5px; }
+  .wmb-prev--x .wmb-prev__tweet { padding: 14px 16px; }
+  .wmb-prev--x .wmb-prev__who { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .wmb-prev--x .wmb-prev__avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--mark-bg); color: var(--mark-ink); font-size: 13px; font-weight: var(--weight-bold); }
+  .wmb-prev--x .wmb-prev__who b { font-size: 13px; }
+  .wmb-prev--x .wmb-prev__who span { color: var(--muted); font-size: 12px; }
+  .wmb-prev--x .wmb-prev__tweet > p { margin: 0 0 10px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.7; }
+  .wmb-prev--x .wmb-prev__linkcard { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--panel-bg); }
+  .wmb-prev--x .wmb-prev__linkcard span { color: var(--muted); font-size: 11.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-prev--x .wmb-prev__linkcard em { color: var(--link); font-style: normal; font-size: 11.5px; flex: none; }
+  .wmb-prev--x .wmb-prev__stats { display: flex; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .wmb-prev-note { color: var(--muted-low); font-size: 11.5px; line-height: 1.5; }
+
+  /* ---------- Assets ---------- */
+  .wmb-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }
+  .wmb-asset { border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); overflow: hidden; }
+  .wmb-asset.is-bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+  .wmb-asset.is-fixed { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+  .wmb-asset__thumb { position: relative; aspect-ratio: 4/3; display: grid; place-items: center; color: var(--accent-ink); font-size: 14px; font-weight: var(--weight-bold); }
+  .wmb-asset__badge { position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 10.5px; font-weight: var(--weight-demi); }
+  .wmb-asset.is-bad .wmb-asset__badge { background: var(--danger); color: var(--accent-ink); }
+  .wmb-asset.is-fixed .wmb-asset__badge { background: var(--success); color: var(--accent-ink); }
+  .wmb-asset__badge.is-ok { background: var(--success-soft); color: var(--success); }
+  .wmb-asset__info { padding: 10px 12px 12px; display: grid; gap: 4px; }
+  .wmb-asset__name { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-asset__meta { color: var(--muted); font-size: 11.5px; }
+  .wmb-asset__check { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: var(--weight-demi); }
+  .wmb-asset__check.is-ok { color: var(--success); }
+  .wmb-asset__check.is-bad { color: var(--danger); }
+  .wmb-asset__check svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .wmb-assets-note { margin-top: 14px; color: var(--muted-low); font-size: 11.5px; line-height: 1.5; }
+
+  /* ---------- Bottom signing / action bar ---------- */
+  .wmb-review__bar {
+    flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    min-height: 72px; padding: 10px 20px;
+    border-top: 1px solid var(--line);
+    background: var(--topbar-bg);
+  }
+  .wmb-bar-facts { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px; }
+  .wmb-bar-facts b { font-size: 13px; font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-bar-facts span { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wmb-bar-center { flex: 0 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .wmb-bar-hint { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .wmb-bar-hint.is-warn { color: var(--amber); }
+  .wmb-bar-hint.is-ok { color: var(--success); }
+  .wmb-bar-hint.is-bad { color: var(--danger); }
+  .wmb-steps { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .wmb-step { display: inline-flex; align-items: center; gap: 6px; color: var(--muted-low); font-size: 12px; font-weight: var(--weight-medium); white-space: nowrap; }
+  .wmb-step svg { width: 13px; height: 13px; flex: none; }
+  .wmb-step.is-done { color: var(--success); }
+  .wmb-step.is-now { color: var(--accent-soft); }
+  .wmb-bar-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+  .wmb-bar-actions .ds-button { min-width: 96px; }
+
+  /* ---------- Pi overlay (collapsed by default) ---------- */
+  .wmb-pi {
+    position: fixed; top: var(--topbar-height); right: 0; bottom: 0; z-index: 950;
+    width: var(--pi-width);
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--border-strong);
+    background: var(--panel-bg);
+    box-shadow: var(--shadow-modal);
+    transform: translateX(103%);
+    transition: transform var(--dur-expand) var(--ease-out-expo);
+  }
+  .wmb-pi.is-open { transform: translateX(0); }
+
+  /* ---------- Toasts ---------- */
+  .wmb-toasts {
+    position: fixed; left: 50%; bottom: 26px; z-index: 5000;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    pointer-events: none;
+  }
+  .wmb-toast {
+    padding: 9px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+    background: var(--surface-raised); color: var(--ink);
+    font-size: 13px; font-weight: var(--weight-medium);
+    box-shadow: var(--shadow-modal);
+    animation: wmb-toast-in 160ms var(--ease-out-expo);
+  }
+  @keyframes wmb-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- Modal niceties ---------- */
+  .wmb-modal-note { margin: 0; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--tag-bg); color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+  .wmb-account-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); }
+  .wmb-account-card i { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-lg); background: var(--pf-xhs); color: var(--accent-ink); font-size: 13px; font-weight: var(--weight-bold); font-style: normal; }
+  .wmb-account-card b { display: block; font-size: 13.5px; }
+  .wmb-account-card span { color: var(--muted); font-size: 12px; }
+  .wmb-perm { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .wmb-perm span { padding: 2px 9px; border-radius: var(--radius-pill); background: var(--tag-bg); color: var(--muted); font-size: 11.5px; }
+  .wmb-auth-line { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+  .wmb-auth-ok { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--success); font-size: 13.5px; font-weight: var(--weight-semibold); }
+  .wmb-auth-ok svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .wmb-log { margin: 0; padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--panel-bg); font-family: var(--mono); font-size: 12px; line-height: 1.8; color: var(--ink-soft); white-space: pre-wrap; }
+  .wmb-log .err { color: var(--danger); }
+  .wmb-receipt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .wmb-receipt-cell { padding: 12px 14px; border: 1px solid var(--border-soft); border-radius: var(--radius-xl); background: var(--surface); display: grid; gap: 4px; }
+  .wmb-receipt-cell b { font-size: 18px; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+  .wmb-receipt-cell span { color: var(--muted); font-size: 12px; }
+
+  /* ---------- Responsive degradation ---------- */
+  @media (max-width: 1279px) {
+    .wmb-strip { width: 300px; }
+    .wmb-rail-toggle { display: inline-flex; }
+    .wmb-review__rail {
+      position: fixed; top: var(--topbar-height); right: 0; bottom: 0; z-index: 900;
+      width: min(320px, 90vw);
+      border-left: 1px solid var(--border-strong);
+      box-shadow: var(--shadow-modal);
+      transform: translateX(102%);
+      transition: transform var(--dur-expand) var(--ease-out-expo);
+    }
+    .wmb-review__rail.is-open { transform: translateX(0); }
+  }
+  @media (max-width: 1160px) {
+    .wmb-bar-center .wmb-bar-hint { display: none; }
+  }
+  @media (max-width: 760px) {
+    .wmb-strip { width: 264px; }
+    .wmb-paper { padding: 22px 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wmb-pi, .wmb-review__rail { transition: none; }
+    .wmb-toast { animation: none; }
+    .wmb-iconbtn, .wmb-row, .wmb-stat, .wmb-ann, .wmb-step { transition: none; }
+  }
+</style>
+</head>
+<body data-scheme="b-immersive-review">
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const NS = window.WemediaBuddyDesignSystem_1c877c;
+if (!NS || !NS.Button) {
+  document.getElementById('root').textContent = '设计系统 bundle 未加载，请检查网络后刷新。';
+} else {
+const { AppModal, Button, ChipFilter, StatePanel, StatusPill, TabList, WmbCreatureMark } = NS;
+
+/* ------------------------------------------------------------------ */
+/* 常量                                                               */
+/* ------------------------------------------------------------------ */
+const STATE_META = {
+  'pending-auth':    { label: '待授权',     tone: 'needs-user' },
+  'pending-publish': { label: '待人工发布', tone: 'warn' },
+  'needs-takeover':  { label: '需要接管',   tone: 'bad' },
+  'reconcile':       { label: '待对账',     tone: 'idle' },
+  'failed':          { label: '失败',       tone: 'bad' },
+  'published':       { label: '已发布',     tone: 'ok' },
+  'publishing':      { label: '发布中',     tone: 'active' },
+};
+const PLATFORM_META = {
+  xhs:    { label: '小红书', short: '红', color: 'var(--pf-xhs)' },
+  wechat: { label: '公众号', short: '微', color: 'var(--pf-wx)' },
+  zhihu:  { label: '知乎',   short: '知', color: 'var(--info)' },
+  x:      { label: 'X',      short: 'X',  color: 'var(--pf-x)' },
+};
+const ANN_META = {
+  check:   { label: '已核对', cls: 'wmb-ann-kind--check' },
+  suggest: { label: '建议',   cls: 'wmb-ann-kind--suggest' },
+  risk:    { label: '需确认', cls: 'wmb-ann-kind--risk' },
+  issue:   { label: '阻断',   cls: 'wmb-ann-kind--issue' },
+};
+const FILTERS = [
+  { id: 'all', label: '全部' },
+  { id: 'pending-auth', label: '待授权' },
+  { id: 'pending-publish', label: '待人工发布' },
+  { id: 'needs-takeover', label: '需要接管' },
+  { id: 'reconcile', label: '待对账' },
+  { id: 'failed', label: '失败' },
+  { id: 'published', label: '已发布' },
+];
+const ORDER = ['pending-publish', 'needs-takeover', 'pending-auth', 'failed', 'reconcile', 'published'];
+const MODES = [
+  { id: 'content', label: '内容终审' },
+  { id: 'preview', label: '平台预览' },
+  { id: 'assets',  label: '素材检查' },
+];
+const PUB_STEPS = ['准备内容', '上传平台', '确认回执'];
+
+/* ------------------------------------------------------------------ */
+/* 记录数据                                                           */
+/* ------------------------------------------------------------------ */
+const RECORDS = [
+  {
+    id: 'pub-wechat-interview',
+    title: '和一位独立开发者聊了聊 AI 写作',
+    platform: 'wechat', state: 'pending-publish', grade: 'A',
+    account: '公众号 WeMediaBuddy', version: 'v3', planTime: '计划 今日 19:30',
+    retry: false, exception: null, summary: '访谈稿 · 全文 1280 字 · 配图 2 张',
+    paragraphs: [
+      { id: 'intro', kind: 'p', text: '这篇文章来自一次 90 分钟的语音采访。受访者老周，独立开发者，过去半年把 AI 写作用进了自己的内容管线。' },
+      { id: 'h1', kind: 'h2', text: '从抗拒到工具' },
+      { id: 'p1', kind: 'p', text: '老周说自己最开始是抗拒的：「我写了十年博客，凭什么让模型替我写？」真正的转折，是发现 AI 能处理他不擅长的部分——初稿结构、段落衔接、错别字。' },
+      { id: 'quote', kind: 'quote', text: '「我的标准很简单：AI 负责让我更勤奋，我负责让它更准确。」' },
+      { id: 'h2', kind: 'h2', text: '一条可复制的工作流' },
+      { id: 'p2', kind: 'p', text: '老周分享了他的流程：选题由热点扫描自动生成，初稿由风格卡约束的模型产出，他每天只花四十分钟做事实核对和语气微调。' },
+      { id: 'p3', kind: 'p', text: '他特别提到一个细节：所有内容发布前，仍然需要他本人确认。「工具越自动，越要有人兜底。」' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'intro', match: '90 分钟', kind: 'check', status: 'open', note: '已核对采访录音时长 91 分钟，正文取整为 90 分钟，可接受。' },
+      { id: 'a2', paraId: 'quote', match: '我的标准很简单', kind: 'suggest', status: 'open', note: '金句建议以引用块加粗展示，公众号读者对这类句子的完读率更高。' },
+      { id: 'a3', paraId: 'p3', match: '工具越自动', kind: 'check', status: 'open', note: '与全文主题一致，无事实与合规风险。' },
+    ],
+    assets: [
+      { id: 'cover', name: 'cover-interview.png', meta: '900×383 PNG · 0.6MB', ok: true, glyph: '封' },
+      { id: 'quote', name: 'quote-1.png', meta: '1080×720 PNG · 0.4MB', ok: true, glyph: '图' },
+    ],
+    receipt: null,
+  },
+  {
+    id: 'pub-zhihu-devday',
+    title: '开发者日实录：AI 如何改变写代码的方式',
+    platform: 'zhihu', state: 'needs-takeover', grade: 'A',
+    account: '知乎 WeMediaBuddy', version: 'v1', planTime: '原计划 昨日 22:00',
+    retry: false,
+    exception: { kind: 'captcha', title: '平台风控验证', detail: '知乎发布助手提交时触发人机验证，AI 自动重试 2 次失败后已停止，等待主编决定：手动发布或暂缓。' },
+    summary: '活动实录 · 全文 960 字 · 配图 1 张',
+    paragraphs: [
+      { id: 'p1', kind: 'p', text: '上周末的开发者日，我旁听了三场关于 AI 编程的分享。这里记录一些让我印象深刻的观点。' },
+      { id: 'p2', kind: 'p', text: '第一场讲的是「人机结对」：模型写不出来的部分，恰恰是需求描述本身。提问的质量，决定了代码的质量。' },
+      { id: 'p3', kind: 'p', text: '第二场来自一位测试工程师：AI 生成的测试用例覆盖率不错，但边界条件仍然需要人来判断。' },
+      { id: 'p4', kind: 'p', text: '第三场是圆桌：大多数人认为，未来两年最稀缺的不是会写代码的人，而是能把问题说清楚的人。' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'p1', match: '上周末', kind: 'check', status: 'open', note: '已核对活动时间为 8 月 9 日，正文时间表述准确。' },
+      { id: 'a2', paraId: 'p4', match: '把问题说清楚的人', kind: 'risk', status: 'open', note: '知乎发布时触发内容风控验证，AI 已自动重试 2 次失败并停止，需主编接管。' },
+    ],
+    assets: [
+      { id: 'cover', name: 'cover-devday.png', meta: '1200×800 PNG · 0.8MB', ok: true, glyph: '封' },
+    ],
+    receipt: null,
+  },
+  {
+    id: 'pub-xhs-ai-course',
+    title: '零基础用 AI 搭一套自媒体工作流',
+    platform: 'xhs', state: 'pending-auth', grade: 'S',
+    account: '小红书 @灵感小助手', version: 'v2', planTime: '计划 今日 20:00',
+    retry: false,
+    exception: { kind: 'auth', title: '等待平台授权', detail: '小红书账号「灵感小助手」尚未完成授权，发布助手无法代传内容。授权完成后记录进入待人工发布。' },
+    summary: '笔记正文 · 配图 3 张 · 话题 3 个',
+    paragraphs: [
+      { id: 'p1', kind: 'p', text: '上周有朋友问我：不学代码，能不能用 AI 把「找选题—写初稿—配图—发布」这条流水线搭起来？这篇笔记讲讲我自己的搭法。' },
+      { id: 'p2', kind: 'p', text: '第一步是选题。我把一周的热点源接进一个脚本，每天早上自动出一份「今日可跟」清单，人工只需要圈出想写的 3 条。' },
+      { id: 'p3', kind: 'p', text: '第二步是写作。AI 按我给的风格卡生成初稿，我负责改事实和语气。关键不是让它写得「像人」，而是让它不要犯错。' },
+      { id: 'p4', kind: 'p', text: '第三步是发布。配图、封面、话题标签都由工作流准备好，最后一键仍然握在你自己手里。' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'p3', match: '让它不要犯错', kind: 'risk', status: 'open', note: '合规检查：表述含「不要犯错」的绝对化倾向，建议改为更中性的说法。', fix: '让它减少事实错误' },
+      { id: 'a2', paraId: 'p1', match: '找选题—写初稿—配图—发布', kind: 'check', status: 'open', note: '已核对：与本周选题库流程描述一致，无数据冲突。' },
+      { id: 'a3', paraId: 'p2', match: '今日可跟', kind: 'suggest', status: 'open', note: '建议加粗关键词，突出自动化的亮点。' },
+    ],
+    assets: [
+      { id: 'cover', name: 'cover-ai-workflow.png', meta: '1242×1660 PNG · 1.2MB', ok: true, glyph: '封' },
+      { id: 'pic1', name: 'pic-1.png', meta: '1080×1440 PNG · 0.9MB', ok: true, glyph: '图' },
+      { id: 'pic2', name: 'pic-2.png', meta: '1080×1440 PNG · 1.1MB', ok: true, glyph: '图' },
+    ],
+    receipt: null,
+  },
+  {
+    id: 'pub-xhs-cursor',
+    title: 'Cursor 深度使用一周后的真心话',
+    platform: 'xhs', state: 'failed', grade: 'S',
+    account: '小红书 @灵感小助手', version: 'v2', planTime: '失败于 今日 12:00',
+    retry: false,
+    exception: { kind: 'asset', title: '素材超限导致发布失败', detail: '封面图超出小红书单图 3MB 上限，首次发布失败。修复素材后需人工重试，AI 不会自动重发。' },
+    summary: '体验笔记 · 配图 2 张 · 话题 3 个',
+    paragraphs: [
+      { id: 'p1', kind: 'p', text: '用 Cursor 写了一个星期的代码，说几句真心话：它能让我更快，但不能替我想清楚。' },
+      { id: 'p2', kind: 'p', text: '优点：上下文理解比想象中好，重构老项目时省了大量体力活。' },
+      { id: 'p3', kind: 'p', text: '缺点：在架构决策上仍然需要人把住方向，它给出的「最优解」常常是局部最优。' },
+      { id: 'p4', kind: 'p', text: '结论：把它当超强实习生，而不是决策者。' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'p1', match: '真心话', kind: 'issue', status: 'open', note: '素材检查：封面图 cover-cursor.png（4200×4200 PNG · 6.4MB）超过小红书单图 3MB 上限，导致今日 12:00 发布失败。' },
+      { id: 'a2', paraId: 'p4', match: '把它当超强实习生', kind: 'suggest', status: 'open', note: '建议「实习生」前加「可信赖的」，避免引发 AI 工具讨论区争议。', fix: '把它当可信赖的超强实习生' },
+    ],
+    assets: [
+      { id: 'cover', name: 'cover-cursor.png', meta: '4200×4200 PNG · 6.4MB', ok: false, glyph: '封' },
+      { id: 'body', name: 'pic-body.png', meta: '1080×1440 PNG · 1.4MB', ok: true, glyph: '图' },
+    ],
+    receipt: null,
+  },
+  {
+    id: 'pub-x-karpathy',
+    title: 'Karpathy 最新推文的三点启发',
+    platform: 'x', state: 'reconcile', grade: 'B',
+    account: 'X @WeMediaBuddy', version: 'v1', planTime: '发布 昨日 21:15',
+    retry: false, exception: null, summary: '长推文 · 外链 1 条 · 配图 1 张',
+    paragraphs: [
+      { id: 'p1', kind: 'p', text: '刚读完 Karpathy 关于「AI 加速学习」的最新推文，三点启发值得记下来：' },
+      { id: 'p2', kind: 'p', text: '1）学习速度的瓶颈不是信息，而是注意力的连续性；2）让模型解释自己的输出，能显著提高理解质量；3）小步验证比大重构更符合模型的工作方式。' },
+      { id: 'p3', kind: 'p', text: '完整推文已附在评论区，原文链接见文末。' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'p1', match: '最新推文', kind: 'check', status: 'open', note: '已核对引用推文链接与发布时间，无错引。' },
+      { id: 'a2', paraId: 'p1', match: '三点启发', kind: 'suggest', status: 'open', note: '建议正文前加摘要卡片，提升 X 长文完读率。' },
+    ],
+    assets: [
+      { id: 'linkcard', name: 'tweet-link-card.png', meta: '1024×512 PNG · 0.3MB', ok: true, glyph: '链' },
+    ],
+    receipt: null,
+  },
+  {
+    id: 'pub-wechat-weekly',
+    title: '本周 AI 周刊：模型、工具与思考',
+    platform: 'wechat', state: 'published', grade: 'B',
+    account: '公众号 WeMediaBuddy', version: 'v4', planTime: '发布 08-14 09:30',
+    retry: false, exception: null, summary: '周刊 · 全文 2100 字 · 配图 1 张',
+    paragraphs: [
+      { id: 'p1', kind: 'p', text: '本周周刊目录：模型进展三条、工具上新两条、值得重读的深度文章一篇。' },
+      { id: 'p2', kind: 'p', text: '模型进展：多家厂商发布了小尺寸模型的更新，本地部署的门槛进一步降低。' },
+      { id: 'p3', kind: 'p', text: '工具上新：两条自动化工作流工具值得试用，均已通过内部安全审查。' },
+      { id: 'p4', kind: 'p', text: '深度文章：关于「AI 时代的注意力管理」，建议周末花二十分钟读完。' },
+    ],
+    annotations: [
+      { id: 'a1', paraId: 'p1', match: '三条', kind: 'check', status: 'open', note: '已核对本期收录条目与目录一致（模型 3 条 / 工具 2 条 / 深度 1 篇）。' },
+    ],
+    assets: [
+      { id: 'cover', name: 'cover-weekly.png', meta: '900×383 PNG · 0.7MB', ok: true, glyph: '封' },
+    ],
+    receipt: [
+      { label: '阅读', value: '2,130' },
+      { label: '分享', value: '87' },
+      { label: '在看', value: '312' },
+    ],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* 工具函数                                                           */
+/* ------------------------------------------------------------------ */
+function splitPara(para, annotations) {
+  const marks = annotations
+    .filter((a) => a.paraId === para.id && a.status !== 'dismissed')
+    .map((a) => ({ a, at: para.text.indexOf(a.match) }))
+    .filter((x) => x.at >= 0)
+    .sort((x, y) => x.at - y.at);
+  const parts = [];
+  let cursor = 0;
+  for (const { a, at } of marks) {
+    if (at < cursor) continue;
+    if (at > cursor) parts.push({ text: para.text.slice(cursor, at) });
+    parts.push({ text: para.text.slice(at, at + a.match.length), ann: a });
+    cursor = at + a.match.length;
+  }
+  if (cursor < para.text.length) parts.push({ text: para.text.slice(cursor) });
+  return parts;
+}
+
+function deepCopyRecords() {
+  return RECORDS.map((r) => ({
+    ...r,
+    paragraphs: r.paragraphs.map((p) => ({ ...p })),
+    annotations: r.annotations.map((a) => ({ ...a })),
+    assets: r.assets.map((x) => ({ ...x })),
+    exception: r.exception ? { ...r.exception } : null,
+    receipt: r.receipt ? r.receipt.map((x) => ({ ...x })) : null,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/* 小型图标                                                           */
+/* ------------------------------------------------------------------ */
+const IcCheck = () => (
+  <svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" /></svg>
+);
+const IcCircle = () => (
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" /></svg>
+);
+const IcDot = () => (
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" /></svg>
+);
+const IcSun = () => (
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8" /></svg>
+);
+const IcMoon = () => (
+  <svg viewBox="0 0 24 24"><path d="M20 14.5A8.3 8.3 0 0 1 9.5 4a8.3 8.3 0 1 0 10.5 10.5z" /></svg>
+);
+const IcBubble = () => (
+  <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-8 8H5l1.6-3.2A8 8 0 1 1 20 12z" /></svg>
+);
+const IcArrow = () => (
+  <svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
+);
+const IcPanel = () => (
+  <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5" /><path d="M15.5 4v16" /></svg>
+);
+const IcAlert = () => (
+  <svg viewBox="0 0 24 24"><path d="M12 3.5L22 20H2L12 3.5z" /><path d="M12 10v4.5" /><path d="M12 17.4v.1" /></svg>
+);
+
+/* ------------------------------------------------------------------ */
+/* 主应用                                                             */
+/* ------------------------------------------------------------------ */
+function App() {
+  const [records, setRecords] = React.useState(deepCopyRecords);
+  const [selectedId, setSelectedId] = React.useState('pub-wechat-interview');
+  const [filterId, setFilterId] = React.useState('all');
+  const [modeId, setModeId] = React.useState('content');
+  const [theme, setTheme] = React.useState('dark');
+  const [piOpen, setPiOpen] = React.useState(false);
+  const [railOpen, setRailOpen] = React.useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 1280 : true));
+  const [modal, setModal] = React.useState(null);        // { kind, recordId }
+  const [selectedAnnId, setSelectedAnnId] = React.useState(null);
+  const [publishRun, setPublishRun] = React.useState(null); // { recordId, step }
+  const [authPhase, setAuthPhase] = React.useState('idle'); // idle | working | done
+  const [fetchingReceipt, setFetchingReceipt] = React.useState(false);
+  const [fixingAssets, setFixingAssets] = React.useState(false);
+  const [toasts, setToasts] = React.useState([]);
+  const [piText, setPiText] = React.useState('');
+  const [piLog, setPiLog] = React.useState([]);
+  const timersRef = React.useRef([]);
+
+  const pushToast = (text) => {
+    setToasts((ts) => [...ts, { id: Date.now() + Math.random(), text }]);
+  };
+
+  React.useEffect(() => {
+    if (!toasts.length) return;
+    const t = setTimeout(() => setToasts((ts) => ts.slice(1)), 2800);
+    return () => clearTimeout(t);
+  }, [toasts]);
+
+  React.useEffect(() => {
+    const stored = timersRef.current;
+    return () => stored.forEach(clearTimeout);
+  }, []);
+
+  const applyTheme = (nextTheme) => {
+    setTheme(nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
+  const openModal = (kind, recordId) => {
+    if (kind === 'authorize') setAuthPhase('idle');
+    setModal({ kind, recordId });
+  };
+  const closeModal = () => setModal(null);
+
+  const currentRecord = records.find((r) => r.id === selectedId) || null;
+
+  const countBy = (stateId) => records.filter((r) => r.state === stateId).length;
+  const filteredRecords = records
+    .filter((r) => filterId === 'all' || r.state === filterId)
+    .sort((a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state));
+
+  const selectRecord = (id) => {
+    setSelectedId(id);
+    setSelectedAnnId(null);
+    setRailOpen(true);
+  };
+  const deselectRecord = () => {
+    setSelectedId(null);
+    setSelectedAnnId(null);
+  };
+
+  const applyAnnotation = (recordId, annId) => {
+    const rec = records.find((r) => r.id === recordId);
+    if (!rec) return;
+    const ann = rec.annotations.find((a) => a.id === annId);
+    if (!ann || ann.status !== 'open') return;
+    setRecords((rs) => rs.map((r) => {
+      if (r.id !== recordId) return r;
+      const paragraphs = ann.fix ? r.paragraphs.map((p) =>
+        p.id === ann.paraId ? { ...p, text: p.text.replace(ann.match, ann.fix) } : p
+      ) : r.paragraphs;
+      return {
+        ...r,
+        paragraphs,
+        annotations: r.annotations.map((a) => (a.id === annId ? { ...a, status: 'accepted' } : a)),
+      };
+    }));
+    pushToast(ann.fix ? '已采纳建议，正文已更新' : '已标记处理');
+  };
+  const dismissAnnotation = (recordId, annId) => {
+    setRecords((rs) => rs.map((r) => (r.id === recordId
+      ? { ...r, annotations: r.annotations.map((a) => (a.id === annId ? { ...a, status: 'dismissed' } : a)) }
+      : r)));
+    pushToast('已忽略该标注');
+  };
+  const restoreAnnotation = (recordId, annId) => {
+    setRecords((rs) => rs.map((r) => (r.id === recordId
+      ? { ...r, annotations: r.annotations.map((a) => (a.id === annId ? { ...a, status: 'open' } : a)) }
+      : r)));
+  };
+
+  /* 发布流程（人工确认后执行，AI 不自动发布） */
+  const runPublish = () => {
+    const rec = records.find((r) => r.id === modal.recordId);
+    if (!rec) return;
+    setModal(null);
+    setPublishRun({ recordId: rec.id, step: 0 });
+    [800, 1600, 2400].forEach((ms, idx) => {
+      const t = setTimeout(() => {
+        if (idx === 2) {
+          setPublishRun((run) => (run && run.recordId === rec.id ? null : run));
+          setRecords((rs) => rs.map((x) => (x.id === rec.id
+            ? { ...x, state: 'published', planTime: '发布 刚刚', receipt: null, exception: null }
+            : x)));
+          pushToast('发布成功，等待平台回执');
+        } else {
+          setPublishRun((run) => (run && run.recordId === rec.id ? { ...run, step: idx + 1 } : run));
+        }
+      }, ms);
+      timersRef.current.push(t);
+    });
+  };
+
+  /* 授权流程 */
+  const startAuthFlow = () => {
+    setAuthPhase('working');
+    const t = setTimeout(() => setAuthPhase('done'), 1600);
+    timersRef.current.push(t);
+  };
+  const completeAuth = () => {
+    const recId = modal.recordId;
+    setModal(null);
+    setAuthPhase('idle');
+    setRecords((rs) => rs.map((x) => (x.id === recId
+      ? { ...x, state: 'pending-publish', exception: null }
+      : x)));
+    pushToast('授权完成，记录已进入待人工发布');
+  };
+
+  /* 接管流程 */
+  const takeoverManual = () => {
+    const recId = modal.recordId;
+    setModal(null);
+    setRecords((rs) => rs.map((x) => (x.id === recId
+      ? {
+          ...x, state: 'reconcile', planTime: '发布 刚刚（手动）', exception: null,
+          annotations: x.annotations.map((a) => (a.kind === 'risk' ? { ...a, status: 'accepted' } : a)),
+        }
+      : x)));
+    pushToast('已标记手动发布，进入待对账');
+  };
+  const takeoverDefer = () => {
+    const recId = modal.recordId;
+    setModal(null);
+    setRecords((rs) => rs.map((x) => (x.id === recId
+      ? { ...x, state: 'pending-publish', retry: true, planTime: '重试计划 今日 20:30' }
+      : x)));
+    pushToast('已暂缓，稍后由主编重试');
+  };
+
+  /* 对账流程 */
+  const startReconcileFetch = () => {
+    if (fetchingReceipt) return;
+    setFetchingReceipt(true);
+    const t = setTimeout(() => {
+      setFetchingReceipt(false);
+      setRecords((rs) => rs.map((x) => (x.id === 'pub-x-karpathy'
+        ? { ...x, receipt: [{ label: '曝光', value: '12.4k' }, { label: '互动', value: '318' }, { label: '链接点击', value: '46' }] }
+        : x)));
+      pushToast('回执已拉取，请确认对账');
+    }, 1800);
+    timersRef.current.push(t);
+  };
+  const completeReconcile = () => {
+    setRecords((rs) => rs.map((x) => (x.id === 'pub-x-karpathy'
+      ? { ...x, state: 'published', reconciled: true, planTime: '发布 昨日 21:15' }
+      : x)));
+    pushToast('对账完成，已归档为已发布');
+  };
+
+  /* 素材修复（失败 → 待人工发布） */
+  const fixAssets = () => {
+    if (fixingAssets) return;
+    setFixingAssets(true);
+    const t = setTimeout(() => {
+      setFixingAssets(false);
+      setRecords((rs) => rs.map((x) => (x.id === 'pub-xhs-cursor'
+        ? {
+            ...x, state: 'pending-publish', retry: true, planTime: '重试计划 今日 16:00',
+            exception: null,
+            assets: x.assets.map((a) => (a.id === 'cover'
+              ? { ...a, ok: true, meta: '2048×2048 PNG · 1.8MB' } : a)),
+            annotations: x.annotations.map((a) => (a.kind === 'issue' ? { ...a, status: 'fixed' } : a)),
+          }
+        : x)));
+      pushToast('封面已修复，可重试发布');
+    }, 1800);
+    timersRef.current.push(t);
+  };
+
+  /* Pi 会话 */
+  const sendPi = () => {
+    const text = piText.trim();
+    if (!text) return;
+    setPiLog((log) => [...log, { from: 'user', text }]);
+    setPiText('');
+    const t = setTimeout(() => {
+      setPiLog((log) => [...log, { from: 'agent', text: '已记录，我会在下次终审时纳入检查。' }]);
+    }, 700);
+    timersRef.current.push(t);
+  };
+
+  const piTranscript = (() => {
+    if (!currentRecord) {
+      return [
+        { from: 'agent', text: '你好，我是 Pi。从左侧发布队列选一条记录，我可以帮你做终审摘要、核对发布风险。' },
+      ].concat(piLog);
+    }
+    const hints = {
+      'pending-auth': '这篇笔记的正文和配图都已就绪，唯一缺口是小红书账号授权。授权完成后即可进入人工确认，建议今日 20:00 前完成。',
+      'pending-publish': '正文 v3 已完成事实核对，无阻断项。公众号晚间发布打开率通常更高，可以确认发布了。',
+      'needs-takeover': '知乎风控验证已自动重试 2 次失败。按你的偏好，AI 不再自动重试，需要你决定：手动发布或暂缓。',
+      'reconcile': '推文已发布，平台回执尚未拉取。开始对账后我会列出曝光与互动数据供你确认入账。',
+      'failed': '封面素材超限导致发布失败。修复后需要你手动重试，AI 不会自动重发。',
+      'published': '回执已同步。发布记录将进入周报复盘，可在运营总结中引用。',
+      'publishing': '正在执行发布，完成后我会同步回执状态。',
+    };
+    return [
+      { from: 'agent', text: `正在终审「${currentRecord.title}」。` },
+      { from: 'agent', text: hints[currentRecord.state] || '该记录状态正常，无阻断项。' },
+    ].concat(piLog);
+  })();
+
+  /* ------------------------------------------------------------------ */
+  /* 子视图                                                             */
+  /* ------------------------------------------------------------------ */
+
+  const renderOverview = () => (
+    <div className="wmb-overview">
+      <div className="wmb-ov-eyebrow">B · 沉浸终审</div>
+      <h1 className="wmb-ov-title">发布终审台</h1>
+      <p className="wmb-ov-lede">所有平台的发布任务汇成一条队列，点选任意记录进入终审工作台。内容终审、平台预览与素材检查在同一张工作台上完成，最终发布由主编手动确认。</p>
+      <div className="wmb-ov-stats">
+        {FILTERS.filter((f) => f.id !== 'all').map((f) => {
+          const n = countBy(f.id);
+          return (
+            <button key={f.id} type="button" className="wmb-stat" onClick={() => {
+              setFilterId(f.id);
+              const first = records.find((r) => r.state === f.id);
+              if (first) selectRecord(first.id);
+            }}>
+              <strong>{n}</strong>
+              <span>{STATE_META[f.id].label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="wmb-ov-guide">
+        <div className="wmb-guide"><b><em>01</em>进入终审</b><p>在左侧发布队列点选记录，或在状态卡片上直接进入该状态的待办。</p></div>
+        <div className="wmb-guide"><b><em>02</em>逐项核对</b><p>内容终审里高亮标注由 AI 预检生成，逐条采纳或忽略；再切到平台预览与素材检查。</p></div>
+        <div className="wmb-guide"><b><em>03</em>签署发布</b><p>底部操作条随状态切换。AI 只准备内容、不代发，最终发布永远由主编确认。</p></div>
+      </div>
+    </div>
+  );
+
+  const renderPaper = (rec) => {
+    const anns = rec.annotations;
+    const openCount = anns.filter((a) => a.status === 'open').length;
+    return (
+      <div className="wmb-paper">
+        <h2 className="wmb-paper__title">{rec.title}</h2>
+        <div className="wmb-paper__meta">
+          <span>WeMediaBuddy · 原创</span>
+          <span className="wmb-paper__divider" />
+          <span>{rec.version}</span>
+          <span className="wmb-paper__divider" />
+          <span>{rec.platform === 'wechat' ? '约 1280 字' : '短内容'}</span>
+          {openCount > 0 && <StatusPill tone="warn">{openCount} 项标注待处理</StatusPill>}
+        </div>
+        <div className="wmb-paper__prose">
+          {rec.paragraphs.map((para) => {
+            const parts = splitPara(para, anns);
+            const kids = parts.map((part) => {
+              if (!part.ann) return part.text;
+              const resolved = part.ann.status !== 'open';
+              return (
+                <button
+                  key={part.ann.id}
+                  type="button"
+                  className={
+                    'wmb-ann wmb-ann--' + part.ann.kind +
+                    (resolved ? ' is-resolved' : '') +
+                    (selectedAnnId === part.ann.id ? ' is-selected' : '')
+                  }
+                  title={part.ann.note}
+                  onClick={() => {
+                    setSelectedAnnId(part.ann.id);
+                    setRailOpen(true);
+                  }}
+                >
+                  {part.text}
+                </button>
+              );
+            });
+            if (para.kind === 'h2') return <h2 key={para.id}>{kids}</h2>;
+            if (para.kind === 'quote') return <blockquote key={para.id} className="wmb-paper-quote">{kids}</blockquote>;
+            return <p key={para.id}>{kids}</p>;
+          })}
+        </div>
+        {rec.paragraphs[0] && rec.platform === 'xhs' && (
+          <div className="wmb-paper__tags">
+            {['#AI工作流', '#效率工具', '#自媒体运营'].map((tag) => <span key={tag} className="wmb-tag">{tag}</span>)}
+          </div>
+        )}
+        <p className="wmb-paper__hint">点击高亮标注查看核对建议，可在线采纳或忽略；正文修改即时生效。</p>
+      </div>
+    );
+  };
+
+  const renderPreview = (rec) => {
+    const plat = PLATFORM_META[rec.platform];
+    const p0 = rec.paragraphs.find((p) => p.kind === 'p');
+    const p1 = rec.paragraphs.filter((p) => p.kind === 'p')[1];
+    return (
+      <div className="wmb-prevwrap">
+        <div className="wmb-prevshell">
+          <div className="wmb-prevshell__bar" style={{ '--plat-color': plat.color }}>
+            <i /> {plat.label} · 发布预览
+          </div>
+          {rec.platform === 'wechat' && (
+            <div className="wmb-prev wmb-prev--wechat">
+              <div className="wmb-prev__brand"><WmbCreatureMark state="idle" /><span>WeMediaBuddy</span></div>
+              <div className="wmb-prev__body">
+                <h3 className="wmb-prev__title">{rec.title}</h3>
+                <div className="wmb-prev__meta">WeMediaBuddy · 08-15 19:30</div>
+                {p0 && <p>{p0.text}</p>}
+                {p1 && <p>{p1.text}</p>}
+              </div>
+              <div className="wmb-prev__foot"><span>阅读 2,130</span><span>分享 87</span><span>在看 312</span></div>
+            </div>
+          )}
+          {rec.platform === 'xhs' && (
+            <div className="wmb-prev wmb-prev--xhs">
+              <div className="wmb-prev__cover" style={{ background: 'linear-gradient(150deg, color-mix(in srgb, var(--pf-xhs) 55%, var(--surface-raised)), color-mix(in srgb, var(--pf-xhs) 18%, var(--surface-raised)))' }}>封面</div>
+              <div className="wmb-prev__cap">
+                <div className="wmb-prev__title">{rec.title}</div>
+                {p0 && <p>{p0.text}</p>}
+                <div className="wmb-prev__tags">
+                  <i>#AI工作流</i><i>#效率工具</i><i>#自媒体运营</i>
+                </div>
+                <div className="wmb-prev__acts"><span>♡ 点赞</span><span>评论</span><span>收藏</span></div>
+              </div>
+            </div>
+          )}
+          {rec.platform === 'zhihu' && (
+            <div className="wmb-prev wmb-prev--zhihu">
+              <div className="wmb-prev__q">
+                <span>问题 · 2026-08-09</span>
+                <p>AI 如何改变写代码的方式？</p>
+              </div>
+              <div className="wmb-prev__a">
+                <div className="wmb-prev__who"><span className="wmb-prev__avatar">W</span><span>WeMediaBuddy</span></div>
+                {p0 && <p>{p0.text}</p>}
+                <span className="wmb-prev__more">阅读全文 ›</span>
+              </div>
+            </div>
+          )}
+          {rec.platform === 'x' && (
+            <div className="wmb-prev wmb-prev--x">
+              <div className="wmb-prev__tweet">
+                <div className="wmb-prev__who">
+                  <span className="wmb-prev__avatar">W</span>
+                  <span><b>WeMediaBuddy</b> <span>@WeMediaBuddy · 08-14 21:15</span></span>
+                </div>
+                <p>{p0 ? p0.text : ''} {p1 ? p1.text : ''}</p>
+                <div className="wmb-prev__linkcard">
+                  <span>x.com/WeMediaBuddy/status/1937…</span>
+                  <em>查看原推文</em>
+                </div>
+                <div className="wmb-prev__stats"><span>12.4k 曝光</span><span>318 互动</span><span>46 链接点击</span></div>
+              </div>
+            </div>
+          )}
+        </div>
+        <p className="wmb-prev-note">预览为静态示意，实际渲染以平台为准；发布前仍会做一次真实平台检查。</p>
+      </div>
+    );
+  };
+
+  const renderAssets = (rec) => (
+    <div className="wmb-assets">
+      {rec.assets.map((asset) => {
+        const bad = !asset.ok;
+        const grad = `linear-gradient(150deg, color-mix(in srgb, ${PLATFORM_META[rec.platform].color} ${bad ? '62%' : '34%'}, var(--surface-raised)), color-mix(in srgb, ${PLATFORM_META[rec.platform].color} 12%, var(--surface-raised)))`;
+        return (
+          <div key={asset.id} className={'wmb-asset ' + (bad ? 'is-bad' : '')}>
+            <div className="wmb-asset__thumb" style={{ background: grad }}>{asset.glyph}
+              {bad ? <span className="wmb-asset__badge">超限</span> : <span className="wmb-asset__badge is-ok">✓ 达标</span>}
+            </div>
+            <div className="wmb-asset__info">
+              <span className="wmb-asset__name">{asset.name}</span>
+              <span className="wmb-asset__meta">{asset.meta}</span>
+              <span className={'wmb-asset__check ' + (bad ? 'is-bad' : 'is-ok')}>
+                {bad ? <IcAlert /> : <IcCheck />}
+                {bad ? '超出平台规格' : '符合平台规格'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderRail = (rec) => {
+    const anns = rec.annotations;
+    const openCount = anns.filter((a) => a.status === 'open').length;
+    return (
+      <React.Fragment>
+        <section className="wmb-rail-sec">
+          <div className="wmb-rail-sec__head"><strong>版本与账号</strong></div>
+          <dl className="wmb-facts">
+            <div><dt>版本</dt><dd>{rec.version}{rec.retry ? ' · 修复后' : ''}</dd></div>
+            <div><dt>账号</dt><dd>{rec.account}</dd></div>
+            <div><dt>计划</dt><dd>{rec.planTime}</dd></div>
+            <div><dt>优先级</dt><dd><span className={'wmb-grade ds-grade'} data-grade={rec.grade}>{rec.grade}</span></dd></div>
+          </dl>
+        </section>
+
+        <section className="wmb-rail-sec">
+          <div className="wmb-rail-sec__head">
+            <strong>需要处理</strong>
+            {rec.exception ? <span>1 项</span> : null}
+          </div>
+          {rec.exception ? (
+            <div className={'wmb-ex wmb-ex--' + rec.exception.kind}>
+              <div className="wmb-ex__title">{rec.exception.title}</div>
+              <p>{rec.exception.detail}</p>
+              {rec.exception.kind === 'captcha' && <span className="wmb-ex__hint">AI 已停止自动重试，等待主编决定。</span>}
+              {rec.exception.kind === 'auth' && <span className="wmb-ex__hint">在底部操作条点击「去授权」。</span>}
+              {rec.exception.kind === 'asset' && <span className="wmb-ex__hint">先修复素材，再人工重试发布。</span>}
+            </div>
+          ) : (
+            <span className="wmb-calm-ok"><IcCheck />无异常，内容已就绪</span>
+          )}
+        </section>
+
+        <section className="wmb-rail-sec">
+          <div className="wmb-rail-sec__head">
+            <strong>核对记录</strong>
+            <span>{openCount > 0 ? openCount + ' 项待处理' : '已全部处理'}</span>
+          </div>
+          {anns.map((ann) => {
+            const meta = ANN_META[ann.kind];
+            const done = ann.status !== 'open';
+            return (
+              <div key={ann.id} className={'wmb-ann-row' + (selectedAnnId === ann.id ? ' is-selected' : '') + (done ? ' is-done' : '')}>
+                <div className="wmb-ann-kinds">
+                  <span className={'wmb-ann-kind ' + meta.cls}>
+                    {ann.kind === 'check' ? <IcCheck /> : ann.kind === 'suggest' ? <IcBubble /> : <IcAlert />}
+                    {meta.label}
+                  </span>
+                  {done && <span className={'wmb-ann-state' + (ann.status === 'dismissed' ? ' is-muted' : '')}>{ann.status === 'accepted' ? '已采纳' : ann.status === 'fixed' ? '已修复' : '已忽略'}</span>}
+                </div>
+                <p>{ann.note}</p>
+                {!done && (
+                  <div className="wmb-ann-actions">
+                    <Button size="sm" variant="secondary" onClick={() => applyAnnotation(rec.id, ann.id)}>采纳</Button>
+                    <Button size="sm" variant="text" onClick={() => dismissAnnotation(rec.id, ann.id)}>忽略</Button>
+                  </div>
+                )}
+                {done && ann.status !== 'fixed' && (
+                  <div className="wmb-ann-actions">
+                    <Button size="sm" variant="text" onClick={() => restoreAnnotation(rec.id, ann.id)}>撤销</Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
+        {(rec.receipt || rec.state === 'published' || (rec.state === 'reconcile' && fetchingReceipt)) && (
+          <section className="wmb-rail-sec">
+            <div className="wmb-rail-sec__head"><strong>回执数据</strong></div>
+            {rec.receipt ? (
+              <React.Fragment>
+                <dl className="wmb-receipt">
+                  {rec.receipt.map((item) => (
+                    <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>
+                  ))}
+                </dl>
+                {rec.reconciled && <span className="wmb-receipt-ok"><IcCheck />已入账 · 对账完成</span>}
+              </React.Fragment>
+            ) : (
+              <p style={{ margin: 0, color: 'var(--muted)', fontSize: '12px' }}>
+                {fetchingReceipt ? '正在拉取平台回执…' : '已发布，等待平台回执同步。'}
+              </p>
+            )}
+          </section>
+        )}
+      </React.Fragment>
+    );
+  };
+
+  const renderReview = (rec) => {
+    const plat = PLATFORM_META[rec.platform];
+    const stateMeta = STATE_META[rec.state];
+    const publishing = publishRun && publishRun.recordId === rec.id;
+
+    let barHint = null;
+    let hintTone = '';
+    let primaryLabel = '';
+    let secondaryLabel = '';
+    let secondaryAction = null;
+    let primaryAction = null;
+    const primarySlot = (label, onClick, opts) => (
+      <span data-testid="primary-action"><Button variant="primary" onClick={onClick} disabled={opts && opts.disabled}>{label}</Button></span>
+    );
+
+    if (rec.state === 'pending-auth') {
+      barHint = '等待账号授权，授权后进入待人工发布';
+      hintTone = 'is-warn';
+      primaryLabel = '去授权';
+      primaryAction = primarySlot(primaryLabel, () => openModal('authorize', rec.id));
+      secondaryLabel = '稍后处理';
+      secondaryAction = () => deselectRecord();
+    } else if (rec.state === 'pending-publish') {
+      barHint = rec.retry ? '素材已修复，等待主编重试发布' : 'AI 已就绪，等待主编确认发布';
+      hintTone = 'is-ok';
+      primaryLabel = rec.retry ? '重试发布' : '确认发布';
+      primaryAction = publishing
+        ? primarySlot('发布中…', null, { disabled: true })
+        : primarySlot(primaryLabel, () => openModal('publish', rec.id));
+      secondaryLabel = '编辑草稿';
+      secondaryAction = () => { setModeId('content'); pushToast('已切换到内容终审，可在线编辑'); };
+    } else if (rec.state === 'needs-takeover') {
+      barHint = 'AI 已停止自动重试，等待主编接管';
+      hintTone = 'is-bad';
+      primaryLabel = '接管处理';
+      primaryAction = primarySlot(primaryLabel, () => openModal('takeover', rec.id));
+      secondaryLabel = '我已了解';
+      secondaryAction = () => pushToast('异常已记录，等待你的决定');
+    } else if (rec.state === 'reconcile') {
+      barHint = fetchingReceipt ? '正在拉取平台回执…' : (rec.receipt ? '回执已到，确认入账后归档' : '等待平台回执对账');
+      hintTone = rec.receipt ? 'is-ok' : '';
+      if (rec.receipt) {
+        primaryLabel = '完成对账';
+        primaryAction = primarySlot(primaryLabel, completeReconcile);
+      } else {
+        primaryLabel = '开始对账';
+        primaryAction = primarySlot(primaryLabel, startReconcileFetch, { disabled: fetchingReceipt });
+      }
+      secondaryLabel = '重新拉取';
+      secondaryAction = startReconcileFetch;
+    } else if (rec.state === 'failed') {
+      barHint = '封面素材超限，需先修复';
+      hintTone = 'is-bad';
+      primaryLabel = '修复素材';
+      primaryAction = primarySlot(primaryLabel, fixAssets, { disabled: fixingAssets });
+      secondaryLabel = '查看失败日志';
+      secondaryAction = () => openModal('log', rec.id);
+    } else if (rec.state === 'published') {
+      barHint = rec.receipt ? '回执已同步，可随时查看' : '已发布，等待回执同步';
+      hintTone = 'is-ok';
+      primaryLabel = '查看回执';
+      primaryAction = primarySlot(primaryLabel, () => openModal('receipt', rec.id));
+      secondaryLabel = '复制链接';
+      secondaryAction = () => pushToast('发布链接已复制');
+    }
+
+    return (
+      <div className="wmb-review">
+        <header className="wmb-review__head">
+          <Button variant="text" size="sm" onClick={deselectRecord}><IcArrow /> 返回队列</Button>
+          <h2 className="wmb-review__title">{rec.title}</h2>
+          <div className="wmb-review__meta">
+            <span className="wmb-plat" style={{ '--plat-color': plat.color }}><i />{plat.label}</span>
+            <span className={'wmb-grade ds-grade'} data-grade={rec.grade}>{rec.grade}</span>
+            <StatusPill tone={stateMeta.tone} live={rec.state === 'publishing'}>{stateMeta.label}</StatusPill>
+            <span className="wmb-review__time">{rec.planTime}</span>
+          </div>
+          <div className="wmb-review__actions">
+            <button type="button" className="wmb-iconbtn wmb-rail-toggle" data-testid="rail-toggle" aria-label="打开核对与异常面板" aria-pressed={railOpen} onClick={() => setRailOpen((v) => !v)}>
+              <IcPanel />
+            </button>
+          </div>
+        </header>
+
+        <div className="wmb-review__tabs">
+          <TabList tabs={MODES} selectedId={modeId} onSelect={setModeId} ariaLabel="终审模式" />
+        </div>
+
+        <div className="wmb-review__body">
+          <div className="wmb-review__main">
+            {modeId === 'content' && renderPaper(rec)}
+            {modeId === 'preview' && renderPreview(rec)}
+            {modeId === 'assets' && renderAssets(rec)}
+          </div>
+          <aside className={'wmb-review__rail' + (railOpen ? ' is-open' : '')} data-testid="rail">
+            {renderRail(rec)}
+          </aside>
+        </div>
+
+        <footer className="wmb-review__bar">
+          <div className="wmb-bar-facts">
+            <b>{rec.account}</b>
+            <span>{plat.label} · {rec.version}{rec.retry ? ' · 修复后' : ''} · {rec.planTime}</span>
+          </div>
+          <div className="wmb-bar-center">
+            {publishing ? (
+              <div className="wmb-steps" role="status">
+                {PUB_STEPS.map((stepLabel, idx) => (
+                  <span key={stepLabel} className={'wmb-step' + (idx < publishRun.step ? ' is-done' : idx === publishRun.step ? ' is-now' : '')}>
+                    {idx < publishRun.step ? <IcCheck /> : idx === publishRun.step ? <IcDot /> : <IcCircle />}
+                    {stepLabel}
+                  </span>
+                ))}
+                <WmbCreatureMark state="working" />
+              </div>
+            ) : (
+              <p className={'wmb-bar-hint ' + hintTone}>{barHint}</p>
+            )}
+          </div>
+          <div className="wmb-bar-actions">
+            {secondaryLabel && secondaryAction && (
+              <Button variant="secondary" onClick={secondaryAction} disabled={fetchingReceipt && secondaryLabel === '重新拉取'}>{secondaryLabel}</Button>
+            )}
+            {primaryAction}
+          </div>
+        </footer>
+      </div>
+    );
+  };
+
+  const renderModal = () => {
+    if (!modal) return null;
+    const rec = records.find((r) => r.id === modal.recordId);
+    if (!rec) return null;
+    const plat = PLATFORM_META[rec.platform];
+
+    if (modal.kind === 'publish') {
+      const retry = rec.retry;
+      return (
+        <AppModal open title={retry ? '确认重试发布' : '确认发布'} size="confirm" onRequestClose={closeModal} ariaDescription="手动发布确认"
+          footer={(
+            <React.Fragment>
+              <Button variant="secondary" onClick={closeModal}>取消</Button>
+              <span data-testid="primary-action"><Button variant="primary" onClick={runPublish}>{retry ? '确认重试' : '确认发布'}</Button></span>
+            </React.Fragment>
+          )}>
+          <p>即将发布：<strong>{rec.title}</strong></p>
+          <p>发布目标：{plat.label} · {rec.account}（{rec.version}）</p>
+          <p className="wmb-modal-note">AI 只准备内容，不代替主编发布。点击确认后由本机发布助手上传，最终结果以平台回执为准。</p>
+        </AppModal>
+      );
+    }
+
+    if (modal.kind === 'authorize') {
+      return (
+        <AppModal open title="小红书账号授权" size="standard" onRequestClose={closeModal} ariaDescription="平台账号授权"
+          footer={authPhase === 'done' ? (
+            <span data-testid="primary-action"><Button variant="primary" onClick={completeAuth}>完成</Button></span>
+          ) : (
+            <React.Fragment>
+              <Button variant="secondary" onClick={closeModal} disabled={authPhase === 'working'}>取消</Button>
+              <span data-testid="primary-action"><Button variant="primary" onClick={startAuthFlow} disabled={authPhase === 'working'}>
+                {authPhase === 'working' ? '授权中…' : '开始授权'}
+              </Button></span>
+            </React.Fragment>
+          )}>
+          <div className="wmb-account-card">
+            <i>红</i>
+            <span><b>小红书 @灵感小助手</b><span>授权状态：未授权</span></span>
+          </div>
+          <div className="wmb-perm"><span>发布笔记</span><span>上传图片</span><span>读取回执</span></div>
+          {authPhase === 'working' && (
+            <div className="wmb-auth-line"><WmbCreatureMark state="working" /> 正在拉起授权页，请稍候…</div>
+          )}
+          {authPhase === 'done' && (
+            <div className="wmb-auth-ok"><IcCheck />授权成功 · 权限已开通</div>
+          )}
+        </AppModal>
+      );
+    }
+
+    if (modal.kind === 'takeover') {
+      return (
+        <AppModal open title="接管发布任务" size="standard" role="alertdialog" onRequestClose={closeModal} ariaDescription="接管异常发布任务"
+          footer={(
+            <React.Fragment>
+              <Button variant="text" onClick={closeModal}>取消</Button>
+              <Button variant="secondary" onClick={takeoverDefer}>暂缓稍后重试</Button>
+              <span data-testid="primary-action"><Button variant="primary" onClick={takeoverManual}>我已手动发布</Button></span>
+            </React.Fragment>
+          )}>
+          <p><strong>{rec.exception ? rec.exception.title : '发布异常'}</strong></p>
+          <p>{rec.exception ? rec.exception.detail : ''}</p>
+          <p className="wmb-modal-note">AI 已停止自动重试，以下操作由你决定：手动发布后进入对账，或暂缓到稍后重试。</p>
+        </AppModal>
+      );
+    }
+
+    if (modal.kind === 'receipt') {
+      return (
+        <AppModal open title="发布回执" size="standard" onRequestClose={closeModal} ariaDescription="发布回执详情"
+          footer={(
+            <React.Fragment>
+              <Button variant="secondary" onClick={() => pushToast('发布链接已复制')}>复制链接</Button>
+              <span data-testid="primary-action"><Button variant="primary" onClick={closeModal}>知道了</Button></span>
+            </React.Fragment>
+          )}>
+          {rec.receipt ? (
+            <div className="wmb-receipt-grid">
+              {rec.receipt.map((item) => (
+                <div key={item.label} className="wmb-receipt-cell"><b>{item.value}</b><span>{item.label}</span></div>
+              ))}
+            </div>
+          ) : (
+            <p>回执尚未同步，稍后会自动拉取。</p>
+          )}
+          <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>{plat.label} · {rec.account} · {rec.planTime}</p>
+        </AppModal>
+      );
+    }
+
+    if (modal.kind === 'log') {
+      return (
+        <AppModal open title="失败日志" size="standard" onRequestClose={closeModal} ariaDescription="发布失败日志"
+          footer={(
+            <span data-testid="primary-action"><Button variant="primary" onClick={closeModal}>关闭</Button></span>
+          )}>
+          <pre className="wmb-log">
+            <span>[12:00:03] 发布助手启动：小红书 @灵感小助手</span>{'\n'}
+            <span>[12:00:07] 上传 cover-cursor.png 失败：文件 6.4MB 超过平台单图上限 3MB</span>{'\n'}
+            <span className="err">[12:00:07] 发布中止，等待素材修复</span>{'\n'}
+            <span>[12:00:08] AI 未自动重试（手动发布边界）</span>
+          </pre>
+        </AppModal>
+      );
+    }
+    return null;
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* 渲染                                                               */
+  /* ------------------------------------------------------------------ */
+  const total = records.length;
+  const pendingCount = records.filter((r) => ['pending-auth', 'pending-publish', 'needs-takeover'].includes(r.state)).length;
+
+  return (
+    <div className="wmb-app">
+      <header className="wmb-topbar">
+        <div className="wmb-brand">
+          <WmbCreatureMark state="working" />
+          <span className="wmb-brand-name">WeMediaBuddy</span>
+          <span className="wmb-room"><i />B · 沉浸终审</span>
+        </div>
+        <div className="wmb-topbar-spacer" />
+        <div className="wmb-topbar-right">
+          <a className="wmb-link" href="index.html">比较方案</a>
+          <span className="wmb-topbar-divider" />
+          <button
+            type="button"
+            className={'wmb-iconbtn' + (piOpen ? ' is-active' : '')}
+            data-testid="pi-toggle"
+            aria-label={piOpen ? '收起 Pi 助理' : '展开 Pi 助理'}
+            aria-expanded={piOpen}
+            onClick={() => setPiOpen((v) => !v)}
+          >
+            <IcBubble />
+          </button>
+          <button
+            type="button"
+            className="wmb-iconbtn"
+            data-testid="theme-toggle"
+            aria-label={theme === 'dark' ? '切换到白昼主题' : '切换到墨夜主题'}
+            onClick={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? <IcSun /> : <IcMoon />}
+          </button>
+        </div>
+      </header>
+
+      <div className="wmb-shell">
+        <aside className="wmb-strip">
+          <div className="wmb-strip__head">
+            <div className="wmb-strip__title">发布队列<span className="wmb-strip__count">{total} 条 · {pendingCount} 条待处理</span></div>
+            <div className="wmb-strip__sub">跨平台任务一览，点选进入终审</div>
+          </div>
+          <div className="wmb-strip__filters">
+            {FILTERS.map((f) => (
+              <ChipFilter
+                key={f.id}
+                label={f.label}
+                count={f.id === 'all' ? total : countBy(f.id)}
+                pressed={filterId === f.id}
+                onToggle={(nextPressed) => setFilterId(nextPressed ? f.id : 'all')}
+              />
+            ))}
+          </div>
+          {filteredRecords.length ? (
+            <ul className="wmb-strip__list" data-testid="task-list">
+              {filteredRecords.map((rec) => {
+                const plat = PLATFORM_META[rec.platform];
+                const stateMeta = STATE_META[rec.state];
+                return (
+                  <li key={rec.id}>
+                    <button
+                      type="button"
+                      className={'wmb-row' + (selectedId === rec.id ? ' is-selected' : '')}
+                      data-testid="task-row"
+                      data-state={rec.state}
+                      aria-pressed={selectedId === rec.id}
+                      onClick={() => (selectedId === rec.id ? deselectRecord() : selectRecord(rec.id))}
+                    >
+                      <span className="wmb-row__mark" style={{ '--plat-color': plat.color }}>{plat.short}</span>
+                      <span className="wmb-row__copy">
+                        <span className="wmb-row__title">{rec.title}</span>
+                        <span className="wmb-row__meta">
+                          {rec.exception && <i className="wmb-row__ex" title={rec.exception.title} />}
+                          <span>{plat.label} · {rec.planTime}</span>
+                        </span>
+                      </span>
+                      <span className="wmb-row__pill">
+                        <StatusPill tone={stateMeta.tone} live={rec.state === 'publishing'}>{stateMeta.label}</StatusPill>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="wmb-strip__list">
+              <StatePanel state="empty" title="该状态下没有记录" body="切换筛选或回到「全部」。" />
+            </div>
+          )}
+          <div className="wmb-strip__foot">边界：AI 只准备内容与回执，最终发布一律由主编手动确认。</div>
+        </aside>
+
+        <main className="wmb-canvas" data-testid="detail">
+          {currentRecord ? renderReview(currentRecord) : renderOverview()}
+        </main>
+      </div>
+
+      <aside className={'wmb-pi' + (piOpen ? ' is-open' : '')} data-testid="pi-panel" aria-label="Pi 主编助理" aria-hidden={!piOpen}>
+        <div className="ds-pi-head">
+          <WmbCreatureMark state={piOpen ? 'working' : 'idle'} />
+          <span className="ds-pi-title">Pi · 主编助理</span>
+        </div>
+        <p className="ds-pi-context"><em>当前记录</em><span>{currentRecord ? currentRecord.title : '未选择'}</span></p>
+        <div className="ds-pi-transcript">
+          {piTranscript.map((msg, idx) => (
+            <div key={idx} className={'ds-pi-msg ' + (msg.from === 'user' ? 'ds-pi-msg--user' : 'ds-pi-msg--agent')}>
+              {msg.text}
+            </div>
+          ))}
+        </div>
+        <div className="ds-pi-composer">
+          <textarea
+            value={piText}
+            onChange={(evt) => setPiText(evt.target.value)}
+            placeholder="向 Pi 提问，例如：这篇的风险点是什么？"
+            aria-label="向 Pi 提问"
+          />
+          <div className="ds-pi-composer-bar">
+            <span className="ds-pi-composer-meta"><button type="button" className="ds-pi-model-trigger">模型 · 默认</button></span>
+            <button type="button" className="ds-pi-send" aria-label="发送" onClick={sendPi} disabled={!piText.trim()}>
+              <svg viewBox="0 0 24 24"><path d="M4 11.5L20 4l-7.5 16-2.2-6.3L4 11.5z" /><path d="M10.3 13.7L20 4" /></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="wmb-toasts" role="status" aria-live="polite">
+        {toasts.map((t) => <div key={t.id} className="wmb-toast">{t.text}</div>)}
+      </div>
+
+      {renderModal()}
+    </div>
+  );
+}
+
+const rootEl = document.getElementById('root');
+ReactDOM.createRoot(rootEl).render(<App />);
+}
+</script>
+</body>
+</html>

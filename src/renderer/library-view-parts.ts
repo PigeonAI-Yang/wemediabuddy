@@ -6,7 +6,7 @@ import type {
   SourceKnowledgeDetail,
 } from '../shared/knowledge-topic-library';
 
-export type LibrarySection = 'saved' | 'pending' | 'health' | 'removed';
+export type LibrarySection = 'saved' | 'watching' | 'pending' | 'health' | 'captureFailures' | 'removed';
 
 export type LibrarySourceItem = {
   id: string;
@@ -74,7 +74,7 @@ export type {
 } from '../shared/knowledge-topic-library';
 
 export function isLibrarySection(value: string | null): value is LibrarySection {
-  return value === 'saved' || value === 'pending' || value === 'health' || value === 'removed';
+  return value === 'saved' || value === 'watching' || value === 'pending' || value === 'health' || value === 'captureFailures' || value === 'removed';
 }
 
 /** 旧「重发」段 id 一次性兼容迁移：rediscovery → pending（设计 §9 旧键迁移）。 */
@@ -223,10 +223,10 @@ export function conclusionStatusLabel(status: string | null | undefined): string
 }
 
 const BODY_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
-  ready: '正文已抓取',
-  failed: '抓取失败',
+  ready: '正文已保存',
+  failed: '正文归档失败',
   empty: '无正文',
-  none: '尚未抓取'
+  none: '正文归档中'
 });
 export function bodyStatusLabel(status: string | null | undefined): string {
   return BODY_STATUS_LABELS[String(status ?? '')] ?? String(status ?? '');
@@ -290,8 +290,8 @@ export function sourceListBadges(opts: {
   openHealthIssues?: number;
 }): Array<{ cls: string; text: string }> {
   const badges: Array<{ cls: string; text: string }> = [];
-  if (opts.bodyStatus === 'ready') badges.push({ cls: 'green', text: '正文已抓取' });
-  else if (opts.bodyStatus === 'failed') badges.push({ cls: 'amber', text: '正文抓取失败' });
+  if (opts.bodyStatus === 'ready') badges.push({ cls: 'green', text: '正文已保存' });
+  else if (opts.bodyStatus === 'failed') badges.push({ cls: 'amber', text: '正文归档失败' });
   else if (opts.bodyStatus === 'empty') badges.push({ cls: 'gray', text: '无正文' });
   if (opts.digested) badges.push({ cls: 'green', text: '已消化' });
   if (opts.openHealthIssues && opts.openHealthIssues > 0) {
@@ -335,7 +335,7 @@ export function healthSeverityCls(severity: string | null | undefined): string {
 }
 
 /** dataChanged 触发资料库刷新的 scope（设计 §9：knowledge/topics/canvas/health/receipt + 既有 library/sources）。 */
-export const LIBRARY_REFRESH_SCOPES: readonly string[] = ['sources', 'library', 'knowledge', 'topics', 'receipt', 'health'];
+export const LIBRARY_REFRESH_SCOPES: readonly string[] = ['sources', 'library', 'knowledge', 'topics', 'receipt', 'health', 'media'];
 export function shouldRefreshLibrary(scopes: readonly string[] | null | undefined): boolean {
   if (!scopes || !scopes.length) return true;
   return scopes.some((scope) => LIBRARY_REFRESH_SCOPES.includes(scope));

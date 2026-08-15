@@ -1,11 +1,9 @@
 import type { PiContextRef, PiStudioDocument, PiStudioOpenAnnotation } from './app-types';
+// WMB-5243：Pi 画布直送上下文 = 后端冻结选择清单（scope selected_only，服务端校验/去重/限长）。
+import type { KnowledgeCanvasSelectionManifest } from '../shared/knowledge-canvas';
 
-export type PiDirectCanvasContext = {
-  scope: string;
-  items: Array<{ nodeId: string }>;
-  relations: Array<{ id: string }>;
-  estimatedCharacters: number;
-};
+/** 发送时由后端冻结清单（validateKnowledgeSelectionManifest）生成；不再走旧 context package 预览。 */
+export type PiDirectCanvasContext = KnowledgeCanvasSelectionManifest;
 
 // ── WMB-5207：Studio 工作稿 + 开放批注的确定性上下文裁剪 ──────────────────────
 // 设计规格 §8：预算不足时按优先级裁剪——先保全部批注原文与说明，再保每条批注邻近
@@ -290,9 +288,13 @@ export function buildPiContextPayload(
     ? `\ncontextRule=只使用下面直接提供的页面上下文，不得调用上下文包工具，也不得扩展到选中范围之外。`
       + `\nmode=${context.packagePurpose ?? 'discussion'}`
       + `\ncanvasId=${context.canvasId ?? ''}`
-      + `\nselectionMode=${context.contextSelection?.mode ?? 'current_page'}`
+      + `\nselectionMode=${context.contextSelection?.mode ?? 'selected'}`
       + `\nsuggestionRule=若要提出新节点或关系，只能调用 wmb_suggest_knowledge 创建待确认建议；用户确认前不得视为正式知识。`
       + `\ncontextNodeIds=${JSON.stringify(directContext.items.map((item) => item.nodeId))}`
+      + `\ncontextSelectionExcludedCount=${directContext.excludedCount}`
+      + (directContext.excludedCount > 0
+        ? `\ncontextSelectionExcluded=未纳入 ${directContext.excludedCount} 项（重复正式身份/已消失节点/限长裁剪；明细见 contextManifest.excludedReasons）`
+        : '')
       + `\ncontextManifest=${JSON.stringify(directContext)}`
     : xList
       ? `${dispatchRule}\nobjectRule=优先使用下面直接提供的 X List 页面上下文；用户没点帖子时讨论当前列表已加载的全部动态（loadedCount/visiblePosts），点了帖子时只讨论该帖及其评论。不要假设未加载的更早帖子。`
@@ -358,7 +360,8 @@ export function describePiContextChip(context: PiContextRef): string {
   const rankingCount = (context.rankingContext?.boards.length ?? 0) + (context.rankingContext?.items.length ?? 0);
   const xList = context.xListContext;
   if (context.contextSelection) {
-    return `${context.pageLabel} · ${context.contextSelection.mode === 'selected' ? `已选 ${context.contextSelection.nodeIds.length} 项` : `当前页 ${context.contextSelection.nodeIds.length} 项`}`;
+    // WMB-5243：全局知识网络框选上下文 —— “知识网络 · 已框选 N 项”。
+    return `${context.pageLabel} · 已框选 ${context.contextSelection.nodeIds.length} 项`;
   }
   if (xList) {
     if (xList.mode === 'post' && xList.selectedPost) return `${context.pageLabel} · 帖子 ${xList.selectedPost.authorHandle || ''}`.trim();

@@ -2,7 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
 import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { upsertSource } from './sources.ts';
+import { scheduleSourceBodyArchive } from './source-body-archive.ts';
 import { writeXListTimelineCacheIfImproved } from './x-list-timeline-cache.ts';
+import { freezeXTimelineMediaCandidates } from './x-media-wiring.ts';
 import { saveXPostMetricSnapshot } from './x-post-metrics.ts';
 import {
   createXList, deleteXList, ensureXListMember, readXListDetail, readXListIndex, readXListMembers, readXListTimeline,
@@ -152,21 +154,49 @@ export function persistBoundXListTimeline(
   try {
     const capturedAt = result.detail.observation.capturedAt;
     const observationKey = input.observationKey?.trim() || `${current.id}:${capturedAt}`;
-    const saved = result.posts.map((post) => ({ post, source: upsertSource(database, {
-      feedId: current.sourceFeedId,
-      originalUrl: post.url,
-      title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
-      author: post.authorHandle ?? undefined,
-      publishedAt: post.postedAt ?? undefined,
-      summary: post.text,
-      evidence: JSON.stringify({
-        listId: current.listId,
-        listUrl: current.canonicalUrl,
-        collectedAt: capturedAt,
-        avatarUrl: post.avatarUrl ?? null,
-        displayName: post.displayName ?? null
-      })
-    }) }));
+    const saved = result.posts.map((post) => {
+      const source = upsertSource(database, {
+        feedId: current.sourceFeedId,
+        originalUrl: post.url,
+        title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
+        author: post.authorHandle ?? undefined,
+        publishedAt: post.postedAt ?? undefined,
+        summary: post.text,
+        evidence: JSON.stringify({
+          listId: current.listId,
+          listUrl: current.canonicalUrl,
+          collectedAt: capturedAt,
+          avatarUrl: post.avatarUrl ?? null,
+          displayName: post.displayName ?? null
+        })
+      });
+      // WMB-5269：结构化 X 帖子完整文本 → 同事务立即固化正文（不请求 X 原页）。
+      scheduleSourceBodyArchive(database, {
+        sourceId: source.id,
+        sourceRevision: source.revision,
+        url: post.url,
+        structuredText: post.text,
+        contentType: 'text/plain',
+        origin: 'x_list_live',
+        channel: 'x_lists'
+      });
+      return { post, source };
+    });
+    // WMB-5244：Source 事务内冻结媒体候选——Candidate + 初始 Attempt + media_archive Job
+    // 与 upsertSource 同事务原子落库（设计 §7.1）；下载在提交后由 ArchiveWorker 异步执行，
+    // 媒体下载失败不回滚文字 Source。图片/视频/引用帖媒体顺序按设计 §7.2 带入候选。
+    let candidateCount = 0;
+    saved.forEach(({ post, source }, postOrdinal) => {
+      const frozen = freezeXTimelineMediaCandidates(database, {
+        sourceId: source.id,
+        sourceRevision: source.revision,
+        post,
+        postOrdinal,
+        requestId: observationKey,
+        discoveredAt: capturedAt
+      });
+      candidateCount += frozen.candidateIds.length;
+    });
     const snapshotIds = saved.flatMap(({ post, source }) => post.metricEvidence ? [saveXPostMetricSnapshot(database, {
       sourceItemId: source.id,
       accountKey: current.accountKey,
@@ -191,7 +221,7 @@ export function persistBoundXListTimeline(
     });
     // WMB-5229：直写保存成功后异步有界编译（不阻断采集/快照）。
     for (const { source } of saved) scheduleSourceKnowledgeCompile({ sourceId: source.id, revision: source.revision });
-    return success({ binding: updated!, sourceIds, snapshotIds, candidateCount: result.posts.length, capturedAt });
+    return success({ binding: updated!, sourceIds, snapshotIds, candidateCount, capturedAt });
   } catch (error) {
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
   }

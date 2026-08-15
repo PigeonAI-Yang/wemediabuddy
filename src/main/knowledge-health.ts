@@ -17,6 +17,18 @@
  *   隔离（store 原生 assertWorkspaceMatches/assertScopeAllowed + 扫描按 scope 过滤）、
  *   受影响范围上限（maxAffectedObjects / maxIssuesPerRun / pageSize）与 dataChanged 广播。
  *
+ * WMB-5237（知识完整性七类补齐）：新增检测器 orphan_knowledge / missing_wiki_page /
+ * unsupported_claim / stale_claim / duplicate_knowledge / duplicate_entity / cross_reference /
+ * data_gap，全部为确定性 SQLite 判定（正式对象/版本/证据关系），并入局部与周期 Lint：
+ * - 每类计划带稳定 fingerprint（对象 id + anchor），重复扫描不重复 Issue；
+ * - 条件消除（对象被连接/修复/归档/重新编译）时确定性 Issue 自动 resolved；
+ *   disputed/contradicted 等真实争议恒保持 open，不自动裁决；
+ * - cross_reference 复用 issueType=broken_reference（affectedObjectType='wiki_page' 区分），
+ *   只校验 Wiki 页面当前版本的结构化正式引用（adopted_note_version_ids / business_object_refs），
+ *   不做自由文本猜测；data_gap 新增 issue_type（v60 migration 重建表追加 CHECK 取值）；
+ * - 扫描 phase 扩展为 14 个（每 phase 一个查询 + 一个 id 游标），checkpoint 键升级
+ *   knowledge_lint_checkpoint_v2（旧 v1 游标语义与新 phase 集不对齐），检测器版本升至 '2'。
+ *
  * 不修改：Review/Publication/Metric 保存链、结果回流模块（outcome-feedback.ts）、编译器。
  * 正式知识写只经 applyKnowledgeChangeSet；不新增表（checkpoint 复用 app_meta 既有 KV：
  * v56 无专用 lint 状态表，且「可暂停恢复的扫描游标」不是知识对象，不属 knowledge_health_issues
@@ -75,28 +87,56 @@ export const KNOWLEDGE_HEALTH_ERROR_CODES = Object.freeze([
 ] as const);
 
 /** 检测器版本：false_positive 防重复报警按此版本识别；语义变化时递增。 */
-export const KNOWLEDGE_HEALTH_DETECTOR_VERSION = '1' as const;
+export const KNOWLEDGE_HEALTH_DETECTOR_VERSION = '2' as const;
 
 export const KNOWLEDGE_HEALTH_LINT_CHANNEL_REASON = 'knowledge_health.lint' as const;
 
-const CHECKPOINT_META_KEY = 'knowledge_lint_checkpoint_v1';
+// WMB-5237：检测器集合/扫描阶段已扩展，旧 checkpoint（v1 游标语义）不与新阶段对齐 → 换新键，
+// 旧 running checkpoint 自然失效（readCheckpoint 返回 null），新一轮周期从头扫描且不重复旧 Issue。
+const CHECKPOINT_META_KEY = 'knowledge_lint_checkpoint_v2';
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_MAX_AFFECTED_OBJECTS = 100;
 const DEFAULT_MAX_ISSUES_PER_RUN = 50;
 const LANE_PREFIX = 'lane:';
 
+/** data_gap 业务阈值：captured FreeNote 超过该天数仍未处理即视为知识管线数据缺口。 */
+export const DATA_GAP_FREE_NOTE_MAX_AGE_DAYS = 14 as const;
+
+/** data-gap 检测/复查共用的确定性截止时间（captured 且 created_at 早于该值才构成缺口）。 */
+function dataGapCutoffIso(): string {
+  return new Date(Date.now() - DATA_GAP_FREE_NOTE_MAX_AGE_DAYS * 86_400_000).toISOString();
+}
+
 export type HealthLintDetector =
   | 'broken_reference'
   | 'unreturned_review'
   | 'unresolved_contradiction'
-  | 'stale_wiki_page';
+  | 'stale_wiki_page'
+  | 'orphan_knowledge'
+  | 'missing_wiki_page'
+  | 'unsupported_claim'
+  | 'stale_claim'
+  | 'duplicate_knowledge'
+  | 'duplicate_entity'
+  | 'cross_reference'
+  | 'data_gap';
 
 export const KNOWLEDGE_HEALTH_DETECTORS: Readonly<Record<HealthLintDetector, HealthIssueType>> = Object.freeze({
   broken_reference: 'broken_reference',
   unreturned_review: 'unreturned_review',
   unresolved_contradiction: 'unresolved_contradiction',
-  stale_wiki_page: 'stale_wiki_page'
+  stale_wiki_page: 'stale_wiki_page',
+  orphan_knowledge: 'orphan_knowledge',
+  missing_wiki_page: 'missing_wiki_page',
+  unsupported_claim: 'unsupported_claim',
+  stale_claim: 'stale_claim',
+  duplicate_knowledge: 'duplicate_knowledge',
+  duplicate_entity: 'duplicate_entity',
+  // Wiki 正文/结构中的不可解析正式引用（cross-reference）是 broken_reference 的一种：
+  // 以 affectedObjectType='wiki_page' 区分，不新增 issue_type。
+  cross_reference: 'broken_reference',
+  data_gap: 'data_gap'
 });
 
 const ALL_DETECTORS: readonly HealthLintDetector[] = Object.keys(KNOWLEDGE_HEALTH_DETECTORS) as HealthLintDetector[];
@@ -115,12 +155,33 @@ const AUTO_REPAIR_ALLOWLIST: Readonly<Record<HealthIssueType, boolean>> = Object
   unreturned_review: false,
   underperforming_method: false,
   overgeneralized_global: false,
-  unanswered_high_value_question: false
+  unanswered_high_value_question: false,
+  data_gap: false
 });
 
-export type HealthLintPhase = 'relations' | 'evidence_links' | 'reviews' | 'notes' | 'wiki_pages';
+export type HealthLintPhase =
+  | 'relations'
+  | 'evidence_links'
+  | 'reviews'
+  | 'notes'
+  | 'wiki_pages'
+  | 'missing_entity_pages'
+  | 'missing_topic_pages'
+  | 'orphan_notes'
+  | 'unsupported_claims'
+  | 'stale_claims'
+  | 'duplicate_notes'
+  | 'duplicate_entities'
+  | 'cross_references'
+  | 'data_gaps';
 
-const PHASE_ORDER: readonly HealthLintPhase[] = ['relations', 'evidence_links', 'reviews', 'notes', 'wiki_pages'];
+/** 每个 phase 恰好一个扫描查询 + 一个 id 游标（游标跨查询混用会漏扫，故按查询拆 phase）。 */
+const PHASE_ORDER: readonly HealthLintPhase[] = [
+  'relations', 'evidence_links', 'reviews', 'notes', 'wiki_pages',
+  'missing_entity_pages', 'missing_topic_pages', 'orphan_notes',
+  'unsupported_claims', 'stale_claims', 'duplicate_notes', 'duplicate_entities',
+  'cross_references', 'data_gaps'
+];
 
 /** 正式关系端点存在性检查的目标表（与 store ENDPOINT_TABLES 对齐；全 schema 下恒存在）。 */
 const ENDPOINT_TABLES: Readonly<Record<string, string>> = Object.freeze({
@@ -147,6 +208,26 @@ const EVIDENCE_OBJECT_TABLES: Readonly<Record<string, string>> = Object.freeze({
   wiki_page_version: 'knowledge_wiki_page_versions',
   content_version: 'content_versions',
   platform_version: 'platform_versions'
+});
+
+/**
+ * Wiki 正文/结构可解析正式引用的对象表（cross-reference 检测）。
+ * 引用形态来自既有写方：`source:<id>:r<rev>`（compiler）、`topic:<id>`（legacy-init）、
+ * `review:<id>`（outcome-feedback）、`wiki_version:<id>` / `note_version:<id>`（query-writeback），
+ * 以及 adopted_note_version_ids_json。只认已知 type；未知形态不做自由文本猜测（放行）。
+ * 注意：`source:<id>:r<rev>` 的 revision 段属 Source revision slice 的表，本切片不依赖未提交符号，
+ * 只校验对象 id 存在性（对象整体删除才算坏引用）。
+ */
+const WIKI_REF_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  source: 'source_items',
+  topic: 'topics',
+  review: 'reviews',
+  wiki_version: 'knowledge_wiki_page_versions',
+  note_version: 'knowledge_note_versions',
+  knowledge_note: 'knowledge_notes',
+  knowledge_entity: 'knowledge_entities',
+  free_note: 'knowledge_free_notes',
+  publication: 'publications'
 });
 
 // ============================================================
@@ -462,7 +543,347 @@ function staleWikiPagePlan(ctx: DetectorContext, pageId: string): HealthLintIssu
     severity: 'low',
     anchor: `page:${pageId}:stale`,
     detail: 'Wiki 页面 compile_status=stale 但仍为当前页面。',
-    suggestedAction: '重新编译该 Wiki 页面；编译后自动解决。'
+    suggestedAction: '有新资料待整理；整理后自动解决。'
+  });
+}
+
+// ============================================================
+// WMB-5237 知识完整性检测器（确定性；全部基于正式 SQLite 对象/版本/证据关系）
+// ============================================================
+// 七类：orphan（orphan_knowledge）、missing-page（missing_wiki_page）、duplicate
+// （duplicate_knowledge / duplicate_entity）、unsupported（unsupported_claim）、
+// stale-claim（stale_claim）、cross-reference（broken_reference@wiki_page）、
+// data-gap（data_gap）。每类条件函数同时充当「problem 判定」，供计划与自动解决复用：
+// 条件消除（对象被连接/修复/归档/重新编译）→ 确定性 Issue 自动 resolved；
+// disputed/contradicted 等真实争议恒保持 open，不自动裁决。
+
+/** 孤立条件：活动 Note（非 question）无任何证据链接、无任何活动正式关系、未被活动 Wiki 页面采纳。 */
+function orphanNoteCondition(ctx: DetectorContext, noteId: string): boolean {
+  const database = ctx.database;
+  const row = database.prepare(
+    `SELECT n.id FROM knowledge_notes n
+     WHERE n.id = ? AND n.scope = ? AND n.lifecycle = 'active' AND n.kind != 'question'
+       AND NOT EXISTS (
+         SELECT 1 FROM knowledge_evidence_links e
+         JOIN knowledge_note_versions v ON v.id = e.knowledge_note_version_id
+         WHERE v.note_id = n.id)
+       AND NOT EXISTS (
+         SELECT 1 FROM knowledge_formal_relations r
+         WHERE r.scope = n.scope AND r.ended_change_set_id IS NULL
+           AND (r.from_object_id = n.id OR r.to_object_id = n.id))`
+  ).get(noteId, ctx.scope);
+  if (!row) return false;
+  // 采纳按不可变版本 id 判定（adopted_note_version_ids_json 为 JSON 数组字符串；id 无引号安全）
+  const versions = database.prepare('SELECT id FROM knowledge_note_versions WHERE note_id = ?').all(noteId) as Array<{ id: string }>;
+  for (const version of versions) {
+    const adopted = database.prepare(
+      `SELECT 1 FROM knowledge_wiki_page_versions w
+       JOIN knowledge_wiki_pages p ON p.id = w.page_id
+       WHERE p.scope = ? AND p.lifecycle = 'active' AND w.adopted_note_version_ids_json LIKE ? LIMIT 1`
+    ).get(ctx.scope, `%"${version.id}"%`);
+    if (adopted) return false;
+  }
+  return true;
+}
+
+function orphanKnowledgePlan(ctx: DetectorContext, noteId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('orphan_knowledge')) return null;
+  if (!orphanNoteCondition(ctx, noteId)) return null;
+  return Object.freeze({
+    issueType: 'orphan_knowledge',
+    affectedObjectType: 'knowledge_note',
+    affectedObjectId: noteId,
+    severity: 'low',
+    anchor: `note:${noteId}:orphan`,
+    detail: '活动知识 Note 完全孤立：无证据链接、无正式关系、未被任何 Wiki 页面采纳。',
+    suggestedAction: '人工复核：补充证据/关系或并入当前认识；确认无意义可归档。'
+  });
+}
+
+/** unsupported 条件：当前认识版本宣称 supported/contradicted，但没有任何有效 EvidenceLink。 */
+function noteUnsupportedCondition(ctx: DetectorContext, noteId: string): boolean {
+  const row = ctx.database.prepare(
+    `SELECT 1 FROM knowledge_notes n
+     JOIN knowledge_note_versions v ON v.id = n.current_version_id
+     WHERE n.id = ? AND n.scope = ? AND n.lifecycle = 'active'
+       AND v.conclusion_status IN ('supported','contradicted')
+       AND NOT EXISTS (SELECT 1 FROM knowledge_evidence_links e WHERE e.knowledge_note_version_id = v.id)`
+  ).get(noteId, ctx.scope);
+  return row !== undefined;
+}
+
+function unsupportedClaimPlan(ctx: DetectorContext, noteId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('unsupported_claim')) return null;
+  if (!noteUnsupportedCondition(ctx, noteId)) return null;
+  return Object.freeze({
+    issueType: 'unsupported_claim',
+    affectedObjectType: 'knowledge_note',
+    affectedObjectId: noteId,
+    severity: 'medium',
+    anchor: `note:${noteId}:unsupported`,
+    detail: '当前认识版本结论为 supported/contradicted，但没有任何有效 EvidenceLink 支撑。',
+    suggestedAction: '人工复核：补充证据链接，或把结论降级为 unverified/inference。'
+  });
+}
+
+/** stale 条件：当前认识版本带明确 valid_until 且已过时（确定性阈值 = 既有时间字段本身）。 */
+function noteStaleCondition(ctx: DetectorContext, noteId: string, nowIso: string): boolean {
+  const row = ctx.database.prepare(
+    `SELECT 1 FROM knowledge_notes n
+     JOIN knowledge_note_versions v ON v.id = n.current_version_id
+     WHERE n.id = ? AND n.scope = ? AND n.lifecycle = 'active'
+       AND v.valid_until IS NOT NULL AND v.valid_until < ?`
+  ).get(noteId, ctx.scope, nowIso);
+  return row !== undefined;
+}
+
+function staleClaimPlan(ctx: DetectorContext, noteId: string, nowIso: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('stale_claim')) return null;
+  if (!noteStaleCondition(ctx, noteId, nowIso)) return null;
+  return Object.freeze({
+    issueType: 'stale_claim',
+    affectedObjectType: 'knowledge_note',
+    affectedObjectId: noteId,
+    severity: 'medium',
+    anchor: `note:${noteId}:stale-claim`,
+    detail: '当前认识版本已过明确有效期（valid_until 已到期）。',
+    suggestedAction: '人工复核：更新该 Claim 的有效期/内容，或将其归档。'
+  });
+}
+
+/** 重复知识条件：同 scope 存在另一活动 Note，当前陈述逐字相同（同 kind）。 */
+function duplicateKnowledgePartner(ctx: DetectorContext, noteId: string): string | null {
+  const row = ctx.database.prepare(
+    `SELECT MIN(n2.id) AS partnerId FROM knowledge_notes n
+     JOIN knowledge_note_versions v ON v.id = n.current_version_id
+     JOIN knowledge_notes n2 ON n2.scope = n.scope AND n2.lifecycle = 'active' AND n2.id != n.id
+     JOIN knowledge_note_versions v2 ON v2.id = n2.current_version_id
+     WHERE n.id = ? AND n.scope = ? AND n.lifecycle = 'active'
+       AND n2.kind = n.kind AND trim(lower(v2.statement)) = trim(lower(v.statement))`
+  ).get(noteId, ctx.scope) as { partnerId: string | null } | undefined;
+  return row?.partnerId ?? null;
+}
+
+function duplicateKnowledgePlan(ctx: DetectorContext, noteId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('duplicate_knowledge')) return null;
+  const partnerId = duplicateKnowledgePartner(ctx, noteId);
+  if (!partnerId) return null;
+  const pairKey = [noteId, partnerId].sort().join(':');
+  return Object.freeze({
+    issueType: 'duplicate_knowledge',
+    affectedObjectType: 'knowledge_note',
+    affectedObjectId: noteId,
+    severity: 'medium',
+    anchor: `duplicate-note:${pairKey}`,
+    detail: `活动 Note 与 ${partnerId} 的当前认识版本陈述逐字相同（同 kind），疑似重复知识。`,
+    suggestedAction: '人工复核：合并/限域，或确认并存理由（不自动裁决）。'
+  });
+}
+
+/** 重复实体条件：同 scope 存在另一活动 Entity，强外部身份（external_identity_json）完全相同。 */
+function duplicateEntityPartner(ctx: DetectorContext, entityId: string): string | null {
+  const row = ctx.database.prepare(
+    `SELECT MIN(e2.id) AS partnerId FROM knowledge_entities e
+     JOIN knowledge_entities e2 ON e2.scope = e.scope AND e2.lifecycle = 'active' AND e2.id != e.id
+     WHERE e.id = ? AND e.scope = ? AND e.lifecycle = 'active' AND e.external_identity_json != '{}'
+       AND e2.external_identity_json = e.external_identity_json`
+  ).get(entityId, ctx.scope) as { partnerId: string | null } | undefined;
+  return row?.partnerId ?? null;
+}
+
+function duplicateEntityPlan(ctx: DetectorContext, entityId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('duplicate_entity')) return null;
+  const partnerId = duplicateEntityPartner(ctx, entityId);
+  if (!partnerId) return null;
+  const pairKey = [entityId, partnerId].sort().join(':');
+  return Object.freeze({
+    issueType: 'duplicate_entity',
+    affectedObjectType: 'knowledge_entity',
+    affectedObjectId: entityId,
+    severity: 'high',
+    anchor: `duplicate-entity:${pairKey}`,
+    detail: `活动 Entity 与 ${partnerId} 具有完全相同的强外部身份（external_identity_json），疑似同一现实身份。`,
+    suggestedAction: '人工复核：合并实体或确认为不同语境身份（强身份重复为确定性信号，但仍不自动裁决）。'
+  });
+}
+
+/** 实体/主题被当前知识引用：被活动 Note 版本采纳（JSON id 数组）或作为活动正式关系目标。 */
+function entityReferencedInScope(ctx: DetectorContext, entityId: string): boolean {
+  const database = ctx.database;
+  const adopted = database.prepare(
+    `SELECT 1 FROM knowledge_note_versions v JOIN knowledge_notes n ON n.id = v.note_id
+     WHERE n.scope = ? AND v.adopted_entity_ids_json LIKE ? LIMIT 1`
+  ).get(ctx.scope, `%"${entityId}"%`);
+  if (adopted) return true;
+  const related = database.prepare(
+    `SELECT 1 FROM knowledge_formal_relations r
+     WHERE r.scope = ? AND r.ended_change_set_id IS NULL
+       AND r.to_object_type = 'knowledge_entity' AND r.to_object_id = ? LIMIT 1`
+  ).get(ctx.scope, entityId);
+  return related !== undefined;
+}
+
+function topicReferencedInScope(ctx: DetectorContext, topicId: string): boolean {
+  const database = ctx.database;
+  const adopted = database.prepare(
+    `SELECT 1 FROM knowledge_note_versions v JOIN knowledge_notes n ON n.id = v.note_id
+     WHERE n.scope = ? AND v.adopted_topic_ids_json LIKE ? LIMIT 1`
+  ).get(ctx.scope, `%"${topicId}"%`);
+  if (adopted) return true;
+  const related = database.prepare(
+    `SELECT 1 FROM knowledge_formal_relations r
+     WHERE r.scope = ? AND r.ended_change_set_id IS NULL
+       AND r.to_object_type = 'topic' AND r.to_object_id = ? LIMIT 1`
+  ).get(ctx.scope, topicId);
+  return related !== undefined;
+}
+
+/** missing-page 条件：活动实体/主题被当前知识引用，但同 scope 没有活动 Wiki 页面。 */
+function entityMissingPageCondition(ctx: DetectorContext, entityId: string): boolean {
+  const database = ctx.database;
+  const active = database.prepare(
+    'SELECT 1 FROM knowledge_entities WHERE id = ? AND scope = ? AND lifecycle = ? LIMIT 1'
+  ).get(entityId, ctx.scope, 'active');
+  if (!active) return false;
+  const page = database.prepare(
+    `SELECT 1 FROM knowledge_wiki_pages
+     WHERE scope = ? AND subject_type = 'entity' AND subject_id = ? AND lifecycle = 'active' LIMIT 1`
+  ).get(ctx.scope, entityId);
+  if (page) return false;
+  return entityReferencedInScope(ctx, entityId);
+}
+
+function topicMissingPageCondition(ctx: DetectorContext, topicId: string): boolean {
+  const database = ctx.database;
+  const topic = database.prepare('SELECT 1 FROM topics WHERE id = ?').get(topicId);
+  if (!topic) return false;
+  const page = database.prepare(
+    `SELECT 1 FROM knowledge_wiki_pages
+     WHERE scope = ? AND subject_type = 'topic' AND subject_id = ? AND lifecycle = 'active' LIMIT 1`
+  ).get(ctx.scope, topicId);
+  if (page) return false;
+  return topicReferencedInScope(ctx, topicId);
+}
+
+function missingEntityPagePlan(ctx: DetectorContext, entityId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('missing_wiki_page')) return null;
+  if (!entityMissingPageCondition(ctx, entityId)) return null;
+  return Object.freeze({
+    issueType: 'missing_wiki_page',
+    affectedObjectType: 'knowledge_entity',
+    affectedObjectId: entityId,
+    severity: 'medium',
+    anchor: `entity:${entityId}:missing-page`,
+    detail: '活动 Entity 被当前知识引用（Note 采纳/正式关系），但没有活动 Wiki 页面。',
+    suggestedAction: '人工复核：为该实体整理出当前认识，或移除其引用。'
+  });
+}
+
+function missingTopicPagePlan(ctx: DetectorContext, topicId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('missing_wiki_page')) return null;
+  if (!topicMissingPageCondition(ctx, topicId)) return null;
+  return Object.freeze({
+    issueType: 'missing_wiki_page',
+    affectedObjectType: 'topic',
+    affectedObjectId: topicId,
+    severity: 'medium',
+    anchor: `topic:${topicId}:missing-page`,
+    detail: 'Topic 被当前知识引用（Note 采纳/正式关系），但没有活动 Wiki 页面。',
+    suggestedAction: '人工复核：为该主题整理出当前认识，或确认已并入其他页面。'
+  });
+}
+
+/** 解析 business_object_refs 形式化引用；未知形态放行（不做自由文本猜测）。 */
+function parseWikiRef(ref: unknown): { type: string; id: string } | null {
+  if (typeof ref !== 'string') return null;
+  const parts = ref.split(':');
+  if (parts.length < 2) return null;
+  const type = parts[0]!.trim();
+  const id = parts[1]!.trim();
+  if (!type || !id) return null;
+  return { type, id };
+}
+
+/** 当前 Wiki 页面版本中不可解析的正式引用（结构字段：adopted_note_version_ids / business_object_refs）。 */
+function pageCurrentBrokenRefs(ctx: DetectorContext, pageId: string): Array<{ kind: string; type: string; id: string }> {
+  const database = ctx.database;
+  const page = database.prepare(
+    'SELECT current_version_id AS versionId, lifecycle, scope FROM knowledge_wiki_pages WHERE id = ?'
+  ).get(pageId) as Record<string, unknown> | undefined;
+  if (!page || String(page.scope) !== ctx.scope || String(page.lifecycle) !== 'active') return [];
+  const versionId = String(page.versionId ?? '');
+  if (!versionId) return [];
+  const version = database.prepare(
+    `SELECT adopted_note_version_ids_json AS adopted, business_object_refs_json AS refs
+     FROM knowledge_wiki_page_versions WHERE id = ?`
+  ).get(versionId) as Record<string, unknown> | undefined;
+  if (!version) return [];
+  const broken: Array<{ kind: string; type: string; id: string }> = [];
+  let adopted: unknown[] = [];
+  let refs: unknown[] = [];
+  try {
+    adopted = JSON.parse(String(version.adopted ?? '[]')) as unknown[];
+  } catch {
+    adopted = [];
+  }
+  try {
+    refs = JSON.parse(String(version.refs ?? '[]')) as unknown[];
+  } catch {
+    refs = [];
+  }
+  for (const adoptedId of adopted) {
+    if (typeof adoptedId !== 'string' || !adoptedId) continue;
+    if (!objectExists(database, WIKI_REF_TABLES.note_version!, adoptedId)) {
+      broken.push({ kind: 'adopted_note_version', type: 'note_version', id: adoptedId });
+    }
+  }
+  for (const ref of refs) {
+    const parsed = parseWikiRef(ref);
+    if (!parsed) continue;
+    const table = WIKI_REF_TABLES[parsed.type];
+    if (!table) continue; // 未知类型不做猜测
+    if (!objectExists(database, table, parsed.id)) {
+      broken.push({ kind: 'business_object_ref', type: parsed.type, id: parsed.id });
+    }
+  }
+  return broken;
+}
+
+function crossReferencePlan(ctx: DetectorContext, pageId: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('cross_reference')) return null;
+  const broken = pageCurrentBrokenRefs(ctx, pageId);
+  if (!broken.length) return null;
+  return Object.freeze({
+    issueType: 'broken_reference',
+    affectedObjectType: 'wiki_page',
+    affectedObjectId: pageId,
+    severity: 'medium',
+    anchor: `page-ref:${pageId}`,
+    detail: `Wiki 页面当前版本包含不可解析的正式引用：${broken.map((b) => `${b.kind}:${b.type}:${b.id}`).join('、')}。`,
+    suggestedAction: '人工复核：重新整理当前认识（清除失效引用）或恢复被引用对象。'
+  });
+}
+
+/** data-gap 条件：captured FreeNote 超过业务阈值天数仍未处理（原始观察未进入知识管线）。 */
+function dataGapCondition(ctx: DetectorContext, freeNoteId: string, cutoffIso: string): boolean {
+  const row = ctx.database.prepare(
+    `SELECT 1 FROM knowledge_free_notes
+     WHERE id = ? AND scope = ? AND processing_state = 'captured' AND created_at < ?`
+  ).get(freeNoteId, ctx.scope, cutoffIso);
+  return row !== undefined;
+}
+
+function dataGapPlan(ctx: DetectorContext, freeNoteId: string, cutoffIso: string): HealthLintIssuePlan | null {
+  if (!ctx.detectors.includes('data_gap')) return null;
+  if (!dataGapCondition(ctx, freeNoteId, cutoffIso)) return null;
+  return Object.freeze({
+    issueType: 'data_gap',
+    affectedObjectType: 'knowledge_free_note',
+    affectedObjectId: freeNoteId,
+    severity: 'low',
+    anchor: `free-note:${freeNoteId}:unprocessed`,
+    detail: `captured FreeNote 超过 ${DATA_GAP_FREE_NOTE_MAX_AGE_DAYS} 天仍未处理，原始观察未进入知识管线。`,
+    suggestedAction: '人工复核：处理该原始记录（晋升/忽略/归档），或确认延迟原因。'
   });
 }
 
@@ -491,6 +912,10 @@ function verdictForIssue(ctx: DetectorContext, issue: OpenIssueRow): 'problem' |
         ).get(issue.affectedObjectId, ctx.scope) as Record<string, unknown> | undefined;
         if (!row) return 'cleared'; // 已终结
         return relationGhostEndpoints(database, row).length ? 'problem' : 'cleared';
+      }
+      // WMB-5237 cross-reference：Wiki 页面当前版本仍含不可解析正式引用 → problem；重新编译干净 → cleared
+      if (issue.affectedObjectType === 'wiki_page') {
+        return pageCurrentBrokenRefs(ctx, issue.affectedObjectId).length ? 'problem' : 'cleared';
       }
       // 证据链接坏引用：Note 版本仍存在任意坏证据 → problem
       const links = database.prepare(
@@ -527,6 +952,22 @@ function verdictForIssue(ctx: DetectorContext, issue: OpenIssueRow): 'problem' |
       if (!row || String(row.lifecycle) !== 'active' || String(row.compileStatus) !== 'stale') return 'cleared';
       return 'problem';
     }
+    case 'orphan_knowledge':
+      return orphanNoteCondition(ctx, issue.affectedObjectId) ? 'problem' : 'cleared';
+    case 'missing_wiki_page':
+      return (issue.affectedObjectType === 'knowledge_entity'
+        ? entityMissingPageCondition(ctx, issue.affectedObjectId)
+        : topicMissingPageCondition(ctx, issue.affectedObjectId)) ? 'problem' : 'cleared';
+    case 'unsupported_claim':
+      return noteUnsupportedCondition(ctx, issue.affectedObjectId) ? 'problem' : 'cleared';
+    case 'stale_claim':
+      return noteStaleCondition(ctx, issue.affectedObjectId, now()) ? 'problem' : 'cleared';
+    case 'duplicate_knowledge':
+      return duplicateKnowledgePartner(ctx, issue.affectedObjectId) !== null ? 'problem' : 'cleared';
+    case 'duplicate_entity':
+      return duplicateEntityPartner(ctx, issue.affectedObjectId) !== null ? 'problem' : 'cleared';
+    case 'data_gap':
+      return dataGapCondition(ctx, issue.affectedObjectId, dataGapCutoffIso()) ? 'problem' : 'cleared';
     default:
       // 未知类型保守保持 open（不自动裁决）
       return 'problem';
@@ -655,11 +1096,31 @@ function detectForObject(ctx: DetectorContext, ref: HealthLintObjectRef): Health
         if (plan) plans.push(plan);
       }
       if (ctx.detectors.includes('broken_reference')) plans.push(...detectBrokenEvidenceForNote(ctx, ref.objectId));
+      if (ctx.detectors.includes('unsupported_claim')) {
+        const plan = unsupportedClaimPlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('stale_claim')) {
+        const plan = staleClaimPlan(ctx, ref.objectId, now());
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('orphan_knowledge')) {
+        const plan = orphanKnowledgePlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('duplicate_knowledge')) {
+        const plan = duplicateKnowledgePlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
       return plans;
     }
     case 'wiki_page': {
       if (ctx.detectors.includes('stale_wiki_page')) {
         const plan = staleWikiPagePlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('cross_reference')) {
+        const plan = crossReferencePlan(ctx, ref.objectId);
         if (plan) plans.push(plan);
       }
       return plans;
@@ -671,6 +1132,28 @@ function detectForObject(ctx: DetectorContext, ref: HealthLintObjectRef): Health
            WHERE subject_type = 'topic' AND subject_id = ? AND lifecycle = 'active' AND scope = ? LIMIT 1`
         ).get(ref.objectId, ctx.scope) as { id: string } | undefined;
         const plan = page ? staleWikiPagePlan(ctx, page.id) : null;
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('missing_wiki_page')) {
+        const plan = missingTopicPagePlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      return plans;
+    }
+    case 'knowledge_entity': {
+      if (ctx.detectors.includes('duplicate_entity')) {
+        const plan = duplicateEntityPlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      if (ctx.detectors.includes('missing_wiki_page')) {
+        const plan = missingEntityPagePlan(ctx, ref.objectId);
+        if (plan) plans.push(plan);
+      }
+      return plans;
+    }
+    case 'knowledge_free_note': {
+      if (ctx.detectors.includes('data_gap')) {
+        const plan = dataGapPlan(ctx, ref.objectId, dataGapCutoffIso());
         if (plan) plans.push(plan);
       }
       return plans;
@@ -1176,6 +1659,169 @@ function scanPhasePage(
       }
       return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
     }
+    case 'missing_entity_pages': {
+      if (!ctx.detectors.includes('missing_wiki_page')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT e.id FROM knowledge_entities e
+         WHERE e.scope = ? AND e.lifecycle = 'active' AND e.id > ?
+           AND NOT EXISTS (
+             SELECT 1 FROM knowledge_wiki_pages p
+             WHERE p.scope = e.scope AND p.subject_type = 'entity' AND p.subject_id = e.id AND p.lifecycle = 'active')
+           AND (EXISTS (
+                  SELECT 1 FROM knowledge_note_versions v JOIN knowledge_notes n ON n.id = v.note_id
+                  WHERE n.scope = e.scope AND v.adopted_entity_ids_json LIKE '%"' || e.id || '"%')
+                OR EXISTS (
+                  SELECT 1 FROM knowledge_formal_relations r
+                  WHERE r.scope = e.scope AND r.ended_change_set_id IS NULL
+                    AND r.to_object_type = 'knowledge_entity' AND r.to_object_id = e.id))
+         ORDER BY e.id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = missingEntityPagePlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'missing_topic_pages': {
+      if (!ctx.detectors.includes('missing_wiki_page')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT t.id FROM topics t
+         WHERE t.id > ?
+           AND NOT EXISTS (
+             SELECT 1 FROM knowledge_wiki_pages p
+             WHERE p.scope = ? AND p.subject_type = 'topic' AND p.subject_id = t.id AND p.lifecycle = 'active')
+           AND (EXISTS (
+                  SELECT 1 FROM knowledge_note_versions v JOIN knowledge_notes n ON n.id = v.note_id
+                  WHERE n.scope = ? AND v.adopted_topic_ids_json LIKE '%"' || t.id || '"%')
+                OR EXISTS (
+                  SELECT 1 FROM knowledge_formal_relations r
+                  WHERE r.scope = ? AND r.ended_change_set_id IS NULL
+                    AND r.to_object_type = 'topic' AND r.to_object_id = t.id))
+         ORDER BY t.id LIMIT ?`
+      ).all(cp.cursor, ctx.scope, ctx.scope, ctx.scope, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = missingTopicPagePlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'orphan_notes': {
+      if (!ctx.detectors.includes('orphan_knowledge')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT n.id FROM knowledge_notes n
+         WHERE n.scope = ? AND n.lifecycle = 'active' AND n.kind != 'question' AND n.id > ?
+           AND NOT EXISTS (
+             SELECT 1 FROM knowledge_evidence_links e
+             JOIN knowledge_note_versions v ON v.id = e.knowledge_note_version_id
+             WHERE v.note_id = n.id)
+           AND NOT EXISTS (
+             SELECT 1 FROM knowledge_formal_relations r
+             WHERE r.scope = n.scope AND r.ended_change_set_id IS NULL
+               AND (r.from_object_id = n.id OR r.to_object_id = n.id))
+         ORDER BY n.id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = orphanKnowledgePlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'unsupported_claims': {
+      if (!ctx.detectors.includes('unsupported_claim')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT n.id FROM knowledge_notes n
+         JOIN knowledge_note_versions v ON v.id = n.current_version_id
+         WHERE n.scope = ? AND n.lifecycle = 'active'
+           AND v.conclusion_status IN ('supported','contradicted')
+           AND NOT EXISTS (SELECT 1 FROM knowledge_evidence_links e WHERE e.knowledge_note_version_id = v.id)
+           AND n.id > ?
+         ORDER BY n.id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = unsupportedClaimPlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'stale_claims': {
+      if (!ctx.detectors.includes('stale_claim')) return { scanned: 0, plans, lastId: '' };
+      const nowIso = now();
+      const rows = database.prepare(
+        `SELECT n.id FROM knowledge_notes n
+         JOIN knowledge_note_versions v ON v.id = n.current_version_id
+         WHERE n.scope = ? AND n.lifecycle = 'active' AND v.valid_until IS NOT NULL AND v.valid_until < ?
+           AND n.id > ?
+         ORDER BY n.id LIMIT ?`
+      ).all(ctx.scope, nowIso, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = staleClaimPlan(ctx, row.id, nowIso);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'duplicate_notes': {
+      if (!ctx.detectors.includes('duplicate_knowledge')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT n.id FROM knowledge_notes n
+         JOIN knowledge_note_versions v ON v.id = n.current_version_id
+         WHERE n.scope = ? AND n.lifecycle = 'active' AND n.id > ?
+           AND EXISTS (
+             SELECT 1 FROM knowledge_notes n2
+             JOIN knowledge_note_versions v2 ON v2.id = n2.current_version_id
+             WHERE n2.scope = n.scope AND n2.lifecycle = 'active' AND n2.id != n.id
+               AND n2.kind = n.kind AND trim(lower(v2.statement)) = trim(lower(v.statement)))
+         ORDER BY n.id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = duplicateKnowledgePlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'duplicate_entities': {
+      if (!ctx.detectors.includes('duplicate_entity')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT e.id FROM knowledge_entities e
+         WHERE e.scope = ? AND e.lifecycle = 'active' AND e.external_identity_json != '{}' AND e.id > ?
+           AND EXISTS (
+             SELECT 1 FROM knowledge_entities e2
+             WHERE e2.scope = e.scope AND e2.lifecycle = 'active' AND e2.id != e.id
+               AND e2.external_identity_json = e.external_identity_json)
+         ORDER BY e.id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = duplicateEntityPlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'cross_references': {
+      if (!ctx.detectors.includes('cross_reference')) return { scanned: 0, plans, lastId: '' };
+      const rows = database.prepare(
+        `SELECT id FROM knowledge_wiki_pages
+         WHERE scope = ? AND lifecycle = 'active' AND id > ?
+         ORDER BY id LIMIT ?`
+      ).all(ctx.scope, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = crossReferencePlan(ctx, row.id);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
+    case 'data_gaps': {
+      if (!ctx.detectors.includes('data_gap')) return { scanned: 0, plans, lastId: '' };
+      const cutoffIso = dataGapCutoffIso();
+      const rows = database.prepare(
+        `SELECT id FROM knowledge_free_notes
+         WHERE scope = ? AND processing_state = 'captured' AND created_at < ? AND id > ?
+         ORDER BY id LIMIT ?`
+      ).all(ctx.scope, cutoffIso, cp.cursor, limit) as Array<{ id: string }>;
+      for (const row of rows) {
+        const plan = dataGapPlan(ctx, row.id, cutoffIso);
+        if (plan) plans.push(plan);
+      }
+      return { scanned: rows.length, plans, lastId: rows.length ? String(rows[rows.length - 1]!.id) : '' };
+    }
   }
 }
 
@@ -1357,6 +2003,9 @@ function affectedObjectsFromChangeSet(
   for (const note of input.notes ?? []) {
     if (note.id) push(note.scope, 'knowledge_note', note.id);
     else push(note.scope, 'knowledge_note', noteIdByKey(database, note.scope, note.canonicalKey));
+  }
+  for (const freeNote of input.freeNotes ?? []) {
+    push(freeNote.scope, 'knowledge_free_note', freeNote.id);
   }
   for (const page of input.wikiPages ?? []) {
     if (page.id) push(page.scope, 'wiki_page', page.id);

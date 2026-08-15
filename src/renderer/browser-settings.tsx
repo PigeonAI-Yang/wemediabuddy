@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { WmbSettingsSnapshot } from './wmb-settings-types';
 
-type BrowserPlatform = 'x' | 'wechat';
+type BrowserPlatform = 'x' | 'wechat' | 'zhihu';
 type TimelineCacheStats = { rows: number; bytes: number; accounts: number };
 
 function formatBytes(value: number): string {
@@ -23,7 +23,7 @@ function expectedAccountsText(snapshot: WmbSettingsSnapshot['browserBinding']): 
   const entries = Object.entries(snapshot?.expectedAccountSnapshot ?? {});
   if (!entries.length) return '尚未记录已验证账号';
   return entries.map(([platform, account]) => {
-    const name = platform === 'x' ? 'X' : platform === 'wechat' ? '微信公众号' : platform;
+    const name = platform === 'x' ? 'X' : platform === 'wechat' ? '微信公众号' : platform === 'zhihu' ? '知乎' : platform;
     const key = account?.accountKey || account?.displayName || '未知账号';
     return `${name} · ${key}`;
   }).join('；');
@@ -41,7 +41,7 @@ export function BrowserSettings({
   refresh: () => void;
 }): React.JSX.Element {
   const browserPlatforms = (settings.workspace.profile.platforms ?? []).filter(
-    (platform): platform is BrowserPlatform => platform === 'x' || platform === 'wechat',
+    (platform): platform is BrowserPlatform => platform === 'x' || platform === 'wechat' || platform === 'zhihu',
   );
   const [browserPlatform, setBrowserPlatform] = useState<BrowserPlatform>(browserPlatforms[0] ?? 'x');
   const [browserNote, setBrowserNote] = useState('');
@@ -58,7 +58,7 @@ export function BrowserSettings({
   const bound = settings.boundBrowserProfile;
   const selectedProfile = settings.browserProfiles.find((profile) => profile.id === browserChoice) ?? null;
   const isCurrentChoice = Boolean(browserChoice && browserChoice === settings.browserBinding?.profileId);
-  const platformName = browserPlatform === 'x' ? 'X' : '微信公众号';
+  const platformName = browserPlatform === 'x' ? 'X' : browserPlatform === 'wechat' ? '微信公众号' : '知乎';
 
   useEffect(() => {
     void window.wmb.getXListTimelineCacheStats()
@@ -224,7 +224,7 @@ export function BrowserSettings({
           >
             {browserPlatforms.length === 0 && <option value="x">当前工作空间未启用可验证平台</option>}
             {browserPlatforms.map((platform) => (
-              <option key={platform} value={platform}>{platform === 'x' ? 'X' : '微信公众号'}</option>
+              <option key={platform} value={platform}>{platform === 'x' ? 'X' : platform === 'wechat' ? '微信公众号' : '知乎'}</option>
             ))}
           </select>
         </label>

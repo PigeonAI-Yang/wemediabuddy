@@ -1,5 +1,6 @@
 import type { ContentProjectDetail, ContentProjectPlatform, ContentProjectStatus, ContentProjectStatusSummary, ContentProjectSummary } from '../main/content';
 import type { StudioAnnotation } from '../shared/studio-annotations';
+import { AppModal } from './app-modal';
 import { PlatformMark } from './platform-mark';
 import { formatTime, platformNames, statuses } from './studio-view-helpers';
 import { studioPlatformTab, type StudioTab } from './studio-platform-tabs';
@@ -77,16 +78,18 @@ export function StudioLibraryHeader({ summary, projects, hasMore, status, archiv
   </section>;
 }
 
-export function StudioEditorTop({ selected, dirty, latestCreatedAt, documentLabel, onBack, toggleContext, viewedVersion, editorMode, setEditorMode, busy, save }: {
-  selected: ContentProjectDetail | null; dirty: boolean; latestCreatedAt?: string; documentLabel?: string; onBack: () => void; toggleContext: () => void;
+export function StudioEditorTop({ selected, dirty, latestCreatedAt, documentLabel, onBack, onToggleHistory, historyOpen, viewedVersion, editorMode, setEditorMode, busy, save, preparePublication, prepareLabel, prepareDisabled }: {
+  selected: ContentProjectDetail | null; dirty: boolean; latestCreatedAt?: string; documentLabel?: string; onBack: () => void; onToggleHistory: () => void; historyOpen: boolean;
   viewedVersion: boolean;
   editorMode: 'rich' | 'source'; setEditorMode: (value: 'rich' | 'source') => void; busy: boolean; save: () => Promise<void>;
+  preparePublication?: () => Promise<void>; prepareLabel?: string; prepareDisabled?: boolean;
 }): React.JSX.Element {
   return <div className="studio-editor-top"><div className="studio-head-copy">
     <div className="studio-crumbs"><button className="studio-top-back" onClick={onBack}>创作库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
     <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>{documentLabel ?? `核心正文 · 第 ${selected.versionCount} 版`} · <b>{dirty ? '有未保存修改' : '已保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latestCreatedAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
-  </div><div className="studio-grow"/><button className="secondary-button" onClick={toggleContext}>版本</button>
+  </div><div className="studio-grow"/><button className="secondary-button" onClick={onToggleHistory} aria-expanded={historyOpen} aria-controls="studio-history-modal-dialog">版本</button>
   {!viewedVersion ? <div className="studio-mode-switch" role="group" aria-label="编辑模式"><button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码</button><button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>渲染编辑</button></div> : null}
+  {preparePublication && <button className="secondary-button" disabled={busy || prepareDisabled} onClick={() => void preparePublication()}>{prepareLabel ?? '准备发布'}</button>}
   <button className="primary-button" disabled={!selected || busy || viewedVersion} onClick={() => void save()} title={viewedVersion ? '历史版本只读，请返回最新版后再保存' : dirty ? '保存当前修改' : '内容未改动'}>保存</button></div>;
 }
 
@@ -160,7 +163,8 @@ export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdow
   </div>;
 }
 
-export function StudioContext({ selected, setTab, setViewedVersionId, latestId, activePlatform, selectedPlatformVersionId, setSelectedPlatformVersionId, annotationView }: {
+export function StudioHistoryModal({ open, selected, setTab, setViewedVersionId, latestId, activePlatform, selectedPlatformVersionId, setSelectedPlatformVersionId, annotationView, onRequestClose }: {
+  open: boolean;
   selected: ContentProjectDetail | null;
   setTab: (value: StudioTab) => void;
   setViewedVersionId: (value: string) => void; latestId?: string;
@@ -168,15 +172,24 @@ export function StudioContext({ selected, setTab, setViewedVersionId, latestId, 
   selectedPlatformVersionId?: string | null;
   setSelectedPlatformVersionId?: (value: string) => void;
   annotationView: StudioAnnotationViewProps;
+  onRequestClose: () => void;
 }): React.JSX.Element {
   const platformVersions = activePlatform && selected ? selected.platformVersions[activePlatform] ?? [] : [];
   const showAnnotations = annotationView.tab === 'annotations';
-  return <aside className="studio-context-v2" aria-label="版本与批注">
-    <div className="studio-context-tabs" role="tablist" aria-label="右侧面板">
+  return <AppModal
+    open={open}
+    title="创作记录"
+    size="large"
+    className="studio-history-modal"
+    ariaDescription="版本历史与批注"
+    testId="studio-history-modal"
+    onRequestClose={onRequestClose}
+  >
+    <div className="studio-history-tabs" role="tablist" aria-label="创作记录">
       <button type="button" role="tab" aria-selected={showAnnotations} className={showAnnotations ? 'active' : ''} onClick={() => annotationView.setTab('annotations')}>批注 {annotationView.openCount}</button>
       <button type="button" role="tab" aria-selected={!showAnnotations} className={!showAnnotations ? 'active' : ''} onClick={() => annotationView.setTab('versions')}>版本 {annotationView.versionCount}</button>
     </div>
-    <div className="studio-context-body">
+    <div className="studio-history-body">
       {showAnnotations && <StudioAnnotationsPanel
         rows={annotationView.rows}
         loading={annotationView.loading}
@@ -196,25 +209,25 @@ export function StudioContext({ selected, setTab, setViewedVersionId, latestId, 
         {selected && activePlatform && <>
           <p className="studio-panel-title">{platformNames[activePlatform]}版本</p>
           {platformVersions.map((version, index) => (
-            <button type="button" className={`studio-context-version${(selectedPlatformVersionId ?? platformVersions[0]?.id) === version.id ? ' active' : ''}`} key={version.id} onClick={() => setSelectedPlatformVersionId?.(version.id)}>
+            <button type="button" className={`studio-history-version${(selectedPlatformVersionId ?? platformVersions[0]?.id) === version.id ? ' active' : ''}`} key={version.id} onClick={() => { setSelectedPlatformVersionId?.(version.id); onRequestClose(); }}>
               <strong>{version.title || `平台版本 ${version.id.slice(0, 8)}`}{index === 0 ? ' · 最新' : ''}</strong>
               <small>版本 {version.revision} · {formatTime(version.updatedAt)} · 绑定核心第 {selected.revisions.find((item) => item.id === version.contentVersionId)?.number ?? version.contentVersionId} 版</small>
             </button>
           ))}
-          {!platformVersions.length && <div className="studio-context-hint">尚无平台版本；在中央编辑器输入正文并保存即可创建首版。</div>}
-          {!!platformVersions.length && <div className="studio-context-hint">点击任一平台版本，在中央编辑器继续修改。</div>}
+          {!platformVersions.length && <div className="studio-history-hint">尚无平台版本；在中央编辑器输入正文并保存即可创建首版。</div>}
+          {!!platformVersions.length && <div className="studio-history-hint">点击任一平台版本，在中央编辑器继续修改。</div>}
         </>}
         {selected && !activePlatform && <>
           <p className="studio-panel-title">版本历史</p>
           {selected.revisions.map((version) => (
-            <button type="button" className="studio-context-version" key={version.id} onClick={() => { setTab('versions'); setViewedVersionId(version.id); }}>
+            <button type="button" className="studio-history-version" key={version.id} onClick={() => { setTab('versions'); setViewedVersionId(version.id); onRequestClose(); }}>
               <strong>第 {version.number} 版{version.id === latestId ? ' · 最新' : ''}</strong>
               <small>{formatTime(version.createdAt)} · {version.author === 'user' ? '你修改' : 'Pi 创建'}</small>
             </button>
           ))}
-          <div className="studio-context-hint">点版本进入只读查看。关联来源与素材在底部状态条，可点击跳转。</div>
+          <div className="studio-history-hint">点版本进入只读查看。关联来源与素材在底部状态条，可点击跳转。</div>
         </>}
       </>}
     </div>
-  </aside>;
+  </AppModal>;
 }

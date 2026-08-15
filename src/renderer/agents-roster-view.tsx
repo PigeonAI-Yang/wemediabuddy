@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
 import { AgentAvatarCropDialog } from './agent-avatar-crop';
-import { AgentsDetailDrawer } from './agents-detail-drawer';
+import { AgentsDetailModal } from './agents-detail-modal';
 import { resolveDeskConflict } from './agents-roster-conflict';
 import {
   EMPLOYEE_ORDER,
@@ -36,9 +36,12 @@ export function AgentsRosterView({
   const [tick, setTick] = useState(0);
   const [avatarByRole, setAvatarByRole] = useState<Partial<Record<RoleId, string>>>({});
   const [cropRole, setCropRole] = useState<RoleId | null>(null);
-  const [drawerRole, setDrawerRole] = useState<RoleId | null>(null);
-  const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
+  const [modalRole, setModalRole] = useState<RoleId | null>(null);
+  const [modalJobId, setModalJobId] = useState<string | null>(null);
   const focusReturn = useRef<HTMLElement | null>(null);
+  // 头像裁切期间暂存详情弹窗状态：裁切弹窗是独立模态层，关闭详情弹窗避免嵌套，
+  // 裁切关闭后按原 role/job 恢复详情弹窗。
+  const cropReturn = useRef<{ role: RoleId; jobId: string | null } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -118,19 +121,35 @@ export function AgentsRosterView({
   );
   void tick;
 
-  const openRoleDrawer = (roleId: RoleId) => {
+  const openRoleModal = (roleId: RoleId) => {
     if (document.activeElement instanceof HTMLElement) focusReturn.current = document.activeElement;
     const roleKey: EmployeeRole | null = roleId === 'desk' ? null : (roleId as EmployeeRole);
     const ordered = roleKey ? sortInstancesForDisplay(projection?.byRole[roleKey]?.active ?? []) : [];
-    setDrawerRole(roleId);
-    setDrawerJobId(ordered[0]?.jobId ?? null);
+    setModalRole(roleId);
+    setModalJobId(ordered[0]?.jobId ?? null);
   };
 
-  const closeDrawer = () => {
-    setDrawerRole(null);
-    setDrawerJobId(null);
-    focusReturn.current?.focus();
-    focusReturn.current = null;
+  const closeModal = () => {
+    // 仅清 UI 状态；运行中任务继续执行，订阅由详情弹窗卸载清理。
+    setModalRole(null);
+    setModalJobId(null);
+  };
+
+  const openAvatarCrop = (roleId: RoleId) => {
+    cropReturn.current = { role: roleId, jobId: modalJobId };
+    setCropRole(roleId);
+    setModalRole(null);
+    setModalJobId(null);
+  };
+
+  const closeAvatarCrop = () => {
+    setCropRole(null);
+    const pending = cropReturn.current;
+    cropReturn.current = null;
+    if (pending) {
+      setModalRole(pending.role);
+      setModalJobId(pending.jobId);
+    }
   };
 
   const cancel = async (jobId: string) => {
@@ -191,8 +210,8 @@ export function AgentsRosterView({
               deskConflict={deskConflict}
               projection={projection}
               avatarByRole={avatarByRole}
-              expanded={drawerRole === roleId}
-              onOpenRole={openRoleDrawer}
+              expanded={modalRole === roleId}
+              onOpenRole={openRoleModal}
             />
           ))}
         </div>
@@ -250,29 +269,30 @@ export function AgentsRosterView({
         </div>
       )}
 
-      {drawerRole !== null && projection ? (
-        <>
-          <button type="button" className="drawer-backdrop open" aria-label="关闭运行明细" onClick={closeDrawer} />
-          <AgentsDetailDrawer
-            roleId={drawerRole}
-            projection={projection}
-            selectedJobId={drawerJobId}
-            deskRow={deskRow}
-            deskOccupied={deskOccupied}
-            deskConflict={deskConflict}
-            onSelectJobId={setDrawerJobId}
-            onClose={closeDrawer}
-            onCopyJobId={copyJobId}
-            onPickAvatar={setCropRole}
-          />
-        </>
+      {modalRole !== null && projection ? (
+        <AgentsDetailModal
+          roleId={modalRole}
+          projection={projection}
+          selectedJobId={modalJobId}
+          deskRow={deskRow}
+          roleRow={modalRole === 'desk' ? null : roster.find((r) => r.roleId === modalRole) ?? null}
+          deskOccupied={deskOccupied}
+          deskConflict={deskConflict}
+          avatarUrl={avatarByRole[modalRole]}
+          onSelectJobId={setModalJobId}
+          onClose={closeModal}
+          onCopyJobId={copyJobId}
+          onPickAvatar={openAvatarCrop}
+          returnFocusRef={focusReturn}
+        />
       ) : null}
 
       {cropRole ? (
         <AgentAvatarCropDialog
           roleId={cropRole}
           roleLabel={cropRole === 'desk' ? (deskRow?.labelZh ?? ROLE_CATALOG.desk.labelZh) : ROLE_CATALOG[cropRole].labelZh}
-          onClose={() => setCropRole(null)}
+          initialImage={avatarByRole[cropRole]}
+          onClose={closeAvatarCrop}
           onSaved={(url) => {
             setAvatarByRole((prev) => ({ ...prev, [cropRole]: url }));
           }}

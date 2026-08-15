@@ -159,14 +159,30 @@ export type KnowledgeCanvasSelectionManifestItem = Readonly<{
   snapshot: Readonly<Record<string, unknown>> | null;
 }>;
 
+/** 未纳入项原因：重复正式身份 / 无效或已消失节点 / 字符或项数限长裁剪。 */
+export type KnowledgeCanvasSelectionExcludedReason = 'duplicate' | 'invalid' | 'over_limit';
+
+export type KnowledgeCanvasSelectionExcluded = Readonly<{
+  nodeId: string;
+  /** 非法 ID 解析失败时无法得知正式类型，为 null；其余为节点正式类型。 */
+  objectType: string | null;
+  reason: KnowledgeCanvasSelectionExcludedReason;
+}>;
+
 /**
  * selected-only 创作动作的规范输入清单：UI 展示的清单与正式写使用的清单必须是同一份
  * （不允许 UI 显示选中 A、服务端实际使用全画布）。越界/重复节点由 main 拒绝。
+ * WMB-5243：excludedCount 为全部未纳入项计数（重复正式身份 + 无效/已消失节点 +
+ * 字符/项数限长裁剪），excludedReasons 为可选有界明细；UI/Pi 必须以 excludedCount 明示数量。
  */
 export type KnowledgeCanvasSelectionManifest = Readonly<{
   scope: 'selected_only';
   canvasId: string;
   items: readonly KnowledgeCanvasSelectionManifestItem[];
+  /** 全部未纳入项计数：重复正式身份 + 无效/已消失节点 + 限长裁剪（用户显式排除除外）。 */
+  excludedCount: number;
+  /** 可选有界未纳入明细（按出现顺序；计数以 excludedCount 为准，明细可截断）。 */
+  excludedReasons?: readonly KnowledgeCanvasSelectionExcluded[];
   estimatedCharacters: number;
   limitCharacters: number;
   overLimit: boolean;

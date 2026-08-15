@@ -299,10 +299,11 @@ test('view DOM gates: overview first, active+history unified second (WMB-5151/51
 
 test('view DOM gates: overview cards are whole-card buttons with truthful progress (WMB-5195)', async () => {
   const overview = await readFile(new URL('../src/renderer/agents-roster-overview.tsx', import.meta.url), 'utf8');
-  // 整卡 button + 键盘语义：aria-expanded/aria-controls，禁止卡内嵌套交互元素（头像按钮已移除）。
+  // 整卡 button + 键盘语义：aria-expanded/aria-haspopup/aria-controls 引用共享弹窗 dialog id，禁止卡内嵌套交互元素（头像按钮已移除）。
   assert.match(overview, /className="agents-role-card/);
   assert.match(overview, /aria-expanded=\{expanded\}/);
-  assert.match(overview, /aria-controls="agents-detail-panel"/);
+  assert.match(overview, /aria-haspopup="dialog"/);
+  assert.match(overview, /aria-controls="agents-detail-modal-dialog"/);
   assert.doesNotMatch(overview, /agents-role-avatar/, 'avatar is not a nested button inside the card anymore');
   // 进度轨主导：卡内恒显 role=progressbar；确定轨带 aria-valuenow，不确定轨只加 indeterminate 类。
   assert.match(overview, /role="progressbar"/);
@@ -317,44 +318,49 @@ test('view DOM gates: overview cards are whole-card buttons with truthful progre
   assert.match(overview, /agents-role-card is-desk/);
 });
 
-test('view DOM gates: detail drawer reads real data through shared read-only APIs (WMB-5195)', async () => {
+test('view DOM gates: detail modal reads real data through shared read-only APIs (WMB-5195/5251)', async () => {
   const source = await readFile(new URL('../src/renderer/agents-roster-view.tsx', import.meta.url), 'utf8');
-  const drawer = await readFile(new URL('../src/renderer/agents-detail-drawer.tsx', import.meta.url), 'utf8');
-  // 同页右侧抽屉：复用既有 drawer/panel 模式（sources-panel + drawer-backdrop），非 modal。
-  assert.match(source, /<AgentsDetailDrawer[\s>]/);
-  assert.match(source, /className="drawer-backdrop open"/);
-  assert.match(drawer, /className="sources-panel open agents-detail-panel"/);
+  const modal = await readFile(new URL('../src/renderer/agents-detail-modal.tsx', import.meta.url), 'utf8');
+  // WMB-5251：详情抽屉迁移为共享 AppModal（size=standard），不再渲染 sources-panel/drawer-backdrop 抽屉层。
+  assert.match(source, /<AgentsDetailModal[\s>]/);
+  assert.doesNotMatch(source, /drawer-backdrop/, 'agents roster must not render the global drawer backdrop');
+  assert.match(modal, /<AppModal[\s>]/);
+  assert.match(modal, /size="standard"/);
+  assert.match(modal, /className="agents-detail-modal"/);
+  assert.match(modal, /testId="agents-detail-modal"/);
+  assert.match(modal, /returnFocusRef=\{returnFocusRef\}/);
   // 员工：authoritative projection/task/job transcript；主管：roster taskId + 当前 Pi conversation，同一 dock 事件流。
-  assert.match(drawer, /projection\.byRole/);
-  assert.match(drawer, /window\.wmb\.getAgentTask\(\{ id: selected\.taskId \}\)\.catch\(\(\) => null\)/);
-  assert.match(drawer, /window\.wmb\.jobsMessages\(selected\.jobId\)\.catch\(\(\) => \[\]\)/);
-  assert.match(drawer, /window\.wmb\.getAgentTaskTranscript\(selected\.jobId\)\.catch\(\(\) => null\)/);
+  assert.match(modal, /projection\.byRole/);
+  assert.match(modal, /window\.wmb\.getAgentTask\(\{ id: selected\.taskId \}\)\.catch\(\(\) => null\)/);
+  assert.match(modal, /window\.wmb\.jobsMessages\(selected\.jobId\)\.catch\(\(\) => \[\]\)/);
+  assert.match(modal, /window\.wmb\.getAgentTaskTranscript\(selected\.jobId\)\.catch\(\(\) => null\)/);
   assert.match(source, /deskRow=\{deskRow\}/);
   assert.match(source, /deskOccupied=\{deskOccupied\}/);
-  assert.match(drawer, /window\.wmb\.getAgentTask\(\{ id: deskRow\.taskId \}\)\.catch\(\(\) => null\)/);
-  assert.match(drawer, /window\.wmb\.getPiConversation\(\)\.catch\(\(\) => null\)/);
-  assert.match(drawer, /applyPiTranscriptEvent\(items \?\? \[\], event\)/);
-  assert.match(drawer, /mergePiConversationWithLive\(disk, current\)/);
-  assert.match(drawer, />实时运行记录</);
+  assert.match(modal, /window\.wmb\.getAgentTask\(\{ id: deskRow\.taskId \}\)\.catch\(\(\) => null\)/);
+  assert.match(modal, /window\.wmb\.getPiConversation\(\)\.catch\(\(\) => null\)/);
+  assert.match(modal, /applyPiTranscriptEvent\(items \?\? \[\], event\)/);
+  assert.match(modal, /mergePiConversationWithLive\(disk, current\)/);
+  assert.match(modal, />实时运行记录</);
   // 员工事件重读；主管实时归并并低频与磁盘对账；关闭清理。
-  assert.match(drawer, /setInterval\(reload, 5000\)/);
-  assert.match(drawer, /window\.addEventListener\('keydown'/);
+  assert.match(modal, /setInterval\(reload, 5000\)/);
+  // Esc/遮罩/焦点由共享 AppModal 承担，feature 不得重建 keydown 监听。
+  assert.doesNotMatch(modal, /window\.addEventListener\('keydown'/, 'Escape close must be owned by shared AppModal');
   // 空态精确「暂无运行明细」，不伪造记录。
-  assert.match(drawer, />暂无运行明细</);
-  assert.doesNotMatch(drawer, /Math\.random|0\.62|0\.28|0\.15/, 'no fabricated progress values');
+  assert.match(modal, />暂无运行明细</);
+  assert.doesNotMatch(modal, /Math\.random|0\.62|0\.28|0\.15/, 'no fabricated progress values');
 });
 
 test('detail transcript separates input, notices, replies, thinking, and tools (WMB-5196)', async () => {
-  const drawer = await readFile(new URL('../src/renderer/agents-detail-drawer.tsx', import.meta.url), 'utf8');
+  const modal = await readFile(new URL('../src/renderer/agents-detail-modal.tsx', import.meta.url), 'utf8');
   const css = await readFile(new URL('../src/renderer/styles-agents.css', import.meta.url), 'utf8');
-  assert.match(drawer, /isPiSystemEvent\(message\)/);
-  assert.match(drawer, /<details className="agents-detail-bubble agents-detail-entry system-event">/);
+  assert.match(modal, /isPiSystemEvent\(message\)/);
+  assert.match(modal, /<details className="agents-detail-bubble agents-detail-entry system-event">/);
   for (const label of ['系统通知', '安排记录', '任务输入', '智能体回复', '智能体执行', '思考', '回复']) {
-    assert.match(drawer, new RegExp(`>${label}<`), `${label} semantic label must remain visible`);
+    assert.match(modal, new RegExp(`>${label}<`), `${label} semantic label must remain visible`);
   }
-  assert.match(drawer, /segment\.isError \? '错误' : '工具'/);
-  assert.match(drawer, /const isLongInput = text\.length > 360 \|\| text\.split\('\\n'\)\.length > 8/);
-  assert.match(drawer, /<details className="agents-detail-expandable">/);
+  assert.match(modal, /segment\.isError \? '错误' : '工具'/);
+  assert.match(modal, /const isLongInput = text\.length > 360 \|\| text\.split\('\\n'\)\.length > 8/);
+  assert.match(modal, /<details className="agents-detail-expandable">/);
   assert.match(css, /\.agents-detail-expandable > summary \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(css, /\.agents-detail-transcript \{[\s\S]*gap: 0;[\s\S]*overflow: hidden;/);
   assert.match(css, /\.agents-detail-entry\.user \{[\s\S]*background: color-mix/);

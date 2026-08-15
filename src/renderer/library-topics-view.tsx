@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { workspaceStorageKey } from './workspace-storage'; import { TopicMaintenanceLedger } from './topic-maintenance-ledger.tsx';
 import { severityLabel } from './knowledge-canvas-projection';
+import { SourceMark } from './source-mark';
+// WMB-5239：共享搜索/日志 hooks 与深链分发（单源 IPC；topicId 限定当前主题范围）。
+import {
+  dispatchWikiDeepLink,
+  dispatchWikiLogEntry,
+  formatWikiWhen,
+  useKnowledgeLog,
+  useWikiIndexSummary,
+  useWikiSearch,
+  wikiLogEntryDeepLinkInput,
+  wikiLogEventLabel,
+  wikiLogObjectLabel,
+  wikiSearchObjectLabel,
+} from './wiki-discovery';
+// WMB-5239：主题页特有展示策略（与回执时间线重叠过滤、索引状态提示）。
+import { isTopicLogSupplementary, topicIndexStatusLabel } from './topic-search-log';
 import type {
   KnowledgeCompileStatus,
   KnowledgeHealthIssueRecord,
@@ -218,24 +234,20 @@ const WIKI_DETAIL_LIMITS = {
 } as const;
 
 const COMPILE_STATUS_LABELS: Record<string, string> = {
-  current: '已编译',
-  stale: '待重编译',
-  compiling: '编译中',
-  failed: '编译失败',
+  current: '已整理',
+  stale: '有新资料待更新',
+  compiling: '正在整理新资料',
+  failed: '整理失败',
 };
 
 // WMB-5233：诚实三态用户语言（uncompiled / legacy_shell / compiled）。
 // legacy_shell = 历史初始化（migration/derived-from-legacy）创建的初始页，零采纳知识；
-// 空壳不得显示“已编译/当前”，必须如实表达“初始档案/尚未编译”。
-const COMPILE_STATE_LABELS: Record<string, string> = {
-  uncompiled: '尚未编译',
-  legacy_shell: '初始档案',
-  compiled: '已编译',
-};
+// WMB-5242：统一整理语言（compiled→已整理 / uncompiled→尚未整理 / legacy_shell→初始档案）。
+const COMPILE_STATE_LABELS: Record<string, string> = { uncompiled: '等待整理', legacy_shell: '初始档案', compiled: '已整理' }
 
 const COMPILE_STATE_HINTS: Record<string, string> = {
-  uncompiled: '本主题还没有正式编译的 Wiki：继续保存可靠来源，Pi 会把可验证、可复用的部分编译到这里。',
-  legacy_shell: '本页由历史资料迁移自动建立（初始档案），尚无采纳知识：继续保存来源并编译后将形成正式认识。',
+  uncompiled: '本主题还没有整理出当前认识：继续保存可靠来源，资料员会把可验证、可复用的部分持续整理到这里。',
+  legacy_shell: '本页由历史资料迁移自动建立（初始档案），还没有形成正式认识：继续保存来源，将逐步整理出当前认识。',
   compiled: '',
 };
 
@@ -323,8 +335,8 @@ const HEALTH_TYPE_LABELS: Record<string, string> = {
   duplicate_entity: '重复实体',
   duplicate_knowledge: '重复知识',
   orphan_knowledge: '孤立知识',
-  missing_wiki_page: '缺少 Wiki 页',
-  stale_wiki_page: 'Wiki 已过期',
+  missing_wiki_page: '尚未整理',
+  stale_wiki_page: '有新资料待更新',
   broken_reference: '失效引用',
   unreturned_review: '复盘未回流',
   underperforming_method: '方法表现不佳',
@@ -343,7 +355,7 @@ const HEALTH_STATUS_LABELS: Record<string, string> = {
 const RECEIPT_TRIGGER_LABELS: Record<string, string> = {
   ingest: '资料更新',
   query: 'Pi 对话',
-  lint: '知识检查',
+  lint: '整理检查',
   creation: '创作回流',
   review: '复盘回流',
   migration: '档案初始化',
@@ -858,7 +870,7 @@ function changeTypeLabel(value?: string | null): string {
     archived: '归档',
     rejected: '排除',
     restored: '恢复',
-    recompiled: '重编译',
+    recompiled: '重新整理',
   };
   return labels[value ?? ''] ?? value ?? '变化';
 }
@@ -963,15 +975,14 @@ function patchSourceItem(
   };
 }
 
+// WMB-5242：列表卡元信息以「更新于…」和资料/创作使用为主（知识目录语义；去掉机会等管线词）。
 function listTopicMeta(item: TopicListItem): string {
   const parts: string[] = [];
   const relative = formatRelativeTime(item.lastSeenAt);
-  if (relative) parts.push(relative);
+  if (relative) parts.push(`更新于 ${relative}`);
   parts.push(`${item.sourceCount ?? 0} 资料`);
-  parts.push(`${item.opportunityCount ?? 0} 机会`);
   if (item.contentCount != null) parts.push(`${item.contentCount} 内容`);
   if (item.publicationCount != null && item.publicationCount > 0) parts.push(`${item.publicationCount} 发布`);
-  parts.push(topicStatusLabel(item.status));
   return parts.join(' · ');
 }
 
@@ -984,6 +995,7 @@ export function LibraryTopicsView(props: {
   onOpenCanvas?: (canvasId?: string) => void;
   onOpenPi?: () => void;
   piConfigured?: boolean;
+  aiSourcePresentation?: boolean;
 }): React.JSX.Element {
   const {
     workspaceId,
@@ -994,6 +1006,7 @@ export function LibraryTopicsView(props: {
     onOpenCanvas,
     onOpenPi,
     piConfigured = false,
+    aiSourcePresentation = false,
   } = props;
 
   const [topics, setTopics] = useState<TopicListItem[]>([]);
@@ -1019,6 +1032,18 @@ export function LibraryTopicsView(props: {
   const [wikiError, setWikiError] = useState<string | null>(null);
   const [wikiReloadToken, setWikiReloadToken] = useState(0);
   const [wikiTab, setWikiTab] = useState<WikiTabId>('overview');
+  // WMB-5239：主题原位「搜索本主题资料 / 相关动态」（topicId 限定当前主题范围；无主题时不发 IPC）。
+  const [topicSearchQuery, setTopicSearchQuery] = useState('');
+  const topicScopeId = selectedTopicId ?? undefined;
+  const topicScopeEnabled = Boolean(selectedTopicId);
+  const topicSearch = useWikiSearch({ query: topicSearchQuery, topicId: topicScopeId, enabled: topicScopeEnabled, limit: 12 });
+  const topicActivity = useKnowledgeLog({ topicId: topicScopeId, enabled: topicScopeEnabled, limit: 30 });
+  const { summary: indexSummary, error: indexError } = useWikiIndexSummary({ enabled: topicScopeEnabled });
+  const indexHint = indexError ? '检索状态暂不可用' : topicIndexStatusLabel(indexSummary);
+  const topicActivityEntries = useMemo(
+    () => topicActivity.entries.filter((entry) => isTopicLogSupplementary(entry)),
+    [topicActivity.entries],
+  );
   const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const wikiLoadSeq = useRef(0);
@@ -1522,6 +1547,13 @@ export function LibraryTopicsView(props: {
     return parts.join(' · ');
   }, [sourceTotal, opportunityTotal, contentTotal, reviewTotal, recentLabel]);
 
+  // WMB-5242：最近整理时间 = 当前认识版本创建时间（唯一可读的整理时点）；尚未整理（无版本）时不显示时间。
+  const organizeLabel = useMemo(() => {
+    const time = wikiDetail?.wiki?.current?.createdAt ?? null;
+    if (!time) return null;
+    return formatRelativeTime(time) ?? formatWhen(time);
+  }, [wikiDetail]);
+
   const moveFocus = useCallback((delta: number) => {
     if (!topics.length) return;
     const currentIndex = topics.findIndex((item) => item.id === focusedTopicId);
@@ -1823,7 +1855,10 @@ export function LibraryTopicsView(props: {
     const busy = sourceUpdatingId === item.objectId;
     return <article key={itemKey(item)} className={`library-topic-card${contradicting ? ' contradicting' : ''}`}>
       <header>
-        <strong>{item.title}</strong>
+        <div className="library-topic-source-title">
+          <SourceMark canonicalUrl={originalUrl} aiSourcePresentation={aiSourcePresentation}/>
+          <strong>{item.title}</strong>
+        </div>
         <div className="library-topic-card-badges">
           <span className={`library-topic-badge${contradicting ? ' danger' : ''}`}>{relationLabel(relation)}</span>
           <time>{formatWhen(item.occurredAt)}</time>
@@ -2017,7 +2052,7 @@ export function LibraryTopicsView(props: {
     const countEntries = Object.entries(receipt.counts ?? {}).filter(([key, value]) => Number(value) > 0 && key in RECEIPT_COUNT_LABELS);
     const triggerLabel = RECEIPT_TRIGGER_LABELS[receipt.triggerType] ?? receipt.triggerType;
     const isMigration = receipt.triggerType === 'migration';
-    const visibleSummary = isMigration ? '已建立主题档案，后续资料会自动沉淀为当前认识。' : (receipt.summary || '知识已更新');
+    const visibleSummary = isMigration ? '已建立主题档案，后续资料会自动沉淀为当前认识。' : (receipt.summary || '当前认识已更新');
     return <article key={receipt.id} className="library-topic-card">
       <header>
         <strong>{visibleSummary}</strong>
@@ -2065,7 +2100,7 @@ export function LibraryTopicsView(props: {
 
   const renderWikiVersion = (version: KnowledgeWikiPageVersionRecord, isCurrent: boolean) => {
     const isMigration = version.compileReason?.includes('migration') || version.changeSummary?.includes('历史初始化') || version.readableDiff?.includes('derived-from-legacy');
-    const visibleSummary = isMigration ? '主题档案已建立，等待资料编译出第一版当前认识。' : (version.changeSummary || version.compileReason || '未记录变更说明');
+    const visibleSummary = isMigration ? '主题档案已建立，等待资料整理出第一版当前认识。' : (version.changeSummary || version.compileReason || '未记录变更说明');
     return <article key={version.id} className={`library-topic-card topic-wiki-version${isCurrent ? ' current' : ''}`}>
       <header>
         <strong><span className="topic-wiki-version-num">V{version.versionNumber}</span>{isMigration ? '主题档案初始化' : (version.title || '主题认识')}</strong>
@@ -2088,6 +2123,77 @@ export function LibraryTopicsView(props: {
         <span>恢复会生成新版本</span>
       </div> : null}
     </article>;
+  };
+
+  const renderTopicSearchBody = () => {
+    if (topicSearch.loading) return <p className="library-panel-empty">正在检索本主题资料…</p>;
+    if (topicSearch.error) return <div className="library-topic-error" role="alert">
+      <strong>本主题资料检索失败</strong>
+      <p>{topicSearch.error}</p>
+      <button type="button" onClick={topicSearch.retry}>重试</button>
+    </div>;
+    if (!topicSearchQuery.trim()) return <p className="library-panel-empty">输入关键词，检索本主题已收录的资料、知识与实体。</p>;
+    if (!topicSearch.results.length) return <p className="library-panel-empty">没有找到相关内容。搜索全部资料可到资料库。</p>;
+    return <>
+      <p className="topic-wiki-search-count" role="status">找到 {topicSearch.total} 条结果</p>
+      <div className="topic-wiki-search-results">
+        {topicSearch.results.map((result) => (
+          <button
+            key={`${result.objectType}:${result.objectId}:${result.versionRef}`}
+            type="button"
+            className="topic-wiki-search-result"
+            onClick={() => dispatchWikiDeepLink(result.navigation)}
+          >
+            <span className="topic-wiki-search-result-body">
+              <span className="topic-wiki-search-result-title">{result.title}</span>
+              {result.snippet ? <span className="topic-wiki-search-result-snippet">{result.snippet}</span> : null}
+              <span className="topic-wiki-search-result-meta">更新于 {formatWikiWhen(result.updatedAt)}</span>
+            </span>
+            <span className="topic-wiki-search-result-side">
+              <span className="topic-wiki-search-result-type">{wikiSearchObjectLabel(result.objectType)}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>;
+  };
+
+  const renderTopicActivityBody = () => {
+    if (topicActivity.loading) return <p className="library-panel-empty">正在加载相关动态…</p>;
+    if (topicActivity.error) return <div className="library-topic-error" role="alert">
+      <strong>相关动态加载失败</strong>
+      <p>{topicActivity.error}</p>
+      <button type="button" onClick={topicActivity.retry}>重试</button>
+    </div>;
+    if (!topicActivityEntries.length) return <p className="library-panel-empty">还没有与本主题相关的动态。</p>;
+    return <>
+      <div className="library-topic-cards">
+        {topicActivityEntries.map((entry) => {
+          const navigable = wikiLogEntryDeepLinkInput(entry) !== null;
+          return <article key={entry.id} className="library-topic-card">
+            <header>
+              <strong>{entry.title}</strong>
+              <div className="library-topic-card-badges">
+                <span className="library-topic-badge">{wikiLogEventLabel(entry.eventType)}</span>
+                <time>{formatWikiWhen(entry.time)}</time>
+              </div>
+            </header>
+            {entry.summary ? <p>{entry.summary}</p> : null}
+            <div className="library-topic-card-meta">
+              <span>{wikiLogObjectLabel(entry.objectType)}</span>
+            </div>
+            {navigable ? <div className="library-panel-actions">
+              <button type="button" className="text-button" onClick={() => void dispatchWikiLogEntry(entry)}>打开</button>
+            </div> : null}
+          </article>;
+        })}
+      </div>
+      {topicActivity.hasMore ? <div className="topic-wiki-activity-more">
+        <button type="button" disabled={topicActivity.loadingMore} onClick={topicActivity.loadMore}>
+          {topicActivity.loadingMore ? '加载中…' : '加载更多'}
+        </button>
+      </div> : null}
+    </>;
   };
 
   const renderWikiPage = () => {
@@ -2116,18 +2222,18 @@ export function LibraryTopicsView(props: {
         {wikiDetail.wiki?.compileNote ? <span>{wikiDetail.wiki.compileNote}</span> : null}
       </div> : null}
 
-      {/* WMB-5233：空壳诚实三态 —— 尚未编译 / legacy 初始档案，绝不显示“已编译/当前”。 */}
+      {/* WMB-5233：空壳诚实三态 —— 尚未整理 / legacy 初始档案，绝不显示“已整理/当前”。 */}
       {compileState === 'uncompiled' || compileState === 'legacy_shell' ? <div className={`topic-wiki-compile-banner compile-state-${compileState}`} role="status">
         <strong>{COMPILE_STATE_LABELS[compileState]}</strong>
         <span>{COMPILE_STATE_HINTS[compileState]}</span>
       </div> : null}
 
-      {wikiRisks && (wikiRisks.disputed > 0 || wikiRisks.inference > 0 || wikiRisks.contradicted > 0 || wikiRisks.stale || wikiRisks.failed) ? <div className="topic-wiki-risks" aria-label="知识风险">
+      {wikiRisks && (wikiRisks.disputed > 0 || wikiRisks.inference > 0 || wikiRisks.contradicted > 0 || wikiRisks.stale || wikiRisks.failed) ? <div className="topic-wiki-risks" aria-label="当前认识风险">
         {wikiRisks.disputed > 0 ? <span className="library-topic-badge warn">{RISK_KIND_LABELS.disputed} {wikiRisks.disputed}</span> : null}
         {wikiRisks.contradicted > 0 ? <span className="library-topic-badge danger">{RISK_KIND_LABELS.contradicted} {wikiRisks.contradicted}</span> : null}
         {wikiRisks.inference > 0 ? <span className="library-topic-badge info">{RISK_KIND_LABELS.inference} {wikiRisks.inference}</span> : null}
         {wikiRisks.stale ? <span className="library-topic-badge">{RISK_KIND_LABELS.stale}</span> : null}
-        {wikiRisks.failed ? <span className="library-topic-badge danger">编译失败</span> : null}
+        {wikiRisks.failed ? <span className="library-topic-badge danger">{COMPILE_STATUS_LABELS.failed}</span> : null}
       </div> : null}
 
       <section id="topic-wiki-current" data-wiki-tab="overview" className={`topic-wiki-section topic-wiki-primary${hasCurrentKnowledge ? '' : ' is-empty'}`} aria-labelledby="topic-wiki-current-title" tabIndex={-1}>
@@ -2150,7 +2256,7 @@ export function LibraryTopicsView(props: {
         </> : <div className="topic-wiki-empty">
           <span className="empty-mark" aria-hidden="true">◔</span>
           <strong className="topic-wiki-empty-title">还没有形成可复用的认识</strong>
-          <p className="topic-wiki-empty-text">已有资料仍在档案中。继续保存可靠来源，Pi 会把其中可验证、可复用的部分编译到这里。</p>
+          <p className="topic-wiki-empty-text">已有资料仍在档案中。继续保存可靠来源，资料员会把其中可验证、可复用的部分整理成当前认识。</p>
           <button type="button" className="secondary-button" onClick={() => setDeepMode(true)}>查看已有资料</button>
         </div>}
       </section>
@@ -2162,7 +2268,7 @@ export function LibraryTopicsView(props: {
         </div>
         {sourcesPreview.length ? <div className="topic-wiki-source-list">
           {sourcesPreview.slice(0, 2).map((item) => <article key={itemKey(item)} className="topic-wiki-source-row">
-            <span className="topic-wiki-source-badge" aria-hidden="true">◆</span>
+            <SourceMark canonicalUrl={item.metadata?.originalUrl ?? item.metadata?.sourceUrl ?? null} aiSourcePresentation={aiSourcePresentation}/>
             <div className="topic-wiki-source-body">
               <div className="topic-wiki-source-title">{item.title}</div>
               {item.body ? <div className="topic-wiki-source-summary">{item.body}</div> : null}
@@ -2193,11 +2299,41 @@ export function LibraryTopicsView(props: {
         </div>
         {receipts.length ? <div className="library-topic-cards">
           {receipts.map((receipt) => renderWikiReceipt(receipt))}
-        </div> : <p className="library-panel-empty">最近还没有知识变化。</p>}
+        </div> : <p className="library-panel-empty">最近还没有认识变化。</p>}
       </section>
 
-      <div className="topic-wiki-secondary" data-wiki-tab="sources" aria-label="知识储备">
-        {secondaryEmpty ? <p className="topic-wiki-secondary-empty">知识仍在积累：证据、创作影响与待研究会在情报回流后出现。</p> : null}
+      {/* WMB-5239：相关动态 —— 与「最近变化」回执时间线互补的资料摄取/检查/问答（topicId 限定；不复制资料库维护控制台）。 */}
+      <section className="topic-wiki-section topic-wiki-changes topic-wiki-activity" data-wiki-tab="changes" aria-labelledby="topic-wiki-activity-title" tabIndex={-1}>
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-activity-title">相关动态</h3>
+          <span>资料摄取 · 检查 · 问答</span>
+        </div>
+        {renderTopicActivityBody()}
+      </section>
+
+      {/* WMB-5239：搜索本主题资料 —— 统一搜索按当前主题范围过滤（topicId 真实生效），结果走既有深链。 */}
+      <section className="topic-wiki-section topic-wiki-search" data-wiki-tab="sources" aria-labelledby="topic-wiki-search-title" tabIndex={-1}>
+        <div className="library-topic-section-head">
+          <h3 id="topic-wiki-search-title">搜索本主题资料</h3>
+          <span className="topic-index-hint" role="status">{indexHint}</span>
+        </div>
+        <div className="topic-wiki-search-field">
+          <input
+            type="search"
+            className="topic-wiki-search-input"
+            placeholder="在本主题的资料、知识与实体中检索"
+            aria-label="搜索本主题资料"
+            value={topicSearchQuery}
+            onChange={(event) => setTopicSearchQuery(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        {renderTopicSearchBody()}
+      </section>
+
+      <div className="topic-wiki-secondary" data-wiki-tab="sources" aria-label="认识储备">
+        {secondaryEmpty ? <p className="topic-wiki-secondary-empty">认识仍在积累：证据、创作影响与待研究会在情报回流后出现。</p> : null}
         <section id="topic-wiki-evidence" className="topic-wiki-section topic-wiki-compact" aria-labelledby="topic-wiki-evidence-title" tabIndex={-1}>
           <div className="library-topic-section-head">
             <h3 id="topic-wiki-evidence-title">证据</h3>
@@ -2215,7 +2351,7 @@ export function LibraryTopicsView(props: {
           </div>
           {wikiDetail.creationImpact.items.length ? <div className="library-topic-cards">
             {wikiDetail.creationImpact.items.map((record) => renderWikiUsage(record))}
-          </div> : !secondaryEmpty ? <p className="library-panel-empty">暂无创作调用记录（创作采用知识后出现）。</p> : null}
+          </div> : !secondaryEmpty ? <p className="library-panel-empty">暂无创作使用记录（创作参考当前认识后出现）。</p> : null}
         </section>
 
         <section id="topic-wiki-research" className="topic-wiki-section topic-wiki-compact" aria-labelledby="topic-wiki-research-title" tabIndex={-1}>
@@ -2315,19 +2451,22 @@ export function LibraryTopicsView(props: {
           >
             <div className="topic-object-card-top">
               <strong>{item.title}</strong>
-              <span className="topic-object-card-top-badges">
-                {/* WMB-5233：诚实三态（尚未编译 / 初始档案 / 已编译）。 */}
-                <span className={`topic-compile-state ${item.compileState ?? 'uncompiled'}`}>
-                  {COMPILE_STATE_LABELS[item.compileState ?? 'uncompiled']}
-                </span>
+            </div>
+            {/* WMB-5242：当前综合 —— 标题后优先呈现（知识目录语义）。 */}
+            {summary ? <p className="topic-object-card-summary topic-object-card-current">{summary}</p> : null}
+            <div className="topic-object-card-footer">
+              <div className="topic-object-card-meta">{listTopicMeta(item)}</div>
+              <span className="topic-object-card-footer-badges">
+                {/* WMB-5242：整理状态（已整理 / 初始资料 / 尚未整理）；仅已有数据可推导时展示。 */}
+                {item.compileState ? <span className={`topic-compile-state ${item.compileState}`}>
+                  {COMPILE_STATE_LABELS[item.compileState] ?? item.compileState}
+                </span> : null}
                 <span className={`pill-status ${topicStatusClass(item.status)}`}>
                   <span className="dot" />
                   {topicStatusLabel(item.status)}
                 </span>
               </span>
             </div>
-            {summary ? <p className="topic-object-card-summary">{summary}</p> : null}
-            <div className="topic-object-card-meta">{listTopicMeta(item)}</div>
           </button>;
         })}
       </div>
@@ -2395,6 +2534,7 @@ export function LibraryTopicsView(props: {
             </span>
           </div>
           <p className="topic-object-meta">{objectMetaLine}</p>
+          {showWikiPage ? <p className="topic-object-meta">{`资料员持续维护${organizeLabel ? ` · 最近整理 ${organizeLabel}` : ''}`}</p> : null}
           {canvasMessage ? <p className="library-topic-action-note">{canvasMessage}</p> : null}
           {!piConfigured ? <p className="library-topic-action-note">Pi 尚未配置时，无法直接生成选题方案。</p> : null}
         </header>
@@ -2444,7 +2584,7 @@ export function LibraryTopicsView(props: {
           </div>
           : !wikiDetail ? <p className="library-panel-empty">正在加载主题…</p>
           : showWikiPage ? renderWikiPage() : <>
-          <p className="library-topic-action-note">本主题尚未编译（尚无正式 Wiki）：继续保存资料后，Pi 会在这里汇总出当前认识。以下为现有档案。</p>
+          <p className="library-topic-action-note">本主题还没有整理出当前认识：继续保存资料后，资料员会在这里持续汇总。以下为现有档案。</p>
           <nav className="topic-work-tabs" aria-label="主题工作分段">
             <button type="button" className={segment === 'judgments' ? 'active' : ''} onClick={() => setSegment('judgments')}>
               判断 <span>{counts.judgments}</span>

@@ -117,12 +117,12 @@ check('种子证据成功', Boolean(evidenceApplied.changeSetId) && Boolean(evid
   check('v56 下无 usage 表', fixture.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='knowledge_usage_packages'").get().c === 0);
 
   const migrated = migrateDatabase(path.join(directory, 'fixture.db'));
-  check('migrateDatabase 补齐 v57-v58', Number(migrated.prepare('SELECT max(version) AS m FROM schema_migrations').get().m) === 58);
+  check('migrateDatabase 补齐全部迁移', Number(migrated.prepare('SELECT max(version) AS m FROM schema_migrations').get().m) === migrations.length);
   check('usage 包表存在', migrated.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='knowledge_usage_packages'").get().c === 1);
   check('usage 记录表存在', migrated.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='knowledge_usage_records'").get().c === 1);
-  check('迁移总数 = 58', count(migrated, 'schema_migrations') === 58);
+  check('迁移总数 = migrations.length', count(migrated, 'schema_migrations') === migrations.length);
   const reopened = migrateDatabase(path.join(directory, 'fixture.db'));
-  check('重开幂等', count(reopened, 'schema_migrations') === 58);
+  check('重开幂等', count(reopened, 'schema_migrations') === migrations.length);
   reopened.close();
   migrated.close();
   fixture.close();

@@ -151,7 +151,8 @@ const b1 = runLocalLint(database, {
   requestId: 'lint-local-conflict-1', workspaceId: 'ws-a', scope: 'global',
   affectedObjects: [{ objectType: 'knowledge_note', objectId: 'note-conflict' }]
 });
-check('B 首次发现可信冲突 Issue', b1.ok && b1.counts.issuesCreated === 1 && b1.issues.length === 1);
+// v2 局部 Lint 对无证据/无正式关系/未被 Wiki 采纳的 disputed note 同时产出 unresolved_contradiction + orphan_knowledge。
+check('B 首次发现可信冲突 Issue', b1.ok && b1.counts.issuesCreated === 2 && b1.issues.length === 2);
 check('B Issue 为 unresolved_contradiction 且 open',
   b1.issues[0]?.issueType === 'unresolved_contradiction' && b1.issues[0]?.status === 'open'
   && b1.issues[0]?.affectedObjectType === 'knowledge_note' && b1.issues[0]?.affectedObjectId === 'note-conflict');
@@ -162,8 +163,8 @@ const b2 = runLocalLint(database, {
   requestId: 'lint-local-conflict-2', workspaceId: 'ws-a', scope: 'global',
   affectedObjects: [{ objectType: 'knowledge_note', objectId: 'note-conflict' }]
 });
-check('B 重复扫描去重零新建', b2.counts.issuesCreated === 0 && b2.counts.issuesDeduplicated === 1);
-check('B 同一 Issue 行数不变', count(database, 'knowledge_health_issues') === initialIssueCount + 1);
+check('B 重复扫描去重零新建', b2.counts.issuesCreated === 0 && b2.counts.issuesDeduplicated === 2);
+check('B 同一 Issue 行数不变', count(database, 'knowledge_health_issues') === initialIssueCount + 2);
 check('B 同一 Issue id 不变', getHealthIssue(database, conflictIssueId)?.status === 'open');
 
 // ============ C. 不可修复坏证据引用（源已删除）：open 不自动裁决 ============
@@ -264,7 +265,7 @@ check('G 步 1 修复坏关系 rel-ghost-3', step1.counts.repairsApplied >= 1);
 // 模拟崩溃：ChangeSet 已提交但 checkpoint 未推进（手工回滚 checkpoint 到本轮开始前）
 const cpBeforeStep1 = { ...begin1.checkpoint };
 database.prepare('UPDATE app_meta SET value = ?, updated_at = ?, revision = revision + 1 WHERE key = ?')
-  .run(JSON.stringify(cpBeforeStep1), NOW, 'knowledge_lint_checkpoint_v1');
+  .run(JSON.stringify(cpBeforeStep1), NOW, 'knowledge_lint_checkpoint_v2'); // v2 检测器 checkpoint 键（v1 游标语义与新 phase 集不对齐）
 const retry1 = runPeriodicLintStep(database);
 check('G 崩溃后重试零新增 ChangeSet', count(database, 'knowledge_change_sets') === changeSetsBeforePeriodic + 1);
 check('G 崩溃后重试零新增 Issue', count(database, 'knowledge_health_issues') === issuesBeforePeriodic + 1);
@@ -283,7 +284,7 @@ while (stepResult.status === 'running') {
   stepResult = runPeriodicLintStep(database).checkpoint;
 }
 check('G 周期 Lint 完成', stepResult.status === 'completed' && stepResult.completedAt !== null);
-check('G 五阶段全部扫描（scannedObjects > 0）', stepResult.counts.scannedObjects > 0);
+check('G 14 phase 全部扫描（scannedObjects > 0）', stepResult.counts.scannedObjects > 0);
 const issuesAfterPeriodic = count(database, 'knowledge_health_issues');
 // 周期 run 新增 2 个 Issue：rel-ghost-3 修复 + page-topic stale（wiki_pages 阶段）
 check('G 周期扫描仅新增期望 Issue（修复 1 + stale 1）', issuesAfterPeriodic === issuesBeforePeriodic + 2);
@@ -357,7 +358,8 @@ const laneRun = runLocalLint(database, {
   requestId: 'lint-lane-1', workspaceId: 'ws-a', scope: 'lane:uk-life-content-radar',
   affectedObjects: [{ objectType: 'knowledge_note', objectId: 'note-lane-conflict' }]
 });
-check('I lane lint 生成 lane Issue', laneRun.counts.issuesCreated === 1 && laneRun.issues[0]?.scope === 'lane:uk-life-content-radar');
+// v2 对 lane 孤立 disputed note 同样产出 unresolved_contradiction + orphan_knowledge（均 lane scope）。
+check('I lane lint 生成 lane Issue', laneRun.counts.issuesCreated === 2 && laneRun.issues[0]?.scope === 'lane:uk-life-content-radar');
 const laneIssueId = laneRun.issues[0].id;
 
 const globalRunOnLaneNote = runLocalLint(database, {
@@ -385,7 +387,8 @@ while (laneCp.status === 'running') {
 }
 check('I lane 周期完成', laneCp.status === 'completed');
 check('I lane 周期未触碰 global 问题', getHealthIssue(database, conflictIssueId)?.status === 'open' && getHealthIssue(database, staleIssueId)?.status === 'open');
-check('I lane 周期未重复 lane Issue', count(database, 'knowledge_health_issues') === 8);
+// 8（G 结束后）+ 2（lane 局部 Lint）= 10；lane 周期零新增（全部去重）。
+check('I lane 周期未重复 lane Issue', count(database, 'knowledge_health_issues') === 10);
 
 // ============ J. 受影响范围上限：超出即拒绝、零写 ============
 const changeSetsBeforeCap = count(database, 'knowledge_change_sets');
@@ -426,15 +429,15 @@ const k2 = runLocalLint(database, {
 check('K 重放零新增（去重生效）', k2.counts.issuesCreated === 0 && k2.changeSetId === null && count(database, 'knowledge_change_sets') === changeSetsAfterK1);
 
 // ============ L. 终态校验 + 清理 ============
-// 期望行数：conflict/evidence/repair1/repair2/review/repair3/stale = 7，lane = 8，repair5 = 9（repair6 未处理）
-check('L 全流程 Issue 计数 = 9（repair6 尚未处理）', count(database, 'knowledge_health_issues') === 9);
+// v2 期望行数：conflict+orphan=2、ev-ghost evidence=1、repair1/2/3=3、review=1、stale=1、lane=2 → 10；repair5=11（repair6 未处理）
+check('L 全流程 Issue 计数 = 11（repair6 尚未处理）', count(database, 'knowledge_health_issues') === 11);
 const l1 = runLocalLint(database, {
   requestId: 'lint-local-repair-6', workspaceId: 'ws-a', scope: 'global',
   affectedObjects: [{ objectType: 'knowledge_relation', objectId: 'rel-ghost-6' }]
 });
 check('L rel-ghost-6 收尾修复', l1.counts.repairsApplied === 1 && database.prepare(
   'SELECT ended_change_set_id AS e FROM knowledge_formal_relations WHERE id = ?').get('rel-ghost-6').e !== null);
-check('L 收尾后 Issue 计数 = 10', count(database, 'knowledge_health_issues') === 10);
+check('L 收尾后 Issue 计数 = 12', count(database, 'knowledge_health_issues') === 12);
 
 // ============ M. 统一 ChangeSet 提交后局部 Lint 触发（生产接线） ============
 registerKnowledgeChangeSetLintTrigger();
@@ -448,8 +451,9 @@ applyKnowledgeChangeSet(database, meta('health-trigger-top-1'), {
   }],
   receipts: [{ triggerType: 'ingest', requestId: 'health-trigger-top-1', summary: '触发测试', counts: {} }]
 });
+// v2：12（L 收尾后）+ note-triggered 的 unresolved_contradiction + orphan_knowledge = 14。
 check('M1 提交后自动生成局部 Lint Issue',
-  count(database, 'knowledge_health_issues') === 11
+  count(database, 'knowledge_health_issues') === 14
   && findIssue(listHealthIssues(database).items, 'note-triggered', 'unresolved_contradiction')?.status === 'open');
 check('M1 恰好新增 1 个 lint ChangeSet（不递归）', count(database, 'knowledge_change_sets') === mBaselineChangeSets + 2);
 const triggeredLintChangeSet = database.prepare(
@@ -570,8 +574,9 @@ while (nGuard < 20) {
   database.prepare('UPDATE jobs SET due_at = ?, status = ? WHERE dedupe_key = ?').run(new Date().toISOString(), 'pending', 'lint:periodic:global:rolling');
 }
 check('N3 周期 Lint 最终完成', getPeriodicLintCheckpoint(database)?.status === 'completed');
-// 期间仅 rel-ghost-4（I-1 隔离测试刻意遗留的坏关系）被周期 Lint 自动修复，其余问题全部去重
-check('N3 续跑不重复 Issue（仅新增遗留坏关系修复 1 行）', count(database, 'knowledge_health_issues') === nBaselineIssues + 1);
+// 期间新增 5 行：rel-ghost-4（I-1 刻意遗留）自动修复 1 行 + M3 触发被禁时写入的两条 supported note
+// （note-triggered-fail / -nested）由周期 Lint 补扫出 orphan_knowledge + unsupported_claim 各 2 行；其余问题全部去重
+check('N3 续跑不重复 Issue（新增 5 行：遗留修复 1 + M3 补扫 4）', count(database, 'knowledge_health_issues') === nBaselineIssues + 5);
 check('N3 遗留坏关系已被周期修复', database.prepare(
   'SELECT ended_change_set_id AS e FROM knowledge_formal_relations WHERE id = ?').get('rel-ghost-4').e !== null);
 
@@ -588,7 +593,7 @@ check('N4 失败 job 超重试窗口 → pending', recover2.recovered === 1 && d
 
 cancelPeriodicLint(database);
 check('L checkpoint 已取消', getPeriodicLintCheckpoint(database) === null);
-check('L 检测器版本已记录（false_positive 防重复报警依据）', KNOWLEDGE_HEALTH_DETECTOR_VERSION === '1');
+check('L 检测器版本已记录（false_positive 防重复报警依据）', KNOWLEDGE_HEALTH_DETECTOR_VERSION === '2');
 
 database.close();
 await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

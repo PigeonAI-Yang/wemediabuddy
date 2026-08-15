@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import sourceIndex from '../../skills/wemedia-intelligence-engine/references/source-index.json';
 import { findSourceLogo, type RegisteredSourceLogo } from '../shared/source-logo';
 import { brandIconUrl, normalizePlatformId } from './platform-mark';
@@ -32,19 +33,24 @@ export function SourceMark({ canonicalUrl, aiSourcePresentation, avatarUrl = nul
   aiSourcePresentation: boolean;
   avatarUrl?: string | null;
 }): React.JSX.Element {
-  if (isHttpUrl(avatarUrl)) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [avatarUrl]);
+
+  if (!avatarFailed && isHttpUrl(avatarUrl)) {
     return <span className="source-mark source-mark-avatar" title="作者头像">
-      <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" decoding="async"/>
+      <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" decoding="async" onError={() => setAvatarFailed(true)}/>
     </span>;
   }
 
   const registered = aiSourcePresentation ? findSourceLogo(canonicalUrl, registeredSources) : null;
   const registeredLogoUrl = registered ? logoAssets[`../../images/source-logos/${registered.logo}`] : null;
-  if (registered && registeredLogoUrl) {
-    return <span className={`source-mark${registered.kind === 'professional_account' ? ' source-mark-profile' : ''}`}>
-      <img src={registeredLogoUrl} alt=""/>
-    </span>;
-  }
+  if (registered && registeredLogoUrl && registered.kind !== 'professional_account') {
+      return <span className="source-mark">
+        <img src={registeredLogoUrl} alt=""/>
+      </span>;
+    }
 
   const platformId = platformIdFromUrl(canonicalUrl);
   const platformLogo = brandIconUrl(platformId);

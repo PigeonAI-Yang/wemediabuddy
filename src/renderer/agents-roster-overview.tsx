@@ -33,7 +33,8 @@ function RoleCard({
       className={`agents-role-card${className ? ` ${className}` : ''}`}
       data-role={roleId}
       aria-expanded={expanded}
-      aria-controls="agents-detail-panel"
+      aria-haspopup="dialog"
+      aria-controls="agents-detail-modal-dialog"
       onClick={() => onOpenRole(roleId)}
     >
       <span className="agents-card-avatar">{avatar ? <img src={avatar} alt="" /> : <span>{meta.labelZh.slice(0, 1)}</span>}</span>
@@ -103,7 +104,8 @@ export function RoleOverviewRow({
         className="agents-role-card is-desk"
         data-role={roleId}
         aria-expanded={expanded}
-        aria-controls="agents-detail-panel"
+        aria-haspopup="dialog"
+        aria-controls="agents-detail-modal-dialog"
         onClick={() => onOpenRole(roleId)}
       >
         <span className="agents-card-avatar">{avatar ? <img src={avatar} alt="" /> : <span>{meta.labelZh.slice(0, 1)}</span>}</span>

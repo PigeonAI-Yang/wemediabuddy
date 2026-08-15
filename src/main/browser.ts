@@ -151,8 +151,11 @@ export async function ensureQuietXBrowserWindow(cdpUrl: string, options: { force
 /** Only for explicit takeover / login. */
 export async function revealXBrowserWindow(cdpUrl: string): Promise<void> {
   lastQuietHideAt.delete(cdpUrl.replace(/\/$/, ''));
-  await showPyaireaderWindowsOnWindows().catch(() => {});
+  const pid = await listeningPid(cdpUrl);
+  await showPyaireaderWindowsOnWindows(pid).catch(() => {});
   await setBrowserWindowState(cdpUrl, 'visible').catch(() => {});
+  // CDP bounds do not remove a prior DWM cloak; restore once more after CDP normalizes the window.
+  await showPyaireaderWindowsOnWindows(pid).catch(() => {});
 }
 
 export async function cdpReady(cdpUrl: string): Promise<boolean> {
@@ -240,12 +243,12 @@ async function hidePyaireaderWindowsOnWindows(): Promise<void> {
   await runPyaireaderWindowScript('hide');
 }
 
-async function showPyaireaderWindowsOnWindows(): Promise<void> {
+async function showPyaireaderWindowsOnWindows(pid: number): Promise<void> {
   if (process.platform !== 'win32') return;
-  await runPyaireaderWindowScript('show');
+  await runPyaireaderWindowScript('show', pid);
 }
 
-async function runPyaireaderWindowScript(mode: 'hide' | 'show'): Promise<void> {
+async function runPyaireaderWindowScript(mode: 'hide' | 'show', targetPid?: number): Promise<void> {
   // Only touch the dedicated WMB/legacy Edge worker windows. Never the user's normal browser.
   // hide: SW_HIDE + toolwindow + cloak => no taskbar button / no visible flash.
   // show: restore appwindow + uncloak + SW_RESTORE for explicit takeover only.
@@ -281,13 +284,18 @@ public static class WmbWin {
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }
 "@
-$targets = Get-CimInstance Win32_Process | Where-Object {
-  $_.Name -match 'msedge|chrome' -and $_.CommandLine -match 'pyaireader\\\\edge-cdp-profiles|pyaireader/edge-cdp-profiles|wemedia-?buddy\\\\browser-profile|wemedia-?buddy/browser-profile'
-}
-if (-not $targets) { return }
-$pids = @{}
-foreach ($p in $targets) { $pids[[uint32]$p.ProcessId] = $true }
 $mode = '${mode}'
+$targetPid = ${targetPid ?? 0}
+$pids = @{}
+if ($mode -eq 'show' -and $targetPid -gt 0) {
+  $pids[[uint32]$targetPid] = $true
+} else {
+  $targets = Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -match 'msedge|chrome' -and $_.CommandLine -match 'pyaireader\\edge-cdp-profiles|pyaireader/edge-cdp-profiles|wemedia-?buddy\\browser-profile|wemedia-?buddy/browser-profile'
+  }
+  foreach ($p in $targets) { $pids[[uint32]$p.ProcessId] = $true }
+}
+if ($pids.Count -eq 0) { return }
 [WmbWin]::EnumWindows({
   param([IntPtr]$hWnd, [IntPtr]$lParam)
   [uint32]$procId = 0
@@ -310,7 +318,7 @@ $mode = '${mode}'
     $cloak = 0
     [void][WmbWin]::DwmSetWindowAttribute($hWnd, 13, [ref]$cloak, 4)
     [void][WmbWin]::ShowWindow($hWnd, [WmbWin]::SW_RESTORE)
-    [void][WmbWin]::SetWindowPos($hWnd, [IntPtr]::Zero, 80, 80, 0, 0, [uint32]([WmbWin]::SWP_NOSIZE -bor [WmbWin]::SWP_SHOWWINDOW))
+    [void][WmbWin]::SetWindowPos($hWnd, [IntPtr]::Zero, 80, 80, 1280, 900, [uint32][WmbWin]::SWP_SHOWWINDOW)
     [void][WmbWin]::SetForegroundWindow($hWnd)
   }
   return $true

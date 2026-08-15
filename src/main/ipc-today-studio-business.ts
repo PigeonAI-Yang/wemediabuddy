@@ -20,8 +20,17 @@ import { migrateDatabase } from './db/migrations.ts';
 import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
 import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
 import { bindAgentAvatarAsset, clearAgentAvatarMapping, listAgentAvatars } from './agent-avatars.ts';
-import { getAsset, guessImageMime, linkProjectAsset, listProjectAssets, markdownImageForAsset, registerStagedAsset, stageAssetBytes } from './assets.ts';
+import { getAsset, guessImageMime, linkProjectAsset, listProjectAssets, markdownImageForAsset, MAX_DERIVED_IMAGE_BYTES, registerStagedAsset, stageAssetBytes } from './assets.ts';
+import type { StagedCrop } from './media-bindings.ts';
+import { insertDerivedCropProvenance, pngDimensionsFromBytes } from './media-bindings.ts';
+import { isValidCropRegion, type ContentMediaBindingDraft, type CropRegion, type PlatformClipPayload, type PlatformCropPayload, type PlatformMediaBindingDraft } from '../shared/media-bindings.ts';
+import type { StagedClipSave } from './content.ts';
+import {
+  commitClipDerivation, insertDerivedProvenance, isAnnotationSpecValid, MEDIA_RUNTIME_MISSING,
+  stageClipAsset, validateClipRange, type AnnotationSpec, type StagedClip
+} from './media-derivations.ts';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData, requireReceiptData } from './business-command.ts';
+import { failure } from './result.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
 
 export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependencies): void {
@@ -284,7 +293,7 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'content.copy' });
     return receiptAsCommandResult(receipt);
   });
-  ipcMain.handle('studio:save-core', async (_event, input: { projectId: string; title: string; body: string; expectedRevision: number }) => {
+  ipcMain.handle('studio:save-core', async (_event, input: { projectId: string; title: string; body: string; expectedRevision: number; mediaBindings?: ContentMediaBindingDraft[] }) => {
     const runtime = await requireBusinessRuntime(dependencies); if (!input?.projectId) throw new Error('请先选择内容项目。');
     const receipt = await dispatchBusinessCommand(runtime, { command: 'content.save_version', requestId: freshRequestId(), actor: ownerUiActor,
       input: { ...input, body: String(input.body ?? ''), author: 'user' as const },
@@ -297,10 +306,57 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
   ipcMain.handle('studio:save-platform', async (_event, input: {
     projectId: string; contentVersionId: string; platform: ContentProjectPlatform; format: string; title?: string;
     body: string; assetIds?: string[]; expectedRevision?: number; versionId?: string;
+    mediaBindings?: PlatformMediaBindingDraft[]; cropPayloads?: PlatformCropPayload[];
+    clipPayloads?: PlatformClipPayload[];
   }) => {
     const runtime = await requireBusinessRuntime(dependencies); if (!input?.projectId) throw new Error('请先选择内容项目。');
+    // WMB-5237：裁切载荷在 dispatcher 事务前 stage（sha256 命名幂等，文件重复可容忍）；
+    // asset + provenance + 绑定在 dispatcher 事务内原子注册/写入，保存失败整体回滚（不留半写）。
+    const stagedCrops: StagedCrop[] = [];
+    for (const payload of input.cropPayloads ?? []) {
+      if (!payload?.assetId) throw new Error('裁切载荷缺少源素材 assetId。');
+      if (!isValidCropRegion(payload.cropRegion)) throw new Error('裁切区域无效（须 0..1 且 x+width<=1、y+height<=1、width/height>0）。');
+      if (typeof payload.pngBase64 !== 'string' || payload.pngBase64.length === 0) throw new Error('裁切载荷缺少 PNG 字节。');
+      const bytes = Buffer.from(payload.pngBase64, 'base64');
+      const pngDimensions = pngDimensionsFromBytes(bytes);
+      const staged = await stageAssetBytes(runtime.identity.rootPath, {
+        bytes,
+        fileName: 'crop.png',
+        mimeType: 'image/png',
+        origin: 'platform-crop',
+        width: payload.width ?? pngDimensions?.width ?? null,
+        height: payload.height ?? pngDimensions?.height ?? null
+      });
+      stagedCrops.push({ sourceAssetId: payload.assetId, cropRegion: payload.cropRegion, staged });
+    }
+    // WMB-5246：视频 Clip 载荷在事务前完成文件工作（stageClipAsset：校验 + ffmpeg 物化 + staging，
+    // 零 DB 写）；事务内由 savePlatformVersion 原子注册派生 asset + 血缘 + 绑定回填。
+    // 校验失败 / MEDIA_RUNTIME_MISSING 在任何文件写入之前抛出 → 冲突/失败零部分写。
+    const stagedClips: StagedClipSave[] = [];
+    for (const payload of input.clipPayloads ?? []) {
+      if (!payload?.sourceAssetId) throw new Error('视频载荷缺少源素材 assetId。');
+      if (!Number.isSafeInteger(payload.startMs) || !Number.isSafeInteger(payload.endMs)) throw new Error('视频时间段必须是整数毫秒。');
+      const staged = await stageClipAsset(runtime.database, runtime.identity.rootPath, {
+        sourceAssetId: payload.sourceAssetId,
+        startMs: payload.startMs,
+        endMs: payload.endMs,
+        origin: 'platform-clip'
+      });
+      stagedClips.push({
+        staged: staged.staged,
+        sourceAssetId: payload.sourceAssetId,
+        startMs: payload.startMs,
+        endMs: payload.endMs,
+        codec: staged.codec,
+        copyOrTranscode: staged.copyOrTranscode,
+        durationMs: staged.durationMs,
+        runtimeName: staged.runtimeName,
+        runtimeVersion: staged.runtimeVersion
+      });
+    }
+    const { cropPayloads: _ignoredCropPayloads, clipPayloads: _ignoredClipPayloads, ...saveInput } = input;
     const receipt = await dispatchBusinessCommand(runtime, { command: 'content.save_version', requestId: freshRequestId(), actor: ownerUiActor,
-      input: { ...input, body: String(input.body ?? ''), id: input.versionId },
+      input: { ...saveInput, body: String(input.body ?? ''), id: input.versionId, stagedCrops, stagedClips },
       boundIdentity: { projectId: input.projectId, versionId: input.versionId ?? null }, entityType: 'content_version',
       execute: (database, value) => { const data = requireCommandResultData(savePlatformVersion(database, value)); return { data,
         entityId: data.id, beforeRevision: value.versionId ? value.expectedRevision : undefined, afterRevision: data.revision, readback: data }; } });
@@ -336,5 +392,197 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
         return { data, entityId: asset.id, afterRevision: 1, readback: asset };
       } });
     const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today'], reason: 'studio.asset' }); return data;
+  });
+
+  // WMB-5237：非破坏裁切派生 asset（renderer canvas 导出 PNG → sha256 去重 + derived_crop provenance）。
+  // 写守卫要求 DB 写在命令派发内：stageAssetBytes（纯文件）在 dispatch 前，registerStagedAsset +
+  // insertDerivedCropProvenance（DB 写）在 execute 内同步完成；原图永不覆盖/删除，失败零 DB 关系。
+  // 幂等：相同派生字节经 registerStagedAsset sha256 复用（reused=true），provenance 行 UNIQUE 不重复。
+  ipcMain.handle('studio:derive-asset', async (_event, input: { sourceAssetId?: string; cropRegion?: CropRegion; pngBase64?: string }) => {
+    const sourceAssetId = typeof input?.sourceAssetId === 'string' ? input.sourceAssetId.trim() : '';
+    if (!sourceAssetId) return failure('VALIDATION_ERROR', '缺少源素材 assetId。');
+    if (!isValidCropRegion(input?.cropRegion)) return failure('VALIDATION_ERROR', '裁切区域无效（须 0..1 且 x+width<=1、y+height<=1、width/height>0）。');
+    const pngBase64 = typeof input?.pngBase64 === 'string' ? input.pngBase64.trim() : '';
+    if (!pngBase64) return failure('VALIDATION_ERROR', '缺少裁切后 PNG 数据。');
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(pngBase64, 'base64');
+    } catch {
+      return failure('VALIDATION_ERROR', 'PNG 数据不是合法的 base64。');
+    }
+    if (bytes.byteLength === 0) return failure('VALIDATION_ERROR', 'PNG 数据为空。');
+    if (bytes.byteLength > MAX_DERIVED_IMAGE_BYTES) return failure('VALIDATION_ERROR', `裁切图片超过大小上限（${Math.round(MAX_DERIVED_IMAGE_BYTES / 1024 / 1024)}MB）。`);
+    // PNG magic + IHDR 尺寸的单一实现（png-dimensions.ts，经 media-bindings.ts 导出）；非法字节 → null fail-closed。
+    const dimensions = pngDimensionsFromBytes(bytes);
+    if (!dimensions) return failure('VALIDATION_ERROR', '裁切结果必须是有效的 PNG 图片。');
+    const runtime = await requireBusinessRuntime(dependencies);
+    const source = getAsset(runtime.database, sourceAssetId);
+    if (!source) return failure('NOT_FOUND', `源素材不存在：${sourceAssetId}。`);
+    if (!source.mimeType.startsWith('image/')) return failure('VALIDATION_ERROR', `源素材不是图片（mime ${source.mimeType}）。`);
+    const staged = await stageAssetBytes(runtime.identity.rootPath, {
+      bytes,
+      fileName: 'crop.png',
+      mimeType: 'image/png',
+      origin: 'studio-crop',
+      width: dimensions.width,
+      height: dimensions.height
+    });
+    const requestId = freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'studio:derive-asset',
+      requestId,
+      actor: ownerUiActor,
+      input: { sourceAssetId, cropRegion: input.cropRegion as CropRegion, staged, width: dimensions.width, height: dimensions.height, requestId },
+      boundIdentity: { entityType: 'asset', entityId: sourceAssetId },
+      entityType: 'asset',
+      execute: (database, value) => {
+        const registered = registerStagedAsset(database, value.staged);
+        insertDerivedCropProvenance(database, {
+          sourceAssetId: value.sourceAssetId,
+          derivedAssetId: registered.id,
+          cropRegion: value.cropRegion,
+          width: value.width,
+          height: value.height,
+          origin: 'studio-crop',
+          requestId: value.requestId
+        });
+        const data = { assetId: registered.id, reused: registered.reused, sha256: staged.sha256 };
+        return { data, entityId: registered.id, afterRevision: 1, readback: data };
+      }
+    });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'studio.asset.crop' });
+    return receiptAsCommandResult(receipt);
+  });
+
+  // WMB-5246：非破坏标注派生 asset（renderer canvas 导出标注 PNG → sha256 去重 +
+  // derived_annotation provenance，transform_json 存 {annotationType, elements, width, height}）。
+  // 与裁切同构：文件 staging 在 dispatch 前，DB 写在命令事务内原子完成；原图永不覆盖/删除。
+  ipcMain.handle('studio:derive-annotation', async (_event, input: { sourceAssetId?: string; annotationSpec?: unknown; pngBase64?: string }) => {
+    const sourceAssetId = typeof input?.sourceAssetId === 'string' ? input.sourceAssetId.trim() : '';
+    if (!sourceAssetId) return failure('VALIDATION_ERROR', '缺少源素材 assetId。');
+    if (!isAnnotationSpecValid(input?.annotationSpec)) return failure('VALIDATION_ERROR', 'annotationSpec 无效（须 annotationType 字符串、elements 数组、正整数 width/height）。');
+    const pngBase64 = typeof input?.pngBase64 === 'string' ? input.pngBase64.trim() : '';
+    if (!pngBase64) return failure('VALIDATION_ERROR', '缺少标注后 PNG 数据。');
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(pngBase64, 'base64');
+    } catch {
+      return failure('VALIDATION_ERROR', 'PNG 数据不是合法的 base64。');
+    }
+    if (bytes.byteLength === 0) return failure('VALIDATION_ERROR', 'PNG 数据为空。');
+    if (bytes.byteLength > MAX_DERIVED_IMAGE_BYTES) return failure('VALIDATION_ERROR', `标注图片超过大小上限（${Math.round(MAX_DERIVED_IMAGE_BYTES / 1024 / 1024)}MB）。`);
+    const dimensions = pngDimensionsFromBytes(bytes);
+    if (!dimensions) return failure('VALIDATION_ERROR', '标注结果必须是有效的 PNG 图片。');
+    const runtime = await requireBusinessRuntime(dependencies);
+    const source = getAsset(runtime.database, sourceAssetId);
+    if (!source) return failure('NOT_FOUND', `源素材不存在：${sourceAssetId}。`);
+    if (!source.mimeType.startsWith('image/')) return failure('VALIDATION_ERROR', `源素材不是图片（mime ${source.mimeType}）。`);
+    const staged = await stageAssetBytes(runtime.identity.rootPath, {
+      bytes,
+      fileName: 'annotation.png',
+      mimeType: 'image/png',
+      origin: 'studio-annotation',
+      width: dimensions.width,
+      height: dimensions.height
+    });
+    const requestId = freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'studio:derive-annotation',
+      requestId,
+      actor: ownerUiActor,
+      input: { sourceAssetId, annotationSpec: input.annotationSpec as AnnotationSpec, staged, width: dimensions.width, height: dimensions.height, requestId },
+      boundIdentity: { entityType: 'asset', entityId: sourceAssetId },
+      entityType: 'asset',
+      execute: (database, value) => {
+        const registered = registerStagedAsset(database, value.staged);
+        insertDerivedProvenance(database, {
+          kind: 'derived_annotation',
+          sourceAssetId: value.sourceAssetId,
+          derivedAssetId: registered.id,
+          transformJson: {
+            annotationType: value.annotationSpec.annotationType,
+            elements: value.annotationSpec.elements,
+            width: value.width,
+            height: value.height
+          },
+          origin: 'studio-annotation',
+          requestId: value.requestId
+        });
+        const data = { assetId: registered.id, reused: registered.reused, sha256: staged.sha256 };
+        return { data, entityId: registered.id, afterRevision: 1, readback: data };
+      }
+    });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'studio.asset.annotation' });
+    return receiptAsCommandResult(receipt);
+  });
+
+  // WMB-5246：非破坏 ≤60s 视频片段派生（stream copy 优先，关键帧边界不准确时固定
+  // H.264/AAC 转码；derived_clip [+ derived_transcode] 血缘 + 运行时身份）。
+  // 文件工作（ffmpeg 物化 + staging）在命令事务外；DB 写（asset + provenance）在事务内；
+  // 非法范围/运行时缺失在任何写入之前 fail-closed。
+  ipcMain.handle('studio:derive-clip', async (_event, input: { sourceAssetId?: string; startMs?: number; endMs?: number }) => {
+    const sourceAssetId = typeof input?.sourceAssetId === 'string' ? input.sourceAssetId.trim() : '';
+    if (!sourceAssetId) return failure('VALIDATION_ERROR', '缺少源素材 assetId。');
+    const startMs = input?.startMs;
+    const endMs = input?.endMs;
+    if (typeof startMs !== 'number' || typeof endMs !== 'number' || !Number.isInteger(startMs) || !Number.isInteger(endMs)) {
+      return failure('VALIDATION_ERROR', 'clip 时间范围必须是整数毫秒。');
+    }
+    const runtime = await requireBusinessRuntime(dependencies);
+    const source = getAsset(runtime.database, sourceAssetId);
+    if (!source) return failure('NOT_FOUND', `源素材不存在：${sourceAssetId}。`);
+    if (!source.mimeType.startsWith('video/')) return failure('VALIDATION_ERROR', `源素材不是视频（mime ${source.mimeType}）。`);
+    // 预校验（durationMs 缺失时由 stageClipAsset 探测后二次校验）：非法输入零文件、零 DB 写。
+    const rangeError = validateClipRange(startMs, endMs, source.durationMs);
+    if (rangeError) return failure('VALIDATION_ERROR', rangeError);
+    let stagedClip: StagedClip;
+    try {
+      stagedClip = await stageClipAsset(runtime.database, runtime.identity.rootPath, {
+        sourceAssetId,
+        startMs,
+        endMs,
+        origin: 'studio-clip'
+      });
+    } catch (error) {
+      // stageClipAsset 抛稳定 code（media-derivations.ts）：CLIP_RANGE_INVALID 是用户输入问题 → VALIDATION_ERROR；
+      // MEDIA_RUNTIME_MISSING（受管媒体运行时未就绪）与其它物化失败是环境/执行问题 → INVALID_STATE。
+      // 原始 runtime code 保留在 details.runtimeCode，失败原因不隐藏。
+      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+      const mappedCode = code === 'CLIP_RANGE_INVALID' ? 'VALIDATION_ERROR'
+        : code === MEDIA_RUNTIME_MISSING ? 'INVALID_STATE'
+          : 'INVALID_STATE';
+      return failure(mappedCode, error instanceof Error ? error.message : String(error), {
+        ...(typeof code === 'string' ? { runtimeCode: code } : {})
+      });
+    }
+    const requestId = freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'studio:derive-clip',
+      requestId,
+      actor: ownerUiActor,
+      input: {
+        sourceAssetId, startMs, endMs,
+        staged: stagedClip.staged, mode: stagedClip.copyOrTranscode, codec: stagedClip.codec,
+        runtimeName: stagedClip.runtimeName, runtimeVersion: stagedClip.runtimeVersion, requestId
+      },
+      boundIdentity: { entityType: 'asset', entityId: sourceAssetId },
+      entityType: 'asset',
+      execute: (database, value) => {
+        const data = commitClipDerivation(database, value.staged, {
+          sourceAssetId: value.sourceAssetId,
+          startMs: value.startMs,
+          endMs: value.endMs,
+          origin: 'studio-clip',
+          requestId: value.requestId,
+          mode: value.mode,
+          codec: value.codec,
+          runtimeName: value.runtimeName,
+          runtimeVersion: value.runtimeVersion
+        });
+        return { data, entityId: data.assetId, afterRevision: 1, readback: data };
+      }
+    });
+    if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'studio.asset.clip' });
+    return receiptAsCommandResult(receipt);
   });
 }

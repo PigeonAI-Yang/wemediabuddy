@@ -30,7 +30,7 @@ async function main() {
     const fixtureText = await readFile(FIXTURE_PATH, 'utf8');
     const fixture = JSON.parse(fixtureText);
     assert.equal(fixture.schema, 'wmb.eval-029-workspaces.v1');
-    assert.equal(fixture.schemaVersion, 58);
+    assert.equal(fixture.schemaVersion, 70);
     assert.equal(fixture.semanticProjectionVersion, 3);
     assert.deepEqual(fixture.deliveredAuthorities.map(({ id, table, expectedRowsPerRoot }) => ({ id, table, expectedRowsPerRoot })), [
       { id: 'business-command-receipt', table: 'command_receipts', expectedRowsPerRoot: 0 },
