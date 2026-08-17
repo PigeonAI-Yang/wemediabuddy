@@ -580,8 +580,8 @@ export function revertInvestigationReporterDispatch(
 }
 
 /**
- * 主管验收调查资料包并重新判断（research_review）。
  * - accept：必须携带调查后写作方向 → 保存为方向草稿，进入 direction_pending_approval（第二次 Owner 审批）。
+ * - defer：资料不足或主管无法自行决定 → 持久化验收结论并进入 needs_user，等待 Owner 选择。
  * - supplement：按已确认范围补查 → needs_more_research + 记录下一轮记者工单引用（调用方随后 spawn）。
  * - expand：形成新提纲版本 → 回到 outline_pending_approval（主管保存扩展版提纲后重新呈报）。
  * - stop：调查表明不值得继续 / Owner 停止 → abandoned。
@@ -591,8 +591,9 @@ export function reviewInvestigationResearch(
   input: {
     projectId: string;
     expectedRevision: number;
-    decision: 'accept' | 'supplement' | 'expand' | 'stop';
+    decision: 'accept' | 'defer' | 'supplement' | 'expand' | 'stop';
     direction?: unknown;
+    summary?: string | null;
     reporterJobId?: string | null;
     decidedBy?: string;
   }
@@ -601,15 +602,26 @@ export function reviewInvestigationResearch(
 
   const row = requireRow(database, input.projectId);
   requireRevision(row, input.expectedRevision);
-  requireState(row, ['research_review']);
+  requireState(row, input.decision === 'defer' ? ['research_review'] : ['research_review', 'needs_user']);
   const packageRow = selectLatestPackage(database, input.projectId);
   if (!packageRow) return failure('INVALID_STATE', '缺少调查资料包，无法验收。', {});
   const now = new Date().toISOString();
   const decidedBy = input.decidedBy?.trim() || 'desk';
-  const setReview = (decision: 'accept' | 'supplement' | 'expand' | 'stop', summary: string | null) => {
+  const setReview = (decision: 'accept' | 'defer' | 'supplement' | 'expand' | 'stop', summary: string | null) => {
     database.prepare(`UPDATE investigation_packages SET review_json = ?, reviewed_at = ? WHERE project_id = ? AND round = ?`)
       .run(JSON.stringify({ decision, summary, decidedAt: now, decidedBy }), now, input.projectId, packageRow.round);
   };
+
+  if (input.decision === 'defer') {
+    const summary = typeof input.summary === 'string' && input.summary.trim()
+      ? input.summary.trim()
+      : '主管验收未形成可执行决策，资料不足或存在关键未知，等待 Owner 决定下一步。';
+    setReview('defer', summary);
+    updateRow(database, input.projectId, { status: 'needs_user' });
+    bumpRevision(database, input.projectId, row, now);
+    recordEvent(database, input.projectId, 'research_review_deferred', summary, packageRow.round);
+    return success(readProjectInvestigation(database, input.projectId)!);
+  }
 
   if (input.decision === 'accept') {
     if (input.direction === undefined) {
@@ -1026,9 +1038,9 @@ export function buildInvestigationSupervisorReviewPrompt(projectId: string): str
     `请立即验收创作项目 ${projectId} 的专项调查资料包。`,
     `先调用 wmb_get_investigation({ project_id: "${projectId}" }) 读取最新 revision、已确认提纲、资料包、来源引用和未解决声明。`,
     '逐项核对来源是否支持关键事实，区分成立判断、需收窄或推翻的判断、新发现与仍未知边界；不得把来源标题、摘要或 reporter 自述当成已核实事实。',
-    '资料包足以形成可信写作方向时，调用 wmb_review_investigation_research，携带当前 expected_revision 和完整 direction；成功后必须读回 direction_pending_approval，再向 Owner 汇报待第二次审批。',
-    '资料不足时不要伪造方向、不要调用通过工具；明确说明缺口并建议补查、扩展范围或停止，等待 Owner 决定。',
-    '这是主管验收回合，不派写手，不修改 Owner 审批，不要 sleep 或轮询。'
+    '资料包足以形成可信写作方向时，必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="accept" 和完整 direction；成功后必须读回 direction_pending_approval，再向 Owner 汇报待第二次审批。',
+    '资料不足或存在无法由主管自行决定的关键未知时，不得伪造方向、不得自行验收通过或派写手；必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="defer" 和具体 summary，将结论持久化为 needs_user，再向 Owner 说明以下有效选择：按观点稿继续（强观点与未来判断可保留为作者判断，数字、引语、具体案例、归因等外部可验证事实仍须落在证据内）、需要补查、扩展范围或停止调查。',
+    '无论通过或暂缓，本回合都必须持久化一次验收结果；不得把项目留在 research_review。成功后读回最新调查状态。这是主管验收回合，不派写手、不代替 Owner 选择「按观点稿继续」、不修改 Owner 审批，不要 sleep 或轮询。'
   ].join('\n');
 }
 

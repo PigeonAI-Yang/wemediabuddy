@@ -11,6 +11,7 @@ import { buildAssetIdsFromPlatformBindings, contentBindingKey, type ContentMedia
 import { createStudioPlatformDraft, isStudioPlatformDraftDirty, addVideoPlatformBinding, platformBindingsToDrafts, platformMediaBindingsEqual, readPlatformVersionBindings, selectStudioPlatformVersion, setPlatformBindingCaption, setPlatformBindingClipRange, setPlatformBindingPoster, setPlatformCover, shiftPlatformBindingOrdinal, studioPlatformDraftKey, studioPlatformFromTab, syncPlatformBindingsToRefs, type StudioPlatformDraft, type StudioTab } from './studio-platform-tabs';
 import { StudioMediaSuggestions, formatMs } from './studio-media-suggestions';
 import type { MediaRecommendation, MediaRecommendationsReadModel } from '../shared/media-recommendations';
+import type { IllustrationRatio, IllustrationRun } from '../shared/illustration-workflow';
 import { annotationContextAround, annotationScopeKey, computeBodyFingerprint, leadingTitleLength, trimToNonWhitespace, validateAnnotationSelection, shiftAnnotationRanges, type StudioAnnotationRow } from './studio-annotations';
 import { StudioAnnotationMenu, StudioAnnotationNoteInput, StudioAnnotationOverlay, bodyOffsetAtDomPoint, richMapping, type SourceHitTest } from './studio-annotation-layer';
 import { appConfirm } from './app-confirm';
@@ -172,6 +173,13 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const [researchBusyId, setResearchBusyId] = useState<string | null>(null);
   const [researchGapMessage, setResearchGapMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false); const [newTitle, setNewTitle] = useState('');
+  const [illustrationRuns, setIllustrationRuns] = useState<IllustrationRun[]>([]);
+  const [illustrationRatio, setIllustrationRatio] = useState<IllustrationRatio>('16:9');
+  const [illustrationMaxGenerated, setIllustrationMaxGenerated] = useState(6);
+  const [illustrationBusy, setIllustrationBusy] = useState(false);
+  const [illustrationRequest, setIllustrationRequest] = useState('');
+  const [illustrationImageModel, setIllustrationImageModel] = useState('');
+  const [illustrationProfileId, setIllustrationProfileId] = useState('');
   const bodyInput = useRef<HTMLDivElement>(null); const sourceInput = useRef<HTMLTextAreaElement>(null);
   // 富文本编辑器 DOM 已反映 editorBody（输入/execCommand 路径置位）：此时回填会重建子树、
   // 丢失光标与输入法组合；非 DOM 路径（撤销/页签切换/外部改写）保持 false，允许回填。
@@ -318,6 +326,23 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     });
     return () => { active = false; unsubscribe(); };
   }, [selectedId]);
+  useEffect(() => {
+    let live = true;
+    let timer: number | undefined;
+    const loadIllustrations = async () => {
+      if (!selectedId) { if (live) setIllustrationRuns([]); return; }
+      const [runs, config] = await Promise.all([
+        window.wmb.listIllustrationRuns(selectedId).catch(() => [] as IllustrationRun[]),
+        window.wmb.getIllustrationImageConfig().catch(() => null)
+      ]);
+      if (!live) return;
+      setIllustrationRuns(runs ?? []);
+      if (config) { setIllustrationProfileId(config.profileId); setIllustrationImageModel(config.model); }
+      if (runs?.some((run) => ['pending', 'planning', 'running'].includes(run.status))) timer = window.setTimeout(loadIllustrations, 1200);
+    };
+    void loadIllustrations();
+    return () => { live = false; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [selectedId, selected?.revisions[0]?.id]);
   const decideResearchGap = async (jobId: string, decision: keyof typeof RESEARCH_DECISION_LABEL) => {
     if (researchBusyId) return;
     setResearchBusyId(jobId);
@@ -1477,6 +1502,46 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
+  const startIllustrationRun = async () => {
+    if (!selected || activePlatform || readOnlyVersion || illustrationBusy || !latest) return;
+    setIllustrationBusy(true); setMessage('正在固定正文并开始配图…');
+    try {
+      const result = await window.wmb.startIllustration({
+        projectId: selected.id,
+        requestId: `studio:illustration:${selected.id}:${latest.id}:${Date.now()}`,
+        expectedRevision: selected.revision,
+        imageProfileId: illustrationProfileId || undefined,
+        imageModel: illustrationImageModel || undefined,
+        ratio: illustrationRatio,
+        maxGenerated: illustrationMaxGenerated
+      });
+      if (!result.ok || !result.data) { setMessage(result.error?.message || '配图未启动'); return; }
+      setIllustrationRuns((runs) => [result.data!, ...runs.filter((run) => run.id !== result.data!.id)]);
+      setMessage('配图运行已开始，成功图片会自动插入新正文版本');
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setIllustrationBusy(false); }
+  };
+  const retryIllustrationItem = async (runId: string, itemId: string) => {
+    if (illustrationBusy) return;
+    setIllustrationBusy(true);
+    try { const result = await window.wmb.retryIllustrationItem({ runId, itemId }); if (result.ok && result.data) setIllustrationRuns((runs) => runs.map((run) => run.id === result.data!.id ? result.data! : run)); else setMessage(result.error?.message || '配图重试失败'); }
+    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setIllustrationBusy(false); }
+  };
+  const regenerateIllustrationItem = async (runId: string, itemId: string) => {
+    if (illustrationBusy) return;
+    setIllustrationBusy(true);
+    try { const result = await window.wmb.regenerateIllustrationItem({ runId, itemId, ratio: illustrationRatio, request: illustrationRequest || undefined }); if (result.ok && result.data) { setIllustrationRuns((runs) => runs.map((run) => run.id === result.data!.id ? result.data! : run)); setIllustrationRequest(''); } else setMessage(result.error?.message || '原位重新生成失败'); }
+    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setIllustrationBusy(false); }
+  };
+  const undoIllustrationItem = async (runId: string, itemId: string) => {
+    if (illustrationBusy) return;
+    setIllustrationBusy(true);
+    try { const result = await window.wmb.undoIllustrationItem({ runId, itemId }); if (result.ok && result.data) setIllustrationRuns((runs) => runs.map((run) => run.id === result.data!.id ? result.data! : run)); else setMessage(result.error?.message || '撤销配图失败'); }
+    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setIllustrationBusy(false); }
+  };
   const prepareZhihuPublication = async () => {
     if (busy || activePlatform !== 'zhihu' || !activePlatformVersion || dirty) return;
     setBusy(true); setMessage('正在写入知乎编辑器…');
@@ -1866,7 +1931,31 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
               <button type="button" className="secondary-button" onClick={() => setCopyOpen(false)}>取消</button>
             </div>}
           </section>}
-          {!readOnlyVersion && <StudioFormatBar busy={busy} execRich={execRich} formatSelection={formatSelection} insertMarkdown={insertMarkdown} insertImageFile={insertImageFile} toggleFind={() => setFindOpen((value) => !value)} onMarkSelection={() => { void markSelection(); }} canMark={annotationsEditable}/>} 
+          {!readOnlyVersion && <StudioFormatBar
+            busy={busy}
+            execRich={execRich}
+            formatSelection={formatSelection}
+            insertMarkdown={insertMarkdown}
+            insertImageFile={insertImageFile}
+            toggleFind={() => setFindOpen((value) => !value)}
+            onMarkSelection={() => { void markSelection(); }}
+            canMark={annotationsEditable}
+            illustrationTools={!activePlatform ? <span className="studio-formatbar-group studio-formatbar-illustration" role="group" aria-label="定稿配图">
+              <label><span>比例</span><select aria-label="比例" value={illustrationRatio} onChange={(event) => setIllustrationRatio(event.target.value as IllustrationRatio)}>{(['1:1', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21'] as IllustrationRatio[]).map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}</select></label>
+              <label><span>张数</span><input aria-label="生成张数" type="number" min={0} max={6} value={illustrationMaxGenerated} onChange={(event) => setIllustrationMaxGenerated(Math.min(6, Math.max(0, Number(event.target.value) || 0)))} /></label>
+              <button type="button" className="studio-illustration-start" title="固定当前正文并开始配图" disabled={busy || illustrationBusy || !latest} onClick={() => void startIllustrationRun()}>定稿配图</button>
+            </span> : undefined}
+          />}
+          {!activePlatform && !readOnlyVersion && illustrationRuns.length > 0 && <section className="studio-illustration-panel" aria-label="配图运行">
+            {illustrationRuns.map((run) => <div className="studio-illustration-run" key={run.id}>
+              <span>运行 {run.status}{run.failureMessage ? ` · ${run.failureMessage}` : ''}</span>
+              <div className="studio-illustration-items">{run.items.map((item) => <div className="studio-illustration-item" key={item.id}>
+                <span>{item.kind === 'source' ? '来源图' : '配图'} · {item.state}{item.errorMessage ? ` · ${item.errorMessage}` : ''}</span>
+                {item.state === 'failed' && <button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void retryIllustrationItem(run.id, item.id)}>重试</button>}
+                {item.kind === 'generated' && item.state === 'completed' && <><select aria-label="重新生成比例" value={illustrationRatio} onChange={(event) => setIllustrationRatio(event.target.value as IllustrationRatio)}>{(['1:1', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21'] as IllustrationRatio[]).map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}</select><input aria-label="重新生成要求" value={illustrationRequest} onChange={(event) => setIllustrationRequest(event.target.value)} placeholder="可选修改要求" /><button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void regenerateIllustrationItem(run.id, item.id)}>重新生成</button>{item.previousAssetId && <button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void undoIllustrationItem(run.id, item.id)}>撤销</button>}</>}
+              </div>)}</div>
+            </div>)}
+          </section>}
           {findOpen && !readOnlyVersion && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? editorBody.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !editorBody.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(editorBody.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas" ref={canvasRef}><article className="studio-paper">
             <textarea id="studio-title" className="studio-title-input" value={editorTitle} rows={1} disabled={busy || Boolean(readOnlyVersion)} placeholder={activePlatform ? '输入平台标题（可选）' : undefined} onChange={(event) => changeEditorTitle(event.target.value)} onInput={(event) => { const el = event.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }} ref={(node) => { if (!node) return; node.style.height = 'auto'; node.style.height = `${node.scrollHeight}px`; }}/>

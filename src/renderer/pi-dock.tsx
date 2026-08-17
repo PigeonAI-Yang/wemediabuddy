@@ -5,15 +5,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
 import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge, type PiDirectCanvasContext } from './pi-context-payload';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
-import { PiComposer } from './pi-composer';
+import { PiComposer, type PiSendOutcome } from './pi-composer';
 import { PiDockHeader, type PiSessionItem } from './pi-dock-header';
-import { appendPiStream, createPiLocalQueueItem, finishPiTool, mergePiConversationWithLive, piErrorMessage, piJobEventNotice, piToolActivity, prunePiLocalQueue, reconcilePiLocalQueue, streamingToolSegment, upsertPiJobNotice, type PiLocalQueueItem } from './pi-dock-utils';
+import { appendPiStream, createPiLocalQueueItem, finishPiTool, mergePiConversationWithLive, piErrorMessage, piJobEventNotice, piToolActivity, prunePiLocalQueue, reconcilePiLocalQueue, streamingToolSegment, upsertPiJobNotice, type PiLocalQueueAttachment, type PiLocalQueueItem } from './pi-dock-utils';
 /** WMB-5178：chatPi 编排派发结果（消费面类型；编排输入携带安全字段，dispatchId 由主进程生成）。 */
 type OrchestratedChatPiResult = {
   queued: boolean;
   stopped: boolean;
   conversation: { id: string; messages: PiDockMessage[] } | null;
 };
+type DeferredImageQueue = Readonly<{
+  localId: string;
+  conversationId: string;
+  projectId: string;
+  message: string;
+}>;
 export function PiDock({ collapsed, toggle, configured, context, resize, resetWidth }: {
   collapsed: boolean;
   toggle: () => void;
@@ -23,6 +29,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   resetWidth: () => void;
 }): React.JSX.Element {
   const [draftSeed, setDraftSeed] = useState<string | null>(null);
+  const [draftRestore, setDraftRestore] = useState<{ text: string; requestId: string; attachments: readonly PiLocalQueueAttachment[] } | null>(null);
   const [messages, setMessages] = useState<PiDockMessage[]>([]);
   const [nativeQueue, setNativeQueue] = useState<PiNativeQueue>({ steering: [], followUp: [] });
   /** WMB-5204：忙时人工消息的 renderer 本地气泡与投递状态（瞬态，绝不持久化）。 */
@@ -41,6 +48,9 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const forkActionRef = useRef(false);
   const [forkAction, setForkAction] = useState<{ entryId: string; retry: boolean } | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+  activeSessionIdRef.current = activeSessionId;
+  const deferredImageDrainRef = useRef<string | null>(null);
   const busy = piTurnActive;
   useEffect(() => {
     setLocalQueue((items) => prunePiLocalQueue(messages, items));
@@ -386,7 +396,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const buildPayload = (text: string, directContext?: PiDirectCanvasContext) =>
     buildPiContextPayload(context, text, directContext);
 
-  const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields, attachments: readonly PiImageAttachmentPayload[] = [], batchRequestId?: string): Promise<boolean> => {
+  const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields, attachments: readonly PiImageAttachmentPayload[] = [], batchRequestId?: string, draftImages: readonly PiLocalQueueAttachment[] = [], deferred?: DeferredImageQueue): Promise<boolean | PiSendOutcome> => {
     const value = text.trim();
     if (!value && attachments.length === 0) return false;
     // §7.1：编排派发前安全字段前置校验——任一缺失/为空即失败，该次任务不发送。
@@ -399,16 +409,41 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       showToast('请先打开一个明确的创作项目，再发送图片。');
       return false;
     }
-    // 图片批次必须独占一个真实 Pi 回合，不能降级为 steer/followUp 后丢失冻结基线。
     const queued = piTurnActive;
-    if (attachments.length > 0 && queued) {
-      showToast('Pi 正在回复，请等待本轮结束后再发送图片。');
-      return false;
+    if (deferred && (queued || deferred.conversationId !== activeSessionId || deferred.projectId !== batchProjectId)) return false;
+    // WMB-5311：忙时图片不进入 Pi native 字符串队列，也不创建批次；冻结原会话、项目、requestId、lane、正文和有序预览快照。
+    if (attachments.length > 0 && queued && !orchestration) {
+      if (!activeSessionId) {
+        showToast('当前 Pi 会话尚未准备好，请稍后再发送图片。');
+        return false;
+      }
+      try {
+        const directContext = context.contextSelection?.nodeIds.length
+          ? await window.wmb.validateKnowledgeSelectionManifest({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
+          : undefined;
+        if (directContext && directContext.excludedCount > 0) showToast(`已纳入 ${directContext.items.length} 项 · 未纳入 ${directContext.excludedCount} 项`);
+        const queuedMessage = buildPayload(value || '请根据当前正文的语义，为这些图片选择合理的插入位置；不合适的图片不要硬塞。', directContext);
+        const requestId = batchRequestId ?? crypto.randomUUID();
+        const frozenImages = (draftImages.length ? draftImages : attachments.map((attachment, index): PiLocalQueueAttachment => ({
+          id: `${requestId}-${index}`,
+          ...attachment,
+          previewUrl: ''
+        }))).map((attachment) => ({ ...attachment }));
+        const item = createPiLocalQueueItem(value, delivery ?? 'steer', {
+          conversationId: activeSessionId,
+          imageBatch: { projectId: batchProjectId!, requestId, message: queuedMessage, attachments: frozenImages }
+        });
+        setLocalQueue((items) => [...items, item]);
+        return { accepted: true, retainAttachments: true };
+      } catch (error) {
+        showToast(piErrorMessage(error));
+        return false;
+      }
     }
     // WMB-5204：忙时人工输入立即投影为主时间线用户气泡；本地项只承载投递状态，不写入会话快照。
     let localId: string | undefined;
     if (queued && !orchestration) {
-      const item = createPiLocalQueueItem(value, delivery ?? 'steer');
+      const item = createPiLocalQueueItem(value, delivery ?? 'steer', { conversationId: activeSessionId });
       localId = item.localId;
       setLocalQueue((items) => [...items, item]);
     }
@@ -437,22 +472,28 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
     try {
       // WMB-5243：发送时才取后端冻结选择清单（服务端校验/去重/限长）；框选本身不发送、不建包。
-      const directContext = context.contextSelection?.nodeIds.length
-        ? await window.wmb.validateKnowledgeSelectionManifest({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
-        : undefined;
+      const directContext = deferred?.message
+        ? undefined
+        : context.contextSelection?.nodeIds.length
+          ? await window.wmb.validateKnowledgeSelectionManifest({ canvasId: context.contextSelection.canvasId, nodeIds: context.contextSelection.nodeIds })
+          : undefined;
       // WMB-5243：冻结包未纳入明示（重复/无效/限长裁剪后 Pi 实际只收到部分选中项）。
-      if (directContext && directContext.excludedCount > 0) {
-        showToast(`已纳入 ${directContext.items.length} 项 · 未纳入 ${directContext.excludedCount} 项`);
-      }
-      const contextualMessage = buildPayload(value || '请根据当前正文的语义，为这些图片选择合理的插入位置；不合适的图片不要硬塞。', directContext);
+      if (directContext && directContext.excludedCount > 0) showToast(`已纳入 ${directContext.items.length} 项 · 未纳入 ${directContext.excludedCount} 项`);
+      const contextualMessage = deferred?.message ?? buildPayload(value || '请根据当前正文的语义，为这些图片选择合理的插入位置；不合适的图片不要硬塞。', directContext);
       const chatInput = attachments.length > 0
-        ? { message: contextualMessage, requestId: batchRequestId ?? crypto.randomUUID(), projectId: batchProjectId!, attachments }
+        ? {
+            message: contextualMessage,
+            ...(deferred ? { delivery: delivery ?? 'steer' as const } : {}),
+            requestId: batchRequestId ?? crypto.randomUUID(),
+            projectId: batchProjectId!,
+            attachments
+          }
         : orchestration ? { message: contextualMessage, orchestration } : contextualMessage;
       const result = await window.wmb.chatPi(chatInput, queued ? (delivery ?? 'steer') : undefined);
       const batchFailed = attachments.length > 0 && result.batchStatus !== 'completed';
       if (result.queued) return true;
-      // 忙时提交未被排队：消息已进会话/被直接处理，移除对应本地反馈项
-      if (localId) setLocalQueue((items) => items.filter((item) => item.localId !== localId));
+      // 忙时提交未被排队：消息已进会话/被直接处理，移除对应本地反馈项； deferred image item waits for drain outcome.
+      if (localId && !deferred) setLocalQueue((items) => items.filter((item) => item.localId !== localId));
       if (result.conversation) {
         setMessages(result.conversation.messages);
         setActiveSessionId(result.conversation.id || null);
@@ -464,6 +505,9 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       if (batchFailed) {
         showToast('图片批次未完成，图片仍保留在输入框。');
         return false;
+      }
+      if (!deferred && attachments.length > 0 && result.batchStatus === 'completed' && batchRequestId) {
+        setLocalQueue((items) => items.filter((item) => item.imageBatch?.requestId !== batchRequestId));
       }
       return true;
     } catch (error) {
@@ -487,9 +531,53 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     }
   };
 
-  const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string) => {
-    return sendText(text, delivery, undefined, attachments, batchRequestId);
-  }, [piTurnActive, configured, context]);
+  const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string, draftImages?: readonly PiLocalQueueAttachment[]) => {
+    return sendText(text, delivery, undefined, attachments, batchRequestId, draftImages);
+  }, [piTurnActive, configured, context, activeSessionId]);
+  useEffect(() => {
+    if (!configured || piTurnActive || phase !== 'idle' || deferredImageDrainRef.current) return;
+    const projectId = context.focus?.studioDocument?.projectId ?? (context.page === 'studio' && context.objectType === 'project' ? context.objectId : null);
+    const imageIndex = localQueue.findIndex((candidate) => {
+      if (candidate.kind !== 'imageBatch' || candidate.status !== 'pending' || !candidate.imageBatch) return false;
+      if (candidate.conversationId !== activeSessionId || candidate.imageBatch.projectId !== projectId) return false;
+      return true;
+    });
+    if (imageIndex < 0) return;
+    const item = localQueue[imageIndex];
+    const batch = item.imageBatch;
+    if (!batch || !item.conversationId) return;
+    // Preserve FIFO across the existing native text lanes and local image lane.
+    if (localQueue.slice(0, imageIndex).some((candidate) => candidate.conversationId === item.conversationId && (candidate.kind === 'imageBatch' || candidate.status === 'pending'))) return;
+    const deferred: DeferredImageQueue = {
+      localId: item.localId,
+      conversationId: item.conversationId,
+      projectId: batch.projectId,
+      message: batch.message
+    };
+    deferredImageDrainRef.current = item.localId;
+    setLocalQueue((items) => items.map((candidate) => candidate.localId === item.localId ? { ...candidate, status: 'accepted' as const } : candidate));
+    void sendText(item.text, item.delivery, undefined, batch.attachments, batch.requestId, batch.attachments, deferred).then((outcome) => {
+      const accepted = outcome !== false && (typeof outcome !== 'object' || outcome === null || outcome.accepted !== false);
+      if (activeSessionIdRef.current !== item.conversationId) {
+        if (accepted) for (const attachment of batch.attachments) if (attachment.previewUrl.startsWith('blob:')) URL.revokeObjectURL(attachment.previewUrl);
+        return;
+      }
+      if (accepted) {
+        for (const attachment of batch.attachments) if (attachment.previewUrl.startsWith('blob:')) URL.revokeObjectURL(attachment.previewUrl);
+        setLocalQueue((items) => items.filter((candidate) => candidate.localId !== item.localId));
+        return;
+      }
+      setLocalQueue((items) => items.map((candidate) => candidate.localId === item.localId ? { ...candidate, status: 'failed' as const } : candidate));
+      setDraftRestore({ text: item.text, requestId: batch.requestId, attachments: batch.attachments });
+    }).catch(() => {
+      if (activeSessionIdRef.current !== item.conversationId) return;
+      setLocalQueue((items) => items.map((candidate) => candidate.localId === item.localId ? { ...candidate, status: 'failed' as const } : candidate));
+      setDraftRestore({ text: item.text, requestId: batch.requestId, attachments: batch.attachments });
+    }).finally(() => {
+      deferredImageDrainRef.current = null;
+    });
+  }, [configured, piTurnActive, phase, localQueue, activeSessionId, context]);
+
   useEffect(() => {
     const generate = (event: Event) => {
       const detail = (event as CustomEvent<string | { prompt: string; orchestration?: OrchestrationSafeFields }>).detail;
@@ -509,12 +597,20 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       showToast(error instanceof Error ? error.message : '停止失败');
     }
   }, [piTurnActive, configured]);
+  const discardLocalQueue = () => {
+    for (const item of localQueue) for (const attachment of item.imageBatch?.attachments ?? []) if (attachment.previewUrl.startsWith('blob:')) URL.revokeObjectURL(attachment.previewUrl);
+    activeSessionIdRef.current = null;
+    deferredImageDrainRef.current = null;
+    setLocalQueue([]);
+    setDraftRestore(null);
+  };
   const newConversation = async () => {
     if (busy) await stop();
+    discardLocalQueue();
     conversationTouched.current = true;
     const conversation = await window.wmb.newPiConversation();
     setMessages(conversation.messages ?? []);
-    setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
+    setNativeQueue({ steering: [], followUp: [] }); setJobNotices([]);
     setActiveSessionId(conversation.id || null);
     setPhase('idle');
     setStatusText(configured ? '新会话' : '等待配置');
@@ -524,10 +620,11 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const openSession = async (conversationId: string) => {
     if (!conversationId || conversationId === activeSessionId) { setSessionMenuOpen(false); return; }
     if (busy) await stop();
+    discardLocalQueue();
     conversationTouched.current = true;
     const conversation = await window.wmb.switchPiConversation(conversationId);
     setMessages(conversation.messages ?? []);
-    setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
+    setNativeQueue({ steering: [], followUp: [] }); setJobNotices([]);
     setActiveSessionId(conversation.id || conversationId);
     setPhase('idle');
     setStatusText(configured ? '已切换会话' : '等待配置');
@@ -537,7 +634,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const archiveSession = async (conversationId: string, archived: boolean) => { if (busy) { showToast('Pi 正在回复，完成或停止后再归档'); return; }
     try {
       conversationTouched.current = true; const selected = await window.wmb.archivePiConversation(conversationId, archived);
-      if (archived && conversationId === activeSessionId) { setMessages(selected.messages ?? []); setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]); setActiveSessionId(selected.id || null);
+      if (archived && conversationId === activeSessionId) { discardLocalQueue(); setMessages(selected.messages ?? []); setNativeQueue({ steering: [], followUp: [] }); setJobNotices([]); setActiveSessionId(selected.id || null);
         setPhase('idle'); setStatusText(configured ? '已切换会话' : '等待配置');
       }
       await refreshSessions(); showToast(archived ? '会话已归档' : '会话已恢复');
@@ -558,9 +655,8 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
     conversationTouched.current = true;
     try {
       const forked = await window.wmb.forkPiConversation(entryId);
-      if (forked.cancelled) { showToast('未能创建新对话'); setStatusText(configured ? '已配置' : '等待配置'); return; }
       setMessages(forked.conversation.messages);
-      setNativeQueue({ steering: [], followUp: [] }); setLocalQueue([]); setJobNotices([]);
+      discardLocalQueue(); setNativeQueue({ steering: [], followUp: [] }); setJobNotices([]);
       setActiveSessionId(forked.conversation.id || null);
       setPhase('idle'); setStatusText(configured ? '已创建新对话' : '等待配置');
       await refreshSessions();
@@ -611,8 +707,10 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         phase={phase}
         draftSeed={draftSeed}
         onDraftSeedConsumed={() => setDraftSeed(null)}
+        draftRestore={draftRestore}
+        onDraftRestoreConsumed={() => setDraftRestore(null)}
         annotationBadge={annotationBadge}
-        onSend={(text, delivery, attachments, batchRequestId) => send(text, delivery, attachments, batchRequestId)}
+        onSend={(text, delivery, attachments, batchRequestId, draftImages) => send(text, delivery, attachments, batchRequestId, draftImages)}
         onStop={() => { void stop(); }}
         modelLabel={modelLabel}
         thinkingChoice={thinkingChoice}

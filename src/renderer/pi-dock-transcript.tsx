@@ -310,9 +310,11 @@ export function PiDockTranscript({
         const timeLabel = formatPiMessageTime(message.createdAt);
         const localStatusLabel = localItem?.status === 'failed'
           ? '发送失败'
-          : localItem?.status === 'accepted'
-            ? (localItem.delivery === 'followUp' ? 'Pi 已接收 · 下一轮' : 'Pi 已接收 · 当前回复')
-            : localItem ? '发送中' : '';
+          : localItem?.kind === 'imageBatch'
+            ? (localItem.status === 'accepted' ? '图片批次执行中' : '等待当前回复结束')
+            : localItem?.status === 'accepted'
+              ? (localItem.delivery === 'followUp' ? 'Pi 已接收 · 下一轮' : 'Pi 已接收 · 当前回复')
+              : localItem ? '发送中' : '';
         const segments = piMessageSegments(message);
         const activityOnly = message.role === 'assistant' && message.status === 'streaming' && !segments.length;
         const showActions = Boolean(segments.length) && message.status !== 'streaming' && !localItem;
@@ -323,7 +325,7 @@ export function PiDockTranscript({
         return isOrchestration
           ? <PiOrchestrationRow key={messageKey} message={message} />
           : (
-            <div className={`pi-bubble-wrap ${isSystemEvent ? 'system-event' : message.role}`} key={messageKey} data-local-status={localItem?.status}>
+            <div className={`pi-bubble-wrap ${isSystemEvent ? 'system-event' : message.role}`} key={messageKey} data-local-status={localItem?.status} data-queue-kind={localItem?.kind} data-queue-conversation-id={localItem?.conversationId ?? undefined} data-queue-project-id={localItem?.imageBatch?.projectId} data-attachment-count={localItem?.imageBatch?.attachments.length}>
             {isSystemEvent
               ? <div className="pi-system-event" role="status">
                   <div className="pi-system-event-label">WMB 系统通知</div>
@@ -341,6 +343,12 @@ export function PiDockTranscript({
                     {!activityOnly && message.status !== 'streaming' && <PiKnowledgePanel conversationId={conversationId ?? null} question={piKnowledgeQuestionBefore(displayMessages, index)} />}
                   </>
                 : <p className="user pi-bubble">{message.text}</p>}
+                {localItem?.kind === 'imageBatch' && localItem.imageBatch && <div className="pi-local-image-queue" aria-label={`排队图片 ${localItem.imageBatch.attachments.length} 张`}>
+                  <div className="pi-local-image-queue-previews">
+                    {localItem.imageBatch.attachments.map((attachment, attachmentIndex) => attachment.previewUrl ? <img key={`${attachment.id}-${attachmentIndex}`} src={attachment.previewUrl} alt={`${attachmentIndex + 1}. ${attachment.fileName}`} /> : <span key={`${attachment.id}-${attachmentIndex}`} aria-label={`${attachmentIndex + 1}. ${attachment.fileName}`}>{attachmentIndex + 1}</span>)}
+                  </div>
+                  <span>{localItem.imageBatch.attachments.length} 张图片 · 已冻结顺序</span>
+                </div>}
             {!activityOnly && <div className="pi-bubble-meta">
               {localItem
                 ? <span className="pi-bubble-time" role="status">{localStatusLabel}</span>

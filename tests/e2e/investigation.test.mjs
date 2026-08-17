@@ -26,7 +26,7 @@
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { seedSource, writeLocalPiConfig } from './lib/seed.mjs';
 import { buildResearchEvidencePack } from '../../src/main/research-task-state.ts';
-import { initializeProjectInvestigation, readProjectInvestigation, saveInvestigationOutline, decideInvestigationOutline, recordInvestigationReporterTerminal } from '../../src/main/project-investigation.ts';
+import { initializeProjectInvestigation, readProjectInvestigation, reviewInvestigationResearch, saveInvestigationOutline, decideInvestigationOutline, recordInvestigationReporterTerminal } from '../../src/main/project-investigation.ts';
 
 const OUTLINE_FIXTURE = Object.freeze({
   scope: 'E2E 调查：平台机制与创作者成本',
@@ -95,6 +95,24 @@ async function seedResearchReviewProject({ dataRoot, userDataDir, workspaceId })
     if (!result.ok || result.data.status !== 'research_review') {
       throw new Error(`seed 终态失败: ${JSON.stringify(result)}`);
     }
+  } finally {
+    db.close();
+  }
+}
+
+async function seedDeferredReviewProject(context) {
+  await seedResearchReviewProject(context);
+  const db = openWriteDb(context.dataRoot);
+  try {
+    const project = db.prepare("SELECT id FROM content_projects WHERE title = 'E2E 调查项目（验收中）' LIMIT 1").get();
+    const current = readProjectInvestigation(db, project.id);
+    const result = reviewInvestigationResearch(db, {
+      projectId: project.id,
+      expectedRevision: current.revision,
+      decision: 'defer',
+      summary: '关键事实仍缺少可信来源，等待 Owner 决定下一步。'
+    });
+    if (!result.ok || result.data.status !== 'needs_user') throw new Error(`seed 暂缓验收失败: ${JSON.stringify(result)}`);
   } finally {
     db.close();
   }
@@ -424,6 +442,40 @@ export default [
         assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
       });
       return { writerGate: true };
+    }
+  },
+  {
+    id: 'WMB-5290-deferred-owner-decision',
+    journeyIds: [],
+    launch: { seedFixture: seedDeferredReviewProject },
+    run: async ({ app, page, helpers, assert, step, evidence }) => {
+      await helpers.waitForAppReady(page);
+      await step('主管暂缓验收后，Owner 可见结论与四个决策入口', async () => {
+        await helpers.navigateTo(page, 'studio');
+        await openProjectByName(page, 'E2E 调查项目（验收中）');
+        await openInvestigationSurface(page);
+        await waitForInvestigationState(page, ['needs_user']);
+        const state = await readInvestigationState(page);
+        assert(state.primary === 'accept-research', `Owner 应可选择按观点稿继续（accept-research）: ${JSON.stringify(state)}`);
+        const primaryLabel = (await page.locator('.investigation-primary-action').textContent())?.replace(/\s+/g, ' ').trim() ?? '';
+        assert(primaryLabel === '按观点稿继续', `暂缓后主动作应显示「按观点稿继续」: ${primaryLabel}`);
+        const surface = await page.locator('.studio-investigation').textContent();
+        assert(surface.includes('暂缓，等待 Owner 决定'), `主管暂缓结论未显示: ${surface}`);
+        assert(surface.includes('按观点稿继续'), `Owner 决策说明未显示按观点稿继续: ${surface}`);
+        assert(surface.includes('外部可验证事实') && surface.includes('证据'), `事实与证据边界说明未显示: ${surface}`);
+        for (const action of ['supplement-research', 'expand-research', 'stop-research']) {
+          assert(await page.locator(`[data-action="${action}"]`).count() === 1, `缺少 Owner 决策入口 ${action}`);
+        }
+        assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
+      });
+      await step('1100×800 观点稿决策区无横向溢出，page error 0', async () => {
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+        await page.waitForTimeout(300);
+        const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        assert(overflowX === 0, `1100px 观点稿决策区不应横向溢出，实际 ${overflowX}`);
+        assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
+      });
+      return { deferredOwnerDecision: true };
     }
   }
 ];

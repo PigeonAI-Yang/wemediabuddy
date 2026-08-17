@@ -37,13 +37,14 @@ import { getAgentTask, type AgentTask } from './agent-tasks.ts';
 import {
   dispatchCancelAgentTask,
   dispatchFailAgentTask,
+  dispatchNeedsUserAgentTask,
   dispatchReportAgentTaskProgress,
   dispatchStartAgentTask,
   dispatchUpdateAgentTaskPhase,
   type AgentTaskCommandContext,
   type AgentTaskMutationDependency
 } from './agent-task-commands.ts';
-import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
+import { readTaskModelPolicySnapshot, resolveAgentPiPrerequisite, roleModelNeedsUserFailure } from './agent-prerequisites.ts';
 import { readAssistantTexts, type DailyIntelligenceRun } from './agent-runner.ts';
 
 // ---------- WMB-5172 提取：agent-runner 私有窄助手仅复刻窄行为（公共底层归属见 import；大逻辑不复制） ----------
@@ -306,10 +307,15 @@ export async function startResearchJob(input: {
   let workDir: string | undefined;
   try {
     const contextRefs = { roleId: 'reporter' as const };
-    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'research', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+      intent: 'research', roleId: 'reporter', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+    });
     if (prerequisite.waiting) return prerequisite.waiting;
-    const started = await dispatchStartAgentTask(dependency, { intent: 'research', businessDate: input.businessDate, contextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
+    const started = await dispatchStartAgentTask(dependency, { intent: 'research', businessDate: input.businessDate, contextRefs: taskContextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     const task = started.task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'reporter') ?? policySnapshot;
     createdTask = task;
     if (started.reused && !['resume_pending', 'starting'].includes(task.phase)) return { task, reused: true };
     // 复用撞车防护：同业务日存在其他父工单的活动 research 任务时 fail-closed（绝不跑错任务）。
@@ -362,6 +368,9 @@ export async function startResearchJob(input: {
       const baseline = await readFile(sessionFile, 'utf8').then((text) => text.split(/\r?\n/).length).catch(() => 0);
       if (!activeRuntime || !activeConfig) {
         const started = await startPiRuntimeWithFallback({
+          roleId: 'reporter',
+          policySnapshot: taskPolicySnapshot,
+          taskId: task.id,
           piConfigPath: input.piConfigPath,
           createRuntime,
           onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>)
@@ -373,6 +382,9 @@ export async function startResearchJob(input: {
       const config = activeConfig;
       if (!runtime || !config) throw new Error('PI_RUNTIME_UNREACHABLE：研究会话运行时未就绪。');
       const completed = await runPiPromptWithFallback({
+        roleId: 'reporter',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         initial: { runtime, config },
         createRuntime,
@@ -538,6 +550,11 @@ export async function startResearchJob(input: {
     const message = error instanceof Error ? error.message : String(error);
     if (createdTask) {
       const current = getAgentTask(database, createdTask.id);
+      const modelFailure = roleModelNeedsUserFailure(error);
+      if (current?.status === 'running' && current.controlAction !== 'cancel' && modelFailure) {
+        const waiting = await dispatchNeedsUserAgentTask(dependency, createdTask.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${createdTask.id}:needs-user:model`, createdTask.id, input.workerLeaseId));
+        return { task: waiting, reused: false };
+      }
       if (current?.status === 'running' && current.controlAction !== 'cancel') {
         await dispatchFailAgentTask(dependency, createdTask.id, 'RESEARCH_FAILED', message, taskCommandContext(lane, `${createdTask.id}:fail`, createdTask.id, input.workerLeaseId));
       }

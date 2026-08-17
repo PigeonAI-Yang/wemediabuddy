@@ -10,14 +10,14 @@ import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
 import { stopManagedBrowsers, type BrowserRuntime } from './browser'; import { configureBrowserProfileRegistryPath, openBrowserProfileRegistry } from './browser-config';
-import { migratePiConfigToInstallation, readPiConfig, resolvePiConfigChain, savePiConfig, type ResolvedPiConfig } from './pi-config';
+import { migratePiConfigToInstallation, readPiConfig, resolveRoleModelPolicySnapshot, resolveRolePiConfigChain, roleModelCandidateKey, savePiConfig, type ResolvedPiConfig } from './pi-config';
 import { startPiRuntimeWithFallback } from './pi-config-fallback';
 import { setSourceKnowledgeCompileDeps, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
 import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, type KnowledgeBackfillDeps } from './knowledge-backfill';
 import { getMaintenanceRun, KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
-import { piModelsJson, WMB_VISION_MODEL } from './pi-model';
+import { piModelsJson } from './pi-model';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, piVisionExtensionFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
 import {
   agentRequestId,
@@ -67,6 +67,7 @@ import { broadcastPiEvent, broadcastPiRuntimeProgress, createWindow } from './ap
 import { registerSettingsConfigIpc } from './ipc-settings-config';
 import { registerPiDockIpc } from './ipc-pi-dock';
 import { registerXListIpc } from './ipc-x-lists'; import { dispatchRecoverOrphanedXListOperations } from './x-list-business-command'; import { activeXListOperationIds } from './x-list-execution'; import { registerIntelligenceChannelsIpc } from './ipc-intelligence-channels';
+import { registerIllustrationWorkflowIpc, resumePendingIllustrationRuns } from './illustration-workflow.ts';
 import { getAsset, guessImageMime } from './assets';
 import { preparePiExtension } from './pi-extension';
 import { WorkspaceProposalStore } from './workspace-proposals'; import { IntelligenceChannelProposalStore } from './intelligence-channel-proposals'; import { createWorkspaceConfirmation } from './workspace-confirmation';
@@ -168,16 +169,18 @@ if (!hasSingleInstanceLock) {
  * desk 独占 lease，第二次拿到「当前 Pi worker lease 尚未释放」）。
  */
 let deskStartup: Promise<PiRpcSupervisor> | null = null;
-async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable<string> } = {}): Promise<PiRpcSupervisor> {
+async function ensurePi(dataRoot: DataRoot, options: { skipCandidateKeys?: Iterable<string> } = {}): Promise<PiRpcSupervisor> {
   const runtime = activeRuntime;
   if (!runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
   const running = currentPi();
-  if (running?.isRunning && !options.skipProfileIds) return running;
+  if (running?.isRunning && !options.skipCandidateKeys) return running;
   if (deskStartup) return deskStartup;
   const startup = (async () => {
-    if (running?.isRunning && options.skipProfileIds) await runtime.stopWorker().catch(() => {});
+    if (running?.isRunning && options.skipCandidateKeys) await runtime.stopWorker().catch(() => {});
     const lease = runtime.acquireWorkerLease(null, null, 'desk');
-    const chain = resolvePiConfigChain(undefined, { skipProfileIds: options.skipProfileIds });
+    const deskPolicySnapshot = resolveRoleModelPolicySnapshot('desk');
+    const skipCandidateKeys = new Set(options.skipCandidateKeys ?? []);
+    const chain = resolveRolePiConfigChain('desk', deskPolicySnapshot).filter((config) => !skipCandidateKeys.has(roleModelCandidateKey(config.id, config.model)));
     const failures: string[] = [];
     let lastError: unknown;
     try {
@@ -194,7 +197,7 @@ async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable
         try {
           await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
           worker = new PiRpcSupervisor(process.execPath, [piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', runtime.getPiSessionFile() || layout.sessionFile, '-e', extensionPath, '-e', piVisionExtensionFromRuntimeRoot(runtimeRoot), '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []), '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT], {
-            ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: WMB_VISION_MODEL, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
+            ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: config.model, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
           }, (event) => {
             runtime.guardLease(lease, () => {
               broadcastPiRuntimeProgress(event, 'dock');
@@ -224,7 +227,9 @@ async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable
               profileName: config.name,
               model: config.model,
               text: `主服务不可用，已降级到 ${config.name}（${config.model}）`,
-              failures
+              failures,
+              roleId: 'desk',
+              policyRevision: deskPolicySnapshot.revision
             });
           }
           return worker;
@@ -241,9 +246,18 @@ async function ensurePi(dataRoot: DataRoot, options: { skipProfileIds?: Iterable
             profileId: config.id,
             profileName: config.name,
             text: `${config.name} 失败，正在尝试下一个 AI 服务…`,
-            error: message
+            error: message,
+            roleId: 'desk',
+            policyRevision: deskPolicySnapshot.revision
           });
         }
+      }
+      if (lastError && isPiProviderFallbackError(lastError) && failures.length) {
+        throw Object.assign(new Error(`角色模型链已耗尽：${failures.join('；')}`), {
+          code: 'ROLE_MODEL_CHAIN_EXHAUSTED',
+          details: { state: 'needs_user', roleId: 'desk', policyRevision: deskPolicySnapshot.revision, failures: [...failures] },
+          failures: [...failures]
+        });
       }
       throw lastError instanceof Error ? lastError : new Error(failures.at(-1) || 'Pi 模型服务不可用。');
     } catch (error) {
@@ -297,7 +311,7 @@ async function withKnowledgeCompilePi<T>(dataRootPath: string, run: (runtime: Pi
           }
         }, workDir);
       };
-      const started = await startPiRuntimeWithFallback({ createRuntime });
+      const started = await startPiRuntimeWithFallback({ roleId: 'desk', createRuntime });
       knowledgeCompilePi = started.runtime;
       knowledgeCompilePiWorkDir = workDir;
     }
@@ -839,7 +853,7 @@ app.whenReady().then(async () => {
     setPiSessionFile: (sessionFile) => { activeRuntime?.setPiSessionFile(sessionFile); },
     getActiveRuntime: () => activeRuntime
   });
-  if (activeRuntime) resumePendingInvestigationSupervisorReviews(activeRuntime);
+  queueMicrotask(() => { if (activeRuntime) resumePendingInvestigationSupervisorReviews(activeRuntime); });
   ipcMain.handle('agent:start', async (_event, input: { intent: AgentIntent; businessDate: string; contextRefs?: Record<string, unknown> }) => {
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
@@ -1167,6 +1181,8 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
   ipcMain.handle('settings:open-logs', async () => { const dataRoot = await loadSelectedDataRoot(); if (!dataRoot) throw new Error('请先选择数据根目录。'); const error = await shell.openPath(path.join(dataRoot.path, 'logs')); if (error) throw new Error(error); });
   ipcMain.handle('link:open', async (_event, value: string) => { const url = new URL(value); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('只允许打开网页链接。'); await shell.openExternal(url.toString()); });
   registerKnowledgeContentIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
+  registerIllustrationWorkflowIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
+  if (activeRuntime) void resumePendingIllustrationRuns({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
   registerJobsIpc({ getActiveRuntime: () => activeRuntime });
   setDeskJobNotifyBridges({ getPi: currentPi, getRuntime: () => activeRuntime });
   registerExecutionGrantIpc(ipcMain, () => activeRuntime);

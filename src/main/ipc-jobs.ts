@@ -22,11 +22,21 @@ export type JobsIpcDependencies = {
   getActiveRuntime: () => ActiveWorkspaceRuntime | null;
 };
 
-const supervisorReviewsStarted = new Set<string>();
+const supervisorReviewPackagesStarted = new Map<string, string>();
 
-function dispatchInvestigationSupervisorReview(projectId: string): void {
-  if (supervisorReviewsStarted.has(projectId)) return;
-  supervisorReviewsStarted.add(projectId);
+function dispatchInvestigationSupervisorReview(runtime: ActiveWorkspaceRuntime, projectId: string): void {
+  const pending = runtime.database.prepare(
+    `SELECT package.id AS package_id
+       FROM project_investigations AS investigation
+       JOIN investigation_packages AS package ON package.project_id = investigation.project_id
+      WHERE investigation.project_id = ?
+        AND investigation.status = 'research_review'
+        AND package.review_json IS NULL
+      ORDER BY package.round DESC
+      LIMIT 1`
+  ).get(projectId) as { package_id: string } | undefined;
+  if (!pending || supervisorReviewPackagesStarted.get(projectId) === pending.package_id) return;
+  supervisorReviewPackagesStarted.set(projectId, pending.package_id);
   const dispatchId = randomUUID();
   void runDockManagerPrompt({
     message: buildInvestigationSupervisorReviewPrompt(projectId),
@@ -45,7 +55,9 @@ function dispatchInvestigationSupervisorReview(projectId: string): void {
       }
     }
   }).catch((error) => {
-    supervisorReviewsStarted.delete(projectId);
+    if (supervisorReviewPackagesStarted.get(projectId) === pending.package_id) {
+      supervisorReviewPackagesStarted.delete(projectId);
+    }
     console.error('[project-investigation-supervisor-review]', error);
   });
 }
@@ -54,7 +66,7 @@ export function resumePendingInvestigationSupervisorReviews(runtime: ActiveWorks
   const rows = runtime.database.prepare(
     `SELECT project_id FROM project_investigations WHERE status = 'research_review' ORDER BY updated_at ASC`
   ).all() as Array<{ project_id: string }>;
-  for (const row of rows) dispatchInvestigationSupervisorReview(row.project_id);
+  for (const row of rows) dispatchInvestigationSupervisorReview(runtime, row.project_id);
 }
 
 export function ensureJobsSpawner(deps: JobsIpcDependencies) {
@@ -69,7 +81,7 @@ export function ensureJobsSpawner(deps: JobsIpcDependencies) {
       void handleInvestigationJobEvent(runtime, event)
         .then((investigation) => {
           if (investigation?.role === 'reporter_review' && investigation.dispatchSupervisor) {
-            dispatchInvestigationSupervisorReview(investigation.projectId);
+            dispatchInvestigationSupervisorReview(runtime, investigation.projectId);
           }
           return notifyDeskJobEvent({
             type: String(event.type ?? ''),

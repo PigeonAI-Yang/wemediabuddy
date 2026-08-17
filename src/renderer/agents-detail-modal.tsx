@@ -402,7 +402,7 @@ function InstanceRunDetail({
             ))}
           </ul>
         ) : (
-          <p className="agents-detail-empty">暂无运行明细</p>
+          <p className="agents-detail-empty">暂无消息</p>
         )}
       </section>
       <RunLogSection events={events} transcript={transcript ?? []} followKey={inst.jobId} />
@@ -412,7 +412,7 @@ function InstanceRunDetail({
 
 /**
  * 智能体任务详情弹窗（WMB-5251，由 WMB-5195 右侧抽屉迁移）：按角色打开，
- * 默认选中该角色第一个活动实例，多实例可切换。数据全部来自共享只读 API；
+ * 活动实例优先，角色空闲时显示最近一次持久历史；活动多实例可切换。数据全部来自共享只读 API；
  * onPiEvent/onDataChanged 只触发选中实例重读，不把事件直接归属；运行中低频
  * fallback 刷新，关闭即清理订阅与定时器。遮罩/焦点/ Esc /滚动锁由共享 AppModal 承担；
  * 关闭仅清 UI 状态，绝不取消运行中任务。
@@ -455,13 +455,16 @@ export function AgentsDetailModal({
   const roleKey: EmployeeRole | null = roleId === 'desk' ? null : (roleId as EmployeeRole);
   const active = roleKey ? (projection.byRole[roleKey]?.active ?? []) : [];
   const ordered = sortInstancesForDisplay(active);
-  const selected = ordered.find((i) => i.jobId === selectedJobId) ?? ordered[0] ?? null;
+  const latestHistory = roleKey ? (projection.byRole[roleKey]?.history?.[0] ?? null) : null;
   const deskActive = roleId === 'desk' && Boolean(deskOccupied || deskConflict || deskRow?.status === 'running' || deskRow?.status === 'blocked');
   // 与角色卡同一 roster 行投影：running/blocked 且带 taskId 即视为权威活动行；
   // 实例优先，遗留行只在无投影实例时渲染（与 RoleOverviewRow legacyBusy 语义一致）。
   const row = roleId === 'desk' ? (deskRow ?? null) : (roleRow ?? null);
   const rowActive = Boolean(row && row.taskId && (row.status === 'running' || row.status === 'blocked'));
   const rowBacked = roleId === 'desk' ? deskActive : ordered.length === 0 && rowActive;
+  // 活动实例/遗留活动行优先；角色空闲时保留最近一次持久历史，避免终态切换后执行过程瞬间消失。
+  const displayed = ordered.length > 0 || rowBacked ? ordered : latestHistory ? [latestHistory] : [];
+  const selected = displayed.find((i) => i.jobId === selectedJobId) ?? displayed[0] ?? null;
 
   const [task, setTask] = useState<AgentTaskView | null>(null);
   const [messages, setMessages] = useState<JobMessageView[]>([]);
@@ -563,7 +566,7 @@ export function AgentsDetailModal({
               transcript={transcript}
             />
           ) : <p className="agents-detail-empty">暂无运行明细</p>
-        ) : ordered.length === 0 ? (
+        ) : displayed.length === 0 ? (
           rowBacked ? (
             <RosterRunDetail
               name={`${meta.labelZh}任务`}
@@ -576,9 +579,9 @@ export function AgentsDetailModal({
           ) : <p className="agents-detail-empty">暂无运行明细</p>
         ) : (
           <>
-            {ordered.length > 1 ? (
+            {displayed.length > 1 ? (
               <div className="agents-detail-switch" role="group" aria-label="任务切换">
-                {ordered.map((inst, index) => (
+                {displayed.map((inst, index) => (
                   <button
                     key={inst.jobId}
                     type="button"

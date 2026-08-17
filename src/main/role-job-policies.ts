@@ -9,12 +9,13 @@ import { getAgentTask } from './agent-tasks.ts';
 import {
   dispatchCancelAgentTask,
   dispatchFailAgentTask,
+  dispatchNeedsUserAgentTask,
   dispatchStartAgentTask,
   type AgentTaskCommandContext
 } from './agent-task-commands.ts';
 import type { DeferredSignal, RoleJobPolicy, RoleJobReadbackV1, RoleJobSpec } from './role-job-registry.ts';
 import { JOB_ERROR_CODES, snapshotScanReadback } from './role-job-registry.ts';
-import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
+import { readTaskModelPolicySnapshot, resolveAgentPiPrerequisite, roleModelNeedsUserFailure } from './agent-prerequisites.ts';
 import { startWorkspaceDailyIntelligence } from './workspace-intelligence.ts';
 import { startStudioDraft } from './agent-runner.ts';
 import { startResearchJob } from './research-job-runtime.ts';
@@ -220,27 +221,28 @@ export async function runOrganizePolicy(ctx: EmployeePolicyContext): Promise<Emp
   if (!ctx.signal.aborted) ctx.signal.addEventListener('abort', onAbort, { once: true });
   try {
     const contextRefs = {
-      roleId: 'librarian',
+      roleId: 'librarian' as const,
       jobId: ctx.jobId,
       brief: ctx.brief,
       manager: 'desk',
       workspaceId: runtime.identity.workspaceId
     };
-    // 与 daily/studio 原语同构：Pi 配置缺失 → 复用 needs_user 任务（主管补配置后重派）。
+    // 与 daily/studio 原语同构：角色模型策略缺失或无效 → 复用 needs_user 任务。
     const prerequisite = await resolveAgentPiPrerequisite(runtime, {
-      intent: 'page_library',
-      businessDate: ctx.businessDate,
-      contextRefs
+      intent: 'page_library', roleId: 'librarian', businessDate: ctx.businessDate, contextRefs
     });
     if (prerequisite.waiting) return { task: prerequisite.waiting.task, reused: true };
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
     const startRequestId = `page_library:${ctx.jobId}:start:${randomUUID()}`;
     const started = await dispatchStartAgentTask(runtime, {
       intent: 'page_library',
       businessDate: ctx.businessDate,
-      contextRefs
+      contextRefs: taskContextRefs
     }, taskCommandContext(lane, startRequestId, undefined, ctx.workerLeaseId));
     const task = started.task;
     createdTask = task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'librarian') ?? policySnapshot;
     if (started.reused && !['resume_pending', 'starting'].includes(task.phase)) return { task, reused: true };
     // 任务已建但取消信号已到：直接取消任务，不再启动 Pi。
     if (ctx.signal.aborted) {
@@ -281,6 +283,9 @@ export async function runOrganizePolicy(ctx: EmployeePolicyContext): Promise<Emp
       await pi?.stop().catch(() => {});
     });
     const startedRuntime = await startPiRuntimeWithFallback({
+      roleId: 'librarian',
+      policySnapshot: taskPolicySnapshot,
+      taskId: task.id,
       createRuntime,
       onEvent: (event) => ctx.onEvent(event as unknown as Record<string, unknown>)
     });
@@ -289,6 +294,9 @@ export async function runOrganizePolicy(ctx: EmployeePolicyContext): Promise<Emp
     // WMB-5121 §8.3：捕获会话末条 assistant 文本（内存路径，免读文件；readback 优先于收据外的围栏声明）。
     let finalAssistantText: string | null = null;
     await runPiPromptWithFallback({
+      roleId: 'librarian',
+      policySnapshot: taskPolicySnapshot,
+      taskId: task.id,
       initial: startedRuntime,
       createRuntime,
       onEvent: (event) => ctx.onEvent(event as unknown as Record<string, unknown>),
@@ -318,6 +326,11 @@ export async function runOrganizePolicy(ctx: EmployeePolicyContext): Promise<Emp
           // 不落 failed 双终态（runner abort 门已尽量抢先，此处兜底）。
           await bestEffortCancelTask(runtime, createdTask.id, lane, ctx.workerLeaseId);
         } else {
+          const modelFailure = roleModelNeedsUserFailure(error);
+          if (modelFailure) {
+            const waiting = await dispatchNeedsUserAgentTask(runtime, createdTask.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${createdTask.id}:needs-user:model`, createdTask.id, ctx.workerLeaseId));
+            return { task: waiting, reused: false, finalAssistantText: null };
+          }
           try {
             await dispatchFailAgentTask(runtime, createdTask.id, JOB_ERROR_CODES.LIBRARY_ORGANIZE_FAILED, error instanceof Error ? error.message : String(error), taskCommandContext(lane, `${createdTask.id}:fail`, createdTask.id, ctx.workerLeaseId));
           } catch { /* 控制路径已写终态则忽略 */ }

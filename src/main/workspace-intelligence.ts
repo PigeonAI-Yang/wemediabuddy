@@ -9,12 +9,13 @@ import { agentRequestId, dailyAgentSessionId, getAgentTask } from './agent-tasks
 import {
   dispatchCompleteAgentTask,
   dispatchFinishDailyIntelligence,
+  dispatchNeedsUserAgentTask,
   dispatchReportAgentTaskProgress,
   dispatchStartAgentTask,
   dispatchUpdateAgentTaskPhase,
   type AgentTaskMutationDependency
 } from './agent-task-commands.ts';
-import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
+import { readTaskModelPolicySnapshot, resolveAgentPiPrerequisite, roleModelNeedsUserFailure } from './agent-prerequisites.ts';
 import { startDailyIntelligence, type DailyIntelligenceRun } from './agent-runner.ts';
 import { startDailyChannelRun, type DailyChannelInput } from './daily-intelligence-channels.ts';
 import type { DeferredSignal } from './role-job-registry.ts';
@@ -82,7 +83,7 @@ export async function startWorkspaceDailyIntelligence(
   try {
     const workspace = database.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined;
     if (!workspace?.value) throw new Error('WORKSPACE_ID_REQUIRED');
-    const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
+    const contextRefs = { roleId: 'planner' as const, planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
     if (input.judgeOnly) {
       // 增量判断入口：复用采集后处于 channel_scanned 的当日任务直接进入判断。
       if (profile.intelligencePackId === 'wemedia-intelligence-engine') return runners.ai ? runners.ai(input) : startDailyIntelligence(input);
@@ -90,7 +91,9 @@ export async function startWorkspaceDailyIntelligence(
       return runners.game ? runners.game(input, profile) : startLaneDailyIntelligence(input, profile);
     }
     if (!hasInjected && !input.scanOnly) {
-      const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+      const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+        intent: 'daily_intelligence', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+      });
       if (prerequisite.waiting) return prerequisite.waiting;
     }
     const channels = await startDailyChannelRun(dependency, {
@@ -116,13 +119,18 @@ export async function startWorkspaceDailyIntelligence(
 async function startLaneDailyIntelligence(input: IntelligenceInput, profile: WorkspaceProfileV1): Promise<DailyIntelligenceRun> {
   const { dependency, database, close } = workspaceDependency(input);
   const lane = profile.intelligencePackId;
-  const startRequestId = `daily_intelligence:${input.businessDate}:${profile.profileId}:start:${randomUUID()}`;
+  const startRequestId = `workspace_daily:${profile.profileId}:${input.businessDate}:start:${randomUUID()}`;
   try {
-    const contextRefs = { planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
-    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    const contextRefs = { roleId: 'planner' as const, planDate: input.businessDate, workspaceProfileId: profile.profileId, workspaceProfileRevision: profile.revision };
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+      intent: 'daily_intelligence', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+    });
     if (prerequisite.waiting) return prerequisite.waiting;
-    const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs }, schedulerContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
+    const started = await dispatchStartAgentTask(dependency, { intent: 'daily_intelligence', businessDate: input.businessDate, contextRefs: taskContextRefs }, schedulerContext(lane, startRequestId, undefined, input.workerLeaseId));
     const task = started.task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'planner') ?? policySnapshot;
     if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
@@ -166,12 +174,18 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
     try {
       await dispatchReportAgentTaskProgress(dependency, task.id, { phase: 'judging_opportunities', message: '渠道扫描已完成，正在评估新资料并更新选题池。' }, schedulerContext(lane, `${task.id}:progress:judging`, task.id, input.workerLeaseId));
       const startedRuntime = await startPiRuntimeWithFallback({
+        roleId: 'planner',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         createRuntime,
         onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>)
       });
       runtime = startedRuntime.runtime;
       await runPiPromptWithFallback({
+        roleId: 'planner',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         initial: startedRuntime,
         createRuntime,
@@ -189,6 +203,11 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
       return { task: completed, reused: false };
     } catch (error) {
       const current = getAgentTask(database, task.id);
+      const modelFailure = roleModelNeedsUserFailure(error);
+      if (current?.status === 'running' && modelFailure) {
+        const waiting = await dispatchNeedsUserAgentTask(dependency, current.id, modelFailure.code, modelFailure.message, schedulerContext(lane, `${current.id}:needs-user:model`, current.id, input.workerLeaseId));
+        return { task: waiting, reused: started.reused };
+      }
       if (current?.status === 'running') {
         const partial = await dispatchFinishDailyIntelligence(dependency, current.id, {
           forcePartial: true,

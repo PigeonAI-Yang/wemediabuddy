@@ -38,6 +38,7 @@ import {
   dispatchCancelAgentTask,
   dispatchCompleteAgentTask,
   dispatchFailAgentTask,
+  dispatchNeedsUserAgentTask,
   dispatchFinishDailyIntelligence,
   dispatchPartialAgentTask,
   dispatchReportAgentTaskProgress,
@@ -46,7 +47,7 @@ import {
   type AgentTaskCommandContext,
   type AgentTaskMutationDependency
 } from './agent-task-commands.ts';
-import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
+import { readTaskModelPolicySnapshot, resolveAgentPiPrerequisite, roleModelNeedsUserFailure } from './agent-prerequisites.ts';
 import { ensurePiConversationLayout, readPiConversation } from './pi-conversation.ts';
 import { buildOrchestrationEnvelope } from '../shared/orchestration-envelope.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
@@ -559,8 +560,12 @@ export async function startDailyIntelligence(input: {
   const startRequestId = `daily_intelligence:${input.businessDate}:start:${randomUUID()}`;
   try {
     const contextRefs = { planDate: input.businessDate, roleId: 'planner' as const };
-    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'daily_judge', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+      intent: 'daily_judge', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+    });
     if (prerequisite.waiting) return prerequisite.waiting;
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
     const existing = getActiveDailyIntelligenceTask(database, input.businessDate);
     let started: { task: AgentTask; reused: boolean };
     if (existing && (existing.phase === 'channel_scanned' || existing.phase === 'resume_pending' || existing.intent === 'daily_judge')) {
@@ -570,15 +575,16 @@ export async function startDailyIntelligence(input: {
         existing.phase,
         {
           intent: existing.intent === 'daily_judge' ? undefined : 'daily_judge',
-          contextRefs: { ...existing.contextRefs, ...contextRefs, roleId: 'planner' }
+          contextRefs: { ...existing.contextRefs, ...taskContextRefs, modelPolicySnapshot: readTaskModelPolicySnapshot(existing, 'planner') ?? policySnapshot }
         },
         taskCommandContext(lane, `${existing.id}:rebind-judge:${randomUUID()}`, existing.id, input.workerLeaseId, { requestId: startRequestId })
       );
       started = { task: rebound, reused: true };
     } else {
-      started = await dispatchStartAgentTask(dependency, { intent: 'daily_judge', businessDate: input.businessDate, contextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+      started = await dispatchStartAgentTask(dependency, { intent: 'daily_judge', businessDate: input.businessDate, contextRefs: taskContextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     }
     const task = started.task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'planner') ?? policySnapshot;
     if (started.reused && !['resume_pending', 'starting', 'channel_scanned'].includes(task.phase)) return { task, reused: true };
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const piSessionId = dailyAgentSessionId(input.businessDate, task.id);
@@ -664,6 +670,9 @@ export async function startDailyIntelligence(input: {
           refreshWorkCarry(dependency, beforePlan.businessDate);
         }
         const startedRuntime = await startPiRuntimeWithFallback({
+          roleId: 'planner',
+          policySnapshot: taskPolicySnapshot,
+          taskId: beforePlan.id,
           piConfigPath: input.piConfigPath,
           createRuntime,
           onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>)
@@ -678,6 +687,9 @@ export async function startDailyIntelligence(input: {
           const gateTask = getAgentTask(database, beforePlan.id) ?? beforePlan;
           const gateRun = buildDailyGateRun(database, gateTask);
           const prompted = await runPiPromptWithFallback({
+            roleId: 'planner',
+            policySnapshot: taskPolicySnapshot,
+            taskId: beforePlan.id,
             piConfigPath: input.piConfigPath,
             initial: { runtime: synthesis, config: activeConfig },
             createRuntime,
@@ -758,6 +770,11 @@ export async function startDailyIntelligence(input: {
       const current = getAgentTask(database, task.id);
       const cancelled = await cancelIfRequested(current);
       if (cancelled) return { task: cancelled, reused: started.reused };
+      const modelFailure = roleModelNeedsUserFailure(error);
+      if (current?.status === 'running' && modelFailure) {
+        const waiting = await dispatchNeedsUserAgentTask(dependency, task.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${task.id}:needs-user:model`, task.id, input.workerLeaseId));
+        return { task: waiting, reused: started.reused };
+      }
       if (current?.status === 'running') {
         const partial = await dispatchFinishDailyIntelligence(dependency, task.id, { forcePartial: true, errorCode: 'DAILY_INTELLIGENCE_FAILED', errorMessage: message }, taskCommandContext(lane, `${task.id}:finish:failed`, task.id, input.workerLeaseId));
         return { task: partial, reused: started.reused };
@@ -815,11 +832,10 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
     `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
     '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；标题围绕该题材独有的对象、问题、动作或证据，不自动添加「普通人」等万能受众标签，不复用固定前缀，不写来源未支持的数字、结果或因果；本任务禁止调用 wmb_save_platform_version，研究续派任务也禁止再次派研究。',
-    '4. 把图文交付作为完成条件：优先复用项目已有可信图片；没有可用图片时，至少制作一张不含未经核实事实的 SVG 首图和一张正文信息图。分别调用 wmb_import_project_image 导入，requestId 使用 version_request_id 后缀 :image:1、:image:2，并保留返回的 assetId 与 Markdown。',
-    '5. 将首图放在 H1 后，将正文信息图放在对应判断段落后；图片必须推进理解，禁止纯装饰、虚构产品截图、金额、数据或引语。',
-    `6. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为包含图片 Markdown 的完整正文，并通过 mediaBindings 提交每张图片的 assetId、occurrence、widthPreset、align 和 caption。`,
-    `7. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认项目已有核心版本正文，且 assets、最新版 bindings 和正文 wmb-asset 引用均非空。若图片导入或绑定失败，不得把任务报告为完整图文稿。`,
-    '8. 最后用简洁中文回复：已保存图文核心版本，并给出标题、图片数量和正文前两句。'
+    '4. 正文阶段不自动生成、导入或插入图片；如需配图，必须在正文保存后由 Owner 显式启动定稿配图流程。',
+    `5. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为不含自动配图的完整正文。`,
+    `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存；配图由定稿流程单独处理。`,
+    '7. 最后用简洁中文回复：已保存核心正文，并给出标题和正文前两句。'
   ].join('\n');
 }
 
@@ -844,16 +860,22 @@ export async function startStudioDraft(input: {
   const startRequestId = input.startRequestId ?? `studio_draft:${input.businessDate}:${input.projectId}:start`;
   try {
     const contextRefs = {
+      roleId: 'writer' as const,
       projectId: input.projectId,
       writerTask,
       researchGate: writerTask === 'core_draft' ? (input.researchReady === true ? 'satisfied' : 'required') : 'not_applicable'
     };
-    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+      intent: 'studio_draft', roleId: 'writer', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+    });
     if (prerequisite.waiting) return prerequisite.waiting;
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
     const conversation = await readPiConversation(input.dataRootPath);
-    const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs: taskContextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'writer') ?? policySnapshot;
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const extensionPath = await preparePiExtension(layout.agentDir);
@@ -900,12 +922,18 @@ export async function startStudioDraft(input: {
     let runtime: PiRpcSupervisor | null = null;
     try {
       const startedRuntime = await startPiRuntimeWithFallback({
+        roleId: 'writer',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         createRuntime,
         onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>)
       });
       runtime = startedRuntime.runtime;
       await runPiPromptWithFallback({
+        roleId: 'writer',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         initial: startedRuntime,
         createRuntime,
@@ -949,6 +977,11 @@ export async function startStudioDraft(input: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const current = getAgentTask(database, task.id);
+      const modelFailure = roleModelNeedsUserFailure(error);
+      if (current?.status === 'running' && modelFailure) {
+        const waiting = await dispatchNeedsUserAgentTask(dependency, task.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${task.id}:needs-user:model`, task.id, input.workerLeaseId));
+        return { task: waiting, reused: false };
+      }
       if (current?.status === 'running') await dispatchFailAgentTask(dependency, task.id, 'STUDIO_DRAFT_FAILED', message, taskCommandContext(lane, `${task.id}:fail`, task.id, input.workerLeaseId));
       throw error;
     } finally {
@@ -989,13 +1022,18 @@ export async function startResultsReview(input: {
   const lane = 'results-review';
   const startRequestId = `results_review:${input.businessDate}:${input.publicationId}:start`;
   try {
-    const contextRefs = { publicationId: input.publicationId };
-    const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
+    const contextRefs = { roleId: 'planner' as const, publicationId: input.publicationId };
+    const prerequisite = await resolveAgentPiPrerequisite(dependency, {
+      intent: 'results_review', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
+    });
     if (prerequisite.waiting) return prerequisite.waiting;
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
     const conversation = await readPiConversation(input.dataRootPath);
-    const started = await dispatchStartAgentTask(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const started = await dispatchStartAgentTask(dependency, { intent: 'results_review', businessDate: input.businessDate, contextRefs: taskContextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'planner') ?? policySnapshot;
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const extensionPath = await preparePiExtension(layout.agentDir);
@@ -1021,12 +1059,18 @@ export async function startResultsReview(input: {
     let runtime: PiRpcSupervisor | null = null;
     try {
       const startedRuntime = await startPiRuntimeWithFallback({
+        roleId: 'planner',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         createRuntime,
         onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>)
       });
       runtime = startedRuntime.runtime;
       await runPiPromptWithFallback({
+        roleId: 'planner',
+        policySnapshot: taskPolicySnapshot,
+        taskId: task.id,
         piConfigPath: input.piConfigPath,
         initial: startedRuntime,
         createRuntime,
@@ -1046,6 +1090,11 @@ export async function startResultsReview(input: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const current = getAgentTask(database, task.id);
+      const modelFailure = roleModelNeedsUserFailure(error);
+      if (current?.status === 'running' && modelFailure) {
+        const waiting = await dispatchNeedsUserAgentTask(dependency, task.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${task.id}:needs-user:model`, task.id, input.workerLeaseId));
+        return { task: waiting, reused: false };
+      }
       if (current?.status === 'running') await dispatchFailAgentTask(dependency, task.id, 'RESULTS_REVIEW_FAILED', message, taskCommandContext(lane, `${task.id}:fail`, task.id, input.workerLeaseId));
       throw error;
     } finally {

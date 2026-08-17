@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Theme } from './app-types';
 import { BrowserSettings } from './browser-settings';
 import { IntelligenceChannelsView } from './intelligence-channels-view';
@@ -7,6 +7,138 @@ import { AgentsSettingsPanel } from './agents-settings-panel';
 import { appConfirm } from './app-confirm';
 import { AppUpdateSettings } from './app-update-settings';
 import { SettingsIcon, type SettingsIconName } from './settings-icons';
+import type { WmbRoleId, WmbRoleModelCandidate, WmbRoleModelPolicy, WmbSettingsSnapshot } from './wmb-settings-types';
+
+const ROLE_DEFINITIONS: Array<{ id: WmbRoleId; label: string; description: string }> = [
+  { id: 'desk', label: '主管 / Pi', description: '主编席对话与全站内部审批。' },
+  { id: 'reporter', label: '记者', description: '发现、采集和整理外部线索。' },
+  { id: 'planner', label: '策划', description: '判断机会、形成选题与复盘方向。' },
+  { id: 'writer', label: '写手', description: '根据已批准的方向起草内容。' },
+  { id: 'librarian', label: '资料员', description: '整理资料库与主题家底。' }
+];
+type RolePolicyDraft = Record<WmbRoleId, WmbRoleModelCandidate[]>;
+type PiModelOption = { id: string; contextWindow?: number; maxTokens?: number };
+type RoleModelFetchRecord = { requestKey: string; models: PiModelOption[]; error?: string };
+const ROLE_THINKING_OPTIONS = [
+  { value: 'off', label: '关闭思考' },
+  { value: 'minimal', label: '最低' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'xhigh', label: '极高' },
+  { value: 'max', label: '最大' }
+] as const;
+type RoleThinkingLevel = typeof ROLE_THINKING_OPTIONS[number]['value'];
+
+function isRoleThinkingLevel(value: unknown): value is RoleThinkingLevel {
+  return ROLE_THINKING_OPTIONS.some((option) => option.value === value);
+}
+
+function roleCandidateIdentity(candidate: WmbRoleModelCandidate): string {
+  return JSON.stringify([candidate.profileId, candidate.model]);
+}
+
+function roleCandidateValue(candidate: WmbRoleModelCandidate): string {
+  return JSON.stringify({ profileId: candidate.profileId, model: candidate.model });
+}
+
+function parseRoleCandidateValue(value: string): WmbRoleModelCandidate | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || !('profileId' in parsed) || !('model' in parsed) || typeof parsed.profileId !== 'string' || typeof parsed.model !== 'string') return null;
+    const thinking = 'thinking' in parsed ? parsed.thinking : undefined;
+    if (thinking !== undefined && !isRoleThinkingLevel(thinking)) return null;
+    return { profileId: parsed.profileId, model: parsed.model, ...(thinking === undefined ? {} : { thinking }) };
+  } catch {
+    return null;
+  }
+}
+
+function isPiModelOption(value: unknown): value is PiModelOption {
+  if (!value || typeof value !== 'object' || !('id' in value) || typeof value.id !== 'string') return false;
+  return value.id.length > 0;
+}
+
+function normalizePiModels(models: unknown): PiModelOption[] {
+  if (!Array.isArray(models)) return [];
+  const seen = new Set<string>();
+  return models.filter((model): model is PiModelOption => {
+    if (!isPiModelOption(model) || seen.has(model.id)) return false;
+    seen.add(model.id);
+    return true;
+  });
+}
+
+function rolePolicyDraftFromSettings(settings: WmbSettingsSnapshot | null | undefined): RolePolicyDraft {
+  return ROLE_DEFINITIONS.reduce((draft, role) => {
+    draft[role.id] = (settings?.pi.roleModelPolicies?.[role.id]?.candidates ?? []).map((candidate) => ({
+      profileId: typeof candidate?.profileId === 'string' ? candidate.profileId : '',
+      model: typeof candidate?.model === 'string' ? candidate.model : '',
+      thinking: candidate?.thinking
+    }));
+    return draft;
+  }, {} as RolePolicyDraft);
+}
+
+function policyInputFromDraft(draft: RolePolicyDraft): Record<WmbRoleId, WmbRoleModelPolicy> {
+  return ROLE_DEFINITIONS.reduce((policies, role) => {
+    policies[role.id] = { candidates: draft[role.id].map((candidate) => ({ ...candidate })) };
+    return policies;
+  }, {} as Record<WmbRoleId, WmbRoleModelPolicy>);
+}
+
+function validateRolePolicyDraft(draft: RolePolicyDraft, settings: WmbSettingsSnapshot | null | undefined): string[] {
+  const profiles = settings?.pi.profiles ?? [];
+  const errors: string[] = [];
+  for (const role of ROLE_DEFINITIONS) {
+    const candidates = draft[role.id] ?? [];
+    if (candidates.length === 0) {
+      errors.push(`${role.label}至少需要一个模型候选。`);
+      continue;
+    }
+    const identities = new Set<string>();
+    for (const candidate of candidates) {
+      const profileId = typeof candidate?.profileId === 'string' ? candidate.profileId : '';
+      const model = typeof candidate?.model === 'string' ? candidate.model : '';
+      if (!profileId.trim() || !model.trim()) {
+        errors.push(`${role.label}的候选必须同时包含 Provider 预设和模型。`);
+        continue;
+      }
+      const identity = roleCandidateIdentity({ profileId, model });
+      if (identities.has(identity)) errors.push(`${role.label}的 Provider 与模型组合不能重复。`);
+      identities.add(identity);
+      const profile = profiles.find((item) => item.id === profileId);
+      if (!profile) errors.push(`${role.label}引用的预设已不存在，请重新分配。`);
+      else if (!profile.configured) errors.push(`${role.label}的预设“${profile.name}”尚未完成 API 配置。`);
+    }
+  }
+  return errors;
+}
+
+function formatThinking(thinking: WmbRoleModelCandidate['thinking']): string {
+  const labels: Record<RoleThinkingLevel, string> = {
+    off: '关闭思考', minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最大'
+  };
+  return thinking ? labels[thinking] : '默认思考';
+}
+
+function formatRoleCandidateThinking(candidate: WmbRoleModelCandidate, providerThinking: WmbRoleModelCandidate['thinking']): string {
+  const inherited = candidate.thinking === undefined;
+  const effectiveThinking = inherited ? providerThinking : candidate.thinking;
+  const source = inherited ? '继承 Provider 默认' : '候选覆盖';
+  return `${source}：${formatThinking(effectiveThinking)}`;
+}
+
+function formatPiConfigError(error: unknown): string {
+  const value = error as { message?: unknown; details?: { roleIds?: unknown; taskReferences?: unknown } } | null;
+  const message = value && typeof value.message === 'string' ? value.message : '操作失败';
+  const details = value?.details;
+  const roleIds = Array.isArray(details?.roleIds) ? details.roleIds.filter((id): id is WmbRoleId => ROLE_DEFINITIONS.some((role) => role.id === id)) : [];
+  const tasks = Array.isArray(details?.taskReferences) ? details.taskReferences.filter((task): task is { taskId?: string } => Boolean(task && typeof task === 'object')) : [];
+  const roleText = roleIds.length ? `引用角色：${roleIds.map((id) => ROLE_DEFINITIONS.find((role) => role.id === id)?.label ?? id).join('、')}。` : '';
+  const taskText = tasks.length ? `还有 ${tasks.length} 个未结束任务引用此预设${tasks.some((task) => task.taskId) ? `（${tasks.map((task) => task.taskId).filter(Boolean).join('、')}）` : ''}。` : '';
+  return `${message}${roleText}${taskText}`;
+}
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0 B';
@@ -33,13 +165,24 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
+  const [piThinking, setPiThinking] = useState<WmbSettingsSnapshot['pi']['profiles'][number]['thinking']>('off');
   const [piApiKey, setPiApiKey] = useState('');
   const [piConfigNote, setPiConfigNote] = useState('');
-  const [piModels, setPiModels] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>([]);
+  const [piModels, setPiModels] = useState<PiModelOption[]>([]);
+  const [roleModelCatalog, setRoleModelCatalog] = useState<Record<string, PiModelOption[]>>({});
+  const [roleModelFetchErrors, setRoleModelFetchErrors] = useState<Record<string, string>>({});
+  const roleModelFetchCache = useRef(new Map<string, RoleModelFetchRecord>());
   const [piContextWindow, setPiContextWindow] = useState('');
   const [piMaxTokens, setPiMaxTokens] = useState('');
   const [piNativeSearch, setPiNativeSearch] = useState(false);
   const [loadingPiModels, setLoadingPiModels] = useState(false);
+  const [rolePolicyDraft, setRolePolicyDraft] = useState<RolePolicyDraft>(() => rolePolicyDraftFromSettings(settings));
+  const [rolePolicyDirty, setRolePolicyDirty] = useState(false);
+  const [rolePolicySaving, setRolePolicySaving] = useState(false);
+  const [rolePolicyNote, setRolePolicyNote] = useState('');
+  const [illustrationProfileId, setIllustrationProfileId] = useState('');
+  const [illustrationModel, setIllustrationModel] = useState('');
+  const [illustrationConfigNote, setIllustrationConfigNote] = useState('');
   const [runtimeNote, setRuntimeNote] = useState('');
   const [workspaceNote, setWorkspaceNote] = useState('');
   const [workspaces, setWorkspaces] = useState<{ activeWorkspaceId: string | null; workspaces: Array<{ id: string; displayName: string; rootPath: string }> }>({ activeWorkspaceId: null, workspaces: [] });
@@ -51,6 +194,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiApi(profile?.api ?? 'openai-responses');
     setPiBaseUrl(profile?.baseUrl ?? '');
     setPiModel(profile?.model ?? '');
+    setPiThinking(profile?.thinking ?? 'off');
     setPiContextWindow(profile?.contextWindow ? String(profile.contextWindow) : '');
     setPiMaxTokens(profile?.maxTokens ? String(profile.maxTokens) : '');
     setPiNativeSearch(profile?.nativeSearch === true);
@@ -63,6 +207,54 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     // 只在用户手动切换预设时由 selectPiProfile 清空提示。
     selectPiProfile(settings?.pi.activeId ?? '', { keepNote: true });
   }, [settings?.pi.activeId, settings?.pi.profiles]);
+  useEffect(() => {
+    if (rolePolicyDirty) return;
+    setRolePolicyDraft(rolePolicyDraftFromSettings(settings));
+  }, [settings?.pi.modelPolicyRevision, settings?.pi.profiles, rolePolicyDirty]);
+  useEffect(() => {
+    if (section !== 'ai' || !settings) return;
+    let cancelled = false;
+    const configuredProfiles = settings.pi.profiles.filter((profile) => profile.configured);
+    const pending = configuredProfiles.map(async (profile) => {
+      const requestKey = `${profile.baseUrl}\u0000${profile.api}`;
+      const cached = roleModelFetchCache.current.get(profile.id);
+      if (cached?.requestKey === requestKey) return [profile.id, cached] as const;
+      try {
+        const models = normalizePiModels(await window.wmb.listPiModels({ id: profile.id, baseUrl: profile.baseUrl, api: profile.api }));
+        const record: RoleModelFetchRecord = { requestKey, models };
+        roleModelFetchCache.current.set(profile.id, record);
+        return [profile.id, record] as const;
+      } catch (error) {
+        const record: RoleModelFetchRecord = {
+          requestKey,
+          models: [],
+          error: error instanceof Error ? error.message : '获取模型失败'
+        };
+        roleModelFetchCache.current.set(profile.id, record);
+        return [profile.id, record] as const;
+      }
+    });
+    void Promise.all(pending).then((entries) => {
+      if (cancelled) return;
+      const nextCatalog: Record<string, PiModelOption[]> = {};
+      const nextErrors: Record<string, string> = {};
+      for (const [profileId, record] of entries) {
+        nextCatalog[profileId] = record.models;
+        if (record.error) nextErrors[profileId] = record.error;
+      }
+      setRoleModelCatalog(nextCatalog);
+      setRoleModelFetchErrors(nextErrors);
+    });
+    return () => { cancelled = true; };
+  }, [section, settings?.pi.profiles]);
+  useEffect(() => {
+    if (section !== 'ai') return;
+    void window.wmb.getIllustrationImageConfig().then((config) => {
+      if (!config) return;
+      setIllustrationProfileId(config.profileId);
+      setIllustrationModel(config.model);
+    }).catch(() => {});
+  }, [section, settings?.pi.profiles]);
   useEffect(() => { if (section === 'data') void Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]).then(([listed, proposals]) => { setWorkspaces(listed); setWorkspaceProposals(proposals); }); }, [section, dataRoot]);
   const saveProfile = async () => {
     try {
@@ -72,18 +264,25 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         baseUrl: piBaseUrl,
         model: piModel,
         api: piApi,
-        thinking: settings?.pi.profiles.find((profile) => profile.id === piProfileId)?.thinking,
+        thinking: piThinking,
         nativeSearch: piNativeSearch,
         contextWindow: piContextWindow ? Number(piContextWindow) : null,
         maxTokens: piMaxTokens ? Number(piMaxTokens) : null,
         apiKey: piApiKey || undefined
       });
       setPiApiKey('');
-      setPiConfigNote('已保存并切换到此配置');
+      setPiConfigNote('预设已保存并设为新任务的默认选择。');
       refresh();
     } catch (error) {
-      setPiConfigNote(error instanceof Error ? error.message : '保存失败');
+      setPiConfigNote(formatPiConfigError(error));
     }
+  };
+  const saveIllustrationConfig = async () => {
+    if (!illustrationProfileId || !illustrationModel.trim()) { setIllustrationConfigNote('请选择已配置的 Provider 预设并填写图像模型。'); return; }
+    try {
+      const result = await window.wmb.saveIllustrationImageConfig({ profileId: illustrationProfileId, model: illustrationModel.trim() });
+      setIllustrationConfigNote(result.ok ? '独立配图模型已保存。' : result.error?.message || '保存失败');
+    } catch (error) { setIllustrationConfigNote(error instanceof Error ? error.message : '保存失败'); }
   };
   const fetchModels = async () => {
     setLoadingPiModels(true);
@@ -109,40 +308,60 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     }
   };
 
-  const fallbackProfiles = (settings?.pi.fallbackOrder ?? [])
-    .map((id) => settings?.pi.profiles.find((profile) => profile.id === id))
-    .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile));
-  const unusedFallbackProfiles = (settings?.pi.profiles ?? []).filter((profile) => !profile.active && !(settings?.pi.fallbackOrder ?? []).includes(profile.id));
-  const moveFallback = async (id: string, direction: -1 | 1) => {
-    if (!settings) return;
-    const order = [...(settings.pi.fallbackOrder ?? [])];
-    const index = order.indexOf(id);
-    const next = index + direction;
-    if (index < 0 || next < 0 || next >= order.length) return;
-    [order[index], order[next]] = [order[next], order[index]];
-    try {
-      await window.wmb.setPiFallbackOrder(order);
-      refresh();
-    } catch (error) {
-      setPiConfigNote(error instanceof Error ? error.message : '保存降级顺序失败');
-    }
+  const roleModelOptionsForProfile = (profile: WmbSettingsSnapshot['pi']['profiles'][number]): PiModelOption[] => {
+    const fetched = roleModelCatalog[profile.id] ?? [];
+    if (fetched.length > 0) return fetched;
+    return profile.model.trim() ? [{ id: profile.model }] : [];
   };
-  const addFallback = async (id: string) => {
-    if (!settings) return;
-    try {
-      await window.wmb.setPiFallbackOrder([...(settings.pi.fallbackOrder ?? []), id]);
-      refresh();
-    } catch (error) {
-      setPiConfigNote(error instanceof Error ? error.message : '保存降级顺序失败');
-    }
+  const roleModelFetchErrorEntries = (settings?.pi.profiles ?? [])
+    .filter((profile) => roleModelFetchErrors[profile.id])
+    .map((profile) => ({ profile, error: roleModelFetchErrors[profile.id] }));
+  const rolePolicyErrors = validateRolePolicyDraft(rolePolicyDraft, settings);
+  const updateRoleChain = (roleId: WmbRoleId, update: (candidates: WmbRoleModelCandidate[]) => WmbRoleModelCandidate[]) => {
+    setRolePolicyDraft((current) => ({ ...current, [roleId]: update([...(current[roleId] ?? [])]) }));
+    setRolePolicyDirty(true);
+    setRolePolicyNote('');
   };
-  const removeFallback = async (id: string) => {
+  const updateRoleCandidateThinking = (roleId: WmbRoleId, index: number, thinking: WmbRoleModelCandidate['thinking']) => {
+    updateRoleChain(roleId, (candidates) => candidates.map((candidate, itemIndex) => itemIndex === index ? { ...candidate, thinking } : candidate));
+  };
+  const addRoleCandidate = (roleId: WmbRoleId, value: string) => {
+    const candidate = parseRoleCandidateValue(value);
+    if (!candidate) return;
+    updateRoleChain(roleId, (candidates) => candidates.some((item) => roleCandidateIdentity(item) === roleCandidateIdentity(candidate)) ? candidates : [...candidates, candidate]);
+  };
+  const moveRoleCandidate = (roleId: WmbRoleId, index: number, direction: -1 | 1) => {
+    updateRoleChain(roleId, (candidates) => {
+      const next = index + direction;
+      if (index < 0 || next < 0 || next >= candidates.length) return candidates;
+      [candidates[index], candidates[next]] = [candidates[next], candidates[index]];
+      return candidates;
+    });
+  };
+  const removeRoleCandidate = (roleId: WmbRoleId, index: number) => {
+    updateRoleChain(roleId, (candidates) => candidates.length <= 1 ? candidates : candidates.filter((_candidate, itemIndex) => itemIndex !== index));
+  };
+  const saveRolePolicies = async () => {
     if (!settings) return;
+    const errors = validateRolePolicyDraft(rolePolicyDraft, settings);
+    if (errors.length > 0) {
+      setRolePolicyNote(errors.join(' '));
+      return;
+    }
+    setRolePolicySaving(true);
+    setRolePolicyNote('');
     try {
-      await window.wmb.setPiFallbackOrder((settings.pi.fallbackOrder ?? []).filter((item) => item !== id));
+      await window.wmb.saveRoleModelPolicies({
+        roleModelPolicies: policyInputFromDraft(rolePolicyDraft),
+        expectedRevision: settings.pi.modelPolicyRevision
+      });
+      setRolePolicyDirty(false);
+      setRolePolicyNote('五个角色的模型策略已一次性保存，新任务将使用新的策略版本。');
       refresh();
     } catch (error) {
-      setPiConfigNote(error instanceof Error ? error.message : '保存降级顺序失败');
+      setRolePolicyNote(formatPiConfigError(error));
+    } finally {
+      setRolePolicySaving(false);
     }
   };
 
@@ -201,48 +420,33 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         </section>}
         {section !== 'general' && !settings && <section className="settings-section"><p>正在加载设置…若长时间空白，请返回工作台再进设置，或重启应用。</p></section>}
         {section === 'ai' && settings && <>
-          <section className="settings-section">
-            <div className="settings-section-heading"><h3>配置预设</h3></div>
+          <section className="settings-section settings-preset-section" aria-labelledby="model-preset-title">
+            <div className="settings-section-heading"><h3 id="model-preset-title">模型预设</h3><p>预设保存接口、模型和密钥；角色分配只引用预设，不复制密钥。</p></div>
             <div className="settings-profile-list">
+              {settings.pi.profiles.length === 0 && <div className="settings-fallback-empty">还没有模型预设，请先添加一个预设。</div>}
               {settings.pi.profiles.map((profile) => <button type="button" key={profile.id} className={`settings-profile${profile.id === piProfileId ? ' selected' : ''}`} onClick={() => selectPiProfile(profile.id)}>
                 <span className="settings-provider-mark"><SettingsIcon name="ai" /></span>
-                <span><strong>{profile.name}</strong><small>{profile.model} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'}{profile.nativeSearch ? ' · 自带搜索' : ''}</small></span>
-                {profile.active && <em><span className="dot" aria-hidden="true" />正在使用</em>}
+                <span><strong>{profile.name}</strong><small>{profile.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'} · {formatThinking(profile.thinking)}{profile.nativeSearch ? ' · 自带搜索' : ''}</small></span>
+                <em className={profile.configured ? 'configured' : 'unconfigured'}>{profile.configured ? '已配置' : '未完成配置'}{profile.active ? ' · 默认选择' : ''}</em>
               </button>)}
             </div>
-            <div className="settings-inline-actions">
-              <button type="button" className="text-button settings-icon-text-button" onClick={() => selectPiProfile('')}><SettingsIcon name="plus" />添加配置预设</button>
-              <button type="button" className="text-button settings-icon-text-button" onClick={() => {
-                setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1');
-                setPiApi('openai-completions'); setPiModel(''); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiNativeSearch(false);
-                setPiConfigNote('填写 OpenCode Go API Key 后获取模型');
-              }}><SettingsIcon name="plus" />OpenCode Go</button>
-            </div>
-          </section>
-
-          <section className="settings-section">
-            <div className="settings-section-heading"><h3>故障降级顺序</h3><p>当前预设失败时按序切换。</p></div>
-            <div className="settings-fallback-active"><span>1</span><div><strong>{settings.pi.profiles.find((profile) => profile.active)?.name || '未选择当前预设'}</strong><small>始终最先尝试</small></div></div>
-            <div className="settings-profile-list settings-fallback-list">
-              {fallbackProfiles.length === 0 && <div className="settings-fallback-empty">尚未添加降级服务。可从下方未列入的预设中加入。</div>}
-              {fallbackProfiles.map((profile, index) => <div key={profile.id} className="settings-fallback-row">
-                <span className="settings-fallback-index">{index + 2}</span>
-                <span><strong>{profile.name}</strong><small>{profile.model}</small></span>
-                <div className="settings-fallback-actions">
-                  <button type="button" className="text-button" disabled={index === 0} onClick={() => void moveFallback(profile.id, -1)}>上移</button>
-                  <button type="button" className="text-button" disabled={index === fallbackProfiles.length - 1} onClick={() => void moveFallback(profile.id, 1)}>下移</button>
-                  <button type="button" className="text-button" onClick={() => void removeFallback(profile.id)}>移除</button>
+            <div className="settings-inline-actions settings-preset-actions">
+              <button type="button" className="text-button settings-icon-text-button" onClick={() => selectPiProfile('')}><SettingsIcon name="plus" />添加模型预设</button>
+              <details className="settings-action-disclosure">
+                <summary className="text-button settings-icon-text-button"><SettingsIcon name="plus" />更多预设模板</summary>
+                <div className="settings-action-disclosure-menu">
+                  <button type="button" className="text-button settings-icon-text-button" onClick={() => {
+                    setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1');
+                    setPiApi('openai-completions'); setPiModel(''); setPiThinking('off'); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiNativeSearch(false);
+                    setPiConfigNote('填写 OpenCode Go API Key 后获取模型。');
+                  }}><SettingsIcon name="plus" />使用 OpenCode Go 模板</button>
                 </div>
-              </div>)}
+              </details>
             </div>
-            {unusedFallbackProfiles.length > 0 && <div className="settings-inline-actions settings-fallback-add">
-              {unusedFallbackProfiles.map((profile) => <button type="button" key={profile.id} className="text-button settings-icon-text-button" onClick={() => void addFallback(profile.id)}><SettingsIcon name="plus" />{profile.name}</button>)}
-            </div>}
-          </section>
-          <section className="settings-section">
-            <div className="settings-section-heading"><h3>{piName || '新配置'}</h3></div>
+            <div className="settings-profile-editor" aria-labelledby="profile-editor-title">
+              <div className="settings-section-heading"><h3 id="profile-editor-title">{piName || '新模型预设'}</h3><p>先完成 Provider 预设，再在下方角色分配中引用它。这里仅修改接口、模型和密钥。</p></div>
             <div className="settings-form">
-            <label><span>配置名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
+            <label><span>预设名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
             <label><span>接口类型</span><select value={piApi} onChange={(event) => { setPiApi(event.target.value as 'openai-responses' | 'openai-completions'); setPiModels([]); }}>
               <option value="openai-responses">OpenAI Responses</option>
               <option value="openai-completions">OpenAI Chat Completions</option>
@@ -256,25 +460,109 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                 <button type="button" className="secondary-button" disabled={loadingPiModels || !piBaseUrl.trim()} onClick={() => void fetchModels()}>{loadingPiModels ? '获取中…' : '获取模型'}</button>
               </div>
             </label>
+            <label><span>思考等级</span><select value={piThinking ?? 'off'} onChange={(event) => setPiThinking(event.target.value as WmbSettingsSnapshot['pi']['profiles'][number]['thinking'])}><option value="off">关闭思考</option><option value="minimal">最低</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option><option value="max">最大</option></select></label>
             <label><span>上下文长度（tokens）</span><input type="number" min="1" step="1" value={piContextWindow} onChange={(event) => setPiContextWindow(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label><span>最大输出（tokens）</span><input type="number" min="1" step="1" value={piMaxTokens} onChange={(event) => setPiMaxTokens(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label className="settings-switch"><span>模型自带联网搜索</span><input type="checkbox" checked={piNativeSearch} onChange={(event) => setPiNativeSearch(event.target.checked)} aria-label="模型自带联网搜索" /></label>
             <p className="settings-help wide">不同模型分别保存；接口未提供元数据时可以手动填写，留空则使用 Pi 的运行时默认值。</p>
             <label className="wide"><span>Base URL</span><input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="http://localhost:61946/v1" /></label>
             <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>
-            {piConfigNote && <p className="pi-config-note">{piConfigNote}</p>}
+            {piConfigNote && <p className="pi-config-note" aria-live="polite">{piConfigNote}</p>}
             <div className="settings-form-actions">
-              {piProfileId && !settings.pi.profiles.find((profile) => profile.id === piProfileId)?.active && <button className="secondary-button" onClick={() => void window.wmb.activatePiConfig(piProfileId).then(refresh)}>设为当前</button>}
-              {piProfileId && <button className="danger-button" onClick={() => {
+              {piProfileId && !settings.pi.profiles.find((profile) => profile.id === piProfileId)?.active && <button type="button" className="secondary-button" onClick={() => void window.wmb.activatePiConfig(piProfileId).then(refresh)}>设为默认选择</button>}
+              {piProfileId && <button type="button" className="danger-button" onClick={() => {
                 void (async () => {
-                  if (!await appConfirm({ title: '删除配置', message: '删除这个 API 配置？', confirmLabel: '删除', danger: true })) return;
-                  await window.wmb.deletePiConfig(piProfileId).then(() => { setPiProfileId(''); refresh(); });
+                  if (!await appConfirm({ title: '删除模型预设', message: '删除这个模型预设？若仍被角色或未结束任务引用，系统会拒绝删除并列出引用。', confirmLabel: '删除', danger: true })) return;
+                  try {
+                    await window.wmb.deletePiConfig(piProfileId);
+                    setPiProfileId('');
+                    setPiConfigNote('模型预设已删除。');
+                    refresh();
+                  } catch (error) {
+                    setPiConfigNote(formatPiConfigError(error));
+                  }
                 })();
-              }}>删除</button>}
-              <button className="primary-button" onClick={() => void saveProfile()}>{piProfileId ? '保存修改' : '保存并使用'}</button>
+              }}>删除预设</button>}
+              <button type="button" className="primary-button" onClick={() => void saveProfile()}>{piProfileId ? '保存预设修改' : '保存模型预设'}</button>
             </div>
           </div>
+            </div>
           </section>
+
+          <section className="settings-section settings-role-policy-section" aria-labelledby="role-policy-title">
+            <div className="settings-section-heading"><h3 id="role-policy-title">角色分配</h3><p>每个角色从上到下依次尝试，首项是首选；思考等级可按候选覆盖，排序和移除收在“管理”中。调整后统一保存，不会打断当前正在生成的回复。</p></div>
+            {roleModelFetchErrorEntries.length > 0 && <p className="settings-note error" role="status" aria-live="polite">部分 Provider 模型列表获取失败：{roleModelFetchErrorEntries.map(({ profile, error }) => `${profile.name}（${error}）`).join('；')}。仍保留各预设当前模型作为选择。</p>}
+            <div className="role-policy-list">
+              {ROLE_DEFINITIONS.map((role) => {
+                const candidates = rolePolicyDraft[role.id] ?? [];
+                const selectedIdentities = new Set(candidates.map(roleCandidateIdentity));
+                const availableIdentities = new Set<string>();
+                const availableCandidates = settings.pi.profiles.flatMap((profile) => roleModelOptionsForProfile(profile).map((model) => ({ profileId: profile.id, model: model.id }))).filter((candidate) => {
+                  const identity = roleCandidateIdentity(candidate);
+                  if (selectedIdentities.has(identity) || availableIdentities.has(identity)) return false;
+                  availableIdentities.add(identity);
+                  return true;
+                });
+                return <article className="role-policy-row" key={role.id}>
+                  <div className="role-policy-heading"><div><h4>{role.label}</h4><p>{role.description}</p></div><span className={`pill-status ${candidates.length ? 'gray' : 'red'}`}><span className="dot" aria-hidden="true" />{candidates.length ? `${candidates.length} 个候选` : '需要配置'}</span></div>
+                  <ol className="role-policy-chain" aria-label={`${role.label}模型候选顺序`}>
+                    {candidates.map((candidate, index) => {
+                      const profile = settings.pi.profiles.find((item) => item.id === candidate.profileId);
+                      return <li key={`${role.id}-${roleCandidateIdentity(candidate)}-${index}`} data-profile-id={candidate.profileId} data-model={candidate.model}>
+                        <span className="role-policy-index" aria-hidden="true">{index + 1}</span>
+                        <div className="role-policy-copy">
+                          {profile ? <>
+                            <div className="role-policy-provider-line"><strong>{profile.name}</strong><span className="role-policy-priority">{index === 0 ? '首选' : `备用 ${index}`}</span></div>
+                            <small data-role-model={candidate.model}>模型 · {candidate.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'Chat Completions' : 'Responses'} · {formatRoleCandidateThinking(candidate, profile.thinking)}</small>
+                            {!profile.configured && <span className="role-policy-warning">此预设尚未完成 API 配置</span>}
+                          </> : <>
+                            <div className="role-policy-provider-line"><strong className="role-policy-error">预设已不存在</strong><span className="role-policy-priority">不可用</span></div>
+                            <small data-role-model={candidate.model}>{candidate.profileId} · {candidate.model || '未填写模型'} · {formatRoleCandidateThinking(candidate, undefined)}</small>
+                          </>}
+                        </div>
+                        <div className="role-policy-actions">
+                          <label className="role-policy-thinking"><span>候选思考</span><select value={candidate.thinking ?? ''} aria-label={`${role.label}第 ${index + 1} 项候选思考等级`} onChange={(event) => updateRoleCandidateThinking(role.id, index, event.target.value === '' ? undefined : event.target.value as RoleThinkingLevel)}>
+                            <option value="">继承 Provider 默认（{formatThinking(profile?.thinking)}）</option>
+                            {ROLE_THINKING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select></label>
+                          <details className="role-policy-management">
+                            <summary aria-label={`${role.label}第 ${index + 1} 项候选管理`}>管理</summary>
+                            <div className="role-policy-management-menu">
+                              <button type="button" className="text-button" disabled={index === 0} aria-label={`${role.label}第 ${index + 1} 项上移`} onClick={() => moveRoleCandidate(role.id, index, -1)}>上移</button>
+                              <button type="button" className="text-button" disabled={index === candidates.length - 1} aria-label={`${role.label}第 ${index + 1} 项下移`} onClick={() => moveRoleCandidate(role.id, index, 1)}>下移</button>
+                              <button type="button" className="text-button" disabled={candidates.length <= 1} aria-label={`从${role.label}移除第 ${index + 1} 项`} onClick={() => removeRoleCandidate(role.id, index)}>移除</button>
+                            </div>
+                          </details>
+                        </div>
+                      </li>;
+                    })}
+                  </ol>
+                  <label className="role-policy-add"><span>添加备用模型</span><select value="" onChange={(event) => addRoleCandidate(role.id, event.target.value)} aria-label={`为${role.label}添加备用模型`}><option value="">选择 Provider + 模型</option>{availableCandidates.map((candidate) => {
+                    const profile = settings.pi.profiles.find((item) => item.id === candidate.profileId);
+                    return <option key={roleCandidateValue(candidate)} value={roleCandidateValue(candidate)} data-profile-id={candidate.profileId} data-model={candidate.model}>{profile?.name ?? candidate.profileId} · {candidate.model}</option>;
+                  })}</select></label>
+                </article>;
+              })}
+            </div>
+            {rolePolicyErrors.length > 0 && <p className="settings-note error" role="alert"><strong>无法保存：</strong>{rolePolicyErrors.join(' ')}</p>}
+            {rolePolicyNote && <p className={`settings-note${/失败|错误|无效|不存在|引用|需要|未完成/.test(rolePolicyNote) ? ' error' : ''}`} aria-live="polite">{rolePolicyNote}</p>}
+            <div className="settings-form-actions role-policy-save-actions">
+              <span className="settings-list-note">{rolePolicyDirty ? '有未保存的角色分配' : `当前策略版本 ${settings.pi.modelPolicyRevision}`}</span>
+              <button type="button" className="primary-button" disabled={!rolePolicyDirty || rolePolicyErrors.length > 0 || rolePolicySaving} onClick={() => void saveRolePolicies()}>{rolePolicySaving ? '保存中…' : '保存智能体模型分配'}</button>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <div className="settings-section-heading"><h3>独立配图模型</h3><p>沿用已配置 Provider 的 API，只为定稿后的配图调用；不会在正文阶段自动运行。</p></div>
+            <div className="settings-form">
+              <label><span>Provider 预设</span><select value={illustrationProfileId} onChange={(event) => setIllustrationProfileId(event.target.value)}><option value="">请选择已配置预设</option>{settings.pi.profiles.filter((profile) => profile.configured).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+              <label><span>图像模型</span><input value={illustrationModel} onChange={(event) => setIllustrationModel(event.target.value)} placeholder="例如：gpt-image-1" /></label>
+              <p className="settings-help wide">需要服务商支持图像生成接口；API Key 仍由上方模型预设管理。</p>
+              {illustrationConfigNote && <p className="pi-config-note">{illustrationConfigNote}</p>}
+              <div className="settings-form-actions"><button type="button" className="primary-button" disabled={!illustrationProfileId || !illustrationModel.trim()} onClick={() => void saveIllustrationConfig()}>保存配图模型</button></div>
+            </div>
+          </section>
+
         </>}
         {section === 'skills' && <PiSkillsSettings />}
         {section === 'data' && <section className="settings-section">

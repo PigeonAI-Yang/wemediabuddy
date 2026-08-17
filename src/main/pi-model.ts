@@ -53,7 +53,7 @@ export function piModelsJson(config: {
     id: config.model,
     name: config.model,
     reasoning: true,
-    input: config.model === WMB_VISION_MODEL ? ['text', 'image'] : ['text'],
+    input: ['text', 'image'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     ...limits
   };
@@ -63,13 +63,7 @@ export function piModelsJson(config: {
         baseUrl: config.baseUrl,
         api: config.api,
         apiKey: config.apiKey,
-        models: config.model === WMB_VISION_MODEL ? [primary] : [primary, {
-          id: WMB_VISION_MODEL,
-          name: WMB_VISION_MODEL,
-          reasoning: false,
-          input: ['text', 'image'],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        }]
+        models: [primary]
       }
     }
   };

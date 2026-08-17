@@ -64,7 +64,7 @@ import { isPiImageBatchChatInput, normalizePiImageBatchMessage, type PiImageAtta
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
-  ensurePi: (dataRoot: DataRoot, options?: { skipProfileIds?: Iterable<string> }) => Promise<PiRpcSupervisor>;
+  ensurePi: (dataRoot: DataRoot, options?: { skipCandidateKeys?: Iterable<string> }) => Promise<PiRpcSupervisor>;
   getPi: () => PiRpcSupervisor | null;
   getLastPiProfileId?: () => string | null;
   getPiSessionFile: () => string | null;
@@ -589,8 +589,7 @@ export async function runDockManagerPrompt(input: {
     stopAfterOpening = false;
   }
 }
-
-async function runPiImageBatch(
+export async function runPiImageBatch(
   dataRoot: DataRoot,
   runtime: ActiveWorkspaceRuntime,
   pi: PiRpcSupervisor,
@@ -709,6 +708,10 @@ async function runPiImageBatch(
         if (!attachment.assetId) throw new Error(`第 ${attachment.ordinal + 1} 张图片尚未导入。`);
         const loaded = await readPiImageAssetBytes(dataRoot.path, runtime.database, attachment.assetId);
         images.push({ type: 'image', data: loaded.bytes.toString('base64'), mimeType: loaded.asset.mimeType });
+      }
+      const activeModel = await pi.getModel();
+      if (activeModel.provider !== 'wmb-api') {
+        throw new Error(`Pi 当前模型提供商为 ${activeModel.provider}，图片分析要求使用 wmb-api。`);
       }
       const result = await pi.promptUntilSettled(buildPiImagePlacementPrompt({ batch, baseline }), { images });
       thinking = result.thinking;

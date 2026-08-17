@@ -3,6 +3,7 @@ import type { PiCommand } from '../main/pi-commands';
 import { filterPiCommands, insertPiCommand } from './pi-command-filter';
 import { MAX_PI_IMAGE_ATTACHMENTS, MAX_PI_IMAGE_BYTES, MAX_PI_IMAGE_TOTAL_BYTES } from '../shared/pi-image-batch';
 import type { PiImageAttachmentPayload, PiImageMimeType } from '../shared/pi-image-batch';
+import type { PiLocalQueueAttachment } from './pi-dock-utils';
 
 const SOURCE_LABEL: Record<PiCommand['source'], string> = {
   skill: 'Skill',
@@ -53,12 +54,19 @@ const imageDimensions = (url: string): Promise<{ width: number; height: number }
   return promise;
 };
 
+export type PiSendOutcome = Readonly<{
+  accepted: boolean;
+  retainAttachments?: boolean;
+}>;
+
 export const PiComposer = memo(function PiComposer({
   configured,
   busy,
   phase,
   draftSeed,
   onDraftSeedConsumed,
+  draftRestore,
+  onDraftRestoreConsumed,
   annotationBadge,
   onSend,
   onStop,
@@ -79,9 +87,11 @@ export const PiComposer = memo(function PiComposer({
   phase: 'idle' | 'starting' | 'running' | 'failed' | 'stopped';
   draftSeed: string | null;
   onDraftSeedConsumed: () => void;
+  draftRestore: { text: string; requestId: string; attachments: readonly PiLocalQueueAttachment[] } | null;
+  onDraftRestoreConsumed: () => void;
   /** WMB-5207：发送时实际带入的批注数；null 表示无批注，不显示徽标。 */
   annotationBadge: { included: number; omitted: number } | null;
-  onSend: (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string) => void | boolean | Promise<void | boolean>;
+  onSend: (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string, draftImages?: readonly PiLocalQueueAttachment[]) => void | boolean | PiSendOutcome | Promise<void | boolean | PiSendOutcome>;
   onStop: () => void;
   modelLabel: string;
   thinkingChoice: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -147,6 +157,24 @@ export const PiComposer = memo(function PiComposer({
     setPaletteDismissed(false);
     onDraftSeedConsumed();
   }, [draftSeed, onDraftSeedConsumed]);
+  useEffect(() => {
+    if (!draftRestore) return;
+    if (!input.trim() && attachments.length === 0) {
+      resetHistoryBrowsing();
+      setInput(draftRestore.text);
+      setAttachments(draftRestore.attachments.map((entry): QueuedImage => ({
+        ...entry,
+        dataBase64: entry.bytesBase64,
+        width: entry.width ?? null,
+        height: entry.height ?? null,
+        state: 'ready'
+      })));
+      setBatchRequestId(draftRestore.requestId);
+      setPaletteDismissed(false);
+      setQueueError('图片批次失败，原提交仍保留，可重试。');
+    }
+    onDraftRestoreConsumed();
+  }, [draftRestore, onDraftRestoreConsumed]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -230,24 +258,37 @@ export const PiComposer = memo(function PiComposer({
   };
   const sendCurrent = (delivery?: 'steer' | 'followUp') => {
     const text = input.trim();
-    if ((!text && !attachments.length) || sending) return;
+    if ((!text && !attachments.length) || (sending && !busy)) return;
     if (attachments.some((entry) => entry.state !== 'ready')) { setQueueError('请等待图片读取完成，或移除读取失败的图片。'); return; }
     const frozenAttachments = attachments.map((entry): PiImageAttachmentPayload => ({ fileName: entry.fileName, mimeType: entry.mimeType, bytesBase64: entry.dataBase64, byteCount: entry.byteCount, width: entry.width, height: entry.height }));
+    const frozenDraftImages = attachments.map((entry): PiLocalQueueAttachment => ({
+      id: entry.id,
+      fileName: entry.fileName,
+      mimeType: entry.mimeType,
+      bytesBase64: entry.dataBase64,
+      byteCount: entry.byteCount,
+      width: entry.width,
+      height: entry.height,
+      previewUrl: entry.previewUrl
+    }));
     const requestId = attachments.length > 0 ? (batchRequestId ?? crypto.randomUUID()) : undefined;
     if (requestId) setBatchRequestId(requestId);
     resetHistoryBrowsing();
     setSending(true);
     setInput('');
     setPaletteDismissed(false);
-    void Promise.resolve(onSend(text, delivery, frozenAttachments, requestId)).then((acceptedResult) => {
-      if (acceptedResult === false) { setInput(text); return; }
+    void Promise.resolve(onSend(text, delivery, frozenAttachments, requestId, frozenDraftImages)).then((acceptedResult) => {
+      const accepted = acceptedResult !== false && (typeof acceptedResult !== 'object' || acceptedResult === null || acceptedResult.accepted !== false);
+      if (!accepted) { setInput((current) => current.trim() ? current : text); return; }
       if (text && textHistoryRef.current[textHistoryRef.current.length - 1] !== text) textHistoryRef.current.push(text);
       resetHistoryBrowsing();
-      for (const entry of attachments) URL.revokeObjectURL(entry.previewUrl);
-      setAttachments([]);
+      const retainAttachments = typeof acceptedResult === 'object' && acceptedResult !== null && acceptedResult.retainAttachments === true;
+      if (!retainAttachments) for (const entry of attachments) URL.revokeObjectURL(entry.previewUrl);
+      const submittedIds = new Set(frozenDraftImages.map((entry) => entry.id));
+      setAttachments((current) => current.filter((entry) => !submittedIds.has(entry.id)));
       setBatchRequestId(null);
       setQueueError('');
-    }).catch(() => setInput(text)).finally(() => setSending(false));
+    }).catch(() => setInput((current) => current.trim() ? current : text)).finally(() => setSending(false));
   };
 
   const chooseCommand = (command: PiCommand) => {
@@ -344,14 +385,14 @@ export const PiComposer = memo(function PiComposer({
       <div className="pi-composer-bar">
         <div className="pi-composer-tools">
           <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
-          <button type="button" className="pi-icon-button" title="插入图片" aria-label="插入图片" disabled={!configured || sending} onClick={() => fileInputRef.current?.click()}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L9 18"/></svg></button>
+          <button type="button" className="pi-icon-button" title="插入图片" aria-label="插入图片" disabled={!configured || (sending && !busy)} onClick={() => fileInputRef.current?.click()}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L9 18"/></svg></button>
           <button type="button" className="pi-icon-button" title="附件（即将支持）" aria-label="附件" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
         </div>
         <div className="pi-composer-meta">
           <button type="button" className={`pi-model-trigger${modelMenuOpen ? ' open' : ''}`} title="选择模型和推理强度" onClick={onOpenModelMenu}><span>{modelLabel}</span><small>{thinkingChoice === 'auto' ? '自动' : thinkingChoice}</small><b>▾</b></button>
           {busy && !input.trim() && attachments.length === 0
             ? <button type="button" className="pi-send-button pi-stop-button" title="停止 Pi 当前回复" aria-label="停止 Pi 当前回复" disabled={!configured} onClick={onStop}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg></button>
-            : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || sending || (!input.trim() && !attachments.length)} onClick={() => sendCurrent('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
+            : <button type="button" className="pi-send-button" title={busy ? '插入当前回复（Alt+Enter 放到下一轮）' : '发送'} aria-label={busy ? '插入当前回复' : '发送'} disabled={!configured || (sending && !busy) || (!input.trim() && !attachments.length)} onClick={() => sendCurrent('steer')}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-5 14-2-5-7-2Z"/><path d="m12 12 7-7"/></svg></button>}
         </div>
       </div>
     </div>

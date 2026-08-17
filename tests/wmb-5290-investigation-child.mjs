@@ -19,10 +19,12 @@
 //    无调查的遗留项目与 ready_to_write 项目照常放行；
 // 9. 显式写手启动：startInvestigationWriter 记录 writerJobId → writing（writing 中拒绝重复）；
 //    writer 终态 job.finished → completed；
-// 10. supplement/expand/stop 分支：supplement→needs_more_research→retry（同提纲版本、
+// 10. defer 分支：主管资料不足必须持久化 needs_user，原包不再是待验收；Owner 可
+//     supplement，记者新包重新进入 research_review，再次 defer 后重启仍保持 needs_user；
+// 11. supplement/expand/stop 分支：supplement→needs_more_research→retry（同提纲版本、
 //     round+1）；needs_user 终态可 retry；expand→新提纲版本回 Owner 审批；
 //     stop→abandoned；direction supplement→保持 direction_pending_approval 等待修订；
-// 11. 重启持久化：新连接读回完整调查档案（状态、版本、包、工单引用）。
+// 12. 重启持久化：新连接读回完整调查档案（状态、版本、包、工单引用）。
 
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -176,6 +178,7 @@ try {
   const projectE = createContentProjectWithVersion(db, { title: '调查项目E（写手门）', body: 'E 正文', sourceIds: [] }).id;
   const projectF = createContentProjectWithVersion(db, { title: '遗留项目F（无调查）', body: 'F 正文', sourceIds: [] }).id;
   const projectG = createContentProjectWithVersion(db, { title: '调查项目G（方向补查）', body: 'G 正文', sourceIds: [] }).id;
+  const projectH = createContentProjectWithVersion(db, { title: '调查项目H（验收暂缓）', body: 'H 正文', sourceIds: [] }).id;
 
   const read = (projectId) => {
     const value = readProjectInvestigation(db, projectId);
@@ -414,6 +417,51 @@ try {
     projectId: projectG, expectedRevision: nextRevision(projectG), writerJobId: 'job-w-g'
   }), 'INVALID_STATE', 'G 未就绪启动写手');
 
+
+  // ---------- 项目 H：资料不足持久化 defer；同包不重派；新包仍可重新验收 ----------
+  expectOk(initializeProjectInvestigation(db, projectH), 'H 初始化');
+  expectOk(saveInvestigationOutline(db, { projectId: projectH, expectedRevision: nextRevision(projectH), outline: outlineA }), 'H 保存提纲');
+  expectOk(decideInvestigationOutline(db, {
+    projectId: projectH, expectedRevision: nextRevision(projectH), decision: 'approve', reporterJobId: 'job-h-rep-1'
+  }), 'H 批准提纲');
+  const packH1 = buildPack('job-h-rep-1', 1, [sourceA.id], 'candidates_exhausted');
+  expectOk(recordInvestigationReporterTerminal(db, {
+    projectId: projectH, jobId: 'job-h-rep-1', type: 'job.partial', pack: packH1
+  }), 'H 首轮资料包');
+  const deferredH1 = expectOk(reviewInvestigationResearch(db, {
+    projectId: projectH,
+    expectedRevision: nextRevision(projectH),
+    decision: 'defer',
+    summary: '有效来源不足，等待 Owner 选择补查、扩展范围或停止。'
+  }), 'H 主管暂缓验收');
+  expect(deferredH1.status === 'needs_user' && deferredH1.package?.review?.decision === 'defer',
+    `H 暂缓后必须持久化 needs_user/review: ${JSON.stringify(deferredH1)}`);
+  expect(countRows(db, "SELECT COUNT(*) AS c FROM project_investigations WHERE project_id = ? AND status = 'research_review'", projectH) === 0,
+    'H 同一资料包暂缓后不得继续被恢复扫描识别为待主管验收');
+  expectRejectedCode(reviewInvestigationResearch(db, {
+    projectId: projectH, expectedRevision: nextRevision(projectH), decision: 'defer', summary: '重复验收'
+  }), 'INVALID_STATE', 'H 同一资料包不得重复 defer');
+
+  const supplementedH = expectOk(reviewInvestigationResearch(db, {
+    projectId: projectH,
+    expectedRevision: nextRevision(projectH),
+    decision: 'supplement',
+    reporterJobId: 'job-h-rep-2'
+  }), 'H Owner 选择补查');
+  expect(supplementedH.status === 'needs_more_research' && supplementedH.reporter?.round === 2,
+    `H 补查后应进入新记者轮次: ${JSON.stringify(supplementedH)}`);
+  const packH2 = buildPack('job-h-rep-2', 2, [sourceA.id, sourceB.id]);
+  const receivedH2 = expectOk(recordInvestigationReporterTerminal(db, {
+    projectId: projectH, jobId: 'job-h-rep-2', type: 'job.finished', pack: packH2
+  }), 'H 新资料包');
+  expect(receivedH2.status === 'research_review' && receivedH2.package?.pack.round === 2 && receivedH2.package?.review === null,
+    `H 新资料包必须重新进入一次主管验收: ${JSON.stringify(receivedH2)}`);
+  const deferredH2 = expectOk(reviewInvestigationResearch(db, {
+    projectId: projectH, expectedRevision: nextRevision(projectH), decision: 'defer', summary: '新资料包仍需 Owner 决策。'
+  }), 'H 新资料包暂缓');
+  const finalRevisionH = deferredH2.revision;
+  expect(deferredH2.status === 'needs_user' && deferredH2.package?.pack.round === 2,
+    `H 新包暂缓后状态异常: ${JSON.stringify(deferredH2)}`);
   // ---------- 项目 E/F/B/A：JobSpawner 服务端写手门 ----------
   // E：调查存在但未就绪（outline_pending_approval）→ 同步抛 JOB_INVESTIGATION_NOT_READY。
   expectOk(initializeProjectInvestigation(db, projectE), 'E 初始化');
@@ -515,6 +563,10 @@ try {
   expect(revivedB.status === 'ready_to_write' && revivedB.reporter?.round === 3,
     `重启后 B 应就绪且 round=3: ${revivedB.status}/${revivedB.reporter?.round}`);
   expect(readProjectInvestigation(reopened, projectF) === null, '重启后遗留项目 F 仍无调查');
+  const revivedH = readProjectInvestigation(reopened, projectH);
+  expect(revivedH.status === 'needs_user' && revivedH.revision === finalRevisionH && revivedH.package?.pack.round === 2
+    && revivedH.package?.review?.decision === 'defer',
+    `重启后 H 必须保持已验收待 Owner 决策，不得回到 research_review: ${JSON.stringify(revivedH)}`);
   const revivedDetail = getContentProject(reopened, projectA);
   expect(revivedDetail.investigation?.status === 'completed' && revivedDetail.investigation?.revision === revivedA.revision,
     '重启后项目详情应投影同一调查');
@@ -526,6 +578,7 @@ try {
     projectC: { status: 'outline_pending_approval', outlineVersion: 2 },
     projectD: { status: 'abandoned' },
     projectG: { status: 'direction_pending_approval', directionStatus: 'supplemented' },
+    projectH: { status: revivedH.status, round: revivedH.package?.pack.round, review: revivedH.package?.review?.decision },
     writerGate: { rejected: ['outline_pending_approval', 'completed', 'expanded-outline-pending'], allowed: ['legacy', 'ready_to_write'] },
     successorSuppressed: deskResult.reason,
     successorControl: controlResult.reason,

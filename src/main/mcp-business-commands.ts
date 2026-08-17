@@ -309,7 +309,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('content.import_image', {
-    description: '把 AI 生成或已有图片导入指定内容项目，返回 asset 与可插入正文的 Markdown；授权复用 content.save_version。',
+    description: '把外部生成或已有图片导入指定内容项目，返回 asset 与可插入正文的 Markdown；授权复用 content.save_version。',
     inputSchema: z.object({
       ...authoritySchema,
       project_id: z.string(),
@@ -467,18 +467,31 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('investigation.review_research', {
-    description: '主管验收已交付的专项调查资料包并形成调查后写作方向；只允许 accept，成功后进入 Owner 第二次审批。返回 CommandReceiptV1。',
-    inputSchema: { ...authoritySchema, project_id: z.string().min(1), expected_revision: z.number().int(), direction: investigationDirectionSchema }
+    description: '主管验收已交付的专项调查资料包；accept 形成调查后写作方向并进入 Owner 第二次审批，资料不足或无法自行决策时用 defer 转为 needs_user 并等待 Owner。返回 CommandReceiptV1。',
+    inputSchema: {
+      ...authoritySchema,
+      project_id: z.string().min(1),
+      expected_revision: z.number().int(),
+      decision: z.enum(['accept', 'defer']).default('accept'),
+      direction: investigationDirectionSchema.optional(),
+      summary: z.string().min(1).optional()
+    }
   }, async (input) => {
-    const { request_id, task_id, grant_id, worker_lease_id, project_id, expected_revision, direction } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'investigation.review_research', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: {
+    const { request_id, task_id, grant_id, worker_lease_id, project_id, expected_revision, decision, direction, summary } = input;
+    const reviewInput = decision === 'defer'
+      ? {
+        projectId: project_id,
+        expectedRevision: expected_revision,
+        decision: 'defer' as const,
+        summary: summary ?? null,
+        decidedBy: 'desk'
+      }
+      : {
         projectId: project_id,
         expectedRevision: expected_revision,
         decision: 'accept' as const,
         decidedBy: 'desk',
-        direction: {
+        direction: direction ? {
           keyFacts: direction.key_facts,
           upheld: direction.upheld,
           changed: direction.changed,
@@ -489,8 +502,11 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
           audienceValue: direction.audience_value,
           scope: direction.scope,
           constraints: direction.constraints
-        }
-      },
+        } : undefined
+      };
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'investigation.review_research', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: reviewInput,
       boundIdentity: { entityType: 'content_project', entityId: project_id }, entityType: 'project_investigation',
       execute: (database, normalized) => {
         const data = requireCommandResultData(reviewInvestigationResearch(database, normalized));

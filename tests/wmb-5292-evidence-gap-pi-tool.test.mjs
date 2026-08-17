@@ -5,6 +5,8 @@
  *   都经 preparePiExtension 挂载同一扩展包，注册即三角色可达），camelCase 参数 schema 齐备。
  * - 参数映射（运行时级）：真实执行 Pi 工具 execute，捕获发往 MCP 的 tools/call arguments，
  *   camelCase 参数必须逐键映射为 research.dispatch 的 snake_case 输入，required claims 原样透传。
+ * - WMB-5290：扩展注册 wmb_review_investigation_research；defer 经 execute 转发为
+ *   investigation.review_research 的 snake_case + authority 参数（同一 captureMcpCall 桩验证）。
  * - 指引（guidance）：evidence-grounded-writer 只指向 wmb_dispatch_research，不得出现
  *   wmb_spawn_job / jobs.spawn 记者误路由，派单成功后停止当前交付；operator Skill 登记该工具。
  * - 既有合同不变（经既有公开函数）：deriveResearchParentRole 父角色白名单、三层止环
@@ -151,6 +153,61 @@ test('WMB-5292: Pi 工具 execute 把 camelCase 参数逐键映射为 research.d
     assert.deepEqual(stub.calls[1].arguments, {
       parent_task_id: 'task-planner-2',
       required_claims: [{ key: 'fact_a', text: '声明 A', type: 'fact' }]
+    });
+  } finally {
+    delete process.env.WMB_MCP_URL;
+    await stub.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 2b. WMB-5290：扩展注册 wmb_review_investigation_research，defer 转发 authority + snake_case
+// ---------------------------------------------------------------------------
+
+test('WMB-5290: 扩展注册 wmb_review_investigation_research，camelCase schema 与 defer 契约齐备', async () => {
+  const tools = await loadPiTools('wmb5290-presence');
+  const review = tools.get('wmb_review_investigation_research');
+  assert.ok(review, '扩展必须注册 wmb_review_investigation_research');
+  assert.deepEqual(review.parameters.required, ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'decision']);
+  assert.deepEqual(review.parameters.properties.decision.enum, ['accept', 'defer']);
+  for (const key of ['requestId', 'taskId', 'grantId', 'workerLeaseId', 'projectId', 'expectedRevision', 'decision', 'direction', 'summary']) {
+    assert.ok(key in review.parameters.properties, `schema 必须暴露 ${key}`);
+  }
+  assert.equal(review.parameters.additionalProperties, false);
+  assert.match(review.description, /按观点稿继续/);
+  assert.match(review.description, /外部可验证事实/);
+  assert.match(review.parameters.properties.decision.description, /按观点稿继续/);
+  assert.match(review.parameters.properties.decision.description, /不得编造/);
+});
+
+test('WMB-5290: Pi 工具 execute 把 defer 映射为 investigation.review_research 的 snake_case + authority 参数', async () => {
+  const stub = await captureMcpCall();
+  process.env.WMB_MCP_URL = stub.url;
+  try {
+    const tools = await loadPiTools('wmb5290-map');
+    const review = tools.get('wmb_review_investigation_research');
+    assert.ok(review, '扩展必须注册 wmb_review_investigation_research');
+    await review.execute('wmb5290-map', {
+      requestId: 'req-review-defer',
+      taskId: 'task-desk-1',
+      grantId: 'grant-review-1',
+      workerLeaseId: 'lease-1',
+      projectId: 'project-review-1',
+      expectedRevision: 7,
+      decision: 'defer',
+      summary: '来源未覆盖关键政策，需 Owner 决定是否扩展范围'
+    });
+    assert.equal(stub.calls.length, 1);
+    assert.equal(stub.calls[0].name, 'investigation.review_research');
+    assert.deepEqual(stub.calls[0].arguments, {
+      request_id: 'req-review-defer',
+      task_id: 'task-desk-1',
+      grant_id: 'grant-review-1',
+      worker_lease_id: 'lease-1',
+      project_id: 'project-review-1',
+      expected_revision: 7,
+      decision: 'defer',
+      summary: '来源未覆盖关键政策，需 Owner 决定是否扩展范围'
     });
   } finally {
     delete process.env.WMB_MCP_URL;

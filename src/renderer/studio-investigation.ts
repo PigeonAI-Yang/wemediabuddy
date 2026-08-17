@@ -40,7 +40,7 @@ export type StudioInvestigationApi = {
   investigationInitialize(projectId: string): Promise<StudioInvestigationCommandResult>;
   investigationSaveOutline(input: { projectId: string; expectedRevision: number; outline: StudioInvestigationOutline }): Promise<StudioInvestigationCommandResult>;
   investigationDecideOutline(input: { projectId: string; expectedRevision: number; decision: 'approve' | 'reject' }): Promise<StudioInvestigationCommandResult>;
-  investigationReviewResearch(input: { projectId: string; expectedRevision: number; decision: 'accept' | 'supplement' | 'expand' | 'stop'; direction?: StudioInvestigationDirection }): Promise<StudioInvestigationCommandResult>;
+  investigationReviewResearch(input: { projectId: string; expectedRevision: number; decision: 'accept' | 'defer' | 'supplement' | 'expand' | 'stop'; direction?: StudioInvestigationDirection }): Promise<StudioInvestigationCommandResult>;
   investigationSaveDirection(input: { projectId: string; expectedRevision: number; direction: StudioInvestigationDirection }): Promise<StudioInvestigationCommandResult>;
   investigationDecideDirection(input: { projectId: string; expectedRevision: number; decision: 'approve' | 'supplement' | 'stop' }): Promise<StudioInvestigationCommandResult>;
   investigationStartWriter(input: { projectId: string; expectedRevision: number }): Promise<StudioInvestigationCommandResult>;
@@ -259,8 +259,8 @@ function normalizePackage(value: unknown): StudioInvestigationPackage | null {
   if (!isRecord(value)) return null;
   const review = isRecord(value.review)
     ? {
-        decision: (['accept', 'supplement', 'expand', 'stop'] as const).includes(value.review.decision as never)
-          ? (value.review.decision as 'accept' | 'supplement' | 'expand' | 'stop')
+        decision: (['accept', 'defer', 'supplement', 'expand', 'stop'] as const).includes(value.review.decision as never)
+          ? (value.review.decision as 'accept' | 'defer' | 'supplement' | 'expand' | 'stop')
           : 'stop',
         summary: asNullableString(value.review.summary),
         decidedAt: asNullableString(value.review.decidedAt),

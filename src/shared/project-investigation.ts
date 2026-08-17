@@ -76,7 +76,7 @@ export type InvestigationWriterJob = Readonly<{
 
 /** 主管验收（资料包审阅）记录。 */
 export type InvestigationPackageReview = Readonly<{
-  decision: 'accept' | 'supplement' | 'expand' | 'stop';
+  decision: 'accept' | 'defer' | 'supplement' | 'expand' | 'stop';
   summary: string | null;
   decidedAt: string | null;
   decidedBy: string | null;
@@ -149,8 +149,9 @@ export type InvestigationDecideOutlineInput = {
 export type InvestigationReviewResearchInput = {
   projectId: string;
   expectedRevision: number;
-  decision: 'accept' | 'supplement' | 'expand' | 'stop';
+  decision: 'accept' | 'defer' | 'supplement' | 'expand' | 'stop';
   direction?: InvestigationDirection;
+  summary?: string | null;
 };
 
 export type InvestigationDecideDirectionInput = {

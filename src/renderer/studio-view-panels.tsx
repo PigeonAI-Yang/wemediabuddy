@@ -133,10 +133,10 @@ export function StudioOutline({ outline, tab, setTab, platformVersions, investig
   </aside>;
 }
 
-export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdown, insertImageFile, toggleFind, onMarkSelection, canMark }: {
+export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdown, insertImageFile, toggleFind, onMarkSelection, canMark, illustrationTools }: {
   busy: boolean; execRich: (command: string, value?: string) => void; formatSelection: (before: string, after?: string, placeholder?: string) => void;
   insertMarkdown: (value: string) => void; insertImageFile: (file?: File) => Promise<void>; toggleFind: () => void;
-  onMarkSelection?: () => void; canMark?: boolean;
+  onMarkSelection?: () => void; canMark?: boolean; illustrationTools?: React.JSX.Element;
 }): React.JSX.Element {
   return <div className="studio-formatbar" role="toolbar" aria-label="正文格式" onMouseDown={(event) => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); }}>
     <span className="studio-formatbar-group" role="group" aria-label="段落">
@@ -170,6 +170,7 @@ export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdow
       <button type="button" title="查找替换" onClick={toggleFind}>查找替换</button>
       {onMarkSelection && <button type="button" title="把所选文字标记为有问题" aria-label="标记所选文字为有问题" disabled={!canMark} onClick={onMarkSelection}>标记</button>}
     </span>
+    {illustrationTools}
   </div>;
 }
 

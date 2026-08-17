@@ -16,7 +16,7 @@ import type { BrowserProfile } from '../main/browser-config';
 import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding';
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
 import type { PublicationBrowserOperationV1 as PublicationBrowserOperation, PublicationSnapshotV1 as PublicationSnapshot } from '../main/publication-operations';
-import type { WmbSettingsSnapshot } from './wmb-settings-types';
+import type { WmbRoleId, WmbRoleModelPolicy, WmbSettingsSnapshot } from './wmb-settings-types';
 import type { CrewInstance, CrewProjection } from './agents-instance-logic';
 import type { OnboardingAiSaveInput, OnboardingAiTestRecord, OnboardingAiTestResult, OnboardingAiTestSettings, OnboardingStatus, OnboardingStep, OnboardingWorkspaceResult, PlatformCheckStatus } from '../main/onboarding';
 import type { UpdateState } from '../main/app-update';
@@ -29,6 +29,7 @@ import type {
   InvestigationDirection, InvestigationOutline, InvestigationReviewResearchInput, ProjectInvestigation
 } from '../shared/project-investigation';
 import type { MediaRecommendation, MediaRecommendationsReadModel } from '../shared/media-recommendations';
+import type { IllustrationCommandResult, IllustrationImageConfig, IllustrationItemRetryInput, IllustrationRegenerateInput, IllustrationRun, IllustrationStartInput, IllustrationUndoInput } from '../shared/illustration-workflow';
 import type {
   KnowledgeAnnotationReadFilter, KnowledgeAnnotationRecord, KnowledgeChangeSetApplyInput, KnowledgeChangeSetApplyResult,
   KnowledgeChangeSetReadFilter, KnowledgeChangeSetRecord, KnowledgeEntityReadFilter, KnowledgeEntityRecord,
@@ -285,7 +286,7 @@ declare global {
       savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
-      setPiFallbackOrder(ids: string[]): Promise<unknown>;
+      saveRoleModelPolicies(input: { roleModelPolicies: Record<WmbRoleId, WmbRoleModelPolicy>; expectedRevision?: number }): Promise<WmbSettingsSnapshot['pi']>;
       listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>;
       listPiSkills(): Promise<PiSkillSummary[]>;
       savePiSkill(input: PiSkillInput): Promise<PiSkillSummary>;
@@ -676,6 +677,14 @@ declare global {
       investigationRetryReporter(input: { projectId: string; expectedRevision: number }): Promise<InvestigationCommandResult>;
       listMediaRecommendations(input: { contentVersionId: string; projectId?: string }): Promise<MediaRecommendationsReadModel>;
       generateMediaRecommendations(input: { contentVersionId: string; projectId: string; sourceRevisionKeys: string[]; allowGeneratedCover?: boolean; requestId?: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }>;
+      listIllustrationRuns(projectId: string): Promise<IllustrationRun[]>;
+      getIllustrationRun(runId: string): Promise<IllustrationRun | null>;
+      startIllustration(input: IllustrationStartInput): Promise<IllustrationCommandResult<IllustrationRun>>;
+      retryIllustrationItem(input: IllustrationItemRetryInput): Promise<IllustrationCommandResult<IllustrationRun>>;
+      regenerateIllustrationItem(input: IllustrationRegenerateInput): Promise<IllustrationCommandResult<IllustrationRun>>;
+      undoIllustrationItem(input: IllustrationUndoInput): Promise<IllustrationCommandResult<IllustrationRun>>;
+      getIllustrationImageConfig(): Promise<IllustrationImageConfig | null>;
+      saveIllustrationImageConfig(input: { profileId: string; model: string }): Promise<IllustrationCommandResult<IllustrationImageConfig>>;
       decideMediaRecommendation(input: { id: string; expectedRevision: number; decision: 'accept' | 'reject'; confirmedByOwner?: boolean }): Promise<{ ok: boolean; data?: MediaRecommendation; error?: { code?: string; message?: string; details?: unknown } | null }>;
       getPublications(): Promise<Array<{
         publication: {

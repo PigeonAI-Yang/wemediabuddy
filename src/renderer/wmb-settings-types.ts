@@ -2,7 +2,24 @@ import type { BrowserProfile } from '../main/browser-config';
 import type { IntelligenceChannelsSummary } from '../main/intelligence-channels';
 import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding';
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
+import type { RoleModelCandidate } from '../shared/pi-config';
 
+export type WmbRoleId = 'desk' | 'reporter' | 'planner' | 'writer' | 'librarian';
+export type WmbRoleModelCandidate = RoleModelCandidate;
+export type WmbRoleModelPolicy = { candidates: WmbRoleModelCandidate[] };
+export type WmbPiProfile = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  model: string;
+  api: 'openai-responses' | 'openai-completions';
+  thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  nativeSearch?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+  configured: boolean;
+  active: boolean;
+};
 export type WmbSettingsSnapshot = {
   paths: Record<string, string>;
   usage: Record<string, number>;
@@ -17,12 +34,14 @@ export type WmbSettingsSnapshot = {
   boundBrowserProfile: BrowserProfile | null;
   legacyBrowserSource: OwnerBrowserState['legacySource'];
   pi: {
+    version: 3;
     activeId: string | null;
-    profiles: Array<{ id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number; maxTokens?: number; configured: boolean; active: boolean }>;
-    fallbackOrder: string[];
+    profiles: WmbPiProfile[];
     baseUrl: string;
     model: string;
     configured: boolean;
+    modelPolicyRevision: number;
+    roleModelPolicies: Record<WmbRoleId, WmbRoleModelPolicy>;
   };
   piRuntime: { version: string; root: string; source: 'bundled' | 'override'; previousVersion: string | null; stagingVersion: string | null };
   workspace: {

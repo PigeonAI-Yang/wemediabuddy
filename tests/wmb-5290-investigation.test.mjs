@@ -21,8 +21,17 @@ test('WMB-5304 reporter completion dispatches a bounded supervisor review prompt
   assert.match(prompt, new RegExp(projectId));
   assert.match(prompt, /wmb_get_investigation/);
   assert.match(prompt, /wmb_review_investigation_research/);
+  assert.match(prompt, /decision="accept"/);
+  assert.match(prompt, /decision="defer"/);
+  assert.match(prompt, /needs_user/);
+  assert.match(prompt, /不得把项目留在 research_review/);
   assert.match(prompt, /direction_pending_approval/);
+  assert.match(prompt, /按观点稿继续/);
+  assert.match(prompt, /外部可验证事实/);
+  assert.match(prompt, /不得自行验收通过/);
+  assert.match(prompt, /不派写手/);
+  assert.match(prompt, /不代替 Owner/);
   assert.match(prompt, /Owner.*第二次审批/);
-  assert.match(prompt, /资料不足时不要伪造方向/);
+  assert.match(prompt, /资料不足.*不得伪造方向/);
   assert.match(prompt, /不派写手/);
 });

@@ -388,7 +388,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
           </p>
         )}
         {pack.review && (
-          <p className="investigation-meta-line">主管验收：{pack.review.decision}{pack.review.summary ? ` — ${pack.review.summary}` : ''}</p>
+          <p className="investigation-meta-line">主管验收：{pack.review.decision === 'defer' ? '暂缓，等待 Owner 决定' : pack.review.decision}{pack.review.summary ? ` — ${pack.review.summary}` : ''}</p>
         )}
         {contradicted.length > 0 && (
           <div className="investigation-claim-group" data-kind="conflict">
@@ -485,7 +485,11 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
       }
       case 'needs_user':
         return model.package
-          ? { label: '验收通过', dataAction: 'accept-research', onClick: acceptResearch }
+          ? {
+              label: model.package.review?.decision === 'defer' ? '按观点稿继续' : '验收通过',
+              dataAction: 'accept-research',
+              onClick: acceptResearch
+            }
           : { label: '补派记者', dataAction: 'retry-reporter', onClick: retryReporter };
       case 'direction_pending_approval':
         return { label: '批准写作方向', dataAction: 'approve-direction', onClick: approveDirection };
@@ -644,9 +648,12 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
         )}
         {status === 'needs_user' && (
           <>
-            <div className="investigation-note amber" role="status">调查需要 Owner 决策：范围变化、关键访问阻塞或主管无法自行决策时进入此状态。</div>
+            <div className="investigation-note amber" role="status">{model.package?.review?.decision === 'defer'
+              ? '主管暂缓验收：强观点与未来判断可作为作者判断继续，数字、引语、具体案例、归因等外部可验证事实必须落在证据内。请选择：按观点稿继续、需要补查、扩展范围或停止调查。'
+              : '调查需要 Owner 决策：范围变化、关键访问阻塞或主管无法自行决策时进入此状态。'}</div>
             {model.package && renderPackage()}
             {approvedOutline && renderApprovedOutline()}
+            {model.package && renderDirectionEditor()}
           </>
         )}
         {status === 'direction_pending_approval' && (

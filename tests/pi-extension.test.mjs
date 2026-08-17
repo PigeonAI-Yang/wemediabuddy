@@ -116,7 +116,7 @@ test('packaged Pi runtime pins and loads the upstream delegated vision extension
   assert.match(prepare, /bundledVision\.version === installedVision\.version/);
   assert.doesNotMatch(prepare, /readFile\(marker, 'utf8'\)[\s\S]{0,100}process\.exit/);
   assert.match(main, /piVisionExtensionFromRuntimeRoot\(runtimeRoot\)/);
-  assert.match(main, /PI_VISION_MODEL: WMB_VISION_MODEL/);
+  assert.match(main, /PI_VISION_MODEL: config\.model/);
   assert.match(operator, /describe_image/);
 });
 

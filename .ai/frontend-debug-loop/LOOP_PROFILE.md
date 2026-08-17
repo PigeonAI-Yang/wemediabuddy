@@ -1,8 +1,8 @@
-selected-milestone: WMB-5308
-project-purpose: Studio Pi dock 将用户拖入的图片按明确顺序交给 Pi 进行正文排图，失败时保留可重试输入。
-target-surface: Pi composer drag/drop queue、sendCurrent snapshot、PiDock sendText、preload chatPi、Main pi:chat image-batch branch。
-runtime-chain: drag/drop -> PiComposer attachments -> frozen submit snapshot -> PiDock send callback -> preload chatPi -> pi:chat input guard -> pi_image_batch.create/import/analyze。
-completion-authority: 新鲜 Electron 进程中拖入六张有效图片并立即发送；Main IPC 的 pi_image_batches 记录六个同序附件并选择批量图片路径；分析失败时六张待发送图片仍保留；无图片仍走普通 context message。
-focused-gate: WMB-5307 focused Electron scenario at 1100x800 with local blackhole Pi config; six-file drag/send and Main IPC readback.
-budgets: implementation attempts=1; repair attempts=1; product files max=8; scope growth=0.
-stop-conditions: 修复要求新增通用附件系统、改变 Pi image-batch/backend schema、权限、foundation brand token 或依赖。
+selected-milestone: WMB-5322
+project-purpose: 设置页需要让用户先理解 Provider 预设与五角色策略的关系，再低摩擦地配置每个候选的模型、推理强度和顺序。
+target-surface: 设置 > AI 与模型 > 模型预设与角色分配。
+runtime-chain: settings snapshot -> role policy draft -> candidate rows/actions -> saveRoleModelPolicies IPC.
+completion-authority: TASKS.md WMB-5322 doing row + designer-reviewed hierarchy + real Electron STG-009 at 1100x800.
+focused-gate: Provider 管理与角色分配层级清晰；候选行不再同时呈现多个同权菜单/文字动作；添加、推理强度、排序、移除和保存仍可用。
+budgets: implementation attempts=1; repair attempts=1; product files max=3; scope growth=0.
+stop-conditions: 需要改后端合同/DB schema/依赖、角色运行时语义、权限/发布边界或 foundation brand token。

@@ -13,7 +13,7 @@ import {
   type CrewProjection,
   type EmployeeRole
 } from './agents-instance-logic';
-import { ActiveRoleInstances, RoleHistoryList } from './agents-roster-instances';
+import { ActiveRoleInstances, ActiveRosterTask, RoleHistoryList } from './agents-roster-instances';
 import { RoleOverviewRow } from './agents-roster-overview';
 import { roleLabel, type RosterRow } from './agents-roster-parts';
 
@@ -119,6 +119,18 @@ export function AgentsRosterView({
     () => (projection ? EMPLOYEE_ORDER.filter((r) => projection.byRole[r].history.length > 0) : []),
     [projection]
   );
+  const rosterActive = useMemo(() => ORDER.flatMap<{ roleId: RoleId; row: RosterRow | null; status: 'running' | 'blocked' }>((roleId) => {
+    const row = roster.find((candidate) => candidate.roleId === roleId) ?? null;
+    if (roleId === 'desk') {
+      if (!deskOccupied) return [];
+      return [{ roleId, row, status: deskConflict ? 'blocked' as const : 'running' as const }];
+    }
+    const role = roleId as EmployeeRole;
+    if ((projection?.byRole[role].active.length ?? 0) > 0) return [];
+    if (row?.status !== 'running' && row?.status !== 'blocked') return [];
+    return [{ roleId, row, status: row.status }];
+  }), [deskConflict, deskOccupied, projection, roster]);
+  const hasCurrentTasks = sections.length > 0 || rosterActive.length > 0;
   void tick;
 
   const openRoleModal = (roleId: RoleId) => {
@@ -241,7 +253,16 @@ export function AgentsRosterView({
           <section className="agents-work-ledger" aria-label="进行中的任务与历史任务">
             <section className="agents-active" aria-label="进行中的任务">
               <h2 className="agents-zone-title">进行中的任务</h2>
-              {sections.length > 0 ? sections.map((s) => (
+              {rosterActive.map((item) => (
+                <ActiveRosterTask
+                  key={`roster-${item.roleId}`}
+                  roleId={item.roleId}
+                  row={item.row}
+                  status={item.status}
+                  onOpenRole={openRoleModal}
+                />
+              ))}
+              {sections.map((s) => (
                 <ActiveRoleInstances
                   key={s.roleId}
                   section={s}
@@ -250,7 +271,8 @@ export function AgentsRosterView({
                   onRedispatch={redispatch}
                   onCancel={cancel}
                 />
-              )) : <p className="agents-filter-empty" role="status">当前无进行中的任务</p>}
+              ))}
+              {!hasCurrentTasks ? <p className="agents-filter-empty" role="status">当前无进行中的任务</p> : null}
             </section>
             {historyRoles.length > 0 ? <section className="agents-history-area" aria-label="历史任务">
               <h2 className="agents-zone-title">历史任务</h2>

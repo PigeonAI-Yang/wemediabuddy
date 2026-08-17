@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createServer } from 'vite';
 import { studioInvestigationIndicator } from '../src/renderer/studio-investigation-indicator.ts';
 
 function investigation(status, reporter = null) {
@@ -44,5 +45,34 @@ test('investigation indicator is gray for every non-active, non-error state', ()
     'abandoned'
   ]) {
     assert.equal(studioInvestigationIndicator(investigation(status)).state, 'idle', status);
+  }
+});
+
+test('deferred supervisor review survives renderer normalization for Owner decision actions', async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { wmb: {} };
+  const vite = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true }, appType: 'custom' });
+  try {
+    const { normalizeInvestigationModel } = await vite.ssrLoadModule('/src/renderer/studio-investigation.ts');
+    const normalized = normalizeInvestigationModel({
+      projectId: 'project-deferred',
+      status: 'needs_user',
+      revision: 2,
+      createdAt: '2026-08-17T00:00:00.000Z',
+      updatedAt: '2026-08-17T00:01:00.000Z',
+      package: {
+        pack: null,
+        sourceIds: [],
+        review: { decision: 'defer', summary: '资料不足', decidedAt: '2026-08-17T00:01:00.000Z', decidedBy: 'desk' },
+        createdAt: '2026-08-17T00:00:30.000Z'
+      },
+      history: []
+    });
+    assert.equal(normalized?.package?.review?.decision, 'defer');
+    assert.equal(normalized?.package?.review?.summary, '资料不足');
+  } finally {
+    await vite.close();
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
   }
 });

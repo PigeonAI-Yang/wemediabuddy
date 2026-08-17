@@ -465,4 +465,67 @@ const saveInvestigationOutline: ToolDefinition = {
   }
 };
 
-export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, importProjectImage, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getInvestigation, saveInvestigationOutline, getMetrics, getReviews, saveReview];
+const reviewInvestigationResearch: ToolDefinition = {
+  name: 'wmb_review_investigation_research',
+  label: '验收项目调查资料',
+  description: '主管验收已交付的专项调查资料包。证据充分时 accept 并提交完整写作方向；资料不足时 defer，将结论持久化并交回 Owner 决策。defer 后 Owner 的有效选择包括：按观点稿继续（此时可再次 accept，提交观点优先但受限的写作方向：强观点与未来判断可保留为作者判断，数字、引语、具体案例、归因等外部可验证事实仍须有证据支持，不得编造）、需要补查、扩展范围或停止调查。',
+  parameters: {
+    type: 'object',
+    properties: {
+      ...authorityProperties,
+      requestId: { type: 'string' },
+      projectId: { type: 'string' },
+      expectedRevision: { type: 'number' },
+      decision: {
+        type: 'string',
+        enum: ['accept', 'defer'],
+        description: 'accept：证据充分时验收通过；defer 后 Owner 选择「按观点稿继续」时也可再次 accept，强观点与未来判断可保留为作者判断，数字、引语、具体案例、归因等外部可验证事实不得编造。defer：资料不足或存在关键未知，交回 Owner 在按观点稿继续、需要补查、扩展范围、停止调查中选择。'
+      },
+      direction: {
+        type: 'object',
+        properties: {
+          keyFacts: { type: 'array', items: { type: 'string' } },
+          upheld: { type: 'array', items: { type: 'string' } },
+          changed: { type: 'array', items: { type: 'string' } },
+          discoveries: { type: 'array', items: { type: 'string' } },
+          unknowns: { type: 'array', items: { type: 'string' } },
+          recommendation: { type: 'string', enum: ['continue', 'adjust', 'redirect', 'stop'] },
+          coreQuestion: { type: 'string' },
+          audienceValue: { type: 'string' },
+          scope: { type: 'string' },
+          constraints: { type: 'array', items: { type: 'string' } }
+        },
+        required: ['keyFacts', 'upheld', 'changed', 'discoveries', 'unknowns', 'recommendation', 'coreQuestion', 'audienceValue', 'scope', 'constraints'],
+        additionalProperties: false
+      },
+      summary: { type: 'string' }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'decision'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    const direction = params.direction as Record<string, unknown> | undefined;
+    return textResult(await callTool('investigation.review_research', {
+      ...authorityPayload(params),
+      request_id: String(params.requestId ?? ''),
+      project_id: String(params.projectId ?? ''),
+      expected_revision: Number(params.expectedRevision),
+      decision: params.decision === 'defer' ? 'defer' : 'accept',
+      direction: direction ? {
+        key_facts: direction.keyFacts,
+        upheld: direction.upheld,
+        changed: direction.changed,
+        discoveries: direction.discoveries,
+        unknowns: direction.unknowns,
+        recommendation: direction.recommendation,
+        core_question: direction.coreQuestion,
+        audience_value: direction.audienceValue,
+        scope: direction.scope,
+        constraints: direction.constraints
+      } : undefined,
+      summary: params.summary ? String(params.summary) : undefined
+    }));
+  }
+};
+
+export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, importProjectImage, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getInvestigation, saveInvestigationOutline, reviewInvestigationResearch, getMetrics, getReviews, saveReview];

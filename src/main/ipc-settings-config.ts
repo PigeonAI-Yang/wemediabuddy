@@ -1,6 +1,7 @@
 import { BrowserWindow, app, dialog, ipcMain, safeStorage } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { DataRoot } from './data-root';
 import { migrateDatabase } from './db/migrations';
 import { readSettings } from './settings';
@@ -8,7 +9,8 @@ import type { BrowserRuntime } from './browser';
 import type { BrowserProfileOwner, OwnerBrowserCommand, OwnerBrowserPlatform } from './browser-profile-owner.ts';
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, setPiFallbackOrder, type PiThinkingLevel } from './pi-config';
+import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, saveRoleModelPolicies, type PiThinkingLevel, type RoleId } from './pi-config';
+import type { RoleModelPolicies } from '../shared/pi-config.ts';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
 import { deletePiSkill, listPiSkills, savePiSkill, syncPiSkillsForDataRoots, type PiSkillInput } from './pi-skill-library';
@@ -155,15 +157,20 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     return saved;
   });
   ipcMain.handle('pi-config:delete', async (_event, id: string) => {
-    const saved = deletePiConfig(id);
+    const root = await loadSelectedDataRoot();
+    const taskReferences = root ? readPiTaskReferences(root.path, id) : [];
+    const saved = deletePiConfig(id, undefined, { taskReferences });
     await stopPi();
     return saved;
   });
-  ipcMain.handle('pi-config:set-fallback-order', async (_event, ids: string[]) => {
-    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw new Error('降级顺序无效。');
-    const saved = setPiFallbackOrder(ids);
-    await stopPi();
-    return saved;
+  ipcMain.handle('pi-config:save-role-policies', async (_event, input: { roleModelPolicies: RoleModelPolicies; expectedRevision?: number }) => {
+    if (!input || typeof input !== 'object' || !input.roleModelPolicies || typeof input.roleModelPolicies !== 'object') {
+      throw new Error('角色模型策略无效。');
+    }
+    return saveRoleModelPolicies({
+      roleModelPolicies: input.roleModelPolicies,
+      expectedRevision: input.expectedRevision
+    });
   });
   ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: unknown; apiKey?: string }) => {
     const api = requirePiApiType(input.api);
@@ -190,6 +197,33 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     await stopPi();
     return { name };
   });
+}
+
+function readPiTaskReferences(rootPath: string, profileId: string): Array<{ taskId: string; roleId?: RoleId }> {
+  const database = new DatabaseSync(path.join(rootPath, 'wmb.db'), { readOnly: true });
+  try {
+    const rows = database.prepare("SELECT id, context_refs_json AS contextRefsJson FROM agent_tasks WHERE status NOT IN ('succeeded', 'partial', 'failed', 'cancelled')").all() as Array<{ id: string; contextRefsJson: string }>;
+    const roleIds = ['desk', 'reporter', 'planner', 'writer', 'librarian'] as const;
+    const references: Array<{ taskId: string; roleId?: RoleId }> = [];
+    for (const row of rows) {
+      try {
+        const refs = asRecord(JSON.parse(row.contextRefsJson));
+        const snapshot = asRecord(refs?.modelPolicySnapshot);
+        const snapshotProfiles = snapshot?.profiles;
+        if (!Array.isArray(snapshotProfiles) || !snapshotProfiles.some((profile) => asRecord(profile)?.profileId === profileId)) continue;
+        const snapshotRole = snapshot?.roleId;
+        const roleId = typeof snapshotRole === 'string' && roleIds.includes(snapshotRole as (typeof roleIds)[number]) ? snapshotRole as RoleId : undefined;
+        references.push({ taskId: row.id, ...(roleId ? { roleId } : {}) });
+      } catch { /* malformed task refs cannot identify this profile */ }
+    }
+    return references;
+  } finally {
+    database.close();
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function ownerIpcError(code: string, message: string): Error {

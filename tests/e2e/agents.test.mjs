@@ -89,6 +89,21 @@ function writeLegacyDockConversation(dataRoot) {
   }, null, 2), 'utf8');
 }
 
+function writeEmployeeTranscript(dataRoot, jobId) {
+  const sessionFile = path.join(dataRoot, 'agent', 'sessions', `job-${jobId}.jsonl`);
+  mkdirSync(path.dirname(sessionFile), { recursive: true });
+  const entries = [
+    { type: 'message', id: 'wmb-5313-user', timestamp: NOW(), message: { role: 'user', content: '调查这个项目的事实依据' } },
+    { type: 'message', id: 'wmb-5313-assistant', timestamp: NOW(), message: { role: 'assistant', content: [
+      { type: 'thinking', thinking: '先核对项目与来源' },
+      { type: 'toolCall', id: 'wmb-5313-call', name: 'wmb_read_project', arguments: { projectId: 'project-wmb-5313' } },
+      { type: 'text', text: '已完成记者调查并整理证据。' }
+    ] } },
+    { type: 'message', timestamp: NOW(), message: { role: 'toolResult', toolCallId: 'wmb-5313-call', details: { content: '已读取项目与来源记录' } } }
+  ];
+  writeFileSync(sessionFile, `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+}
+
 /** 本地黑洞服务器：接受连接但永不响应 → 任务停留在 running（取消窗口可测），零外网。 */
 function startHangingServer() {
   return new Promise((resolve) => {
@@ -250,6 +265,52 @@ export default [
       });
       await healthCheck(page, evidence, assert, step);
       return { modal: true, pageerrors: evidence.pageerrors.length };
+    }
+  },
+  {
+    id: 'WMB-5313-agents-completed-run-detail',
+    journeyIds: ['WMB-5313-agents-completed-run-detail'],
+    launch: {
+      seedFixture: async ({ dataRoot }) => {
+        const jobId = 'job-wmb-5313-reporter-complete';
+        const db = openDb(dataRoot);
+        try {
+          seedAgentTask(db, {
+            id: 'task-wmb-5313-reporter-complete',
+            jobId,
+            roleId: 'reporter',
+            intent: 'research',
+            status: 'succeeded',
+            phase: 'completed',
+            brief: 'WMB-5313 已完成记者调查',
+            businessDate: planDate,
+            progress: { planned: 4, processed: 4, message: '调查完成' },
+            events: [{ at: NOW(), message: '已核验 4 项调查主张' }]
+          });
+        } finally {
+          db.close();
+        }
+        writeEmployeeTranscript(dataRoot, jobId);
+      }
+    },
+    run: async ({ page, evidence, assert, step }) => {
+      await step('启动进入智能体页并打开空闲记者详情', async () => {
+        await waitForAppReady(page, { shell: '.app-shell', timeoutMs: 90_000 });
+        await navigateTo(page, 'agents');
+        await page.locator('.agents-role-card[data-role="reporter"]').click();
+      });
+      await step('最近终态工单保留真实执行过程', async () => {
+        const modal = page.locator('[data-testid="agents-detail-modal"]');
+        await modal.waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForFunction(() => (document.querySelector('[data-testid="agents-detail-modal"]')?.textContent ?? '').includes('已完成记者调查并整理证据。'), null, { timeout: 15_000 });
+        const text = (await modal.textContent()) ?? '';
+        assert(text.includes('job-wmb-5313-reporter-complete'), `缺少终态工单 ID: ${text}`);
+        assert(text.includes('已核验 4 项调查主张'), '缺少持久任务事件');
+        assert(text.includes('已完成记者调查并整理证据。'), '缺少真实 Pi transcript');
+        assert(!text.includes('暂无运行明细'), '终态记者详情不应回落空态');
+      });
+      await healthCheck(page, evidence, assert, step);
+      return { completedRunVisible: true, pageerrors: evidence.pageerrors.length };
     }
   },
   {
@@ -503,10 +564,14 @@ export default [
         assert((pct ?? '').includes('25%'), `遗留任务卡进度异常: ${pct}`);
         const summary = await card.locator('.agents-card-summary').textContent();
         assert((summary ?? '').includes('E2E 正在扫描 X 列表渠道'), `卡片摘要异常: ${summary}`);
-        assert(await page.locator('.agents-instance-card').count() === 0, '投影活动实例区应为空（mismatch 前提）');
+        const currentTask = page.locator('.agents-active .agents-role-group[data-role="reporter"] .agents-instance-card[data-task="task-e2e-legacy-scan"]');
+        await currentTask.waitFor({ state: 'visible', timeout: 15_000 });
+        assert(await page.locator('.agents-filter-empty').count() === 0, '真实遗留任务运行时中央区不得显示无进行中任务');
+        const currentText = (await currentTask.textContent()) ?? '';
+        assert(currentText.includes('工作中') && currentText.includes('E2E 正在扫描 X 列表渠道'), `中央当前任务语义异常: ${currentText}`);
+        await currentTask.locator('button', { hasText: '查看运行明细' }).click();
       });
-      await step('点击角色卡打开弹窗：真实任务明细而非空态', async () => {
-        await page.locator('.agents-role-card[data-role="reporter"]').click();
+      await step('从中央当前任务进入弹窗：真实任务明细而非空态', async () => {
         const modal = page.locator('[data-testid="agents-detail-modal"]');
         await modal.waitFor({ state: 'visible', timeout: 15_000 });
         // 等待真实任务加载完成（taskId 出现）再断言，避免初始空态与异步加载的竞态。

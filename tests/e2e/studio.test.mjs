@@ -19,6 +19,9 @@ import { createServer } from 'node:http';
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { savePlatformVersion } from '../../src/main/content.ts';
 import { importAssetBytes, linkProjectAsset, markdownImageForAsset } from '../../src/main/assets.ts';
+import { insertMediaCandidates, completeMediaCandidatePreserved } from '../../src/main/db/media-archive-store.ts';
+import { sourceRevisionKey } from '../../src/shared/media-candidates.ts';
+import { enqueueVisualRun, markVisualRunRunning, markVisualRunCompleted, VISUAL_SCHEMA_VERSION } from '../../src/main/visual-source-lineage.ts';
 import { seedSource } from './lib/seed.mjs';
 import { buildJobContextRefs, buildJobObjectBoundary } from '../../src/main/job-object-boundary.ts';
 import { buildResearchEvidencePack } from '../../src/main/research-task-state.ts';
@@ -41,8 +44,78 @@ const seedWithProject = async ({ dataRoot, workspaceId }) => {
   }
 };
 
-function startPiComposerMock() {
+const seedIllustrationProject = async ({ dataRoot, workspaceId }) => {
+  await seedWorkflowBase(dataRoot, workspaceId);
+  const db = openWriteDb(dataRoot);
+  try {
+    const sourceId = seedSource(db, {
+      title: 'E2E 已归档来源图',
+      summary: '真实来源图应优先复用',
+      originalUrl: 'https://e2e.example/source'
+    });
+    const project = seedStudioProject(db, {
+      title: 'E2E 定稿配图项目',
+      coreV1: '初稿正文',
+      coreV2: '# 定稿配图 E2E\n\n来源事实图。\n\n需要生成解释图。',
+      platforms: [],
+      sourceIds: [sourceId]
+    });
+    const asset = await importAssetBytes(db, dataRoot, {
+      bytes: makeSeedPng(32, 24, 80, 140, 200),
+      fileName: 'e2e-source.png',
+      mimeType: 'image/png',
+      origin: 'source_media',
+      width: 32,
+      height: 24
+    });
+    const revisionKey = sourceRevisionKey(sourceId, 1);
+    const candidateId = insertMediaCandidates(db, {
+      sourceId,
+      sourceRevisionKey: revisionKey,
+      channel: 'official_web',
+      requestId: 'e2e-illustration-source',
+      discoveredAt: new Date().toISOString(),
+      candidates: [{ kind: 'image', originalUrl: 'https://e2e.example/source.png', ordinal: 1, postKind: 'web', surroundingText: '来源证据图' }]
+    }).candidateIds[0];
+    completeMediaCandidatePreserved(db, {
+      candidateId,
+      sourceId,
+      sourceRevisionKey: revisionKey,
+      assetId: asset.id,
+      sha256: asset.sha256,
+      capturedAt: new Date().toISOString(),
+      kind: 'image',
+      ordinal: 1,
+      originalUrl: 'https://e2e.example/source.png',
+      caption: '来源证据图',
+      rightsStatus: 'likely_reusable',
+      createdBy: 'e2e',
+      requestId: 'e2e-illustration-source'
+    });
+    const visual = enqueueVisualRun(db, { sourceId, sourceRevisionId: revisionKey, assetId: asset.id, schemaVersion: VISUAL_SCHEMA_VERSION }).run;
+    markVisualRunRunning(db, visual.id);
+    markVisualRunCompleted(db, visual.id, {
+      model: 'fixture-vision',
+      provider: 'e2e',
+      promptVersion: 1,
+      observation: {
+        reason: '来源事实图已完成理解。',
+        items: [{ kind: 'claim', canonicalKey: 'source-fact', statement: '来源事实图', excerpt: '来源事实图', valueRationale: '直接证据' }]
+      }
+    });
+    return project;
+  } finally {
+    db.close();
+  }
+};
+
+function startPiComposerMock({ holdFirst = false } = {}) {
   let responseNumber = 0;
+  let activeResponses = 0;
+  let maxActiveResponses = 0;
+  let releaseFirstResponse = () => {};
+  let firstResponseReadyResolve = () => {};
+  const firstResponseReady = new Promise((resolve) => { firstResponseReadyResolve = resolve; });
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const respond = (status, body) => {
@@ -53,6 +126,11 @@ function startPiComposerMock() {
         return respond(200, { data: [{ id: 'gpt-5.4' }, { id: 'gpt-5.4-vision' }] });
       }
       if (req.method === 'POST' && req.url?.endsWith('/responses')) {
+        activeResponses += 1;
+        maxActiveResponses = Math.max(maxActiveResponses, activeResponses);
+        let active = true;
+        const releaseActive = () => { if (active) { active = false; activeResponses = Math.max(0, activeResponses - 1); } };
+        res.once('close', releaseActive);
         req.on('data', () => {});
         req.on('end', () => {
           responseNumber += 1;
@@ -62,22 +140,32 @@ function startPiComposerMock() {
             id: itemId, type: 'message', role: 'assistant', status: 'completed',
             content: [{ type: 'output_text', text: 'E2E mock response', annotations: [] }]
           };
-          const events = [
-            { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
-            { type: 'response.output_item.added', output_index: 0, item: { id: itemId, type: 'message', role: 'assistant', status: 'in_progress', content: [] } },
-            { type: 'response.output_text.delta', item_id: itemId, output_index: 0, content_index: 0, delta: 'E2E mock response' },
-            { type: 'response.output_item.done', output_index: 0, item: outputItem },
-            {
-              type: 'response.completed',
-              response: {
-                id: responseId, status: 'completed', output: [outputItem],
-                usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } }
+          const writeResponse = () => {
+            if (res.writableEnded || res.headersSent) return;
+            const events = [
+              { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
+              { type: 'response.output_item.added', output_index: 0, item: { id: itemId, type: 'message', role: 'assistant', status: 'in_progress', content: [] } },
+              { type: 'response.output_text.delta', item_id: itemId, output_index: 0, content_index: 0, delta: 'E2E mock response' },
+              { type: 'response.output_item.done', output_index: 0, item: outputItem },
+              {
+                type: 'response.completed',
+                response: {
+                  id: responseId, status: 'completed', output: [outputItem],
+                  usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } }
+                }
               }
-            }
-          ];
-          res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'close' });
-          for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`);
-          res.end();
+            ];
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'close' });
+            for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`);
+            res.end();
+            releaseActive();
+          };
+          if (holdFirst && responseNumber === 1) {
+            firstResponseReadyResolve();
+            releaseFirstResponse = writeResponse;
+          } else {
+            writeResponse();
+          }
         });
         return;
       }
@@ -89,6 +177,43 @@ function startPiComposerMock() {
       if (!address || typeof address === 'string') return reject(new Error('本地 Pi mock 未能取得端口。'));
       resolve({
         baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        waitForFirstResponse: () => firstResponseReady,
+        releaseFirstResponse: () => releaseFirstResponse(),
+        maxActiveResponses: () => maxActiveResponses,
+        close: () => new Promise((closeResolve) => server.close(() => closeResolve()))
+      });
+    });
+  });
+}
+
+function startIllustrationImageMock() {
+  const requests = [];
+  let responseNumber = 0;
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      if (req.method !== 'POST' || !req.url?.endsWith('/images/generations')) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end('{}');
+        return;
+      }
+      const chunks = [];
+      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('end', () => {
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        requests.push(payload);
+        responseNumber += 1;
+        const bytes = makeSeedPng(40 + responseNumber, 24 + responseNumber, 180, 80 + responseNumber, 120);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ b64_json: bytes.toString('base64') }] }));
+      });
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') return reject(new Error('图像 provider mock 未能取得端口。'));
+      resolve({
+        baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        requests,
         close: () => new Promise((closeResolve) => server.close(() => closeResolve()))
       });
     });
@@ -1651,6 +1776,106 @@ export default [
     }
   },
   {
+    id: 'WMB-5311-pi-busy-image-queue',
+    journeyIds: [],
+    launch: { seedFixture: seedWithProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, openDb }) => {
+      const step = (label, action) => helpers.step(evidence, label, action);
+      const mock = await startPiComposerMock({ holdFirst: true });
+      try {
+        await helpers.waitForAppReady(page);
+        await step('进入 Studio 项目并固定视口', async () => {
+          await helpers.navigateTo(page, 'studio');
+          await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+          await openProjectByName(page, 'E2E 创作项目 A');
+          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+        });
+        await step('配置可控 Pi mock 并启动一个保持中的真实回合', async () => {
+          await page.evaluate((baseUrl) => window.wmb.savePiConfig({
+            id: 'e2e', name: 'E2E WMB-5311 queue mock', baseUrl, model: 'gpt-5.4', api: 'openai-responses', thinking: 'off',
+            contextWindow: 400000, maxTokens: 1024, apiKey: 'e2e-wmb-5311-key'
+          }), mock.baseUrl);
+          await page.locator('.pi-composer textarea').fill('busy first turn');
+          await page.getByRole('button', { name: '发送' }).click();
+          await mock.waitForFirstResponse();
+          await page.waitForFunction(() => document.querySelector('.pi-composer textarea')?.placeholder.includes('继续输入'), null, { timeout: 20_000 });
+        });
+        const { db, close } = openDb();
+        const projectId = db.prepare('SELECT id FROM content_projects WHERE title = ? LIMIT 1').get('E2E 创作项目 A')?.id;
+        close();
+        assert(typeof projectId === 'string' && projectId.length > 0, '未能读取 E2E 创作项目 ID。');
+        const activeConversationId = await page.evaluate(() => window.wmb.getPiConversation().then((conversation) => conversation.id));
+        await step('忙时先排入纯文字，再排入有序六图并冻结原会话', async () => {
+          const textarea = page.locator('.pi-composer textarea');
+          await textarea.fill('queued text before images');
+          await page.getByRole('button', { name: '插入当前回复' }).click();
+          const payloads = Array.from({ length: 6 }, (_, index) => ({
+            name: `busy-${index + 1}.png`,
+            mimeType: 'image/png',
+            base64: makeSeedPng(28 + index, 18 + index, 50 + index, 90 + index, 130 + index).toString('base64')
+          }));
+          await page.evaluate((items) => {
+            const composer = document.querySelector('.pi-composer');
+            if (!composer) throw new Error('Pi composer 不存在。');
+            const transfer = new DataTransfer();
+            for (const item of items) {
+              const binary = atob(item.base64);
+              const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+              transfer.items.add(new File([bytes], item.name, { type: item.mimeType }));
+            }
+            composer.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+            composer.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+          }, payloads);
+          await page.waitForFunction(() => document.querySelectorAll('.pi-image-queue-item').length === 6, null, { timeout: 20_000 });
+          await page.waitForFunction(() => [...document.querySelectorAll('.pi-image-queue-item small')].every((node) => !node.textContent?.includes('读取中')), null, { timeout: 20_000 });
+          await textarea.fill('queued six images');
+          await page.getByRole('button', { name: '插入当前回复' }).click();
+          await page.waitForFunction(() => document.querySelectorAll('.pi-bubble-wrap[data-queue-kind]').length >= 2, null, { timeout: 20_000 });
+          const queued = await page.$$eval('.pi-bubble-wrap[data-queue-kind]', (nodes) => nodes.map((node) => ({
+            kind: node.getAttribute('data-queue-kind'),
+            text: node.querySelector('.pi-bubble')?.textContent?.trim() ?? '',
+            count: Number(node.getAttribute('data-attachment-count') ?? 0),
+            conversationId: node.getAttribute('data-queue-conversation-id'),
+            projectId: node.getAttribute('data-queue-project-id')
+          })));
+          assert(queued.map((item) => item.kind).join(',') === 'text,imageBatch', `忙时队列未按提交顺序投影: ${JSON.stringify(queued)}`);
+          assert(queued[0].text.includes('queued text before images') && queued[1].text.includes('queued six images'), `忙时队列正文错位: ${JSON.stringify(queued)}`);
+          assert(queued[1].count === 6 && queued[1].conversationId === activeConversationId && queued[1].projectId === projectId, `图片队列未绑定原会话/项目: ${JSON.stringify(queued[1])}`);
+        });
+        await step('当前 Pi 回合未结束前不得创建批次或并发请求', async () => {
+          const batches = await page.evaluate((id) => window.wmb.listPiImageBatches({ projectId: id, limit: 20 }), projectId);
+          assert(batches.length === 0, `忙时图片不应提前创建批次: ${JSON.stringify(batches)}`);
+          assert(mock.maxActiveResponses() === 1, `忙时出现并发 Pi provider 请求: ${mock.maxActiveResponses()}`);
+        });
+        mock.releaseFirstResponse();
+        await step('当前回合完成后按序创建六图批次并保留失败快照', async () => {
+          let observation = null;
+          for (let attempt = 0; attempt < 300; attempt += 1) {
+            const batches = await page.evaluate((id) => window.wmb.listPiImageBatches({ projectId: id, limit: 20 }), projectId);
+            const batch = batches.find((candidate) => candidate.attachments.length === 6) ?? null;
+            if (batch) {
+              observation = { batch, attachments: batch.attachments };
+              if (batch.status === 'failed_analysis') break;
+            }
+            await helpers.delay(100);
+          }
+          assert(observation?.batch?.status === 'failed_analysis', `忙时图片未在前回合结束后进入真实失败终态: ${JSON.stringify(observation)}`);
+          assert(observation.attachments.length === 6, `忙时图片批次附件数量错误: ${JSON.stringify(observation)}`);
+          assert(observation.attachments.every((item, index) => item.ordinal === index && item.sourceFileName === `busy-${index + 1}.png`), `忙时图片批次顺序错误: ${JSON.stringify(observation.attachments)}`);
+          assert(mock.maxActiveResponses() === 1, `图片批次与前一 Pi 回合发生并发: ${mock.maxActiveResponses()}`);
+          await page.waitForFunction(() => document.querySelectorAll('.pi-image-queue-item').length === 6, null, { timeout: 20_000 });
+          const retained = await page.$$eval('.pi-image-queue-item b', (nodes) => nodes.map((node) => node.textContent?.trim()));
+          assert(retained.every((label, index) => label?.includes(`${index + 1}. busy-${index + 1}.png`)), `失败后图片快照未保留可重试: ${JSON.stringify(retained)}`);
+          await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'pi-busy-image-queue-six-order' });
+        });
+        return { queuedText: true, queuedImages: true, attachmentCount: 6, order: ['busy-1.png', 'busy-2.png', 'busy-3.png', 'busy-4.png', 'busy-5.png', 'busy-6.png'], retainedOnFailure: true, maxConcurrentResponses: mock.maxActiveResponses() };
+      } finally {
+        mock.releaseFirstResponse();
+        await mock.close();
+      }
+    }
+  },
+  {
     id: 'WMB-5309-pi-composer-keyboard-history',
     journeyIds: [],
     launch: { seedFixture: seedWithProject },
@@ -1765,6 +1990,141 @@ export default [
         await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-research-auto-continue-1100' });
       });
       return { askedUser: false, decision: 'narrow', continued: true };
+    }
+  },
+  {
+    id: 'WMB-5312-studio-illustration-workflow',
+    journeyIds: [],
+    launch: { seedFixture: seedIllustrationProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, step, openDb }) => {
+      const imageMock = await startIllustrationImageMock();
+      const readRun = (runId) => page.evaluate((id) => window.wmb.getIllustrationRun(id), runId);
+      const waitForRun = async (runId, predicate, label) => {
+        for (let attempt = 0; attempt < 240; attempt += 1) {
+          const value = await readRun(runId);
+          if (value && predicate(value)) return value;
+          await helpers.delay(100);
+        }
+        throw new Error(`${label} 超时: ${JSON.stringify(await readRun(runId))}`);
+      };
+      try {
+        await helpers.waitForAppReady(page);
+        await step('图像模型只在设置页配置，编辑器工具条只保留配图动作', async () => {
+          const configResult = await page.evaluate(async (baseUrl) => {
+            await window.wmb.savePiConfig({ id: 'e2e-illustration-image', name: 'E2E 配图 Provider', baseUrl, model: 'e2e-image', api: 'openai-completions', apiKey: 'e2e-image-key' });
+            return window.wmb.saveIllustrationImageConfig({ profileId: 'e2e-illustration-image', model: 'e2e-image' });
+          }, imageMock.baseUrl);
+          assert(configResult.ok === true, `独立图像 Provider 配置失败: ${JSON.stringify(configResult)}`);
+          await helpers.navigateTo(page, 'settings');
+          await page.locator('.settings-nav nav button[title="AI 与模型"]').click();
+          const modelSection = page.locator('.settings-section', { hasText: '独立配图模型' });
+          await modelSection.getByLabel('图像模型').waitFor({ state: 'visible', timeout: 15_000 });
+          await helpers.navigateTo(page, 'studio');
+          await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+          await openProjectByName(page, 'E2E 定稿配图项目');
+          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+          const toolbar = page.locator('.studio-formatbar');
+          await toolbar.getByRole('group', { name: '定稿配图' }).waitFor({ state: 'visible', timeout: 15_000 });
+          assert(await page.getByLabel('模型').count() === 0, '创作编辑器不应显示配图模型字段。');
+          assert(await page.locator('.studio-illustration-panel').count() === 0, '没有运行记录时正文上方不应出现独立配图面板。');
+          const geometry = await toolbar.getByRole('group', { name: '定稿配图' }).evaluate((group) => {
+            const select = group.querySelector('select');
+            const input = group.querySelector('input');
+            const button = group.querySelector('button');
+            if (!select || !input || !button) return null;
+            const controls = [select, input, button].map((node) => {
+              const rect = node.getBoundingClientRect();
+              const style = getComputedStyle(node);
+              return { top: rect.top, height: rect.height, textAlign: style.textAlign, paddingLeft: style.paddingLeft, paddingRight: style.paddingRight };
+            });
+            const labels = [...group.querySelectorAll('label')].map((node) => getComputedStyle(node).gap);
+            return { controls, groupGap: getComputedStyle(group).gap, labels };
+          });
+          assert(geometry, '定稿配图工具条控件缺失。');
+          assert(geometry.controls.every((control) => Math.abs(control.height - 32) <= 1), `控件高度不统一: ${JSON.stringify(geometry)}`);
+          assert(Math.max(...geometry.controls.map((control) => control.top)) - Math.min(...geometry.controls.map((control) => control.top)) <= 1, `控件基线不统一: ${JSON.stringify(geometry)}`);
+          assert(geometry.controls[0].textAlign === 'center' && geometry.controls[1].textAlign === 'center', `字段值未统一居中: ${JSON.stringify(geometry)}`);
+          assert(geometry.groupGap === '8px' && geometry.labels.every((gap) => gap === '8px'), `控件间距不统一: ${JSON.stringify(geometry)}`);
+        });
+
+        const { db: initialDb, close: closeInitial } = openDb();
+        const projectId = initialDb.prepare('SELECT id FROM content_projects WHERE title = ? LIMIT 1').get('E2E 定稿配图项目')?.id;
+        const initialVersions = initialDb.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get(projectId)?.count;
+        closeInitial();
+        assert(typeof projectId === 'string' && projectId.length > 0, '未能读取定稿配图项目。');
+
+        let started;
+        await step('只有用户点击工具条定稿动作才创建混合来源/生成配图运行', async () => {
+          const toolbar = page.locator('.studio-formatbar');
+          await toolbar.getByLabel('比例').selectOption('21:9');
+          await toolbar.getByLabel('生成张数').fill('1');
+          await toolbar.getByRole('button', { name: '定稿配图' }).click();
+          for (let attempt = 0; attempt < 100; attempt += 1) {
+            const runs = await page.evaluate((id) => window.wmb.listIllustrationRuns(id), projectId);
+            if (runs[0]) { started = runs[0]; break; }
+            await helpers.delay(100);
+          }
+          assert(started?.id, '点击定稿后未创建配图运行。');
+          const completed = await waitForRun(started.id, (run) => ['completed', 'partial', 'failed', 'conflicted'].includes(run.status), '首次配图');
+          assert(completed.items.some((item) => item.kind === 'source' && item.state === 'completed'), `来源图未被真实复用: ${JSON.stringify(completed.items)}`);
+          assert(completed.items.some((item) => item.kind === 'generated' && item.state === 'completed'), `生成图未成功: ${JSON.stringify(completed.items)}`);
+          assert(completed.items.filter((item) => item.kind === 'generated').length <= 1, '生成图超出本次上限。');
+          assert(imageMock.requests[0].ratio === '21:9' && imageMock.requests[0].aspect_ratio === '21:9', `Provider 未收到结构化比例: ${JSON.stringify(imageMock.requests[0])}`);
+        });
+
+        let run = await readRun(started.id);
+        const generated = run.items.find((item) => item.kind === 'generated' && item.state === 'completed');
+        assert(generated?.assetId, '首次生成项缺少 Asset。');
+        const oldAssetId = generated.assetId;
+        const oldTargetVersionId = run.targetVersionId;
+        const { db: firstDb, close: closeFirst } = openDb();
+        try {
+          const latest = firstDb.prepare('SELECT body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(projectId)?.body ?? '';
+          assert(latest.includes('wmb-asset://'), `混合配图未插入正文: ${latest}`);
+          assert(firstDb.prepare('SELECT COUNT(*) AS count FROM media_recommendations').get().count > 0, '来源媒体建议链没有真实结果。');
+          assert(firstDb.prepare("SELECT COUNT(*) AS count FROM asset_provenance WHERE kind='generated'").get().count === 1, '生成 Asset 未写入内部血缘。');
+        } finally { closeFirst(); }
+
+        await step('点击生成项后携带上下文原位重新生成并可撤销', async () => {
+          const itemRow = page.locator('.studio-illustration-item').filter({ hasText: '配图 · completed' }).first();
+          await itemRow.getByLabel('重新生成比例').selectOption('9:21');
+          await itemRow.getByLabel('重新生成要求').fill('改成竖向构图');
+          await itemRow.getByRole('button', { name: '重新生成' }).click();
+          const regenerated = await waitForRun(started.id, (candidate) => candidate.items.some((item) => item.id === generated.id && item.state === 'completed' && item.previousAssetId === oldAssetId), '原位重新生成');
+          const replacement = regenerated.items.find((item) => item.id === generated.id);
+          assert(replacement.assetId !== oldAssetId && replacement.ratio === '9:21', `原位替换状态错误: ${JSON.stringify(replacement)}`);
+          assert(imageMock.requests.length === 2 && imageMock.requests[1].prompt.includes('改成竖向构图'), `重新生成未携带修改要求: ${JSON.stringify(imageMock.requests[1])}`);
+          await page.waitForFunction(() => [...document.querySelectorAll('.studio-illustration-item button')].some((button) => button.textContent?.includes('撤销')), null, { timeout: 20_000 });
+          const providerCallsBeforeUndo = imageMock.requests.length;
+          const undoItem = page.locator('.studio-illustration-item').filter({ hasText: '配图 · completed' }).first();
+          await undoItem.getByRole('button', { name: '撤销' }).click();
+          const undone = await waitForRun(started.id, (candidate) => candidate.items.some((item) => item.id === generated.id && item.assetId === oldAssetId && !item.previousAssetId), '撤销旧图');
+          assert(undone.items.find((item) => item.id === generated.id)?.assetId === oldAssetId, '撤销未恢复旧图。');
+          assert(imageMock.requests.length === providerCallsBeforeUndo, '撤销不应再次调用图像 Provider。');
+          assert(undone.targetVersionId !== oldTargetVersionId, '原位替换/撤销应各自产生新正文版本。');
+        });
+
+        await step('Renderer 重载后运行、项状态与 Asset 仍可读回', async () => {
+          await page.reload();
+          await helpers.waitForAppReady(page);
+          const readback = await readRun(started.id);
+          assert(readback?.status === 'completed', `重载后运行状态丢失: ${JSON.stringify(readback)}`);
+          assert(readback.items.some((item) => item.kind === 'source' && item.state === 'completed'), '重载后来源项状态丢失。');
+          assert(readback.items.some((item) => item.kind === 'generated' && item.assetId === oldAssetId), '重载后撤销后的生成 Asset 丢失。');
+          const { db, close } = openDb();
+          try {
+            const latest = db.prepare('SELECT body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(projectId)?.body ?? '';
+            const versionCount = db.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get(projectId)?.count;
+            assert(Number(versionCount) >= Number(initialVersions) + 3, `正文版本未按 start/regenerate/undo 增加: ${versionCount}`);
+            assert(!latest.includes('AI 生成'), '正文不得显示 AI 生成 标签。');
+          } finally { close(); }
+          assert(evidence.pageerrors.length === 0, `配图场景出现页面异常: ${JSON.stringify(evidence.pageerrors)}`);
+          await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-illustration-workflow' });
+        });
+        return { started: true, mixedSourceAndGenerated: true, regenerated: true, undone: true, rendererReadback: true, providerRequests: imageMock.requests.length };
+      } finally {
+        await imageMock.close();
+      }
     }
   }
 ];

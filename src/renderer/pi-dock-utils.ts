@@ -2,6 +2,7 @@ import { piToolSummary, printableToolValue, type PiMessageSegment } from '../sha
 import type { PiChatMessage } from '../main/pi-conversation.ts';
 import { extractVisiblePrompt } from '../shared/pi-visible-prompt.ts';
 import { isJobEventEnvelope } from '../shared/job-event-envelope.ts';
+import type { PiImageAttachmentPayload } from '../shared/pi-image-batch.ts';
 
 /** 自动工单终态（JOB_EVENT）投影标记：永不当作用户气泡，也不作为 fork/retry 锚点。 */
 export function isPiSystemEvent(message: PiChatMessage): boolean {
@@ -276,14 +277,37 @@ export function nextPiConversationFollowing(current: boolean, userScrollIntent: 
   return nearBottom || (!userScrollIntent && current);
 }
 
-/** WMB-5204：忙时人工消息的 renderer 瞬态投影；正文必须进入主时间线，但绝不持久化。 */
+/** WMB-5204/WMB-5311：忙时人工消息的 renderer 瞬态投影；图片批次连同预览快照只归属原会话。 */
+export type PiLocalQueueAttachment = Readonly<PiImageAttachmentPayload & {
+  id: string;
+  previewUrl: string;
+}>;
+
 export type PiLocalQueueItem = {
   localId: string;
   text: string;
   delivery: 'steer' | 'followUp';
   status: 'pending' | 'accepted' | 'failed';
   createdAt: string;
+  kind: 'text' | 'imageBatch';
+  conversationId: string | null;
+  imageBatch?: Readonly<{
+    projectId: string;
+    requestId: string;
+    message: string;
+    attachments: readonly PiLocalQueueAttachment[];
+  }>;
 };
+
+type PiLocalQueueItemOptions = Readonly<{
+  conversationId?: string | null;
+  imageBatch?: Readonly<{
+    projectId: string;
+    requestId: string;
+    message: string;
+    attachments: readonly PiLocalQueueAttachment[];
+  }>;
+}>;
 
 type PiNativeQueueSnapshot = {
   steering: string[];
@@ -296,14 +320,20 @@ export function piLocalQueueEntryId(localId: string): string {
   return `${PI_LOCAL_QUEUE_ENTRY_PREFIX}${localId}`;
 }
 
-/** 忙时人工提交立即创建：仅 trimmed 人类输入、投递方式与本地 UUID。 */
-export function createPiLocalQueueItem(text: string, delivery: 'steer' | 'followUp' = 'steer'): PiLocalQueueItem {
+/** 忙时人工提交立即创建：仅 trimmed 人类输入、投递方式与本地 UUID；图片项冻结完整批次。 */
+export function createPiLocalQueueItem(text: string, delivery: 'steer' | 'followUp' = 'steer', options: PiLocalQueueItemOptions = {}): PiLocalQueueItem {
+  const imageBatch = options.imageBatch
+    ? { ...options.imageBatch, attachments: options.imageBatch.attachments.slice() }
+    : undefined;
   return {
     localId: crypto.randomUUID(),
     text: text.trim(),
     delivery,
     status: 'pending',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    kind: imageBatch ? 'imageBatch' : 'text',
+    conversationId: options.conversationId ?? null,
+    ...(imageBatch ? { imageBatch } : {})
   };
 }
 
@@ -318,7 +348,7 @@ export function reconcilePiLocalQueue(queue: PiNativeQueueSnapshot, locals: PiLo
   };
   const consumed = { steer: new Set<number>(), followUp: new Set<number>() };
   return locals.map((local) => {
-    if (local.status !== 'pending') return local;
+    if (local.kind !== 'text' || local.status !== 'pending') return local;
     const texts = visible[local.delivery];
     const used = consumed[local.delivery];
     const index = texts.findIndex((text, candidate) => !used.has(candidate) && text === local.text);
@@ -330,7 +360,7 @@ export function reconcilePiLocalQueue(queue: PiNativeQueueSnapshot, locals: PiLo
 
 /** 已由本地人工气泡承载的 native 队列正文不再重复显示；外部消息与系统通知仍留在运输队列。 */
 export function filterPiNativeQueueMessages(natives: string[], delivery: 'steer' | 'followUp', locals: PiLocalQueueItem[]): string[] {
-  const candidates = locals.filter((item) => item.status !== 'failed' && item.delivery === delivery);
+  const candidates = locals.filter((item) => item.kind === 'text' && item.status !== 'failed' && item.delivery === delivery);
   const consumed = new Set<number>();
   return natives.filter((raw) => {
     if (isJobEventEnvelope(raw)) return true;
@@ -355,15 +385,18 @@ function unclaimedPiLocalQueueItems(messages: PiChatMessage[], locals: PiLocalQu
     const canonicalIndex = messages.findIndex((message, index) => !claimedCanonical.has(index) && canonicalUserMatchesLocal(message, local));
     if (canonicalIndex < 0) return true;
     claimedCanonical.add(canonicalIndex);
-    return false;
+    // A deferred image batch stays in local state until its batch result is known;
+    // accepted items hide their optimistic bubble once Main has canonicalized it,
+    // while failed items remain visible and retryable.
+    return local.kind === 'imageBatch' && local.status === 'failed';
   });
 }
 
-/** canonical 用户条目到达后才回收对应本地项；idle/failed 事件本身不得制造可见性断档。 */
+/** canonical 用户条目到达后才回收对应本地项；图片批次由批次完成/失败决定回收。 */
 export function prunePiLocalQueue(messages: PiChatMessage[], locals: PiLocalQueueItem[]): PiLocalQueueItem[] {
   if (!locals.length) return locals;
   const remaining = unclaimedPiLocalQueueItems(messages, locals);
-  return remaining.length === locals.length ? locals : remaining;
+  return locals.filter((local) => local.kind === 'imageBatch' || remaining.includes(local));
 }
 
 /**

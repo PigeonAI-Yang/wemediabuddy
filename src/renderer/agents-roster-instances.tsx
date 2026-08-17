@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
-import { ROLE_CATALOG } from '../shared/agent-capabilities';
+import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
 import { instanceDetail, instanceStatusWord, instanceTiming, researchClaimLine, statusWord, type ActiveRoleSection, type CrewInstance } from './agents-instance-logic';
-import { StatusDot, clock, roleLabel, stampLine } from './agents-roster-parts';
+import { StatusDot, clock, progressPresentation, roleLabel, stampLine, type RosterRow } from './agents-roster-parts';
 
 /** 历史折叠区最近条数（只展示终态实例，越近越相关）。 */
 const HISTORY_LIMIT = 5;
@@ -113,6 +113,73 @@ export function ActiveRoleInstances({
         {section.visible.map((inst) => (
           <InstanceCard key={inst.jobId} inst={inst} busy={busy} onCopyJobId={onCopyJobId} onRedispatch={onRedispatch} onCancel={onCancel} />
         ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * 未进入 JobPool 的真实当前任务（daily/page Pi）与主管占用。
+ * 角色卡既然显示活动，中央当前任务区必须呈现同一 roster 真值；此处不提供 JobPool 取消操作。
+ */
+export function ActiveRosterTask({
+  roleId,
+  row,
+  status,
+  onOpenRole
+}: {
+  roleId: RoleId;
+  row: RosterRow | null;
+  status: 'running' | 'blocked';
+  onOpenRole: (roleId: RoleId) => void;
+}): JSX.Element {
+  const meta = ROLE_CATALOG[roleId];
+  const displayStatus = status === 'blocked' ? 'needs_user' : 'running';
+  const present = progressPresentation(row?.progressRatio, status === 'running');
+  const summary = row?.summary && row.summary !== '当前无任务'
+    ? row.summary
+    : roleId === 'desk' ? '主管正在处理 Pi 请求' : status === 'blocked' ? '需要你处理' : '工作中';
+  return (
+    <section className="agents-role-group" data-role={roleId} aria-labelledby={`agents-role-${roleId}-active`}>
+      <header className="agents-active-head">
+        <h3 id={`agents-role-${roleId}-active`} className="agents-role-title">{meta.labelZh}</h3>
+        <span className="agents-role-count">1</span>
+      </header>
+      <ul className="agents-instance-list" aria-label={`${meta.labelZh}任务列表`}>
+        <li className={`agents-instance-card status-${displayStatus}`} data-task={row?.taskId ?? undefined}>
+          <header className="agents-instance-head">
+            <StatusDot status={displayStatus} />
+            <strong className="agents-instance-name">{meta.labelZh}</strong>
+            <span className={`agents-job-status-word status-${displayStatus}`}>{status === 'blocked' ? '等你批' : '工作中'}</span>
+          </header>
+          <p className="agents-instance-brief" title={summary}>{summary}</p>
+          {status === 'running' && (present.determinate || row?.progressLabel) ? (
+            <div className="agents-instance-progress">
+              {present.determinate ? (
+                <div
+                  className="agents-work-progress"
+                  style={{ ['--progress' as string]: present.ratio }}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={present.ratio == null ? undefined : Math.round(present.ratio * 100)}
+                >
+                  <i />
+                </div>
+              ) : null}
+              {row?.progressLabel ? <span className="agents-instance-step">{row.progressLabel}</span> : null}
+            </div>
+          ) : null}
+          <div className="agents-instance-meta">
+            {row?.intent ? <span className="agents-job-intent">{row.intent}</span> : null}
+            {row?.taskId ? <span className="agents-job-anchor" title={`任务编号 ${row.taskId}`}>#{row.taskId.slice(0, 8)}</span> : null}
+          </div>
+          <footer className="agents-instance-actions">
+            <button type="button" className="agents-row-action strong" data-role={roleId} onClick={() => onOpenRole(roleId)}>
+              查看运行明细
+            </button>
+          </footer>
+        </li>
       </ul>
     </section>
   );

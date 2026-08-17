@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { StudioAnnotation, StudioAnnotationResolveReason, StudioCommandResult, StudioDocumentScope, StudioReconcileMode } from '../shared/studio-annotations.ts';
+import type { RoleModelPolicies } from '../shared/pi-config.ts';
 import type { PiImageBatchChatInput, PiImageBatchRecord, PiImageBatchStatus } from '../shared/pi-image-batch.ts';
 import type { ContentMediaBindingDraft, CropRegion, PlatformClipPayload, PlatformCropPayload, PlatformMediaBindingDraft } from '../shared/media-bindings.ts';
 import {
@@ -10,6 +11,7 @@ import {
   type InvestigationOutline,
   type InvestigationReviewResearchInput
 } from '../shared/project-investigation.ts';
+import { ILLUSTRATION_IPC, type IllustrationItemRetryInput, type IllustrationRegenerateInput, type IllustrationStartInput, type IllustrationUndoInput } from '../shared/illustration-workflow.ts';
 import {
   KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS,
   KNOWLEDGE_FLYWHEEL_WRITE_IPC_CHANNEL,
@@ -228,6 +230,14 @@ contextBridge.exposeInMainWorld('wmb', {
   listMediaRecommendations: (input: { contentVersionId: string; projectId?: string }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_LIST_IPC_CHANNEL, input) as Promise<MediaRecommendationsReadModel>,
   generateMediaRecommendations: (input: { contentVersionId: string; projectId: string; sourceRevisionKeys: string[]; allowGeneratedCover?: boolean; requestId?: string }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_GENERATE_IPC_CHANNEL, input),
   decideMediaRecommendation: (input: { id: string; expectedRevision: number; decision: 'accept' | 'reject'; confirmedByOwner?: boolean }) => ipcRenderer.invoke(MEDIA_RECOMMENDATIONS_DECIDE_IPC_CHANNEL, input) as Promise<{ ok: boolean; data?: MediaRecommendation; error?: unknown }>,
+  listIllustrationRuns: (projectId: string) => ipcRenderer.invoke(ILLUSTRATION_IPC.list, projectId),
+  getIllustrationRun: (runId: string) => ipcRenderer.invoke(ILLUSTRATION_IPC.get, runId),
+  startIllustration: (input: IllustrationStartInput) => ipcRenderer.invoke(ILLUSTRATION_IPC.start, input),
+  retryIllustrationItem: (input: IllustrationItemRetryInput) => ipcRenderer.invoke(ILLUSTRATION_IPC.retry, input),
+  regenerateIllustrationItem: (input: IllustrationRegenerateInput) => ipcRenderer.invoke(ILLUSTRATION_IPC.regenerate, input),
+  undoIllustrationItem: (input: IllustrationUndoInput) => ipcRenderer.invoke(ILLUSTRATION_IPC.undo, input),
+  getIllustrationImageConfig: () => ipcRenderer.invoke(ILLUSTRATION_IPC.imageConfigGet),
+  saveIllustrationImageConfig: (input: { profileId: string; model: string }) => ipcRenderer.invoke(ILLUSTRATION_IPC.imageConfigSave, input),
   getXhsStatus: () => ipcRenderer.invoke('xhs:status'),
   ensureXhs: () => ipcRenderer.invoke('xhs:ensure'),
   startXhsLogin: () => ipcRenderer.invoke('xhs:start-login'),
@@ -335,7 +345,7 @@ contextBridge.exposeInMainWorld('wmb', {
   savePiConfig: (input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions'; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => ipcRenderer.invoke('pi-config:save', input),
   activatePiConfig: (id: string) => ipcRenderer.invoke('pi-config:activate', id),
   deletePiConfig: (id: string) => ipcRenderer.invoke('pi-config:delete', id),
-  setPiFallbackOrder: (ids: string[]) => ipcRenderer.invoke('pi-config:set-fallback-order', ids),
+  saveRoleModelPolicies: (input: { roleModelPolicies: RoleModelPolicies; expectedRevision?: number }) => ipcRenderer.invoke('pi-config:save-role-policies', input),
   listPiModels: (input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions'; apiKey?: string }) => ipcRenderer.invoke('pi-config:list-models', input) as Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>,
   listPiSkills: () => ipcRenderer.invoke('pi-skills:list'),
   savePiSkill: (input: { originalName?: string; name: string; description: string; instructions: string }) => ipcRenderer.invoke('pi-skills:save', input),

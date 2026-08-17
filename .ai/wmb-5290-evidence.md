@@ -20,6 +20,15 @@
   - `tests/e2e/.artifacts/INV-002-studio-investigation-writer-gate-tsfS4o/`
 - Electron coverage includes initialization, outline edit/save/approval, reporter dispatch and explicit terminal recovery, structured package/source linkage, research acceptance, direction approval, explicit writer confirmation/dispatch, reload persistence, `1100×800`, zero horizontal overflow, and zero page errors.
 
+### 2026-08-17 deferred supervisor review recovery
+
+- Root cause: the persisted `review.decision = "defer"` was valid in the shared/domain contract, but `src/renderer/studio-investigation.ts` omitted it from defensive normalization and silently rendered it as `stop`.
+- Fixed renderer normalization and the Studio `needs_user` surface. It now identifies the supervisor result as “暂缓，等待 Owner 决定” and exposes the existing Owner choices: accept with a completed direction, supplement within scope, expand scope, or stop.
+- `node --test --test-concurrency=1 tests/studio-investigation-indicator.test.mjs` — PASS, 4/4.
+- `node tests/e2e/runner.mjs --file tests/e2e/investigation.test.mjs --scenario WMB-5290-deferred-owner-decision` — PASS, 1/1 in isolated headless Electron; the four decision entries are visible and page errors are zero.
+- Evidence: `tests/e2e/.artifacts/WMB-5290-deferred-owner-decision-JGDLTa/`.
+- Test tabs closed by the runner; process-level cleanup check found `0` isolated `wmb-e2e` / acceptance Electron processes.
+
 ## Scope checks
 
 - No foundation brand token or dependency change.

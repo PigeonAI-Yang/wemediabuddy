@@ -6,8 +6,8 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { activatePiConfig, deletePiConfig, listPiModels, migratePiConfigToInstallation, readPiConfig, resolvePiConfig, savePiConfig, setPiFallbackOrder } from '../src/main/pi-config.ts';
-import { piModelsJson, WMB_VISION_MODEL } from '../src/main/pi-model.ts';
+import { activatePiConfig, deletePiConfig, listPiModels, migratePiConfigToInstallation, readPiConfig, resolvePiConfig, resolveRoleModelPolicySnapshot, savePiConfig, saveRoleModelPolicies } from '../src/main/pi-config.ts';
+import { piModelsJson } from '../src/main/pi-model.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
 test('Pi API presets read, switch and delete without exposing keys', async () => {
@@ -41,32 +41,94 @@ test('Pi API presets read, switch and delete without exposing keys', async () =>
   }
 });
 
-test('Pi fallback order is configurable and stays after the active profile', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-fallback-'));
+test('v1 fallback chain migrates to v3 pair candidates and role policies save atomically', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-role-policy-'));
   const configPath = path.join(rootPath, 'pi-api-config.json');
   try {
     await writeFile(configPath, JSON.stringify({ version: 1, state: {
       activeId: 'one',
+      fallbackOrder: ['three', 'one', 'two', 'missing'],
       profiles: [
-        { id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', encryptedApiKey: 'secret-one' },
-        { id: 'two', name: '备用甲', baseUrl: 'https://two.test/v1', model: 'model-two', api: 'openai-completions', encryptedApiKey: 'secret-two' },
+        { id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', thinking: 'low', encryptedApiKey: 'secret-one' },
+        { id: 'two', name: '备用甲', baseUrl: 'https://two.test/v1', model: 'model-two', api: 'openai-completions', thinking: 'medium', encryptedApiKey: 'secret-two' },
         { id: 'three', name: '备用乙', baseUrl: 'https://three.test/v1', model: 'model-three', api: 'openai-responses', encryptedApiKey: 'secret-three' }
       ]
     } }), 'utf8');
 
-    const initial = readPiConfig(configPath);
-    assert.deepEqual(initial.fallbackOrder, []);
+    const migrated = readPiConfig(configPath);
+    assert.equal(migrated.version, 3);
+    assert.equal(migrated.modelPolicyRevision, 1);
+    for (const roleId of ['desk', 'reporter', 'planner', 'writer', 'librarian']) {
+      assert.deepEqual(migrated.roleModelPolicies[roleId].candidates, [
+        { profileId: 'one', model: 'model-one' },
+        { profileId: 'three', model: 'model-three' },
+        { profileId: 'two', model: 'model-two' }
+      ]);
+    }
 
-    const ordered = setPiFallbackOrder(['three', 'one', 'two', 'missing'], configPath);
-    assert.deepEqual(ordered.fallbackOrder, ['three', 'two']);
+    const nextPolicies = Object.fromEntries(
+      Object.keys(migrated.roleModelPolicies).map((roleId) => [roleId, {
+        candidates: roleId === 'writer'
+          ? [
+            { profileId: 'two', model: 'writer-model-a', thinking: 'high' },
+            { profileId: 'two', model: 'writer-model-b', thinking: 'off' },
+            { profileId: 'one', model: 'model-one' }
+          ]
+          : roleId === 'reporter'
+            ? [{ profileId: 'one', model: 'model-one', thinking: 'xhigh' }]
+            : [{ profileId: 'one', model: 'model-one' }]
+      }])
+    );
+    const saved = saveRoleModelPolicies({ roleModelPolicies: nextPolicies, expectedRevision: migrated.modelPolicyRevision }, configPath);
+    assert.equal(saved.modelPolicyRevision, 2);
+    assert.deepEqual(saved.roleModelPolicies.writer.candidates, nextPolicies.writer.candidates);
+    assert.deepEqual(saved.roleModelPolicies.reporter.candidates, [{ profileId: 'one', model: 'model-one', thinking: 'xhigh' }]);
 
-    const activated = activatePiConfig('two', configPath);
-    assert.equal(activated.activeId, 'two');
-    assert.deepEqual(activated.fallbackOrder, ['three']);
+    const snapshot = resolveRoleModelPolicySnapshot('writer', configPath);
+    assert.deepEqual(snapshot.profiles.map((profile) => [profile.profileId, profile.model, profile.thinking]), [
+      ['two', 'writer-model-a', 'high'], ['two', 'writer-model-b', 'off'], ['one', 'model-one', 'low']
+    ]);
+    assert.equal(Object.isFrozen(snapshot), true);
+    assert.equal(Object.isFrozen(snapshot.profiles[0]), true);
+    assert.equal(resolveRoleModelPolicySnapshot('reporter', configPath).profiles[0].thinking, 'xhigh');
 
-    const deleted = deletePiConfig('three', configPath);
-    assert.deepEqual(deleted.fallbackOrder, []);
-    assert.equal(deleted.activeId, 'two');
+    assert.throws(
+      () => saveRoleModelPolicies({ roleModelPolicies: { ...nextPolicies, planner: { candidates: [{ profileId: 'one', model: 'model-one', thinking: 'invalid' }] } }, expectedRevision: saved.modelPolicyRevision }, configPath),
+      (error) => error?.code === 'ROLE_MODEL_CONFIG_INVALID'
+    );
+    assert.throws(
+      () => saveRoleModelPolicies({ roleModelPolicies: { ...nextPolicies, planner: { candidates: [{ profileId: 'one', model: 'model-one', thinking: 'high' }, { profileId: 'one', model: 'model-one', thinking: 'off' }] } }, expectedRevision: saved.modelPolicyRevision }, configPath),
+      (error) => error?.code === 'ROLE_MODEL_CONFIG_INVALID'
+    );
+
+    assert.throws(
+      () => saveRoleModelPolicies({ roleModelPolicies: { ...nextPolicies, reporter: { candidates: [{ profileId: 'one', model: '' }] } }, expectedRevision: saved.modelPolicyRevision }, configPath),
+      (error) => error?.code === 'ROLE_MODEL_PROFILE_MISSING'
+    );
+    const unchanged = readPiConfig(configPath);
+    assert.equal(unchanged.modelPolicyRevision, 2);
+    assert.deepEqual(unchanged.roleModelPolicies.reporter.candidates, [{ profileId: 'one', model: 'model-one', thinking: 'xhigh' }]);
+  } finally {
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+test('v2 profile-id policies migrate using each profile current model', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-v2-migration-'));
+  const configPath = path.join(rootPath, 'pi-api-config.json');
+  try {
+    const profiles = [
+      { id: 'shared', name: '共享预设', baseUrl: 'https://shared.test/v1', model: 'current-shared', api: 'openai-responses', encryptedApiKey: 'secret-shared' },
+      { id: 'other', name: '备用预设', baseUrl: 'https://other.test/v1', model: 'current-other', api: 'openai-completions', encryptedApiKey: 'secret-other' }
+    ];
+    const roleModelPolicies = Object.fromEntries(['desk', 'reporter', 'planner', 'writer', 'librarian'].map((roleId) => [roleId, { profileIds: roleId === 'writer' ? ['shared', 'other'] : ['shared'] }]));
+    await writeFile(configPath, JSON.stringify({ version: 2, activeId: 'shared', profiles, modelPolicyRevision: 9, roleModelPolicies }), 'utf8');
+    const migrated = readPiConfig(configPath);
+    assert.equal(migrated.version, 3);
+    assert.equal(migrated.modelPolicyRevision, 9);
+    assert.deepEqual(migrated.roleModelPolicies.writer.candidates, [
+      { profileId: 'shared', model: 'current-shared' },
+      { profileId: 'other', model: 'current-other' }
+    ]);
   } finally {
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
@@ -99,27 +161,28 @@ test('Pi API model list uses the compatible models endpoint', async () => {
   }
 });
 
-test('Pi models.json uses per-model limits and leaves unknown models unlocked', () => {
+test('Pi models.json uses per-model limits and registers only a multimodal primary', () => {
   const known = piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: '$WMB_PI_API_KEY', model: 'deepseek-v4-flash' });
-  assert.equal(known.providers['wmb-api'].models[0].contextWindow, 1000000);
-  assert.equal(known.providers['wmb-api'].models[0].maxTokens, 384000);
-  assert.deepEqual(known.providers['wmb-api'].models[0].input, ['text']);
-  assert.deepEqual(known.providers['wmb-api'].models[1], {
-    id: WMB_VISION_MODEL,
-    name: WMB_VISION_MODEL,
-    reasoning: false,
-    input: ['text', 'image'],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-  });
-  const unknown = JSON.stringify(piModelsJson({ baseUrl: 'https://example.test/v1', api: 'openai-responses', apiKey: 'key', model: 'unknown' }));
-  assert.equal(unknown.includes('contextWindow'), false);
-  assert.equal(unknown.includes('maxTokens'), false);
+  const knownModels = known.providers['wmb-api'].models;
+  assert.equal(knownModels.length, 1);
+  assert.equal(knownModels[0].contextWindow, 1000000);
+  assert.equal(knownModels[0].maxTokens, 384000);
+  assert.deepEqual(knownModels[0].input, ['text', 'image']);
+  const unknown = piModelsJson({ baseUrl: 'https://example.test/v1', api: 'openai-responses', apiKey: 'key', model: 'unknown' });
+  const unknownModels = unknown.providers['wmb-api'].models;
+  assert.equal(unknownModels.length, 1);
+  assert.equal(unknownModels[0].id, 'unknown');
+  assert.deepEqual(unknownModels[0].input, ['text', 'image']);
+  const unknownJson = JSON.stringify(unknown);
+  assert.equal(unknownJson.includes('contextWindow'), false);
+  assert.equal(unknownJson.includes('maxTokens'), false);
 });
 
-test('Pi vision model remains a single multimodal registry entry when active', () => {
-  const config = piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: 'key', model: WMB_VISION_MODEL });
-  assert.equal(config.providers['wmb-api'].models.length, 1);
-  assert.deepEqual(config.providers['wmb-api'].models[0].input, ['text', 'image']);
+test('Pi models.json keeps the configured primary as the sole multimodal entry', () => {
+  const config = piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: 'key', model: 'configured-primary' });
+  assert.deepEqual(config.providers['wmb-api'].models.map((model) => ({ id: model.id, input: model.input })), [
+    { id: 'configured-primary', input: ['text', 'image'] }
+  ]);
 });
 
 test('unsupported Pi API protocol is rejected at every config boundary', async () => {
@@ -165,9 +228,8 @@ test('official AI presets migrate once to the installation store shared by every
     assert.equal(ukRead.prepare("SELECT value FROM app_meta WHERE key='pi-api-config'").get(), undefined);
     ukRead.close();
 
-    const empty = deletePiConfig('shared', configPath);
-    assert.equal(empty.configured, false);
-    assert.deepEqual(migratePiConfigToInstallation(configPath, [ai.path, uk.path]), { migratedFrom: null, profileCount: 0 });
+    assert.deepEqual(migratePiConfigToInstallation(configPath, [ai.path, uk.path]), { migratedFrom: null, profileCount: 1 });
+    assert.equal(readPiConfig(configPath).configured, true);
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
 });
 

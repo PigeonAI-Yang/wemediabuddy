@@ -30,6 +30,7 @@ export type PiChatResult = {
   error?: string;
 };
 export type PiImageContent = { type: 'image'; data: string; mimeType: string };
+export type PiModelIdentity = { provider: string; modelId: string };
 
 function defer<T>(): { promise: Promise<T>; resolve(value: T | PromiseLike<T>): void; reject(error: Error): void } {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -98,7 +99,8 @@ export function humanizePiProviderError(raw: string): string {
 export function isPiProviderFallbackError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error ?? '');
   const text = raw.replace(/^\d{3}:\s*/, '').trim();
-  return /rate limit|too many requests|\b429\b|out of .*messages|quota|limit_reached|resource_exhausted|overloaded|capacity|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|fetch failed|socket|timeout|temporar(?:y|ily)|bad gateway|service unavailable|\b5\d\d\b|status code|unauthorized|invalid.?api.?key|incorrect api key|forbidden|\b401\b|\b403\b|model .*not .*available|provider/i.test(text);
+  // 只允许尚未产生副作用的瞬时服务故障降级；鉴权、模型/协议配置、权限和业务错误必须原样失败。
+  return /rate limit|too many requests|\b429\b|out of .*messages|quota|limit_reached|resource_exhausted|overloaded|capacity|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|fetch failed|socket|timeout|temporar(?:y|ily)|bad gateway|service unavailable|\b5\d\d\b/i.test(text);
 }
 
 export class PiRpcSupervisor {
@@ -176,6 +178,20 @@ export class PiRpcSupervisor {
 
   getState(): Promise<RpcMessage> {
     return this.send({ type: 'get_state' });
+  }
+  async getModel(): Promise<PiModelIdentity> {
+    const state = await this.getState();
+    const data = state.data;
+    const model = data && typeof data === 'object' && 'model' in data ? data.model : undefined;
+    if (!model || typeof model !== 'object' || !('provider' in model) || !('id' in model)) throw new Error('Pi 当前模型不可用。');
+    const provider = model.provider;
+    const modelId = model.id;
+    if (typeof provider !== 'string' || !provider || typeof modelId !== 'string' || !modelId) throw new Error('Pi 当前模型不可用。');
+    return { provider, modelId };
+  }
+
+  setModel(provider: string, modelId: string): Promise<RpcMessage> {
+    return this.send({ type: 'set_model', provider, modelId });
   }
 
   getCommands(): Promise<RpcMessage> {

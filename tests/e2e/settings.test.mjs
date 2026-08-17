@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { helpers } from './harness.mjs';
 import { openDb, seedSourceFeed, seedXListBinding, seedXListIndex } from './lib/seed.mjs';
 
@@ -111,7 +112,24 @@ export default [
         assert(await page.locator('.settings-profile .settings-provider-mark svg').count() > 0, 'AI 配置预设应使用 SVG 图形标识');
         assert(await page.locator('.settings-icon-text-button svg').count() >= 2, '新增配置动作应使用 SVG 加号图标');
         await captureEvidence({ app, page, evidence, artifactsDir, name: 'settings-ai-icons-1100' });
-        assert(!(await page.locator('.settings-fallback-active').innerText()).includes('当前正在使用'), '降级顺序不应重复当前预设状态');
+        assert(await page.locator('.role-policy-row').count() === 5, '角色分配应完整展示主管、情报员、策划、写手、资料员');
+        assert(await page.locator('.role-policy-chain').count() === 5, '每个角色应有独立且有序的模型候选链');
+        const rolePolicySnapshot = await page.evaluate(async () => {
+          const snapshot = await window.wmb.getSettings();
+          const roleIds = ['desk', 'reporter', 'planner', 'writer', 'librarian'];
+          const profiles = new Map((snapshot?.pi?.profiles ?? []).map((profile) => [profile.id, profile.name]));
+          return roleIds.map((roleId) => (snapshot?.pi?.roleModelPolicies?.[roleId]?.candidates ?? []).map((candidate) => ({ provider: profiles.get(candidate.profileId) ?? candidate.profileId, model: candidate.model })));
+        });
+        const renderedRolePairs = await page.locator('.role-policy-chain').evaluateAll((chains) => chains.map((chain) => [...chain.querySelectorAll('li')].map((item) => ({ provider: item.querySelector('.role-policy-copy strong')?.textContent?.trim() ?? '', model: item.querySelector('[data-role-model]')?.getAttribute('data-role-model') ?? '' }))));
+        assert(JSON.stringify(renderedRolePairs) === JSON.stringify(rolePolicySnapshot), `保存的 Provider + 模型组合应完整显示，实际 ${JSON.stringify({ renderedRolePairs, rolePolicySnapshot })}`);
+        const roleCatalog = await page.locator('.role-policy-add select').evaluateAll((selects) => selects.map((select) => [...select.options].slice(1).map((option) => ({ providerId: option.dataset.profileId ?? '', model: option.dataset.model ?? '', label: option.textContent?.trim() ?? '' }))));
+        assert(roleCatalog.length === 5 && roleCatalog.every((options) => options.every((option) => option.providerId && option.model && option.label.endsWith(`· ${option.model}`))), `角色新增选项应带 Provider 与精确模型，实际 ${JSON.stringify(roleCatalog)}`);
+        assert(roleCatalog.every((options) => {
+          const identities = options.map((option) => `${option.providerId}\u0000${option.model}`);
+          return new Set(identities).size === identities.length;
+        }), '每个角色的新增目录不应重复 Provider + 模型组合');
+        assert(await page.locator('.role-policy-save-actions .primary-button').isDisabled(), '未修改角色分配时不应允许重复保存');
+        assert(/当前策略版本\s+\d+/u.test(await page.locator('.role-policy-save-actions').innerText()), '角色分配应显示当前策略版本');
         assert(await page.locator('.settings-nav nav button[title="X Lists"]').count() === 0, '设置侧栏不应保留独立 X Lists');
         await page.locator('.settings-nav nav button[title="情报渠道"]').click();
         await page.locator('.channel-settings-tabs').waitFor({ state: 'visible', timeout: 15_000 });
@@ -446,6 +464,75 @@ export default [
         assert(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) === 0, 'Pi Skills 不应横向溢出');
       });
       return { surface: 'settings', journey: 'STG-008', skillsRendered: true };
+    }
+  },
+  {
+    id: 'STG-009-settings-role-provider-models',
+    journeyIds: ['STG-009-settings-role-provider-models'],
+    run: async ({ app, page, evidence, artifactsDir }) => {
+      const server = createServer((request, response) => {
+        if (request.method === 'GET' && request.url?.endsWith('/models')) {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ data: [{ id: 'role-model-alpha' }, { id: 'role-model-beta' }] }));
+          return;
+        }
+        response.writeHead(404, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'not found' } }));
+      });
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      try {
+        await step(evidence, '启动就绪', () => waitForAppReady(page));
+        const address = server.address();
+        assert(address && typeof address === 'object', '模型目录服务应取得监听地址');
+        const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+        await page.evaluate((url) => window.wmb.savePiConfig({
+          id: 'role-multi', name: '多模型 Provider', baseUrl: url, model: 'role-model-alpha', api: 'openai-responses', thinking: 'off', apiKey: 'e2e-role-model-key'
+        }), baseUrl);
+        await page.reload();
+        await waitForAppReady(page);
+        await navigateTo(page, 'settings');
+        await page.locator('.settings-nav nav button[title="AI 与模型"]').click();
+        const deskSelect = page.locator('.role-policy-row').first().locator('.role-policy-add select');
+        await deskSelect.locator('option[data-profile-id="role-multi"][data-model="role-model-beta"]').waitFor({ state: 'attached', timeout: 15_000 });
+        const providerModels = await deskSelect.locator('option[data-profile-id="role-multi"]').evaluateAll((options) => options.map((option) => option.dataset.model));
+        assert(JSON.stringify(providerModels) === JSON.stringify(['role-model-alpha', 'role-model-beta']), `同一 Provider 应列出全部可用模型，实际 ${JSON.stringify(providerModels)}`);
+        await deskSelect.selectOption({ label: '多模型 Provider · role-model-beta' });
+        const candidateRows = page.locator('.role-policy-chain > li');
+        const candidateThinkingSelects = page.locator('.role-policy-chain > li .role-policy-thinking select');
+        const candidateSelectLabels = await candidateThinkingSelects.evaluateAll((selects) => selects.map((select) => select.getAttribute('aria-label') ?? ''));
+        assert(await candidateThinkingSelects.count() === await candidateRows.count() && candidateSelectLabels.every(Boolean), '每个角色候选都应有一个可访问的思考等级选择器');
+        const betaCandidate = page.locator('.role-policy-row').first().locator('li[data-profile-id="role-multi"][data-model="role-model-beta"]');
+        await betaCandidate.waitFor({ state: 'visible', timeout: 15_000 });
+        assert((await betaCandidate.locator('.role-policy-copy small').textContent()).includes('继承 Provider 默认'), '未设置候选覆盖时应明确显示继承 Provider 默认');
+        await betaCandidate.locator('.role-policy-thinking select').selectOption('high');
+        assert((await betaCandidate.locator('.role-policy-copy small').textContent()).includes('候选覆盖：高'), '候选覆盖应在摘要中明确显示');
+        const save = page.locator('.role-policy-save-actions .primary-button');
+        assert(!(await save.isDisabled()), '新增明确模型候选后应允许保存');
+        await save.click();
+        await page.locator('.role-policy-save-actions', { hasText: '当前策略版本' }).waitFor({ state: 'visible', timeout: 15_000 });
+        const saved = await page.evaluate(() => window.wmb.getSettings());
+        const savedCandidate = saved.pi.roleModelPolicies.desk.candidates.find((candidate) => candidate.profileId === 'role-multi' && candidate.model === 'role-model-beta');
+        assert(savedCandidate?.thinking === 'high', '保存读回应保留候选思考覆盖');
+        await page.reload();
+        await waitForAppReady(page);
+        await navigateTo(page, 'settings');
+        await page.locator('.settings-nav nav button[title="AI 与模型"]').click();
+        const reloadedBeta = page.locator('.role-policy-row').first().locator('li[data-profile-id="role-multi"][data-model="role-model-beta"]');
+        await reloadedBeta.waitFor({ state: 'visible', timeout: 15_000 });
+        assert(await reloadedBeta.locator('.role-policy-thinking select').inputValue() === 'high', 'Electron 保存后重新加载应读回候选思考覆盖');
+        assert((await reloadedBeta.locator('.role-policy-copy small').textContent()).includes('候选覆盖：高'), '重新加载后的候选摘要应保留覆盖语义');
+        const management = reloadedBeta.locator('.role-policy-management');
+        await management.locator('summary').click();
+        assert(await management.locator('.role-policy-management-menu button').count() === 3, '候选排序与移除应收进单一管理菜单');
+        await reloadedBeta.scrollIntoViewIfNeeded();
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'settings-role-provider-models-1100' });
+        return { surface: 'settings', journey: 'STG-009', providerModels, savedModel: 'role-model-beta', savedThinking: 'high' };
+      } finally {
+        await new Promise((resolve) => server.close(() => resolve(undefined)));
+      }
     }
   }
 ];

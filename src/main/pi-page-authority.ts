@@ -65,7 +65,7 @@ export function injectAuthorityBlocked(raw: string, reason: string): string {
 export async function ensurePageAuthority(
   runtime: ActiveWorkspaceRuntime,
   dataRoot: DataRoot,
-  ensurePi: (dataRoot: DataRoot, options?: { skipProfileIds?: Iterable<string> }) => Promise<PiRpcSupervisor>,
+  ensurePi: (dataRoot: DataRoot, options?: { skipCandidateKeys?: Iterable<string> }) => Promise<PiRpcSupervisor>,
   raw: string
 ): Promise<{ message: string; status: PageAuthorityResult }> {
   const pageRaw = extractContextField(raw, 'page');

@@ -1,54 +1,30 @@
 {
-  "active_loop": "wmb-5308-pi-image-batch-send",
+  "active_loop": "wmb-5322-ai-model-settings-hierarchy",
   "status": "done",
-  "symptom": "Pi composer 中图片预览存在，但发送可走普通 context message；批次失败时 pending files 也可能被当作成功而清空。",
+  "symptom": "AI 与模型页面的角色候选行同时暴露候选摘要、推理下拉、上移、下移、移除和添加下拉，层级扁平且菜单逻辑混乱。",
   "observation_packet": {
-    "url": "fresh isolated Electron E2E workspace",
-    "viewport": "1100x800 CSS pixels",
-    "user_action": "在 Studio Pi composer drop 六张有效 PNG，确认有序预览后立即点击发送；使用本地黑洞 provider 触发分析失败。",
-    "expected": "冻结提交快照包含六张同序图片；preload/Main 接收 PiImageBatchChatInput；pi_image_batches 在分析失败前已建立六个附件；失败保留六张 pending files；无图片仍发送普通 context message。",
-    "actual": "旧持久 Main 进程服务旧 IPC 时预览存在但没有 pi_image_batches；重启后批量路径建立六附件并以 failed_analysis 结束；补充 batchStatus 后 PiComposer 保留六张 pending files。",
-    "screenshot": "tests/e2e/.artifacts/WMB-5307-pi-image-batch-composer-a4rbFH/pi-image-batch-composer-six-send-screenshot.png",
-    "console": "tests/e2e/.artifacts/WMB-5307-pi-image-batch-composer-a4rbFH/pi-image-batch-composer-six-send-console.json",
-    "network_ws": "本地黑洞 Pi endpoint 127.0.0.1:1/v1；未调用真实 provider。",
-    "dom_selector": ".pi-composer, .pi-image-queue-item, .pi-send-button[aria-label=\"发送\"]",
-    "computed_style_layout": "1100x800 视口无横向溢出；failed_analysis 后六个 queue item 仍可见。",
-    "state_store": "PiComposer queued images -> frozenAttachments -> PiDock send callback -> preload pi:chat -> Main pi_image_batches；六个 sourceFileName 按 ordinal 0..5 回读，失败返回 false 后 queue 保留。"
+    "url": "WeMediaBuddy Electron > 设置 > AI 与模型",
+    "viewport": "1100x800",
+    "user_action": "浏览 Provider 预设并配置五个角色的模型候选、推理强度和顺序",
+    "expected": "先理解 Provider 与角色分配的层级，再在单一候选结构内完成配置和管理。",
+    "actual": "候选摘要、候选思考下拉和三个文字动作并列；添加备用模型又使用另一条全宽下拉，五个角色重复后视觉噪音很高。",
+    "screenshot": "tests/e2e/.artifacts/STG-009-settings-role-provider-models-75UzG5/settings-role-provider-models-1100-screenshot.png",
+    "console": "page error 0",
+    "network_ws": "无数据链路故障，当前问题属于信息架构与交互层级。",
+    "dom_selector": ".settings-role-policy-section .role-policy-row",
+    "computed_style_layout": "1100x800 无横向溢出，但每个候选行右侧同时出现 select + 三个文本动作，角色块纵向重复。",
+    "state_store": "Provider/model/thinking 候选合同与保存读回已通过 WMB-5321。"
   },
-  "hypotheses": [
-    {
-      "hypothesis": "拖拽后 submit callback 捕获旧 attachments，导致 sendText 收到空数组。",
-      "supports": "预览存在而批次缺失，表象符合 snapshot 丢失。",
-      "would_disprove": "新鲜 Electron 同一路径在 Main 建立六附件批次。",
-      "next_check": "重启持久 dev 进程后运行六文件 focused Electron gate。",
-      "result": "disproved; fresh renderer callback and preload delivered six attachments。"
-    },
-    {
-      "hypothesis": "持久 Main 进程未重载 WMB-5307 的 pi:chat image-batch 分支，renderer/main 版本错位后把对象落入普通 context path。",
-      "supports": "进程 uptime 约 3h26m；重启前无 pi_image_batches；当前 Main `src/main/ipc-pi-dock.ts:776-802` 以 isPiImageBatchChatInput 选择批量路径。",
-      "would_disprove": "重启后仍无批次或六附件。",
-      "next_check": "fresh isolated Electron + local blackhole provider + Main IPC batch readback。",
-      "result": "confirmed; restart plus focused gate passed。"
-    },
-    {
-      "hypothesis": "failed_analysis response 未携带批次状态，PiDock 将失败误判为 accepted，PiComposer 因此清空 pending files。",
-      "supports": "旧失败截图中 assistant 显示 Connection error 且 composer queue 为空；Main 返回 outcome 但 response 没有 status。",
-      "would_disprove": "failed_analysis 后 batch queue 仍显示六张且 send result 为 false。",
-      "next_check": "typed batchStatus propagation + same six-file failure gate。",
-      "result": "confirmed and repaired; failed_analysis now returns false to composer and retains six files。"
-    }
-  ],
-  "breakpoint": "Primary: src/main/ipc-pi-dock.ts:776-802 stale Main dispatch lacked isPiImageBatchChatInput and fell through to ordinary chat. Secondary: src/renderer/pi-dock.tsx:452-466 now treats a non-completed batchStatus as failed so PiComposer's clear-on-success/retain-on-failure contract holds.",
-  "owner_check": {
-    "user-blocked-on": "旧持久 Main 进程版本错位，以及失败响应未显式携带 batch status。",
-    "now-usable": "fresh process sends six dragged images in displayed order through batch handling and retains them after analysis failure。",
-    "real-data-or-state": "真实 DOM drop、真实 React state、真实 preload IPC、真实 SQLite-backed batch rows。",
-    "loading-empty-error-states": "图片读取完成后才允许发送；local blackhole verifies truthful failed_analysis; failed batch returns false and retains files/text; no-image branch remains ordinary context path。",
-    "v1-v2-baseline-preserved": "UI design, ordinary Pi context selection, WMB-5307 backend schema, permissions, and dependencies unchanged。",
-    "regression-risk-checked": "focused Electron gate passed at 1100x800 with six ordered Main attachments, retained queue, and no page errors。",
-    "would-user-return-this": "no"
-  },
+  "hypotheses": [{
+    "hypothesis": "角色候选缺少清晰的主编辑区与次级管理动作分组，导致所有控件争夺同一视觉层级。",
+    "supports": "真实截图显示候选摘要、下拉和三个文字动作同权并列，添加入口与候选编辑采用不同结构。",
+    "would_disprove": "若设计审查认为问题主要来自页面级导航或 Provider 预设区，而不是候选结构，则应调整断点。",
+    "next_check": "由 designer 审查真实截图、DOM 与现有设计系统，并给出最小重组方案。",
+    "result": "confirmed：Provider 编辑归入预设阶段，候选主信息与推理常显，排序/移除收进单一管理 disclosure，五角色合并为分隔列表。"
+  }],
+  "breakpoint": "component information hierarchy and action grouping",
+  "owner_check": null,
   "attempts": 1,
-  "last_gate": "node tests/e2e/runner.mjs --file tests/e2e/studio.test.mjs --scenario WMB-5307-pi-image-batch-composer --keep-runtime; passed, dragged=true, sent=true, mainBatchSelected=true, attachmentCount=6, retainedOnFailure=true",
+  "last_gate": "AFTER: TypeScript 0 diagnostics, design-token drift 3/3 PASS, real Electron STG-009 1/1 PASS with management disclosure and 1100x800 visual inspection.",
   "clean_completion": "yes"
 }
