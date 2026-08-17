@@ -53,9 +53,9 @@ export function piJobEventNotice(event: PiJobEventPayload, createdAt: string): P
     : action === 'job.waiting_resource'
       ? `已排队，等待资源${event.waitReason ? `（${event.waitReason}）` : ''}。`
       : action === 'job.finished'
-        ? '已完成，主管正在验收。'
+        ? '已完成。'
         : action === 'job.partial'
-          ? '部分完成，主管正在验收。'
+          ? '部分完成。'
           : action === 'job.needs_user'
             ? '需要你介入，主管正在整理原因。'
             : action === 'job.failed'

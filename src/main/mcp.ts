@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { McpServer, createMcpHandler, type CallToolResult, type McpHttpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { getContentProject, listContentProjects } from './content.ts';
+import { readProjectInvestigation } from './project-investigation.ts';
 import { migrateDatabase } from './db/migrations.ts';
 import { getToday } from './workbench.ts';
 import { getSource, searchSources } from './sources.ts';
@@ -64,10 +65,15 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'knowledge.topic_maintenance_propose': 'wmb_propose_topic_maintenance',
   'knowledge.topic_maintenance_list': 'wmb_list_topic_maintenance',
   'knowledge.topic_maintenance_get': 'wmb_get_topic_maintenance',
+  'content.import_image': 'wmb_import_project_image',
   'content.save_version': 'wmb_save_core_version',
   'content.create': 'wmb_create_content_project',
   'content.get': 'wmb_get_content',
   'content.list': 'wmb_list_content_projects',
+  'investigation.get': 'wmb_get_investigation',
+  'investigation.outline_save': 'wmb_save_investigation_outline',
+  'investigation.review_research': 'wmb_review_investigation_research',
+  'investigation.direction_save': 'wmb_save_investigation_direction',
   'metrics.get': 'wmb_get_metrics',
   'reviews.get': 'wmb_get_reviews',
   'reviews.save': 'wmb_save_review',
@@ -254,6 +260,12 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   });
   server.registerTool('content.get', { description: '按项目 ID 读取一个内容项目的完整详情。', inputSchema: { project_id: z.string() } }, async ({ project_id }) => {
     const db = database(); try { return text(getContentProject(db, project_id)); } finally { db.close(); }
+  });
+  server.registerTool('investigation.get', {
+    description: 'WMB-5290 读取一个内容项目的专项调查（状态、当前提纲版本与审批状态、记者工单、调查资料包、写作方向与历史流水）。只读；不含来源正文。',
+    inputSchema: { project_id: z.string() }
+  }, async ({ project_id }) => {
+    const db = database(); try { return text(readProjectInvestigation(db, project_id)); } finally { db.close(); }
   });
   server.registerTool('assets.list', { description: '读取已导入素材元数据。' }, async () => {
     const db = database();

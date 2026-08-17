@@ -3,10 +3,10 @@ import type { Theme } from './app-types';
 import { BrowserSettings } from './browser-settings';
 import { IntelligenceChannelsView } from './intelligence-channels-view';
 import { PiSkillsSettings } from './pi-skills-settings';
-import { XListDisplaySettings } from './x-list-display-settings';
 import { AgentsSettingsPanel } from './agents-settings-panel';
 import { appConfirm } from './app-confirm';
 import { AppUpdateSettings } from './app-update-settings';
+import { SettingsIcon, type SettingsIconName } from './settings-icons';
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0 B';
@@ -20,11 +20,12 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   setBrowserChoice: (value: string) => void; refresh: () => void; theme: Theme;
   setTheme: (value: Theme) => void; back: () => void;
 }): React.JSX.Element {
-  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
+  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'agent' | 'diagnostics' | 'about';
   const [section, setSection] = useState<SettingsSection>(() => {
     const requested = sessionStorage.getItem('wmb.settingsSection');
     sessionStorage.removeItem('wmb.settingsSection');
-    const allowed: SettingsSection[] = ['general', 'ai', 'skills', 'data', 'browser', 'channels', 'lists', 'agent', 'diagnostics', 'about'];
+    if (requested === 'lists') return 'channels';
+    const allowed: SettingsSection[] = ['general', 'ai', 'skills', 'data', 'browser', 'channels', 'agent', 'diagnostics', 'about'];
     return allowed.includes(requested as SettingsSection) ? requested as SettingsSection : 'ai';
   });
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
@@ -145,67 +146,83 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     }
   };
 
-  const sections: Array<{ id: SettingsSection; label: string; icon: string }> = [
-    { id: 'general', label: '常规', icon: '⌂' },
-    { id: 'ai', label: 'AI 与模型', icon: '✦' },
-    { id: 'skills', label: 'Pi Skills', icon: '◇' },
-    { id: 'data', label: '数据与存储', icon: '▱' },
-    { id: 'browser', label: '浏览器与账号', icon: '◎' },
-    { id: 'channels', label: '情报渠道', icon: '⌁' },
-    { id: 'lists', label: 'X Lists', icon: '≡' },
-    { id: 'agent', label: '智能体接入', icon: '↔' },
-    { id: 'diagnostics', label: '系统诊断', icon: '⌁' }
+  const navigationGroups: Array<{ label: string; items: Array<{ id: SettingsSection; label: string; icon: SettingsIconName }> }> = [
+    { label: '基础', items: [
+      { id: 'general', label: '常规', icon: 'general' },
+      { id: 'ai', label: 'AI 与模型', icon: 'ai' },
+      { id: 'skills', label: 'Pi Skills', icon: 'skills' }
+    ] },
+    { label: '采集与账号', items: [
+      { id: 'browser', label: '浏览器与账号', icon: 'browser' },
+      { id: 'channels', label: '情报渠道', icon: 'channels' }
+    ] },
+    { label: '系统', items: [
+      { id: 'agent', label: '智能体接入', icon: 'agent' },
+      { id: 'data', label: '数据与存储', icon: 'data' },
+      { id: 'diagnostics', label: '系统诊断', icon: 'diagnostics' }
+    ] }
   ];
   const headings: Record<SettingsSection, { title: string; description: string }> = {
     general: { title: '常规', description: '' },
     ai: { title: 'AI 与模型', description: '' },
-    skills: { title: 'Pi Skills', description: '' },
+    skills: { title: 'Pi Skills', description: '管理 Pi 在新会话中加载的工作方法。' },
     data: { title: '数据与存储', description: '' },
-    browser: { title: '浏览器与账号', description: '' },
+    browser: { title: '浏览器与账号', description: '设置登录环境，并确认各平台使用的账号。' },
     channels: { title: '情报渠道', description: '' },
-    lists: { title: 'X Lists', description: '' },
     agent: { title: '智能体与角色', description: '' },
     diagnostics: { title: '系统诊断', description: '' },
     about: { title: '关于 WMB', description: '' }
   };
   return <section className="settings-workspace">
     <aside className="settings-nav">
-      <button type="button" className="settings-back" onClick={back}><b>‹</b><span>返回工作台</span></button>
-      <h1>设置</h1>
-      <nav>{sections.map((item) => <button type="button" key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)} title={item.label}><b>{item.icon}</b><span>{item.label}</span></button>)}</nav>
-      <nav className="settings-nav-foot"><button type="button" className={section === 'about' ? 'active' : ''} onClick={() => setSection('about')}><b>ⓘ</b><span>关于 WMB</span></button></nav>
+      <button type="button" className="settings-back" onClick={back}><b><SettingsIcon name="back" /></b><span>返回工作台</span></button>
+      <nav aria-label="设置菜单">{navigationGroups.map((group) => <div className="settings-nav-group" key={group.label}>
+        <p>{group.label}</p>
+        {group.items.map((item) => <button type="button" key={item.id} className={section === item.id ? 'active' : ''} onClick={() => setSection(item.id)} title={item.label}><b><SettingsIcon name={item.icon} /></b><span>{item.label}</span></button>)}
+      </div>)}</nav>
+      <nav className="settings-nav-foot"><button type="button" className={section === 'about' ? 'active' : ''} onClick={() => setSection('about')}><b><SettingsIcon name="about" /></b><span>关于 WMB</span></button></nav>
     </aside>
     <div className="settings-content">
       <div className="settings-content-inner">
-        <header className="settings-heading"><h2>{headings[section].title}</h2></header>
-        {section === 'general' && <section className="settings-section">
-          <div className="settings-row"><div><h3>启动后打开</h3></div><strong>今日内容</strong></div>
-          <div className="settings-row"><div><h3>界面语言</h3></div><strong>简体中文</strong></div>
+        <header className="settings-heading"><h2>{headings[section].title}</h2>{headings[section].description && <p>{headings[section].description}</p>}</header>
+        {section === 'general' && <section className="settings-section settings-general-grid">
+          <article className="settings-preference-group">
+            <div className="settings-section-heading"><h3>界面主题</h3><p>切换立即生效并自动记住。</p></div>
+            <div className="settings-theme-options" role="group" aria-label="界面主题">
+              <button type="button" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}><span aria-hidden="true"><SettingsIcon name="moon" /></span><span><strong>黑夜紫罗兰</strong><small>深色工作环境</small></span></button>
+              <button type="button" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}><span aria-hidden="true"><SettingsIcon name="sun" /></span><span><strong>白昼紫罗兰</strong><small>明亮工作环境</small></span></button>
+            </div>
+          </article>
+          <article className="settings-preference-group">
+            <div className="settings-section-heading"><h3>启动与语言</h3></div>
+            <div className="settings-row"><div><h3>启动后打开</h3></div><div className="settings-row-actions"><strong>今日内容</strong><span className="pill-status gray">固定</span></div></div>
+            <div className="settings-row"><div><h3>界面语言</h3></div><div className="settings-row-actions"><strong>简体中文</strong><span className="pill-status gray">固定</span></div></div>
+          </article>
         </section>}
-        {!settings && <section className="settings-section"><p>正在加载设置…若长时间空白，请返回工作台再进设置，或重启应用。</p></section>}
+        {section !== 'general' && !settings && <section className="settings-section"><p>正在加载设置…若长时间空白，请返回工作台再进设置，或重启应用。</p></section>}
         {section === 'ai' && settings && <>
           <section className="settings-section">
             <div className="settings-section-heading"><h3>配置预设</h3></div>
             <div className="settings-profile-list">
               {settings.pi.profiles.map((profile) => <button type="button" key={profile.id} className={`settings-profile${profile.id === piProfileId ? ' selected' : ''}`} onClick={() => selectPiProfile(profile.id)}>
-                <span className="settings-provider-mark">{profile.name.slice(0, 1).toUpperCase()}</span>
+                <span className="settings-provider-mark"><SettingsIcon name="ai" /></span>
                 <span><strong>{profile.name}</strong><small>{profile.model} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'}{profile.nativeSearch ? ' · 自带搜索' : ''}</small></span>
-                {profile.active && <em>● 正在使用</em>}
+                {profile.active && <em><span className="dot" aria-hidden="true" />正在使用</em>}
               </button>)}
             </div>
             <div className="settings-inline-actions">
-              <button type="button" className="text-button" onClick={() => selectPiProfile('')}>＋ 添加配置预设</button>
-              <button type="button" className="text-button" onClick={() => {
+              <button type="button" className="text-button settings-icon-text-button" onClick={() => selectPiProfile('')}><SettingsIcon name="plus" />添加配置预设</button>
+              <button type="button" className="text-button settings-icon-text-button" onClick={() => {
                 setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1');
                 setPiApi('openai-completions'); setPiModel(''); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiNativeSearch(false);
                 setPiConfigNote('填写 OpenCode Go API Key 后获取模型');
-              }}>＋ OpenCode Go</button>
+              }}><SettingsIcon name="plus" />OpenCode Go</button>
             </div>
           </section>
 
           <section className="settings-section">
             <div className="settings-section-heading"><h3>故障降级顺序</h3><p>当前预设失败时按序切换。</p></div>
-            <div className="settings-fallback-active"><span>1</span><div><strong>{settings.pi.profiles.find((profile) => profile.active)?.name || '未选择当前预设'}</strong><small>当前正在使用 · 始终最先尝试</small></div></div>
+            <div className="settings-fallback-active"><span>1</span><div><strong>{settings.pi.profiles.find((profile) => profile.active)?.name || '未选择当前预设'}</strong><small>始终最先尝试</small></div></div>
             <div className="settings-profile-list settings-fallback-list">
               {fallbackProfiles.length === 0 && <div className="settings-fallback-empty">尚未添加降级服务。可从下方未列入的预设中加入。</div>}
               {fallbackProfiles.map((profile, index) => <div key={profile.id} className="settings-fallback-row">
@@ -219,7 +236,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
               </div>)}
             </div>
             {unusedFallbackProfiles.length > 0 && <div className="settings-inline-actions settings-fallback-add">
-              {unusedFallbackProfiles.map((profile) => <button type="button" key={profile.id} className="text-button" onClick={() => void addFallback(profile.id)}>＋ {profile.name}</button>)}
+              {unusedFallbackProfiles.map((profile) => <button type="button" key={profile.id} className="text-button settings-icon-text-button" onClick={() => void addFallback(profile.id)}><SettingsIcon name="plus" />{profile.name}</button>)}
             </div>}
           </section>
           <section className="settings-section">
@@ -263,16 +280,16 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         {section === 'data' && <section className="settings-section">
           <div className="settings-row"><div><h3>数据目录</h3></div><div className="settings-row-actions"><span className="path-chip">{dataRoot || '尚未选择数据根目录'}</span><button className="secondary-button" onClick={() => void window.wmb.chooseDataRoot().then(refresh)}>选择目录</button></div></div>
           {workspaceProposals.map(({ proposal, binding, selectedRootPath }) => <div className="settings-row" key={proposal.id}><div><h3>待确认：{proposal.profile.displayName}</h3><p>受众：{proposal.profile.audience}</p><p>目标：{proposal.profile.contentGoal}</p><p>编辑简报：{proposal.profile.editorialBrief}</p><p>能力：{proposal.profile.intelligencePackId}@{proposal.profile.intelligencePackVersion} · {proposal.profile.creationPackId}@{proposal.profile.creationPackVersion} · {proposal.profile.platforms.join(' / ')}</p>{proposal.target === 'new' && <p>新工作空间目录：{selectedRootPath ?? '尚未选择'}</p>}<p>完整差异：{proposal.displayedDiff.map((item) => `${item.field}: ${JSON.stringify(item.before)} → ${JSON.stringify(item.after)}`).join('；')}</p></div><div className="settings-row-actions">{proposal.target === 'new' && <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.selectWorkspaceProposalRoot(binding).then(() => window.wmb.listWorkspaceProposals()).then(setWorkspaceProposals).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>选择数据目录</button>}<button className="primary-button" disabled={proposal.target === 'new' && !selectedRootPath} onClick={() => { setWorkspaceNote(''); void window.wmb.confirmWorkspaceProposal(binding).then(async () => { const [listed, proposals] = await Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]); setWorkspaces(listed); setWorkspaceProposals(proposals); setWorkspaceNote(proposal.target === 'new' ? '工作空间已创建，切换后重启即可使用。' : '当前工作空间配方已更新。'); }).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>{proposal.target === 'new' ? '确认创建' : '确认更新当前工作空间'}</button></div></div>)}
-          {workspaces.workspaces.map((workspace) => <div className="settings-row" key={workspace.id}><div><h3>{workspace.displayName}</h3><p>{workspace.id} · {workspace.rootPath}</p></div>{workspace.id === workspaces.activeWorkspaceId ? <span className="pill-status green"><span className="dot"/>当前</span> : <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.switchWorkspace(workspace.id).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>切换后重启</button>}</div>)}
+          {workspaces.workspaces.map((workspace) => <div className="settings-row" key={workspace.id}><div><h3>{workspace.displayName}</h3><p>{workspace.rootPath}</p></div>{workspace.id === workspaces.activeWorkspaceId ? <span className="pill-status green"><span className="dot"/>当前</span> : <button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.switchWorkspace(workspace.id).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>切换后重启</button>}</div>)}
           {!workspaces.workspaces.some((workspace) => workspace.displayName === '英国生活') && <div className="settings-row"><div><h3>英国生活官方工作空间</h3></div><button className="secondary-button" onClick={() => { setWorkspaceNote(''); void window.wmb.createUkWorkspace().then(() => window.wmb.listWorkspaces()).then(setWorkspaces).catch((error) => setWorkspaceNote(error instanceof Error ? error.message : String(error))); }}>创建 UK 工作空间</button></div>}
           {workspaceNote && <p className="settings-note error">{workspaceNote}</p>}
           {settings && <>
-            <div className="settings-row"><div><h3>数据库</h3><p>wmb.db · {formatBytes(settings.usage.database)} · 数据库版本 v{settings.counts.migrations}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
-            <div className="settings-row"><div><h3>素材目录</h3><p>assets/ · {formatBytes(settings.usage.assets)} · 内容指纹去重</p></div></div>
-            <div className="settings-row"><div><h3>当前绑定浏览器档案</h3><p>{settings.paths.boundBrowserProfile || '尚未绑定'} · {formatBytes(settings.usage.boundBrowserProfile)}</p></div></div>
-            <div className="settings-row"><div><h3>旧版浏览器档案（只读保留）</h3><p>{settings.paths.legacyBrowserProfile} · {formatBytes(settings.usage.legacyBrowserProfile)}</p></div></div>
+            <div className="settings-row"><div><h3>数据库</h3><p>占用 {formatBytes(settings.usage.database)}</p></div><span className="pill-status green"><span className="dot"/>健康</span></div>
+            <div className="settings-row"><div><h3>素材目录</h3><p>占用 {formatBytes(settings.usage.assets)}</p></div></div>
+            <div className="settings-row"><div><h3>当前登录环境</h3><p>{settings.paths.boundBrowserProfile || '尚未设置'} · {formatBytes(settings.usage.boundBrowserProfile)}</p></div></div>
+            <div className="settings-row"><div><h3>旧版登录环境（只读保留）</h3><p>{settings.paths.legacyBrowserProfile} · {formatBytes(settings.usage.legacyBrowserProfile)}</p></div></div>
           </>}
-          <div className="settings-row"><div><h3>日志</h3><p>logs/ · {settings ? formatBytes(settings.usage.logs) : '—'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
+          <div className="settings-row"><div><h3>日志</h3><p>占用 {settings ? formatBytes(settings.usage.logs) : '—'}</p></div><button className="secondary-button" onClick={() => void window.wmb.openLogs()}>打开日志目录</button></div>
         </section>}
         {section === 'browser' && settings && (
           <BrowserSettings
@@ -282,14 +299,13 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             refresh={refresh}
           />
         )}
-        {section === 'channels' && settings && <IntelligenceChannelsView settingsMode />}
-        {section === 'lists' && settings && <XListDisplaySettings workspaceId={settings.workspace.id} />}
+        {section === 'channels' && settings && <IntelligenceChannelsView settingsMode workspaceId={settings.workspace.id} />}
         {section === 'agent' && settings && <section className="settings-section settings-section-agent">
           <div className="settings-row settings-row-compact">
             <div>
               <h3>本地接入</h3>
-              <p className="settings-mono-line">{settings.mcp.status === 'ready' ? settings.mcp.url : '本地接入服务未启动'}</p>
-              <p>{settings.workspace.displayName} · 配方 {settings.workspace.profile.profileId}</p>
+              <p className="settings-mono-line">{settings.mcp.status === 'ready' ? settings.mcp.url : '—'}</p>
+              <p>{settings.workspace.displayName}</p>
             </div>
             <span className={`pill-status ${settings.mcp.status === 'ready' ? 'green' : 'gray'}`}><span className="dot"/>{settings.mcp.status === 'ready' ? '运行中' : '未启动'}</span>
           </div>
@@ -303,7 +319,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
         </section>}
         {section === 'about' && settings && <section className="settings-section">
           <AppUpdateSettings/>
-          <div className="settings-row"><div><h3>Pi 运行组件</h3><p>{settings.piRuntime?.source === 'override' ? '数据目录版本' : '随应用安装'} · {settings.piRuntime?.root}</p>{runtimeNote && <p className="task-status">{runtimeNote}</p>}</div><div className="settings-row-actions"><strong>{settings.piRuntime?.version || 'unknown'}</strong><button className="secondary-button" onClick={() => void window.wmb.getPiRuntime().then((info) => setRuntimeNote(`当前 ${info.version}（${info.source}）`)).then(refresh)}>刷新版本</button><button className="secondary-button" disabled={!settings.piRuntime?.previousVersion} onClick={() => void window.wmb.rollbackPiRuntime().then((result) => { setRuntimeNote(result.ok ? '已回滚到上一版本' : (result.error?.message || '回滚失败')); refresh(); })}>回滚</button></div></div>
+          <div className="settings-row"><div><h3>Pi 运行组件</h3><p>{settings.piRuntime?.source === 'override' ? '数据目录版本' : '随应用安装'}</p>{runtimeNote && <p className="task-status">{runtimeNote}</p>}</div><div className="settings-row-actions"><strong>{settings.piRuntime?.version || '未知'}</strong><button className="secondary-button" onClick={() => void window.wmb.getPiRuntime().then(() => setRuntimeNote('版本信息已刷新。')).then(refresh)}>刷新版本</button><button className="secondary-button" disabled={!settings.piRuntime?.previousVersion} onClick={() => void window.wmb.rollbackPiRuntime().then((result) => { setRuntimeNote(result.ok ? '已回滚到上一版本' : (result.error?.message || '回滚失败')); refresh(); })}>回滚</button></div></div>
         </section>}
       </div>
     </div>

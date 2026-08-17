@@ -93,6 +93,31 @@ try {
   const tools = new Map();
   const extension = (await import(`../.pi/extensions/wmb-mcp/index.ts?test=${Date.now()}`)).default;
   extension({ registerTool(tool) { tools.set(tool.name, tool); } });
+  const imageResult = await tools.get('wmb_import_project_image').execute('image-a', {
+    requestId: 'wmb-1103-image-a',
+    taskId: task.id,
+    grantId: grant.data.id,
+    projectId: 'project-1001',
+    fileName: 'decision.svg',
+    alt: '工具、服务与平台判断图',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675"><rect width="1200" height="675" fill="#f4f4f0"/><text x="80" y="340" font-size="64" fill="#111">Tool → Service → Marketplace</text></svg>'
+  });
+  const imported = JSON.parse(imageResult.details.content[0].text);
+  const assetId = imported.data?.asset?.id;
+  const imageMarkdown = imported.data?.markdown;
+  const bitmapResult = await tools.get('wmb_import_project_image').execute('image-b', {
+    requestId: 'wmb-1103-image-b',
+    taskId: task.id,
+    grantId: grant.data.id,
+    projectId: 'project-1001',
+    fileName: 'cover.png',
+    mimeType: 'image/png',
+    alt: '项目首图',
+    contentBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+  });
+  const importedBitmap = JSON.parse(bitmapResult.details.content[0].text);
+  const bitmapAssetId = importedBitmap.data?.asset?.id;
+  const bitmapMarkdown = importedBitmap.data?.markdown;
   const firstResult = await tools.get('wmb_save_core_version').execute('client-a', {
     requestId: 'wmb-1103-client-a',
     taskId: task.id,
@@ -100,7 +125,11 @@ try {
     projectId: 'project-1001',
     expectedRevision: 1,
     title: '客户端 A 新标题',
-    body: '客户端 A 新版本'
+    body: `客户端 A 新版本\n\n${bitmapMarkdown}\n\n${imageMarkdown}`,
+    mediaBindings: [
+      { assetId: bitmapAssetId, occurrence: 0, widthPreset: 'full', align: 'center', caption: '项目首图' },
+      { assetId, occurrence: 0, widthPreset: 'full', align: 'center', caption: '工具、服务与平台判断图' }
+    ]
   });
   const staleResult = await tools.get('wmb_save_core_version').execute('client-b', {
     requestId: 'wmb-1103-client-b',
@@ -114,9 +143,15 @@ try {
   const stale = JSON.parse(staleResult.details.content[0].text);
   const finalProject = db.prepare('SELECT title, revision FROM content_projects WHERE id = ?').get('project-1001');
   const finalVersions = db.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id = ?').get('project-1001').count;
-  if (!first.ok || first.data.projectRevision !== 2 || first.data.project.title !== '客户端 A 新标题'
-    || stale.ok || stale.error.code !== 'REVISION_CONFLICT' || stale.error.details.current.revision !== 2
-    || finalProject.title !== '客户端 A 新标题' || finalProject.revision !== 2 || finalVersions !== 4) {
+  const projectAssets = db.prepare('SELECT COUNT(*) AS count FROM content_project_assets WHERE project_id = ?').get('project-1001').count;
+  const mediaBindings = db.prepare('SELECT COUNT(*) AS count FROM content_media_bindings WHERE content_version_id = ?').get(first.data?.id).count;
+  const savedBody = db.prepare('SELECT body FROM content_versions WHERE id = ?').get(first.data?.id)?.body ?? '';
+  if (!imported.ok || !assetId || !imageMarkdown || !importedBitmap.ok || !bitmapAssetId || !bitmapMarkdown
+    || !first.ok || first.data.projectRevision !== 2 || first.data.project.title !== '客户端 A 新标题'
+    || !savedBody.includes(`wmb-asset://${assetId}`) || !savedBody.includes(`wmb-asset://${bitmapAssetId}`)
+    || projectAssets !== 2 || mediaBindings !== 2 || stale.ok || stale.error.code !== 'REVISION_CONFLICT'
+    || stale.error.details.current.revision !== 2 || finalProject.title !== '客户端 A 新标题'
+    || finalProject.revision !== 2 || finalVersions !== 4) {
     throw new Error('stale revision created an extra version');
   }
 
@@ -131,6 +166,8 @@ try {
     searchHit: searched.items[0].id,
     searchQueryCount: searchCounter.count(),
     firstProjectRevision: first.data.projectRevision,
+    importedAssetIds: [bitmapAssetId, assetId],
+    mediaBindingCount: mediaBindings,
     staleError: stale.error.code,
     finalProjectVersionCount: finalVersions
   }));

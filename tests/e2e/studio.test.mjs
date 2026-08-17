@@ -14,10 +14,16 @@
 // src/shared/media-bindings.ts、src/shared/media-token.ts、media-binding-migrations.ts（v62）。
 
 import { deflateSync } from 'node:zlib';
+import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { savePlatformVersion } from '../../src/main/content.ts';
 import { importAssetBytes, linkProjectAsset, markdownImageForAsset } from '../../src/main/assets.ts';
 import { seedSource } from './lib/seed.mjs';
+import { buildJobContextRefs, buildJobObjectBoundary } from '../../src/main/job-object-boundary.ts';
+import { buildResearchEvidencePack } from '../../src/main/research-task-state.ts';
+import { upsertResearchClaim } from '../../src/main/db/research-claims-store.ts';
+import { enqueueResearchSuccessor } from '../../src/main/research-successor.ts';
 
 const seedBase = async ({ dataRoot, workspaceId }) => {
   await seedWorkflowBase(dataRoot, workspaceId);
@@ -29,7 +35,141 @@ const seedWithProject = async ({ dataRoot, workspaceId }) => {
   try {
     const xSourceId = seedSource(db, { title: 'E2E X 资料', summary: 'X 来源摘要', author: '@wmb_e2e', originalUrl: 'https://x.com/wmb_e2e/status/100' });
     const wechatSourceId = seedSource(db, { title: 'E2E 微信资料', summary: '微信来源摘要', author: 'WMB 测试公众号', originalUrl: 'https://mp.weixin.qq.com/s/wmb-e2e-source' });
-    seedStudioProject(db, { sourceIds: [xSourceId, wechatSourceId] });
+    seedStudioProject(db, { sourceIds: [xSourceId, wechatSourceId], coreV2: '核心 V2 正文（编辑保存）\n\n## Markdown 二级标题\n\n**已确认：**2026 年继续验证。\n\n- 一级条目\n  - 二级条目' });
+  } finally {
+    db.close();
+  }
+};
+
+function startPiComposerMock() {
+  let responseNumber = 0;
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const respond = (status, body) => {
+        res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(body));
+      };
+      if (req.method === 'GET' && req.url?.endsWith('/models')) {
+        return respond(200, { data: [{ id: 'gpt-5.4' }, { id: 'gpt-5.4-vision' }] });
+      }
+      if (req.method === 'POST' && req.url?.endsWith('/responses')) {
+        req.on('data', () => {});
+        req.on('end', () => {
+          responseNumber += 1;
+          const responseId = `e2e-response-${responseNumber}`;
+          const itemId = `e2e-message-${responseNumber}`;
+          const outputItem = {
+            id: itemId, type: 'message', role: 'assistant', status: 'completed',
+            content: [{ type: 'output_text', text: 'E2E mock response', annotations: [] }]
+          };
+          const events = [
+            { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
+            { type: 'response.output_item.added', output_index: 0, item: { id: itemId, type: 'message', role: 'assistant', status: 'in_progress', content: [] } },
+            { type: 'response.output_text.delta', item_id: itemId, output_index: 0, content_index: 0, delta: 'E2E mock response' },
+            { type: 'response.output_item.done', output_index: 0, item: outputItem },
+            {
+              type: 'response.completed',
+              response: {
+                id: responseId, status: 'completed', output: [outputItem],
+                usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } }
+              }
+            }
+          ];
+          res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'close' });
+          for (const event of events) res.write(`data: ${JSON.stringify(event)}\n\n`);
+          res.end();
+        });
+        return;
+      }
+      respond(404, {});
+    });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') return reject(new Error('本地 Pi mock 未能取得端口。'));
+      resolve({
+        baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        close: () => new Promise((closeResolve) => server.close(() => closeResolve()))
+      });
+    });
+  });
+}
+
+const RESEARCH_GATE_DATE = '2026-08-16';
+
+function insertResearchGateTask(db, { id, intent, status, phase, businessDate, contextRefs, resultRefs = {} }) {
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_tasks (
+    id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
+    progress_json, checkpoint_json, events_json, heartbeat_at, error_code, error_message,
+    created_at, updated_at, finished_at
+  ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, '{}', '{}', '[]', NULL, NULL, NULL, ?, ?, NULL)`).run(
+    id, intent, businessDate, status, phase, JSON.stringify(contextRefs), JSON.stringify(resultRefs), now, now
+  );
+}
+
+/** WMB-5296: one Studio project plus a truthful unresolved research successor requiring owner choice. */
+const seedStudioResearchGate = async ({ dataRoot, workspaceId }) => {
+  await seedWorkflowBase(dataRoot, workspaceId);
+  const db = openWriteDb(dataRoot);
+  try {
+    const project = seedStudioProject(db, {
+      title: 'E2E 研究续写项目',
+      coreV1: '研究续写项目正文',
+      coreV2: '等待研究结论后继续写作',
+      platforms: []
+    });
+    const parentTaskId = `e2e-parent-${randomUUID()}`;
+    const parentJobId = `e2e-job-${randomUUID()}`;
+    const parentRequest = {
+      roleId: 'writer', brief: '基于研究结果完成核心正文', projectId: project.projectId,
+      writerTask: 'core_draft', businessDate: RESEARCH_GATE_DATE
+    };
+    const parentRefs = buildJobContextRefs({
+      jobId: parentJobId,
+      request: parentRequest,
+      boundary: buildJobObjectBoundary(parentRequest, RESEARCH_GATE_DATE)
+    });
+    insertResearchGateTask(db, {
+      id: parentTaskId, intent: 'studio_draft', status: 'partial', phase: 'research_dispatched',
+      businessDate: RESEARCH_GATE_DATE, contextRefs: parentRefs
+    });
+
+    const researchTaskId = `e2e-research-${randomUUID()}`;
+    const claim = { key: 'agentic_loop_study_identity', text: '原始研究出处、论文标题与作者身份', type: 'fact' };
+    const research = {
+      gapId: `gap-${researchTaskId}`, parentJobId, parentTaskId, parentRoleId: 'writer',
+      requiredClaims: [claim],
+      budget: { timeMinutes: 12, minValidSources: 15, maxCandidates: 40, maxParallelFetches: 3, maxRounds: 1 },
+      channels: ['web', 'x', 'xhs']
+    };
+    const researchRequest = {
+      roleId: 'reporter', brief: '研究补料工单', businessDate: RESEARCH_GATE_DATE,
+      projectId: project.projectId, research
+    };
+    const researchRefs = buildJobContextRefs({
+      jobId: `e2e-research-job-${randomUUID()}`,
+      request: researchRequest,
+      boundary: buildJobObjectBoundary(researchRequest, RESEARCH_GATE_DATE)
+    });
+    const pack = buildResearchEvidencePack({
+      jobId: researchTaskId, round: 1,
+      claims: [{ id: `claim-${randomUUID()}`, key: claim.key, status: 'unresolved', verdictReason: 'threshold_not_met', evidenceSourceIds: [], needsTimeExcerpt: false }],
+      sourceIds: [], validSourceCount: 0, candidateCount: 0, timeSpentMinutes: 2,
+      terminalReason: 'candidates_exhausted', unresolvedRequiredClaims: [claim.key]
+    });
+    insertResearchGateTask(db, {
+      id: researchTaskId, intent: 'research', status: 'partial', phase: 'partial',
+      businessDate: RESEARCH_GATE_DATE, contextRefs: researchRefs, resultRefs: pack
+    });
+    const claimResult = upsertResearchClaim(db, {
+      taskId: researchTaskId, claimKey: claim.key, claimText: claim.text, claimType: claim.type, status: 'unresolved'
+    });
+    if (!claimResult.ok) throw new Error(`seedStudioResearchGate: claim 写入失败 ${JSON.stringify(claimResult.error ?? claimResult)}`);
+    const successor = enqueueResearchSuccessor(db, { researchTaskId });
+    if (!successor.enqueued || successor.job?.status !== 'needs_user') {
+      throw new Error(`seedStudioResearchGate: 续派门未建立 ${JSON.stringify(successor)}`);
+    }
   } finally {
     db.close();
   }
@@ -104,18 +244,18 @@ function makeSeedPng(width, height, r, g, b) {
  * 核心 v2 与 X 平台 v1 均显式携带媒体绑定草稿（最终契约字段），UI 编辑后的保存走新版本绑定。
  * @returns {{ projectId, coreV2Id, platXId, assetAId, assetBId, shaA, shaB }}
  */
-async function seedImageEditingProject({ dataRoot, workspaceId }) {
+async function seedImageEditingProject({ dataRoot, workspaceId }, assetASize = { width: 64, height: 64 }) {
   await seedWorkflowBase(dataRoot, workspaceId);
   const db = openWriteDb(dataRoot);
   try {
     const content = await import('../../src/main/content.ts');
     const assetA = await importAssetBytes(db, dataRoot, {
-      bytes: makeSeedPng(64, 64, 214, 42, 42),
+      bytes: makeSeedPng(assetASize.width, assetASize.height, 214, 42, 42),
       fileName: 'seed-a.png',
       mimeType: 'image/png',
       origin: 'e2e:st008:source',
-      width: 64,
-      height: 64
+      width: assetASize.width,
+      height: assetASize.height
     });
     const assetB = await importAssetBytes(db, dataRoot, {
       bytes: makeSeedPng(64, 64, 42, 82, 214),
@@ -170,16 +310,28 @@ async function seedImageEditingProject({ dataRoot, workspaceId }) {
 const INLINE_FIGURE = '.studio-rich-annotate-wrap .studio-rich-editor figure.studio-figure[data-wmb-asset]';
 const INLINE_TOOLBAR = '.studio-inline-image-toolbar[role="toolbar"][aria-label="图片工具条"]';
 
-/** 切到渲染编辑（富文本）模式；等正文两张图片 figure 渲染。 */
+/** 切到可视化编辑模式；等正文图片 figure 渲染。 */
 async function switchToRichEditor(page) {
   const switched = await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('.studio-mode-switch button')].find((b) => b.textContent?.includes('渲染编辑'));
+    const btn = [...document.querySelectorAll('.studio-mode-switch button')].find((node) => node.textContent?.includes('可视化编辑'));
     if (!btn) return false;
     btn.click();
     return true;
   });
-  if (!switched) throw new Error('未找到「渲染编辑」模式切换按钮');
+  if (!switched) throw new Error('未找到「可视化编辑」模式切换按钮');
   await page.waitForSelector(INLINE_FIGURE, { timeout: 15_000 });
+}
+
+/** 切到源码编辑模式；只等待原始 Markdown textarea。 */
+async function switchToSourceEditor(page) {
+  const switched = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('.studio-mode-switch button')].find((node) => node.textContent?.includes('源码编辑'));
+    if (!btn) return false;
+    btn.click();
+    return true;
+  });
+  if (!switched) throw new Error('未找到「源码编辑」模式切换按钮');
+  await page.waitForSelector('#studio-body-source:not([disabled])', { state: 'visible', timeout: 15_000 });
 }
 
 /** 点击状态栏「本文图片 N 张」入口打开图片菜单（已打开则跳过，幂等）。 */
@@ -248,10 +400,34 @@ async function confirmCropModal(page, preset = '1:1') {
   }
 }
 
-/** 断言只读版本：正文图无编辑工具条/手柄（编辑按钮不可用），保存按钮禁用；只读提示条尽量在场。 */
+/** 断言只读版本：顶栏不显示无关保存；历史操作统一成正常按钮；正文图不可编辑。 */
 async function assertReadonlyImageState(page) {
-  const saveDisabled = await page.$eval('.studio-editor-top button.primary-button', (b) => Boolean(b.disabled));
-  if (!saveDisabled) throw new Error('只读版本「保存」按钮应禁用');
+  const historyChrome = await page.evaluate(() => {
+    const topSave = [...document.querySelectorAll('.studio-editor-top button')].filter((button) => button.textContent?.trim() === '保存').length;
+    const actions = [...document.querySelectorAll('.historical-version-actions button')].map((button) => ({
+      label: button.textContent?.trim() ?? '',
+      primary: button.classList.contains('primary-button'),
+      secondary: button.classList.contains('secondary-button'),
+      height: Math.round(button.getBoundingClientRect().height)
+    }));
+    return { topSave, actions, overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  });
+  if (historyChrome.topSave !== 0) throw new Error(`历史只读态不应显示无关的保存按钮: ${JSON.stringify(historyChrome)}`);
+  if (historyChrome.actions.length !== 3 || historyChrome.actions.filter((item) => item.primary).length !== 1 || historyChrome.actions.some((item) => !item.primary && !item.secondary)) {
+    throw new Error(`历史版本三个操作应统一使用按钮样式且仅返回最新版为主操作: ${JSON.stringify(historyChrome)}`);
+  }
+  if (new Set(historyChrome.actions.map((item) => item.height)).size !== 1 || historyChrome.overflowX !== 0) {
+    throw new Error(`历史版本操作应等高且无横向溢出: ${JSON.stringify(historyChrome)}`);
+  }
+  await page.locator('.historical-version-actions button', { hasText: '复制为新项目' }).click();
+  await page.waitForSelector('.historical-copy-row #studio-copy-title', { timeout: 10_000 });
+  const copyRow = await page.evaluate(() => ({
+    labels: [...document.querySelectorAll('.historical-copy-row button')].map((button) => button.textContent?.trim() ?? ''),
+    allStyled: [...document.querySelectorAll('.historical-copy-row button')].every((button) => button.classList.contains('secondary-button')),
+    overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+  }));
+  if (!copyRow.allStyled || copyRow.labels.join('|') !== '创建新项目|取消' || copyRow.overflowX !== 0) throw new Error(`复制项目展开行按钮/布局错误: ${JSON.stringify(copyRow)}`);
+  await page.locator('.historical-copy-row button', { hasText: '取消' }).click();
   await page.locator(INLINE_FIGURE).nth(0).click();
   await page.waitForTimeout(500);
   const state = await page.evaluate(() => ({
@@ -319,16 +495,39 @@ export default [
       await step('1100×800 最小窗口仍无重复元数据与虚假阅读时间', async () => {
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
         await page.waitForTimeout(300);
-        const compact = await page.evaluate(() => ({
-          metaRows: document.querySelectorAll('.studio-doc-meta').length,
-          status: document.querySelector('.studio-writing-status')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-          titleVisible: Boolean(document.querySelector('#studio-title')?.getBoundingClientRect().height),
-          overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
-        }));
+        const compact = await page.evaluate(() => {
+          const formatbar = document.querySelector('.studio-formatbar');
+          const barRect = formatbar?.getBoundingClientRect();
+          const groups = [...(formatbar?.querySelectorAll('.studio-formatbar-group') ?? [])].map((group) => group.getBoundingClientRect());
+          return {
+            metaRows: document.querySelectorAll('.studio-doc-meta').length,
+            status: document.querySelector('.studio-writing-status')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+            titleVisible: Boolean(document.querySelector('#studio-title')?.getBoundingClientRect().height),
+            formatbarHeight: Math.round(barRect?.height ?? 0),
+            formatbarOverflow: formatbar ? formatbar.scrollWidth - formatbar.clientWidth : -1,
+            groupsInside: Boolean(barRect) && groups.every((rect) => rect.left >= barRect.left - 1 && rect.right <= barRect.right + 1),
+            overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+          };
+        });
         assert(compact.metaRows === 0 && !/约\s*\d+\s*分钟/.test(compact.status), `最小窗口不得恢复重复元数据或阅读时间，实际 ${JSON.stringify(compact)}`);
         assert(compact.titleVisible && compact.status.includes('字数') && /来源 \d+/.test(compact.status) && /素材 \d+/.test(compact.status), `最小窗口应保留标题与真实状态入口，实际 ${JSON.stringify(compact)}`);
         assert(compact.overflowX === 0, `1100×800 创作编辑器不应产生页面横向溢出，实际 ${compact.overflowX}`);
+        assert(compact.formatbarHeight > 48 && compact.formatbarOverflow === 0 && compact.groupsInside, `1100px 下格式工具栏应分行完整显示且不可横向滚动: ${JSON.stringify(compact)}`);
         await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-metadata-cleanup-1100' });
+      });
+      await step('Markdown 完整渲染且不泄露字面标记', async () => {
+        await page.locator('.studio-mode-switch button', { hasText: '可视化编辑' }).click();
+        await page.waitForSelector('#studio-body h2', { timeout: 10_000 });
+        const rendered = await page.evaluate(() => ({
+          heading: document.querySelector('#studio-body h2')?.textContent?.trim() ?? '',
+          strong: document.querySelector('#studio-body strong')?.textContent?.trim() ?? '',
+          listItems: [...document.querySelectorAll('#studio-body li')].map((item) => item.firstChild?.textContent?.trim() ?? ''),
+          literalMarkers: (document.querySelector('#studio-body')?.textContent ?? '').includes('**'),
+          editable: document.querySelector('#studio-body')?.getAttribute('contenteditable')
+        }));
+        assert(rendered.heading === 'Markdown 二级标题' && rendered.strong === '已确认：' && rendered.listItems.length === 2, `Markdown 标题/强调/嵌套列表未完整渲染: ${JSON.stringify(rendered)}`);
+        assert(!rendered.literalMarkers && rendered.editable === 'true', `可视化编辑不应泄露 Markdown 标记且必须可编辑: ${JSON.stringify(rendered)}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-editor-markdown-toolbar-1100' });
       });
       await step('关联来源详情统一显示紧凑平台身份', async () => {
         await page.locator('button.studio-status-link', { hasText: '来源 2' }).click();
@@ -383,13 +582,28 @@ export default [
         await openProjectByName(page, 'E2E 创作项目 A');
       });
       const editedTitle = 'E2E 创作项目 A（已编辑保存）';
-      await step('修改标题并保存', async () => {
+      const richSuffix = ' RICH_EDIT_ABC';
+      await step('渲染态修改标题与正文并保存', async () => {
         await page.fill('#studio-title', editedTitle);
+        await page.locator('.studio-mode-switch button', { hasText: '可视化编辑' }).click();
+        await page.waitForSelector('#studio-body[contenteditable="true"]', { timeout: 10_000 });
+        await page.evaluate(() => {
+          const editor = document.querySelector('#studio-body');
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          editor.focus();
+        });
+        await page.keyboard.type(richSuffix);
+        await page.waitForFunction((suffix) => document.querySelector('#studio-body')?.textContent?.trimEnd().endsWith(suffix.trim()), richSuffix, { timeout: 10_000 });
         await page.waitForFunction(() => document.querySelector('.studio-doc-state')?.textContent?.includes('有未保存修改'), null, { timeout: 10_000 });
         await page.click('.studio-editor-top button.primary-button');
         await page.waitForFunction(() => document.querySelector('.studio-doc-state')?.textContent?.includes('已保存'), null, { timeout: 15_000 });
-        const docState = await page.textContent('.studio-doc-state');
-        assert(docState.includes('已保存'), `保存后文档状态应为已保存: ${docState}`);
+        const bodyText = await page.textContent('#studio-body');
+        assert(bodyText.trimEnd().endsWith(richSuffix.trim()), `渲染态输入顺序或光标被重置: ${JSON.stringify(bodyText?.slice(-40))}`);
       });
       await step('重载后内容持久保留（UI 双读回）', async () => {
         await page.reload();
@@ -402,7 +616,9 @@ export default [
         if (rowShown) await openProjectByName(page, editedTitle);
         await page.waitForSelector('.studio-editor-view', { timeout: 15_000 });
         const title = await page.inputValue('#studio-title');
+        const body = await page.inputValue('#studio-body-source');
         assert(title === editedTitle, `重载后标题未持久化: ${JSON.stringify(title)}`);
+        assert(body.endsWith(richSuffix), `重载后渲染态正文修改未持久化: ${JSON.stringify(body.slice(-60))}`);
       });
       await step('持久化读回：DB 标题与版本', () => {
         const { db, close } = openDb();
@@ -520,6 +736,56 @@ export default [
         await openProjectByName(page, 'E2E 创作项目 A');
       });
       let annotationId = null;
+      await step('长正文深处右键打开说明输入不改变阅读位置', async () => {
+        await page.locator('.studio-mode-switch button', { hasText: '可视化编辑' }).click();
+        await page.waitForSelector('#studio-body[contenteditable="true"]', { timeout: 10_000 });
+        await page.evaluate(() => {
+          const editor = document.querySelector('#studio-body');
+          if (!(editor instanceof HTMLElement)) throw new Error('missing rich editor');
+          editor.innerHTML += Array.from({ length: 36 }, (_, index) => `<p>批注滚动稳定性段落 ${index + 1}：保持当前阅读位置。</p>`).join('');
+          editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: null }));
+        });
+        await page.waitForFunction(() => (document.querySelector('#studio-body')?.textContent ?? '').includes('批注滚动稳定性段落 36'));
+        const selection = await page.evaluate(() => {
+          const canvas = document.querySelector('.studio-canvas');
+          const editor = document.querySelector('#studio-body');
+          if (!(canvas instanceof HTMLElement) || !(editor instanceof HTMLElement)) return null;
+          const target = [...editor.querySelectorAll('p')].find((node) => node.textContent?.includes('批注滚动稳定性段落 36'));
+          const textNode = target?.firstChild;
+          if (!(target instanceof HTMLElement) || !textNode) return null;
+          target.scrollIntoView({ block: 'center' });
+          const text = textNode.textContent ?? '';
+          const start = text.indexOf('保持当前阅读位置');
+          if (start < 0) return null;
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + '保持当前阅读位置'.length);
+          const selected = window.getSelection();
+          selected?.removeAllRanges();
+          selected?.addRange(range);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.left + Math.min(24, rect.width / 2), y: rect.top + rect.height / 2, scrollTop: canvas.scrollTop };
+        });
+        assert(selection && selection.scrollTop > 100, `未能建立正文深处选区: ${JSON.stringify(selection)}`);
+        await page.mouse.click(selection.x, selection.y, { button: 'right' });
+        await page.waitForSelector('.studio-annotation-menu', { timeout: 10_000 });
+        await page.locator('.studio-annotation-menu button', { hasText: '标记并说明' }).click();
+        await page.waitForSelector('.studio-annotation-note-pop textarea', { timeout: 10_000 });
+        await page.waitForTimeout(200);
+        const scrollAfter = await page.$eval('.studio-canvas', (node) => node.scrollTop);
+        assert(Math.abs(scrollAfter - selection.scrollTop) <= 2, `打开说明输入导致编辑画布跳动: before=${selection.scrollTop}, after=${scrollAfter}`);
+        await helpers.captureEvidence({ app: ctx.app, page, evidence: ctx.evidence, artifactsDir: ctx.artifactsDir, name: 'studio-annotation-scroll-stable' });
+        await page.fill('.studio-annotation-note-pop textarea', 'E2E 深处批注说明');
+        await page.click('.studio-annotation-note-actions button.primary-button');
+        await page.waitForSelector('.studio-annotation-note-pop', { state: 'detached', timeout: 10_000 });
+        await page.waitForFunction(() => document.querySelectorAll('.studio-annotation-rect, .studio-annotation-mark').length > 0);
+        const { db, close } = openDb();
+        try {
+          const row = db.prepare(`SELECT quoted_text, note FROM studio_annotations WHERE note = 'E2E 深处批注说明' ORDER BY created_at DESC LIMIT 1`).get();
+          assert(row?.note === 'E2E 深处批注说明' && row.quoted_text.length > 0, `深处批注未持久化: ${JSON.stringify(row)}`);
+        } finally { close(); }
+        await page.locator('.studio-mode-switch button', { hasText: '源码' }).click();
+      });
       await step('拖选文字并标记为有问题', async () => {
         await page.waitForSelector('#studio-body-source', { timeout: 10_000 });
         const selected = await page.evaluate(() => {
@@ -746,7 +1012,7 @@ export default [
     journeyIds: ['ST-008-studio-image-editing'],
     launch: { seedFixture: seedImageEditingProject },
     run: async (ctx) => {
-      const { page, helpers, assert, step, openDb } = ctx;
+      const { page, helpers, assert, step, openDb, app, evidence, artifactsDir } = ctx;
       // seedFixture 的返回值不直接回传，场景内从真实 DB 读取种子元数据（真实读回）。
       const seed = await (async () => {
         const { db, close } = openDb();
@@ -766,11 +1032,35 @@ export default [
       const TOOLBAR_SEL = '.studio-inline-image-toolbar[role="toolbar"][aria-label="图片工具条"]';
 
       await helpers.waitForAppReady(page);
-      await step('导航到创作页并打开图片项目（1568 视口）', async () => {
+      await step('导航到创作页并打开超宽图片项目（1568 视口）', async () => {
         await page.setViewportSize({ width: 1568, height: 960 });
         await helpers.navigateTo(page, 'studio');
         await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
         await openProjectByName(page, 'E2E 图片编辑项目');
+      });
+
+      await step('源码编辑只显示可编辑 Markdown，不混入渲染预览', async () => {
+        await switchToSourceEditor(page);
+        const sourceState = await page.evaluate(() => {
+          const textarea = document.querySelector('#studio-body-source');
+          const paper = document.querySelector('.studio-paper');
+          const canvas = document.querySelector('.studio-canvas');
+          return {
+            value: textarea?.value ?? '',
+            disabled: textarea?.disabled ?? true,
+            readonly: textarea?.readOnly ?? true,
+            renderedPreviewCount: document.querySelectorAll('.studio-live-false-body').length,
+            paperOverflow: paper ? paper.scrollWidth - paper.clientWidth : -1,
+            canvasOverflow: canvas ? canvas.scrollWidth - canvas.clientWidth : -1,
+            pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+          };
+        });
+        assert(sourceState.value.includes('wmb-asset://') && !sourceState.disabled && !sourceState.readonly,
+          `源码编辑器未显示可编辑原始 Markdown: ${JSON.stringify(sourceState)}`);
+        assert(sourceState.renderedPreviewCount === 0, `源码编辑器不应混入渲染预览: ${JSON.stringify(sourceState)}`);
+        assert(sourceState.paperOverflow === 0 && sourceState.canvasOverflow === 0 && sourceState.pageOverflow === 0,
+          `源码编辑模式出现横向溢出: ${JSON.stringify(sourceState)}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-source-editor-raw-markdown' });
         await switchToRichEditor(page);
       });
 
@@ -807,6 +1097,152 @@ export default [
         assert(projected.width === 'medium' && projected.align === 'right', `尺寸/对齐投影异常: ${JSON.stringify(projected)}`);
         const afterBody = await page.evaluate(() => document.querySelector('.studio-rich-editor')?.textContent ?? '');
         assert(afterBody === beforeBody, '尺寸/对齐不应修改正文内容（正文 token 不动）');
+      });
+
+      await step('WMB-5287：尺寸/对齐真实几何生效、失焦延迟不回滚、保存重载后从绑定恢复', async () => {
+        // 基线：上一步已将图 A 置为 medium/right —— 先以真实几何（65% 行宽、贴右缘）验证，
+        // 而非仅按钮态/数据属性。
+        const measureFigure = () => page.evaluate((sel) => {
+          const editor = document.querySelector('.studio-rich-editor');
+          const fig = editor?.querySelector(sel);
+          if (!editor || !fig) return null;
+          const cs = getComputedStyle(editor);
+          const er = editor.getBoundingClientRect();
+          const contentLeft = er.left + (Number.parseFloat(cs.paddingLeft) || 0);
+          const contentRight = er.right - (Number.parseFloat(cs.paddingRight) || 0);
+          const rect = fig.getBoundingClientRect();
+          return {
+            width: rect.width,
+            ratio: rect.width / Math.max(1, contentRight - contentLeft),
+            leftGap: rect.left - contentLeft,
+            rightGap: contentRight - rect.right,
+            attrWidth: fig.getAttribute('data-wmb-width'),
+            attrAlign: fig.getAttribute('data-wmb-align')
+          };
+        }, FIGURE_SEL);
+        const approx = (a, b, eps) => Math.abs(a - b) <= eps;
+        const baseline = await measureFigure();
+        assert(baseline && approx(baseline.ratio, 0.65, 0.03) && baseline.rightGap <= 3
+          && baseline.attrWidth === 'medium' && baseline.attrAlign === 'right',
+          `基线（medium/right）未按真实几何渲染: ${JSON.stringify(baseline)}`);
+        const bodyBefore = await page.evaluate(() => document.querySelector('.studio-rich-editor')?.textContent ?? '');
+
+        // 点击 small + left：必须立即以真实几何生效（40% 行宽、贴左缘），而非仅按钮态/数据属性。
+        await page.click(`${TOOLBAR_SEL} .studio-inline-width[data-preset="small"]`);
+        await page.waitForFunction((sel) => {
+          const fig = document.querySelector(sel);
+          const editor = document.querySelector('.studio-rich-editor');
+          if (!fig || !editor) return false;
+          const cs = getComputedStyle(editor);
+          const er = editor.getBoundingClientRect();
+          const cw = er.right - (Number.parseFloat(cs.paddingRight) || 0) - (er.left + (Number.parseFloat(cs.paddingLeft) || 0));
+          const ratio = fig.getBoundingClientRect().width / cw;
+          return fig.getAttribute('data-wmb-width') === 'small' && ratio >= 0.37 && ratio <= 0.43;
+        }, FIGURE_SEL, { timeout: 10_000 });
+        await page.click(`${TOOLBAR_SEL} .studio-inline-align[data-align="left"]`);
+        await page.waitForFunction((sel) => {
+          const fig = document.querySelector(sel);
+          const editor = document.querySelector('.studio-rich-editor');
+          if (!fig || !editor) return false;
+          const cs = getComputedStyle(editor);
+          const er = editor.getBoundingClientRect();
+          const contentLeft = er.left + (Number.parseFloat(cs.paddingLeft) || 0);
+          return fig.getAttribute('data-wmb-align') === 'left' && fig.getBoundingClientRect().left - contentLeft <= 3;
+        }, FIGURE_SEL, { timeout: 10_000 });
+        const s1 = await measureFigure();
+        assert(s1 && approx(s1.ratio, 0.4, 0.03) && s1.leftGap <= 3 && s1.attrWidth === 'small' && s1.attrAlign === 'left',
+          `small/left 未按真实几何生效: ${JSON.stringify(s1)}`);
+
+        // 失焦（点击标题）关闭选中框，等待 >1s：几何与投影不得回滚（WMB-5287 回归点）。
+        await page.locator('#studio-title').click({ position: { x: 10, y: 10 } });
+        try { await page.waitForSelector(TOOLBAR_SEL, { state: 'detached', timeout: 5_000 }); } catch { /* 工具条可能已先行关闭 */ }
+        await page.waitForTimeout(1200);
+        const s2 = await measureFigure();
+        assert(s2 && Math.abs(s2.width - s1.width) <= 1 && Math.abs(s2.leftGap - s1.leftGap) <= 1
+          && s2.attrWidth === 'small' && s2.attrAlign === 'left',
+          `失焦/延迟后尺寸或对齐回滚（WMB-5287）: before=${JSON.stringify(s1)} after=${JSON.stringify(s2)}`);
+        const bodyAfter = await page.evaluate(() => document.querySelector('.studio-rich-editor')?.textContent ?? '');
+        assert(bodyAfter === bodyBefore, '宽度/对齐不应改动正文内容（正文 token 不动）');
+        const tokenClean = await page.evaluate((sel) => {
+          const f = document.querySelector(sel);
+          const img = f?.querySelector(':scope > img');
+          return { src: img?.getAttribute('src') ?? '', alt: img?.getAttribute('alt') ?? '', imgStyle: img?.getAttribute('style') ?? '', figStyle: f?.getAttribute('style') ?? '' };
+        }, FIGURE_SEL);
+        assert(tokenClean.src === `wmb-asset://${assetAId}` && tokenClean.alt === '图注A' && !tokenClean.imgStyle && !tokenClean.figStyle,
+          `布局编辑不应改写正文图片引用/alt 或残留内联样式: ${JSON.stringify(tokenClean)}`);
+
+        // 重新选中：工具条按钮态与草稿一致。
+        await page.locator(FIGURE_SEL).nth(0).click();
+        await page.waitForSelector(TOOLBAR_SEL, { timeout: 10_000 });
+        const pressed = await page.evaluate((tb) => ({
+          width: [...document.querySelectorAll(`${tb} .studio-inline-width`)].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-preset')),
+          align: [...document.querySelectorAll(`${tb} .studio-inline-align`)].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-align'))
+        }), TOOLBAR_SEL);
+        assert(JSON.stringify(pressed.width) === '["small"]' && JSON.stringify(pressed.align) === '["left"]',
+          `重新选中后工具条按钮态与草稿不一致: ${JSON.stringify(pressed)}`);
+
+        // 保存（现有协议）：新核心版本落库；正文 token 纯净；点击的 small/left 进入绑定。
+        await page.click('.studio-editor-top button.primary-button');
+        await page.waitForFunction(() => document.querySelector('.studio-doc-state')?.textContent?.includes('已保存'), null, { timeout: 25_000 });
+        const { db, close } = openDb();
+        try {
+          const version = db.prepare('SELECT id, body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(projectIdValue);
+          assert(Boolean(version), '缺少保存后的最新核心版本');
+          const tokens = [...version.body.matchAll(/!\[([^\]]*)\]\((wmb-asset:\/\/[0-9a-fA-F-]{36})\)/g)];
+          assert(tokens.length === 2, `保存后核心正文应仍为 2 个纯净图片 token: ${version.body.match(/!\[[^\]]*\]\([^)]*\)/g)?.join(' | ') ?? version.body}`);
+          for (const [, , dest] of tokens) assert(/^wmb-asset:\/\/[0-9a-fA-F-]{36}$/.test(dest), `正文 token 混入布局杂质: ${dest}`);
+          assert(tokens[0][1] === '图注A', `保存后图 A alt 不应被布局改动污染: ${tokens[0][1]}`);
+          assert(!/data-wmb-|style=|width=|align=|crop/i.test(version.body), '保存后正文出现布局残留');
+          const bindings = db.prepare('SELECT asset_id, occurrence, width_preset, align, caption FROM content_media_bindings WHERE content_version_id = ? ORDER BY ordinal').all(version.id);
+          assert(bindings.length === 2, `绑定行数应为 2，实际 ${bindings.length}`);
+          const first = bindings.find((b) => b.asset_id === assetAId && b.occurrence === 0);
+          assert(first && first.width_preset === 'small' && first.align === 'left' && first.caption === '图注A',
+            `点击的 small/left 未持久化到核心绑定: ${JSON.stringify(first)}`);
+        } finally { close(); }
+
+        // 重载同一项目：从持久化绑定恢复真实几何与工具条态。
+        await page.reload();
+        await helpers.waitForAppReady(page);
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head), .studio-editor-view', { timeout: 20_000 });
+        const rowShown = await page.evaluate(() => !!document.querySelector('.studio-project-row:not(.head)'));
+        if (rowShown) await openProjectByName(page, 'E2E 图片编辑项目');
+        await page.waitForSelector('.studio-editor-view', { timeout: 15_000 });
+        await switchToRichEditor(page);
+        await page.locator(FIGURE_SEL).nth(0).click();
+        await page.waitForSelector(TOOLBAR_SEL, { timeout: 10_000 });
+        const restored = await measureFigure();
+        assert(restored && approx(restored.ratio, 0.4, 0.03) && restored.leftGap <= 3 && restored.attrWidth === 'small' && restored.attrAlign === 'left',
+          `重载后绑定未恢复（应仍为 small/left）: ${JSON.stringify(restored)}`);
+        const restoredPressed = await page.evaluate((tb) => ({
+          width: [...document.querySelectorAll(`${tb} .studio-inline-width`)].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-preset')),
+          align: [...document.querySelectorAll(`${tb} .studio-inline-align`)].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-align'))
+        }), TOOLBAR_SEL);
+        assert(JSON.stringify(restoredPressed.width) === '["small"]' && JSON.stringify(restoredPressed.align) === '["left"]',
+          `重载后工具条未反映恢复的绑定: ${JSON.stringify(restoredPressed)}`);
+
+        // 恢复 medium/right 草稿，衔接后续拖拽步骤（其断言 before === 'medium'）。
+        await page.click(`${TOOLBAR_SEL} .studio-inline-width[data-preset="medium"]`);
+        await page.waitForFunction((sel) => {
+          const fig = document.querySelector(sel);
+          const editor = document.querySelector('.studio-rich-editor');
+          if (!fig || !editor) return false;
+          const cs = getComputedStyle(editor);
+          const er = editor.getBoundingClientRect();
+          const cw = er.right - (Number.parseFloat(cs.paddingRight) || 0) - (er.left + (Number.parseFloat(cs.paddingLeft) || 0));
+          const ratio = fig.getBoundingClientRect().width / cw;
+          return fig.getAttribute('data-wmb-width') === 'medium' && ratio >= 0.62 && ratio <= 0.68;
+        }, FIGURE_SEL, { timeout: 10_000 });
+        await page.click(`${TOOLBAR_SEL} .studio-inline-align[data-align="right"]`);
+        await page.waitForFunction((sel) => {
+          const fig = document.querySelector(sel);
+          const editor = document.querySelector('.studio-rich-editor');
+          if (!fig || !editor) return false;
+          const cs = getComputedStyle(editor);
+          const er = editor.getBoundingClientRect();
+          const contentRight = er.right - (Number.parseFloat(cs.paddingRight) || 0);
+          return fig.getAttribute('data-wmb-align') === 'right' && contentRight - fig.getBoundingClientRect().right <= 3;
+        }, FIGURE_SEL, { timeout: 10_000 });
       });
 
       await step('拖拽一次：手柄拖到右侧吸附通栏，绑定草稿更新', async () => {
@@ -979,6 +1415,7 @@ export default [
         await page.waitForSelector('.historical-version-notice', { timeout: 10_000 });
         await page.waitForSelector(FIGURE_SEL, { timeout: 15_000 });
         await assertReadonlyImageState(page);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-historical-version-actions' });
       });
 
       await step('返回最新版，1568 视口无横向溢出且未访问外部平台', async () => {
@@ -1009,6 +1446,325 @@ export default [
         readonlyDisabled: true,
         viewport1568NoOverflow: true
       };
+    }
+  },
+  {
+    id: 'WMB-5305-studio-editor-modes-and-image-insertion',
+    launch: { seedFixture: seedWithProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, openDb }) => {
+      const step = (label, action) => helpers.step(evidence, label, action);
+      const sourceImage = makeSeedPng(72, 48, 139, 124, 255);
+      const visualImage = makeSeedPng(64, 64, 76, 195, 138);
+      await helpers.waitForAppReady(page);
+      await step('打开项目并确认两种编辑模式语义', async () => {
+        await page.setViewportSize({ width: 1100, height: 800 });
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+        await openProjectByName(page, 'E2E 创作项目 A');
+        const labels = await page.$$eval('.studio-mode-switch button', (nodes) => nodes.map((node) => node.textContent?.trim()));
+        assert(JSON.stringify(labels) === JSON.stringify(['源码编辑', '可视化编辑']), `编辑模式标签不明确: ${JSON.stringify(labels)}`);
+        await switchToSourceEditor(page);
+        const state = await page.evaluate(() => ({
+          visible: Boolean(document.querySelector('#studio-body-source')),
+          disabled: document.querySelector('#studio-body-source')?.disabled ?? true,
+          readonly: document.querySelector('#studio-body-source')?.readOnly ?? true,
+          previewCount: document.querySelectorAll('.studio-live-false-body').length
+        }));
+        assert(state.visible && !state.disabled && !state.readonly && state.previewCount === 0, `源码编辑模式合同错误: ${JSON.stringify(state)}`);
+      });
+      await step('源码编辑在当前光标插入图片 token', async () => {
+        await page.evaluate(() => {
+          const textarea = document.querySelector('#studio-body-source');
+          const offset = textarea.value.indexOf('核心 V2 正文') + '核心 V2 正文'.length;
+          textarea.focus();
+          textarea.setSelectionRange(offset, offset);
+        });
+        await page.locator('input.studio-import-input').first().setInputFiles({ name: 'source-mode.png', mimeType: 'image/png', buffer: sourceImage });
+        await page.waitForFunction(() => (document.querySelector('#studio-body-source')?.value.match(/wmb-asset:\/\//g) ?? []).length === 1, null, { timeout: 20_000 });
+        const body = await page.inputValue('#studio-body-source');
+        const expectedAt = body.indexOf('核心 V2 正文') + '核心 V2 正文'.length;
+        const tokenAt = body.indexOf('![source-mode](wmb-asset://');
+        assert(tokenAt > expectedAt && /^\s+$/.test(body.slice(expectedAt, tokenAt)), `源码图片未按当前光标插入独立图片段: ${JSON.stringify(body)}`);
+      });
+      await step('可视化编辑在当前光标插入并立即渲染第二张图片', async () => {
+        await page.locator('.studio-mode-switch button', { hasText: '可视化编辑' }).click();
+        await page.waitForSelector('#studio-body[contenteditable="true"] figure[data-wmb-asset]', { timeout: 15_000 });
+        await page.evaluate(() => {
+          const editor = document.querySelector('#studio-body');
+          const paragraph = [...editor.querySelectorAll('p')].find((node) => node.textContent?.includes('来源身份')) ?? editor.lastChild;
+          const range = document.createRange();
+          range.selectNodeContents(paragraph);
+          range.collapse(false);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          editor.focus();
+        });
+        await page.locator('input.studio-import-input').first().setInputFiles({ name: 'visual-mode.png', mimeType: 'image/png', buffer: visualImage });
+        await page.waitForFunction(() => document.querySelectorAll('#studio-body figure[data-wmb-asset]').length === 2, null, { timeout: 20_000 });
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-editor-two-mode-image-insertion' });
+      });
+      await step('拖动图片到标题下方并提供键盘移动替代', async () => {
+        const dragResult = await page.evaluate(() => {
+          const editor = document.querySelector('#studio-body');
+          const sourceFigure = document.querySelector('figure.studio-figure img[alt="source-mode"]')?.closest('figure.studio-figure');
+          const heading = [...editor.querySelectorAll('h2')].find((node) => node.textContent?.includes('Markdown 二级标题'));
+          if (!editor || !sourceFigure || !heading) return null;
+          const transfer = new DataTransfer();
+          const targetRect = heading.getBoundingClientRect();
+          sourceFigure.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+          heading.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: targetRect.left + 12, clientY: targetRect.bottom - 1 }));
+          const indicator = heading.getAttribute('data-wmb-drop-position');
+          heading.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: targetRect.left + 12, clientY: targetRect.bottom - 1 }));
+          sourceFigure.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: transfer }));
+          const children = [...editor.children];
+          return {
+            draggable: sourceFigure.getAttribute('draggable'),
+            indicator,
+            sourceIndex: children.indexOf(sourceFigure),
+            headingIndex: children.indexOf(heading)
+          };
+        });
+        assert(dragResult?.draggable === 'true' && dragResult.indicator === 'after' && dragResult.sourceIndex === dragResult.headingIndex + 1, `图片拖动落点错误: ${JSON.stringify(dragResult)}`);
+        await page.waitForSelector('.studio-inline-image-toolbar [data-action="move-up"]:not([disabled])');
+        await page.click('.studio-inline-image-toolbar [data-action="move-up"]');
+        await page.waitForFunction(() => {
+          const editor = document.querySelector('#studio-body');
+          const figure = document.querySelector('figure.studio-figure img[alt="source-mode"]')?.closest('figure.studio-figure');
+          const heading = [...editor.querySelectorAll('h2')].find((node) => node.textContent?.includes('Markdown 二级标题'));
+          return editor && figure && heading && [...editor.children].indexOf(figure) + 1 === [...editor.children].indexOf(heading);
+        });
+        await page.waitForSelector('.studio-inline-image-toolbar [data-action="move-down"]:not([disabled])');
+        await page.click('.studio-inline-image-toolbar [data-action="move-down"]');
+        await page.waitForFunction(() => {
+          const editor = document.querySelector('#studio-body');
+          const figure = document.querySelector('figure.studio-figure img[alt="source-mode"]')?.closest('figure.studio-figure');
+          const heading = [...editor.querySelectorAll('h2')].find((node) => node.textContent?.includes('Markdown 二级标题'));
+          return editor && figure && heading && [...editor.children].indexOf(figure) === [...editor.children].indexOf(heading) + 1;
+        });
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-inline-image-drag-position' });
+      });
+      await step('保存重载后源码与两张图片保持一致', async () => {
+        await switchToSourceEditor(page);
+        const beforeSave = await page.inputValue('#studio-body-source');
+        assert((beforeSave.match(/wmb-asset:\/\//g) ?? []).length === 2, `源码未读回两张图片 token: ${JSON.stringify(beforeSave)}`);
+        assert(beforeSave.indexOf('## Markdown 二级标题') < beforeSave.indexOf('![source-mode](wmb-asset://'), `拖动后图片未位于标题下方: ${JSON.stringify(beforeSave)}`);
+        await page.click('.studio-editor-top button.primary-button');
+        await page.waitForFunction(() => document.querySelector('.studio-doc-state')?.textContent?.includes('已保存'), null, { timeout: 20_000 });
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await helpers.waitForAppReady(page);
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head), .studio-editor-view', { timeout: 20_000 });
+        if (await page.locator('.studio-project-row:not(.head)').count()) await openProjectByName(page, 'E2E 创作项目 A');
+        await switchToSourceEditor(page);
+        const reloaded = await page.inputValue('#studio-body-source');
+        assert((reloaded.match(/wmb-asset:\/\//g) ?? []).length === 2, `保存重载后图片 token 丢失: ${JSON.stringify(reloaded)}`);
+        assert(reloaded.indexOf('## Markdown 二级标题') < reloaded.indexOf('![source-mode](wmb-asset://'), `保存重载后图片位置回退: ${JSON.stringify(reloaded)}`);
+        const { db, close } = openDb();
+        try {
+          const persisted = db.prepare("SELECT cv.body FROM content_versions cv JOIN content_projects cp ON cp.id = cv.project_id WHERE cp.title = ? ORDER BY cv.version_number DESC LIMIT 1").get('E2E 创作项目 A')?.body ?? '';
+          assert((persisted.match(/wmb-asset:\/\//g) ?? []).length === 2, `SQLite 最新正文未持久化两张图片: ${JSON.stringify(persisted)}`);
+        } finally { close(); }
+        const overflow = await page.evaluate(() => ({
+          canvas: document.querySelector('.studio-canvas')?.scrollWidth - document.querySelector('.studio-canvas')?.clientWidth,
+          document: document.documentElement.scrollWidth - document.documentElement.clientWidth
+        }));
+        assert((overflow.canvas ?? 0) <= 1 && overflow.document <= 1, `1100 视口出现横向溢出: ${JSON.stringify(overflow)}`);
+      });
+      return { sourceModeRawEditable: true, sourceImageInserted: true, visualImageInserted: true, imageDragMoved: true, keyboardMoveFallback: true, persisted: true };
+    }
+  },
+  {
+    id: 'WMB-5307-pi-image-batch-composer',
+    journeyIds: [],
+    launch: { seedFixture: seedWithProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, openDb }) => {
+      const step = (label, action) => helpers.step(evidence, label, action);
+      await helpers.waitForAppReady(page);
+      await step('进入有核心正文的 Studio 项目', async () => {
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+        await openProjectByName(page, 'E2E 创作项目 A');
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+      });
+      await step('切换到本地黑洞 Pi 配置，避免真实 provider 副作用', async () => {
+        await page.evaluate(() => window.wmb.savePiConfig({
+          id: 'e2e',
+          name: 'E2E 本地黑洞配置',
+          baseUrl: 'http://127.0.0.1:1/v1',
+          model: 'gpt-5.4',
+          api: 'openai-responses',
+          thinking: 'off',
+          contextWindow: 400000,
+          maxTokens: 1024,
+          apiKey: 'e2e-blackhole-key'
+        }));
+      });
+      await step('拖入六张图片并显示有序预览', async () => {
+        const payloads = Array.from({ length: 6 }, (_, index) => ({
+          name: `drag-${index + 1}.png`,
+          mimeType: 'image/png',
+          base64: makeSeedPng(24 + index, 16 + index, 40 + index, 80 + index, 120 + index).toString('base64')
+        }));
+        await page.evaluate((items) => {
+          const composer = document.querySelector('.pi-composer');
+          if (!composer) throw new Error('Pi composer 不存在。');
+          const transfer = new DataTransfer();
+          for (const item of items) {
+            const binary = atob(item.base64);
+            const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+            transfer.items.add(new File([bytes], item.name, { type: item.mimeType }));
+          }
+          composer.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+          composer.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        }, payloads);
+        await page.waitForFunction(() => document.querySelectorAll('.pi-image-queue-item').length === 6, null, { timeout: 20_000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('.pi-image-queue-item small')].length === 6 && [...document.querySelectorAll('.pi-image-queue-item small')].every((node) => !node.textContent?.includes('读取中')), null, { timeout: 20_000 });
+        const labels = await page.$$eval('.pi-image-queue-item b', (nodes) => nodes.map((node) => node.textContent?.trim()));
+        assert(labels.length === 6 && labels.every((label, index) => label?.includes(`${index + 1}. drag-${index + 1}.png`)), `拖拽图片顺序或预览错误: ${JSON.stringify(labels)}`);
+      });
+      await step('立即发送并在 Main IPC 数据库边界确认六个附件', async () => {
+        const { db, close } = openDb();
+        const projectId = db.prepare('SELECT id FROM content_projects WHERE title = ? LIMIT 1').get('E2E 创作项目 A')?.id;
+        close();
+        assert(typeof projectId === 'string' && projectId.length > 0, '未能读取 E2E 创作项目 ID。');
+        await page.getByRole('button', { name: '发送' }).click();
+        let observation = null;
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const batches = await page.evaluate((id) => window.wmb.listPiImageBatches({ projectId: id, limit: 1 }), projectId);
+          const batch = batches[0] ?? null;
+          if (batch) {
+            observation = { batch, attachments: batch.attachments };
+            if (batch.status === 'failed_analysis' && batch.attachments.length === 6) break;
+          }
+          await helpers.delay(100);
+        }
+        assert(observation?.batch?.status === 'failed_analysis', `批量图片路径未进入预期分析失败: ${JSON.stringify(observation)}`);
+        assert(observation.attachments.length === 6, `Main IPC 边界附件数量错误: ${JSON.stringify(observation)}`);
+        assert(observation.attachments.every((item, index) => item.ordinal === index && item.sourceFileName === `drag-${index + 1}.png`), `Main IPC 边界附件顺序错误: ${JSON.stringify(observation.attachments)}`);
+        await page.waitForFunction(() => document.querySelectorAll('.pi-image-queue-item').length === 6, null, { timeout: 20_000 });
+        const retainedLabels = await page.$$eval('.pi-image-queue-item b', (nodes) => nodes.map((node) => node.textContent?.trim()));
+        assert(retainedLabels.every((label, index) => label?.includes(`${index + 1}. drag-${index + 1}.png`)), `分析失败后待发送图片被静默清空: ${JSON.stringify(retainedLabels)}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'pi-image-batch-composer-six-send' });
+      });
+      return { dragged: true, sent: true, mainBatchSelected: true, attachmentCount: 6, retainedOnFailure: true, order: ['drag-1.png', 'drag-2.png', 'drag-3.png', 'drag-4.png', 'drag-5.png', 'drag-6.png'] };
+    }
+  },
+  {
+    id: 'WMB-5309-pi-composer-keyboard-history',
+    journeyIds: [],
+    launch: { seedFixture: seedWithProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert }) => {
+      const step = (label, action) => helpers.step(evidence, label, action);
+      const mock = await startPiComposerMock();
+      try {
+        await helpers.waitForAppReady(page);
+        await step('进入 Studio 项目并固定视口', async () => {
+          await helpers.navigateTo(page, 'studio');
+          await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+          await openProjectByName(page, 'E2E 创作项目 A');
+          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+        });
+        await step('切换到本地成功响应 Pi mock', async () => {
+          await page.evaluate((baseUrl) => window.wmb.savePiConfig({
+            id: 'e2e', name: 'E2E Pi history mock', baseUrl, model: 'gpt-5.4', api: 'openai-responses', thinking: 'off',
+            contextWindow: 400000, maxTokens: 1024, apiKey: 'e2e-history-key'
+          }), mock.baseUrl);
+        });
+        await page.waitForSelector('.pi-composer textarea', { timeout: 20_000 });
+        const input = page.locator('.pi-composer textarea');
+        const sendText = async (text) => {
+          await input.fill(text);
+          await page.waitForSelector('.pi-send-button[title="发送"]:not([disabled])', { timeout: 20_000 });
+          await input.press('Enter');
+          await page.waitForFunction((wanted) => [...document.querySelectorAll('.pi-bubble.user')].some((node) => node.textContent?.trim() === wanted), text, { timeout: 20_000 });
+          await page.waitForSelector('.pi-send-button[title="发送"]', { timeout: 20_000 });
+        };
+        await step('发送两条成功文本并输入未发送草稿', async () => {
+          await sendText('history-first');
+          await sendText('history-second');
+          await input.fill('draft-to-restore');
+          await input.evaluate((node) => { node.focus(); node.setSelectionRange(0, 0); });
+        });
+        const recalledSequence = [];
+        for (const key of ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown']) {
+          await input.press(key);
+          recalledSequence.push(await input.inputValue());
+        }
+        const restoredDraft = await input.inputValue();
+        assert(JSON.stringify(recalledSequence) === JSON.stringify(['history-second', 'history-first', 'history-second', 'draft-to-restore']), `历史召回顺序错误: ${JSON.stringify(recalledSequence)}`);
+        assert(restoredDraft === 'draft-to-restore', `越过最新记录未恢复草稿: ${JSON.stringify({ restoredDraft })}`);
+        const multilineValue = 'multiline first\nmultiline second';
+        await step('多行编辑中非零偏移 ArrowUp 保持原生移动', async () => {
+          await input.fill(multilineValue);
+          await input.evaluate((node) => { node.focus(); node.setSelectionRange(node.value.length, node.value.length); });
+        });
+        const multilineBefore = await input.evaluate((node) => ({ value: node.value, caret: node.selectionStart ?? -1 }));
+        await input.press('ArrowUp');
+        const multilineAfter = await input.evaluate((node) => ({ value: node.value, caret: node.selectionStart ?? -1 }));
+        const multilinePreservation = {
+          valueBefore: multilineBefore.value,
+          valueAfter: multilineAfter.value,
+          caretBefore: multilineBefore.caret,
+          caretAfter: multilineAfter.caret,
+          nativeMovement: multilineAfter.value === multilineBefore.value && multilineAfter.caret < multilineBefore.caret
+        };
+        assert(multilinePreservation.nativeMovement, `多行 ArrowUp 被历史劫持: ${JSON.stringify(multilinePreservation)}`);
+        let palettePrecedence = null;
+        await step('命令面板上下键优先改变活动命令', async () => {
+          await input.fill('/');
+          await page.waitForFunction(() => document.querySelectorAll('.pi-command-options [role="option"]').length >= 2, null, { timeout: 20_000 });
+          const paletteInitial = await input.getAttribute('aria-activedescendant');
+          assert(paletteInitial, '命令面板未提供初始活动项');
+          await input.press('ArrowDown');
+          await page.waitForFunction((initial) => document.querySelector('.pi-composer textarea')?.getAttribute('aria-activedescendant') !== initial, paletteInitial, { timeout: 5_000 });
+          const paletteAfterDown = await input.getAttribute('aria-activedescendant');
+          const inputAfterDown = await input.inputValue();
+          await input.press('ArrowUp');
+          await page.waitForFunction((initial) => document.querySelector('.pi-composer textarea')?.getAttribute('aria-activedescendant') === initial, paletteInitial, { timeout: 5_000 });
+          const paletteAfterUp = await input.getAttribute('aria-activedescendant');
+          const inputAfterUp = await input.inputValue();
+          palettePrecedence = { initialActive: paletteInitial, afterDown: paletteAfterDown, afterUp: paletteAfterUp, inputAfterDown, inputAfterUp };
+          assert(paletteAfterDown !== paletteInitial && paletteAfterUp === paletteInitial && inputAfterDown === '/' && inputAfterUp === '/', `命令面板上下键未保持优先级: ${JSON.stringify(palettePrecedence)}`);
+          await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'pi-composer-keyboard-history' });
+        });
+        return { recalledSequence, restoredDraft, multilinePreservation, palettePrecedence };
+      } finally {
+        await mock.close();
+      }
+    }
+  },
+  {
+    id: 'WMB-5296-studio-research-auto-continue',
+    journeyIds: [],
+    launch: { seedFixture: seedStudioResearchGate },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, step, openDb }) => {
+      await helpers.waitForAppReady(page);
+      await step('历史待决研究缺口在启动时自动收窄并续派', async () => {
+        await page.waitForTimeout(500);
+        const { db, close } = openDb();
+        try {
+          const row = db.prepare("SELECT status, payload_json AS payloadJson FROM jobs WHERE kind='research_successor' ORDER BY created_at DESC LIMIT 1").get();
+          const payload = JSON.parse(row.payloadJson);
+          assert(payload.decision === 'narrow', `自动决策必须采用最保守的 narrow: ${JSON.stringify({ status: row.status, decision: payload.decision })}`);
+          assert(['pending', 'running', 'succeeded', 'needs_user'].includes(row.status), `续派状态无效: ${row.status}`);
+        } finally { close(); }
+      });
+      await step('Studio 不再要求用户处理内部研究路由', async () => {
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+        await openProjectByName(page, 'E2E 研究续写项目');
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+        await page.waitForTimeout(250);
+        const state = await page.evaluate(() => ({
+          gateRows: document.querySelectorAll('.studio-research-gate-row[data-successor]').length,
+          overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+        }));
+        assert(state.gateRows === 0, `自动续派后不应显示待决门: ${JSON.stringify(state)}`);
+        assert(state.overflowX === 0 && evidence.pageerrors.length === 0, `1100px Studio 应无横向溢出/page error: ${JSON.stringify({ state, pageerrors: evidence.pageerrors })}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-research-auto-continue-1100' });
+      });
+      return { askedUser: false, decision: 'narrow', continued: true };
     }
   }
 ];

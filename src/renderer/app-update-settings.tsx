@@ -26,7 +26,7 @@ export function AppUpdateSettings(): React.JSX.Element {
   const color = state.status === 'error' ? 'gray' : available ? 'green' : 'gray';
   return <div className="app-update-block">
     <div className="settings-row">
-      <div><h3>WeMediaBuddy</h3><p>当前版本 v{state.currentVersion} · 更新源 GitHub Releases</p></div>
+      <div><h3>应用版本</h3><p>v{state.currentVersion} · 更新源 GitHub Releases</p></div>
       <div className="settings-row-actions"><span className={`pill-status ${color}`}><span className="dot"/>{statusText}</span><button className="secondary-button" disabled={state.status === 'checking' || state.status === 'downloading' || state.installing} onClick={() => void run(window.wmb.checkAppUpdate)}>检查更新</button></div>
     </div>
     {state.status === 'downloading' && state.progress && <div className="update-progress" aria-label={`更新下载 ${state.progress.percent.toFixed(0)}%`}><span style={{ width: `${Math.min(100, Math.max(0, state.progress.percent))}%` }}/></div>}

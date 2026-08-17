@@ -3,6 +3,8 @@ import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform,
 import type { StudioAnnotation, StudioDocumentScope, StudioPlatform } from '../shared/studio-annotations';
 import { assetImageToken, bodyWithoutLeadingTitle, contentMediaLayoutMap, formatAssetSize, formatTime, htmlToMarkdown, insertTextAtCursor, looksLikeMarkdown, parseAssetImages, platformNames, removeAssetImageToken, renderMarkdown, replaceAssetImageToken, statuses, updateAssetImageAlt, updateContentMediaBinding, wrapTextareaSelection, type StudioAssetImageRef } from './studio-view-helpers';
 import { StudioEditorTop, StudioFormatBar, StudioHistoryModal, StudioLibraryHeader, StudioOutline } from './studio-view-panels';
+import { StudioInvestigationPanel } from './studio-investigation-panel';
+import { studioInvestigationIndicator, type StudioInvestigationIndicator } from './studio-investigation-indicator';
 import { StudioInlineImageOverlay, type InlineImageDraft, type InlineImageSelection } from './studio-image-toolbar';
 import { StudioImageCropDialog, type StudioCropApplyResult, type StudioDeriveCropInput, type StudioDeriveCropResult } from './studio-image-crop';
 import { buildAssetIdsFromPlatformBindings, contentBindingKey, type ContentMediaBinding, type ContentMediaBindingDraft, type MediaAlign, type MediaWidthPreset, type PlatformCropPayload, type PlatformMediaBindingDraft } from '../shared/media-bindings';
@@ -16,6 +18,80 @@ import { priorityGrade } from './today-view-parts';
 import { SourcePlatformMark } from './source-mark';
 
 type StudioSelectionSnapshot = { start: number; end: number; basis: string };
+
+type EditorInsertionBookmark = Readonly<{
+  body: string;
+  offset: number;
+  sourceSelection?: Readonly<{ start: number; end: number }>;
+}>;
+
+const RICH_INSERTION_MARKER = '\uE000WMB_IMAGE_INSERT\uE001';
+
+function nodePath(root: Node, target: Node): number[] | null {
+  const path: number[] = [];
+  let current: Node | null = target;
+  while (current && current !== root) {
+    const parent: ParentNode | null = current.parentNode;
+    if (!parent) return null;
+    const index = Array.prototype.indexOf.call(parent.childNodes, current) as number;
+    if (index < 0) return null;
+    path.unshift(index);
+    current = parent as Node;
+  }
+  return current === root ? path : null;
+}
+
+function nodeFromPath(root: Node, path: readonly number[]): Node | null {
+  let current = root;
+  for (const index of path) {
+    const child = current.childNodes[index];
+    if (!child) return null;
+    current = child;
+  }
+  return current;
+}
+
+function captureRichInsertionBookmark(editor: HTMLElement, fallbackBody: string): EditorInsertionBookmark {
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range || !editor.contains(range.startContainer)) return { body: fallbackBody, offset: fallbackBody.length };
+  const path = nodePath(editor, range.startContainer);
+  if (!path) return { body: fallbackBody, offset: fallbackBody.length };
+  const clone = editor.cloneNode(true) as HTMLElement;
+  const target = nodeFromPath(clone, path);
+  if (!target) return { body: fallbackBody, offset: fallbackBody.length };
+  const offsetLimit = target.nodeType === Node.TEXT_NODE ? (target.textContent?.length ?? 0) : target.childNodes.length;
+  const markerRange = document.createRange();
+  markerRange.setStart(target, Math.min(range.startOffset, offsetLimit));
+  markerRange.collapse(true);
+  markerRange.insertNode(document.createTextNode(RICH_INSERTION_MARKER));
+  const markedBody = htmlToMarkdown(clone);
+  const offset = markedBody.indexOf(RICH_INSERTION_MARKER);
+  if (offset < 0) return { body: fallbackBody, offset: fallbackBody.length };
+  return { body: markedBody.replace(RICH_INSERTION_MARKER, ''), offset };
+}
+
+/** WMB-5296 Studio「研究缺口 · 等你批」行投影（与 src/main/research-successor-projection.ts 同构，含 projectId）。 */
+type StudioResearchGapItem = Readonly<{
+  id: string;
+  parentJobId: string;
+  parentTaskId: string;
+  researchTaskId: string;
+  parentRoleId: 'writer' | 'planner' | 'librarian';
+  projectId: string | null;
+  unresolvedClaims: ReadonlyArray<Readonly<{ key: string; text: string | null; type: 'fact' | 'price' | 'policy' | null }>>;
+  decision: 'narrow' | 'supplement' | 'accept' | null;
+  createdAt: string;
+  updatedAt: string;
+}>;
+
+/** 三动作可读标签（与 research-successor RESEARCH_SUCCESSOR_ACTIONS / Today 同值，精确映射 narrow/supplement/accept）。 */
+const RESEARCH_DECISION_LABEL: Readonly<Record<'narrow' | 'supplement' | 'accept', string>> = Object.freeze({
+  narrow: '收窄范围',
+  supplement: '补充材料后继续',
+  accept: '接受并标注待核实'
+});
+
 type StudioFocusObject = {
   type: string; id: string; title: string; summary?: string | null;
   bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number;
@@ -87,10 +163,19 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const annotationSyncGuardRef = useRef(0);
   const pendingExternalReplaceRef = useRef(false);
   const annotationSyncPromiseRef = useRef<Promise<boolean> | null>(null);
-  const [copyTitle, setCopyTitle] = useState(''); const [findOpen, setFindOpen] = useState(false); const [findText, setFindText] = useState('');
+  const [copyTitle, setCopyTitle] = useState(''); const [copyOpen, setCopyOpen] = useState(false); const [findOpen, setFindOpen] = useState(false); const [findText, setFindText] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false); const [editorMode, setEditorMode] = useState<'rich' | 'source'>('source');
+  const [investigationIndicator, setInvestigationIndicator] = useState<StudioInvestigationIndicator>(() => studioInvestigationIndicator(null));
+  // WMB-5296：Studio「研究缺口 · 等你批」——只投影当前选中项目（projectId 精确匹配）的 needs_user 续派行。
+  const [researchGapRows, setResearchGapRows] = useState<StudioResearchGapItem[]>([]);
+  const [researchGapsError, setResearchGapsError] = useState<string | null>(null);
+  const [researchBusyId, setResearchBusyId] = useState<string | null>(null);
+  const [researchGapMessage, setResearchGapMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false); const [newTitle, setNewTitle] = useState('');
   const bodyInput = useRef<HTMLDivElement>(null); const sourceInput = useRef<HTMLTextAreaElement>(null);
+  // 富文本编辑器 DOM 已反映 editorBody（输入/execCommand 路径置位）：此时回填会重建子树、
+  // 丢失光标与输入法组合；非 DOM 路径（撤销/页签切换/外部改写）保持 false，允许回填。
+  const richDomSyncedRef = useRef(false);
   const richWrapRef = useRef<HTMLDivElement>(null); const sourceWrapRef = useRef<HTMLDivElement>(null);
   const sourceHitTestRef = useRef<SourceHitTest | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -119,6 +204,8 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const [coreMediaBase, setCoreMediaBase] = useState<ContentMediaBindingDraft[]>([]);
   // WMB-5237 正文内图片：点击选中态（浮动工具条/拖拽手柄；只读历史仅定位查看）
   const [inlineSelection, setInlineSelection] = useState<InlineImageSelection | null>(null);
+  const draggedFigureRef = useRef<HTMLElement | null>(null);
+  const dropTargetRef = useRef<{ block: HTMLElement; position: 'before' | 'after' } | null>(null);
   const bodyHistory = useRef<string[]>(['']); const bodyHistoryIndex = useRef(0);
   const latest = selected?.revisions[0]; const viewedVersion = selected?.revisions.find((version) => version.id === viewedVersionId) ?? null;
   const activePlatform = studioPlatformFromTab(tab);
@@ -172,6 +259,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     try {
       const detail = await window.wmb.getStudioProject(id);
       setSelected(detail);
+      setInvestigationIndicator(studioInvestigationIndicator(detail?.investigation));
       setTitle(detail?.title ?? '');
       const latestBody = detail?.revisions[0]?.body ?? '';
       setBody(latestBody);
@@ -206,9 +294,55 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       }
     });
   }, [query, status, archived, order, platform, offset, anyDirty, selectedId, busy]);
+  // WMB-5296：研究缺口投影——选中项目变化与既有 agent/today 数据变更事件时刷新；
+  // 只保留 projectId 精确等于 selected.id 的行（父任务持久 refs 权威匹配，绝不按标题推断）。
+  const researchGapForProject = useMemo(() => {
+    if (!selectedId) return [];
+    return researchGapRows.filter((row) => row.projectId === selectedId);
+  }, [researchGapRows, selectedId]);
+  useEffect(() => {
+    setResearchGapRows([]); setResearchGapsError(null); setResearchGapMessage(null);
+    if (!selectedId) return;
+    let active = true;
+    const loadGaps = () => void window.wmb.listResearchSuccessorsNeedsUser().then((items) => {
+      if (!active) return;
+      setResearchGapRows(items ?? []);
+      setResearchGapsError(null);
+    }).catch(() => {
+      if (active) setResearchGapsError('研究缺口读取失败，请稍后重试');
+    });
+    loadGaps();
+    const unsubscribe = window.wmb.onDataChanged((event) => {
+      const scopes = event.scopes ?? [];
+      if (scopes.includes('agent') || scopes.includes('today') || scopes.length === 0) loadGaps();
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [selectedId]);
+  const decideResearchGap = async (jobId: string, decision: keyof typeof RESEARCH_DECISION_LABEL) => {
+    if (researchBusyId) return;
+    setResearchBusyId(jobId);
+    setResearchGapMessage(null);
+    setResearchGapsError(null);
+    try {
+      const result = await window.wmb.decideResearchSuccessor({ jobId, decision });
+      if (result && typeof result === 'object' && result.ok) {
+        setResearchGapMessage(`已选择「${RESEARCH_DECISION_LABEL[decision]}」：写作将自动继续（原角色续派已恢复待调度）。`);
+        // 决策生效后重读投影：needs_user 行已转 pending，本项目的缺口行随之消失。
+        const items = await window.wmb.listResearchSuccessorsNeedsUser().catch(() => null);
+        if (items) setResearchGapRows(items);
+      } else {
+        const error = result && typeof result === 'object' && result.error ? result.error : null;
+        setResearchGapsError(error ? `决策未生效（${error.code}）：${error.message}` : '决策未生效：未知错误。');
+      }
+    } catch (error) {
+      setResearchGapsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setResearchBusyId(null);
+    }
+  };
   useEffect(()=>{void window.wmb.listKnowledgeTopics({limit:100}).then((page)=>setTopics(page?.items ?? []));},[]);
   useEffect(() => { setOffset(0); }, [query, status, archived, order, platform]);
-  useEffect(() => { if (!selectedId) { setSelected(null); setPlatformSelections({}); setPlatformDrafts({}); onContext(null); } }, [selectedId]);
+  useEffect(() => { if (!selectedId) { setSelected(null); setPlatformSelections({}); setPlatformDrafts({}); setInvestigationIndicator(studioInvestigationIndicator(null)); onContext(null); } }, [selectedId]);
   const summary = projects.find((item) => item.id === selectedId);
   useEffect(() => {
     if (!selectedId) return;
@@ -424,31 +558,28 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         figure.removeAttribute('data-wmb-width');
         figure.removeAttribute('data-wmb-align');
       }
+      figure.draggable = editorMode === 'rich' && !readOnlyVersion && !busy;
+      if (figure.draggable) figure.title = '拖动图片调整位置';
+      else figure.removeAttribute('title');
     }
-  }, [activeLayoutMap]);
-  // 布局草稿 / 正文变化后重新投影（富文本编辑器、源码实时预览、只读历史共用）。
+  }, [activeLayoutMap, editorMode, readOnlyVersion, busy]);
+  // 布局草稿 / 正文变化后重新投影（可视化编辑器与只读历史共用）。
   useEffect(() => {
-    if (!editorTab) return;
-    const roots = [bodyInput.current, ...Array.from(document.querySelectorAll<HTMLElement>('.studio-live-false-body'))].filter(Boolean) as HTMLElement[];
-    for (const root of roots) applyInlineLayout(root);
+    if (!editorTab || !bodyInput.current) return;
+    applyInlineLayout(bodyInput.current);
   }, [editorTab, displayBody, editorMode, readOnlyVersion?.id, applyInlineLayout]);
+  // 富文本 DOM 唯一的回填路径：正在输入时保光标（activeElement + richDomSynced 守卫），
+  // 模式/页签/历史切换、撤销重做与外部改写（DOM 未反映 editorBody）时从 displayBody 重渲染。
+  // 注意：不得再加无守卫的 innerHTML 写入 —— 每次击键都会重建子树并丢失光标/输入法组合。
   useEffect(() => {
     if (!editorTab) return;
     if (editorMode !== 'rich' && !readOnlyVersion) return;
     const editor = bodyInput.current;
     if (!editor) return;
-    if (document.activeElement === editor && editorMode === 'rich' && !readOnlyVersion) return;
+    if (document.activeElement === editor && editorMode === 'rich' && !readOnlyVersion && richDomSyncedRef.current) return;
     editor.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(displayBody));
     applyInlineLayout(editor);
   }, [tab, editorTab, displayBody, readOnlyVersion?.id, editorMode]);
-  useEffect(() => {
-    if (!editorTab) return;
-    if (!(readOnlyVersion || editorMode === 'rich')) return;
-    const editor = bodyInput.current;
-    if (!editor) return;
-    editor.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(displayBody));
-    applyInlineLayout(editor);
-  }, [tab, editorTab, editorMode, readOnlyVersion?.id, displayBody]);
   const fitSourceEditor = () => {
     const textarea = sourceInput.current;
     if (!textarea) return;
@@ -483,6 +614,8 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   };
   const changeEditorTitle = (next: string) => activePlatform ? updateActivePlatformDraft({ title: next }) : setTitle(next);
   const changeBody = (next: string) => {
+    // 默认视为外部改写（富文本 DOM 需回填）；编辑器 DOM 路径在调用后自行置回 true。
+    richDomSyncedRef.current = false;
     const history = bodyHistory.current.slice(0, bodyHistoryIndex.current + 1);
     if (history[history.length - 1] !== next) history.push(next);
     bodyHistory.current = history;
@@ -515,6 +648,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     editor.focus();
     document.execCommand('insertHTML', false, renderMarkdown(snippet));
     changeBody(htmlToMarkdown(editor));
+    richDomSyncedRef.current = true;
   };
   const formatSelection = (before: string, after = before, placeholder = '文字') => {
     if (readOnlyVersion) return;
@@ -541,6 +675,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       return;
     } else document.execCommand('insertText', false, `${before}${placeholder}${after}`);
     changeBody(htmlToMarkdown(editor));
+    richDomSyncedRef.current = true;
   };
   const execRich = (command: string, value?: string) => {
     if (editorMode === 'source') {
@@ -562,6 +697,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     editor.focus();
     document.execCommand(command, false, value);
     changeBody(htmlToMarkdown(editor));
+    richDomSyncedRef.current = true;
   };
   const handleEditorPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
     if (readOnlyVersion || busy) return;
@@ -580,6 +716,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     event.preventDefault();
     document.execCommand('insertHTML', false, renderMarkdown(text));
     changeBody(htmlToMarkdown(editor));
+    richDomSyncedRef.current = true;
   };
   const handleSourcePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (readOnlyVersion || busy) return;
@@ -590,32 +727,60 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   };
   const insertImageFile = async (file?: File) => {
     if (!selected || busy || readOnlyVersion) return;
+    const sourceStart = sourceInput.current?.selectionStart ?? editorBody.length;
+    const insertionBookmark: EditorInsertionBookmark = editorMode === 'source'
+      ? {
+          body: editorBody,
+          offset: sourceStart,
+          sourceSelection: {
+            start: sourceStart,
+            end: sourceInput.current?.selectionEnd ?? sourceStart
+          }
+        }
+      : bodyInput.current
+        ? captureRichInsertionBookmark(bodyInput.current, editorBody)
+        : { body: editorBody, offset: editorBody.length };
     setBusy(true);
     setMessage(file ? '正在插入图片…' : '选择图片…');
     try {
-      let result: Awaited<ReturnType<typeof window.wmb.importStudioImage>>;
-      if (file) {
-        const buffer = new Uint8Array(await file.arrayBuffer());
-        let binary = '';
-        for (const byte of buffer) binary += String.fromCharCode(byte);
-        result = await window.wmb.importStudioImage({
-          projectId: selected.id,
-          fileName: file.name,
-          mimeType: file.type,
-          bytesBase64: btoa(binary),
-          alt: file.name.replace(/\.[^.]+$/, '')
-        });
-      } else {
-        result = await window.wmb.importStudioImage({ projectId: selected.id });
-      }
+      const result = file
+        ? await (async () => {
+            const buffer = new Uint8Array(await file.arrayBuffer());
+            let binary = '';
+            for (const byte of buffer) binary += String.fromCharCode(byte);
+            return window.wmb.importStudioImage({
+              projectId: selected.id,
+              fileName: file.name,
+              mimeType: file.type,
+              bytesBase64: btoa(binary),
+              alt: file.name.replace(/\.[^.]+$/, '')
+            });
+          })()
+        : await window.wmb.importStudioImage({ projectId: selected.id });
       if (!result.ok) {
         setMessage(result.cancelled ? '' : '插入图片失败');
         return;
       }
       if (activePlatform) updateActivePlatformDraft({ assetIds: [...new Set([...(activePlatformDraft?.assetIds ?? activePlatformVersion?.assets ?? []), result.asset.id])] });
-      insertMarkdown(`${result.markdown}\n\n`);
+      const start = insertionBookmark.sourceSelection?.start ?? insertionBookmark.offset;
+      const end = insertionBookmark.sourceSelection?.end ?? start;
+      const before = insertionBookmark.body.slice(0, start);
+      const after = insertionBookmark.body.slice(end);
+      const leadingBreak = !before || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      const trailingBreak = !after || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+      const snippet = `${leadingBreak}${result.markdown}${trailingBreak}`;
+      changeBody(`${before}${snippet}${after}`);
       setMessage(result.reused ? '已插入已有图片素材' : '图片已插入');
       const detail = await window.wmb.getStudioProject(selected.id); if (detail) setSelected(detail);
+      if (editorMode === 'source') {
+        const caret = start + snippet.length;
+        window.requestAnimationFrame(() => {
+          const textarea = sourceInput.current;
+          if (!textarea) return;
+          textarea.focus();
+          textarea.setSelectionRange(caret, caret);
+        });
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -835,17 +1000,14 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     }
     const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      const roots = [bodyInput.current, document.querySelector<HTMLElement>('.studio-live-false-body')].filter(Boolean) as HTMLElement[];
-      for (const root of roots) {
-        const figures = [...root.querySelectorAll('figure[data-wmb-asset]')];
-        const figure = figures.filter((node) => node.getAttribute('data-wmb-asset') === ref.assetId)[ref.occurrence];
-        if (figure) {
-          figure.scrollIntoView({ block: 'center', behavior });
-          figure.classList.add('studio-figure-flash');
-          window.setTimeout(() => figure.classList.remove('studio-figure-flash'), 1400);
-          return;
-        }
-      }
+      const root = bodyInput.current;
+      if (!root) return;
+      const figures = [...root.querySelectorAll('figure[data-wmb-asset]')];
+      const figure = figures.filter((node) => node.getAttribute('data-wmb-asset') === ref.assetId)[ref.occurrence];
+      if (!figure) return;
+      figure.scrollIntoView({ block: 'center', behavior });
+      figure.classList.add('studio-figure-flash');
+      window.setTimeout(() => figure.classList.remove('studio-figure-flash'), 1400);
     }));
   };
   const requestReplaceAssetImage = (ref: StudioAssetImageRef) => {
@@ -990,14 +1152,11 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   };
   // ---- WMB-5237 正文内图片：点击选中 + 浮动工具条接线（布局只写 coreMediaDraft，绝不写正文）----
   const findInlineFigure = useCallback((sel: InlineImageSelection): HTMLElement | null => {
-    const roots = [bodyInput.current, ...Array.from(document.querySelectorAll<HTMLElement>('.studio-live-false-body'))].filter(Boolean) as HTMLElement[];
-    for (const root of roots) {
-      const all = [...root.querySelectorAll<HTMLElement>('figure.studio-figure')].filter((node) => node.getAttribute('data-wmb-asset') === sel.assetId);
-      // 优先 data-wmb-occurrence 精确匹配；旧 DOM（无属性）回退同 assetId 出现序。
-      const figure = all.find((node) => node.getAttribute('data-wmb-occurrence') === String(sel.occurrence)) ?? all[sel.occurrence];
-      if (figure) return figure;
-    }
-    return null;
+    const root = bodyInput.current;
+    if (!root) return null;
+    const all = [...root.querySelectorAll<HTMLElement>('figure.studio-figure')].filter((node) => node.getAttribute('data-wmb-asset') === sel.assetId);
+    // 优先 data-wmb-occurrence 精确匹配；旧 DOM（无属性）回退同 assetId 出现序。
+    return all.find((node) => node.getAttribute('data-wmb-occurrence') === String(sel.occurrence)) ?? all[sel.occurrence] ?? null;
   }, []);
   const inlineFigureOccurrence = (root: Element, figure: Element, assetId: string): number => {
     const figures = [...root.querySelectorAll<HTMLElement>('figure.studio-figure')].filter((node) => node.getAttribute('data-wmb-asset') === assetId);
@@ -1012,9 +1171,128 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     if (!assetId) return;
     event.preventDefault();
     const attrOccurrence = figure.getAttribute('data-wmb-occurrence');
-    const root = figure.closest('.studio-rich-editor') ?? figure.closest('.studio-live-false-body');
+    const root = figure.closest('.studio-rich-editor');
     const occurrence = attrOccurrence !== null ? Number(attrOccurrence) : (root ? inlineFigureOccurrence(root, figure, assetId) : 0);
     setInlineSelection({ assetId, occurrence });
+  };
+  const clearInlineDropTarget = () => {
+    const target = dropTargetRef.current;
+    if (target) target.block.removeAttribute('data-wmb-drop-position');
+    dropTargetRef.current = null;
+  };
+  const commitInlineFigureOrder = (root: HTMLElement, movedFigure: HTMLElement, messageText: string) => {
+    const movedAssetId = movedFigure.getAttribute('data-wmb-asset');
+    if (!movedAssetId) return;
+    const previousBindings = new Map(coreMediaDraft.map((binding) => [contentBindingKey(binding.assetId, binding.occurrence), binding]));
+    const usedBindings = new Set<string>();
+    const nextBindings: ContentMediaBindingDraft[] = [];
+    const seen = new Map<string, number>();
+    let movedOccurrence = 0;
+    for (const figure of root.querySelectorAll<HTMLElement>('figure.studio-figure')) {
+      const assetId = figure.getAttribute('data-wmb-asset') ?? '';
+      if (!assetId) continue;
+      const oldOccurrence = Number(figure.getAttribute('data-wmb-occurrence') ?? seen.get(assetId) ?? 0);
+      const newOccurrence = seen.get(assetId) ?? 0;
+      seen.set(assetId, newOccurrence + 1);
+      const oldKey = contentBindingKey(assetId, oldOccurrence);
+      const binding = previousBindings.get(oldKey);
+      if (binding) {
+        nextBindings.push({ ...binding, occurrence: newOccurrence });
+        usedBindings.add(oldKey);
+      }
+      figure.setAttribute('data-wmb-occurrence', String(newOccurrence));
+      if (figure === movedFigure) movedOccurrence = newOccurrence;
+    }
+    if (!activePlatform) {
+      const nonImageBindings = coreMediaDraft.filter((binding) => (binding.mediaKind ?? 'image') !== 'image' && !usedBindings.has(contentBindingKey(binding.assetId, binding.occurrence)));
+      setCoreMediaDraft([...nextBindings, ...nonImageBindings]);
+    }
+    const nextBody = htmlToMarkdown(root);
+    changeBody(nextBody);
+    richDomSyncedRef.current = true;
+    setInlineSelection({ assetId: movedAssetId, occurrence: movedOccurrence });
+    setMessage(messageText);
+  };
+  const topLevelDropBlock = (root: HTMLElement, target: EventTarget | null, clientY: number): HTMLElement | null => {
+    const dragged = draggedFigureRef.current;
+    let block = target instanceof Element ? target as HTMLElement : null;
+    while (block && block.parentElement !== root) block = block.parentElement;
+    if (!block || block === root || block === dragged) {
+      const candidates = [...root.children].filter((node): node is HTMLElement => node instanceof HTMLElement && node !== dragged);
+      block = candidates.reduce<HTMLElement | null>((nearest, candidate) => {
+        if (!nearest) return candidate;
+        const distance = Math.abs(candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2 - clientY);
+        const nearestRect = nearest.getBoundingClientRect();
+        const nearestDistance = Math.abs(nearestRect.top + nearestRect.height / 2 - clientY);
+        return distance < nearestDistance ? candidate : nearest;
+      }, null);
+    }
+    return block;
+  };
+  const handleInlineFigureDragStart = (event: React.DragEvent<HTMLElement>) => {
+    if (readOnlyVersion || busy || editorMode !== 'rich') return;
+    const figure = (event.target as Element | null)?.closest('figure.studio-figure');
+    if (!(figure instanceof HTMLElement)) return;
+    draggedFigureRef.current = figure;
+    figure.classList.add('studio-figure-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', 'wemediabuddy-inline-image');
+    const assetId = figure.getAttribute('data-wmb-asset');
+    if (assetId) setInlineSelection({ assetId, occurrence: Number(figure.getAttribute('data-wmb-occurrence') ?? 0) });
+  };
+  const handleInlineFigureDragOver = (event: React.DragEvent<HTMLElement>) => {
+    const dragged = draggedFigureRef.current;
+    if (!dragged) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const root = event.currentTarget;
+    const block = topLevelDropBlock(root, event.target, event.clientY);
+    if (!block) return;
+    const rect = block.getBoundingClientRect();
+    const position: 'before' | 'after' = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    const current = dropTargetRef.current;
+    if (current?.block !== block || current.position !== position) {
+      clearInlineDropTarget();
+      block.setAttribute('data-wmb-drop-position', position);
+      dropTargetRef.current = { block, position };
+    }
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const canvasRect = canvas.getBoundingClientRect();
+      if (event.clientY < canvasRect.top + 48) canvas.scrollBy({ top: -28, behavior: 'auto' });
+      else if (event.clientY > canvasRect.bottom - 48) canvas.scrollBy({ top: 28, behavior: 'auto' });
+    }
+  };
+  const handleInlineFigureDrop = (event: React.DragEvent<HTMLElement>) => {
+    const dragged = draggedFigureRef.current;
+    const target = dropTargetRef.current;
+    if (!dragged || !target) return;
+    event.preventDefault();
+    clearInlineDropTarget();
+    if (target.position === 'before') target.block.before(dragged);
+    else target.block.after(dragged);
+    dragged.classList.remove('studio-figure-dragging');
+    draggedFigureRef.current = null;
+    commitInlineFigureOrder(event.currentTarget, dragged, '图片位置已调整');
+  };
+  const handleInlineFigureDragEnd = () => {
+    clearInlineDropTarget();
+    draggedFigureRef.current?.classList.remove('studio-figure-dragging');
+    draggedFigureRef.current = null;
+  };
+  const moveInlineFigure = (direction: -1 | 1) => {
+    if (!inlineSelection || readOnlyVersion || busy) return;
+    const figure = findInlineFigure(inlineSelection);
+    const root = bodyInput.current;
+    if (!figure || !root) return;
+    const sibling = direction < 0 ? figure.previousElementSibling : figure.nextElementSibling;
+    if (!(sibling instanceof HTMLElement)) {
+      setMessage(direction < 0 ? '图片已经在最上方' : '图片已经在最下方');
+      return;
+    }
+    if (direction < 0) sibling.before(figure);
+    else sibling.after(figure);
+    commitInlineFigureOrder(root, figure, direction < 0 ? '图片已上移' : '图片已下移');
   };
   const inlineDraft = useMemo<InlineImageDraft | null>(() => {
     if (!inlineSelection || activePlatform) return null;
@@ -1026,6 +1304,9 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     if (!inlineSelection) return '';
     return assetImageRefs.find((item) => item.assetId === inlineSelection.assetId && item.occurrence === inlineSelection.occurrence)?.alt ?? '';
   }, [inlineSelection, assetImageRefs]);
+  const selectedInlineFigure = inlineSelection ? findInlineFigure(inlineSelection) : null;
+  const canMoveInlineUp = Boolean(selectedInlineFigure?.previousElementSibling);
+  const canMoveInlineDown = Boolean(selectedInlineFigure?.nextElementSibling);
   const inlineRefOf = (): StudioAssetImageRef | null => {
     if (!inlineSelection) return null;
     return assetImageRefs.find((item) => item.assetId === inlineSelection.assetId && item.occurrence === inlineSelection.occurrence) ?? null;
@@ -1215,7 +1496,16 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     setBusy(true); setMessage('Pi 正在写初稿…');
     try {
       const result = await window.wmb.startStudioDraft({ businessDate: planDate, projectId: selected.id });
-      setMessage(result.ok ? result.data?.task.status === 'needs_user' ? result.data.task.errorMessage || '需要用户处理' : 'Pi 初稿任务已完成' : result.error?.message || '初稿失败');
+      const task = result.data?.task;
+      setMessage(result.ok
+        ? task?.phase === 'research_dispatched'
+          ? '已派外部研究，完成后将自动续写'
+          : task?.status === 'failed'
+            ? task.errorMessage || '外部研究未成功派出'
+            : task?.status === 'needs_user'
+              ? task.errorMessage || '需要用户处理'
+              : 'Pi 初稿任务已完成'
+        : result.error?.message || '初稿失败');
       await reload();
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
@@ -1478,12 +1768,9 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     const run = () => {
       const canvas = canvasRef.current;
       const title = item.title.trim();
-      // 富文本 / 只读历史 / 源码预览：按标题文本定位
-      const roots = [
-        bodyInput.current,
-        canvas?.querySelector('.studio-live-false-body') as HTMLElement | null
-      ].filter(Boolean) as HTMLElement[];
-      for (const root of roots) {
+      // 可视化编辑 / 只读历史：按标题文本定位
+      const root = bodyInput.current;
+      if (root) {
         const headings = [...root.querySelectorAll('h1,h2,h3,h4,h5,h6')];
         const hit = headings.find((node) => (node.textContent || '').trim() === title)
           ?? headings.find((node) => (node.textContent || '').trim().includes(title));
@@ -1559,11 +1846,26 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     <input ref={replaceImageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void replaceAssetImage(file); }}/>
     <StudioEditorTop selected={selected} dirty={dirty} latestCreatedAt={activePlatformVersion?.updatedAt ?? latest?.createdAt} documentLabel={activePlatform ? `${platformNames[activePlatform]} · ${activePlatformVersion ? `版本 ${activePlatformVersion.revision}` : '新版本'}` : undefined} onBack={() => onSelect(null)} onToggleHistory={() => setHistoryOpen((value) => !value)} historyOpen={historyOpen} viewedVersion={Boolean(readOnlyVersion)} editorMode={editorMode} setEditorMode={setEditorMode} busy={busy} save={save} preparePublication={activePlatform === 'zhihu' && activePlatformVersion ? prepareZhihuPublication : undefined} prepareLabel="准备发布知乎" prepareDisabled={dirty}/>
     <div className="studio-editor-grid">
-    <StudioOutline outline={outline} tab={tab} setTab={setTab} platformVersions={selected?.platformVersions ?? {}} onJumpToStart={jumpToStart} onJumpToHeading={jumpToHeading}/>
+    <StudioOutline outline={outline} tab={tab} setTab={setTab} platformVersions={selected?.platformVersions ?? {}} investigationIndicator={investigationIndicator} onJumpToStart={jumpToStart} onJumpToHeading={jumpToHeading}/>
     <main className="studio-document">
       {selected ? <>
         {editorTab && <>
-          {readOnlyVersion && <section className="historical-version-notice"><span>正在查看不可修改的版本 v{readOnlyVersion.number}</span><div><button className="secondary-button" onClick={() => setViewedVersionId(null)}>返回最新版</button><button className="secondary-button" disabled={busy} onClick={() => void saveFromVersion()}>基于此版本另存</button></div><label>新项目标题<input value={copyTitle} onChange={(event) => setCopyTitle(event.target.value)}/></label><button className="primary-button" disabled={busy || !copyTitle.trim()} onClick={() => void copyVersion()}>复制版本为新项目</button></section>}
+          {readOnlyVersion && <section className="historical-version-notice" aria-label="历史版本">
+            <div className="historical-version-strip">
+              <span className="historical-version-identity"><b>历史版本 v{readOnlyVersion.number}</b> · 只读</span>
+              <div className="historical-version-actions">
+                <button type="button" className="primary-button" onClick={() => { setViewedVersionId(null); setCopyOpen(false); }}>返回最新版</button>
+                <button type="button" className="secondary-button" disabled={busy} onClick={() => void saveFromVersion()}>基于此版本另存</button>
+                <button type="button" className="secondary-button" aria-expanded={copyOpen} onClick={() => setCopyOpen((value) => !value)}>复制为新项目…</button>
+              </div>
+            </div>
+            {copyOpen && <div className="historical-copy-row">
+              <label htmlFor="studio-copy-title">新项目标题</label>
+              <input id="studio-copy-title" className="studio-copy-title-input" value={copyTitle} placeholder="输入新项目标题" onChange={(event) => setCopyTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && copyTitle.trim() && !busy) void copyVersion(); }}/>
+              <button type="button" className="secondary-button" disabled={busy || !copyTitle.trim()} onClick={() => void copyVersion()}>创建新项目</button>
+              <button type="button" className="secondary-button" onClick={() => setCopyOpen(false)}>取消</button>
+            </div>}
+          </section>}
           {!readOnlyVersion && <StudioFormatBar busy={busy} execRich={execRich} formatSelection={formatSelection} insertMarkdown={insertMarkdown} insertImageFile={insertImageFile} toggleFind={() => setFindOpen((value) => !value)} onMarkSelection={() => { void markSelection(); }} canMark={annotationsEditable}/>} 
           {findOpen && !readOnlyVersion && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? editorBody.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !editorBody.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(editorBody.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas" ref={canvasRef}><article className="studio-paper">
@@ -1573,19 +1875,32 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
                 <div
                   ref={(node) => {
                     bodyInput.current = node;
-                    if (node && (readOnlyVersion || editorMode === 'rich')) {
+                    // 正在输入时保光标：仅当编辑器 DOM 未反映 editorBody（非输入路径改写）或
+                    // 编辑器未聚焦（模式/页签切换、历史只读、外部改写）时回填。
+                    // 聚焦输入期间 DOM 即真源，onInput 已同步 editorBody，回填会破坏光标与输入法。
+                    if (node && (readOnlyVersion || editorMode === 'rich')
+                      && (document.activeElement !== node || !richDomSyncedRef.current)) {
                       const html = renderMarkdown(bodyWithoutLeadingTitle(displayBody));
-                      if (node.innerHTML !== html) node.innerHTML = html;
+                      if (node.innerHTML !== html) {
+                        node.innerHTML = html;
+                        // WMB-5287：回填重建了整个子树，必须同步重投影图片布局，
+                        // 否则 blur/选中关闭等与草稿无关的提交会把 data-wmb-width/align 抹掉。
+                        applyInlineLayout(node);
+                      }
                     }
                   }}
                   id="studio-body"
                   className="studio-rich-editor"
                   contentEditable={!readOnlyVersion && !busy && editorMode === 'rich'}
                   suppressContentEditableWarning
-                  onInput={(event) => changeBody(htmlToMarkdown(event.currentTarget))}
+                  onInput={(event) => { changeBody(htmlToMarkdown(event.currentTarget)); richDomSyncedRef.current = true; }}
                   onPaste={handleEditorPaste}
                   onContextMenu={handleEditorContextMenu}
                   onClick={handleInlineFigureClick}
+                  onDragStart={handleInlineFigureDragStart}
+                  onDragOver={handleInlineFigureDragOver}
+                  onDrop={handleInlineFigureDrop}
+                  onDragEnd={handleInlineFigureDragEnd}
                   onBlur={(event) => {
                     if (readOnlyVersion || editorMode !== 'rich') return;
                     event.currentTarget.innerHTML = renderMarkdown(bodyWithoutLeadingTitle(editorBody));
@@ -1617,14 +1932,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
                   />
                   <StudioAnnotationOverlay mode="source" editorRef={bodyInput} wrapRef={sourceWrapRef} body={editorBody} leadingTitleLen={annotationLeadingTitleLen} rows={visibleOpenAnnotations} selectedAnnotationId={selectedAnnotationId} flashAnnotationId={flashAnnotationId} hitTestRef={sourceHitTestRef} onSelectAnnotation={selectAnnotationFromBody} onAnnotationMenu={openAnnotationMenu} />
                 </div>
-                <section className="studio-live-false" aria-label="Markdown 实时预览">
-                  <div className="studio-live-false-label">实时预览</div>
-                  <div
-                    className="studio-rich-editor studio-live-false-body"
-                    onClick={handleInlineFigureClick}
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(bodyWithoutLeadingTitle(editorBody)) || '<p class="studio-live-false-empty">输入 Markdown 后这里会实时渲染</p>' }}
-                  />
-                </section>
               </div>
             )}
           </article></div>
@@ -1808,12 +2115,38 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
                 )}
               </div>
             </div>
+            {(researchGapForProject.length > 0 || researchGapsError || researchGapMessage) && (
+              <div className="studio-research-gate" aria-label="研究缺口 · 等你批">
+                {researchGapForProject.map((gap) => (
+                  <div className="studio-research-gate-row" key={gap.id} data-successor={gap.id}>
+                    <span className="studio-research-gate-title">研究缺口 · 等你批</span>
+                    <span className="studio-research-gate-hint">研究返回时含未解决声明，需你决策后写作才会自动继续</span>
+                    <span className="studio-research-gate-claims">
+                      {gap.unresolvedClaims.map((claim) => (
+                        <span className="studio-research-gate-claim" key={claim.key} title={claim.text ?? undefined}>
+                          <b>{claim.key}</b>
+                          {claim.text ? <span className="studio-research-gate-claim-text">{claim.text}</span> : null}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="studio-research-gate-actions">
+                      <button type="button" className="secondary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'narrow')}>收窄范围</button>
+                      <button type="button" className="secondary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'supplement')}>补充材料后继续</button>
+                      <button type="button" className="primary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'accept')}>接受并标注待核实</button>
+                    </span>
+                  </div>
+                ))}
+                {researchGapMessage ? <p className="studio-research-gate-msg" role="status">{researchGapMessage}</p> : null}
+                {researchGapsError ? <p className="studio-research-gate-error" role="alert">{researchGapsError}</p> : null}
+              </div>
+            )}
             <span className={message ? 'studio-status-message' : undefined}>
               {message || (readOnlyVersion ? '历史版本只读' : dirty ? '未保存' : anyDirty ? '其他页签有未保存修改' : '已保存')}
             </span>
           </div>
         </>}
         {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small className="studio-source-meta"><SourcePlatformMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/><span>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</span></small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
+        {tab === 'investigation' && <StudioInvestigationPanel projectId={selected.id} sources={selected.sources} onOpenSource={onOpenSource} onOpenWriting={() => setTab('core')} onIndicatorChange={setInvestigationIndicator} />}
         {tab === 'assets' && <section className="studio-detail-list">{selected.assets.length ? selected.assets.map((asset) => <article key={asset.id}><span>{asset.mimeType}</span><h3>{asset.relativePath}</h3><p>素材指纹 {asset.sha256}</p><small>{asset.byteCount} 字节{asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}{asset.durationMs ? ` · ${asset.durationMs} 毫秒` : ''} · {asset.origin}</small></article>) : <div className="compact-empty"><h2>没有关联素材</h2><p>只有被平台版本真实引用的素材才会显示。</p></div>}</section>}
       </> : <section className="empty-state editor-empty"><h2>{message ? '项目详情读取失败' : '选择一个内容项目'}</h2><p>{message || '左侧会显示符合当前条件的项目。'}</p>{selectedId && message && <button onClick={() => void loadDetail(selectedId)}>重新读取</button>}</section>}
     </main>
@@ -1864,6 +2197,10 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
         alt={inlineAlt}
         editable={Boolean(selected && !readOnlyVersion && !busy)}
         showLayout={!activePlatform}
+        canMoveUp={canMoveInlineUp}
+        canMoveDown={canMoveInlineDown}
+        onMoveUp={() => moveInlineFigure(-1)}
+        onMoveDown={() => moveInlineFigure(1)}
         onWidthPreset={handleInlineWidth}
         onAlign={handleInlineAlign}
         onReplace={handleInlineReplace}

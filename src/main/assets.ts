@@ -86,6 +86,8 @@ export function registerStagedAsset(database: DatabaseSync, staged: StagedAsset)
   database.prepare(`INSERT INTO assets (id, relative_path, mime_type, byte_count, sha256, origin, width, height, duration_ms, created_at, updated_at, revision)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`).run(staged.id, staged.relativePath, staged.mimeType, staged.byteCount,
     staged.sha256, staged.origin, staged.width, staged.height, staged.durationMs, now, now);
+  database.prepare(`INSERT INTO asset_provenance (id, asset_id, kind, origin, created_at) VALUES (?, ?, 'imported', ?, ?)`)
+    .run(randomUUID(), staged.id, staged.origin, now);
   return { id: staged.id, relativePath: staged.relativePath, reused: false, mimeType: staged.mimeType, sha256: staged.sha256 };
 }
 

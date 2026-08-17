@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { StudioAnnotation, StudioAnnotationResolveReason, StudioCommandResult, StudioDocumentScope, StudioReconcileMode } from '../shared/studio-annotations.ts';
+import type { PiImageBatchChatInput, PiImageBatchRecord, PiImageBatchStatus } from '../shared/pi-image-batch.ts';
 import type { ContentMediaBindingDraft, CropRegion, PlatformClipPayload, PlatformCropPayload, PlatformMediaBindingDraft } from '../shared/media-bindings.ts';
+import {
+  INVESTIGATION_IPC,
+  type InvestigationDecideDirectionInput,
+  type InvestigationDecideOutlineInput,
+  type InvestigationDirection,
+  type InvestigationOutline,
+  type InvestigationReviewResearchInput
+} from '../shared/project-investigation.ts';
 import {
   KNOWLEDGE_FLYWHEEL_READ_IPC_CHANNELS,
   KNOWLEDGE_FLYWHEEL_WRITE_IPC_CHANNEL,
@@ -336,8 +345,10 @@ contextBridge.exposeInMainWorld('wmb', {
   getPiRuntime: () => ipcRenderer.invoke('pi-runtime:get'),
   updatePiRuntime: (sourceRuntimeRoot: string) => ipcRenderer.invoke('pi-runtime:update', sourceRuntimeRoot),
   rollbackPiRuntime: () => ipcRenderer.invoke('pi-runtime:rollback'),
-  chatPi: (input: string | { message: string; delivery?: 'steer' | 'followUp'; orchestration?: { originLabel: string; title: string; goal: string; acceptance: string } }, delivery?: 'steer' | 'followUp') => ipcRenderer.invoke('pi:chat', typeof input === 'string' ? { message: input, delivery } : { ...input, delivery: input.delivery ?? delivery }) as Promise<{
+  chatPi: (input: string | PiImageBatchChatInput | { message: string; orchestration: { originLabel: string; title: string; goal: string; acceptance: string }; delivery?: 'steer' | 'followUp' }, delivery?: 'steer' | 'followUp') => ipcRenderer.invoke('pi:chat', typeof input === 'string' ? { message: input, delivery } : { ...input, delivery: input.delivery ?? delivery }) as Promise<{
+    batchStatus?: PiImageBatchStatus;
     text: string;
+    thinking?: string;
     stopped: boolean;
     queued: boolean;
     conversation: {
@@ -350,6 +361,8 @@ contextBridge.exposeInMainWorld('wmb', {
       updatedAt: string;
     } | null;
   }>,
+  getPiImageBatch: (input: { projectId: string; batchId?: string; requestId?: string }) => ipcRenderer.invoke('pi:image-batch:get', input) as Promise<PiImageBatchRecord | null>,
+  listPiImageBatches: (input: { projectId: string; limit?: number }) => ipcRenderer.invoke('pi:image-batch:list', input) as Promise<PiImageBatchRecord[]>,
   stopPi: () => ipcRenderer.invoke('pi:stop') as Promise<{ stopped: boolean }>,
   forkPiConversation: (entryId: string) => ipcRenderer.invoke('pi:fork', entryId) as Promise<{
     cancelled: boolean;
@@ -502,6 +515,16 @@ contextBridge.exposeInMainWorld('wmb', {
   deriveStudioAsset: (input: { sourceAssetId: string; cropRegion: CropRegion; pngBase64: string }) => ipcRenderer.invoke('studio:derive-asset', input),
   deriveStudioAnnotation: (input: { sourceAssetId: string; annotationSpec: unknown; pngBase64: string }) => ipcRenderer.invoke('studio:derive-annotation', input),
   deriveStudioClip: (input: { sourceAssetId: string; startMs: number; endMs: number }) => ipcRenderer.invoke('studio:derive-clip', input),
+  // WMB-5290：项目专项调查（两次 Owner 审批 + 派记者/写手编排；变更返回完整读模型 CommandResult）。
+  investigationGet: (projectId: string) => ipcRenderer.invoke(INVESTIGATION_IPC.get, projectId),
+  investigationInitialize: (projectId: string) => ipcRenderer.invoke(INVESTIGATION_IPC.initialize, projectId),
+  investigationSaveOutline: (input: { projectId: string; expectedRevision: number; outline: InvestigationOutline }) => ipcRenderer.invoke(INVESTIGATION_IPC.saveOutline, input),
+  investigationDecideOutline: (input: InvestigationDecideOutlineInput) => ipcRenderer.invoke(INVESTIGATION_IPC.decideOutline, input),
+  investigationReviewResearch: (input: InvestigationReviewResearchInput) => ipcRenderer.invoke(INVESTIGATION_IPC.reviewResearch, input),
+  investigationSaveDirection: (input: { projectId: string; expectedRevision: number; direction: InvestigationDirection }) => ipcRenderer.invoke(INVESTIGATION_IPC.saveDirection, input),
+  investigationDecideDirection: (input: InvestigationDecideDirectionInput) => ipcRenderer.invoke(INVESTIGATION_IPC.decideDirection, input),
+  investigationStartWriter: (input: { projectId: string; expectedRevision: number }) => ipcRenderer.invoke(INVESTIGATION_IPC.startWriter, input),
+  investigationRetryReporter: (input: { projectId: string; expectedRevision: number }) => ipcRenderer.invoke(INVESTIGATION_IPC.retryReporter, input),
   getPublications: () => ipcRenderer.invoke('publish:list'),
   collectXMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:collect-x', publicationId),
   schedulePublicationMetrics: (publicationId: string) => ipcRenderer.invoke('metrics:schedule', publicationId),

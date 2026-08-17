@@ -15,8 +15,12 @@ test('evidence-grounded writer triggers factual creation and enforces the full v
   assert.match(skill, /丰富来自新增有效信息/);
   assert.match(skill, /从成稿反向复核/);
   assert.match(skill, /正式成稿/);
-  assert.match(skill, /核查摘要/);
-  assert.match(skill, /收窄角度 \+ 缺失证据/);
+  assert.match(skill, /内部核查结果/);
+  assert.match(skill, /不得包含主张账本、研究过程、证据缺口、核查清单、残余不确定项、免责声明/);
+  assert.match(skill, /若收窄后已无独立价值，则停止成稿/);
+  assert.match(skill, /鲜明判断、超前愿景、情绪张力和读者行动/);
+  assert.match(skill, /强观点不等于伪造事实/);
+  assert.match(skill, /不能因为内部核查而把正文写成论文/);
 });
 
 test('evidence-grounded writer UI metadata stays implicit and names the exact Skill', async () => {

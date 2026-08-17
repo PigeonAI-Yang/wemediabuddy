@@ -628,11 +628,21 @@ export function claimSourceBodyJob(
   if (Number(updated.changes ?? 0) !== 1) return { claimed: false, reason: 'STALE' };
   const job = getJob(database, jobId);
   if (!job) return { claimed: false, reason: 'STALE' };
+  // 执行序号 = attempt_count（已 +1）；用户重试归零后序号 1 已被上一生命周期的已结束行占用 → 顺延 MAX+1
+  // （与媒体 worker 同规则：新生命周期不覆盖旧 attempt 历史，UNIQUE(job_id, attempt_number) 不冲突）。
+  let attemptNumber = job.attemptCount;
+  const slot = database.prepare('SELECT finished_at AS finishedAt FROM source_body_capture_attempts WHERE job_id = ? AND attempt_number = ?')
+    .get(jobId, attemptNumber) as { finishedAt: string | null } | undefined;
+  if (slot && slot.finishedAt !== null) {
+    const maxRow = database.prepare('SELECT MAX(attempt_number) AS maxAttempt FROM source_body_capture_attempts WHERE job_id = ?')
+      .get(jobId) as { maxAttempt: number | null };
+    attemptNumber = Number(maxRow.maxAttempt ?? 0) + 1;
+  }
   database.prepare(`INSERT INTO source_body_capture_attempts (
     id, job_id, attempt_number, status, fetch_method, started_at
   ) VALUES (?, ?, ?, 'running', ?, ?)`)
-    .run(randomUUID(), jobId, job.attemptCount, job.fetchMethod ?? 'static_http', now);
-  return { claimed: true, job, attemptNumber: job.attemptCount };
+    .run(randomUUID(), jobId, attemptNumber, job.fetchMethod ?? 'static_http', now);
+  return { claimed: true, job, attemptNumber };
 }
 
 // ---- finish（调用方事务内） ----
@@ -651,6 +661,8 @@ export function finishSourceBodyJob(
     expectedAttempts: number;
     outcome: BodyCaptureOutcome;
     now?: string;
+    /** claim 返回的执行序号（用户重试归零后可能 ≠ attempt_count；缺省兼容旧调用=attempt_count）。 */
+    attemptNumber?: number;
   }
 ): BodyFinishResult {
   const now = input.now ?? new Date().toISOString();
@@ -659,6 +671,7 @@ export function finishSourceBodyJob(
     return { finished: false, stale: true, jobStatus: job?.status ?? 'pending' };
   }
 
+  const attemptNumber = input.attemptNumber ?? job.attemptCount;
   const writeAttempt = (status: 'succeeded' | 'failed', extra: Partial<Record<string, SQLInputValue>> = {}) => {
     database.prepare(`UPDATE source_body_capture_attempts SET
       status = ?, finished_at = ?, error_code = ?, error_message = ?, http_status = ?, fetch_method = ?,
@@ -670,7 +683,7 @@ export function finishSourceBodyJob(
         extra.fetchMethod ?? job.fetchMethod ?? 'static_http',
         extra.contentType ?? null, extra.requestedUrl ?? null, extra.finalUrl ?? null,
         extra.redirectChain ?? null, extra.extractedChars ?? null,
-        input.jobId, job.attemptCount
+        input.jobId, attemptNumber
       );
   };
 
@@ -1049,9 +1062,12 @@ async function runOneJobProduction(
   deps: SourceBodyArchiveWorkerDeps
 ): Promise<{ outcome: BodyCaptureOutcome; claimed: boolean }> {
   const now = new Date().toISOString();
+  // requestId 绑定「运行时激活 + job 生命周期」：updatedAt 在用户重试（attempt_count 归零）时变化，
+  // 保证重试后的新执行不复用旧生命周期回执（避免 REQUEST_REPLAY_CONFLICT / 陈旧回放）。
+  const claimRequestId = `source-body-archive:${job.id}:claim:${runtime.identity.runtimeEpoch}:${job.attemptCount}:${job.updatedAt}`;
   const claimReceipt = await dispatchBusinessCommand(runtime, {
     command: SOURCE_BODY_ARCHIVE_CLAIM_COMMAND,
-    requestId: `source-body-archive:${job.id}:claim:${job.attemptCount}`,
+    requestId: claimRequestId,
     actor: schedulerActor,
     input: { jobId: job.id, expectedAttempts: job.attemptCount, now },
     boundIdentity: runtime.identity,
@@ -1069,9 +1085,9 @@ async function runOneJobProduction(
 
   const finishReceipt = await dispatchBusinessCommand(runtime, {
     command: SOURCE_BODY_ARCHIVE_FINISH_COMMAND,
-    requestId: `source-body-archive:${job.id}:finish:${claimData.job.attemptCount}`,
+    requestId: `source-body-archive:${job.id}:finish:${runtime.identity.runtimeEpoch}:${claimData.job.attemptCount}:${claimData.job.updatedAt}`,
     actor: schedulerActor,
-    input: { jobId: job.id, expectedAttempts: claimData.job.attemptCount, outcome: execution, now },
+    input: { jobId: job.id, expectedAttempts: claimData.job.attemptCount, attemptNumber: claimData.attemptNumber, outcome: execution, now },
     boundIdentity: runtime.identity,
     entityType: 'source_body_capture_job',
     execute: (db, normalizedInput) => {
@@ -1079,7 +1095,8 @@ async function runOneJobProduction(
         jobId: normalizedInput.jobId,
         expectedAttempts: normalizedInput.expectedAttempts,
         outcome: normalizedInput.outcome,
-        now: normalizedInput.now
+        now: normalizedInput.now,
+        attemptNumber: normalizedInput.attemptNumber
       });
       return { data: result, entityId: job.id };
     }
@@ -1198,9 +1215,12 @@ export class SourceBodyArchiveScheduler {
       if (this.stopped || generation !== this.generation || !runtime.isActive || (this.options.isCurrent && !this.options.isCurrent())) return;
       try {
         if (!this.recovered) {
+          // WMB-5301：恢复回执必须绑定运行时激活（runtimeEpoch）+ 调度器代际。
+          // 仅用 generation 会在每次应用启动（新 epoch、同 requestId）时与旧回执冲突/回放，
+          // 导致恢复永不执行；epoch 隔离后每次启动都真实运行一次恢复（recovered 标志保证每启动一次）。
           const recovery = await dispatchBusinessCommand(runtime, {
             command: 'source_body_archive.recover',
-            requestId: `source-body-archive:recover:${generation}`,
+            requestId: `source-body-archive:recover:${runtime.identity.runtimeEpoch}:${generation}`,
             actor: schedulerActor,
             input: {},
             boundIdentity: runtime.identity,

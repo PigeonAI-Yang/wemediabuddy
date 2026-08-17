@@ -30,6 +30,7 @@ import {
 import { registerStagedAsset } from './assets.ts';
 import { readStudioMediaProjection, type StudioSourceMedia } from './studio-media-projection.ts';
 import { clipKey, commitClipDerivation, type ClipDerivationResult, type StagedClip } from './media-derivations.ts';
+import { readProjectInvestigation, type ProjectInvestigation } from './project-investigation.ts';
 
 /** 保存路径的 Clip 载荷：stageClipAsset 结果 + 源与时间范围（血缘与绑定回填必需；见 ipc-today-studio-business）。 */
 export type StagedClipSave = StagedClip & {
@@ -83,6 +84,8 @@ export type ContentProjectDetail = ContentProjectSummary & {
     width: number | null; height: number | null; durationMs: number | null; createdAt: string;
   }>;
   creativeBrief: { id: string; title: string; revision: number; status: 'draft'|'confirmed'; canvasId: string | null; contextNodeIds: string[] } | null;
+  /** WMB-5290：项目专项调查读模型（无调查时 null；与 ContentProjectDetail 同型，见 src/shared/project-investigation.ts）。 */
+  investigation: ProjectInvestigation | null;
   /** WMB-5246：项目关联 Source 的已保存媒体（来源图/原视频/关键帧/Segment；迁移未落地时为空数组）。 */
   sourceMedia: StudioSourceMedia[];
 };
@@ -262,6 +265,7 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
     platformVersions,
     assets,
     creativeBrief,
+    investigation: readProjectInvestigation(database, projectId),
     sourceMedia: mediaProjection.sourceMedia,
     versionCount: revisions.length,
     latestVersion: revisions[0] ? {

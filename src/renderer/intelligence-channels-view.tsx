@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { IntelligenceModule } from '../main/intelligence-channels';
 import type { ChannelProposalInput } from '../main/intelligence-channel-proposals';
 import { channelReadiness, intelligenceModuleLabels, intelligenceModules } from './intelligence-channel-ui';
+import { XListDisplaySettings } from './x-list-display-settings';
 
 type ChannelData = Awaited<ReturnType<typeof window.wmb.getIntelligenceChannels>>;
 type ChannelSource = ChannelData['summary']['sources'][number];
@@ -23,9 +24,10 @@ const receiptStatusLabels = { succeeded: '已检查', failed: '检查失败', ne
 function messageOf(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function displayTime(value: string): string { return new Date(value).toLocaleString('zh-CN', { hour12: false }); }
 
-export function IntelligenceChannelsView({ onStatusChange, settingsMode = false }: {
+export function IntelligenceChannelsView({ onStatusChange, settingsMode = false, workspaceId }: {
   onStatusChange?: (status: { text: string; running?: boolean } | null) => void;
   settingsMode?: boolean;
+  workspaceId: string;
 }): React.JSX.Element {
   const [data, setData] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
   const [proposals, setProposals] = useState<ChannelProposal[]>([]);
   const [xTrends, setXTrends] = useState<Record<string, Awaited<ReturnType<typeof window.wmb.listXPostTrends>>>>({});
   const [observations, setObservations] = useState<Record<string, Awaited<ReturnType<typeof window.wmb.getXObservation>>>>({});
+  const [settingsPanel, setSettingsPanel] = useState<'sources' | 'lists'>('sources');
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -158,9 +161,13 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
 
   return <section className="intelligence-channels" aria-label="情报渠道">
     <header className="intelligence-channels-head">
-      <div className={settingsMode ? "settings-section-heading" : "channel-page-heading"}>{settingsMode ? <h3>来源与扫描</h3> : <h1>情报渠道</h1>}{settingsMode ? null : <p>每天检查的官网与 X Lists。</p>}</div>
-      <button className="refresh-button" onClick={() => void load()} disabled={loading || Boolean(busy)} title="刷新渠道" aria-label="刷新渠道">↻</button>
+      {settingsMode ? <nav className="channel-settings-tabs" aria-label="情报渠道设置">
+        <button type="button" className={settingsPanel === 'sources' ? 'active' : ''} aria-current={settingsPanel === 'sources' ? 'page' : undefined} onClick={() => setSettingsPanel('sources')}>来源与扫描</button>
+        <button type="button" className={settingsPanel === 'lists' ? 'active' : ''} aria-current={settingsPanel === 'lists' ? 'page' : undefined} onClick={() => setSettingsPanel('lists')}>X Lists 管理</button>
+      </nav> : <div className="channel-page-heading"><h1>情报渠道</h1><p>每天检查的官网与 X Lists。</p></div>}
+      {(!settingsMode || settingsPanel === 'sources') && <button className="refresh-button" onClick={() => void load()} disabled={loading || Boolean(busy)} title="刷新渠道" aria-label="刷新渠道">↻</button>}
     </header>
+    {(!settingsMode || settingsPanel === 'sources') && <>
     <div className="channel-readiness" aria-label="渠道就绪情况">
       {intelligenceModules.map((module) => {
         const readiness = channelReadiness(data?.summary, module);
@@ -190,7 +197,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
             <input type="radio" name="x-list-candidate" checked={selectedXListId === candidate.listId} onChange={() => setSelectedXListId(candidate.listId)} />
             <span><strong>{candidate.name}</strong><small>{candidate.accountKey} · {candidate.ownerHandle || '未知创建者'} · {candidate.canonicalUrl}</small></span>
           </label>)}
-          <div className="channel-confirm-row"><span>{xResolution.candidates.length > 1 ? '同名 List 已全部列出，请选择准确来源。' : '请确认这是要接入的 List。'}</span><button className="secondary-button channel-confirm-cta" onClick={() => void confirmXList()} disabled={!selectedXList || Boolean(busy)}>加入待确认清单</button></div>
+          <div className="channel-confirm-row">{xResolution.candidates.length > 1 && <span>同名 List 已全部列出，请选择准确来源。</span>}<button className="secondary-button channel-confirm-cta" onClick={() => void confirmXList()} disabled={!selectedXList || Boolean(busy)}>加入待确认清单</button></div>
         </div>}
       </section>
     </div>
@@ -214,5 +221,7 @@ export function IntelligenceChannelsView({ onStatusChange, settingsMode = false 
         </article>;
       })}</div> : <p className="channel-empty">还没有情报来源。先添加一个公开网站，或接入当前账号可访问的 X List。</p>}
     </section>
+    </>}
+    {settingsMode && settingsPanel === 'lists' && <XListDisplaySettings workspaceId={workspaceId} />}
   </section>;
 }

@@ -26,6 +26,7 @@ import {
 } from './ipc-business-context.ts';
 import { registerKnowledgeBusinessIpc, registerKnowledgeMaintenanceIpc } from './ipc-knowledge-business.ts';
 import { registerTodayStudioBusinessIpc } from './ipc-today-studio-business.ts';
+import { registerProjectInvestigationIpc } from './ipc-project-investigation.ts';
 import { registerStudioAnnotationIpc } from './ipc-studio-annotations.ts';
 import { registerKnowledgeFlywheelIpc } from './ipc-knowledge-flywheel.ts';
 import { registerWikiIndexIpc } from './ipc-wiki-index.ts';
@@ -40,6 +41,8 @@ export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencie
   // WMB-5236：全库维护 run IPC（start/status/pause/resume）。
   registerKnowledgeMaintenanceIpc(dependencies);
   registerTodayStudioBusinessIpc(dependencies);
+  // WMB-5290：项目专项调查（Owner 两次审批 + 派记者/写手编排）。
+  registerProjectInvestigationIpc(dependencies);
   registerStudioAnnotationIpc(dependencies);
   registerKnowledgeFlywheelIpc(dependencies);
   // WMB-5238：统一全文搜索 / 索引摘要 / hot cache 只读 + 全局时间日志（只读，无写通道）。

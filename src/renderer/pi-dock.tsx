@@ -1,5 +1,6 @@
 import { pageAuthoritySpec } from '../shared/page-authority';
 import { ORCHESTRATION_SAFE_FIELDS, type OrchestrationSafeFields } from '../shared/orchestration-envelope';
+import type { PiImageAttachmentPayload } from '../shared/pi-image-batch';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
 import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge, type PiDirectCanvasContext } from './pi-context-payload';
@@ -385,16 +386,25 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const buildPayload = (text: string, directContext?: PiDirectCanvasContext) =>
     buildPiContextPayload(context, text, directContext);
 
-  const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields) => {
+  const sendText = async (text: string, delivery?: 'steer' | 'followUp', orchestration?: OrchestrationSafeFields, attachments: readonly PiImageAttachmentPayload[] = [], batchRequestId?: string): Promise<boolean> => {
     const value = text.trim();
-    if (!value) return;
+    if (!value && attachments.length === 0) return false;
     // §7.1：编排派发前安全字段前置校验——任一缺失/为空即失败，该次任务不发送。
     if (orchestration && !ORCHESTRATION_SAFE_FIELDS.every((field) => orchestration[field]?.trim())) {
       showToast('任务信息不完整，未发送');
-      return;
+      return false;
     }
-    // 只有真 Pi 回合才走 steer/followUp 队列；主管投影 busy 假象不得吞消息。
+    const batchProjectId = context.focus?.studioDocument?.projectId ?? (context.page === 'studio' && context.objectType === 'project' ? context.objectId : null);
+    if (attachments.length > 0 && !batchProjectId) {
+      showToast('请先打开一个明确的创作项目，再发送图片。');
+      return false;
+    }
+    // 图片批次必须独占一个真实 Pi 回合，不能降级为 steer/followUp 后丢失冻结基线。
     const queued = piTurnActive;
+    if (attachments.length > 0 && queued) {
+      showToast('Pi 正在回复，请等待本轮结束后再发送图片。');
+      return false;
+    }
     // WMB-5204：忙时人工输入立即投影为主时间线用户气泡；本地项只承载投递状态，不写入会话快照。
     let localId: string | undefined;
     if (queued && !orchestration) {
@@ -418,7 +428,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
               text: last.text || '（后台编排继续，你可直接对话）'
             };
           }
-          next.push({ role: 'user', text: value, createdAt: stamped });
+          next.push({ role: 'user', text: value || '请根据当前正文语义合理安排这些图片。', createdAt: stamped });
           next.push({ role: 'assistant', text: '', status: 'streaming', createdAt: stamped });
           return next;
         });
@@ -434,9 +444,13 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       if (directContext && directContext.excludedCount > 0) {
         showToast(`已纳入 ${directContext.items.length} 项 · 未纳入 ${directContext.excludedCount} 项`);
       }
-      const chatInput = orchestration ? { message: buildPayload(value, directContext), orchestration } : buildPayload(value, directContext);
+      const contextualMessage = buildPayload(value || '请根据当前正文的语义，为这些图片选择合理的插入位置；不合适的图片不要硬塞。', directContext);
+      const chatInput = attachments.length > 0
+        ? { message: contextualMessage, requestId: batchRequestId ?? crypto.randomUUID(), projectId: batchProjectId!, attachments }
+        : orchestration ? { message: contextualMessage, orchestration } : contextualMessage;
       const result = await window.wmb.chatPi(chatInput, queued ? (delivery ?? 'steer') : undefined);
-      if (result.queued) return;
+      const batchFailed = attachments.length > 0 && result.batchStatus !== 'completed';
+      if (result.queued) return true;
       // 忙时提交未被排队：消息已进会话/被直接处理，移除对应本地反馈项
       if (localId) setLocalQueue((items) => items.filter((item) => item.localId !== localId));
       if (result.conversation) {
@@ -447,13 +461,18 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       setPhase(result.stopped ? 'stopped' : 'idle');
       setStatusText(result.stopped ? '已停止' : (configured ? '已配置' : '等待配置'));
       void refreshSessions();
+      if (batchFailed) {
+        showToast('图片批次未完成，图片仍保留在输入框。');
+        return false;
+      }
+      return true;
     } catch (error) {
       const message = piErrorMessage(error);
       if (queued) {
         // WMB-5189：steer 派发被拒 → 本地项明确 failed + 既有 toast
         if (localId) setLocalQueue((items) => items.map((item) => item.localId === localId ? { ...item, status: 'failed' as const } : item));
         showToast(message);
-        return;
+        return false;
       }
       setPiTurnActive(false);
       setPhase('failed'); setStatusText('失败');
@@ -464,11 +483,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         else next.push({ role: 'assistant', text: message, status: 'failed', createdAt: new Date().toISOString() });
         return next;
       });
+      return false;
     }
   };
 
-  const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp') => {
-    await sendText(text, delivery);
+  const send = useCallback(async (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string) => {
+    return sendText(text, delivery, undefined, attachments, batchRequestId);
   }, [piTurnActive, configured, context]);
   useEffect(() => {
     const generate = (event: Event) => {
@@ -592,7 +612,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         draftSeed={draftSeed}
         onDraftSeedConsumed={() => setDraftSeed(null)}
         annotationBadge={annotationBadge}
-        onSend={(text, delivery) => { void send(text, delivery); }}
+        onSend={(text, delivery, attachments, batchRequestId) => send(text, delivery, attachments, batchRequestId)}
         onStop={() => { void stop(); }}
         modelLabel={modelLabel}
         thinkingChoice={thinkingChoice}

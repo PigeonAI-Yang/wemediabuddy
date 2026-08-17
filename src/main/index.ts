@@ -45,6 +45,7 @@ import { dispatchManagerDailyIntelligence, readManagerProjection, syncManagerTas
 import { createDataRootSelection } from './data-root-selection';
 import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspaceIpcGate, RUNTIME_MANAGING_IPC_CHANNELS, type WorkspaceRuntimeLease } from './workspace-runtime';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
+import { readProjectInvestigation } from './project-investigation.ts';
 import { controlAuditMessage, dailyControlAuditEnabled, isOrphanChannelScannedTask, isOrphanStartingDailyTask } from './daily-control-policy.ts';
 import { decideDailyStartGate } from './daily-start-gate.ts';
 import { releaseDailyStageLock, tryAcquireDailyStageLock } from './daily-stage-lock.ts';
@@ -53,7 +54,7 @@ import { DailyScanScheduler } from './daily-scan-scheduler';
 import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { shanghaiDate } from './ferment';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
-import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
+import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner, resumePendingInvestigationSupervisorReviews } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
 import { startMediaGovernanceScheduler } from './media-governance-lifecycle.ts';
 import { setDeskJobNotifyBridges } from './manager-job-notify.ts';
@@ -838,6 +839,7 @@ app.whenReady().then(async () => {
     setPiSessionFile: (sessionFile) => { activeRuntime?.setPiSessionFile(sessionFile); },
     getActiveRuntime: () => activeRuntime
   });
+  if (activeRuntime) resumePendingInvestigationSupervisorReviews(activeRuntime);
   ipcMain.handle('agent:start', async (_event, input: { intent: AgentIntent; businessDate: string; contextRefs?: Record<string, unknown> }) => {
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
@@ -1108,6 +1110,12 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
     const mcp = currentMcp();
     if (!mcp) throw new Error('WMB MCP 尚未就绪。');
     if (!input.projectId) throw new Error('请先选择内容项目。');
+    const investigation = readProjectInvestigation(runtime.database, input.projectId);
+    const researchReady = Boolean(
+      investigation?.package
+      && investigation.direction
+      && ['ready_to_write', 'writing', 'completed'].includes(investigation.status)
+    );
     broadcastPiEvent({ type: 'starting' });
     try {
       const result = await withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startStudioDraft({
@@ -1116,6 +1124,7 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
         projectId: input.projectId,
         mcpUrl: mcp.url,
         xhsMcpUrl: currentXhs()?.getUrl() || '',
+        researchReady,
         activeRuntime: runtime,
         ...hooks
       }));

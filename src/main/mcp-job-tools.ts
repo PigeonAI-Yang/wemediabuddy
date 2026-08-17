@@ -7,9 +7,10 @@ import { createGenericEmployeeRunner } from './generic-employee-runner.ts';
 import { notifyDeskJobEvent } from './manager-job-notify.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { getAgentTask } from './agent-tasks.ts';
-import { dispatchResearchForEvidenceGap } from './research-dispatch.ts';
+import { dispatchResearchForEvidenceGap, handoffParentAfterResearchDispatch } from './research-dispatch.ts';
 import { RESEARCH_DEFAULT_BUDGET } from './research-job-runner.ts';
 import { handleResearchSuccessorJobEvent } from './research-successor.ts';
+import { handleInvestigationJobEvent } from './project-investigation.ts';
 import type { RoleJobReportV1 } from './role-job-registry.ts';
 import type { McpRuntime } from './mcp.ts';
 
@@ -44,6 +45,8 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
       });
       // WMB-5173：research_successor 续派工单终态事件 → 行终态（消费完成；幂等）。
       void handleResearchSuccessorJobEvent(runtime, event).catch((error) => console.error('[research-successor-event]', error));
+      // WMB-5290：项目专项调查记者/写手工单终态 → 资料包落盘 + 状态转换（幂等；无关工单忽略）。
+      void handleInvestigationJobEvent(runtime, event).catch((error) => console.error('[project-investigation-event]', error));
     },
     execute: createGenericEmployeeRunner(
       () => runtime,
@@ -200,6 +203,7 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
         brief: input.brief ?? null,
         gapId: input.gap_id ?? null
       });
+      await handoffParentAfterResearchDispatch(runtime, input.parent_task_id, result);
       return text(result);
     } finally {
       db.close();

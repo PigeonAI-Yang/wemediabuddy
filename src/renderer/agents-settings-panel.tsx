@@ -119,7 +119,6 @@ export function AgentsSettingsPanel(): JSX.Element {
               <div className="agents-settings-card-head">
                 <div>
                   <h3>{role.labelZh}<small>{role.roomZh}</small></h3>
-                  {role.skills?.length ? <p className="agents-settings-skill-line">{role.skills.join(' / ')}</p> : null}
                 </div>
               </div>
               {roleCaps.length ? (

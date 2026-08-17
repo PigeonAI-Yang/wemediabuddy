@@ -97,15 +97,12 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 监工与传话：`wmb_message_job`（参数 jobId、body）/ `wmb_list_job_messages`（参数 jobId）留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job`（参数 jobId）取消工单。
 - 工单是 WMB 内部业务编排，不构成平台执行授权：最终确认、激活和最终发布仍只由用户在 WMB UI 完成；平台写入继续走各自的精确 UI 授权路径。
 
-### 研究补料与续派决策（research_successor）
+### 研究补料与自动续派（research_successor）
 
 - 父工单（写手/策划/资料员）在证据上有缺口时，系统会按证据缺口自动派生研究补料工单（reporter / research）：同父唯一（同一父工单至多一个活动研究）、businessDate/projectId 边界继承、三层止环（研究或续派产物不再自动再派）。补派与续派由系统按证据缺口自动编排，主管不直接派研究工单。
-- 研究工单终态后自动进入 research_successor 续派：全部 required 声明已判定 → 续派直接恢复原角色（写手/策划/资料员）继续交付；仍有未解决 required 声明（unresolved / source_unavailable）→ 续派先进入「研究缺口 · 等你批」（needs_user），等待主编决策，不自动绕行、不自动重试。
-- 三动作只能由主编在 WMB UI（今日页「研究缺口 · 等你批」卡）决策，主管对话只负责解释与引导：
-  - 收窄（narrow）：未解决声明从本次续派验收范围剔除；本次续派只对已判定声明交付。若仍需核实，必须由主编显式再开研究工单（不自动绕行）。
-  - 手动补料（supplement）：主编已手动补充材料；续派基于既有证据与补充材料继续完成剩余工作，不得编造缺失证据。
-  - 接受并标注待核实（accept）：未解决声明以「待核实」标注交付；正文必须如实标注，不得将其表述为已核实事实。
-- 决策后续派恢复 pending，调度器随即派生原角色续派工单（新 jobId、同一边界），终态以 JOB_EVENT 推送。对「研究缺口 · 等你批」的进度/状态回答只来自班组投影 API 的持久事实，禁止编造。
+- 研究工单终态后自动进入 research_successor 续派：全部 required 声明已判定时直接恢复原角色继续交付；仍有 unresolved / source_unavailable 声明时，系统自动采用最保守的「收窄」决策，将未解决声明移出本次验收范围和正式正文，再恢复原角色继续写作。不得要求用户处理内部研究路由。
+- 自动收窄的输出必须是干净、有传播价值的成稿：只使用已判定事实，但允许作者基于事实给出鲜明判断、超前愿景和有情绪张力的观点。无证据事实直接删除或自然收窄；研究过程、缺口清单、残余不确定项、核查摘要和免责声明式尾注只属于内部任务元数据，禁止写进文章。研究负责防止造假，不得把正文写成论文或审计报告。若收窄后已无独立价值，应如实停止成稿，而不是用防御性文案填充。
+- 续派恢复 pending 后，调度器随即派生原角色续派工单（新 jobId、同一边界），终态以 JOB_EVENT 推送。进度/状态回答只来自班组投影 API 的持久事实，禁止编造。历史 needs_user 续派会在调度器恢复时自动按同一收窄策略继续。
 - 研究工单执行时只走白名单只读工具（web/x/xhs）与唯一写回 `wmb_save_source`；禁止编造无出处数字或来源 URL；禁止调用 `wmb_get_workbench`（防上下文挤爆）。
 
 ### 任务授权与统一回执
@@ -125,6 +122,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 只有用户明确要求继续指定项目时，先用 `wmb_get_content` 读取准确 `projectId` 和 revision，再用 `wmb_save_core_version` 追加版本。
 - 不按标题相似度猜项目。需要查找时先用 `wmb_list_content_projects`，再按 ID 读取。
 - 画布选材流程依次使用 `wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`；用 `wmb_get_brief_lineage` 回读追溯链。
+- 为指定内容项目导入已有或 AI 生成的配图时调用 `wmb_import_project_image`：携带新的 `requestId`、当前 `taskId`/`grantId`/`workerLeaseId` 与准确 `projectId`；栅格图只传 `contentBase64`（PNG/JPEG/WebP/GIF，并配套真实 `mimeType`/`fileName`），受限 SVG 只传 `svg`，两种载荷必须且只能提供一个，可传 `alt`。该工具复用 `content.save_version` 的任务授权，但只登记并关联项目素材，不创建正文版本、不修改正文、更不代表发布；成功后核对回执中的 `asset.id`、`markdown`、`reused`，再用 `wmb_get_content` 回读该项目，确认该素材已关联，正文需要图片时才使用返回的 Markdown。
 - 每次写入后用 `wmb_get_content` 按返回的项目 ID 回读标题、revision、版本号和正文。
 - 为 X、小红书或公众号适配文案时，先用 `wmb_get_content` 读取准确项目，并选定要绑定的核心正文 `contentVersionId`；再分别调用 `wmb_save_platform_version`，传入当前工作空间已启用的 `platform`、明确 `format`、完整标题/正文。创建新平台版本时不传 `versionId`；更新已有平台版本时必须同时传其 `versionId` 和 `expectedRevision`。
 - 每个平台注册后都用 `wmb_get_content` 回读准确 `projectId`、`contentVersionId`、平台、标题和正文。平台版本保存不等于发布；最终发布仍只由用户在 WMB UI 确认。
@@ -233,3 +231,5 @@ Wiki 知识库（WMB-5240，wmb_wiki_action 协议的等价工具面）：`wmb_w
 小红书只读：`xhs_check_login_status`、`xhs_search_feeds`、`xhs_get_feed_detail`、`xhs_user_profile`。
 
 Web 研究只读：`wmb_search_web`、`wmb_read_web_page`。
+
+证据缺口派研究补料：`wmb_dispatch_research`。writer/planner/librarian 事实型写作发现证据缺口时，经本工具上报父任务 ID 与 required claims（系统派生研究补料工单，同父唯一、边界继承，终态自动以原角色续派）；禁止用 `wmb_spawn_job` 派普通 reporter/daily_scan 工单或临时联网代替。

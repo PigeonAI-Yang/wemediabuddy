@@ -45,7 +45,7 @@ export function LegacyStudioView({ studio, refresh, openPublish, selectedId, onS
     try {
       const result = await window.wmb.startStudioDraft({ businessDate: planDate, projectId: selected.id }) as {
         ok: boolean;
-        data?: { task?: { status?: string; errorMessage?: string | null; resultRefs?: { versionNumber?: number } }; reused?: boolean };
+        data?: { task?: { status?: string; phase?: string; errorMessage?: string | null; resultRefs?: { versionNumber?: number } }; reused?: boolean };
         error?: { message?: string } | null;
       };
       if (!result.ok) {
@@ -53,6 +53,7 @@ export function LegacyStudioView({ studio, refresh, openPublish, selectedId, onS
         return;
       }
       if (result.data?.reused) setDraftStatus('初稿任务已在运行');
+      else if (result.data?.task?.phase === 'research_dispatched') setDraftStatus('已派外部研究，完成后将自动续写');
       else if (result.data?.task?.status === 'succeeded') setDraftStatus(`已保存核心版本 v${result.data.task.resultRefs?.versionNumber ?? ''}`.trim());
       else setDraftStatus(result.data?.task?.errorMessage || '初稿已完成');
       refresh();

@@ -195,7 +195,7 @@ test('WMB-5237 menu: htmlToMarkdown returns a single image token from figure and
 });
 
 test('WMB-5237 menu: renderMarkdown hoists figures only for the asset scheme', () => {
-  assert.match(helpersSource, /hoistAssetFigures\(sanitized\)/);
+  assert.match(helpersSource, /hoistAssetFigures\(repairCjkEmphasis\(sanitized\)\)/);
   assert.match(helpersSource, /wmb-asset:\/\/[^"]*"/);
   assert.doesNotMatch(helpersSource, /figcaption\s*\}\)/);
 });

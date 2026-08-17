@@ -6,6 +6,7 @@ import {
   completeAgentTask,
   failAgentTask,
   finishDailyIntelligenceFromReceipts,
+  handoffAgentTaskToResearch,
   needsUserAgentTask,
   partialAgentTask,
   recoverInterruptedAgentTasks,
@@ -31,6 +32,7 @@ const AGENT_TASK_TERMINAL_COMMANDS = Object.freeze([
   'agent_tasks.fail',
   'agent_tasks.needs_user',
   'agent_tasks.partial',
+  'agent_tasks.research_handoff',
   'agent_tasks.finish_daily',
   'agent_tasks.complete'
 ] as const);
@@ -150,6 +152,16 @@ export function dispatchNeedsUserAgentTask(
 export function dispatchPartialAgentTask(dependency: AgentTaskMutationDependency, id: string, context: AgentTaskCommandContext): Promise<AgentTask> {
   return dispatchTask(dependency, context, 'agent_tasks.partial', { id }, id,
     (database, input) => requireCommandResultData(partialAgentTask(database, input.id)));
+}
+
+export function dispatchResearchHandoffAgentTask(
+  dependency: AgentTaskMutationDependency,
+  id: string,
+  handoff: { researchJobId: string; researchTaskId: string | null; reused: boolean },
+  context: AgentTaskCommandContext
+): Promise<AgentTask> {
+  return dispatchTask(dependency, context, 'agent_tasks.research_handoff', { id, handoff }, id,
+    (database, input) => requireCommandResultData(handoffAgentTaskToResearch(database, input.id, input.handoff)));
 }
 
 export function dispatchFinishDailyIntelligence(

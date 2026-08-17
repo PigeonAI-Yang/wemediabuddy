@@ -166,14 +166,18 @@ test('WMB-5174: Today projection exposes only needs_user successors with unresol
   assert.equal(item.id, enqueued.job.id);
   assert.equal(item.parentJobId, 'job-needs');
   assert.equal(item.parentRoleId, 'writer');
+  assert.equal(item.projectId, 'proj-1', 'WMB-5296：父任务持久 refs 的 projectId 精确投影（Studio 匹配依据）');
   assert.equal(item.decision, null, 'needs_user 尚未决策');
   assert.equal(item.unresolvedClaims.length, 1);
   assert.equal(item.unresolvedClaims[0].key, 'claim_a');
   assert.equal(item.unresolvedClaims[0].text, 'GLM 5.2 官方是否涨价', '原文来自 research_claims 冻结行');
   assert.equal(item.unresolvedClaims[0].type, 'price');
   // 只投影声明语义：候选/进度/裸资料字段不得出现。
-  const allowed = ['id', 'parentJobId', 'parentTaskId', 'researchTaskId', 'parentRoleId', 'unresolvedClaims', 'decision', 'createdAt', 'updatedAt'];
+  const allowed = ['id', 'parentJobId', 'parentTaskId', 'researchTaskId', 'parentRoleId', 'projectId', 'unresolvedClaims', 'decision', 'createdAt', 'updatedAt'];
   assert.deepEqual(Object.keys(item).sort(), allowed.sort(), '投影只含声明语义，候选/进度/裸资料不上桌');
+  const decidedPayload = { ...JSON.parse(enqueued.job.payload ? JSON.stringify(enqueued.job.payload) : '{}'), decision: 'narrow' };
+  db.prepare("UPDATE jobs SET status='needs_user', payload_json=? WHERE id=?").run(JSON.stringify(decidedPayload), enqueued.job.id);
+  assert.equal(listResearchSuccessorNeedsUser(db).length, 0, '已自动决策的续派不得因后续 needs_user 重复索要研究选择');
 }));
 
 test('WMB-5174: Today projection omits claim text when research_claims row is missing (never fabricates)', () => withDb((db) => {
@@ -186,6 +190,7 @@ test('WMB-5174: Today projection omits claim text when research_claims row is mi
   const items = listResearchSuccessorNeedsUser(db);
   assert.equal(items.length, 1);
   assert.equal(items[0].parentRoleId, 'planner');
+  assert.equal(items[0].projectId, null, 'WMB-5296：planner 父任务无 projectId（非项目边界）→ null，不推断');
   assert.equal(items[0].unresolvedClaims[0].key, 'claim_x');
   assert.equal(items[0].unresolvedClaims[0].text, null, 'claim 行缺失 → text=null，不编造原文');
 }));

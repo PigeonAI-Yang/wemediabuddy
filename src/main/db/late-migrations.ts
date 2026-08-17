@@ -676,5 +676,86 @@ export const lateMigrations = [
       );
       CREATE INDEX studio_annotations_scope ON studio_annotations(project_id, document_kind, document_id, status);
     `
+  },
+  {
+    version: 72,
+    sql: `
+      -- WMB-5290: 项目专项调查（每项目至多一个活动调查轮次；提纲/方向按版本不可变，资料包按轮不可变）。
+      -- 权威业务内容全部落在创作项目下；transcript 关闭后仍完整可读回。
+      CREATE TABLE project_investigations (
+        project_id TEXT PRIMARY KEY REFERENCES content_projects(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN (
+          'outline_pending_approval', 'outline_rejected', 'researching', 'research_review',
+          'needs_more_research', 'needs_user', 'direction_pending_approval', 'ready_to_write',
+          'writing', 'completed', 'abandoned', 'failed'
+        )),
+        outline_version INTEGER,
+        direction_version INTEGER,
+        reporter_job_id TEXT,
+        reporter_task_id TEXT,
+        reporter_round INTEGER NOT NULL DEFAULT 0,
+        reporter_status TEXT,
+        reporter_error_message TEXT,
+        reporter_started_at TEXT,
+        reporter_finished_at TEXT,
+        writer_job_id TEXT,
+        writer_status TEXT,
+        writer_started_at TEXT,
+        writer_finished_at TEXT,
+        revision INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      CREATE INDEX project_investigations_status ON project_investigations(status, updated_at DESC);
+
+      CREATE TABLE investigation_outline_versions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        outline_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'approved', 'rejected')),
+        decided_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (project_id, version)
+      );
+
+      CREATE TABLE investigation_direction_versions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        direction_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'approved', 'supplemented')),
+        decided_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (project_id, version)
+      );
+
+      -- 调查资料包（每轮一行，不可变；review 由主管验收时更新本行）。
+      CREATE TABLE investigation_packages (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        round INTEGER NOT NULL,
+        reporter_job_id TEXT NOT NULL,
+        outline_version INTEGER NOT NULL,
+        pack_json TEXT NOT NULL,
+        source_ids_json TEXT NOT NULL,
+        review_json TEXT,
+        created_at TEXT NOT NULL,
+        reviewed_at TEXT,
+        UNIQUE (project_id, round)
+      );
+
+      -- 审批/状态转换/调查轮次审计流水（只追加）。
+      CREATE TABLE investigation_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES content_projects(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        note TEXT,
+        version INTEGER,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX investigation_events_project ON investigation_events(project_id, created_at);
+    `
   }
 ] as const;

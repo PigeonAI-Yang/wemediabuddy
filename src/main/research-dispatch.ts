@@ -12,8 +12,10 @@
 
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { JobSpawner } from './job-spawner.ts';
 import { getAgentTask } from './agent-tasks.ts';
+import { dispatchReportAgentTaskProgress, dispatchResearchHandoffAgentTask } from './agent-task-commands.ts';
 import { readJobContractFromRefs } from './job-object-boundary.ts';
 import { readResearchGap } from './research-task-state.ts';
 import { isResearchSuccessorRow } from './research-successor.ts';
@@ -181,4 +183,37 @@ export function dispatchResearchForEvidenceGap(input: {
   });
   const job = input.spawner.spawn(request);
   return { ok: true, reused: false, spawnedJobId: job.id, researchTaskId: null };
+}
+
+/**
+ * 研究派单成功即完成父任务的交接：父 writer/planner/librarian 不得继续写作或保存。
+ * research successor 会作为新工单续派原角色；当前父任务必须以 partial 保留真实链路。
+ */
+export async function handoffParentAfterResearchDispatch(
+  runtime: ActiveWorkspaceRuntime,
+  parentTaskId: string,
+  result: ResearchDispatchResult
+) {
+  const current = getAgentTask(runtime.database, parentTaskId);
+  if (!current || current.status !== 'running') return current;
+  const researchJobId = result.reused
+    ? (result.existingJobId ?? result.existingTaskId)
+    : result.spawnedJobId;
+  const reference = researchJobId;
+  const context = {
+    actor: { type: 'scheduler' as const, id: 'research-dispatch', label: 'ResearchDispatch' },
+    taskId: parentTaskId
+  };
+  await dispatchReportAgentTaskProgress(runtime, parentTaskId, {
+    phase: 'research_dispatched',
+    message: `已派研究补料工单 ${reference}，当前任务停止，等待研究完成后续派。`
+  }, { ...context, requestId: `${parentTaskId}:research-handoff:progress:${reference}` });
+  return dispatchResearchHandoffAgentTask(runtime, parentTaskId, {
+    researchJobId,
+    researchTaskId: result.reused ? result.existingTaskId : null,
+    reused: result.reused
+  }, {
+    ...context,
+    requestId: `${parentTaskId}:research-handoff:partial:${reference}`
+  });
 }

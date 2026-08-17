@@ -4,8 +4,8 @@
  * 纯读模块——不触碰 research 状态机/schema/命令面（decide/enqueue/kick 全部留在
  * research-successor.ts）。规则：
  * - 数据缺失 → 字段为 null / 省略，绝不伪造百分比、计数或声明原文。
- * - Today 只投影 status='needs_user' 且携带 unresolved required claims 的续派行；
- *   候选、进度、裸资料永不进入该投影。
+ * - Today 只投影 status='needs_user'、尚未决策且携带 unresolved required claims 的续派行；
+ *   已自动决策的续派即使后续角色因其他前置条件进入 needs_user，也不得重复索要研究选择。
  * - claim 原文从 research_claims 冻结行读回（缺失时不编造，仅给 key）。
  */
 
@@ -40,6 +40,12 @@ export type ResearchSuccessorNeedsUserItem = Readonly<{
   parentTaskId: string;
   researchTaskId: string;
   parentRoleId: 'writer' | 'planner' | 'librarian';
+  /**
+   * WMB-5296：父任务（agent_tasks.context_refs_json 持久化工单请求）中的 projectId。
+   * 权威来源是父 agent task 的持久 refs——Studio 按此精确匹配选中项目，禁止按标题推断；
+   * 父任务缺失/损坏/无 projectId（如 planner 父任务）→ null（fail-closed，不推断）。
+   */
+  projectId: string | null;
   /** 未解决 required claims：key + 冻结原文（原文缺失时 text=null，不编造）。 */
   unresolvedClaims: ReadonlyArray<Readonly<{ key: string; text: string | null; type: ResearchClaimType | null }>>;
   /** 尚未决策（needs_user 行恒 null）。 */
@@ -61,6 +67,7 @@ type ParsedNeedsUserPayload = {
   researchTaskId: string;
   parentRoleId: ResearchSuccessorNeedsUserItem['parentRoleId'];
   unresolvedClaimKeys: string[];
+  decision: ResearchSuccessorDecision | null;
 };
 
 /** 损坏 payload fail-closed：不投递不可信行（与状态机 parseRow 同源约束）。 */
@@ -75,12 +82,42 @@ function parseNeedsUserPayload(json: string): ParsedNeedsUserPayload | null {
   const parentJobId = typeof record.parentJobId === 'string' ? record.parentJobId : '';
   const parentTaskId = typeof record.parentTaskId === 'string' ? record.parentTaskId : '';
   const parentRoleId = record.parentRoleId === 'planner' || record.parentRoleId === 'librarian' ? record.parentRoleId : 'writer';
+  const decision = record.decision === 'narrow' || record.decision === 'supplement' || record.decision === 'accept'
+    ? record.decision
+    : null;
   if (!researchTaskId || !parentJobId) return null;
   const unresolvedClaimKeys = Array.isArray(record.unresolvedRequiredClaims)
     ? (record.unresolvedRequiredClaims as unknown[]).filter((key): key is string => typeof key === 'string' && key.length > 0)
     : [];
   if (unresolvedClaimKeys.length === 0) return null;
-  return { parentJobId, parentTaskId, researchTaskId, parentRoleId, unresolvedClaimKeys };
+  return { parentJobId, parentTaskId, researchTaskId, parentRoleId, unresolvedClaimKeys, decision };
+}
+
+/**
+ * WMB-5296：父任务 projectId 索引：parentTaskId → projectId（读 agent_tasks.context_refs_json
+ * 持久化工单请求）。父任务不存在 / refs 损坏 / projectId 缺失或非字符串 → null（fail-closed，
+ * 绝不按标题或父工单推断）。与 crew-instance-projection 同源：projectId 只来自持久 refs。
+ */
+function parentProjectIdIndex(database: DatabaseSync, parentTaskIds: string[]): Map<string, string | null> {
+  const index = new Map<string, string | null>();
+  const uniqueIds = [...new Set(parentTaskIds)];
+  if (uniqueIds.length === 0) return index;
+  const placeholders = uniqueIds.map(() => '?').join(',');
+  const rows = database.prepare(
+    `SELECT id, context_refs_json AS contextRefsJson FROM agent_tasks WHERE id IN (${placeholders})`
+  ).all(...uniqueIds) as Array<{ id: string; contextRefsJson: string }>;
+  for (const row of rows) {
+    let refs: Record<string, unknown>;
+    try {
+      refs = JSON.parse(row.contextRefsJson) as Record<string, unknown>;
+    } catch {
+      index.set(row.id, null);
+      continue;
+    }
+    const projectId = refs.projectId;
+    index.set(row.id, typeof projectId === 'string' && projectId ? projectId : null);
+  }
+  return index;
 }
 
 /** research_claims 冻结原文索引：(taskId, claimKey) → {text, type}。 */
@@ -131,7 +168,7 @@ export function readCrewResearchSummary(database: DatabaseSync, task: Pick<Agent
   };
 }
 
-/** Today 投影：status='needs_user' 的研究续派行（含未解决声明原文；无候选/进度/裸资料）。 */
+/** Today 投影：只含尚未决策的 research needs_user；已自动决策的后续等待不重复索要选择。 */
 export function listResearchSuccessorNeedsUser(database: DatabaseSync): ResearchSuccessorNeedsUserItem[] {
   const rows = database.prepare(
     `SELECT id, payload_json, created_at, updated_at FROM jobs
@@ -141,9 +178,10 @@ export function listResearchSuccessorNeedsUser(database: DatabaseSync): Research
   const parsedRows: Array<{ row: NeedsUserRow; payload: ParsedNeedsUserPayload }> = [];
   for (const row of rows) {
     const payload = parseNeedsUserPayload(row.payload_json);
-    if (payload) parsedRows.push({ row, payload });
+    if (payload && payload.decision === null) parsedRows.push({ row, payload });
   }
   const texts = claimTextIndex(database, [...new Set(parsedRows.map((entry) => entry.payload.researchTaskId))]);
+  const projectIds = parentProjectIdIndex(database, parsedRows.map((entry) => entry.payload.parentTaskId));
   const items: ResearchSuccessorNeedsUserItem[] = [];
   for (const { row, payload } of parsedRows) {
     items.push({
@@ -152,6 +190,7 @@ export function listResearchSuccessorNeedsUser(database: DatabaseSync): Research
       parentTaskId: payload.parentTaskId,
       researchTaskId: payload.researchTaskId,
       parentRoleId: payload.parentRoleId,
+      projectId: projectIds.get(payload.parentTaskId) ?? null,
       unresolvedClaims: payload.unresolvedClaimKeys.map((key) => {
         const frozen = texts.get(`${payload.researchTaskId}\u0000${key}`);
         return { key, text: frozen?.text ?? null, type: frozen?.type ?? null };

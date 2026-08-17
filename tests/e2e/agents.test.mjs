@@ -76,7 +76,13 @@ function writeLegacyDockConversation(dataRoot) {
     sessionId: null,
     messages: [
       { role: 'user', text: '今日扫描：X 列表与社区信号', createdAt: now },
-      { role: 'assistant', text: '已开始扫描，当前进度 1/4 渠道。', status: 'stopped', createdAt: now }
+      { role: 'assistant', text: '已开始扫描，当前进度 1/4 渠道。', status: 'stopped', createdAt: now },
+      ...Array.from({ length: 18 }, (_, index) => ({
+        role: 'assistant',
+        text: `扫描运行记录 ${index + 1}/18：正在核验渠道证据与来源状态。`,
+        status: 'stopped',
+        createdAt: new Date(Date.parse(now) + (index + 1) * 1_000).toISOString()
+      }))
     ],
     createdAt: now,
     updatedAt: now
@@ -229,6 +235,8 @@ export default [
         assert((jobId ?? '').trim() === 'job-e2e-reporter-needs', `弹窗任务编号不符: ${jobId}`);
         assert(((await modal.textContent()) ?? '').includes('等你批'), '弹窗未显示等你批提示');
         assert(((await modal.textContent()) ?? '').includes('E2E 弹窗待批工单'), '弹窗未显示任务摘要');
+        assert(await modal.locator('.agents-detail-section[aria-label="运行记录"]').count() === 1, '实例任务也应只有一个运行记录区域');
+        assert(await modal.locator('.agents-detail-section[aria-label="任务事件"]').count() === 0, '实例任务不应保留重复的任务事件区域');
       });
       await step('关闭弹窗后页面恢复正常且焦点回到触发卡', async () => {
         await page.locator('[data-testid="agents-detail-modal"] .app-modal-close').click();
@@ -475,7 +483,7 @@ export default [
         writeLegacyDockConversation(dataRoot);
       }
     },
-    run: async ({ page, evidence, assert, step, workspace }) => {
+    run: async ({ app, page, evidence, artifactsDir, assert, step, workspace }) => {
       let blueAvatar = null;
       await step('启动进入主壳并打开智能体页', async () => {
         await waitForAppReady(page, { shell: '.app-shell', timeoutMs: 90_000 });
@@ -516,14 +524,28 @@ export default [
         assert(text.includes('task-e2e-legacy-scan'), '弹窗应显示真实任务标识');
         assert(text.includes('daily_scan'), '弹窗应显示真实意图');
         assert(text.includes(planDate), '弹窗应显示业务日');
-        assert(text.includes('E2E 每日扫描启动，读取渠道清单'), '任务事件内容缺失');
-        assert(text.includes('已开始扫描，当前进度 1/4 渠道。'), '实时运行记录（dock 会话）缺失');
-        const events = modal.locator('.agents-detail-events li');
-        assert(await events.count() >= 2, `任务事件应为 2 条，实际 ${await events.count()}`);
+        assert(text.includes('E2E 每日扫描启动，读取渠道清单'), '任务状态内容缺失');
+        assert(text.includes('已开始扫描，当前进度 1/4 渠道。'), 'Pi 会话运行记录缺失');
+        assert(await modal.locator('.agents-detail-section[aria-label="运行记录"]').count() === 1, '任务状态与 Pi 会话应合并为单一运行记录区域');
+        assert(await modal.locator('.agents-detail-section[aria-label="任务事件"]').count() === 0, '不应保留重复的任务事件区域');
+        const events = modal.locator('.agents-detail-run-log .task-event');
+        assert(await events.count() >= 2, `运行记录内任务状态应为 2 条，实际 ${await events.count()}`);
+        const logGeometry = await modal.locator('.agents-detail-run-log').evaluate((node) => ({
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+          distanceFromBottom: node.scrollHeight - node.clientHeight - node.scrollTop
+        }));
+        assert(logGeometry.scrollHeight > logGeometry.clientHeight, `运行记录应限制高度并内部滚动: ${JSON.stringify(logGeometry)}`);
+        assert(logGeometry.distanceFromBottom <= 2, `运行记录初始应跟随最新条目: ${JSON.stringify(logGeometry)}`);
         const pct = await modal.locator('.agents-detail-pct').textContent();
         assert((pct ?? '').includes('25%'), `弹窗进度异常: ${pct}`);
       });
-      await step('遗留任务实时更新：低频轮询对账磁盘新事件', async () => {
+      await step('运行记录实时更新：上滚时保留阅读位置，回到底部后恢复追尾', async () => {
+        const runLog = page.locator('[data-testid="agents-detail-modal"] .agents-detail-run-log');
+        await runLog.evaluate((node) => {
+          node.scrollTop = 0;
+          node.dispatchEvent(new Event('scroll'));
+        });
         const db = openDb(workspace.dataRoot);
         try {
           db.prepare(
@@ -541,15 +563,47 @@ export default [
           db.close();
         }
         await page.waitForFunction(() => {
-          const items = [...document.querySelectorAll('[data-testid="agents-detail-modal"] .agents-detail-events li')];
-          return items.some((li) => (li.textContent ?? '').includes('E2E 扫描完成 2/4'));
+          const items = [...document.querySelectorAll('[data-testid="agents-detail-modal"] .agents-detail-run-log .task-event')];
+          return items.some((item) => (item.textContent ?? '').includes('E2E 扫描完成 2/4'));
         }, null, { timeout: 15_000 });
-        // 进度经 roster 轮询（3s）与任务轮询（5s）对账磁盘，等真实 50% 出现再断言。
+        await delay(300);
+        const readingScrollTop = await runLog.evaluate((node) => node.scrollTop);
+        assert(readingScrollTop <= 2, `用户主动上滚后不应被新记录拉回底部，实际 scrollTop=${readingScrollTop}`);
         await page.waitForFunction(() => {
           const pct = document.querySelector('[data-testid="agents-detail-modal"] .agents-detail-pct');
           return (pct?.textContent ?? '').includes('50%');
         }, null, { timeout: 15_000 });
+        await runLog.evaluate((node) => {
+          node.scrollTop = node.scrollHeight;
+          node.dispatchEvent(new Event('scroll'));
+        });
+        const db2 = openDb(workspace.dataRoot);
+        try {
+          db2.prepare(
+            `UPDATE agent_tasks SET events_json = ?, progress_json = ?, updated_at = ? WHERE id = 'task-e2e-legacy-scan'`
+          ).run(
+            JSON.stringify([
+              { at: NOW(), message: 'E2E 每日扫描启动，读取渠道清单' },
+              { at: NOW(), message: 'E2E 正在扫描 X 列表渠道' },
+              { at: NOW(), message: 'E2E 扫描完成 2/4，进入判断' },
+              { at: NOW(), message: 'E2E 扫描完成 3/4，准备汇总' }
+            ]),
+            JSON.stringify({ planned: 4, processed: 3, currentSource: '汇总阶段', message: '已扫描 3/4 渠道' }),
+            NOW()
+          );
+        } finally {
+          db2.close();
+        }
+        await page.waitForFunction(() => {
+          const log = document.querySelector('[data-testid="agents-detail-modal"] .agents-detail-run-log');
+          const hasLatest = (log?.textContent ?? '').includes('E2E 扫描完成 3/4');
+          return Boolean(log) && hasLatest && log.scrollHeight - log.clientHeight - log.scrollTop <= 2;
+        }, null, { timeout: 15_000 });
       });
+      await step('保存统一运行记录视觉证据', async () => {
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'agents-unified-run-log' });
+      });
+
       await step('真实 API 保存头像：卡片与弹窗即时显示大号头像控件', async () => {
         blueAvatar = await page.evaluate(async () => {
           const c = document.createElement('canvas');

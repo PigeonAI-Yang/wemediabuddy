@@ -616,11 +616,11 @@ export function StudioAnnotationMenu({ x, y, items, onClose }: {
     };
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('pointerdown', onPointerDown, true);
-    menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('pointerdown', onPointerDown, true);
-      previousFocus.current?.focus();
+      previousFocus.current?.focus({ preventScroll: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -652,8 +652,8 @@ export function StudioAnnotationNoteInput({ x, y, title, initial, submitLabel, b
   const previousFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    inputRef.current?.focus();
-    return () => { previousFocus.current?.focus(); };
+    inputRef.current?.focus({ preventScroll: true });
+    return () => { previousFocus.current?.focus({ preventScroll: true }); };
   }, []);
   const left = Math.max(8, Math.min(x, window.innerWidth - 324));
   const top = Math.max(8, Math.min(y, window.innerHeight - 196));

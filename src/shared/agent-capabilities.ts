@@ -34,6 +34,7 @@ export type AgentCapabilityId =
   | 'cap.desk'
   | 'cap.internal_prepare'
   | 'cap.wiki_maintain'
+  | 'cap.investigation'
   | 'cap.publish_prep'
   | 'cap.hard_delete'
   | 'cap.platform_mutation';
@@ -268,6 +269,19 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     agentGrantable: true,
     owner: 'desk',
     since: '2026-08-14'
+  }),
+  Object.freeze({
+    id: 'cap.investigation',
+    displayName: '专项调查管理',
+    description: 'WMB-5290 项目专项调查：主管拟定调查提纲、真实验收调查资料包并形成调查后写作方向（两次 Owner 审批保持 UI IPC；记者/写手派单走既有工单面）',
+    commands: Object.freeze(['investigation.outline_save', 'investigation.review_research', 'investigation.direction_save'] as const),
+    readProfiles: Object.freeze(['content'] as const),
+    defaultRoleBindings: Object.freeze({ desk: true }),
+    grantKinds: Object.freeze({ page: Object.freeze(['studio'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'desk',
+    since: '2026-08-16'
   }),
   Object.freeze({
     id: 'cap.publish_prep',

@@ -46,6 +46,24 @@ test('Pi operator Skill documents exactly the registered WMB tools and hard boun
   assert.match(librarianPrompt, /不得复制旧快照或自动批准/);
 });
 
+test('WMB-5293: operator documents the registered project-image import contract', async () => {
+  const [skill, tools] = await Promise.all([
+    readFile(skillPath, 'utf8'),
+    readFile(path.join(toolsRoot, 'wmb-mcp-tools-content.ts'), 'utf8')
+  ]);
+  assert.match(tools, /name:\s*'wmb_import_project_image'/);
+  assert.match(skill, /`wmb_import_project_image`/);
+  assert.match(skill, /PNG\/JPEG\/WebP\/GIF/);
+  assert.match(skill, /`contentBase64`/);
+  assert.match(skill, /受限 SVG 只传 `svg`/);
+  assert.match(skill, /两种载荷必须且只能提供一个/);
+  assert.match(skill, /`taskId`\/`grantId`\/`workerLeaseId`/);
+  assert.match(skill, /复用 `content\.save_version` 的任务授权/);
+  assert.match(skill, /`asset\.id`、`markdown`、`reused`/);
+  assert.match(skill, /`wmb_get_content` 回读该项目/);
+  assert.match(skill, /不创建正文版本、不修改正文、更不代表发布/);
+});
+
 test('UK lane routes X work through current-root WMB tools, not the retired external provider', async () => {
   const skill = await readFile(path.join('skills', 'uk-life-content-radar', 'SKILL.md'), 'utf8');
   assert.doesNotMatch(skill, /pyaireader/i);

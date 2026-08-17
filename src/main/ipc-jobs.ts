@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
 import {
   ensureJobSpawner,
@@ -14,34 +15,79 @@ import { broadcastDataChanged } from './data-changed.ts';
 import type { McpRuntime } from './mcp.ts';
 import { handleTopicReproposalJobEvent } from './topic-maintenance-reproposal.ts';
 import { handleResearchSuccessorJobEvent } from './research-successor.ts';
+import { buildInvestigationSupervisorReviewPrompt, handleInvestigationJobEvent } from './project-investigation.ts';
+import { runDockManagerPrompt } from './ipc-pi-dock.ts';
 
 export type JobsIpcDependencies = {
   getActiveRuntime: () => ActiveWorkspaceRuntime | null;
 };
 
+const supervisorReviewsStarted = new Set<string>();
+
+function dispatchInvestigationSupervisorReview(projectId: string): void {
+  if (supervisorReviewsStarted.has(projectId)) return;
+  supervisorReviewsStarted.add(projectId);
+  const dispatchId = randomUUID();
+  void runDockManagerPrompt({
+    message: buildInvestigationSupervisorReviewPrompt(projectId),
+    page: 'studio',
+    pageLabel: '创作 · 调查验收',
+    objectType: 'content_project',
+    objectId: projectId,
+    orchestration: {
+      dispatchId,
+      delivery: 'direct',
+      safe: {
+        originLabel: '专项调查',
+        title: '主管验收调查资料包',
+        goal: '核验调查证据并形成调查后写作方向',
+        acceptance: '真实资料包已验收；通过时形成待 Owner 审批的方向草稿'
+      }
+    }
+  }).catch((error) => {
+    supervisorReviewsStarted.delete(projectId);
+    console.error('[project-investigation-supervisor-review]', error);
+  });
+}
+
+export function resumePendingInvestigationSupervisorReviews(runtime: ActiveWorkspaceRuntime): void {
+  const rows = runtime.database.prepare(
+    `SELECT project_id FROM project_investigations WHERE status = 'research_review' ORDER BY updated_at ASC`
+  ).all() as Array<{ project_id: string }>;
+  for (const row of rows) dispatchInvestigationSupervisorReview(row.project_id);
+}
+
 export function ensureJobsSpawner(deps: JobsIpcDependencies) {
   const runtime = deps.getActiveRuntime();
   if (!runtime) throw new Error('当前工作空间运行时不可用。');
-  return ensureJobSpawner(runtime, {
+  const spawner = ensureJobSpawner(runtime, {
     onEvent: (event) => {
       broadcastDataChanged({ scopes: ['agent'], reason: String(event.type ?? 'jobs.event') });
       const jobId = typeof event.jobId === 'string' ? event.jobId : '';
       const spawner = getActiveJobSpawner();
       const job = jobId && spawner ? spawner.get(jobId) : null;
-      void notifyDeskJobEvent({
-        type: String(event.type ?? ''),
-        job: job ?? {
-          id: jobId,
-          roleId: typeof event.roleId === 'string' ? event.roleId : undefined,
-          intent: typeof event.intent === 'string' ? event.intent : undefined,
-          status: typeof event.status === 'string' ? event.status : undefined,
-          brief: typeof event.brief === 'string' ? event.brief : undefined,
-          error: typeof event.error === 'string' ? event.error : undefined,
-          report: typeof event.report === 'object' && event.report !== null ? event.report as RoleJobReportV1 : null
-        },
-        runtime,
-        handle: jobId && spawner ? spawner.getHandle(jobId) : null
-      });
+      void handleInvestigationJobEvent(runtime, event)
+        .then((investigation) => {
+          if (investigation?.role === 'reporter_review' && investigation.dispatchSupervisor) {
+            dispatchInvestigationSupervisorReview(investigation.projectId);
+          }
+          return notifyDeskJobEvent({
+            type: String(event.type ?? ''),
+            job: job ?? {
+              id: jobId,
+              roleId: typeof event.roleId === 'string' ? event.roleId : undefined,
+              intent: typeof event.intent === 'string' ? event.intent : undefined,
+              status: typeof event.status === 'string' ? event.status : undefined,
+              brief: typeof event.brief === 'string' ? event.brief : undefined,
+              error: typeof event.error === 'string' ? event.error : undefined,
+              report: typeof event.report === 'object' && event.report !== null ? event.report as RoleJobReportV1 : null
+            },
+            runtime,
+            handle: jobId && spawner ? spawner.getHandle(jobId) : null,
+            suppressDeskPrompt: investigation?.role === 'reporter_review'
+          });
+        })
+        .catch((error) => console.error('[project-investigation-event]', error));
       void handleTopicReproposalJobEvent(runtime, event).catch((error) => console.error('[topic-reproposal-event]', error));
       void handleResearchSuccessorJobEvent(runtime, event).catch((error) => console.error('[research-successor-event]', error));
     },
@@ -54,6 +100,8 @@ export function ensureJobsSpawner(deps: JobsIpcDependencies) {
       }
     )
   });
+  resumePendingInvestigationSupervisorReviews(runtime);
+  return spawner;
 }
 
 export function registerJobsIpc(deps: JobsIpcDependencies): void {

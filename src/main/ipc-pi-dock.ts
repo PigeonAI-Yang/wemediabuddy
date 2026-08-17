@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { DataRoot } from './data-root.ts';
 import { createForkedPiConversation, readPiConversation, writePiConversation, type PiConversationSnapshot } from './pi-conversation.ts';
+const { ipcMain } = electron;
 import { readPiTranscript, syncPiConversation } from './pi-persistence.ts';
-import type { PiRpcSupervisor } from './pi-runtime.ts';
+import type { PiImageContent, PiRpcSupervisor } from './pi-runtime.ts';
 import { broadcastPiEvent, broadcastDataChanged } from './app-window.ts';
 import { appendAcceptedOrchestration, appendPendingOrchestration, updateFailedOrchestration } from './pi-orchestration-store.ts';
 import { buildOrchestrationEnvelope, type OrchestrationData, type OrchestrationSafeFields } from '../shared/orchestration-envelope.ts';
@@ -15,7 +16,7 @@ import { readPiCommands } from './pi-commands.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { ensurePageAuthority, type PageAuthorityResult } from './pi-page-authority.ts';
 import { pageAuthoritySpec, isPageAuthorityView } from '../shared/page-authority.ts';
-import { dispatchBusinessCommand } from './business-command.ts';
+import { dispatchBusinessCommand, requireCommandResultData, requireReceiptData } from './business-command.ts';
 import { ownerUiActor } from './ipc-business-context.ts';
 import { applyKnowledgeChangeSet, KNOWLEDGE_FLYWHEEL_CHANGE_SET_COMMAND, type KnowledgeChangeSetInput } from './knowledge-flywheel.ts';
 import {
@@ -37,7 +38,29 @@ import {
   type WikiActionReject
 } from '../shared/wiki-operator-protocol.ts';
 import { executeWikiAction, type WikiActionResult } from './pi-wiki-actions.ts';
-const { ipcMain } = electron;
+import { saveCoreVersion, type SavedCoreVersion } from './content.ts';
+import type { ContentMediaBindingDraft } from '../shared/media-bindings.ts';
+import type { StagedAsset } from './assets.ts';
+import {
+  buildPiImageBatchResultText,
+  buildPiImagePlacementPrompt,
+  createPiImageBatch,
+  getPiImageBatchBaseline,
+  listPiImageBatches,
+  markPiImageBatchAttachmentImport,
+  parsePiImagePlacementManifest,
+  piImageBatchInputHash,
+  preparePiImageAttachments,
+  readPiImageBatch,
+  readPiImageBatchByRequest,
+  readPiImageAssetBytes,
+  recordPiImageBatchDecisions,
+  registerPiImageAttachment,
+  stagePiImageAttachment,
+  transitionPiImageBatch,
+  validatePiImagePlacement,
+} from './pi-image-batch.ts';
+import { isPiImageBatchChatInput, normalizePiImageBatchMessage, type PiImageAttachmentPayload, type PiImageBatchAttachmentDecision, type PiImageBatchChatInput, type PiImageBatchRecord } from '../shared/pi-image-batch.ts';
 
 type Dependencies = {
   loadSelectedDataRoot: () => Promise<DataRoot | null>;
@@ -567,6 +590,181 @@ export async function runDockManagerPrompt(input: {
   }
 }
 
+async function runPiImageBatch(
+  dataRoot: DataRoot,
+  runtime: ActiveWorkspaceRuntime,
+  pi: PiRpcSupervisor,
+  input: PiImageBatchChatInput
+): Promise<{ text: string; thinking: string; stopped: boolean; batch: PiImageBatchRecord; versionNumber: number | null }> {
+  const prepared = preparePiImageAttachments(input);
+  const baseline = getPiImageBatchBaseline(runtime.database, input.projectId);
+  if (!baseline.versionId || !baseline.body.trim()) throw new Error('当前项目没有可用于排图的核心正文。');
+  const inputHash = piImageBatchInputHash({ projectId: input.projectId, userMessage: input.message, attachments: prepared });
+  const commandData = async <T>(command: string, requestId: string, value: unknown, execute: (database: ActiveWorkspaceRuntime['database'], normalized: unknown) => { data: T; entityId?: string; beforeRevision?: number; afterRevision?: number; readback?: unknown; sideEffectState?: string }): Promise<T> => {
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command,
+      requestId,
+      actor: ownerUiActor,
+      input: value,
+      boundIdentity: { entityType: 'pi_image_batch', projectId: input.projectId, requestId: input.requestId },
+      entityType: 'pi_image_batch',
+      execute: (database, normalized) => execute(database, normalized)
+    });
+    return requireReceiptData(receipt);
+  };
+  let batch = await commandData<PiImageBatchRecord>('pi_image_batch.create', `${input.requestId}:batch`, {
+    requestId: input.requestId,
+    projectId: input.projectId,
+    userMessage: normalizePiImageBatchMessage(input.message),
+    expectedRevision: baseline.expectedRevision,
+    baselineVersionId: baseline.versionId,
+    inputHash,
+    attachments: prepared.map((attachment) => ({
+      ordinal: attachment.ordinal,
+      sourceFileName: attachment.sourceFileName,
+      sourceMimeType: attachment.sourceMimeType,
+      byteCount: attachment.byteCount,
+      width: attachment.width,
+      height: attachment.height,
+      sourceSha256: attachment.sourceSha256
+    }))
+  }, (database, normalized) => {
+    const value = normalized as {
+      requestId: string; projectId: string; userMessage: string; expectedRevision: number; baselineVersionId: string | null; inputHash: string;
+      attachments: Array<{ ordinal: number; sourceFileName: string; sourceMimeType: PiImageAttachmentPayload['mimeType']; byteCount: number; width: number | null; height: number | null; sourceSha256: string }>;
+    };
+    const created = createPiImageBatch(database, {
+      requestId: value.requestId,
+      projectId: value.projectId,
+      userMessage: value.userMessage,
+      expectedRevision: value.expectedRevision,
+      baselineVersionId: value.baselineVersionId,
+      inputHash: value.inputHash,
+      attachments: value.attachments.map((attachment) => ({ ...attachment, bytes: Buffer.alloc(0) }))
+    });
+    return { data: created, entityId: created.id, readback: created };
+  });
+  if (batch.status === 'completed') {
+    const detail = getPiImageBatchBaseline(runtime.database, batch.projectId).project;
+    const version = batch.targetVersionId ? detail.revisions.find((item) => item.id === batch.targetVersionId) : null;
+    return { text: buildPiImageBatchResultText({ batch, versionNumber: version?.number ?? null }), thinking: '', stopped: false, batch, versionNumber: version?.number ?? null };
+  }
+  if (batch.status === 'conflicted' || batch.status === 'canceled') return { text: buildPiImageBatchResultText({ batch }), thinking: '', stopped: false, batch, versionNumber: null };
+
+  const transition = async (status: Parameters<typeof transitionPiImageBatch>[1]['status'], extra: Partial<Parameters<typeof transitionPiImageBatch>[1]> = {}) => {
+    batch = await commandData<PiImageBatchRecord>('pi_image_batch.state', `${input.requestId}:state:${status}`, { batchId: batch.id, status, ...extra }, (database, normalized) => {
+      const next = transitionPiImageBatch(database, normalized as Parameters<typeof transitionPiImageBatch>[1]);
+      return { data: next, entityId: next.id, readback: next };
+    });
+    return batch;
+  };
+  if (batch.status === 'queued' || batch.status === 'failed_import') await transition('importing', { failureStage: null, failureCode: null, failureMessage: null });
+  for (const attachment of batch.attachments) {
+    if (attachment.state === 'imported' || attachment.state === 'used' || attachment.state === 'unused') continue;
+    const original = prepared[attachment.ordinal];
+    if (!original) throw new Error(`无法恢复第 ${attachment.ordinal + 1} 张图片。`);
+    try {
+      const staged = await stagePiImageAttachment(dataRoot.path, original);
+      batch = await commandData<PiImageBatchRecord>('pi_image_batch.import', `${input.requestId}:import:${attachment.ordinal}`, {
+        batchId: batch.id,
+        projectId: input.projectId,
+        ordinal: attachment.ordinal,
+        staged
+      }, (database, normalized) => {
+        const value = normalized as { batchId: string; projectId: string; ordinal: number; staged: StagedAsset };
+        const linked = registerPiImageAttachment(database, value.projectId, value.staged);
+        const next = markPiImageBatchAttachmentImport(database, { batchId: value.batchId, ordinal: value.ordinal, state: 'imported', assetId: linked.assetId });
+        return { data: next, entityId: next.id, readback: { batchId: next.id, ordinal: value.ordinal, assetId: linked.assetId, reused: linked.reused } };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      batch = await commandData<PiImageBatchRecord>('pi_image_batch.import-failed', `${input.requestId}:import-failed:${attachment.ordinal}`, {
+        batchId: batch.id, ordinal: attachment.ordinal, state: 'failed', failureCode: 'IMPORT_FAILED', failureMessage: message
+      }, (database, normalized) => {
+        const next = markPiImageBatchAttachmentImport(database, normalized as Parameters<typeof markPiImageBatchAttachmentImport>[1]);
+        return { data: next, entityId: next.id, readback: next };
+      });
+      batch = await transition('failed_import', { failureStage: 'import', failureCode: 'IMPORT_FAILED', failureMessage: message });
+      return { text: buildPiImageBatchResultText({ batch }), thinking: '', stopped: false, batch, versionNumber: null };
+    }
+  }
+  if (batch.status === 'failed_analysis') await transition('analyzing', { failureStage: null, failureCode: null, failureMessage: null });
+  if (batch.status === 'queued' || batch.status === 'importing') await transition('analyzing');
+
+  let thinking = '';
+  let stopped = false;
+  let placement: { body: string; decisions: PiImageBatchAttachmentDecision[]; mediaBindings: ContentMediaBindingDraft[] } | null = null;
+  if (batch.placementJson) {
+    try {
+      const stored = JSON.parse(batch.placementJson) as { body: string; decisions: PiImageBatchAttachmentDecision[]; mediaBindings: ContentMediaBindingDraft[] };
+      placement = validatePiImagePlacement({ requestId: batch.requestId, projectId: batch.projectId, baselineVersionId: baseline.versionId, expectedRevision: baseline.expectedRevision, body: stored.body, decisions: stored.decisions, mediaBindings: stored.mediaBindings }, { batch, baseline });
+    } catch {
+      placement = null;
+    }
+  }
+  if (!placement) {
+    try {
+      const images: PiImageContent[] = [];
+      for (const attachment of batch.attachments) {
+        if (!attachment.assetId) throw new Error(`第 ${attachment.ordinal + 1} 张图片尚未导入。`);
+        const loaded = await readPiImageAssetBytes(dataRoot.path, runtime.database, attachment.assetId);
+        images.push({ type: 'image', data: loaded.bytes.toString('base64'), mimeType: loaded.asset.mimeType });
+      }
+      const result = await pi.promptUntilSettled(buildPiImagePlacementPrompt({ batch, baseline }), { images });
+      thinking = result.thinking;
+      stopped = result.stopped;
+      if (stopped) throw new Error('Pi 在排图分析开始后被停止。');
+      const manifest = parsePiImagePlacementManifest(result.text);
+      placement = validatePiImagePlacement(manifest, { batch, baseline });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      batch = await transition('failed_analysis', { failureStage: 'analysis', failureCode: 'ANALYSIS_FAILED', failureMessage: message });
+      return { text: buildPiImageBatchResultText({ batch }), thinking, stopped, batch, versionNumber: null };
+    }
+    batch = await commandData<PiImageBatchRecord>('pi_image_batch.decisions', `${input.requestId}:decisions`, {
+      batchId: batch.id, body: placement.body, decisions: placement.decisions, mediaBindings: placement.mediaBindings
+    }, (database, normalized) => {
+      const next = recordPiImageBatchDecisions(database, normalized as Parameters<typeof recordPiImageBatchDecisions>[1]);
+      return { data: next, entityId: next.id, readback: next };
+    });
+  }
+  if (!placement) throw new Error('排图结果缺失。');
+  if (placement.decisions.every((decision) => decision.decision === 'unused')) {
+    batch = await transition('completed', { usedCount: 0, unusedCount: placement.decisions.length });
+    return { text: buildPiImageBatchResultText({ batch }), thinking, stopped, batch, versionNumber: null };
+  }
+  if (batch.status === 'failed_save' || batch.status === 'analyzing') await transition('saving', { failureStage: null, failureCode: null, failureMessage: null });
+  const saveInput = { projectId: batch.projectId, body: placement.body, expectedRevision: batch.expectedRevision, author: 'ai' as const, mediaBindings: placement.mediaBindings };
+  let saved: SavedCoreVersion;
+  try {
+    saved = await commandData<SavedCoreVersion>('wmb_save_core_version', `${input.requestId}:save`, saveInput, (database, normalized) => {
+      const result = saveCoreVersion(database, normalized as typeof saveInput, false);
+      const data = requireCommandResultData(result);
+      return { data, entityId: data.id, beforeRevision: batch.expectedRevision, afterRevision: data.projectRevision, readback: data };
+    });
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    const message = error instanceof Error ? error.message : String(error);
+    if (code === 'REVISION_CONFLICT') batch = await transition('conflicted', { failureStage: 'conflict', failureCode: code, failureMessage: message });
+    else batch = await transition('failed_save', { failureStage: 'save', failureCode: code ?? 'SAVE_FAILED', failureMessage: message });
+    return { text: buildPiImageBatchResultText({ batch }), thinking, stopped, batch, versionNumber: null };
+  }
+  const readback = getPiImageBatchBaseline(runtime.database, batch.projectId).project.revisions.find((version) => version.id === saved.id);
+  if (!readback || readback.body !== placement.body || readback.bindings.length !== placement.mediaBindings.length) {
+    batch = await transition('failed_save', { failureStage: 'readback', failureCode: 'SAVE_READBACK_FAILED', failureMessage: '核心版本保存回读未通过。' });
+    return { text: buildPiImageBatchResultText({ batch }), thinking, stopped, batch, versionNumber: null };
+  }
+  batch = await commandData<PiImageBatchRecord>('pi_image_batch.decisions-readback', `${input.requestId}:decisions-readback`, {
+    batchId: batch.id, decisions: placement.decisions, coreVersionId: saved.id
+  }, (database, normalized) => {
+    const next = recordPiImageBatchDecisions(database, normalized as Parameters<typeof recordPiImageBatchDecisions>[1]);
+    return { data: next, entityId: next.id, readback: next };
+  });
+  batch = await transition('completed', { targetVersionId: saved.id, usedCount: placement.decisions.filter((decision) => decision.decision === 'used').length, unusedCount: placement.decisions.filter((decision) => decision.decision === 'unused').length });
+  broadcastDataChanged({ scopes: ['studio'], reason: 'pi_image_batch.completed' });
+  return { text: buildPiImageBatchResultText({ batch, versionNumber: saved.versionNumber }), thinking, stopped, batch, versionNumber: saved.versionNumber };
+}
+
 export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPiSessionFile, setPiSessionFile, getActiveRuntime }: Dependencies): void {
   dockPromptDeps = { loadSelectedDataRoot, ensurePi, getPi, getPiSessionFile, setPiSessionFile, getActiveRuntime };
   ipcMain.handle('pi:commands', async () => {
@@ -575,11 +773,12 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
     return readPiCommands(await (await ensurePi(dataRoot)).getCommands());
   });
 
-  ipcMain.handle('pi:chat', async (_event, input: string | { message: string; delivery?: 'steer' | 'followUp'; orchestration?: { originLabel: string; title: string; goal: string; acceptance: string } }) => {
+  ipcMain.handle('pi:chat', async (_event, input: string | PiImageBatchChatInput | { message: string; orchestration: { originLabel: string; title: string; goal: string; acceptance: string }; delivery?: 'steer' | 'followUp' }) => {
+    const batchInput = typeof input === 'object' && isPiImageBatchChatInput(input) ? input : null;
     const raw = (typeof input === 'string' ? input : input.message).trim();
-    if (!raw) throw new Error('请输入内容。');
+    if (!raw && !batchInput) throw new Error('请输入内容。');
     // WMB-5178：renderer 仅传安全字段，dispatchId 由主进程按实际派发生成（稳定唯一，对账锚点）。
-    const orchestration: DockOrchestrationInput | null = typeof input === 'object' && input.orchestration
+    const orchestration: DockOrchestrationInput | null = typeof input === 'object' && 'orchestration' in input && input.orchestration
       ? {
           dispatchId: randomUUID(),
           delivery: input.delivery === 'followUp' ? 'follow_up' : input.delivery === 'steer' ? 'steer' : 'direct',
@@ -600,6 +799,58 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
       lastAuthorityStatus = result.status;
       return result.message;
     };
+    if (batchInput) {
+      if (continuesTurn) throw new Error('Pi 正在回复，图片批次不会改变当前队列；请等待本轮结束后再发送。');
+      const activeRuntime = getActiveRuntime?.() ?? null;
+      if (!activeRuntime || path.resolve(activeRuntime.identity.rootPath) !== path.resolve(dataRoot.path)) throw new Error('当前创作项目运行时不可用。');
+      openTurnGate();
+      broadcastPiEvent({ type: 'starting', scope: 'dock' });
+      let batchConversation: PiConversationSnapshot | null = null;
+      let batchPi: PiRpcSupervisor | null = null;
+      try {
+        const current = await readPiConversation(dataRoot.path);
+        const createdAt = new Date().toISOString();
+        batchConversation = await writePiConversation(dataRoot.path, {
+          id: current.id,
+          title: current.title,
+          sessionFile: current.sessionFile,
+          sessionId: current.sessionId,
+          messages: [...current.messages, { role: 'user', text: extractVisiblePrompt(normalizePiImageBatchMessage(raw)), createdAt }, { role: 'assistant', text: '', status: 'streaming', createdAt }],
+          createdAt: current.createdAt,
+          makeActive: true
+        });
+        batchPi = await ensurePi(dataRoot);
+        const outcome = await runPiImageBatch(dataRoot, activeRuntime, batchPi, { ...batchInput, message: batchInput.message });
+        const messages = batchConversation.messages.slice();
+        const last = messages.at(-1);
+        if (last?.role === 'assistant') messages[messages.length - 1] = { ...last, text: outcome.text, thinking: outcome.thinking || undefined, status: outcome.stopped ? 'stopped' : undefined };
+        batchConversation = await writePiConversation(dataRoot.path, {
+          id: batchConversation.id,
+          title: batchConversation.title,
+          sessionFile: batchConversation.sessionFile,
+          sessionId: batchConversation.sessionId,
+          messages,
+          createdAt: batchConversation.createdAt,
+          makeActive: true
+        });
+        setPiSessionFile(batchConversation.sessionFile);
+        broadcastPiEvent({ type: outcome.stopped ? 'stopped' : 'idle', text: outcome.text, thinking: outcome.thinking, scope: 'dock' });
+        return { text: outcome.text, thinking: outcome.thinking, stopped: outcome.stopped, queued: false, batchStatus: outcome.batch.status, conversation: batchConversation };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (batchConversation) {
+          const messages = batchConversation.messages.slice();
+          const last = messages.at(-1);
+          if (last?.role === 'assistant') messages[messages.length - 1] = { ...last, text: message, status: 'failed', segments: [{ kind: 'text', text: message }] };
+          await writePiConversation(dataRoot.path, { id: batchConversation.id, title: batchConversation.title, sessionFile: batchConversation.sessionFile, sessionId: batchConversation.sessionId, messages, createdAt: batchConversation.createdAt, makeActive: true }).catch(() => {});
+        }
+        broadcastPiEvent({ type: 'failed', error: message, scope: 'dock' });
+        throw error;
+      } finally {
+        closeTurnGate();
+        stopAfterOpening = false;
+      }
+    }
     if (continuesTurn) {
       await pendingOpening;
       const runtime = await ensurePi(dataRoot);
@@ -753,6 +1004,19 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
       closeTurnGate();
       stopAfterOpening = false;
     }
+  });
+
+  ipcMain.handle('pi:image-batch:get', async (_event, input: { projectId: string; batchId?: string; requestId?: string }) => {
+    const runtime = getActiveRuntime?.();
+    if (!runtime || runtime.identity.rootPath !== path.resolve((await loadSelectedDataRoot())?.path ?? '')) return null;
+    if (input.batchId) return readPiImageBatch(runtime.database, input.batchId);
+    if (input.requestId) return readPiImageBatchByRequest(runtime.database, input.projectId, input.requestId);
+    return null;
+  });
+  ipcMain.handle('pi:image-batch:list', async (_event, input: { projectId: string; limit?: number }) => {
+    const runtime = getActiveRuntime?.();
+    if (!runtime || runtime.identity.rootPath !== path.resolve((await loadSelectedDataRoot())?.path ?? '')) return [];
+    return listPiImageBatches(runtime.database, input.projectId, input.limit);
   });
 
   ipcMain.handle('pi:authority-status', async () => {

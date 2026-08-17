@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { buildDailyOpportunityPrompt, cancelDailyIntelligenceIfRequested } from '../src/main/agent-runner.ts';
+import { buildDailyOpportunityPrompt, cancelDailyIntelligenceIfRequested, draftPrompt } from '../src/main/agent-runner.ts';
 import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
@@ -38,8 +38,11 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /为什么是现在/);
     assert.match(prompt, /五维/);
     assert.match(prompt, /六栏目/);
-    // 新身份：普通人的方向与真实项目（旧技术创作者/独立开发者身份与旧五维六栏目彻底退出运行时提示词）
-    assert.match(prompt, /面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人/);
+    // 新身份：以方向与真实项目描述受众，不把身份标签锚定成标题素材
+    assert.match(prompt, /正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人/);
+    assert.match(prompt, /受众描述只用于内部判断，不是标题素材/);
+    assert.match(prompt, /内部生成至少三个不同切口的候选/);
+    assert.match(prompt, /不得使用「普通人」等万能受众标签/);
     for (const dimension of ['时代认知', '个人方向', 'AI 实践', '公开验证', '产品化']) assert.match(prompt, new RegExp(dimension), `missing dimension ${dimension}`);
     for (const column of ['迷茫诊断', '经典方法', 'AI 实战', '项目日志', '方向判断', '商业化实验']) assert.match(prompt, new RegExp(column), `missing column ${column}`);
     assert.doesNotMatch(prompt, /内容→信任→付费/);
@@ -78,7 +81,7 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const gated = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
     assert.match(gated, /第一关：赛道相关性判定/);
     assert.match(gated, /五维=时代认知\/个人方向\/AI 实践\/公开验证\/产品化/);
-    assert.match(gated, /纯模型公告、无普通人行动意义的参数\/价格新闻/);
+    assert.match(gated, /纯模型公告、对目标读者没有可执行意义的参数\/价格新闻/);
     assert.doesNotMatch(gated, /宏大行业综述/);
     assert.doesNotMatch(gated, /躺赚毒鸡汤/);
 
@@ -92,6 +95,18 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     database.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('writer prompts keep audience identity out of core and platform titles', () => {
+  const task = { id: 'task-title-test' };
+  const core = draftPrompt(task, 'project-1', 'request-1', 'core_draft');
+  assert.match(core, /标题围绕该题材独有的对象、问题、动作或证据/);
+  assert.match(core, /不自动添加「普通人」等万能受众标签/);
+  assert.match(core, /不写来源未支持的数字、结果或因果/);
+
+  const xhs = draftPrompt(task, 'project-1', 'request-2', 'xiaohongshu_platform_version');
+  assert.match(xhs, /标题围绕该题材独有的对象、问题、动作或证据/);
+  assert.match(xhs, /不自动添加「普通人」等万能受众标签/);
 });
 
 test('daily IPC leaves task creation to the shared channel coordinator and deduplicates by root/date', async () => {

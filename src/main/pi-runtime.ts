@@ -29,6 +29,7 @@ export type PiChatResult = {
   stopped: boolean;
   error?: string;
 };
+export type PiImageContent = { type: 'image'; data: string; mimeType: string };
 
 function defer<T>(): { promise: Promise<T>; resolve(value: T | PromiseLike<T>): void; reject(error: Error): void } {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -180,17 +181,16 @@ export class PiRpcSupervisor {
   getCommands(): Promise<RpcMessage> {
     return this.send({ type: 'get_commands' });
   }
-
-  prompt(message: string): Promise<RpcMessage> {
-    return this.send({ type: 'prompt', message });
+  prompt(message: string, images?: readonly PiImageContent[]): Promise<RpcMessage> {
+    return this.send({ type: 'prompt', message, ...(images?.length ? { images } : {}) });
   }
 
-  steer(message: string): Promise<RpcMessage> {
-    return this.send({ type: 'steer', message });
+  steer(message: string, images?: readonly PiImageContent[]): Promise<RpcMessage> {
+    return this.send({ type: 'steer', message, ...(images?.length ? { images } : {}) });
   }
 
-  followUp(message: string): Promise<RpcMessage> {
-    return this.send({ type: 'follow_up', message });
+  followUp(message: string, images?: readonly PiImageContent[]): Promise<RpcMessage> {
+    return this.send({ type: 'follow_up', message, ...(images?.length ? { images } : {}) });
   }
 
   getEntries(): Promise<RpcMessage> {
@@ -203,7 +203,7 @@ export class PiRpcSupervisor {
 
   async promptUntilSettled(
     message: string,
-    options: { timeoutMs?: number; onDelta?: (text: string) => void; onStreaming?: () => void } = {}
+    options: { timeoutMs?: number; onDelta?: (text: string) => void; onStreaming?: () => void; images?: readonly PiImageContent[] } = {}
   ): Promise<PiChatResult> {
     if (this.active) throw new Error('Pi 正在回复，请稍候。');
     this.active = true;
@@ -227,7 +227,7 @@ export class PiRpcSupervisor {
       reject: (error) => { clearTimeout(timer); reject(error); }
     });
     try {
-      await this.prompt(message);
+      await this.prompt(message, options.images);
       await settled;
       let text = this.streamedText.trim();
       let thinking = this.streamedThinking.trim();

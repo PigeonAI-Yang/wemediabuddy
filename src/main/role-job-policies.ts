@@ -18,6 +18,8 @@ import { resolveAgentPiPrerequisite } from './agent-prerequisites.ts';
 import { startWorkspaceDailyIntelligence } from './workspace-intelligence.ts';
 import { startStudioDraft } from './agent-runner.ts';
 import { startResearchJob } from './research-job-runtime.ts';
+import { isResearchSuccessorRow } from './research-successor.ts';
+import { readProjectInvestigation } from './project-investigation.ts';
 import { preparePiExtension } from './pi-extension.ts';
 import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
@@ -107,14 +109,22 @@ export function runJudgePolicy(ctx: EmployeePolicyContext): Promise<EmployeePoli
   });
 }
 
-/** writer：创作草稿（startStudioDraft 领域原语，草稿保存逻辑零改动）。 */
+/** writer：普通核心初稿先派外部研究；研究续派或已批准专项调查资料包才可直接写作。 */
 export function runDraftPolicy(ctx: EmployeePolicyContext): Promise<EmployeePolicyRun> {
+  const projectId = ctx.spec.projectId ?? '';
+  const investigation = projectId ? readProjectInvestigation(ctx.runtime.database, projectId) : null;
+  const approvedInvestigation = Boolean(
+    investigation?.package
+    && investigation.direction
+    && ['ready_to_write', 'writing', 'completed'].includes(investigation.status)
+  );
   return startStudioDraft({
     dataRootPath: ctx.runtime.identity.rootPath,
     businessDate: ctx.businessDate,
-    projectId: ctx.spec.projectId ?? '',
+    projectId,
     writerTask: ctx.spec.writerTask ?? 'core_draft',
     brief: ctx.brief,
+    researchReady: isResearchSuccessorRow(ctx.runtime.database, ctx.jobId) || approvedInvestigation,
     // WMB-5116：每 job 唯一 start request identity——同 date/project 新工单不再复用确定性
     // `studio_draft:<date>:<project>:start`，避免在 dispatchStart 处 REQUEST_REPLAY_CONFLICT。
     startRequestId: `${ctx.jobId}:studio-draft:start`,

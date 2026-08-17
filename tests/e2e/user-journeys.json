@@ -1602,9 +1602,11 @@
       "page": "settings",
       "risk": "critical",
       "automatable": true,
-      "scenario": "Given 打开设置页 When 点击各分区 Then 分区渲染正确（常规/AI 与模型/Pi Skills/数据与存储/浏览器与账号/情报渠道/X Lists/智能体接入/系统诊断/关于）；sessionStorage 深链（wmb.settingsSection）直达指定分区",
+      "scenario": "Given 打开设置页 When 点击各分区 Then 分区渲染正确（常规/AI 与模型/Pi Skills/数据与存储/浏览器与账号/情报渠道/智能体接入/系统诊断/关于）；情报渠道内可切换来源与扫描和 X Lists 管理；旧 lists 深链进入合并后的情报渠道",
       "assertions": [
-        "全部设置分区可切换且标题正确",
+        "全部设置分区可切换且标题正确，侧栏不存在独立 X Lists",
+        "情报渠道二级切换可达来源与扫描及 X Lists 管理",
+        "旧 lists 深链重定向到情报渠道",
         "从智能体页「设置」进入时自动定位智能体接入分区",
         "settings 视图隐藏 Pi dock（app-shell settings-mode）",
         "返回按钮回到今日"
@@ -1807,6 +1809,41 @@
       ],
       "exclusionReason": null,
       "testFile": "tests/e2e/navigation.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "INV-001-studio-investigation-init-approve",
+      "page": "studio",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 已有选题和来源的创作项目 When 进入项目「调查」工作面并开始调查 Then 生成调查提纲（版本化）并呈报 Owner；Owner 确认前不产生记者工单；确认后进入调查中并持久化记者工单引用（精确项目+提纲版本）",
+      "assertions": [
+        "空态显示开始调查主动作；初始化后状态为 outline_pending_approval 且主动作为保存提纲",
+        "保存提纲落库为版本 1；过期 revision 拒绝（域测试覆盖）",
+        "approve-outline 后状态进入 researching/failed 并持久化 reporter_job_id；失败态可显式补派（retry-reporter，轮次递增）",
+        "重载后调查状态、提纲版本与记者工单引用持久保留",
+        "1100×800 调查工作面无横向溢出，page error 0"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/investigation.test.mjs",
+      "status": "planned"
+    },
+    {
+      "id": "INV-002-studio-investigation-writer-gate",
+      "page": "studio",
+      "risk": "critical",
+      "automatable": true,
+      "scenario": "Given 调查已交付资料包（research_review）When 主管验收并形成调查后写作方向，Owner 第二次批准 Then 只有方向获批后项目进入 ready_to_write 且唯一主动作为显式启动写手；写手启动引用落库；重载后全部档案持久",
+      "assertions": [
+        "research_review 状态展示验收主动作（accept-research）",
+        "accept 后进入 direction_pending_approval，方向版本化保存（不可变版本）",
+        "方向批准前不存在任何 start-writer 入口；approve-direction 后唯一主动作为 start-writer",
+        "显式启动写手后 writer_job_id 落库，状态离开 ready_to_write",
+        "重载后写手引用、资料包、提纲/方向版本与来源关联全部持久",
+        "1100×800 调查工作面无横向溢出，page error 0"
+      ],
+      "exclusionReason": null,
+      "testFile": "tests/e2e/investigation.test.mjs",
       "status": "planned"
     }
   ]

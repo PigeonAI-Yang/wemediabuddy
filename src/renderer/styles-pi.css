@@ -366,6 +366,19 @@ button.pi-jump-latest:not(:disabled):not([aria-disabled="true"]):active { transf
   background: var(--surface-raised); overflow: hidden;
 }
 .pi-composer:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong)); }
+.pi-composer.drag-over { border-color: var(--accent); background: var(--accent-faint); }
+.pi-image-queue { display: flex; gap: 8px; padding: 8px 10px 2px; max-width: 100%; overflow-x: auto; }
+.pi-image-queue-item { display: grid; grid-template-columns: 34px minmax(100px, 1fr) auto; align-items: center; gap: 7px; min-width: 220px; max-width: 280px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.pi-image-queue-item img { width: 34px; height: 34px; object-fit: cover; border-radius: 5px; background: var(--surface); }
+.pi-image-queue-item span { min-width: 0; display: grid; gap: 2px; }
+.pi-image-queue-item b, .pi-image-queue-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-image-queue-item b { font-size: 11px; color: var(--ink); }
+.pi-image-queue-item small { font-size: 10px; color: var(--muted); }
+.pi-image-queue-actions { display: flex; align-items: center; gap: 1px; }
+.pi-image-queue-item button { width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.pi-image-queue-item button:hover, .pi-image-queue-item button:focus-visible { background: var(--surface-hover); color: var(--ink); }
+.pi-image-queue-item button:disabled { opacity: .35; cursor: default; }
+.pi-image-queue-state { margin: 4px 12px 0; color: var(--danger); font-size: 12px; }
 .pi-annotation-badge {
   display: flex; align-items: center; gap: 6px; min-width: 0;
   padding: 8px 12px 2px; font-size: 12px; line-height: 1.4; color: var(--ink);

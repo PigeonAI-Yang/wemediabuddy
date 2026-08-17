@@ -104,6 +104,7 @@ export async function notifyDeskJobEvent(input: {
   runtime?: ActiveWorkspaceRuntime | null;
   getPi?: () => PiRpcSupervisor | null;
   handle?: { taskId?: string | null; sessionFile?: string | null } | null;
+  suppressDeskPrompt?: boolean;
 }): Promise<void> {
   const type = String(input.type || '');
   // 只推关键节点，避免 started 刷屏；started 仍给 UI。waiting_resource 只推 UI，不推 Pi 短回合。
@@ -151,7 +152,7 @@ export async function notifyDeskJobEvent(input: {
     }
   }
 
-  if (!terminal) return;
+  if (!terminal || input.suppressDeskPrompt) return;
 
   const pi = input.getPi?.() ?? deskPiGetter();
   const dataRootPath = runtime?.identity.rootPath;

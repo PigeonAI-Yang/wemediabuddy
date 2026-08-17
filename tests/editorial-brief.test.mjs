@@ -89,7 +89,7 @@ test('assemble returns identity, bounded history, inventory and watermark-scoped
 
     const brief = assembleEditorialBrief(database, { now: NOW, watermark: '2026-08-05T02:00:00.000Z' });
 
-    assert.equal(brief.identity?.audience, '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人');
+    assert.equal(brief.identity?.audience, '正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的中文读者');
     assert.equal(brief.identity?.editorialBrief.includes('五维=时代认知'), true);
     assert.equal(brief.identity?.editorialBrief.includes('迷茫诊断'), true);
     assert.equal(brief.identity?.editorialBrief.includes('SSS'), true);
@@ -149,7 +149,8 @@ test('render produces four blocks with payloads and degrades on empty db', async
 
     const text = renderEditorialBrief(assembleEditorialBrief(database, { now: NOW }));
     for (const marker of ['■ 身份', '■ 历史', '■ 存量', '■ 增量']) assert.ok(text.includes(marker), `missing ${marker}`);
-    assert.ok(text.includes('面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人'));
+    assert.ok(text.includes('正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的中文读者'));
+    assert.ok(text.includes('受众描述只用于内部选题判断'));
     assert.ok(text.includes('渲染作品'));
     assert.ok(text.includes('保留数据开头'));
     assert.ok(text.includes('渲染用摘要'));

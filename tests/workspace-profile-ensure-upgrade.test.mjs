@@ -30,18 +30,20 @@ const V2_OFFICIAL_AI_FIXTURE = {
   contentGoal: '公开用 AI 做内容、跑实验、沉淀方法，把一个人靠内容和产品活下去的路径讲清楚并持续兑现',
   editorialBrief: '编辑使命=公开用 AI 把自己做成能靠内容和产品活下去的人。五维=认知/技能/表达/获客/产品化。优先：真实实验与公开开发回执、可复现用法、受众重复问题、可变现/可产品化信号。降权：纯公告搬运、宏大综述、无观点热点、无法验证的赚钱承诺。栏目骨架：实验日志/开发日志/原则卡/机会判断/周复盘/变现实验。机会按 SSS 至 F 保留全部合格结果。发布是夜灯（X 主战场；小红书客户端人工发）。'
 };
-const NEW_AI_AUDIENCE = '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人';
+const NEW_AI_AUDIENCE = '正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的中文读者';
 
-test('new official.ai root gets template v4 with Zhihu publishing', async () => {
+test('new official.ai root gets template v5 with de-anchored audience and Zhihu publishing', async () => {
   await withDb((database) => {
     const profile = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(profile.displayName, 'AI × 商业化成长');
-    assert.equal(profile.officialTemplateVersion, 4);
+    assert.equal(profile.officialTemplateVersion, 5);
     assert.equal(profile.revision, 1);
     assert.equal(profile.audience, NEW_AI_AUDIENCE);
     assert.match(profile.contentGoal, /真实项目/);
     assert.match(profile.editorialBrief, /五维=时代认知/);
     assert.match(profile.editorialBrief, /迷茫诊断/);
+    assert.match(profile.editorialBrief, /受众描述只用于内部选题判断/);
+    assert.doesNotMatch(profile.audience, /普通人/);
     assert.ok(profile.platforms.includes('zhihu'));
   });
 });
@@ -59,17 +61,17 @@ test('official.ai lineage with template v1 upgrades on ensure', async () => {
     };
     insertWorkspaceProfile(database, stale);
     const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
-    assert.equal(upgraded.officialTemplateVersion, 4);
+    assert.equal(upgraded.officialTemplateVersion, 5);
     assert.equal(upgraded.revision, 2);
     assert.equal(upgraded.displayName, 'AI × 商业化成长');
     assert.equal(upgraded.audience, NEW_AI_AUDIENCE);
     const again = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(again.revision, 2);
-    assert.equal(again.officialTemplateVersion, 4);
+    assert.equal(again.officialTemplateVersion, 5);
   });
 });
 
-test('official.ai lineage with existing v2 profile upgrades to v4 on ensure', async () => {
+test('official.ai lineage with existing v2 profile upgrades to v5 on ensure', async () => {
   await withDb((database) => {
     const stale = {
       ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'],
@@ -79,7 +81,7 @@ test('official.ai lineage with existing v2 profile upgrades to v4 on ensure', as
     };
     insertWorkspaceProfile(database, stale);
     const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
-    assert.equal(upgraded.officialTemplateVersion, 4);
+    assert.equal(upgraded.officialTemplateVersion, 5);
     assert.equal(upgraded.revision, 3);
     assert.equal(upgraded.displayName, 'AI × 商业化成长');
     assert.equal(upgraded.audience, NEW_AI_AUDIENCE);
@@ -87,12 +89,12 @@ test('official.ai lineage with existing v2 profile upgrades to v4 on ensure', as
     assert.doesNotMatch(upgraded.editorialBrief, /内容→信任→付费/);
     const again = ensureOfficialWorkspaceProfile(database, 'official.ai');
     assert.equal(again.revision, 3);
-    assert.equal(again.officialTemplateVersion, 4);
+    assert.equal(again.officialTemplateVersion, 5);
     assert.equal(readWorkspaceProfile(database)?.revision, 3);
   });
 });
 
-test('official.ai v3 workspace upgrades to v4 and enables Zhihu', async () => {
+test('official.ai v3 workspace upgrades to v5 and enables Zhihu', async () => {
   await withDb((database) => {
     insertWorkspaceProfile(database, {
       ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'],
@@ -101,9 +103,28 @@ test('official.ai v3 workspace upgrades to v4 and enables Zhihu', async () => {
       revision: 3
     });
     const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
-    assert.equal(upgraded.officialTemplateVersion, 4);
+    assert.equal(upgraded.officialTemplateVersion, 5);
     assert.equal(upgraded.revision, 4);
     assert.deepEqual(upgraded.platforms, ['x', 'xiaohongshu', 'wechat', 'zhihu']);
+  });
+});
+
+test('official.ai v4 workspace upgrades to v5 and removes title audience anchoring', async () => {
+  await withDb((database) => {
+    insertWorkspaceProfile(database, {
+      ...OFFICIAL_WORKSPACE_TEMPLATES['official.ai'],
+      officialTemplateVersion: 4,
+      audience: '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人',
+      contentGoal: '帮中文普通人完成真实项目',
+      editorialBrief: '无普通人行动意义的参数新闻降权',
+      revision: 4
+    });
+    const upgraded = ensureOfficialWorkspaceProfile(database, 'official.ai');
+    assert.equal(upgraded.officialTemplateVersion, 5);
+    assert.equal(upgraded.revision, 5);
+    assert.equal(upgraded.audience, NEW_AI_AUDIENCE);
+    assert.doesNotMatch(upgraded.audience, /普通人/);
+    assert.match(upgraded.editorialBrief, /标题必须从题材独有的问题、动作、对象或证据中产生/);
   });
 });
 

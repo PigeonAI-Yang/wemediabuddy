@@ -23,6 +23,7 @@ const { RESEARCH_DEFAULT_BUDGET } = await import('../src/main/research-job-runne
 const { buildResearchEvidencePack, parseResearchEvidencePack } = await import('../src/main/research-task-state.ts');
 const {
   RESEARCH_SUCCESSOR_ACTIONS,
+  autoResumeResearchSuccessors,
   decideResearchSuccessor,
   decideResearchSuccessorViaRuntime,
   enqueueResearchSuccessor,
@@ -323,6 +324,28 @@ test('WMB-5173: enqueue — partial with unresolved claims → needs_user row wi
   assert.equal(getResearchSuccessor(db, parent.jobId).status, 'needs_user', '重放不改状态');
 }));
 
+test('WMB-5296: production policy auto-narrows unresolved research and legacy needs_user rows', () => withDb((db) => {
+  const automaticParent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-auto' });
+  const automaticResearch = seedResearchTask(db, {
+    parent: automaticParent, status: 'partial', requiredClaims: [claim('claim_auto')], unresolvedRequiredClaims: ['claim_auto']
+  });
+  const automatic = enqueueResearchSuccessor(db, { researchTaskId: automaticResearch.taskId, autoDecision: 'narrow' });
+  assert.equal(automatic.job.status, 'pending');
+  assert.equal(automatic.job.payload.decision, 'narrow');
+  assert.match(automatic.job.payload.briefSuffix, /主管决策：收窄/);
+
+  const legacyParent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-legacy' });
+  const legacyResearch = seedResearchTask(db, {
+    parent: legacyParent, status: 'partial', requiredClaims: [claim('claim_legacy')], unresolvedRequiredClaims: ['claim_legacy']
+  });
+  const legacy = enqueueResearchSuccessor(db, { researchTaskId: legacyResearch.taskId });
+  assert.equal(legacy.job.status, 'needs_user');
+  assert.equal(autoResumeResearchSuccessors(db), 1);
+  const resumed = getResearchSuccessor(db, legacyParent.jobId);
+  assert.equal(resumed.status, 'pending');
+  assert.equal(resumed.payload.decision, 'narrow');
+}));
+
 test('WMB-5173: enqueue — succeeded (all claims resolved) → pending row (direct run, no needs_user gate)', () => withDb((db) => {
   const parent = seedParent(db, { intent: 'daily_judge', roleId: 'planner' });
   const { taskId } = seedResearchTask(db, { parent, parentRoleId: 'planner', status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
@@ -426,7 +449,7 @@ test('WMB-5173: decide — invalid action, unknown row and terminal rows rejecte
 // 4. 消费：rebuildRoleJobRequest + briefSuffix 派生原角色续派；重启只消费一次
 // ---------------------------------------------------------------------------
 
-test('WMB-5173: kick — consumes needs_user row after decision and spawns original-role successor with EvidencePack briefSuffix, same boundary', async () => withRuntime(async (db) => {
+test('WMB-5296: kick — auto-narrows unresolved claims and spawns original-role successor with the same boundary', async () => withRuntime(async (db) => {
   const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
   const { taskId } = seedResearchTask(db, {
     parent, status: 'partial', requiredClaims: [claim('claim_a'), claim('claim_b', 'B', 'price')], unresolvedRequiredClaims: ['claim_b'], terminalReason: 'budget_exhausted'
@@ -435,10 +458,8 @@ test('WMB-5173: kick — consumes needs_user row after decision and spawns origi
 }, async (runtime, { parent, taskId }) => {
   await enqueueResearchSuccessorForTask(runtime, taskId);
   const row = getResearchSuccessor(runtime.database, parent.jobId);
-  assert.equal(row.status, 'needs_user');
-  const decided = await decideResearchSuccessorViaRuntime(runtime, row.id, 'accept');
-  assert.equal(decided.ok, true);
-
+  assert.equal(row.status, 'pending');
+  assert.equal(row.payload.decision, 'narrow');
   const { spawner, spawned } = fakeSpawner(runtime);
   assert.equal(await kickResearchSuccessors(runtime, spawner), 1);
   const successorJob = spawner.get(row.id);
@@ -448,7 +469,7 @@ test('WMB-5173: kick — consumes needs_user row after decision and spawns origi
   assert.equal(successorJob.businessDate, BUSINESS_DATE, '同一边界 businessDate');
   assert.equal(successorJob.projectId, 'proj-1', '同一边界 projectId');
   assert.ok(successorJob.brief.includes('【研究续派'), 'brief 追加 EvidencePack 摘要');
-  assert.ok(successorJob.brief.includes('【主管决策：接受标注待核实'), 'brief 追加决策说明');
+  assert.ok(successorJob.brief.includes('【主管决策：收窄'), 'brief 追加自动收窄说明');
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(spawned.length, 1);
   // 行已消费（running）：第二次 kick 不再消费（重启只消费一次）。

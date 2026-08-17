@@ -474,6 +474,34 @@ export function partialAgentTask(database: DatabaseSync, id: string): CommandRes
   return success(requireTask(database, id));
 }
 
+/**
+ * 受控研究交接是可审计的部分结果：研究工单引用本身就是当前父任务的交付证据。
+ * 与通用 partial（要求已保存来源）分开，避免把未写正文伪装成普通部分成稿。
+ */
+export function handoffAgentTaskToResearch(
+  database: DatabaseSync,
+  id: string,
+  handoff: { researchJobId: string; researchTaskId: string | null; reused: boolean }
+): CommandResult<AgentTask> {
+  const task = getAgentTask(database, id);
+  if (!task) return failure('NOT_FOUND', 'Agent 任务不存在。');
+  if (task.status === 'partial' && task.phase === 'research_dispatched') return success(task);
+  if (task.status !== 'running') return failure('INVALID_STATE', '只有运行中的任务可以交接研究。');
+  if (!handoff.researchJobId.trim()) return failure('VALIDATION_ERROR', '研究交接缺少 researchJobId。');
+  const now = new Date().toISOString();
+  const resultRefs = {
+    ...task.resultRefs,
+    researchHandoff: {
+      researchJobId: handoff.researchJobId,
+      researchTaskId: handoff.researchTaskId,
+      reused: handoff.reused
+    }
+  };
+  database.prepare(`UPDATE agent_tasks SET status='partial', phase='research_dispatched', result_refs_json=?,
+    control_action=NULL, updated_at=?, finished_at=? WHERE id=?`).run(JSON.stringify(resultRefs), now, now, id);
+  return success(requireTask(database, id));
+}
+
 export function readDailyReceiptAggregation(database: DatabaseSync, task: Pick<AgentTask, 'id' | 'contextRefs'>): DailyReceiptAggregation {
   const workspaceId = typeof task.contextRefs.workspaceId === 'string' ? task.contextRefs.workspaceId : '';
   const frozen = task.contextRefs.intelligenceChannels as { sources?: unknown } | undefined;

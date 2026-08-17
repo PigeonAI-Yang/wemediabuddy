@@ -2,7 +2,7 @@ import type { ContentProjectDetail, ContentProjectPlatform } from '../main/conte
 import type { PlatformMediaBinding, PlatformMediaBindingDraft } from '../shared/media-bindings';
 import { parseAssetImages, type StudioAssetImageRef } from '../shared/media-token';
 
-export type StudioTab = 'core' | 'versions' | 'sources' | 'assets' | `platform:${ContentProjectPlatform}`;
+export type StudioTab = 'core' | 'versions' | 'sources' | 'assets' | 'investigation' | `platform:${ContentProjectPlatform}`;
 
 export const studioPlatformTab = (platform: ContentProjectPlatform): StudioTab => `platform:${platform}`;
 

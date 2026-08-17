@@ -76,6 +76,7 @@ export const MEDIA_ARCHIVE_RETRY_COMMAND = 'media_archive.retry_candidate' as co
 export const MEDIA_ARCHIVE_SET_PAUSED_COMMAND = 'media_archive.set_paused' as const;
 export const MEDIA_ARCHIVE_CLAIM_COMMAND = 'media_archive.claim_job' as const;
 export const MEDIA_ARCHIVE_FINISH_COMMAND = 'media_archive.finish_job' as const;
+export const MEDIA_ARCHIVE_RECOVER_COMMAND = 'media_archive.recover' as const;
 
 export const MEDIA_ARCHIVE_CHANNEL_X = 'x_lists' as const;
 export const MEDIA_ARCHIVE_CHANNEL_WEB = 'official_web' as const;
@@ -931,15 +932,18 @@ async function runOneJobProduction(
   const database = runtime.database;
   const dataRoot = runtime.identity.rootPath;
   // 1. claim（事务内）
+  // requestId 绑定「运行时激活 + job 生命周期」：updatedAt 在用户重试（attempts 归零）时变化，
+  // 保证重试后的新执行不复用旧生命周期回执（避免 REQUEST_REPLAY_CONFLICT / 陈旧回放）。
+  const claimRequestId = `media-archive:${job.id}:claim:${runtime.identity.runtimeEpoch}:${job.attempts}:${job.updatedAt}`;
   const claimReceipt = await dispatchBusinessCommand(runtime, {
     command: MEDIA_ARCHIVE_CLAIM_COMMAND,
-    requestId: `media-archive:${job.id}:claim:${job.attempts}`,
+    requestId: claimRequestId,
     actor: schedulerActor,
     input: { jobId: job.id, expectedAttempts: job.attempts },
     boundIdentity: runtime.identity,
     entityType: 'media_archive_job',
     execute: (db, normalizedInput) => {
-      const result = claimMediaArchiveJob(db, normalizedInput.jobId, normalizedInput.expectedAttempts, { requestId: `media-archive:${job.id}:claim:${job.attempts}` });
+      const result = claimMediaArchiveJob(db, normalizedInput.jobId, normalizedInput.expectedAttempts, { requestId: claimRequestId });
       return { data: result, entityId: job.id };
     }
   });
@@ -956,9 +960,12 @@ async function runOneJobProduction(
 
   // 3. finish（事务内）
   const expectedAttempts = claimData.job.attempts;
+  // 用「claimed 行的 updatedAt」（claim 写入的新时间戳）作为本生命周期终态 token：
+  // 与 claim 的 pending-updatedAt 天然不同，且重试后的新生命周期也必然不同。
+  const finishRequestId = `media-archive:${job.id}:finish:${runtime.identity.runtimeEpoch}:${expectedAttempts}:${claimData.job.updatedAt}`;
   const finishReceipt = await dispatchBusinessCommand(runtime, {
     command: MEDIA_ARCHIVE_FINISH_COMMAND,
-    requestId: `media-archive:${job.id}:finish:${expectedAttempts}`,
+    requestId: finishRequestId,
     actor: schedulerActor,
     input: { jobId: job.id, expectedAttempts, result: execution },
     boundIdentity: runtime.identity,
@@ -1275,7 +1282,19 @@ export class MediaArchiveScheduler {
       if (this.stopped || generation !== this.generation || !runtime.isActive || (this.options.isCurrent && !this.options.isCurrent())) return;
       if (!this.recovered) {
         try {
-          const recovered = recoverInterruptedMediaArchiveJobs(runtime.database, {});
+          // WMB-5301：启动恢复也必须走命令调度（写护栏 WMB_WRITE_REQUIRES_COMMAND_DISPATCH）。
+          // requestId 绑定运行时激活（runtimeEpoch）+ 调度器代际，保证每次调度器启动都真实执行恢复，
+          // 且不会与上一次应用启动的恢复回执冲突/回放。
+          const recovery = await dispatchBusinessCommand(runtime, {
+            command: MEDIA_ARCHIVE_RECOVER_COMMAND,
+            requestId: `media-archive:recover:${runtime.identity.runtimeEpoch}:${generation}`,
+            actor: schedulerActor,
+            input: {},
+            boundIdentity: runtime.identity,
+            entityType: 'media_archive_job',
+            execute: (db) => ({ data: recoverInterruptedMediaArchiveJobs(db, {}) })
+          });
+          const recovered = requireReceiptData(recovery);
           if (recovered.recovered > 0 || recovered.exhausted > 0) {
             broadcastDataChanged({ scopes: ['sources', 'media'], reason: 'media.archive.recover' });
           }

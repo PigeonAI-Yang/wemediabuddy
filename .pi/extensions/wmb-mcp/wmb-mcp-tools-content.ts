@@ -117,6 +117,39 @@ const getTopicMaintenance: ToolDefinition = {
   async execute(_toolCallId, params) { return textResult(await callTool('knowledge.topic_maintenance_get', { proposal_id: String(params.proposalId ?? '') })); }
 };
 
+const importProjectImage: ToolDefinition = {
+  name: 'wmb_import_project_image',
+  label: '导入 WMB 项目配图',
+  description: '把 PNG/JPEG/WebP/GIF 的 base64 数据或受限 SVG 导入指定内容项目，返回 assetId 与可插入正文的 Markdown。',
+  parameters: {
+    type: 'object',
+    properties: {
+      ...authorityProperties,
+      requestId: { type: 'string' },
+      projectId: { type: 'string' },
+      contentBase64: { type: 'string' },
+      svg: { type: 'string' },
+      mimeType: { type: 'string' },
+      fileName: { type: 'string' },
+      alt: { type: 'string' }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'projectId'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('content.import_image', {
+      ...authorityPayload(params),
+      request_id: String(params.requestId ?? ''),
+      project_id: String(params.projectId ?? ''),
+      bytes_base64: params.contentBase64 ? String(params.contentBase64) : undefined,
+      svg_text: params.svg ? String(params.svg) : undefined,
+      mime_type: params.mimeType ? String(params.mimeType) : undefined,
+      file_name: params.fileName ? String(params.fileName) : undefined,
+      alt: params.alt ? String(params.alt) : undefined
+    }));
+  }
+};
+
 const saveCoreVersion: ToolDefinition = {
   name: 'wmb_save_core_version',
   label: '保存 WMB 核心初稿',
@@ -129,7 +162,24 @@ const saveCoreVersion: ToolDefinition = {
       projectId: { type: 'string' },
       expectedRevision: { type: 'number' },
       title: { type: 'string' },
-      body: { type: 'string' }
+      body: { type: 'string' },
+      mediaBindings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            assetId: { type: 'string' },
+            occurrence: { type: 'number' },
+            widthPreset: { type: 'string', enum: ['small', 'medium', 'large', 'full'] },
+            align: { type: 'string', enum: ['left', 'center', 'right'] },
+            caption: { type: ['string', 'null'] },
+            linkUrl: { type: ['string', 'null'] },
+            mediaKind: { type: 'string', enum: ['image', 'video', 'video_poster'] }
+          },
+          required: ['assetId', 'occurrence', 'widthPreset', 'align'],
+          additionalProperties: false
+        }
+      }
     },
     required: ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'body'],
     additionalProperties: false
@@ -141,7 +191,16 @@ const saveCoreVersion: ToolDefinition = {
       project_id: String(params.projectId ?? ''),
       expected_revision: Number(params.expectedRevision),
       title: params.title ? String(params.title) : undefined,
-      body: String(params.body ?? '')
+      body: String(params.body ?? ''),
+      media_bindings: Array.isArray(params.mediaBindings) ? params.mediaBindings.map((binding) => ({
+        asset_id: String((binding as Record<string, unknown>).assetId ?? ''),
+        occurrence: Number((binding as Record<string, unknown>).occurrence),
+        width_preset: (binding as Record<string, unknown>).widthPreset,
+        align: (binding as Record<string, unknown>).align,
+        caption: (binding as Record<string, unknown>).caption,
+        link_url: (binding as Record<string, unknown>).linkUrl,
+        media_kind: (binding as Record<string, unknown>).mediaKind
+      })) : undefined
     }));
   }
 };
@@ -336,4 +395,74 @@ const saveReview: ToolDefinition = {
   }
 };
 
-export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getMetrics, getReviews, saveReview];
+const getInvestigation: ToolDefinition = {
+  name: 'wmb_get_investigation',
+  label: '读取项目调查',
+  description: '读取指定内容项目的专项调查状态、当前 revision、提纲版本、资料包和写作方向。',
+  parameters: {
+    type: 'object',
+    properties: { projectId: { type: 'string' } },
+    required: ['projectId'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('investigation.get', { project_id: String(params.projectId ?? '') }));
+  }
+};
+
+const saveInvestigationOutline: ToolDefinition = {
+  name: 'wmb_save_investigation_outline',
+  label: '保存项目调查提纲',
+  description: '主管为专项调查保存问题导向的完整提纲草稿。每次成功保存形成不可变新版本；不批准提纲、不派记者。',
+  parameters: {
+    type: 'object',
+    properties: {
+      ...authorityProperties,
+      requestId: { type: 'string' },
+      projectId: { type: 'string' },
+      expectedRevision: { type: 'number' },
+      outline: {
+        type: 'object',
+        properties: {
+          scope: { type: 'string' },
+          exclusions: { type: 'array', items: { type: 'string' } },
+          known: { type: 'array', items: { type: 'string' } },
+          hypotheses: { type: 'array', items: { type: 'string' } },
+          questions: { type: 'array', items: { type: 'string' } },
+          dimensions: { type: 'array', items: { type: 'string' } },
+          materialRequirements: { type: 'array', items: { type: 'string' } },
+          truthRisks: { type: 'array', items: { type: 'string' } },
+          disconfirmingConditions: { type: 'array', items: { type: 'string' } },
+          completionCriteria: { type: 'array', items: { type: 'string' } }
+        },
+        required: ['scope', 'exclusions', 'known', 'hypotheses', 'questions', 'dimensions', 'materialRequirements', 'truthRisks', 'disconfirmingConditions', 'completionCriteria'],
+        additionalProperties: false
+      }
+    },
+    required: ['requestId', 'taskId', 'grantId', 'projectId', 'expectedRevision', 'outline'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    const outline = params.outline as Record<string, unknown>;
+    return textResult(await callTool('investigation.outline_save', {
+      ...authorityPayload(params),
+      request_id: String(params.requestId ?? ''),
+      project_id: String(params.projectId ?? ''),
+      expected_revision: Number(params.expectedRevision),
+      outline: {
+        scope: String(outline.scope ?? ''),
+        exclusions: outline.exclusions,
+        known: outline.known,
+        hypotheses: outline.hypotheses,
+        questions: outline.questions,
+        dimensions: outline.dimensions,
+        material_requirements: outline.materialRequirements,
+        truth_risks: outline.truthRisks,
+        disconfirming_conditions: outline.disconfirmingConditions,
+        completion_criteria: outline.completionCriteria
+      }
+    }));
+  }
+};
+
+export const contentTools = [createCreativeBrief, updateCreativeBrief, createProjectFromBrief, getBriefLineage, recordKnowledge, proposeTopicMaintenance, listTopicMaintenance, getTopicMaintenance, importProjectImage, saveCoreVersion, savePlatformVersion, createContentProject, getContent, listContentProjects, getInvestigation, saveInvestigationOutline, getMetrics, getReviews, saveReview];

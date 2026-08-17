@@ -336,11 +336,11 @@ test('view DOM gates: detail modal reads real data through shared read-only APIs
   assert.match(modal, /window\.wmb\.getAgentTaskTranscript\(selected\.jobId\)\.catch\(\(\) => null\)/);
   assert.match(source, /deskRow=\{deskRow\}/);
   assert.match(source, /deskOccupied=\{deskOccupied\}/);
-  assert.match(modal, /window\.wmb\.getAgentTask\(\{ id: deskRow\.taskId \}\)\.catch\(\(\) => null\)/);
+  assert.match(modal, /row\?\.taskId \? window\.wmb\.getAgentTask\(\{ id: row\.taskId \}\)\.catch\(\(\) => null\)/);
   assert.match(modal, /window\.wmb\.getPiConversation\(\)\.catch\(\(\) => null\)/);
   assert.match(modal, /applyPiTranscriptEvent\(items \?\? \[\], event\)/);
   assert.match(modal, /mergePiConversationWithLive\(disk, current\)/);
-  assert.match(modal, />实时运行记录</);
+  assert.match(modal, /<RunLogSection events=\{events\} transcript=/);
   // 员工事件重读；主管实时归并并低频与磁盘对账；关闭清理。
   assert.match(modal, /setInterval\(reload, 5000\)/);
   // Esc/遮罩/焦点由共享 AppModal 承担，feature 不得重建 keydown 监听。
@@ -362,7 +362,7 @@ test('detail transcript separates input, notices, replies, thinking, and tools (
   assert.match(modal, /const isLongInput = text\.length > 360 \|\| text\.split\('\\n'\)\.length > 8/);
   assert.match(modal, /<details className="agents-detail-expandable">/);
   assert.match(css, /\.agents-detail-expandable > summary \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/);
-  assert.match(css, /\.agents-detail-transcript \{[\s\S]*gap: 0;[\s\S]*overflow: hidden;/);
+  assert.match(css, /\.agents-detail-run-log \{[\s\S]*max-height: min\(46vh, 520px\);[\s\S]*overflow-y: auto;[\s\S]*scrollbar-gutter: stable;/);
   assert.match(css, /\.agents-detail-entry\.user \{[\s\S]*background: color-mix/);
   assert.match(css, /\.agents-detail-entry\.system-event > summary \{[\s\S]*grid-template-columns: auto minmax\(0, 1fr\) auto;/);
   assert.match(css, /\.agents-detail-segment \{[\s\S]*grid-template-columns: 40px minmax\(0, 1fr\);/);

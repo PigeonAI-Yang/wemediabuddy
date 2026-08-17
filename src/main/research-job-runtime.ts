@@ -24,7 +24,7 @@ import { migrateDatabase } from './db/migrations.ts';
 import { requireReceiptData, dispatchBusinessCommand } from './business-command.ts';
 import { ensurePiConversationLayout } from './pi-conversation.ts';
 import { preparePiExtension } from './pi-extension.ts';
-import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
+import { piTaskAuthorityPrompt, skillSourcePath } from './pi-operator-skill.ts';
 import { buildOrchestrationEnvelope } from '../shared/orchestration-envelope.ts';
 import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
@@ -55,9 +55,13 @@ function taskCommandContext(lane: string, requestId: string, taskId?: string, wo
   return { actor: schedulerActor(lane), requestId, taskId, workerLeaseId, causation };
 }
 
-function piPromptTimeoutMs(): number {
-  const raw = Number(process.env.WMB_PI_PROMPT_TIMEOUT_MS ?? 300_000);
-  return Number.isFinite(raw) && raw >= 30_000 ? Math.floor(raw) : 300_000;
+/**
+ * 研究记者会话需要完成多轮检索和正文读取；默认 10 分钟，为 12 分钟研究硬预算
+ * 留出至少 2 分钟给机器抓取、claim 判定与终态持久化。显式环境配置仍可下调。
+ */
+export function resolveResearchPromptTimeoutMs(raw: unknown = process.env.WMB_PI_PROMPT_TIMEOUT_MS): number {
+  const value = Number(raw ?? 600_000);
+  return Number.isFinite(value) && value >= 30_000 ? Math.floor(value) : 600_000;
 }
 
 function mutationDependency(input: { activeRuntime?: ActiveWorkspaceRuntime; dataRootPath: string }): { dependency: AgentTaskMutationDependency; database: DatabaseSync; close: () => void } {
@@ -68,6 +72,25 @@ function mutationDependency(input: { activeRuntime?: ActiveWorkspaceRuntime; dat
 
 async function piCliPath(dataRootPath: string): Promise<string> {
   return piCliFromRuntimeRoot(await resolvePiRuntimeRoot(dataRootPath));
+}
+
+export function researchSkillSourcePath(): string {
+  return skillSourcePath('deep-research');
+}
+
+export function researchPiRuntimeArgs(input: {
+  piCliPath: string;
+  sessionFile: string;
+  extensionPath: string;
+  model: string;
+  authorityPrompt: string;
+}): string[] {
+  return [
+    input.piCliPath, '--mode', 'rpc', '--session', input.sessionFile, '-e', input.extensionPath,
+    '--skill', researchSkillSourcePath(),
+    '--provider', 'wmb-api', '--model', input.model,
+    '--append-system-prompt', input.authorityPrompt
+  ];
 }
 
 // ============================================================================
@@ -110,13 +133,16 @@ export function researchDiscoveryPrompt(task: AgentTask, gap: ResearchGap): stri
   return [
     ...researchBriefHeader(task, gap),
     '任务：',
-    '1. 只通过白名单只读工具研究（web 用 wmb_search_web / wmb_read_web_page；X/XHS 用对应只读工具），禁止绕过。',
+    '1. 必须先主动调用 wmb_search_web 检索公网；对每条入选 web 候选再调用 wmb_read_web_page 实际打开正文。X/XHS 候选必须用对应只读工具读取正文。禁止用模型记忆、搜索摘要、标题或 URL 代替已读证据。',
     researchToolDisciplineText(),
-    '2. 为每个声明收集候选来源，每条候选给出可核验字段 title/originalUrl/author/summary；price/policy 类声明每条候选必须同时带 publishedAt（时间）与 excerpt（原文关键句 verbatim 摘录）。',
-    '3. 官方/一手来源 sourceKind 填 official，其余填 secondary（机器按 1 官方 或 2 独立域二手 门槛校验，不达标不采信）。',
-    `4. 候选总数不得超过 ${budget.maxCandidates} 条；X/XHS 已读正文放 inlineText，web 候选不填 inlineText（由系统抓取）。`,
-    '5. 末条回复必须输出一个 ```json 代码块：{ "candidates": [{ "key": "<唯一键>", "claimKey": "<声明键>", "url": "...", "title": "...", "author": "...", "summary": "...", "publishedAt": "...", "excerpt": "...", "sourceKind": "official|secondary", "inlineText": "..." }] }。',
-    '不得编造来源 URL 或字段；无法核验的候选不要列入。'
+    '2. 围绕每个声明分别执行支持性查询与反证/限制性查询；优先寻找官方/一手资料，同时补充独立真实案例、失败案例或不适用边界。',
+    '3. 只输出实际打开并读过的候选；每条给出可核验字段 title/originalUrl/author/summary。price/policy 类声明每条候选必须同时带 publishedAt（时间）与 excerpt（原文关键句 verbatim 摘录）。',
+    '4. 官方/一手来源 sourceKind 填 official，其余填 secondary（机器按 1 官方 或 2 独立域二手 门槛校验，不达标不采信）。',
+    `5. 候选总数不得超过 ${budget.maxCandidates} 条；达到 ${budget.minValidSources} 条有效候选，或发现阶段已用约 8 分钟时，立即停止继续扩展并输出当前结果。X/XHS 已读正文放 inlineText，web 候选不填 inlineText（由系统再次抓取、校验并写入 Source SSOT）。`,
+    '6. 本阶段只负责读取与返回候选：禁止调用 wmb_save_source，禁止调用 wmb_report_agent_progress；来源写入与进度持久化由系统在结构化回复后执行。',
+    '7. 如果联网检索或正文读取不可用，返回空候选或仅返回已实际读到的候选；不得用未经核验的产品结论补齐数量。',
+    '8. 末条回复必须输出一个 ```json 代码块：{ "candidates": [{ "key": "<唯一键>", "claimKey": "<声明键>", "url": "...", "title": "...", "author": "...", "summary": "...", "publishedAt": "...", "excerpt": "...", "sourceKind": "official|secondary", "inlineText": "..." }] }。',
+    '不得编造来源 URL 或字段；无法核验的候选不要列入。系统只会为成功抓取并写入资料库的候选签发 sourceId。'
   ].join('\n');
 }
 
@@ -126,11 +152,12 @@ export function researchProposalPrompt(task: AgentTask, gap: ResearchGap, eviden
     ...researchBriefHeader(task, gap),
     '已核验证据（sourceId 索引，系统已抓取并入库）：',
     evidenceSummary,
+    '本阶段只依据上方已入库证据输出判定；禁止继续检索、读取、写入来源或上报进度。',
     '判定规则（机器为准，建议仅作参考，伪造不达标建议会被降级）：',
     '- supported = ≥1 官方/一手源，或 ≥2 独立可靠二手源（域名互异、字段完整）；price/policy 每条支撑证据必须带时间+摘录。',
     '- contradicted = 反向证据达同门槛，或官方来源直接推翻原命题。',
     '- unresolved = 一轮内已核查但无法判定（证据不足/冲突未达门槛）。',
-    '末条回复必须输出一个 ```json 代码块：{ "claims": [{ "claimKey": "...", "status": "supported|contradicted|unresolved|source_unavailable", "evidenceSourceIds": ["<sourceId>"], "verdictReason": "..." }] }。',
+    '末条回复必须直接输出一个 ```json 代码块：{ "claims": [{ "claimKey": "...", "status": "supported|contradicted|unresolved|source_unavailable", "evidenceSourceIds": ["<sourceId>"], "verdictReason": "..." }] }。',
     '不得编造无出处数字；证据不足时如实标 unresolved。'
   ].join('\n');
 }
@@ -310,11 +337,13 @@ export async function startResearchJob(input: {
 
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
       await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
-      const runtime = new PiRpcSupervisor(process.execPath, [
-        await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', sessionFile, '-e', extensionPath,
-        '--provider', 'wmb-api', '--model', nextConfig.model,
-        '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
-      ], {
+      const runtime = new PiRpcSupervisor(process.execPath, researchPiRuntimeArgs({
+        piCliPath: await piCliPath(input.dataRootPath),
+        sessionFile,
+        extensionPath,
+        model: nextConfig.model,
+        authorityPrompt: piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
+      }), {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
         PI_CODING_AGENT_DIR: layout.agentDir,
@@ -367,7 +396,7 @@ export async function startResearchJob(input: {
       now: () => new Date(),
       discoverCandidates: async (researchGap, options) => {
         if (abortController.signal.aborted) return [];
-        const output = await promptOnce(researchDiscoveryPrompt(task, researchGap), Math.max(30_000, Math.min(piPromptTimeoutMs(), options.timeLeftMs)));
+        const output = await promptOnce(researchDiscoveryPrompt(task, researchGap), Math.max(30_000, Math.min(resolveResearchPromptTimeoutMs(), options.timeLeftMs)));
         const parsed = parseResearchCandidates(output);
         if (!parsed) throw new Error('DISCOVERY_PARSE_FAILED：研究候选结构化输出缺失或非法（fail-closed）。');
         return parsed;
@@ -423,7 +452,7 @@ export async function startResearchJob(input: {
       },
       proposeClaims: async (proposalInput) => {
         if (abortController.signal.aborted) return [];
-        const output = await promptOnce(researchProposalPrompt(task, gap, researchEvidenceSummary(proposalInput.evidenceByClaim)), Math.max(30_000, Math.min(piPromptTimeoutMs(), proposalInput.timeLeftMs)));
+        const output = await promptOnce(researchProposalPrompt(task, gap, researchEvidenceSummary(proposalInput.evidenceByClaim)), Math.max(30_000, Math.min(resolveResearchPromptTimeoutMs(), proposalInput.timeLeftMs)));
         const parsed = parseClaimProposals(output);
         if (!parsed) throw new Error('PROPOSAL_PARSE_FAILED：claim 建议结构化输出缺失或非法（fail-closed）。');
         return parsed;
@@ -495,13 +524,13 @@ export async function startResearchJob(input: {
           entityType: 'agent_task',
           execute: (db) => {
             writeResearchTerminal(db, task.id, { status: terminalStatus, pack: evidencePack });
-            enqueueResearchSuccessor(db, { researchTaskId: task.id });
+            enqueueResearchSuccessor(db, { researchTaskId: task.id, autoDecision: 'narrow' });
             return { data: { taskId: task.id, status: terminalStatus }, entityId: task.id, readback: null };
           }
         });
       } else {
         writeResearchTerminal(database, task.id, { status: terminalStatus, pack: evidencePack });
-        enqueueResearchSuccessor(database, { researchTaskId: task.id });
+        enqueueResearchSuccessor(database, { researchTaskId: task.id, autoDecision: 'narrow' });
       }
     }
     return { task: getAgentTask(database, task.id) ?? task, reused: started.reused };

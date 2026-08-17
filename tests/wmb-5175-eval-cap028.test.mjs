@@ -684,7 +684,7 @@ test('EVAL-032 #9: Today projection — exactly one needs_user card with three a
   assert.equal(item.decision, null);
   assert.deepEqual(RESEARCH_SUCCESSOR_ACTIONS, ['narrow', 'supplement', 'accept'], '三动作：收窄/手动补料/接受标注待核实');
   // 投影只含声明语义：候选/进度/裸资料字段不得出现。
-  const allowed = ['id', 'parentJobId', 'parentTaskId', 'researchTaskId', 'parentRoleId', 'unresolvedClaims', 'decision', 'createdAt', 'updatedAt'];
+  const allowed = ['id', 'parentJobId', 'parentTaskId', 'researchTaskId', 'parentRoleId', 'projectId', 'unresolvedClaims', 'decision', 'createdAt', 'updatedAt'];
   assert.deepEqual(Object.keys(item).sort(), allowed.sort(), '研究进度/候选/裸资料永不上桌');
 }));
 
@@ -733,8 +733,8 @@ test('EVAL-032 #10: reconcile — restart recovery enqueues missing successor id
   assert.equal(successorRowCount(db, parent.jobId), 1);
 }));
 
-// #11 产物质量：续派 brief 只带 EvidencePack 摘要，无旧稿复制；accept 标注待核实
-test('EVAL-032 #11: artifact quality — successor brief appends pack summary, no raw material; accept labels unresolved claims', () => withDb((db) => {
+// #11 产物质量：续派 brief 只带内部 EvidencePack 摘要，并强制输出干净正文
+test('EVAL-032 #11: artifact quality — unresolved claims are internally excluded, never padded into article disclaimers', () => withDb((db) => {
   const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1', taskId: 'parent-q', jobId: 'job-q' });
   const research = seedResearchTask(db, {
     parent, status: 'partial', taskId: 'research-q',
@@ -744,12 +744,14 @@ test('EVAL-032 #11: artifact quality — successor brief appends pack summary, n
   const suffix = buildSuccessorBriefSuffix(research.pack, research.gap, 'accept');
   assert.match(suffix, /研究续派 — EvidencePack 摘要/);
   assert.match(suffix, /glm52_official_price_rise（price\/policy，需时间\+摘录）：unresolved（threshold_not_met）/);
-  assert.match(suffix, /未解决声明：glm52_official_price_rise/);
-  assert.match(suffix, /不得编造无出处数字；未解决声明必须如实标注待核实，不得整段复制旧稿/);
-  assert.match(suffix, /【主管决策：接受标注待核实】/, 'accept 决策说明进入续派 brief');
-  assert.doesNotMatch(suffix, /zhipuai\.cn|openrouter\.ai|candidate|https?:\/\//, '续派 brief 不带候选 URL/裸资料/旧稿正文（写作纪律行为约束由纪律文本承载）');
+  assert.match(suffix, /仅供内部剔除的未解决声明：glm52_official_price_rise/);
+  assert.match(suffix, /未解决声明只用于内部删减，不得写入正式正文/);
+  assert.match(suffix, /不得输出研究过程、核查摘要、残余不确定项或免责声明式尾注/);
+  assert.match(suffix, /【主管决策：接受标注待核实】/, 'accept 决策仍保留内部状态，但禁止免责声明式正文');
+  assert.match(suffix, /正式正文不得出现待核实清单、研究过程说明或免责声明式尾注/);
+  assert.doesNotMatch(suffix, /zhipuai\.cn|openrouter\.ai|candidate|https?:\/\//, '续派 brief 不带候选 URL/裸资料/旧稿正文');
 
-  // 「官方涨价」由未核实变为有据或按用户决策标注：accept 路径保持 unresolved 但显式标注待核实。
+  // accept 只保留内部决策状态；未解决声明仍不得写入正式正文。
   const enqueued = enqueueResearchSuccessor(db, { researchTaskId: research.taskId }).job;
   const decided = decideResearchSuccessor(db, enqueued.id, 'accept');
   assert.equal(decided.ok, true);

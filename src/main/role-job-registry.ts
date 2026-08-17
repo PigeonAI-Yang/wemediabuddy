@@ -40,7 +40,9 @@ import { buildJobObjectBoundary, isEmployeeRole } from './job-object-boundary.ts
 
 /**
  * WMB-5170 §5.2 ResearchGap（研究缺口合同，值对象）。
- * parentRoleId ∈ {writer, planner, librarian}——禁止 reporter/research 作父（§8.2 硬止环派生层）。
+ * parentRoleId ∈ {writer, planner, librarian}——禁止 reporter/research 作父（§8.2 硬止环派生层）；
+ * WMB-5290 扩展 'desk'：项目专项调查派记者（合成稳定父身份 investigation:<projectId>；
+ * 由项目调查层派单，禁止 research_successor 续派——desk 父在 enqueueResearchSuccessor 硬跳过）。
  * budget = 深度档（本次唯一档位）：12 分钟 / 15 有效来源 / 40 候选 / 3 并行抓取 / 仅一轮。
  */
 export type ResearchClaimType = 'fact' | 'price' | 'policy';
@@ -60,7 +62,7 @@ export type ResearchGap = Readonly<{
   gapId: string;
   parentJobId: string;
   parentTaskId: string;
-  parentRoleId: 'writer' | 'planner' | 'librarian';
+  parentRoleId: 'writer' | 'planner' | 'librarian' | 'desk';
   requiredClaims: readonly ResearchRequiredClaim[];
   budget: ResearchBudget;
   channels: readonly ('web' | 'x' | 'xhs')[];
@@ -162,7 +164,9 @@ export const JOB_ERROR_CODES = Object.freeze({
   REPORTER_SCAN_FAILED: 'REPORTER_SCAN_FAILED',
   PLANNER_JUDGE_FAILED: 'PLANNER_JUDGE_FAILED',
   WRITER_DRAFT_FAILED: 'WRITER_DRAFT_FAILED',
-  RESEARCH_FAILED: 'RESEARCH_FAILED'
+  RESEARCH_FAILED: 'RESEARCH_FAILED',
+  /** WMB-5290：写手工单对象项目存在调查但未达可写状态（服务端写手门）。 */
+  JOB_INVESTIGATION_NOT_READY: 'JOB_INVESTIGATION_NOT_READY'
 } as const);
 
 /** §5.2 派生表：roleId → intent（唯一真相源）。 */
@@ -263,7 +267,8 @@ function optionalStringArray(value: unknown, label: string): readonly string[] |
 
 /**
  * WMB-5170 §5.2/§8.2：research 块 strict-key 校验（fail-closed）。
- * parentRoleId ∈ {writer, planner, librarian}——reporter/research 作父一律 VALIDATION_ERROR（硬止环派生层）。
+ * parentRoleId ∈ {writer, planner, librarian, desk}——reporter/research 作父一律 VALIDATION_ERROR（硬止环派生层）；
+ * desk 仅限项目专项调查派单（WMB-5290，由项目调查层构造合成父身份）。
  */
 function parseResearchGap(value: unknown): ResearchGap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -280,8 +285,8 @@ function parseResearchGap(value: unknown): ResearchGap {
   if (!parentJobId) throw validationError('research.parentJobId 不能为空。');
   const parentTaskId = typeof record.parentTaskId === 'string' ? record.parentTaskId.trim() : '';
   if (!parentTaskId) throw validationError('research.parentTaskId 不能为空。');
-  if (record.parentRoleId !== 'writer' && record.parentRoleId !== 'planner' && record.parentRoleId !== 'librarian') {
-    throw validationError('research.parentRoleId 只允许 writer/planner/librarian（禁止 reporter/research 作父）。');
+  if (record.parentRoleId !== 'writer' && record.parentRoleId !== 'planner' && record.parentRoleId !== 'librarian' && record.parentRoleId !== 'desk') {
+    throw validationError('research.parentRoleId 只允许 writer/planner/librarian/desk（禁止 reporter/research 作父）。');
   }
   if (!Array.isArray(record.requiredClaims) || record.requiredClaims.length === 0) {
     throw validationError('research.requiredClaims 必须是非空数组。');

@@ -10,6 +10,7 @@ import { visualUnderstandingMigrations } from './visual-understanding-migrations
 import { mediaGovernanceMigrations } from './media-governance-migrations.ts';
 import { sourceBodyArchiveMigrations } from './source-body-archive-migrations.ts';
 import { wikiIndexMigrations } from './wiki-index-migrations.ts';
+import { piImageBatchMigrations } from './pi-image-batch-migrations.ts';
 import { registerSourceBodyRevisionPurgeGate } from '../source-body-cache.ts';
 
 export const migrations = [
@@ -619,7 +620,7 @@ export const migrations = [
       CREATE INDEX studio_annotations_scope ON studio_annotations(project_id, document_kind, document_id, status);
     `
   },
-  ...sourceBodyArchiveMigrations
+  ...sourceBodyArchiveMigrations, ...piImageBatchMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

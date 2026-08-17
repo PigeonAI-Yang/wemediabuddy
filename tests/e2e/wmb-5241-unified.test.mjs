@@ -804,7 +804,7 @@ export default [
         assert(opened, '创作库应找到 WMB-5241 图片编辑项目');
         await page.waitForSelector('.studio-editor-view', { timeout: 15_000 });
         await page.evaluate(() => {
-          const btn = [...document.querySelectorAll('.studio-mode-switch button')].find((b) => b.textContent?.includes('渲染编辑'));
+          const btn = [...document.querySelectorAll('.studio-mode-switch button')].find((b) => b.textContent?.includes('可视化编辑'));
           btn?.click();
         });
         const FIGURE_SEL = '.studio-rich-annotate-wrap .studio-rich-editor figure.studio-figure[data-wmb-asset]';

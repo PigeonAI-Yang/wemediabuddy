@@ -39,6 +39,10 @@ export type StudioInlineImageOverlayProps = {
   editable: boolean;
   /** 核心正文模式：显示尺寸/对齐与拖拽手柄（平台模式无布局字段）。 */
   showLayout: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onWidthPreset: (preset: MediaWidthPreset) => void;
   onAlign: (align: MediaAlign) => void;
   onReplace: () => void;
@@ -53,7 +57,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function StudioInlineImageOverlay(props: StudioInlineImageOverlayProps): React.JSX.Element | null {
-  const { selection, findFigure, draft, alt, editable, showLayout, onWidthPreset, onAlign, onReplace, onEditCaption, onCrop, onRemove, onClose } = props;
+  const { selection, findFigure, draft, alt, editable, showLayout, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onWidthPreset, onAlign, onReplace, onEditCaption, onCrop, onRemove, onClose } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -153,12 +157,16 @@ export function StudioInlineImageOverlay(props: StudioInlineImageOverlayProps): 
     );
   }
 
-  // 工具条定位：优先紧贴图片上方，空间不足则下方；水平跟随图片左缘（钳制在视口内）。
+  // 工具条定位：优先紧贴图片上方，空间不足则下方；保持在 Studio 文档列内，避免遮挡 Pi dock。
   let toolbarTop: number | null = null;
   let toolbarLeft = 8;
   if (rect) {
     const tw = toolbarWidth || 320;
-    toolbarLeft = clamp(rect.left, 8, Math.max(8, window.innerWidth - tw - 8));
+    const figure = findFigure(selection);
+    const documentRect = figure?.closest('.studio-document')?.getBoundingClientRect();
+    const minLeft = Math.max(8, (documentRect?.left ?? 0) + 8);
+    const maxLeft = Math.max(minLeft, Math.min(window.innerWidth - tw - 8, (documentRect?.right ?? window.innerWidth) - tw - 8));
+    toolbarLeft = clamp(rect.left, minLeft, maxLeft);
     const above = rect.top - 40 - TOOLBAR_ABOVE_GAP;
     toolbarTop = above >= 8 ? above : rect.top + rect.height + TOOLBAR_BELOW_GAP;
   }
@@ -253,6 +261,11 @@ export function StudioInlineImageOverlay(props: StudioInlineImageOverlayProps): 
               <span className="studio-inline-sep" aria-hidden="true" />
             </>
           )}
+          <div className="studio-inline-group" role="group" aria-label="移动图片">
+            <button type="button" className="studio-inline-action" data-action="move-up" aria-label="向上移动图片" disabled={!canMoveUp} onClick={onMoveUp}>上移</button>
+            <button type="button" className="studio-inline-action" data-action="move-down" aria-label="向下移动图片" disabled={!canMoveDown} onClick={onMoveDown}>下移</button>
+          </div>
+          <span className="studio-inline-sep" aria-hidden="true" />
           <button type="button" className="studio-inline-action" data-action="replace" aria-label="替换图片" onClick={onReplace}>替换</button>
           {captionEditing ? (
             <span className="studio-inline-caption-edit">

@@ -24,7 +24,7 @@ import {
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
-import type { WriterTask } from './role-job-registry.ts';
+import type { RoleJobRequest, WriterTask } from './role-job-registry.ts';
 import {
   agentRequestId,
   cancelAgentTask,
@@ -58,9 +58,12 @@ import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import type { ResolvedPiConfig } from './pi-config.ts';
 import { saveCurrentPlan } from './planning.ts';
 import { getToday } from './workbench.ts';
+import { buildJobContextRefs, buildJobObjectBoundary, readJobContractFromRefs } from './job-object-boundary.ts';
 
 const planOutputItemSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).refine((title) => !title.includes('普通人'), {
+    message: '标题不得把受众身份词「普通人」写进发布标题；请改用题材的具体对象、问题、动作或证据'
+  }),
   priority: z.number().int().min(0).max(7),
   whyNow: z.string().min(1),
   timeliness: z.string().min(1),
@@ -156,7 +159,10 @@ export function parseDailyPlanOutput(sessionText: string): DailyPlanOutput {
     throw new Error('模型输出的 ```json 方案块不是合法 JSON。');
   }
   const parsed = planOutputSchema.safeParse(value);
-  if (!parsed.success) throw new Error(`模型方案结构不完整：${parsed.error.issues.slice(0, 3).map((issue) => issue.path.join('.') || issue.message).join('；')}`);
+  if (!parsed.success) throw new Error(`模型方案结构不完整：${parsed.error.issues.slice(0, 3).map((issue) => {
+    const field = issue.path.join('.');
+    return field ? `${field}: ${issue.message}` : issue.message;
+  }).join('；')}`);
   return parsed.data;
 }
 
@@ -306,7 +312,7 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
         '',
         '■ 第一关：赛道相关性判定（资料门，必须先做这一关）',
         `以下 ${options.gate.autoRelevantIds.length} 条增量资料已由系统按官方信源规则判定为赛道相关（Tier 0，无需你判定，四问可直接使用）：${options.gate.autoRelevantIds.join('、')}`,
-        `其余 ${options.gate.pendingIds.length} 条增量资料必须逐条判定赛道相关性：是当前赛道（「身份」块：服务「面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人」的方向与真实项目素材，五维=时代认知/个人方向/AI 实践/公开验证/产品化）的有效素材 → relevant:true；不是 → relevant:false + reasonCode + 一句话 reason。纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺 → irrelevant。reasonCode 只能从以下选择：${modelReasonCodes.join(' / ')}。`,
+        `其余 ${options.gate.pendingIds.length} 条增量资料必须逐条判定赛道相关性：是当前赛道（「身份」块：服务「正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人」的方向与真实项目素材，五维=时代认知/个人方向/AI 实践/公开验证/产品化）的有效素材 → relevant:true；不是 → relevant:false + reasonCode + 一句话 reason。纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺 → irrelevant。reasonCode 只能从以下选择：${modelReasonCodes.join(' / ')}。`,
         '先输出赛道判定 JSON 块（每条待判资料都必须出现且只出现一次，缺失或重复任何一条整轮失败）：',
         '```json',
         '{ "gate": [{ "sourceId": "简报「增量」块中的真实 id", "relevant": true }, { "sourceId": "…", "relevant": false, "reasonCode": "lifestyle_noise", "reason": "一句话原因" }] }',
@@ -329,9 +335,10 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     ...gateSection,
     '',
     '判断要求：',
-    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。脱离身份的泛 AI 资讯、纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
+    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
     '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
     '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
+    '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。反常识、夸张或需要解释的方向只放 titleGuidance。',
     '3. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。',
     '3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。',
     '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。',
@@ -762,7 +769,7 @@ export async function startDailyIntelligence(input: {
   } finally { close(); }
 }
 
-export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = ''): string {
+export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = '', researchReady = false): string {
   if (writerTask === 'xiaohongshu_platform_version') {
     return [
       '执行 WeMediaBuddy Studio 小红书平台版本任务。',
@@ -775,10 +782,26 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
       `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project，并读取最新核心版本。`,
       '3. 如果项目没有核心版本，明确失败并停止；本任务禁止调用 wmb_save_core_version，禁止生成或改写核心稿。',
-      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：给出准确标题，正文自然可读；不虚构核心稿没有的事实。',
+      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：标题围绕该题材独有的对象、问题、动作或证据，不自动添加「普通人」等万能受众标签，不复用固定前缀；正文自然可读，不虚构核心稿没有的事实。',
       `5. 调用 wmb_save_platform_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，contentVersionId 必须是步骤2读到的最新核心版本 id，platform 必须是 xiaohongshu，format 必须是 text，title/body 为完整小红书版本。`,
       `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认 xiaohongshu 平台版本已保存且关联正确的核心版本。`,
       '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
+    ].join('\n');
+  }
+  if (!researchReady) {
+    return [
+      '执行 WeMediaBuddy Studio 核心初稿的外部研究前置交接。当前轮次禁止写作。',
+      `task_id=${task.id}`,
+      'intent=studio_draft',
+      `project_id=${projectId}`,
+      `brief=${brief}`,
+      '要求：',
+      '1. 只通过 wmb_* MCP 工具读业务数据；禁止直接写文件或数据库，禁止生成图片，禁止保存任何正文或平台版本。',
+      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，读取项目标题、现有资料和写作要求。`,
+      '3. 不得把模型内置知识、项目标题中的说法或搜索摘要当作已核查证据。围绕文章对象与版本、工作机制与适用边界、关键事实或数字、现实使用案例、失败案例/反证与风险，整理 4—8 条可由外部来源核查的 requiredClaims；每条使用稳定英文 key、清晰中文 text，type 仅用 fact/price/policy。',
+      `4. 必须调用 wmb_dispatch_research({ parentTaskId: "${task.id}", requiredClaims, channels: ["web", "x", "xhs"], brief })。即使项目已有少量关联资料，也必须派单做外部独立核查；不得改用普通 reporter/daily_scan，不得在当前写手会话临时联网。`,
+      '5. 派单成功后立即结束当前交付。不得继续起草、导图、调用 wmb_import_project_image、wmb_save_core_version 或 wmb_save_platform_version；研究终态会通过 EvidencePack 与项目来源关联后单跳续派新 writer 工单。',
+      '6. 最后只简洁回复：已派外部研究，等待研究完成后续写。'
     ].join('\n');
   }
   return [
@@ -791,10 +814,12 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
     `brief=${brief}`,
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
     `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-    '3. 基于项目标题和关联资料，写一篇完整中文核心初稿正文；本任务禁止调用 wmb_save_platform_version。',
-    `4. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为完整正文。`,
-    `5. 再调用 wmb_get_content({ projectId: "${projectId}" }) 确认该项目已有核心版本正文。`,
-    '6. 最后用简洁中文回复：已保存核心版本，并给出正文前两句。'
+    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；标题围绕该题材独有的对象、问题、动作或证据，不自动添加「普通人」等万能受众标签，不复用固定前缀，不写来源未支持的数字、结果或因果；本任务禁止调用 wmb_save_platform_version，研究续派任务也禁止再次派研究。',
+    '4. 把图文交付作为完成条件：优先复用项目已有可信图片；没有可用图片时，至少制作一张不含未经核实事实的 SVG 首图和一张正文信息图。分别调用 wmb_import_project_image 导入，requestId 使用 version_request_id 后缀 :image:1、:image:2，并保留返回的 assetId 与 Markdown。',
+    '5. 将首图放在 H1 后，将正文信息图放在对应判断段落后；图片必须推进理解，禁止纯装饰、虚构产品截图、金额、数据或引语。',
+    `6. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为包含图片 Markdown 的完整正文，并通过 mediaBindings 提交每张图片的 assetId、occurrence、widthPreset、align 和 caption。`,
+    `7. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认项目已有核心版本正文，且 assets、最新版 bindings 和正文 wmb-asset 引用均非空。若图片导入或绑定失败，不得把任务报告为完整图文稿。`,
+    '8. 最后用简洁中文回复：已保存图文核心版本，并给出标题、图片数量和正文前两句。'
   ].join('\n');
 }
 
@@ -802,6 +827,7 @@ export async function startStudioDraft(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string; projectId: string; mcpUrl: string;
   writerTask?: WriterTask;
   brief?: string;
+  researchReady?: boolean;
   xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
   onTaskReady?: TaskReadyGrantHook;
@@ -817,7 +843,11 @@ export async function startStudioDraft(input: {
   const lane = 'studio-draft';
   const startRequestId = input.startRequestId ?? `studio_draft:${input.businessDate}:${input.projectId}:start`;
   try {
-    const contextRefs = { projectId: input.projectId, writerTask };
+    const contextRefs = {
+      projectId: input.projectId,
+      writerTask,
+      researchGate: writerTask === 'core_draft' ? (input.researchReady === true ? 'satisfied' : 'required') : 'not_applicable'
+    };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath });
     if (prerequisite.waiting) return prerequisite.waiting;
     const conversation = await readPiConversation(input.dataRootPath);
@@ -828,7 +858,28 @@ export async function startStudioDraft(input: {
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const extensionPath = await preparePiExtension(layout.agentDir);
     const requestId = agentRequestId(task.id, writerTask === 'core_draft' ? 'core_version' : 'xiaohongshu_platform_version');
-    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
+    // 旧 Studio 直接 IPC 不经过 JobPool；为研究续派补一份同型持久合同。
+    // JobPool 路径已由 onTaskReady 写入真实 jobId，此处只在缺失时补，不覆盖。
+    let researchContractRefs: Record<string, unknown> | undefined;
+    const taskAfterReady = getAgentTask(database, task.id);
+    if (writerTask === 'core_draft' && input.researchReady !== true && !readJobContractFromRefs(taskAfterReady?.contextRefs ?? {})) {
+      const directRequest: RoleJobRequest = Object.freeze({
+        roleId: 'writer',
+        brief: input.brief?.trim() || 'Studio 直接核心初稿',
+        businessDate: input.businessDate,
+        projectId: input.projectId,
+        writerTask: 'core_draft'
+      });
+      researchContractRefs = {
+        ...(taskAfterReady?.contextRefs ?? {}),
+        ...buildJobContextRefs({
+          jobId: `direct-writer:${task.id}`,
+          request: directRequest,
+          boundary: buildJobObjectBoundary(directRequest, input.businessDate)
+        })
+      };
+    }
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId, contextRefs: researchContractRefs }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
       await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
@@ -864,19 +915,34 @@ export async function startStudioDraft(input: {
           input.onRuntime?.(nextRuntime);
         },
         run: async (activeRuntime) => {
-          // WMB-5178 §5：员工接收会话盖章（Studio 写作任务，target=employee，Dock 永不镜像）。
           const platformTask = writerTask === 'xiaohongshu_platform_version';
+          const researchPreflight = !platformTask && input.researchReady !== true;
           await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({
             dispatchId: `studio_draft:${task.id}`,
             target: 'employee',
             delivery: 'direct',
             safe: platformTask
               ? { originLabel: 'Studio 小红书版本', title: '小红书平台版本', goal: '基于最新核心稿生成并保存小红书平台版本', acceptance: '小红书平台版本读回' }
-              : { originLabel: 'Studio 核心初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
-            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '')
+              : researchPreflight
+                ? { originLabel: 'Studio 核心初稿', title: '外部研究前置', goal: '派出受控外部研究并停止当前写作', acceptance: '研究派单回执与父任务交接' }
+                : { originLabel: 'Studio 核心初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
+            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', input.researchReady === true)
           }), { timeoutMs: piPromptTimeoutMs() });
         }
       });
+      const afterPrompt = getAgentTask(database, task.id);
+      // research.dispatch 成功会把当前父任务置为 partial；禁止继续 validating/complete 覆盖交接真相。
+      if (afterPrompt && afterPrompt.status !== 'running') return { task: afterPrompt, reused: false };
+      if (writerTask === 'core_draft' && input.researchReady !== true) {
+        const failed = await dispatchFailAgentTask(
+          dependency,
+          task.id,
+          'RESEARCH_DISPATCH_MISSING',
+          '外部研究未成功派出；本轮未写作，也未保存正文。',
+          taskCommandContext(lane, `${task.id}:fail:research-dispatch-missing`, task.id, input.workerLeaseId)
+        );
+        return { task: failed, reused: false };
+      }
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
       const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
       return { task: completed, reused: false };

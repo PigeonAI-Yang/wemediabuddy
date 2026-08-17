@@ -86,7 +86,7 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
     } catch (error) { setNote(error instanceof Error ? error.message : String(error)); }
     finally { setLoading(false); }
   };
-  return <>
+  return <section className="x-list-display-settings" aria-label="X Lists 管理">
     <section className="settings-section">
       <div className="settings-section-heading"><h3>List 工作台显示</h3></div>
       <div className="settings-inline-actions"><button type="button" className="secondary-button" disabled={loading} onClick={() => void load(true)}>{loading ? '读取中…' : '刷新账号 Lists'}</button><span className="settings-list-note">{note}</span></div>
@@ -101,7 +101,7 @@ export function XListDisplaySettings({ workspaceId }: { workspaceId: string }): 
       <XListComposer accountKey={index.accountKey} selected={selected} disabled={loading} onPrepare={prepare}/>
       {operations.length > 0 && <section className="x-list-history"><h3>操作记录</h3>{operations.map((operation) => <button key={operation.id} className={activeOperation?.id === operation.id ? 'active' : ''} onClick={() => setActiveOperation(operation)}><span>{operationLabel(operation)}</span><small>{stateLabel(operation)} · {new Date(operation.updatedAt).toLocaleString('zh-CN')}</small></button>)}</section>}
     </section>}
-  </>;
+  </section>;
 }
 
 function XListComposer({ accountKey, selected, disabled, onPrepare }: { accountKey: string; selected: ListRef | null; disabled: boolean; onPrepare: (input: ComposerInput) => Promise<void> }): React.JSX.Element {

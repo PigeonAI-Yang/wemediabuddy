@@ -154,7 +154,7 @@ function researchGapFromRefs(value: unknown): ResearchGap | null {
   const parentTaskId = stringField(record, 'parentTaskId');
   const parentRoleId = record.parentRoleId;
   if (!gapId || !parentJobId || !parentTaskId) return null;
-  if (parentRoleId !== 'writer' && parentRoleId !== 'planner' && parentRoleId !== 'librarian') return null;
+  if (parentRoleId !== 'writer' && parentRoleId !== 'planner' && parentRoleId !== 'librarian' && parentRoleId !== 'desk') return null;
   if (!Array.isArray(record.requiredClaims) || record.requiredClaims.length === 0) return null;
   const requiredClaims: ResearchRequiredClaim[] = [];
   for (const item of record.requiredClaims) {
@@ -280,7 +280,11 @@ const COMMAND_BOUNDARY_EXTRACTORS: Readonly<Record<string, (input: Record<string
     const changes = Array.isArray(input.changes) ? input.changes.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item)) : [];
     const sourceIds = normalizeSourceIds(changes.filter((item) => item.kind === 'reassign').map((item) => item.sourceId));
     return Object.freeze({ businessDate: null, projectId: null, sourceIds, feedIds: EMPTY_SOURCE_IDS, scope: changes.some((item) => item.kind !== 'reassign') ? 'workspace' : null });
-  }
+  },
+  // WMB-5290：项目专项调查主管工具按 projectId 约束对象边界。
+  'investigation.outline_save': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
+  'investigation.review_research': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
+  'investigation.direction_save': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null })
 });
 
 /** 解析命令输入携带的对象边界（未登记的命令 → 空边界，不约束）。 */

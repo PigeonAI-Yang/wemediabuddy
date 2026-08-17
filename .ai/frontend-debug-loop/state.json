@@ -1,35 +1,54 @@
 {
-  "active_loop": "worktree-regression-closeout",
-  "status": "blocked",
-  "symptom": "当前 WMB-5235–5243 未提交工作树导致 18 项完整测试失败。",
+  "active_loop": "wmb-5308-pi-image-batch-send",
+  "status": "done",
+  "symptom": "Pi composer 中图片预览存在，但发送可走普通 context message；批次失败时 pending files 也可能被当作成功而清空。",
   "observation_packet": {
-    "url": "Electron production test surface; no replacement web server",
-    "viewport": "not applicable to contract/data regressions",
-    "user_action": "运行 npm test 并沿内容详情、Today、Pi 编排、设置与知识授权链路验收",
-    "expected": "内容详情查询数固定、终态机会不复活、编排任务卡优先路由、迁移/授权契约与 schema 63 对齐",
-    "actual": "修复前 1483 项中 18 失败；修复后完整测试 1485 项中 1482 通过，仅 3 项因 XHS 二进制被 Defender 删除而失败。",
-    "screenshot": "未涉及像素或布局改动；UNIT/CONTRACT-TEST-ONLY",
-    "console": "无 renderer console 取证；测试输出已定位契约断点",
-    "network_ws": "XHS MCP 被 Windows Defender 阻断，无法建立 loopback MCP 会话",
-    "dom_selector": "Pi orchestration branch: PiOrchestrationRow before pi-bubble-wrap",
-    "computed_style_layout": "未改样式；design token gate 5/5",
-    "state_store_snapshot": "schema migrations 1..63；Today pool 是未终结机会唯一权威"
+    "url": "fresh isolated Electron E2E workspace",
+    "viewport": "1100x800 CSS pixels",
+    "user_action": "在 Studio Pi composer drop 六张有效 PNG，确认有序预览后立即点击发送；使用本地黑洞 provider 触发分析失败。",
+    "expected": "冻结提交快照包含六张同序图片；preload/Main 接收 PiImageBatchChatInput；pi_image_batches 在分析失败前已建立六个附件；失败保留六张 pending files；无图片仍发送普通 context message。",
+    "actual": "旧持久 Main 进程服务旧 IPC 时预览存在但没有 pi_image_batches；重启后批量路径建立六附件并以 failed_analysis 结束；补充 batchStatus 后 PiComposer 保留六张 pending files。",
+    "screenshot": "tests/e2e/.artifacts/WMB-5307-pi-image-batch-composer-a4rbFH/pi-image-batch-composer-six-send-screenshot.png",
+    "console": "tests/e2e/.artifacts/WMB-5307-pi-image-batch-composer-a4rbFH/pi-image-batch-composer-six-send-console.json",
+    "network_ws": "本地黑洞 Pi endpoint 127.0.0.1:1/v1；未调用真实 provider。",
+    "dom_selector": ".pi-composer, .pi-image-queue-item, .pi-send-button[aria-label=\"发送\"]",
+    "computed_style_layout": "1100x800 视口无横向溢出；failed_analysis 后六个 queue item 仍可见。",
+    "state_store": "PiComposer queued images -> frozenAttachments -> PiDock send callback -> preload pi:chat -> Main pi_image_batches；六个 sourceFileName 按 ordinal 0..5 回读，失败返回 false 后 queue 保留。"
   },
   "hypotheses": [
-    {"hypothesis":"内容详情新增绑定读取形成 N+1","supports":"查询数从固定 9 增长为 9+核心版本数+平台版本数","would_disprove":"版本数增加而查询数不变","result":"confirmed-and-repaired-with-two-batch-queries"},
-    {"hypothesis":"其余非 XHS 失败主要是旧测试冻结旧 schema/能力/业务语义","supports":"新版生产链路专项测试通过，旧断言固定 58、14 capabilities 或历史 plan fallback","would_disprove":"真实生产链路缺失或聚焦测试仍失败","result":"confirmed-and-contracts-aligned"},
-    {"hypothesis":"XHS 三项失败由缺文件而非产品逻辑","supports":"恢复 HEAD 文件后 Defender 报病毒/潜在垃圾软件并再次删除，历史 ThreatDetection 命中打包资源","would_disprove":"可信签名二进制可读取并启动","result":"confirmed-external-security-blocker"}
+    {
+      "hypothesis": "拖拽后 submit callback 捕获旧 attachments，导致 sendText 收到空数组。",
+      "supports": "预览存在而批次缺失，表象符合 snapshot 丢失。",
+      "would_disprove": "新鲜 Electron 同一路径在 Main 建立六附件批次。",
+      "next_check": "重启持久 dev 进程后运行六文件 focused Electron gate。",
+      "result": "disproved; fresh renderer callback and preload delivered six attachments。"
+    },
+    {
+      "hypothesis": "持久 Main 进程未重载 WMB-5307 的 pi:chat image-batch 分支，renderer/main 版本错位后把对象落入普通 context path。",
+      "supports": "进程 uptime 约 3h26m；重启前无 pi_image_batches；当前 Main `src/main/ipc-pi-dock.ts:776-802` 以 isPiImageBatchChatInput 选择批量路径。",
+      "would_disprove": "重启后仍无批次或六附件。",
+      "next_check": "fresh isolated Electron + local blackhole provider + Main IPC batch readback。",
+      "result": "confirmed; restart plus focused gate passed。"
+    },
+    {
+      "hypothesis": "failed_analysis response 未携带批次状态，PiDock 将失败误判为 accepted，PiComposer 因此清空 pending files。",
+      "supports": "旧失败截图中 assistant 显示 Connection error 且 composer queue 为空；Main 返回 outcome 但 response 没有 status。",
+      "would_disprove": "failed_analysis 后 batch queue 仍显示六张且 send result 为 false。",
+      "next_check": "typed batchStatus propagation + same six-file failure gate。",
+      "result": "confirmed and repaired; failed_analysis now returns false to composer and retains six files。"
+    }
   ],
-  "breakpoint": "content data access N+1 plus stale test contracts; XHS vendor executable blocked by endpoint security",
+  "breakpoint": "Primary: src/main/ipc-pi-dock.ts:776-802 stale Main dispatch lacked isPiImageBatchChatInput and fell through to ordinary chat. Secondary: src/renderer/pi-dock.tsx:452-466 now treats a non-completed batchStatus as failed so PiComposer's clear-on-success/retain-on-failure contract holds.",
   "owner_check": {
-    "user_blocked_on": "XHS MCP only; remaining local product contracts repaired",
-    "now_usable": true,
-    "real_data_or_state": "real SQLite migrations and production modules exercised by focused tests",
-    "loading_empty_error_states": "Today empty authoritative pool and Pi orchestration states covered",
-    "v1_v2_baseline_preserved": true,
-    "regression_risk_checked": true,
-    "would_user_return_this": true
+    "user-blocked-on": "旧持久 Main 进程版本错位，以及失败响应未显式携带 batch status。",
+    "now-usable": "fresh process sends six dragged images in displayed order through batch handling and retains them after analysis failure。",
+    "real-data-or-state": "真实 DOM drop、真实 React state、真实 preload IPC、真实 SQLite-backed batch rows。",
+    "loading-empty-error-states": "图片读取完成后才允许发送；local blackhole verifies truthful failed_analysis; failed batch returns false and retains files/text; no-image branch remains ordinary context path。",
+    "v1-v2-baseline-preserved": "UI design, ordinary Pi context selection, WMB-5307 backend schema, permissions, and dependencies unchanged。",
+    "regression-risk-checked": "focused Electron gate passed at 1100x800 with six ordered Main attachments, retained queue, and no page errors。",
+    "would-user-return-this": "no"
   },
   "attempts": 1,
-  "last_gate": {"type":"focused contract/data regression","tests":1485,"passed":1482,"failed":3,"typecheck":"pass","design_and_source_hygiene":5,"xhs_blocked":3}
+  "last_gate": "node tests/e2e/runner.mjs --file tests/e2e/studio.test.mjs --scenario WMB-5307-pi-image-batch-composer --keep-runtime; passed, dragged=true, sent=true, mainBatchSelected=true, attachmentCount=6, retainedOnFailure=true",
+  "clean_completion": "yes"
 }

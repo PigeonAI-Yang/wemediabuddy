@@ -20,7 +20,7 @@ export function operatorSkillSourcePath(): string {
   return skillSourcePath('wemedia-buddy-operator');
 }
 
-function skillSourcePath(skillId: string): string {
+export function skillSourcePath(skillId: string): string {
   const local = path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../../skills/${skillId}`);
   try {
     const electron = createRequire(import.meta.url)('electron') as { app?: { isPackaged?: boolean } };

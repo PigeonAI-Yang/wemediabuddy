@@ -1,0 +1,4 @@
+interface:
+  display_name: "深度研究"
+  short_description: "主动联网检索、阅读原文、寻找反证并沉淀可追溯证据"
+  default_prompt: "Use $deep-research to search the web, read primary sources and independent cases, test counterevidence, and return only traceable evidence."

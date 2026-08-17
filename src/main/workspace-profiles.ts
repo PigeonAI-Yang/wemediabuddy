@@ -21,16 +21,16 @@ export const OFFICIAL_WORKSPACE_TEMPLATES: Record<OfficialTemplateId, Omit<Works
   'official.ai': {
     profileId: 'profile.ai.official',
     officialTemplateId: 'official.ai',
-    officialTemplateVersion: 4,
+    officialTemplateVersion: 5,
     displayName: 'AI × 商业化成长',
-    audience: '面对 AI 浪潮无所适从、想找到个人商业化方向并愿意完成真实项目的中文普通人',
-    contentGoal: '帮中文普通人从迷茫走向明确：找到个人商业化方向，完成第一个真实项目并拿到真实反馈；不承诺收入',
-    editorialBrief: '编辑使命=帮「面对 AI 浪潮无所适从」的普通人从迷茫走向明确方向，完成第一个真实项目并拿到真实反馈；不承诺收入。五维=时代认知/个人方向/AI 实践/公开验证/产品化。差异化=经典方法论 × 真实 AI 实践/案例。梯子=宽情绪/问题入口 → 经典方法论解读 → 真实 AI 项目/案例 → 合格对话/诊断/陪跑转化。证据=真实来源+本人实践/案例+具体动作；区分流量与合格线索。降权：纯模型公告、无普通人行动意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺。栏目骨架：迷茫诊断/经典方法/AI 实战/项目日志/方向判断/商业化实验。机会按 SSS 至 F 保留全部合格结果。',
+    audience: '正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的中文读者',
+    contentGoal: '帮助目标读者从迷茫走向明确：找到个人商业化方向，完成第一个真实项目并拿到真实反馈；不承诺收入',
+    editorialBrief: '编辑使命=帮助正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的读者，从迷茫走向明确方向，完成第一个真实项目并拿到真实反馈；不承诺收入。受众描述只用于内部选题判断，不得机械复制进标题。标题必须从题材独有的问题、动作、对象或证据中产生，并避开近期固定前缀与句式。五维=时代认知/个人方向/AI 实践/公开验证/产品化。差异化=经典方法论 × 真实 AI 实践/案例。梯子=宽情绪/问题入口 → 经典方法论解读 → 真实 AI 项目/案例 → 合格对话/诊断/陪跑转化。证据=真实来源+本人实践/案例+具体动作；区分流量与合格线索。降权：纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺。栏目骨架：迷茫诊断/经典方法/AI 实战/项目日志/方向判断/商业化实验。机会按 SSS 至 F 保留全部合格结果。',
     intelligencePackId: 'wemedia-intelligence-engine',
     intelligencePackVersion: 1,
     creationPackId: 'wmb-core-creation',
     creationPackVersion: 1,
-    // WMB-5249：v4 为 official.ai 存量工作空间启用知乎发布面；ensure 仅升级官方谱系，
+    // v5 去除受众身份词对标题的词面锚定，并保留 v4 启用的知乎发布面；ensure 仅升级官方谱系，
     // 自定义配方不受影响，运行中任务仍按既有保护跳过升级。
     platforms: ['x', 'xiaohongshu', 'wechat', 'zhihu']
   },

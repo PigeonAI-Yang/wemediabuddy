@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import { ROLE_CATALOG, type RoleId } from '../shared/agent-capabilities';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { PiMessageSegment } from '../shared/pi-message';
@@ -192,6 +192,82 @@ function TranscriptMessage({ message }: { message: PiChatMessage }): JSX.Element
   );
 }
 
+type RunLogItem =
+  | { kind: 'event'; key: string; at: string; atMs: number; order: number; event: TaskEventView }
+  | { kind: 'transcript'; key: string; at: string | null; atMs: number; order: number; message: PiChatMessage };
+
+function runLogItems(events: TaskEventView[], transcript: PiChatMessage[]): RunLogItem[] {
+  const items: RunLogItem[] = [];
+  for (const [index, event] of events.entries()) {
+    const atMs = Date.parse(event.at);
+    items.push({ kind: 'event', key: `event-${event.at}-${index}`, at: event.at, atMs: Number.isFinite(atMs) ? atMs : Number.POSITIVE_INFINITY, order: items.length, event });
+  }
+  for (const [index, message] of transcript.entries()) {
+    const at = message.createdAt ?? null;
+    const atMs = at ? Date.parse(at) : Number.NaN;
+    items.push({ kind: 'transcript', key: message.entryId ?? `transcript-${index}`, at, atMs: Number.isFinite(atMs) ? atMs : Number.POSITIVE_INFINITY, order: items.length, message });
+  }
+  return items.sort((left, right) => left.atMs - right.atMs || left.order - right.order);
+}
+
+function RunLogSection({ events, transcript, followKey }: { events: TaskEventView[]; transcript: PiChatMessage[]; followKey: string }): JSX.Element {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const followingLatestRef = useRef(true);
+  const previousFollowKeyRef = useRef(followKey);
+  const items = runLogItems(events, transcript);
+  const lastEvent = events[events.length - 1];
+  const lastMessage = transcript[transcript.length - 1];
+  const segmentVersion = lastMessage?.segments?.map((segment) => segment.text.length).join(',') ?? '';
+  const contentVersion = `${events.length}:${lastEvent?.at ?? ''}:${lastEvent?.message ?? ''}:${transcript.length}:${lastMessage?.entryId ?? ''}:${lastMessage?.text.length ?? 0}:${segmentVersion}`;
+
+  useLayoutEffect(() => {
+    if (previousFollowKeyRef.current !== followKey) {
+      previousFollowKeyRef.current = followKey;
+      followingLatestRef.current = true;
+    }
+    const scroller = scrollRef.current;
+    if (scroller && followingLatestRef.current) scroller.scrollTop = scroller.scrollHeight;
+  }, [followKey, contentVersion]);
+
+  if (!items.length) {
+    return (
+      <section className="agents-detail-section" aria-label="运行记录">
+        <h3>运行记录</h3>
+        <p className="agents-detail-empty">暂无运行明细</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="agents-detail-section" aria-label="运行记录">
+      <h3>运行记录</h3>
+      <div
+        ref={scrollRef}
+        className="agents-detail-transcript agents-detail-run-log"
+        role="log"
+        aria-label="实时运行记录"
+        aria-live="polite"
+        aria-relevant="additions text"
+        tabIndex={0}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          followingLatestRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
+        }}
+      >
+        {items.map((item) => item.kind === 'event' ? (
+          <article className="agents-detail-bubble agents-detail-entry task-event" key={item.key}>
+            <div className="agents-detail-entry-head">
+              <span className="agents-detail-entry-type">任务状态</span>
+              <time className="agents-detail-entry-state">{clock(item.at)}</time>
+            </div>
+            <p className="agents-detail-entry-body">{item.event.message}</p>
+          </article>
+        ) : <TranscriptMessage key={item.key} message={item.message} />)}
+      </div>
+    </section>
+  );
+}
+
 /**
  * 主管/遗留任务运行明细：数据全部来自 roster 行 + getAgentTask + 当前 dock 会话，
  * 只读真实任务字段（status/progress/events/phase/intent/businessDate），不伪造文案。
@@ -216,7 +292,7 @@ function RosterRunDetail({
   const progress = taskProgress(task?.progress);
   const events = taskEvents(task?.events);
   const step = row?.progressLabel ?? progress?.message ?? progress?.currentSource ?? row?.phase ?? task?.phase ?? null;
-  const visibleTranscript = (transcript ?? []).filter((message) => message.text.trim() || (message.segments?.length ?? 0) > 0).slice(-16);
+  const visibleTranscript = (transcript ?? []).filter((message) => message.text.trim() || (message.segments?.length ?? 0) > 0);
   return (
     <div className="agents-detail-instance agents-detail-desk">
       <div className="agents-detail-instance-head">
@@ -247,26 +323,7 @@ function RosterRunDetail({
         {(task?.phase ?? row?.phase) ? <div className="agents-detail-meta-row"><span>阶段</span><span>{task?.phase ?? row?.phase}</span></div> : null}
         {task?.errorMessage ? <div className="agents-detail-meta-row"><span>错误</span><span className="agents-detail-error">{task.errorMessage}</span></div> : null}
       </div>
-      <section className="agents-detail-section" aria-label="任务事件">
-        <h3>任务事件</h3>
-        {events.length ? (
-          <ul className="agents-detail-events">
-            {events.map((event, index) => (
-              <li key={`${event.at}-${index}`}><time>{clock(event.at)}</time><span>{event.message}</span></li>
-            ))}
-          </ul>
-        ) : <p className="agents-detail-empty">暂无运行明细</p>}
-      </section>
-      <section className="agents-detail-section" aria-label="实时运行记录">
-        <h3>实时运行记录</h3>
-        {visibleTranscript.length ? (
-          <div className="agents-detail-transcript">
-            {visibleTranscript.map((message, index) => (
-              <TranscriptMessage key={message.entryId ?? `${message.role}-${index}`} message={message} />
-            ))}
-          </div>
-        ) : <p className="agents-detail-empty">暂无运行明细</p>}
-      </section>
+      <RunLogSection events={events} transcript={visibleTranscript} followKey={row?.taskId ?? name} />
     </div>
   );
 }
@@ -331,18 +388,7 @@ function InstanceRunDetail({
         {inst.startedAt ? <div className="agents-detail-meta-row"><span>开始</span><span>{clock(inst.startedAt)}</span></div> : null}
         {inst.finishedAt ? <div className="agents-detail-meta-row"><span>结束</span><span>{clock(inst.finishedAt)}</span></div> : null}
       </div>
-      <section className="agents-detail-section" aria-label="任务事件">
-        <h3>任务事件</h3>
-        {events.length ? (
-          <ul className="agents-detail-events">
-            {events.map((event, index) => (
-              <li key={`${event.at}-${index}`}><time>{clock(event.at)}</time><span>{event.message}</span></li>
-            ))}
-          </ul>
-        ) : (
-          <p className="agents-detail-empty">暂无运行明细</p>
-        )}
-      </section>
+      
       <section className="agents-detail-section" aria-label="最新消息">
         <h3>最新消息</h3>
         {messages.length ? (
@@ -359,18 +405,7 @@ function InstanceRunDetail({
           <p className="agents-detail-empty">暂无运行明细</p>
         )}
       </section>
-      <section className="agents-detail-section" aria-label="运行记录">
-        <h3>运行记录</h3>
-        {transcript && transcript.length ? (
-          <div className="agents-detail-transcript">
-            {transcript.map((m) => (
-              <TranscriptMessage key={m.entryId ?? `${m.role}-${m.text.slice(0, 12)}`} message={m} />
-            ))}
-          </div>
-        ) : (
-          <p className="agents-detail-empty">暂无运行明细</p>
-        )}
-      </section>
+      <RunLogSection events={events} transcript={transcript ?? []} followKey={inst.jobId} />
     </div>
   );
 }

@@ -11,7 +11,12 @@ export function PiSkillsSettings(): React.JSX.Element {
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState('');
   const [note, setNote] = useState('');
+  const [query, setQuery] = useState('');
   const selected = skills.find((skill) => skill.name === selectedName) ?? null;
+  const filteredSkills = skills.filter((skill) => `${skill.name} ${skill.description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const readOnly = Boolean(selected && !selected.editable);
+  const editorState = !selected ? '新建' : selected.editable ? '可编辑' : '只读';
+  const editableCount = skills.filter((skill) => skill.editable).length;
 
   const load = async (preferred?: string) => {
     const listed = await window.wmb.listPiSkills();
@@ -50,24 +55,38 @@ export function PiSkillsSettings(): React.JSX.Element {
   };
 
   return <section className="settings-section pi-skills-settings">
-    <div className="settings-section-heading"><h3>Skill 清单</h3></div>
+    <div className="pi-skills-toolbar">
+      <div><h3>Skill 清单</h3><p>{skills.length} 个 Skill · {editableCount} 个可编辑</p></div>
+      <button type="button" className="secondary-button add" onClick={createNew}>新建 Skill</button>
+    </div>
     <div className="pi-skills-layout">
-      <div className="pi-skills-list">
-        {skills.map((skill) => <button type="button" key={`${skill.scope}:${skill.name}`} className={selectedName === skill.name ? 'selected' : ''} onClick={() => select(skill)}>
-          <span><strong>{skill.name}</strong><small>{skill.description}</small></span>
-          <em>{skill.editable ? (skill.origin === 'bundled' ? '内置 · 可编辑' : '用户 · 可编辑') : skill.scope === 'workspace' ? '当前工作空间 · 只读' : '系统 · 只读'}</em>
-        </button>)}
-        <button type="button" className={!selectedName ? 'selected add' : 'add'} onClick={createNew}>＋ 新建 Skill</button>
-      </div>
-      <div className="pi-skill-editor">
-        <label><span>名称</span><input value={name} readOnly={Boolean(selected && !selected.editable)} onChange={(event) => setName(event.target.value)} placeholder="lowercase-hyphen-name" /></label>
-        <label><span>触发描述</span><textarea rows={4} value={description} readOnly={Boolean(selected && !selected.editable)} onChange={(event) => setDescription(event.target.value)} placeholder="说明这个 Skill 做什么，以及哪些表达应触发它。" /></label>
-        <label><span>指令</span><textarea className="pi-skill-instructions" value={instructions} readOnly={Boolean(selected && !selected.editable)} onChange={(event) => setInstructions(event.target.value)} placeholder="# 工作流程" /></label>
-        {note && <p className="settings-note">{note}</p>}
-        <div className="settings-form-actions">
-          {selected?.editable && <button type="button" className="danger-button" onClick={() => void remove()}>删除</button>}
-          {(!selected || selected.editable) && <button type="button" className="primary-button" onClick={() => void save()}>保存 Skill</button>}
+      <aside className="pi-skills-list" aria-label="Skill 清单">
+        <label className="pi-skills-search"><span className="sr-only">搜索 Skill</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称或触发描述" /></label>
+        <div className="pi-skills-list-scroll">
+          {filteredSkills.map((skill) => <button type="button" key={`${skill.scope}:${skill.name}`} className={selectedName === skill.name ? 'selected' : ''} aria-current={selectedName === skill.name ? 'true' : undefined} onClick={() => select(skill)}>
+            <span className="pi-skill-list-title"><strong>{skill.name}</strong><em>{skill.editable ? '可编辑' : '只读'}</em></span>
+            <small>{skill.description || '暂无触发描述'}</small>
+          </button>)}
+          {filteredSkills.length === 0 && <p className="pi-skills-empty">没有匹配的 Skill</p>}
         </div>
+      </aside>
+      <div className={`pi-skill-editor${readOnly ? ' is-readonly' : ''}`}>
+        <header className="pi-skill-editor-head">
+          <div><h3>{selected?.name || '新建 Skill'}</h3>{readOnly && <p>随来源更新，不能在这里修改。</p>}</div>
+          <span className={`pill-status ${readOnly ? 'gray' : 'violet'}`}>{editorState}</span>
+        </header>
+        <div className="pi-skill-fields">
+          <label><span>名称</span><input value={name} readOnly={readOnly} onChange={(event) => setName(event.target.value)} placeholder="lowercase-hyphen-name" /></label>
+          <label><span>触发描述</span><textarea rows={3} wrap="soft" value={description} readOnly={readOnly} onChange={(event) => setDescription(event.target.value)} placeholder="说明它做什么，以及哪些表达应触发它。" /></label>
+        </div>
+        <label className="pi-skill-instructions-field"><span className="pi-skill-field-label">指令 <small>{readOnly ? '可滚动查看全文' : '支持 Markdown'}</small></span><textarea className="pi-skill-instructions" wrap="soft" value={instructions} readOnly={readOnly} onChange={(event) => setInstructions(event.target.value)} placeholder="# 工作流程" /></label>
+        <footer className="pi-skill-editor-foot">
+          {(note || !readOnly) && <p className="settings-note" aria-live="polite">{note || '保存后，新的 Pi 会话会使用此版本。'}</p>}
+          <div className="settings-form-actions">
+            {selected?.editable && <button type="button" className="danger-button" onClick={() => void remove()}>删除</button>}
+            {(!selected || selected.editable) && <button type="button" className="primary-button" onClick={() => void save()}>保存 Skill</button>}
+          </div>
+        </footer>
       </div>
     </div>
   </section>;

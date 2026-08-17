@@ -50,7 +50,7 @@ test('job lifecycle broadcasts show immediately without mutating the native Pi t
   const terminal = piJobEventNotice({ action: 'job.finished', jobId: 'ec7e11ef-2bf5-4c14-ac6f-6e19fc42a44f', roleId: 'writer', status: 'succeeded' }, '2026-08-11T12:23:41.919Z');
   const notices = upsertPiJobNotice([started], terminal);
   assert.equal(notices.length, 1, '同一工单原地更新生命周期');
-  assert.equal(notices[0].text, '写手工单 ec7e11ef 已完成，主管正在验收。');
+  assert.equal(notices[0].text, '写手工单 ec7e11ef 已完成。');
 
   const durable = { role: 'user', kind: 'system_event', entryId: 'canonical-terminal', text: '[JOB_EVENT] job.finished\njobId=ec7e11ef-2bf5-4c14-ac6f-6e19fc42a44f\nstatus=succeeded', createdAt: '2026-08-11T12:23:41.919Z' };
   assert.deepEqual(mergePiJobNotices([durable], notices), [durable], 'canonical 终态进入会话后隐藏同工单瞬态行');

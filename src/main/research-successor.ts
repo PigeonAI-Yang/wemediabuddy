@@ -4,7 +4,7 @@
  * 复用既有 jobs 表（kind='research_successor'，dedupe_key UNIQUE）——不新增表/迁移。
  * - 终态处理器 enqueue：INSERT OR IGNORE + dedupe_key UNIQUE ⇒ 每父工单至多一个自动续派（重放/重启幂等）。
  * - succeeded（全部 required claim 已判定）→ 续派直接 pending；partial（含 unresolved/source_unavailable
- *   required claim）→ 续派先入 needs_user（等你批三动作：收窄 / 手动补料 / 接受标注待核实）。
+ *   required claim）→ 生产运行时自动采用最保守的 narrow 决策后进入 pending，不等待人工点击。
  * - 消费：rebuildRoleJobRequest(父任务 context_refs) + briefSuffix → JobSpawner 派生**原角色**续派工单
  *   （同一边界、同一 roleId、新 jobId）；research→research 由派生层（parentRoleId 白名单）拒绝。
  * - failed/cancelled 不续派（enqueue 状态门 fail-closed）。
@@ -59,7 +59,7 @@ export type ResearchSuccessorJob = Readonly<{
 
 export type ResearchSuccessorEnqueueResult = Readonly<{
   enqueued: boolean;
-  reason: 'inserted' | 'duplicate_ignored' | 'task_not_found' | 'status_not_terminal' | 'gap_unreadable' | 'evidence_pack_missing';
+  reason: 'inserted' | 'duplicate_ignored' | 'task_not_found' | 'status_not_terminal' | 'gap_unreadable' | 'evidence_pack_missing' | 'investigation_parent';
   job: ResearchSuccessorJob | null;
 }>;
 
@@ -142,9 +142,9 @@ export function isResearchSuccessorRow(database: DatabaseSync, jobId: string): b
 }
 
 const DECISION_NOTES: Readonly<Record<ResearchSuccessorDecision, string>> = Object.freeze({
-  narrow: '【主管决策：收窄】未解决声明已从本次续派验收范围中收窄剔除；本次续派只对已判定声明交付。若仍需核实未解决声明，须由主编显式再开研究工单（不自动绕行）。',
-  supplement: '【主管决策：手动补料】主管已手动补充材料；本次续派基于既有证据与补充材料完成剩余工作，不得编造缺失证据。',
-  accept: '【主管决策：接受标注待核实】未解决声明接受以「待核实」标注交付；正文必须如实标注，不得将其表述为已核实事实。'
+  narrow: '【主管决策：收窄】未解决声明已从本次续派验收范围和正式正文中剔除；只使用已判定声明完成一篇独立、连贯、有读者价值的成稿。不要解释研究缺了什么，也不要追加核查清单或免责声明。',
+  supplement: '【主管决策：手动补料】基于既有证据与补充材料完成成稿；没有证据支持的主张直接删除或自然收窄，不得编造，也不得用免责声明替代内容。',
+  accept: '【主管决策：接受标注待核实】未解决声明不得作为事实写入；能自然归因且对读者有价值时才保留归因表达，否则删除。正式正文不得出现待核实清单、研究过程说明或免责声明式尾注。'
 });
 
 /**
@@ -164,9 +164,9 @@ export function buildSuccessorBriefSuffix(pack: ResearchEvidencePack, gap: Resea
     lines.push('- （无）');
   }
   if (pack.unresolvedRequiredClaims.length) {
-    lines.push(`未解决声明：${pack.unresolvedRequiredClaims.join('、')}`);
+    lines.push(`仅供内部剔除的未解决声明：${pack.unresolvedRequiredClaims.join('、')}`);
   }
-  lines.push('写作纪律：不得编造无出处数字；未解决声明必须如实标注待核实，不得整段复制旧稿。');
+  lines.push('写作纪律：不得编造无出处数字；未解决声明只用于内部删减，不得写入正式正文；不得输出研究过程、核查摘要、残余不确定项或免责声明式尾注；不得整段复制旧稿。');
   if (decision) lines.push(DECISION_NOTES[decision]);
   return lines.join('\n');
 }
@@ -175,9 +175,10 @@ export function buildSuccessorBriefSuffix(pack: ResearchEvidencePack, gap: Resea
  * 终态处理器：research 任务终态（succeeded/partial）且 EvidencePack 已落盘 → enqueue research_successor。
  * - INSERT OR IGNORE + dedupe_key UNIQUE ⇒ 重复投递/重放幂等（至多一行）。
  * - failed/cancelled/needs_user/interrupted/running → 不续派（reason=status_not_terminal）。
- * - 有未解决 required claim → status='needs_user'（等你批三动作）；全部 resolved → status='pending'。
+ * - autoDecision 缺省时保留纯状态机的 needs_user 门，供显式决策 API 与历史兼容测试使用。
+ * - 生产运行时传 narrow：未解决声明从本次续派验收范围收窄，直接 pending，文章流程不中断。
  */
-export function enqueueResearchSuccessor(database: DatabaseSync, input: { researchTaskId: string; now?: string }): ResearchSuccessorEnqueueResult {
+export function enqueueResearchSuccessor(database: DatabaseSync, input: { researchTaskId: string; now?: string; autoDecision?: ResearchSuccessorDecision | null }): ResearchSuccessorEnqueueResult {
   const now = input.now ?? new Date().toISOString();
   const task = getAgentTask(database, input.researchTaskId);
   if (!task) return { enqueued: false, reason: 'task_not_found', job: null };
@@ -187,20 +188,24 @@ export function enqueueResearchSuccessor(database: DatabaseSync, input: { resear
   }
   const gap = readResearchGap(task.contextRefs);
   if (!gap) return { enqueued: false, reason: 'gap_unreadable', job: null };
+  // WMB-5290：项目专项调查（desk 父合成身份）绝不经 research_successor 自动续派——
+  // 补查/重试由主管显式决策（reviewResearch supplement / retryReporter），不建立隐藏多跳链路。
+  if (gap.parentRoleId === 'desk') return { enqueued: false, reason: 'investigation_parent', job: null };
   const pack = parseResearchEvidencePack(task.resultRefs);
   if (!pack) return { enqueued: false, reason: 'evidence_pack_missing', job: null };
 
   const unresolvedRequiredClaims = pack.unresolvedRequiredClaims.filter((key) => gap.requiredClaims.some((claim) => claim.key === key));
+  const autoDecision = unresolvedRequiredClaims.length ? (input.autoDecision ?? null) : null;
   const payload: ResearchSuccessorPayload = {
     parentJobId: gap.parentJobId,
     parentTaskId: gap.parentTaskId,
     researchTaskId: task.id,
     parentRoleId: gap.parentRoleId,
     unresolvedRequiredClaims,
-    briefSuffix: buildSuccessorBriefSuffix(pack, gap),
-    decision: null
+    briefSuffix: buildSuccessorBriefSuffix(pack, gap, autoDecision),
+    decision: autoDecision
   };
-  const status: ResearchSuccessorStatus = unresolvedRequiredClaims.length ? 'needs_user' : 'pending';
+  const status: ResearchSuccessorStatus = unresolvedRequiredClaims.length && !autoDecision ? 'needs_user' : 'pending';
   const dedupeKey = researchSuccessorDedupeKey(gap.parentJobId);
   const inserted = database.prepare(
     `INSERT OR IGNORE INTO jobs (id, kind, status, due_at, attempts, dedupe_key, payload_json, last_error, created_at, updated_at, started_at, finished_at)
@@ -293,9 +298,9 @@ async function runSuccessorWrite<T>(
   return receipt.data as T;
 }
 
-/** 终态处理器（运行时路径）：research 任务终态 → enqueue research_successor（幂等）。 */
+/** 终态处理器（运行时路径）：research 任务终态 → 采用最保守的 narrow 自动续派（幂等）。 */
 export async function enqueueResearchSuccessorForTask(runtime: ActiveWorkspaceRuntime, researchTaskId: string, now?: string): Promise<ResearchSuccessorEnqueueResult> {
-  return runSuccessorWrite(runtime, 'jobs.enqueue_research_successor', researchTaskId, (database) => enqueueResearchSuccessor(database, { researchTaskId, now }));
+  return runSuccessorWrite(runtime, 'jobs.enqueue_research_successor', researchTaskId, (database) => enqueueResearchSuccessor(database, { researchTaskId, now, autoDecision: 'narrow' }));
 }
 
 /** needs_user 决策（运行时路径）：收窄 / 手动补料 / 接受标注待核实 → 恢复 pending。 */
@@ -437,16 +442,33 @@ export async function handleResearchSuccessorJobEvent(runtime: ActiveWorkspaceRu
  * 重启恢复兜底：扫描已终态（succeeded/partial）且 EvidencePack 已落盘、但无 research_successor 行的
  * research 任务 → 补 enqueue（INSERT OR IGNORE 幂等，至多一行）。覆盖「终态已写、enqueue 未执行即崩溃」窗口。
  */
-export function reconcileResearchSuccessors(database: DatabaseSync, now = new Date().toISOString()): number {
+/** 重启 reconcile：补齐终态 research 未建立的续派；autoDecision 仅由生产调度器传入。 */
+export function reconcileResearchSuccessors(
+  database: DatabaseSync,
+  now = new Date().toISOString(),
+  autoDecision: ResearchSuccessorDecision | null = null
+): number {
   const rows = database.prepare(
     `SELECT id FROM agent_tasks WHERE intent = 'research' AND status IN ('succeeded', 'partial') ORDER BY updated_at`
   ).all() as Array<{ id: string }>;
   let enqueued = 0;
   for (const row of rows) {
-    const result = enqueueResearchSuccessor(database, { researchTaskId: row.id, now });
+    const result = enqueueResearchSuccessor(database, { researchTaskId: row.id, now, autoDecision });
     if (result.enqueued && result.reason === 'inserted') enqueued += 1;
   }
   return enqueued;
+}
+/** 历史 needs_user 行也采用 narrow 恢复；只处理尚未决策的研究续派。 */
+export function autoResumeResearchSuccessors(database: DatabaseSync, now = new Date().toISOString()): number {
+  const rows = database.prepare(
+    `SELECT id FROM jobs WHERE kind = ? AND status = 'needs_user' ORDER BY updated_at, id`
+  ).all(RESEARCH_SUCCESSOR_KIND) as Array<{ id: string }>;
+  let resumed = 0;
+  for (const row of rows) {
+    const result = decideResearchSuccessor(database, row.id, 'narrow', now);
+    if (result.ok) resumed += 1;
+  }
+  return resumed;
 }
 
 /** 崩溃残留候选：running 且 updated_at 早于 (now - staleMs) 的行（updated_at 为最近一次 claim 时间）。 */
@@ -522,9 +544,11 @@ export async function reconcileStaleRunningResearchSuccessorsViaRuntime(
   );
 }
 
-/** 重启恢复（运行时路径）：整体在单次命令派发内补齐缺失续派（写守卫授权）。 */
+/** 重启恢复（运行时路径）：补齐缺失续派，并将历史 needs_user 以 narrow 自动恢复。 */
 export async function reconcileResearchSuccessorsViaRuntime(runtime: ActiveWorkspaceRuntime, now = new Date().toISOString()): Promise<number> {
-  return runSuccessorWrite(runtime, 'jobs.reconcile_research_successor', 'all', (database) => reconcileResearchSuccessors(database, now));
+  return runSuccessorWrite(runtime, 'jobs.reconcile_research_successor', 'all', (database) =>
+    reconcileResearchSuccessors(database, now, 'narrow') + autoResumeResearchSuccessors(database, now)
+  );
 }
 
 /** 调度器：启动即 reconcile + stale-running 恢复 + kick，之后每 10s 一轮（对齐 topic-reproposal 范式）。 */

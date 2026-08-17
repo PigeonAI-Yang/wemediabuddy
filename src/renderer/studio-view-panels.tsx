@@ -1,3 +1,4 @@
+import type { StudioInvestigationIndicator } from './studio-investigation-indicator';
 import type { ContentProjectDetail, ContentProjectPlatform, ContentProjectStatus, ContentProjectStatusSummary, ContentProjectSummary } from '../main/content';
 import type { StudioAnnotation } from '../shared/studio-annotations';
 import { AppModal } from './app-modal';
@@ -88,18 +89,27 @@ export function StudioEditorTop({ selected, dirty, latestCreatedAt, documentLabe
     <div className="studio-crumbs"><button className="studio-top-back" onClick={onBack}>创作库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
     <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>{documentLabel ?? `核心正文 · 第 ${selected.versionCount} 版`} · <b>{dirty ? '有未保存修改' : '已保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latestCreatedAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
   </div><div className="studio-grow"/><button className="secondary-button" onClick={onToggleHistory} aria-expanded={historyOpen} aria-controls="studio-history-modal-dialog">版本</button>
-  {!viewedVersion ? <div className="studio-mode-switch" role="group" aria-label="编辑模式"><button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码</button><button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>渲染编辑</button></div> : null}
+  {!viewedVersion ? <div className="studio-mode-switch" role="group" aria-label="编辑模式"><button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码编辑</button><button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>可视化编辑</button></div> : null}
   {preparePublication && <button className="secondary-button" disabled={busy || prepareDisabled} onClick={() => void preparePublication()}>{prepareLabel ?? '准备发布'}</button>}
-  <button className="primary-button" disabled={!selected || busy || viewedVersion} onClick={() => void save()} title={viewedVersion ? '历史版本只读，请返回最新版后再保存' : dirty ? '保存当前修改' : '内容未改动'}>保存</button></div>;
+  {!viewedVersion && <button className="primary-button" disabled={!selected || busy} onClick={() => void save()} title={dirty ? '保存当前修改' : '内容未改动'}>保存</button>}</div>;
 }
 
-export function StudioOutline({ outline, tab, setTab, platformVersions, onJumpToStart, onJumpToHeading }: {
+export function StudioOutline({ outline, tab, setTab, platformVersions, investigationIndicator, onJumpToStart, onJumpToHeading }: {
   outline: Array<{ level: number; title: string; index: number }>; tab: StudioTab; setTab: (value: StudioTab) => void;
   platformVersions: ContentProjectDetail['platformVersions'];
+  investigationIndicator: StudioInvestigationIndicator;
   onJumpToStart?: () => void;
   onJumpToHeading?: (item: { level: number; title: string; index: number }) => void;
 }): React.JSX.Element {
   return <aside className="studio-outline">
+    <section className="studio-outline-section studio-outline-section--work" aria-label="项目工作面">
+      <p className="studio-panel-title">工作面</p>
+      <div className="studio-work-switch" role="group" aria-label="正文 / 调查 / 来源">
+        <button type="button" className={`studio-surface-tab${tab === 'core' ? ' active' : ''}`} data-surface="core" onClick={() => setTab('core')}>正文</button>
+        <button type="button" className={`studio-surface-tab${tab === 'investigation' ? ' active' : ''}`} data-surface="investigation" title={investigationIndicator.label} aria-label={`调查，${investigationIndicator.label}`} onClick={() => setTab('investigation')}>调查<i className="st-dot" data-state={investigationIndicator.state} aria-hidden="true"/></button>
+        <button type="button" className={`studio-surface-tab${tab === 'sources' ? ' active' : ''}`} data-surface="sources" onClick={() => setTab('sources')}>来源</button>
+      </div>
+    </section>
     <section className="studio-outline-section studio-outline-section--outline" aria-label="文章纲要">
       <p className="studio-panel-title">文章纲要</p>
       <button type="button" onClick={() => { setTab('core'); onJumpToStart?.(); }}>开头</button>

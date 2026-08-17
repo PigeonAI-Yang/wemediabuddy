@@ -36,6 +36,7 @@ import {
   type RoleJobRequest,
   type JobTerminalStatus
 } from './role-job-registry.ts';
+import { readProjectInvestigation } from './project-investigation.ts';
 
 /**
  * 外部派工请求 = roleId 判别联合（WMB-5116 §5.1）：**无 intent、无 planDate**；
@@ -178,6 +179,18 @@ export class JobSpawner {
     }
     // strict-key 校验 + 运行时拒 intent；writer 缺 projectId 抛 JOB_PROJECT_REQUIRED。
     const request = parseRoleJobRequest(input);
+    // WMB-5290 写手服务端门：项目存在专项调查且状态未达可写 → 拒绝派写手（fail-closed，
+    // 在池提交前抛错，不产生工单行）。legacy 项目（无调查行）保持既有行为放行；
+    // ready_to_write 允许首派；writing 允许已批准方向的续跑/重试（同一批准方向不重复审批）。
+    if (request.roleId === 'writer') {
+      const investigation = readProjectInvestigation(this.runtime.database, request.projectId);
+      if (investigation && investigation.status !== 'ready_to_write' && investigation.status !== 'writing') {
+        throw Object.assign(
+          new Error(`JOB_INVESTIGATION_NOT_READY: 项目调查状态（${investigation.status}）未达可写（ready_to_write），禁止派写手。`),
+          { code: JOB_ERROR_CODES.JOB_INVESTIGATION_NOT_READY }
+        );
+      }
+    }
     const spec = deriveRoleJobSpec(request, this.runtime.identity.workspaceId);
     const jobInput: JobInput = {
       roleId: spec.roleId,

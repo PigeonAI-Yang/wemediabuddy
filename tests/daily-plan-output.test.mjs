@@ -64,6 +64,14 @@ test('incomplete item structure throws with field detail', () => {
   );
 });
 
+test('audience-label title is rejected before plan persistence', () => {
+  const templated = validBlock.replace('Agent 评测走向生产现场', '普通人做 AI 接单，先卖小结果');
+  assert.throws(
+    () => parseDailyPlanOutput(templated),
+    /标题不得把受众身份词「普通人」写进发布标题/
+  );
+});
+
 test('planDate is optional and ignored when absent', () => {
   const plan = parseDailyPlanOutput('```json\n{"summary":"x","items":[]}\n```');
   assert.equal(plan.planDate, undefined);

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { register } from 'node:module';
 
 // TS loader（与 wmb-5171 同款）：解析 .ts 相对导入。
@@ -23,7 +24,14 @@ import {
 import { canonicalizeUrl } from '../src/main/sources.ts';
 import { parseResearchEvidencePack } from '../src/main/research-task-state.ts';
 import { buildSaveSourcePayload, coreTools } from '../.pi/extensions/wmb-mcp/wmb-mcp-tools-core.ts';
-import { researchDiscoveryPrompt, researchProposalPrompt, researchToolDisciplineText } from '../src/main/research-job-runtime.ts';
+import {
+  researchDiscoveryPrompt,
+  researchPiRuntimeArgs,
+  researchProposalPrompt,
+  researchSkillSourcePath,
+  resolveResearchPromptTimeoutMs,
+  researchToolDisciplineText
+} from '../src/main/research-job-runtime.ts';
 
 
 const BUDGET = { timeMinutes: 12, minValidSources: 15, maxCandidates: 40, maxParallelFetches: 3, maxRounds: 1 };
@@ -485,9 +493,39 @@ test('WMB-5172: research prompts carry whitelist discipline and structured-outpu
   const discovery = researchDiscoveryPrompt(task, gap);
   assert.ok(discovery.includes('40 候选上限') && discovery.includes('3 并行抓取') && discovery.includes('仅一轮'));
   assert.ok(discovery.includes('"candidates"') && discovery.includes('sourceKind'));
+  assert.ok(discovery.includes('达到 15 条有效候选') && discovery.includes('约 8 分钟'));
+  assert.ok(discovery.includes('禁止调用 wmb_save_source') && discovery.includes('禁止调用 wmb_report_agent_progress'));
   const proposal = researchProposalPrompt(task, gap, '## claim_a\n- sourceId=src-1');
   assert.ok(proposal.includes('"claims"') && proposal.includes('evidenceSourceIds'));
   assert.ok(proposal.includes('claim_a（fact）：声明 A（事实）'));
+  assert.ok(proposal.includes('禁止继续检索') && proposal.includes('末条回复必须直接输出'));
+});
+
+test('WMB-5303: research prompt timeout matches the 12-minute hard budget instead of failing at five minutes', () => {
+  assert.equal(resolveResearchPromptTimeoutMs(undefined), 600_000);
+  assert.equal(resolveResearchPromptTimeoutMs('420000'), 420_000);
+  assert.equal(resolveResearchPromptTimeoutMs('invalid'), 600_000);
+  assert.equal(resolveResearchPromptTimeoutMs('29999'), 600_000);
+});
+test('WMB-5291: research runtime mounts the packaged deep-research skill', async () => {
+  const skillPath = researchSkillSourcePath();
+  const skill = await readFile(`${skillPath}/SKILL.md`, 'utf8');
+  assert.match(skill, /name:\s*deep-research/);
+  for (const fragment of ['先联网，后判断', '主动找反证', '搜索结果页不是证据', 'Source SSOT', 'source_unavailable']) {
+    assert.ok(skill.includes(fragment), `deep-research skill 缺少合同：${fragment}`);
+  }
+
+  const args = researchPiRuntimeArgs({
+    piCliPath: 'pi-cli.js',
+    sessionFile: 'research.jsonl',
+    extensionPath: 'wmb-extension.ts',
+    model: 'research-model',
+    authorityPrompt: 'authority'
+  });
+  const skillFlag = args.indexOf('--skill');
+  assert.ok(skillFlag >= 0);
+  assert.equal(args[skillFlag + 1], skillPath);
+  assert.deepEqual(args.slice(args.indexOf('--provider'), args.indexOf('--provider') + 4), ['--provider', 'wmb-api', '--model', 'research-model']);
 });
 
 test('WMB-5172: canonical URL helpers', () => {

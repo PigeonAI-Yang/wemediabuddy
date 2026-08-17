@@ -24,6 +24,10 @@ import type { OrchestrationData } from '../shared/orchestration-envelope';
 import type { PiChatMessage } from '../main/pi-conversation';
 import type { StudioAnnotation, StudioCommandResult, StudioDocumentScope } from '../shared/studio-annotations';
 import type { ContentMediaBindingDraft, CropRegion, PlatformClipPayload, PlatformCropPayload, PlatformMediaBindingDraft } from '../shared/media-bindings';
+import type {
+  InvestigationCommandResult, InvestigationDecideDirectionInput, InvestigationDecideOutlineInput,
+  InvestigationDirection, InvestigationOutline, InvestigationReviewResearchInput, ProjectInvestigation
+} from '../shared/project-investigation';
 import type { MediaRecommendation, MediaRecommendationsReadModel } from '../shared/media-recommendations';
 import type {
   KnowledgeAnnotationReadFilter, KnowledgeAnnotationRecord, KnowledgeChangeSetApplyInput, KnowledgeChangeSetApplyResult,
@@ -37,6 +41,7 @@ import type {
   KnowledgeUsageRecordRecord, KnowledgeWikiPageReadFilter, KnowledgeWikiPageRecord, KnowledgeWikiPageVersionReadFilter,
   KnowledgeWikiPageVersionRecord
 } from '../shared/knowledge-flywheel';
+import type { PiImageBatchChatInput, PiImageBatchRecord, PiImageBatchStatus } from '../shared/pi-image-batch';
 import type {
   KnowledgeCanvasNodeDetail, KnowledgeCanvasNodeDetailInput, KnowledgeCanvasProjection,
   KnowledgeCanvasProjectionInput, KnowledgeCanvasSelectionManifest, KnowledgeCanvasSelectionManifestInput
@@ -287,8 +292,10 @@ declare global {
       deletePiSkill(name: string): Promise<{ name: string }>;
       getPiAuthorityStatus(): Promise<{ status: unknown; chipLabel: string; chipTone: 'write' | 'readonly' | 'prepare' } | null>;
       listPiCommands(): Promise<PiCommand[]>;
-      chatPi(input: string | { message: string; delivery?: 'steer' | 'followUp'; orchestration?: { originLabel: string; title: string; goal: string; acceptance: string } }, delivery?: 'steer' | 'followUp'): Promise<{
+      chatPi(input: string | PiImageBatchChatInput | { message: string; orchestration: { originLabel: string; title: string; goal: string; acceptance: string }; delivery?: 'steer' | 'followUp' }, delivery?: 'steer' | 'followUp'): Promise<{
+        batchStatus?: PiImageBatchStatus;
         text: string;
+        thinking?: string;
         stopped: boolean;
         queued: boolean;
         conversation: {
@@ -301,6 +308,8 @@ declare global {
           updatedAt: string;
         } | null;
       }>;
+      getPiImageBatch(input: { projectId: string; batchId?: string; requestId?: string }): Promise<PiImageBatchRecord | null>;
+      listPiImageBatches(input: { projectId: string; limit?: number }): Promise<PiImageBatchRecord[]>;
       stopPi(): Promise<{ stopped: boolean }>;
       forkPiConversation(entryId: string): Promise<{
         cancelled: boolean;
@@ -362,7 +371,7 @@ declare global {
       getManagerTask(input?: { businessDate?: string }): Promise<{ managerTask: any; legacyChild: any } | null>;
       syncManagerTask(input?: { businessDate?: string }): Promise<any>;
       startDailyIntelligence(input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'>; legacyPipeline?: boolean }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
-      startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
+      startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; phase: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       getProposalLedger(input: { planDate: string; tab?: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired'; limit?: number; offset?: number }): Promise<{
         tab: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
@@ -475,6 +484,7 @@ declare global {
         parentTaskId: string;
         researchTaskId: string;
         parentRoleId: 'writer' | 'planner' | 'librarian';
+        projectId: string | null;
         unresolvedClaims: Array<{ key: string; text: string | null; type: 'fact' | 'price' | 'policy' | null }>;
         decision: 'narrow' | 'supplement' | 'accept' | null;
         createdAt: string;
@@ -654,6 +664,16 @@ declare global {
         | { ok: true; data: { assetId: string; reused: boolean; sha256: string; durationMs: number; codec: string; copyOrTranscode: 'copy' | 'transcode' }; error: null }
         | { ok: false; data: null; error: { code: string; message: string; details: Record<string, unknown> } }
       >;
+      // WMB-5290：项目专项调查（类型见 src/shared/project-investigation.ts）。
+      investigationGet(projectId: string): Promise<ProjectInvestigation | null>;
+      investigationInitialize(projectId: string): Promise<InvestigationCommandResult>;
+      investigationSaveOutline(input: { projectId: string; expectedRevision: number; outline: InvestigationOutline }): Promise<InvestigationCommandResult>;
+      investigationDecideOutline(input: InvestigationDecideOutlineInput): Promise<InvestigationCommandResult>;
+      investigationReviewResearch(input: InvestigationReviewResearchInput): Promise<InvestigationCommandResult>;
+      investigationSaveDirection(input: { projectId: string; expectedRevision: number; direction: InvestigationDirection }): Promise<InvestigationCommandResult>;
+      investigationDecideDirection(input: InvestigationDecideDirectionInput): Promise<InvestigationCommandResult>;
+      investigationStartWriter(input: { projectId: string; expectedRevision: number }): Promise<InvestigationCommandResult>;
+      investigationRetryReporter(input: { projectId: string; expectedRevision: number }): Promise<InvestigationCommandResult>;
       listMediaRecommendations(input: { contentVersionId: string; projectId?: string }): Promise<MediaRecommendationsReadModel>;
       generateMediaRecommendations(input: { contentVersionId: string; projectId: string; sourceRevisionKeys: string[]; allowGeneratedCover?: boolean; requestId?: string }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }>;
       decideMediaRecommendation(input: { id: string; expectedRevision: number; decision: 'accept' | 'reject'; confirmedByOwner?: boolean }): Promise<{ ok: boolean; data?: MediaRecommendation; error?: { code?: string; message?: string; details?: unknown } | null }>;
