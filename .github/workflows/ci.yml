@@ -1,0 +1,100 @@
+# CI —— 自动构建与测试
+#
+# 触发时机：
+#   - 推送到 master / main / develop 分支
+#   - 向 master / main 发起的 Pull Request
+#   - 手动触发（workflow_dispatch）
+#
+# 设计要点：
+#   1. typecheck-unit 在 Linux 上快速跑「类型检查 + 单元测试」作为门禁，
+#      并跳过 Electron 二进制下载以加速（单元测试不启动 Electron）。
+#   2. build-windows 在 windows-latest 上执行完整的 electron-forge 打包，
+#      会下载并校验 win32-x64 媒体运行时（ffmpeg/whisper/tesseract）与技能镜像，
+#      验证整个 Windows 构建链路在每次 PR 都可复现。
+#
+# 注意：由于 media-runtime.lock.json 锁定为 win32-x64，应用打包只能在
+#       Windows runner 上进行；Linux runner 仅做类型/单元测试这类不依赖运行时二进制的检查。
+
+name: CI — 构建与测试
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+# 同一 ref 的多次触发只保留最新一次运行，避免排队浪费
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# CI 只需要读取仓库内容
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) 快速门禁：类型检查 + 单元测试（跨平台可移植，不依赖媒体运行时二进制）
+  # ---------------------------------------------------------------------------
+  typecheck-unit:
+    name: 类型检查与单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖（跳过 Electron 二进制以加速 CI）
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci
+
+      - name: TypeScript 类型检查
+        run: npm run typecheck
+
+      - name: 运行单元测试
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # 2) 完整 Windows 构建验证：下载媒体运行时 + 技能镜像门禁 + 打包
+  # ---------------------------------------------------------------------------
+  build-windows:
+    name: Windows 构建验证
+    runs-on: windows-latest
+    timeout-minutes: 60
+    needs: typecheck-unit
+    steps:
+      - name: 检出源码（含完整历史，供版本/打包脚本使用）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 完整打包（含媒体运行时与镜像新鲜度门禁）
+        env:
+          WMB_OUT_DIR: ${{ github.workspace }}/wmb-out
+        run: npm run package
+
+      - name: 上传未打包的 Windows 产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wemediabuddy-win-unpacked
+          path: ${{ github.workspace }}/wmb-out
+          if-no-files-found: warn
+          retention-days: 7
