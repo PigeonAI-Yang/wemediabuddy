@@ -5,4 +5,8 @@ out/
 /data/
 .wmb-*.log
 tests/e2e/.runtime/
+.ai/archive/
+/.tmp/
+/.tmp-*
+/0
 tests/e2e/.artifacts/
