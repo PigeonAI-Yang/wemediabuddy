@@ -224,7 +224,7 @@ X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_
 
 Wiki 知识库（WMB-5240，wmb_wiki_action 协议的等价工具面）：`wmb_wiki_maintenance_start`、`wmb_wiki_maintenance_status`、`wmb_wiki_maintenance_pause`、`wmb_wiki_maintenance_resume`、`wmb_wiki_maintenance_report`、`wmb_wiki_ingest`、`wmb_wiki_lint`、`wmb_wiki_search`、`wmb_wiki_log`、`wmb_wiki_report`、`wmb_get_fixed_versions`（固定版本只读，按 `type:objectId:versionRef` 引用读取冻结版本）。写工具（start/pause/resume、ingest、lint run）必须携带当前 taskId/grantId/workerLeaseId 并经 grant/dispatcher；只读工具（status/report、search、log、lint 状态、fixed_versions）直达正式只读 API，不接受 workspaceId / rootPath / 本地路径参数。
 
-内容：`wmb_create_content_project`、`wmb_save_core_version`、`wmb_save_platform_version`、`wmb_get_content`、`wmb_list_content_projects`、`wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`、`wmb_get_brief_lineage`。
+内容：`wmb_create_content_project`、`wmb_save_core_version`、`wmb_save_platform_version`、`wmb_get_content`、`wmb_list_content_projects`、`wmb_create_creative_brief`、`wmb_update_creative_brief`、`wmb_create_project_from_brief`、`wmb_get_brief_lineage`、`wmb_get_investigation`、`wmb_save_investigation_outline`、`wmb_review_investigation_research`。
 
 指标与复盘：`wmb_get_metrics`、`wmb_get_reviews`、`wmb_save_review`。
 

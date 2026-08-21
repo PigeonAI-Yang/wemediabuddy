@@ -99,7 +99,8 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
 
 test('writer prompts keep audience identity out of core and platform titles', () => {
   const task = { id: 'task-title-test' };
-  const core = draftPrompt(task, 'project-1', 'request-1', 'core_draft');
+  // core_draft 默认 researchReady=false 时为外部研究前置交接（不含标题约束）；真实写作需 researchReady=true
+  const core = draftPrompt(task, 'project-1', 'request-1', 'core_draft', '', true);
   assert.match(core, /标题围绕该题材独有的对象、问题、动作或证据/);
   assert.match(core, /不自动添加「普通人」等万能受众标签/);
   assert.match(core, /不写来源未支持的数字、结果或因果/);

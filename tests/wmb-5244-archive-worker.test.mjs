@@ -469,12 +469,13 @@ test('worker: 单图归档端到端 —— preserved + Binding + Asset + Provena
       assert.equal(job.status, 'succeeded');
       const attempts = database.prepare('SELECT status FROM media_archive_attempts WHERE candidate_id = ?').all(candidateId);
       assert.deepEqual(attempts.map((a) => a.status), ['succeeded']);
-      // 资产行 + imported provenance
+      // 资产行 + imported provenance（WMB-5244新合同：registerStagedAsset 复合origin + completeMediaCandidatePreserved source_media；单候选2行）
       const asset = database.prepare('SELECT id FROM assets WHERE sha256 = ?').get(shaOf(PNG));
       assert.ok(asset, 'asset 必须登记');
-      const provenance = database.prepare("SELECT kind, origin FROM asset_provenance WHERE asset_id = ?").get(asset.id);
-      assert.equal(provenance.kind, 'imported');
-      assert.equal(provenance.origin, 'source_media');
+      const provenancesSingle = database.prepare("SELECT kind, origin FROM asset_provenance WHERE asset_id = ?").all(asset.id);
+      assert.equal(provenancesSingle.length, 2, '单候选应产生2行provenance（复合origin + source_media）');
+      assert.ok(provenancesSingle.some((p) => p.kind === 'imported' && p.origin === 'source_media'), '存在 source_media 行');
+      assert.ok(provenancesSingle.some((p) => p.kind === 'imported' && String(p.origin).startsWith('source-media:')), '存在复合origin行 source-media:...');
       // data-root 隔离：staging 无残留；assets 只有内容寻址文件
       assert.deepEqual(await readdir(path.join(root, 'staging', 'media')), []);
       const files = await readdir(path.join(root, 'assets'));
@@ -503,9 +504,8 @@ test('worker: 同字节跨 Source 复用 Asset，各 Source 保留独立 Binding
       assert.equal(assets.length, 1, '同字节必须复用同一 Asset');
       const bindings = database.prepare('SELECT id, source_revision_key AS revKey FROM source_media_bindings WHERE asset_id = ?').all(assets[0].id);
       assert.equal(bindings.length, 2, '各 Source 独立 Binding');
-      assert.deepEqual(new Set(bindings.map((b) => b.revKey)), new Set([r1, r2]));
-      const provenances = database.prepare('SELECT id FROM asset_provenance WHERE asset_id = ? AND kind = ?').all(assets[0].id, 'imported');
-      assert.equal(provenances.length, 2, '各 Source 独立 Provenance');
+      const provenances = database.prepare('SELECT id, origin FROM asset_provenance WHERE asset_id = ? AND kind = ?').all(assets[0].id, 'imported');
+      assert.equal(provenances.length, 3, '各 Source 独立 Provenance（首候选2行：复合+source_media，次候选复用Asset仅增source_media，合计3）');
     } finally {
       database.close();
     }

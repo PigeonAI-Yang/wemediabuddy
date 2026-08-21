@@ -196,7 +196,10 @@ test('WMB-5249 fresh database schema accepts zhihu platform rows', async () => {
   await withDatabaseDir(async (directory) => {
     const database = migrateDatabase(path.join(directory, 'wmb.db'));
     const versions = migrations.map((migration) => migration.version);
-    assert.equal(Math.max(...versions), 70, 'WMB-5249 迁移必须是当前最高版本');
+    const maxVersion = Math.max(...versions);
+    assert.ok(versions.includes(70), 'migration 70 应存在（WMB-5249 放开 zhihu）');
+    assert.deepEqual([...versions].sort((a, b) => a - b), Array.from({ length: maxVersion }, (_, index) => index + 1), `迁移版本应精确连续 1..${maxVersion}`);
+    assert.equal(versions.length, maxVersion, '迁移数量应与最大版本号一致（连续无空洞）');
     insertLegacyRows(database);
     insertZhihuRows(database);
     assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);

@@ -1,7 +1,7 @@
 /**
  * WMB-5238 索引存储核心验收（子进程，真实 SQLite）。
  * 覆盖：
- * - fresh 库 migrateDatabase 全链（含 migration 63 wiki 索引表，当前最大 70）成功；重复 migrateDatabase 幂等；
+ * - fresh 库 migrateDatabase 全链（含 migration 63 wiki 索引表，当前最大为生产 migrations 最高版本）成功；重复 migrateDatabase 幂等；
  * - rebuildWikiIndex 从业务表重建：wiki_page（含全部版本 fvr）、knowledge_note、entity、
  *   topic、source（含 source_body_revisions fvr）计数与版本锚逐项命中；
  * - 同对象新版本不抹除历史固定引用：upsert 新版本后旧版本 fvr 行与业务版本表均保留；
@@ -15,7 +15,7 @@ import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { migrations, migrateDatabase } from '../src/main/db/migrations.ts';
 import {
   upsertIndexEntries, removeIndexEntries, rebuildWikiIndex, listIndexEntries,
   getIndexSummary, refreshWikiHotCache, rebuildWikiHotCache, getWikiHotCache
@@ -48,13 +48,14 @@ let database = migrateDatabase(databasePath);
 const schema = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN ('knowledge_index_entries','knowledge_hot_cache')").all();
 check('migration 63 建表', schema.length === 2, JSON.stringify(schema));
 const applied = database.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(({ version }) => Number(version));
+const maxVersion = Math.max(...migrations.map((m) => m.version));
 check('schema_migrations 含 63', applied.includes(63), JSON.stringify(applied));
-check('迁移版本精确连续 1..70', applied.length === 70 && applied.every((version, index) => version === index + 1), JSON.stringify(applied));
+check(`迁移版本精确连续 1..${maxVersion}`, applied.length === maxVersion && applied.length === migrations.length && applied.every((version, index) => version === index + 1), JSON.stringify(applied));
 // 重复迁移（重新打开）幂等
 database.close();
 database = migrateDatabase(databasePath);
 const appliedAgain = database.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(({ version }) => Number(version));
-check('重复迁移幂等（1..70 各恰一次）', appliedAgain.length === 70 && appliedAgain.every((version, index) => version === index + 1), JSON.stringify(appliedAgain));
+check(`重复迁移幂等（1..${maxVersion} 各恰一次）`, appliedAgain.length === maxVersion && appliedAgain.length === migrations.length && appliedAgain.every((version, index) => version === index + 1), JSON.stringify(appliedAgain));
 
 // ============================================================
 // 2) 业务表种子数据

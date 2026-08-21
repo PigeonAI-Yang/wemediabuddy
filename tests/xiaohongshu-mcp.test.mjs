@@ -1,13 +1,35 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { startXhsMcp, XHS_FORBIDDEN_TOOLS, XHS_REQUIRED_TOOLS } from '../src/main/xiaohongshu-mcp.ts';
 
 const vendorDir = path.resolve('resources/xiaohongshu-mcp');
+const XHS_MAIN_BINARY = path.join(vendorDir, 'xiaohongshu-mcp-windows-amd64.exe');
+const XHS_LOGIN_BINARY = path.join(vendorDir, 'xiaohongshu-login-windows-amd64.exe');
 
-test('xhs supervisor starts on loopback, exposes four required tools, and blocks write tools', async () => {
+async function xhsBinariesAvailable() {
+  try {
+    await access(XHS_MAIN_BINARY);
+    await access(XHS_LOGIN_BINARY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function skipIfXhsBinaryMissing(t) {
+  if (await xhsBinariesAvailable()) return false;
+  const reason =
+    `跳过：缺少受管二进制 ${XHS_MAIN_BINARY}（及 ${XHS_LOGIN_BINARY}），` +
+    '请先运行 npm run verify:xhs-resources 同步资源（校验见 scripts/verify-xiaohongshu-mcp-resources.mjs：manifest version v2.1.1 / Apache-2.0，逐 asset 校验 size+sha256，禁止 cookies.json 落盘）';
+  t.skip(reason);
+  return true;
+}
+
+test('xhs supervisor starts on loopback, exposes four required tools, and blocks write tools', async (t) => {
+  if (await skipIfXhsBinaryMissing(t)) return;
   const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'wmb-xhs-data-'));
   let runtime = null;
   try {
@@ -42,8 +64,8 @@ test('xhs supervisor starts on loopback, exposes four required tools, and blocks
     await rm(dataRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
-
-test('xhs supervisor stop leaves no listening child and can restart under new data root', async () => {
+test('xhs supervisor stop leaves no listening child and can restart under new data root', async (t) => {
+  if (await skipIfXhsBinaryMissing(t)) return;
   const rootA = await mkdtemp(path.join(os.tmpdir(), 'wmb-xhs-a-'));
   const rootB = await mkdtemp(path.join(os.tmpdir(), 'wmb-xhs-b-'));
   let runtimeA = null;
@@ -96,7 +118,8 @@ test('forbidden tools list includes publish and interaction mutations', () => {
 });
 
 
-test('xhs supervisor recovers after child process kill on next ensureReady', async () => {
+test('xhs supervisor recovers after child process kill on next ensureReady', async (t) => {
+  if (await skipIfXhsBinaryMissing(t)) return;
   const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'wmb-xhs-kill-'));
   let runtime = null;
   try {

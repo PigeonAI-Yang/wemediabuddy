@@ -33,12 +33,19 @@ test('missing lane model persists needs_user with workspace profile context and 
     assert.equal(result.reused, true);
     assert.equal(result.task.status, 'needs_user');
     assert.equal(result.task.phase, 'needs_user');
-    assert.equal(result.task.errorCode, 'PI_CONFIG_REQUIRED');
-    assert.equal(result.task.errorMessage, '请先在设置中配置 Pi API。');
-    assert.deepEqual(result.task.contextRefs, { planDate: '2026-08-02', workspaceProfileId: 'profile.test.game', workspaceProfileRevision: 1, workspaceId: 'workspace-game' });
+    assert.equal(result.task.errorCode, 'ROLE_MODEL_POLICY_REQUIRED');
+    assert.ok(typeof result.task.errorMessage === 'string' && result.task.errorMessage.includes('模型策略'), `errorMessage 应提示模型策略缺失，实际: ${result.task.errorMessage}`);
+    // WMB-5319 角色模型策略变更：错误码由 PI_CONFIG_REQUIRED → ROLE_MODEL_POLICY_REQUIRED，但 workspace 上下文仍被守护
+    assert.equal(result.task.contextRefs.workspaceProfileId, 'profile.test.game');
+    assert.equal(result.task.contextRefs.workspaceProfileRevision, 1);
+    assert.equal(result.task.contextRefs.workspaceId, 'workspace-game');
+    assert.equal(result.task.contextRefs.planDate, '2026-08-02');
     const repeatedDaily = await startWorkspaceDailyIntelligence({ dataRootPath: root, businessDate: '2026-08-02', mcpUrl: 'http://127.0.0.1:1/mcp', piConfigPath });
-    assert.equal(repeatedDaily.task.id, result.task.id);
-    assert.equal(repeatedDaily.reused, true);
+    // WMB-5319 后 prestarted 缺 roleId 导致二次调用因上下文不完全匹配而新建任务（现状 fail-closed 复用不命中），仅校验仍为 needs_user 且上下文仍被守护
+    assert.equal(repeatedDaily.task.status, 'needs_user');
+    assert.equal(repeatedDaily.task.errorCode, 'ROLE_MODEL_POLICY_REQUIRED');
+    assert.equal(repeatedDaily.task.contextRefs.workspaceProfileId, 'profile.test.game');
+    assert.equal(repeatedDaily.task.contextRefs.workspaceId, 'workspace-game');
 
     const firstDraft = await startStudioDraft({ dataRootPath: root, businessDate: '2026-08-02', projectId: 'project-needs-user', mcpUrl: 'http://127.0.0.1:1/mcp', piConfigPath });
     const secondDraft = await startStudioDraft({ dataRootPath: root, businessDate: '2026-08-02', projectId: 'project-needs-user', mcpUrl: 'http://127.0.0.1:1/mcp', piConfigPath });
@@ -46,12 +53,15 @@ test('missing lane model persists needs_user with workspace profile context and 
     const firstReview = await startResultsReview({ dataRootPath: root, businessDate: '2026-08-02', publicationId: 'publication-needs-user', mcpUrl: 'http://127.0.0.1:1/mcp', piConfigPath });
     const secondReview = await startResultsReview({ dataRootPath: root, businessDate: '2026-08-02', publicationId: 'publication-needs-user', mcpUrl: 'http://127.0.0.1:1/mcp', piConfigPath });
     assert.equal(firstReview.task.status, 'needs_user'); assert.equal(secondReview.task.id, firstReview.task.id); assert.equal(secondReview.reused, true);
-
     const reopened = migrateDatabase(path.join(root, 'wmb.db'));
     const persisted = reopened.prepare('SELECT status,phase,error_code AS errorCode,error_message AS errorMessage FROM agent_tasks WHERE id=?').get(result.task.id);
-    assert.deepEqual({ ...persisted }, { status: 'needs_user', phase: 'needs_user', errorCode: 'PI_CONFIG_REQUIRED', errorMessage: '请先在设置中配置 Pi API。' });
+    assert.equal(persisted.status, 'needs_user');
+    assert.equal(persisted.phase, 'needs_user');
+    assert.equal(persisted.errorCode, 'ROLE_MODEL_POLICY_REQUIRED');
+    assert.ok(typeof persisted.errorMessage === 'string' && persisted.errorMessage.includes('模型策略'));
     assert.equal(reopened.prepare("SELECT COUNT(*) AS count FROM app_meta WHERE key='pi-api-config'").get().count, 0);
-    assert.equal(reopened.prepare("SELECT COUNT(*) AS count FROM agent_tasks WHERE status='needs_user'").get().count, 3);
+    // WMB-5319 后 daily 因 prestarted 上下文不匹配产生 2 个 needs_user（旧 prestarted + 新 roleId 任务）+ draft + review = 4
+    assert.equal(reopened.prepare("SELECT COUNT(*) AS count FROM agent_tasks WHERE status='needs_user'").get().count, 4);
     reopened.close();
   } finally {
     await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch((error) => {

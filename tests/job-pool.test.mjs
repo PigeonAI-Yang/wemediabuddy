@@ -227,12 +227,15 @@ test('L1-2 derivation table: four roles map to locked intents and resource lock 
   assert.equal(xhsSpec.writerTask, 'xiaohongshu_platform_version');
   assert.equal(xhsSpec.readback, 'xiaohongshu_platform_version');
   const corePrompt = draftPrompt({ id: 'task-core' }, 'p1', 'req-core', 'core_draft', '基于项目资料写核心稿');
+  assert.match(corePrompt, /wmb_dispatch_research/);
   assert.match(corePrompt, /wmb_save_core_version/);
-  assert.match(corePrompt, /禁止调用 wmb_save_platform_version/);
+  assert.match(corePrompt, /wmb_save_platform_version/);
   assert.match(corePrompt, /wmb_import_project_image/);
-  assert.match(corePrompt, /assets、最新版 bindings 和正文 wmb-asset 引用均非空/);
-  assert.match(corePrompt, /若图片导入或绑定失败，不得把任务报告为完整图文稿/);
   assert.match(corePrompt, /brief=基于项目资料写核心稿/);
+  const readyPrompt = draftPrompt({ id: 'task-core' }, 'p1', 'req-core', 'core_draft', '基于项目资料写核心稿', true);
+  assert.match(readyPrompt, /wmb_save_core_version/);
+  assert.match(readyPrompt, /禁止调用 wmb_save_platform_version/);
+  assert.match(readyPrompt, /brief=基于项目资料写核心稿/);
   const xhsPrompt = draftPrompt({ id: 'task-xhs' }, 'p1', 'req-xhs', 'xiaohongshu_platform_version', '基于现有 WMB 核心稿生成小红书平台版本');
   assert.match(xhsPrompt, /wmb_save_platform_version/);
   assert.match(xhsPrompt, /platform 必须是 xiaohongshu/);

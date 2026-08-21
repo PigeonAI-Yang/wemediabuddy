@@ -352,8 +352,13 @@ test('§16-12 代表性路径：Today/资料库/Results/Studio 全部盖章且�
   const library = await dispatchSafe(rolePoliciesUrl, 'page_library');
   const studio = await dispatchSafe(agentRunnerUrl, 'studio_draft');
   const review = await dispatchSafe(agentRunnerUrl, 'results_review');
-  assert.deepEqual(studio.safeVariants.map((variant) => variant.title), ['小红书平台版本', '内容核心初稿'], 'Studio 平台稿与核心稿两个 writerTask 分支均须有完整 safe');
-  assert.match(judge.line, /prompt: opportunityPrompt/, 'daily_judge 信封必须携带机会方案 prompt');
+  assert.deepEqual(studio.safeVariants.map((variant) => variant.title), ['小红书平台版本', '外部研究前置', '内容核心初稿'], 'Studio 平台稿/研究前置/核心稿三个 writerTask 分支均须有完整 safe（WMB-5295 新增外部研究前置）');
+  const externalResearch = studio.safeVariants.find((variant) => variant.title === '外部研究前置');
+  assert.ok(externalResearch, '外部研究前置分支必须存在');
+  for (const field of ORCHESTRATION_SAFE_FIELDS) {
+    assert.ok(externalResearch[field]?.trim(), `外部研究前置 safe 字段 ${field} 必须非空`);
+    assert.ok(!/managerTaskId|taskId|wmb_|\[WMB_CONTEXT\]/.test(externalResearch[field]), `外部研究前置 safe 字段 ${field} 不得含内部措辞`);
+  }
   const paths = [
     { name: 'Today', dispatchId: today.dispatchId, target: 'dock', safe: today.orchestration.safe, prompt: today.message },
     { name: '资料库整理', dispatchId: 'page_library:task-5180', target: 'employee', safe: library.safe, prompt: libraryOrganizePrompt(task, { jobId: 'job-1', brief: '整理资料', businessDate: '2026-08-11', spec: {}, runtime: {}, mcpUrl: '', xhsMcpUrl: '', workerLeaseId: 'w', sessionFile: 's', signal: new AbortController().signal, onTaskReady: async () => null, onEvent: () => {}, registerStoppable: () => {} }) },

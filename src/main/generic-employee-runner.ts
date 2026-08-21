@@ -303,7 +303,7 @@ const PREREQUISITE_INTENTS: Readonly<Record<EmployeeRole, readonly string[]>> = 
 });
 
 /**
- * WMB-5142 生命周期「处理」：关闭与本工单同逻辑键的遗留 needs_user 前置卡（PI_CONFIG_REQUIRED）。
+ * WMB-5142 生命周期「处理」：关闭与本工单同逻辑键的遗留 needs_user 前置卡（PI_CONFIG_REQUIRED / ROLE_MODEL_POLICY_REQUIRED）。
  * 匹配键 = 角色前置 intent 集 + businessDate；writer 再按 projectId 精确匹配（不同项目互不关闭）。
  * 任务侧 needs_user → cancelled（历史可追、不再被复用）；池卡（凡引用该任务者，含无合同旧卡）
  * needs_user → cancelled（退出活动视图，jobs:list 不再残留）。配置补齐后由 runner 在真实任务
@@ -318,7 +318,7 @@ export async function closeStaleNeedsUserCards(
   if (!intents.length) return;
   const rows = runtime.database.prepare(
     `SELECT id FROM agent_tasks WHERE intent IN (${intents.map(() => '?').join(',')}) AND business_date = ?
-       AND status = 'needs_user' AND error_code = 'PI_CONFIG_REQUIRED' ORDER BY updated_at DESC`
+       AND status = 'needs_user' AND error_code IN ('PI_CONFIG_REQUIRED','ROLE_MODEL_POLICY_REQUIRED') ORDER BY updated_at DESC`
   ).all(...intents, input.businessDate) as Array<{ id: string }>;
   for (const row of rows) {
     const task = getAgentTask(runtime.database, row.id);

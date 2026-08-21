@@ -568,7 +568,7 @@ test('T11 真实续派（配置缺失 reuse 同任务）：重复卡按任务退
     const first = spawner.spawn({ roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', businessDate: DATE });
     const done1 = await spawner.await(first.id, 20_000);
     assert.equal(done1.status, 'needs_user');
-    assert.equal(done1.report?.code, 'PI_CONFIG_REQUIRED');
+    assert.equal(done1.report?.code, 'ROLE_MODEL_POLICY_REQUIRED');
     assert.ok(done1.report?.taskId, '真实 runner 的 needs_user 报告携带任务 id（去重依据）');
     const single = projectionOf(spawner, runtime);
     assert.equal(single.summary.needsUser, 1, '配置缺失单卡保留（不因无 jobId 合同被误删）');
@@ -600,7 +600,7 @@ test('T12 配置缺失前置卡带工单合同：重启后持久重建仍一张�
     const first = spawner.spawn({ roleId: 'writer', brief: '写 T12 初稿', projectId: 'P12', businessDate: DATE });
     const done1 = await spawner.await(first.id, 20_000);
     assert.equal(done1.status, 'needs_user');
-    assert.equal(done1.report?.code, 'PI_CONFIG_REQUIRED');
+    assert.equal(done1.report?.code, 'ROLE_MODEL_POLICY_REQUIRED');
     assert.ok(done1.report?.taskId, '真实 runner 的 needs_user 报告携带任务 id');
     // 前置卡任务带工单合同（重启后按 jobId 可重建）——修复前无合同、重启即丢。
     const task = getAgentTask(runtime.database, done1.report.taskId);
@@ -622,7 +622,7 @@ test('T12 配置缺失前置卡带工单合同：重启后持久重建仍一张�
       assert.equal(restarted.active.length, 1);
       assert.equal(restarted.active[0].jobId, first.id);
       assert.equal(restarted.active[0].status, 'needs_user');
-      assert.equal(restarted.active[0].code, 'PI_CONFIG_REQUIRED');
+      assert.equal(restarted.active[0].code, 'ROLE_MODEL_POLICY_REQUIRED');
       assert.equal(restarted.active[0].taskId, done1.report.taskId, '持久卡仍指认同一任务');
     } finally {
       await reopened.stop({ drain: false });
@@ -679,7 +679,7 @@ test('T14 补配置续派（处理）：旧卡/旧任务关闭退出，新实例
     const first = spawner.spawn({ roleId: 'writer', brief: '写 T14 初稿', projectId: 'P14', businessDate: DATE });
     const done1 = await spawner.await(first.id, 20_000);
     assert.equal(done1.status, 'needs_user');
-    assert.equal(done1.report?.code, 'PI_CONFIG_REQUIRED');
+    assert.equal(done1.report?.code, 'ROLE_MODEL_POLICY_REQUIRED');
     assert.ok(done1.report?.taskId);
     const oldTaskId = done1.report.taskId;
     // 配置补齐：runner 在真实任务已建（createdTaskId）后执行同一关闭路径（补配置续派 → 旧卡退出）。

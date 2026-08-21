@@ -277,10 +277,13 @@ test('view DOM gates: overview first, active+history unified second (WMB-5151/51
   assert.doesNotMatch(source, /className="agents-spawn-bar"/, 'spawn bar must be gone');
   assert.doesNotMatch(source, /className="page-command"/, 'the old 96px command card must stay removed');
   assert.doesNotMatch(source, /className="agents-groups"/, 'island grid must be gone');
-  // 活动实例区内容驱动：仅当存在可见实例角色才渲染，否则给紧凑空态，不占网格。
-  assert.match(source, /sections\.length > 0 \?/);
+  // 活动实例区内容驱动：仅当存在可见实例角色或活跃 roster 任务才渲染，否则给紧凑空态，不占网格。
+  assert.match(source, /hasCurrentTasks\s*=\s*sections\.length > 0 \|\| rosterActive\.length > 0/);
+  assert.match(source, /!hasCurrentTasks/);
   assert.match(source, /sections\.map\(/);
+  assert.match(source, /rosterActive\.map\(/);
   assert.match(source, /<ActiveRoleInstances[\s>]/, 'active role sections render through the extracted component');
+  assert.match(source, /<ActiveRosterTask[\s>]/, 'roster active tasks render through the extracted component');
   assert.match(source, /className="agents-filter-empty"/);
   // 概览始终渲染全部五组；空角色仍「当前无任务」，有实例角色带状态词。
   assert.match(source, /ORDER\.map\(/);

@@ -129,10 +129,9 @@ test('research projections reject malformed research gaps fail-closed', () => {
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentJobId: undefined } },
     // 缺 parentTaskId
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentTaskId: undefined } },
-    // 父角色为 reporter/research/未知
+    // 父角色为 reporter/research/未知（desk 自 WMB-5290 起允许作为项目专项调查父，不再视为 malformed）
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentRoleId: 'reporter' } },
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentRoleId: 'research' } },
-    { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentRoleId: 'desk' } },
     // requiredClaims 空 / 缺 type / 缺 text
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, requiredClaims: [] } },
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, requiredClaims: [{ key: 'k', text: 't', type: 'bogus' }] } },
@@ -140,7 +139,7 @@ test('research projections reject malformed research gaps fail-closed', () => {
     // budget 缺字段 / 非正数
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, budget: { timeMinutes: 12, minValidSources: 15, maxCandidates: 40, maxParallelFetches: 3 } } },
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, budget: { timeMinutes: 0, minValidSources: 15, maxCandidates: 40, maxParallelFetches: 3, maxRounds: 1 } } },
-    // channels 空 / 非枚举
+    // channels 空 / 非枚举（空数组在 parse 层视为 VALIDATION_ERROR）
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, channels: [] } },
     { ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, channels: ['web', 'facebook'] } },
     // research 块非对象
@@ -152,6 +151,8 @@ test('research projections reject malformed research gaps fail-closed', () => {
       return true;
     }, `malformed research must be rejected`);
   }
+  // WMB-5290：desk 作为父角色现为合法（项目专项调查合成父），验证其不再抛错且能正确解析
+  assert.doesNotThrow(() => parseRoleJobRequest({ ...RESEARCH_REQUEST, research: { ...RESEARCH_REQUEST.research, parentRoleId: 'desk' } }));
   // 外部 intent 输入仍被拒绝（派生唯一真相源不变）。
   assert.throws(() => parseRoleJobRequest({ ...RESEARCH_REQUEST, intent: 'research' }), (error) => {
     assert.equal(error.code, JOB_ERROR_CODES.VALIDATION_ERROR);

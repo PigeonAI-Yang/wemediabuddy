@@ -5,7 +5,7 @@
 //  - wmb-5238-index-triggers-child.mjs（test-double 触发接线）：ChangeSet/归档/失败隔离；
 // 本文件使用真实 store + 真实业务管道（migrateDatabase/upsertSource/writeSourceBodyCache/
 // compileSourceKnowledge/applyKnowledgeChangeSet），锁定跨切片合同：
-//  1) migration 63 落库（wiki 索引表；当前最大 70，全链精确连续 1..70；重放幂等）；
+//  1) migration 63 落库（wiki 索引表；当前最大为生产 migrations 最高版本，全链精确连续 1..CURRENT；重放幂等）；
 //  2) 六类对象经真实管道进入索引（Wiki 正文/Note/Entity/Topic/Source/固定版本引用）；
 //     正文级搜索命中（词只在正文、不在元数据）；
 //  3) 固定版本锚：当前行 versionRef = 不可变版本 id / rev:{revision} / 正文 revision id；
@@ -25,7 +25,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-const { migrateDatabase } = await import('../src/main/db/migrations.ts');
+const { migrations, migrateDatabase } = await import('../src/main/db/migrations.ts');
 const { upsertSource } = await import('../src/main/sources.ts');
 const { upsertKnowledgeTopic } = await import('../src/main/knowledge.ts');
 const { writeSourceBodyCache } = await import('../src/main/source-body-cache.ts');
@@ -121,15 +121,16 @@ async function cleanup(root) {
   }
 }
 
-// ============ 1. migration 63 落库 + 全链 1..70：重放幂等 ============
+// ============ 1. migration 63 落库 + 全链 1..CURRENT：重放幂等 ============
 
-test('WMB-5238 migration 63: lands on migrated connection, versions exact 1..70, replay idempotent', async () => {
+test('WMB-5238 migration 63: lands on migrated connection, versions exact 1..CURRENT, replay idempotent', async () => {
   const root = await makeRoot();
   try {
     const { database } = makeDatabase(root);
     const versions = database.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => Number(r.version));
     assert.ok(versions.includes(63), 'migration 63 应已应用');
-    assert.deepEqual(versions, Array.from({ length: 70 }, (_, index) => index + 1), '迁移版本应精确连续 1..70');
+    const maxVersion = Math.max(...migrations.map((m) => m.version));
+    assert.deepEqual(versions, Array.from({ length: maxVersion }, (_, index) => index + 1), `迁移版本应精确连续 1..${maxVersion}`);
     const tables = new Set(database.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map((r) => String(r.name)));
     assert.ok(tables.has('knowledge_index_entries'), '索引表应存在');
     assert.ok(tables.has('knowledge_hot_cache'), '持久 hot cache 表应存在');

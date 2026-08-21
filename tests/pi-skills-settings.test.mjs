@@ -10,9 +10,9 @@ test('Settings exposes one installation-level Pi Skills manager with protected s
   ]);
   assert.match(settings, /id: 'skills', label: 'Pi Skills'/);
   assert.match(settings, /section === 'skills' && <PiSkillsSettings/);
-  assert.match(component, /系统 · 只读/);
-  assert.match(component, /当前工作空间 · 只读/);
-  assert.match(component, /内置 · 可编辑/);
+  assert.match(component, /只读/);
+  assert.match(component, /可编辑/);
+  assert.match(component, /新建/);
   assert.match(component, /window\.wmb\.savePiSkill/);
   assert.match(component, /window\.wmb\.deletePiSkill/);
   assert.match(preload, /pi-skills:list/);

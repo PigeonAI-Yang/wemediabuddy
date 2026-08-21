@@ -132,6 +132,13 @@ function createLegacyDatabase(dbPath) {
   const markRows = Array.from({ length: 61 }, (_, i) => `(${i + 1}, '2026-01-01T00:00:00.000Z')`).join(',');
   db.exec(`INSERT INTO schema_migrations (version, applied_at) VALUES ${markRows}`);
   db.exec(`
+    CREATE TABLE app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      revision INTEGER NOT NULL
+    );
     CREATE TABLE content_projects (
       id TEXT PRIMARY KEY, topic_id TEXT, plan_item_id TEXT, title TEXT NOT NULL,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL,

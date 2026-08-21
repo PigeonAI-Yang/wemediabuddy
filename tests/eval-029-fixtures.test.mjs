@@ -30,7 +30,7 @@ test('EVAL-029 fixture survives two bounded cold processes without changing its 
     assert.equal(manifest.semanticProjection.registry.workspaces.length, 2);
     assert.notEqual(manifest.semanticProjection.roots.ai.workspaceId, manifest.semanticProjection.roots.uk.workspaceId);
     assert.notEqual(manifest.semanticProjection.roots.ai.profileId, manifest.semanticProjection.roots.uk.profileId);
-    assert.equal(manifest.semanticProjection.schemaVersion, 70);
+    assert.equal(manifest.semanticProjection.schemaVersion, 74);
     assert.equal(manifest.semanticProjection.version, 3);
     assert.deepEqual(manifest.semanticProjection.deliveredAuthorities.map(({ id, table, expectedRowsPerRoot }) => ({ id, table, expectedRowsPerRoot })), [
       { id: 'business-command-receipt', table: 'command_receipts', expectedRowsPerRoot: 0 },
@@ -39,7 +39,7 @@ test('EVAL-029 fixture survives two bounded cold processes without changing its 
       { id: 'immutable-publication-snapshot', table: 'publication_snapshots', expectedRowsPerRoot: 0 }
     ]);
     for (const root of Object.values(manifest.semanticProjection.roots)) {
-      assert.equal(root.migrationVersions.at(-1), 70);
+      assert.equal(root.migrationVersions.at(-1), 74);
       for (const authority of Object.values(root.authorityState)) {
         assert.deepEqual(authority.rows, []);
         assert.equal(authority.columns.includes('runtime_epoch'), true);
