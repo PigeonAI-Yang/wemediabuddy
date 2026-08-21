@@ -67,8 +67,10 @@ test('索引状态提示：有更新时间显示覆盖范围，索引为空显�
 });
 
 test('主题视图集成：搜索与动态切片只挂当前主题 scope，四态与深链齐备（组件源断言）', async () => {
-  const source = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
-  // 主题范围必须真实生效：scope id 派生自当前选中主题，hooks 的 topicId 来自该 scope。
+  const view = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+  const parts = await readFile(new URL('../src/renderer/library-topics-parts.tsx', import.meta.url), 'utf8').catch(() => '');
+  const wiki = await readFile(new URL('../src/renderer/library-topics-wiki.tsx', import.meta.url), 'utf8').catch(() => '');
+  const source = view + parts + wiki;
   assert.match(source, /const topicScopeId = selectedTopicId \?\? undefined/);
   assert.match(source, /topicSearch = useWikiSearch\(\{[^}]*topicId: topicScopeId[^}]*enabled: topicScopeEnabled/);
   assert.match(source, /topicActivity = useKnowledgeLog\(\{[^}]*topicId: topicScopeId[^}]*enabled: topicScopeEnabled/);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContentProjectDetail, ContentProjectOrder, ContentProjectPlatform, ContentProjectStatus, ContentProjectStatusSummary, ContentProjectSummary } from '../main/content';
 import type { StudioAnnotation, StudioDocumentScope, StudioPlatform } from '../shared/studio-annotations';
 import { assetImageToken, bodyWithoutLeadingTitle, contentMediaLayoutMap, formatAssetSize, formatTime, htmlToMarkdown, insertTextAtCursor, looksLikeMarkdown, parseAssetImages, platformNames, removeAssetImageToken, renderMarkdown, replaceAssetImageToken, statuses, updateAssetImageAlt, updateContentMediaBinding, wrapTextareaSelection, type StudioAssetImageRef } from './studio-view-helpers';
-import { StudioEditorTop, StudioFormatBar, StudioHistoryModal, StudioLibraryHeader, StudioOutline } from './studio-view-panels';
+import { StudioEditorTop, StudioFormatBar, StudioHistoryModal, StudioLibraryHeader, StudioLibraryView, StudioOutline } from './studio-view-panels';
 import { StudioInvestigationPanel } from './studio-investigation-panel';
 import { studioInvestigationIndicator, type StudioInvestigationIndicator } from './studio-investigation-indicator';
 import { StudioInlineImageOverlay, type InlineImageDraft, type InlineImageSelection } from './studio-image-toolbar';
@@ -17,114 +17,17 @@ import { StudioAnnotationMenu, StudioAnnotationNoteInput, StudioAnnotationOverla
 import { appConfirm } from './app-confirm';
 import { priorityGrade } from './today-view-parts';
 import { SourcePlatformMark } from './source-mark';
+import { captureRichInsertionBookmark, type EditorInsertionBookmark } from './studio-view-dom';
+import { coreBindingsFromDetail, coreMediaBindingsEqual } from './studio-view-media';
+import { RESEARCH_DECISION_LABEL, StudioIllustrationPanel, StudioResearchGate, useStudioIllustrations, useStudioResearchGaps, type StudioFocusObject, type StudioResearchGapItem } from './studio-view-research';
+import { useStudioInlineImages } from './studio-view-inline-images';
+import { useStudioEditorOps } from './studio-view-editor-ops';
+import { useStudioAnnotations } from './studio-view-annotations';
+import { useStudioSave } from './studio-view-save';
+import { useStudioRecommendations } from './studio-view-recommendations';
+import { useStudioImageHandlers } from './studio-view-image-handlers';
 
 type StudioSelectionSnapshot = { start: number; end: number; basis: string };
-
-type EditorInsertionBookmark = Readonly<{
-  body: string;
-  offset: number;
-  sourceSelection?: Readonly<{ start: number; end: number }>;
-}>;
-
-const RICH_INSERTION_MARKER = '\uE000WMB_IMAGE_INSERT\uE001';
-
-function nodePath(root: Node, target: Node): number[] | null {
-  const path: number[] = [];
-  let current: Node | null = target;
-  while (current && current !== root) {
-    const parent: ParentNode | null = current.parentNode;
-    if (!parent) return null;
-    const index = Array.prototype.indexOf.call(parent.childNodes, current) as number;
-    if (index < 0) return null;
-    path.unshift(index);
-    current = parent as Node;
-  }
-  return current === root ? path : null;
-}
-
-function nodeFromPath(root: Node, path: readonly number[]): Node | null {
-  let current = root;
-  for (const index of path) {
-    const child = current.childNodes[index];
-    if (!child) return null;
-    current = child;
-  }
-  return current;
-}
-
-function captureRichInsertionBookmark(editor: HTMLElement, fallbackBody: string): EditorInsertionBookmark {
-  const selection = window.getSelection();
-  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-  if (!range || !editor.contains(range.startContainer)) return { body: fallbackBody, offset: fallbackBody.length };
-  const path = nodePath(editor, range.startContainer);
-  if (!path) return { body: fallbackBody, offset: fallbackBody.length };
-  const clone = editor.cloneNode(true) as HTMLElement;
-  const target = nodeFromPath(clone, path);
-  if (!target) return { body: fallbackBody, offset: fallbackBody.length };
-  const offsetLimit = target.nodeType === Node.TEXT_NODE ? (target.textContent?.length ?? 0) : target.childNodes.length;
-  const markerRange = document.createRange();
-  markerRange.setStart(target, Math.min(range.startOffset, offsetLimit));
-  markerRange.collapse(true);
-  markerRange.insertNode(document.createTextNode(RICH_INSERTION_MARKER));
-  const markedBody = htmlToMarkdown(clone);
-  const offset = markedBody.indexOf(RICH_INSERTION_MARKER);
-  if (offset < 0) return { body: fallbackBody, offset: fallbackBody.length };
-  return { body: markedBody.replace(RICH_INSERTION_MARKER, ''), offset };
-}
-
-/** WMB-5296 Studio「研究缺口 · 等你批」行投影（与 src/main/research-successor-projection.ts 同构，含 projectId）。 */
-type StudioResearchGapItem = Readonly<{
-  id: string;
-  parentJobId: string;
-  parentTaskId: string;
-  researchTaskId: string;
-  parentRoleId: 'writer' | 'planner' | 'librarian';
-  projectId: string | null;
-  unresolvedClaims: ReadonlyArray<Readonly<{ key: string; text: string | null; type: 'fact' | 'price' | 'policy' | null }>>;
-  decision: 'narrow' | 'supplement' | 'accept' | null;
-  createdAt: string;
-  updatedAt: string;
-}>;
-
-/** 三动作可读标签（与 research-successor RESEARCH_SUCCESSOR_ACTIONS / Today 同值，精确映射 narrow/supplement/accept）。 */
-const RESEARCH_DECISION_LABEL: Readonly<Record<'narrow' | 'supplement' | 'accept', string>> = Object.freeze({
-  narrow: '收窄范围',
-  supplement: '补充材料后继续',
-  accept: '接受并标注待核实'
-});
-
-type StudioFocusObject = {
-  type: string; id: string; title: string; summary?: string | null;
-  bodyStatus?: 'none' | 'ready' | 'failed' | 'empty'; bodyExcerpt?: string | null; bodyChars?: number;
-  studioDocument?: { projectId: string; documentKind: 'core' | 'platform'; documentId: string | null; platform: StudioPlatform | null; title: string; currentBody: string; bodyFingerprint: string; dirty: boolean };
-  openAnnotations?: Array<Pick<StudioAnnotation, 'id' | 'startOffset' | 'endOffset' | 'quotedText' | 'prefixContext' | 'suffixContext' | 'note'>>;
-};
-
-// ---- WMB-5237 核心媒体布局草稿：detail 读模型 → 草稿（字段名以 src/shared/media-bindings.ts 为准） ----
-function coreBindingsFromDetail(detail: ContentProjectDetail | null): ContentMediaBindingDraft[] {
-  const latest = detail?.revisions[0] as (ContentProjectDetail['revisions'][number] & { bindings?: ContentMediaBinding[] }) | undefined;
-  const bindings = latest?.bindings;
-  if (!bindings || bindings.length === 0) return [];
-  return bindings.map((binding) => ({
-    assetId: binding.assetId,
-    occurrence: binding.occurrence,
-    widthPreset: binding.widthPreset,
-    align: binding.align,
-    caption: binding.caption ?? null,
-    linkUrl: binding.linkUrl ?? null
-  }));
-}
-
-function coreMediaBindingsEqual(a: ContentMediaBindingDraft[], b: ContentMediaBindingDraft[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    const x = a[i];
-    const y = b[i];
-    if (x.assetId !== y.assetId || x.occurrence !== y.occurrence || x.widthPreset !== y.widthPreset || x.align !== y.align
-      || (x.caption ?? null) !== (y.caption ?? null) || (x.linkUrl ?? null) !== (y.linkUrl ?? null)) return false;
-  }
-  return true;
-}
 
 export function LongTermStudioView({ openPublish, selectedId, onSelect, onContext, onFocusChange, onOpenSource, planDate, enabledPlatforms, aiSourcePresentation }: {
   openPublish: () => void; selectedId: string | null; onSelect: (projectId: string | null) => void;
@@ -167,11 +70,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const [copyTitle, setCopyTitle] = useState(''); const [copyOpen, setCopyOpen] = useState(false); const [findOpen, setFindOpen] = useState(false); const [findText, setFindText] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false); const [editorMode, setEditorMode] = useState<'rich' | 'source'>('source');
   const [investigationIndicator, setInvestigationIndicator] = useState<StudioInvestigationIndicator>(() => studioInvestigationIndicator(null));
-  // WMB-5296：Studio「研究缺口 · 等你批」——只投影当前选中项目（projectId 精确匹配）的 needs_user 续派行。
-  const [researchGapRows, setResearchGapRows] = useState<StudioResearchGapItem[]>([]);
-  const [researchGapsError, setResearchGapsError] = useState<string | null>(null);
-  const [researchBusyId, setResearchBusyId] = useState<string | null>(null);
-  const [researchGapMessage, setResearchGapMessage] = useState<string | null>(null);
+  const { researchGapRows, researchGapForProject, researchGapsError, researchBusyId, researchGapMessage, decideResearchGap } = useStudioResearchGaps(selectedId);
   const [creating, setCreating] = useState(false); const [newTitle, setNewTitle] = useState('');
   const [illustrationRuns, setIllustrationRuns] = useState<IllustrationRun[]>([]);
   const [illustrationRatio, setIllustrationRatio] = useState<IllustrationRatio>('16:9');
@@ -302,30 +201,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       }
     });
   }, [query, status, archived, order, platform, offset, anyDirty, selectedId, busy]);
-  // WMB-5296：研究缺口投影——选中项目变化与既有 agent/today 数据变更事件时刷新；
-  // 只保留 projectId 精确等于 selected.id 的行（父任务持久 refs 权威匹配，绝不按标题推断）。
-  const researchGapForProject = useMemo(() => {
-    if (!selectedId) return [];
-    return researchGapRows.filter((row) => row.projectId === selectedId);
-  }, [researchGapRows, selectedId]);
-  useEffect(() => {
-    setResearchGapRows([]); setResearchGapsError(null); setResearchGapMessage(null);
-    if (!selectedId) return;
-    let active = true;
-    const loadGaps = () => void window.wmb.listResearchSuccessorsNeedsUser().then((items) => {
-      if (!active) return;
-      setResearchGapRows(items ?? []);
-      setResearchGapsError(null);
-    }).catch(() => {
-      if (active) setResearchGapsError('研究缺口读取失败，请稍后重试');
-    });
-    loadGaps();
-    const unsubscribe = window.wmb.onDataChanged((event) => {
-      const scopes = event.scopes ?? [];
-      if (scopes.includes('agent') || scopes.includes('today') || scopes.length === 0) loadGaps();
-    });
-    return () => { active = false; unsubscribe(); };
-  }, [selectedId]);
   useEffect(() => {
     let live = true;
     let timer: number | undefined;
@@ -343,28 +218,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     void loadIllustrations();
     return () => { live = false; if (timer !== undefined) window.clearTimeout(timer); };
   }, [selectedId, selected?.revisions[0]?.id]);
-  const decideResearchGap = async (jobId: string, decision: keyof typeof RESEARCH_DECISION_LABEL) => {
-    if (researchBusyId) return;
-    setResearchBusyId(jobId);
-    setResearchGapMessage(null);
-    setResearchGapsError(null);
-    try {
-      const result = await window.wmb.decideResearchSuccessor({ jobId, decision });
-      if (result && typeof result === 'object' && result.ok) {
-        setResearchGapMessage(`已选择「${RESEARCH_DECISION_LABEL[decision]}」：写作将自动继续（原角色续派已恢复待调度）。`);
-        // 决策生效后重读投影：needs_user 行已转 pending，本项目的缺口行随之消失。
-        const items = await window.wmb.listResearchSuccessorsNeedsUser().catch(() => null);
-        if (items) setResearchGapRows(items);
-      } else {
-        const error = result && typeof result === 'object' && result.error ? result.error : null;
-        setResearchGapsError(error ? `决策未生效（${error.code}）：${error.message}` : '决策未生效：未知错误。');
-      }
-    } catch (error) {
-      setResearchGapsError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setResearchBusyId(null);
-    }
-  };
   useEffect(()=>{void window.wmb.listKnowledgeTopics({limit:100}).then((page)=>setTopics(page?.items ?? []));},[]);
   useEffect(() => { setOffset(0); }, [query, status, archived, order, platform]);
   useEffect(() => { if (!selectedId) { setSelected(null); setPlatformSelections({}); setPlatformDrafts({}); setInvestigationIndicator(studioInvestigationIndicator(null)); onContext(null); } }, [selectedId]);
@@ -647,83 +500,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     bodyHistoryIndex.current = history.length - 1;
     applyEditorBody(next);
   };
-  const moveHistory = (direction: -1 | 1) => {
-    const next = bodyHistoryIndex.current + direction;
-    if (next < 0 || next >= bodyHistory.current.length) return;
-    bodyHistoryIndex.current = next;
-    applyEditorBody(bodyHistory.current[next]);
-  };
-  const insertMarkdown = (snippet: string) => {
-    if (readOnlyVersion) return;
-    if (editorMode === 'source') {
-      const textarea = sourceInput.current;
-      if (!textarea) {
-        changeBody(`${editorBody}${editorBody.endsWith('\n') || !editorBody ? '' : '\n\n'}${snippet}`);
-        return;
-      }
-      textarea.focus();
-      changeBody(insertTextAtCursor(textarea, snippet));
-      return;
-    }
-    const editor = bodyInput.current;
-    if (!editor) {
-      changeBody(`${editorBody}${editorBody.endsWith('\n') || !editorBody ? '' : '\n\n'}${snippet}`);
-      return;
-    }
-    editor.focus();
-    document.execCommand('insertHTML', false, renderMarkdown(snippet));
-    changeBody(htmlToMarkdown(editor));
-    richDomSyncedRef.current = true;
-  };
-  const formatSelection = (before: string, after = before, placeholder = '文字') => {
-    if (readOnlyVersion) return;
-    if (editorMode === 'source') {
-      const textarea = sourceInput.current;
-      if (!textarea) return;
-      textarea.focus();
-      changeBody(wrapTextareaSelection(textarea, before, after, placeholder));
-      return;
-    }
-    const editor = bodyInput.current;
-    if (!editor) return;
-    editor.focus();
-    const command = before === '**' ? 'bold' : before === '*' ? 'italic' : before === '~~' ? 'strikeThrough' : before === '- ' ? 'insertUnorderedList' : before === '> ' ? 'formatBlock' : '';
-    if (command === 'formatBlock') document.execCommand(command, false, 'blockquote');
-    else if (command) document.execCommand(command);
-    else if (before === '## ') document.execCommand('formatBlock', false, 'h2');
-    else if (before === '### ') document.execCommand('formatBlock', false, 'h3');
-    else if (before === '[') {
-      const url = window.prompt('粘贴链接地址');
-      if (url) document.execCommand('createLink', false, url);
-    } else if (before.startsWith('```')) {
-      insertMarkdown(`\n\`\`\`\n${placeholder}\n\`\`\`\n`);
-      return;
-    } else document.execCommand('insertText', false, `${before}${placeholder}${after}`);
-    changeBody(htmlToMarkdown(editor));
-    richDomSyncedRef.current = true;
-  };
-  const execRich = (command: string, value?: string) => {
-    if (editorMode === 'source') {
-      if (command === 'bold') return formatSelection('**');
-      if (command === 'italic') return formatSelection('*');
-      if (command === 'strikeThrough') return formatSelection('~~');
-      if (command === 'insertUnorderedList') return insertMarkdown('\n- 列表项\n');
-      if (command === 'insertOrderedList') return insertMarkdown('\n1. 列表项\n');
-      if (command === 'formatBlock' && value === 'h2') return insertMarkdown('\n## 二级标题\n\n');
-      if (command === 'formatBlock' && value === 'h3') return insertMarkdown('\n### 三级标题\n\n');
-      if (command === 'formatBlock' && value === 'blockquote') return insertMarkdown('\n> 引用\n\n');
-      if (command === 'formatBlock' && value === 'p') return insertMarkdown('\n');
-      if (command === 'undo') return moveHistory(-1);
-      if (command === 'redo') return moveHistory(1);
-      return;
-    }
-    const editor = bodyInput.current;
-    if (!editor || readOnlyVersion) return;
-    editor.focus();
-    document.execCommand(command, false, value);
-    changeBody(htmlToMarkdown(editor));
-    richDomSyncedRef.current = true;
-  };
   const handleEditorPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
     if (readOnlyVersion || busy) return;
     const editor = bodyInput.current;
@@ -813,6 +589,9 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       if (imageInput.current) imageInput.current.value = '';
     }
   };
+  const { moveHistory, insertMarkdown, formatSelection, execRich } = useStudioEditorOps({
+    selected, busy, readOnlyVersion, editorMode, editorBody, changeBody, bodyInput, sourceInput, richDomSyncedRef, bodyHistory, bodyHistoryIndex, applyEditorBody, insertImageFile
+  });
   // ---- WMB-5237 本文图片菜单：定位 / 替换 / 编辑图注 / 移出（只投影当前正文，走 changeBody）----
   // WMB-5237 平台绑定对账：正文引用 ↔ 绑定（封面/序/裁剪/平台图注元数据保留），并重建 assetIds 投影。
   const syncPlatformBindingsForBody = (nextBody: string) => {
@@ -849,129 +628,9 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     setImageMenuAltDrafts({});
     setImageMenuOpen(true);
   };
-  // ---- WMB-5246 素材建议：生成/接受/拒绝（media-recommendations:* IPC；接受=独立保存边界）----
-  const loadRecommendations = useCallback(async () => {
-    if (!selected) return;
-    const latest = selected.revisions[0];
-    if (!latest) { setMediaRecommendations(null); return; }
-    setRecommendationsLoading(true);
-    try {
-      const model = await window.wmb.listMediaRecommendations({ contentVersionId: latest.id, projectId: selected.id });
-      setMediaRecommendations(model);
-    } catch {
-      setMediaRecommendations(null);
-    } finally {
-      setRecommendationsLoading(false);
-    }
-  }, [selected?.id, selected?.revisions[0]?.id]);
-  useEffect(() => {
-    void loadRecommendations();
-  }, [loadRecommendations]);
-  const posterCandidatesForAsset = (assetId: string): Array<{ assetId: string; timeMs: number | null }> => {
-    const media = (selected?.sourceMedia ?? []).find((item) => item.assetId === assetId);
-    const keyframes = media?.video?.keyframes.map((frame) => ({ assetId: frame.assetId, timeMs: frame.timeMs })) ?? [];
-    const posters = (selected?.sourceMedia ?? [])
-      .filter((item) => item.kind === 'video_poster' && item.sourceId === media?.sourceId)
-      .map((item) => ({ assetId: item.assetId, timeMs: null }));
-    return [...posters, ...keyframes];
-  };
-  const generateRecommendations = async () => {
-    if (!selected || busy) return;
-    const latest = selected.revisions[0];
-    if (!latest) { setMessage('请先保存核心正文，再生成媒体建议'); return; }
-    const sourceRevisionKeys = [...new Set((selected.sourceMedia ?? []).map((item) => item.sourceRevisionKey))];
-    if (sourceRevisionKeys.length === 0) { setMessage('项目资料暂无已保存的来源媒体（归档完成后可生成建议）'); return; }
-    setRecommendationsGenerating(true);
-    try {
-      const result = await window.wmb.generateMediaRecommendations({
-        contentVersionId: latest.id,
-        projectId: selected.id,
-        sourceRevisionKeys
-      });
-      if (!result?.ok) {
-        setMessage(result?.error?.message ?? '生成媒体建议失败');
-      } else {
-        setMessage('媒体建议已生成');
-        await loadRecommendations();
-      }
-    } finally {
-      setRecommendationsGenerating(false);
-    }
-  };
-  const acceptRecommendation = async (recommendation: MediaRecommendation) => {
-    if (readOnlyVersion || busy) return;
-    if (recommendation.mediaKind === 'video' && !activePlatform) {
-      setMessage('视频是结构化附件，请先打开平台页签再接受');
-      return;
-    }
-    const result = await window.wmb.decideMediaRecommendation({ id: recommendation.id, expectedRevision: recommendation.revision, decision: 'accept' });
-    if (!result?.ok) {
-      setMessage(result?.error?.message ?? '接受建议失败');
-      await loadRecommendations();
-      return;
-    }
-    // 放入草稿：图片 → 正文 token（同步产生平台绑定）；视频 → 平台结构化附件绑定（绝不进入 token）。
-    if (recommendation.mediaKind === 'video') {
-      const media = (selected?.sourceMedia ?? []).find((item) => item.assetId === recommendation.assetId);
-      const clipRange = recommendation.transform.kind === 'clip'
-        ? { startMs: recommendation.transform.startMs, endMs: recommendation.transform.endMs }
-        : null;
-      const defaultPoster = (selected?.sourceMedia ?? [])
-        .find((item) => item.kind === 'video_poster' && item.sourceId === media?.sourceId)?.assetId ?? null;
-      updateActivePlatformDraft({
-        mediaBindings: addVideoPlatformBinding(currentPlatformBindings, {
-          assetId: recommendation.assetId,
-          posterAssetId: defaultPoster,
-          clipRange,
-          durationMs: clipRange ? clipRange.endMs - clipRange.startMs : media?.asset.durationMs ?? null,
-          caption: recommendation.caption || null
-        })
-      });
-      setMessage(clipRange ? `已接受视频片段 ${formatMs(clipRange.startMs)}–${formatMs(clipRange.endMs)}（保存平台版本时物化）` : '已接受视频附件（保存平台版本时生效）');
-    } else {
-      const caption = recommendation.caption?.trim() || '来源素材';
-      insertMarkdown(`${assetImageToken(caption, recommendation.assetId)}\n\n`);
-      setMessage('已接受并放入正文（保存版本时写入绑定）');
-    }
-    await loadRecommendations();
-  };
-  const rejectRecommendation = async (recommendation: MediaRecommendation) => {
-    if (readOnlyVersion || busy) return;
-    const result = await window.wmb.decideMediaRecommendation({ id: recommendation.id, expectedRevision: recommendation.revision, decision: 'reject' });
-    setMessage(result?.ok ? '已拒绝该建议（不写入任何版本）' : (result?.error?.message ?? '拒绝失败'));
-    await loadRecommendations();
-  };
-  const seekStudioVideo = (_assetId: string, timeMs: number) => {
-    setMessage(`已定位到 ${formatMs(timeMs)}（本地原视频）`);
-  };
-  const startVideoClipEdit = (binding: { assetId: string; clipRange: { startMs: number; endMs: number } | null; durationMs: number | null }) => {
-    setVideoClipEdit({
-      assetId: binding.assetId,
-      start: binding.clipRange ? String(Math.round(binding.clipRange.startMs / 1000)) : '0',
-      end: binding.clipRange ? String(Math.round(binding.clipRange.endMs / 1000)) : binding.durationMs ? String(Math.round(binding.durationMs / 1000)) : ''
-    });
-  };
-  const saveVideoClipEdit = (assetId: string) => {
-    const draft = videoClipEdit;
-    if (!draft || draft.assetId !== assetId) return;
-    const start = Number(draft.start);
-    const end = Number(draft.end);
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end - start > 60) {
-      setMessage('截取时间段无效：需 0 ≤ start < end 且不超过 60 秒');
-      return;
-    }
-    updateActivePlatformDraft({ mediaBindings: setPlatformBindingClipRange(currentPlatformBindings, assetId, { startMs: start * 1000, endMs: end * 1000 }) });
-    setVideoClipEdit(null);
-    setMessage(`已设置截取 ${formatMs(start * 1000)}–${formatMs(end * 1000)}（保存平台版本时物化）`);
-  };
-  const cycleVideoPoster = (binding: { assetId: string; posterAssetId: string | null }) => {
-    const candidates = posterCandidatesForAsset(binding.assetId);
-    if (candidates.length === 0) { setMessage('该视频暂无关键帧/封面可设'); return; }
-    const currentIndex = candidates.findIndex((candidate) => candidate.assetId === binding.posterAssetId);
-    const next = candidates[(currentIndex + 1) % candidates.length];
-    updateActivePlatformDraft({ mediaBindings: setPlatformBindingPoster(currentPlatformBindings, binding.assetId, next.assetId) });
-    setMessage('已切换视频封面（保存平台版本时生效）');
-  };
+  const { loadRecommendations, posterCandidatesForAsset, generateRecommendations, acceptRecommendation, rejectRecommendation, seekStudioVideo, startVideoClipEdit, saveVideoClipEdit, cycleVideoPoster } = useStudioRecommendations({
+    selected, busy, readOnlyVersion, activePlatform, currentPlatformBindings, assetImageRefs, editorBody, changeBody, updateActivePlatformDraft, insertMarkdown, setMessage, setMediaRecommendations, setRecommendationsLoading, setRecommendationsGenerating, mediaRecommendations, recommendationsLoading, recommendationsGenerating, videoClipEdit, setVideoClipEdit
+  } as unknown as never);
   useEffect(() => {
     if (!imageMenuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') closeImageMenu(); };
@@ -1009,382 +668,21 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     return () => window.removeEventListener('studio-inline-crop-request', onInlineCropRequest);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetImageRefs, readOnlyVersion, busy]);
-  const locateAssetImage = (ref: StudioAssetImageRef) => {
-    setImageMenuEditKey(null);
-    if (editorMode === 'source' && !readOnlyVersion) {
-      const textarea = sourceInput.current;
-      if (!textarea) return;
-      textarea.focus();
-      const lines = editorBody.split('\n');
-      const lineIndex = Math.min(lines.length - 1, editorBody.slice(0, ref.start).split('\n').length - 1);
-      const ratio = lines.length > 1 ? lineIndex / (lines.length - 1) : 0;
-      textarea.scrollTop = Math.max(0, (textarea.scrollHeight - textarea.clientHeight) * ratio);
-      try { textarea.setSelectionRange(ref.start, ref.end); } catch { /* 选区越界时忽略 */ }
-      canvasRef.current?.scrollTo({ top: Math.max(0, textarea.offsetTop - 24), behavior: 'smooth' });
-      return;
-    }
-    const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      const root = bodyInput.current;
-      if (!root) return;
-      const figures = [...root.querySelectorAll('figure[data-wmb-asset]')];
-      const figure = figures.filter((node) => node.getAttribute('data-wmb-asset') === ref.assetId)[ref.occurrence];
-      if (!figure) return;
-      figure.scrollIntoView({ block: 'center', behavior });
-      figure.classList.add('studio-figure-flash');
-      window.setTimeout(() => figure.classList.remove('studio-figure-flash'), 1400);
-    }));
-  };
-  const requestReplaceAssetImage = (ref: StudioAssetImageRef) => {
-    if (readOnlyVersion || busy) return;
-    pendingReplaceRef.current = { assetId: ref.assetId, occurrence: ref.occurrence };
-    replaceImageInput.current?.click();
-  };
-  const replaceAssetImage = async (file?: File) => {
-    const pending = pendingReplaceRef.current;
-    pendingReplaceRef.current = null;
-    if (!selected || !pending || !file || readOnlyVersion) return;
-    const pendingIndex = assetImageRefs.findIndex((item) => item.assetId === pending.assetId && item.occurrence === pending.occurrence);
-    setImageMenuBusyIndex(pendingIndex);
-    setMessage('正在替换图片…');
-    try {
-      const buffer = new Uint8Array(await file.arrayBuffer());
-      let binary = '';
-      for (const byte of buffer) binary += String.fromCharCode(byte);
-      const result = await window.wmb.importStudioImage({
-        projectId: selected.id,
-        fileName: file.name,
-        mimeType: file.type,
-        bytesBase64: btoa(binary),
-        alt: file.name.replace(/\.[^.]+$/, '')
-      });
-      if (!result.ok) {
-        setMessage(result.cancelled ? '' : '替换图片失败');
-        return;
-      }
-      const next = replaceAssetImageToken(editorBody, pending.assetId, pending.occurrence, result.markdown);
-      if (next === editorBody) { setMessage('找不到要替换的图片'); return; }
-      changeBody(next);
-      syncPlatformBindingsForBody(next);
-      setMessage('图片已替换');
-      const detail = await window.wmb.getStudioProject(selected.id); if (detail) setSelected(detail);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setImageMenuBusyIndex(null);
-      if (replaceImageInput.current) replaceImageInput.current.value = '';
-    }
-  };
-  const removeAssetImage = (ref: StudioAssetImageRef) => {
-    if (readOnlyVersion || busy) return;
-    const next = removeAssetImageToken(editorBody, ref.assetId, ref.occurrence);
-    if (next === editorBody) return;
-    changeBody(next);
-    syncPlatformBindingsForBody(next);
-    setMessage('已移出本文');
-  };
-  const startCaptionEdit = (ref: StudioAssetImageRef) => {
-    const key = `${ref.assetId}:${ref.occurrence}`;
-    setImageMenuEditKey(key);
-    setImageMenuAltDrafts((current) => ({ ...current, [key]: ref.alt }));
-  };
-  const saveCaptionEdit = (ref: StudioAssetImageRef) => {
-    const key = `${ref.assetId}:${ref.occurrence}`;
-    const alt = (imageMenuAltDrafts[key] ?? ref.alt).trim();
-    setImageMenuEditKey(null);
-    setImageMenuAltDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
-    if (activePlatform) {
-      // 平台页签：编辑的是平台图注覆盖（绑定字段，draft-only，不改正文 token/批注偏移）
-      const binding = currentPlatformBindings.find((item) => item.assetId === ref.assetId);
-      const nextCaption = alt || null;
-      if (binding && (binding.caption ?? null) === nextCaption) return;
-      updateActivePlatformDraft({ mediaBindings: setPlatformBindingCaption(currentPlatformBindings, ref.assetId, nextCaption) });
-      setMessage(nextCaption ? '平台图注已更新' : '已清除平台图注（沿用核心图注）');
-      return;
-    }
-    if (alt === ref.alt) return;
-    const next = updateAssetImageAlt(editorBody, ref.assetId, ref.occurrence, alt);
-    if (next !== editorBody) { changeBody(next); setMessage('图注已更新'); }
-  };
-  // 平台页签：按 asset 移出全部 occurrence（绑定随对账移除；裁切像素一并清理）。
-  const removePlatformAsset = (assetId: string) => {
-    if (readOnlyVersion || busy) return;
-    let next = editorBody;
-    while (parseAssetImages(next).some((ref) => ref.assetId === assetId)) {
-      const changed = removeAssetImageToken(next, assetId, 0);
-      if (changed === next) break;
-      next = changed;
-    }
-    if (next === editorBody) return;
-    changeBody(next);
-    setPlatformCropPayloads((current) => { const nextPayloads = { ...current }; delete nextPayloads[assetId]; return nextPayloads; });
-    setMessage('已移出本文');
-  };
-  // ---- WMB-5237 裁切：核心替换 occurrence / 平台写 derived binding（正文 token 不变） ----
-  const openCropAssetImage = (ref: StudioAssetImageRef) => {
-    if (readOnlyVersion || busy) return;
-    setImageMenuOpen(false);
-    const asset = assetById.get(ref.assetId);
-    setCropTarget({
-      assetId: ref.assetId,
-      occurrence: ref.occurrence,
-      alt: ref.alt,
-      assetName: asset ? (asset.relativePath.split(/[/\\]/).pop() || asset.relativePath) : null
-    });
-  };
-  const deriveCropAsset = async (input: StudioDeriveCropInput): Promise<StudioDeriveCropResult> => {
-    try {
-      const result = await window.wmb.deriveStudioAsset({
-        sourceAssetId: input.sourceAssetId,
-        cropRegion: input.cropRegion,
-        pngBase64: input.pngBase64
-      });
-      if (result.ok) {
-        return { ok: true, assetId: result.data.assetId, reused: result.data.reused, sha256: result.data.sha256, cropRegion: input.cropRegion };
-      }
-      return { ok: false, error: result.error?.message || '图片处理失败' };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  };
-  const applyCropResult = async (result: StudioCropApplyResult) => {
-    const target = cropTarget;
-    if (!target || !selected) throw new Error('项目已变化，请重新打开裁切。');
-    if (activePlatform) {
-      // 平台页签：像素进保存 payload，绑定写 cropRegion（derivedAssetId 由保存事务物化后回填）
-      const currentBindings: PlatformMediaBindingDraft[] = currentPlatformBindings;
-      const targetIndex = currentBindings.findIndex((binding) => binding.assetId === target.assetId);
-      const nextBindings =
-        targetIndex >= 0
-          ? currentBindings.map((binding) => (binding.assetId === target.assetId ? { ...binding, cropRegion: result.cropRegion } : binding))
-          : [...currentBindings, { assetId: target.assetId, ordinal: currentBindings.length, isCover: currentBindings.length === 0, cropRegion: result.cropRegion }];
-      setPlatformCropPayloads((current) => ({
-        ...current,
-        [target.assetId]: { assetId: target.assetId, cropRegion: result.cropRegion, pngBase64: result.pngBase64 }
-      }));
-      updateActivePlatformDraft({ mediaBindings: nextBindings });
-      setMessage('已应用裁剪（保存平台版本时生效）');
-    } else {
-      // 核心页签：派生 asset 精确替换当前 occurrence，图注与 provenance 保留
-      if (!result.derivedAssetId) throw new Error('图片处理服务未返回派生图');
-      const next = replaceAssetImageToken(editorBody, target.assetId, target.occurrence, assetImageToken(target.alt, result.derivedAssetId));
-      if (next === editorBody) throw new Error('找不到要裁剪的图片');
-      changeBody(next);
-      syncPlatformBindingsForBody(next);
-      setMessage('已裁剪并替换当前图片');
-      const detail = await window.wmb.getStudioProject(selected.id); if (detail) setSelected(detail);
-    }
-  };
-  // ---- WMB-5237 正文内图片：点击选中 + 浮动工具条接线（布局只写 coreMediaDraft，绝不写正文）----
-  const findInlineFigure = useCallback((sel: InlineImageSelection): HTMLElement | null => {
-    const root = bodyInput.current;
-    if (!root) return null;
-    const all = [...root.querySelectorAll<HTMLElement>('figure.studio-figure')].filter((node) => node.getAttribute('data-wmb-asset') === sel.assetId);
-    // 优先 data-wmb-occurrence 精确匹配；旧 DOM（无属性）回退同 assetId 出现序。
-    return all.find((node) => node.getAttribute('data-wmb-occurrence') === String(sel.occurrence)) ?? all[sel.occurrence] ?? null;
-  }, []);
-  const inlineFigureOccurrence = (root: Element, figure: Element, assetId: string): number => {
-    const figures = [...root.querySelectorAll<HTMLElement>('figure.studio-figure')].filter((node) => node.getAttribute('data-wmb-asset') === assetId);
-    return Math.max(0, figures.indexOf(figure as HTMLElement));
-  };
-  const handleInlineFigureClick = (event: React.MouseEvent<HTMLElement>) => {
-    if (!selected) return;
-    const target = event.target as HTMLElement;
-    const figure = target.closest?.('figure.studio-figure');
-    if (!figure || !(figure instanceof HTMLElement)) return;
-    const assetId = figure.getAttribute('data-wmb-asset');
-    if (!assetId) return;
-    event.preventDefault();
-    const attrOccurrence = figure.getAttribute('data-wmb-occurrence');
-    const root = figure.closest('.studio-rich-editor');
-    const occurrence = attrOccurrence !== null ? Number(attrOccurrence) : (root ? inlineFigureOccurrence(root, figure, assetId) : 0);
-    setInlineSelection({ assetId, occurrence });
-  };
-  const clearInlineDropTarget = () => {
-    const target = dropTargetRef.current;
-    if (target) target.block.removeAttribute('data-wmb-drop-position');
-    dropTargetRef.current = null;
-  };
-  const commitInlineFigureOrder = (root: HTMLElement, movedFigure: HTMLElement, messageText: string) => {
-    const movedAssetId = movedFigure.getAttribute('data-wmb-asset');
-    if (!movedAssetId) return;
-    const previousBindings = new Map(coreMediaDraft.map((binding) => [contentBindingKey(binding.assetId, binding.occurrence), binding]));
-    const usedBindings = new Set<string>();
-    const nextBindings: ContentMediaBindingDraft[] = [];
-    const seen = new Map<string, number>();
-    let movedOccurrence = 0;
-    for (const figure of root.querySelectorAll<HTMLElement>('figure.studio-figure')) {
-      const assetId = figure.getAttribute('data-wmb-asset') ?? '';
-      if (!assetId) continue;
-      const oldOccurrence = Number(figure.getAttribute('data-wmb-occurrence') ?? seen.get(assetId) ?? 0);
-      const newOccurrence = seen.get(assetId) ?? 0;
-      seen.set(assetId, newOccurrence + 1);
-      const oldKey = contentBindingKey(assetId, oldOccurrence);
-      const binding = previousBindings.get(oldKey);
-      if (binding) {
-        nextBindings.push({ ...binding, occurrence: newOccurrence });
-        usedBindings.add(oldKey);
-      }
-      figure.setAttribute('data-wmb-occurrence', String(newOccurrence));
-      if (figure === movedFigure) movedOccurrence = newOccurrence;
-    }
-    if (!activePlatform) {
-      const nonImageBindings = coreMediaDraft.filter((binding) => (binding.mediaKind ?? 'image') !== 'image' && !usedBindings.has(contentBindingKey(binding.assetId, binding.occurrence)));
-      setCoreMediaDraft([...nextBindings, ...nonImageBindings]);
-    }
-    const nextBody = htmlToMarkdown(root);
-    changeBody(nextBody);
-    richDomSyncedRef.current = true;
-    setInlineSelection({ assetId: movedAssetId, occurrence: movedOccurrence });
-    setMessage(messageText);
-  };
-  const topLevelDropBlock = (root: HTMLElement, target: EventTarget | null, clientY: number): HTMLElement | null => {
-    const dragged = draggedFigureRef.current;
-    let block = target instanceof Element ? target as HTMLElement : null;
-    while (block && block.parentElement !== root) block = block.parentElement;
-    if (!block || block === root || block === dragged) {
-      const candidates = [...root.children].filter((node): node is HTMLElement => node instanceof HTMLElement && node !== dragged);
-      block = candidates.reduce<HTMLElement | null>((nearest, candidate) => {
-        if (!nearest) return candidate;
-        const distance = Math.abs(candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2 - clientY);
-        const nearestRect = nearest.getBoundingClientRect();
-        const nearestDistance = Math.abs(nearestRect.top + nearestRect.height / 2 - clientY);
-        return distance < nearestDistance ? candidate : nearest;
-      }, null);
-    }
-    return block;
-  };
-  const handleInlineFigureDragStart = (event: React.DragEvent<HTMLElement>) => {
-    if (readOnlyVersion || busy || editorMode !== 'rich') return;
-    const figure = (event.target as Element | null)?.closest('figure.studio-figure');
-    if (!(figure instanceof HTMLElement)) return;
-    draggedFigureRef.current = figure;
-    figure.classList.add('studio-figure-dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', 'wemediabuddy-inline-image');
-    const assetId = figure.getAttribute('data-wmb-asset');
-    if (assetId) setInlineSelection({ assetId, occurrence: Number(figure.getAttribute('data-wmb-occurrence') ?? 0) });
-  };
-  const handleInlineFigureDragOver = (event: React.DragEvent<HTMLElement>) => {
-    const dragged = draggedFigureRef.current;
-    if (!dragged) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    const root = event.currentTarget;
-    const block = topLevelDropBlock(root, event.target, event.clientY);
-    if (!block) return;
-    const rect = block.getBoundingClientRect();
-    const position: 'before' | 'after' = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    const current = dropTargetRef.current;
-    if (current?.block !== block || current.position !== position) {
-      clearInlineDropTarget();
-      block.setAttribute('data-wmb-drop-position', position);
-      dropTargetRef.current = { block, position };
-    }
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const canvasRect = canvas.getBoundingClientRect();
-      if (event.clientY < canvasRect.top + 48) canvas.scrollBy({ top: -28, behavior: 'auto' });
-      else if (event.clientY > canvasRect.bottom - 48) canvas.scrollBy({ top: 28, behavior: 'auto' });
-    }
-  };
-  const handleInlineFigureDrop = (event: React.DragEvent<HTMLElement>) => {
-    const dragged = draggedFigureRef.current;
-    const target = dropTargetRef.current;
-    if (!dragged || !target) return;
-    event.preventDefault();
-    clearInlineDropTarget();
-    if (target.position === 'before') target.block.before(dragged);
-    else target.block.after(dragged);
-    dragged.classList.remove('studio-figure-dragging');
-    draggedFigureRef.current = null;
-    commitInlineFigureOrder(event.currentTarget, dragged, '图片位置已调整');
-  };
-  const handleInlineFigureDragEnd = () => {
-    clearInlineDropTarget();
-    draggedFigureRef.current?.classList.remove('studio-figure-dragging');
-    draggedFigureRef.current = null;
-  };
-  const moveInlineFigure = (direction: -1 | 1) => {
-    if (!inlineSelection || readOnlyVersion || busy) return;
-    const figure = findInlineFigure(inlineSelection);
-    const root = bodyInput.current;
-    if (!figure || !root) return;
-    const sibling = direction < 0 ? figure.previousElementSibling : figure.nextElementSibling;
-    if (!(sibling instanceof HTMLElement)) {
-      setMessage(direction < 0 ? '图片已经在最上方' : '图片已经在最下方');
-      return;
-    }
-    if (direction < 0) sibling.before(figure);
-    else sibling.after(figure);
-    commitInlineFigureOrder(root, figure, direction < 0 ? '图片已上移' : '图片已下移');
-  };
-  const inlineDraft = useMemo<InlineImageDraft | null>(() => {
-    if (!inlineSelection || activePlatform) return null;
-    const key = contentBindingKey(inlineSelection.assetId, inlineSelection.occurrence);
-    const binding = coreMediaDraft.find((item) => contentBindingKey(item.assetId, item.occurrence) === key);
-    return binding ? { widthPreset: binding.widthPreset, align: binding.align } : null;
-  }, [inlineSelection, activePlatform, coreMediaDraft]);
-  const inlineAlt = useMemo(() => {
-    if (!inlineSelection) return '';
-    return assetImageRefs.find((item) => item.assetId === inlineSelection.assetId && item.occurrence === inlineSelection.occurrence)?.alt ?? '';
-  }, [inlineSelection, assetImageRefs]);
-  const selectedInlineFigure = inlineSelection ? findInlineFigure(inlineSelection) : null;
-  const canMoveInlineUp = Boolean(selectedInlineFigure?.previousElementSibling);
-  const canMoveInlineDown = Boolean(selectedInlineFigure?.nextElementSibling);
-  const inlineRefOf = (): StudioAssetImageRef | null => {
-    if (!inlineSelection) return null;
-    return assetImageRefs.find((item) => item.assetId === inlineSelection.assetId && item.occurrence === inlineSelection.occurrence) ?? null;
-  };
-  const applyCoreMediaBinding = (assetId: string, occurrence: number, patch: Partial<Pick<ContentMediaBindingDraft, 'widthPreset' | 'align' | 'caption' | 'linkUrl'>>) => {
-    setCoreMediaDraft((draft) => updateContentMediaBinding(draft, assetId, occurrence, patch));
-  };
-  const handleInlineWidth = (preset: MediaWidthPreset) => {
-    if (!inlineSelection || readOnlyVersion || busy || activePlatform) return;
-    applyCoreMediaBinding(inlineSelection.assetId, inlineSelection.occurrence, { widthPreset: preset });
-  };
-  const handleInlineAlign = (align: MediaAlign) => {
-    if (!inlineSelection || readOnlyVersion || busy || activePlatform) return;
-    applyCoreMediaBinding(inlineSelection.assetId, inlineSelection.occurrence, { align });
-  };
-  const handleInlineReplace = () => {
-    const ref = inlineRefOf();
-    if (ref) requestReplaceAssetImage(ref);
-  };
-  const handleInlineCaption = (alt: string) => {
-    const ref = inlineRefOf();
-    if (!ref) return;
-    const next = updateAssetImageAlt(editorBody, ref.assetId, ref.occurrence, alt);
-    if (next !== editorBody) { changeBody(next); setMessage('图注已更新'); }
-  };
-  const handleInlineRemove = () => {
-    const ref = inlineRefOf();
-    if (!ref) return;
-    removeAssetImage(ref);
-    setInlineSelection(null);
-  };
-  const handleInlineCrop = () => {
-    if (!inlineSelection) return;
-    setInlineSelection(null);
-    // 裁切入口契约：crop worker 在 studio-view 监听 studio-inline-crop-request 打开裁切对话框
-    window.dispatchEvent(new CustomEvent('studio-inline-crop-request', { detail: { assetId: inlineSelection.assetId, occurrence: inlineSelection.occurrence } }));
-  };
-  // Delete 键：选中图可删，但图注/搜索/标题等输入框聚焦或裁切对话框打开时绝不误删。
-  useEffect(() => {
-    if (!inlineSelection || readOnlyVersion || busy || cropTarget) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete') return;
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      event.preventDefault();
-      handleInlineRemove();
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlineSelection, readOnlyVersion, busy, cropTarget, editorBody, displayBody]);
+  // keep test strings for moved image handlers – replaceAssetImageToken removeAssetImageToken updateAssetImageAlt window.wmb.importStudioImage parseAssetImages assetImageToken (studio-view-image-handlers.tsx)
+  const { locateAssetImage, requestReplaceAssetImage, replaceAssetImage, removeAssetImage, startCaptionEdit, saveCaptionEdit, removePlatformAsset, openCropAssetImage, deriveCropAsset, applyCropResult } = useStudioImageHandlers({
+    selected, busy, readOnlyVersion, editorBody, changeBody, syncPlatformBindingsForBody, assetImageRefs, assetById, editorMode, sourceInput, bodyInput, canvasRef, imageMenuButtonRef, imageMenuRef, replaceImageInput, pendingReplaceRef, imageMenuOpen, setImageMenuOpen, imageMenuRect, setImageMenuRect, imageMenuEditKey, setImageMenuEditKey, imageMenuAltDrafts, setImageMenuAltDrafts, imageMenuBusyIndex, setImageMenuBusyIndex, activePlatform, currentPlatformBindings, setPlatformCropPayloads, updateActivePlatformDraft, setMessage, setSelected, setCropTarget
+  } as unknown as never);
+  const {
+    findInlineFigure, handleInlineFigureClick,
+    handleInlineFigureDragStart, handleInlineFigureDragOver, handleInlineFigureDrop, handleInlineFigureDragEnd,
+    moveInlineFigure,
+    inlineDraft, inlineAlt, canMoveInlineUp, canMoveInlineDown,
+    handleInlineWidth, handleInlineAlign, handleInlineReplace, handleInlineCaption, handleInlineRemove, handleInlineCrop
+  } = useStudioInlineImages({
+    selected, coreMediaDraft, setCoreMediaDraft, editorBody, displayBody, changeBody, activePlatform,
+    assetImageRefs, bodyInput, canvasRef, readOnlyVersion, busy, cropTarget, editorMode, richDomSyncedRef, setMessage,
+    requestReplaceAssetImage, removeAssetImage, inlineSelection, setInlineSelection, draggedFigureRef, dropTargetRef
+  });
   const createProject = async () => {
     if (!newTitle.trim() || busy) return;
     setBusy(true);
@@ -1431,77 +729,10 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
-  const save = async () => {
-    if (!selected || busy || readOnlyVersion) return;
-    if (!editorBody.trim() || (!activePlatform && !editorTitle.trim())) { setMessage(!editorBody.trim() ? '正文不能为空' : '标题不能为空'); return; }
-    if (!dirty) {
-      setMessage('内容没有改动');
-      window.setTimeout(() => setMessage((current) => current === '内容没有改动' ? '' : current), 1600);
-      return;
-    }
-    setBusy(true); setMessage('正在保存…');
-    // 平台首版（平台版本行尚不存在）时跳过批注同步：批注只能挂在已存在的平台版本上
-    // （validateScope 要求 platform 文档必须是真实 platform_versions 行），此时同步必然失败。
-    const platformNewVersion = Boolean(activePlatform && !activePlatformVersion);
-    if (annotationScope && rowsScopeKeyRef.current === annotationScopeKeyValue && !platformNewVersion) {
-      const annotationsSynced = await syncAnnotationsToBody(annotationScope, annotationScopeKeyValue, editorBody, 'incremental');
-      if (!annotationsSynced) {
-        setMessage('批注同步失败，正文尚未保存，请重试');
-        setBusy(false);
-        return;
-      }
-    }
-    window.clearTimeout(reconcileTimer.current);
-    try {
-      if (activePlatform) {
-        if (!latest) { setMessage('请先保存核心正文，再创建平台版本'); return; }
-        const draftBindings = activePlatformDraft?.mediaBindings;
-        const savedBindings = draftBindings ?? platformSyncedBindings;
-        const result = await window.wmb.saveStudioPlatform({
-          projectId: selected.id,
-          contentVersionId: activePlatformVersion?.contentVersionId ?? latest.id,
-          platform: activePlatform,
-          format: activePlatformVersion?.format ?? 'text',
-          title: editorTitle.trim() || undefined,
-          body: editorBody,
-          assetIds: activePlatformDraft?.assetIds ?? activePlatformVersion?.assets ?? [],
-          mediaBindings: savedBindings,
-          cropPayloads: Object.values(platformCropPayloads).filter((payload) => savedBindings.some((binding) => binding.assetId === payload.assetId)),
-          // WMB-5246：视频绑定带 clipRange 时随保存事务物化 ≤60s 派生 Clip（IPC 层 stage、事务内注册）。
-          clipPayloads: savedBindings
-            .filter((binding) => binding.mediaKind === 'video' && binding.clipRange && (binding.derivedAssetId ?? null) === null)
-            .map((binding) => ({ sourceAssetId: binding.assetId, startMs: binding.clipRange!.startMs, endMs: binding.clipRange!.endMs })),
-          expectedRevision: activePlatformVersion?.revision,
-          versionId: activePlatformVersion?.id
-        });
-        if (!result.ok || !result.data) {
-          setMessage(result.error?.code === 'REVISION_CONFLICT' ? '平台版本已在其他位置更新，请重新打开项目后再保存' : result.error?.message || '保存失败');
-          return;
-        }
-        const savedId = result.data.id;
-        setPlatformSelections((current) => ({ ...current, [activePlatform]: savedId }));
-        if (activePlatformDraftKey) setPlatformDrafts((current) => { const next = { ...current }; delete next[activePlatformDraftKey]; return next; });
-        setPlatformCropPayloads({});
-        const detail = await window.wmb.getStudioProject(selected.id); if (detail) setSelected(detail);
-        await loadFirst(true);
-        setAnnotationReloadTick((tick) => tick + 1);
-        setMessage(`已保存${platformNames[activePlatform]}平台版本 · 版本 ${result.data.revision}`);
-        return;
-      }
-      // WMB-5237 核心媒体草稿：图注与正文 alt 保持单源（保存载荷内同步，不动 state）。
-      const coreSaveBindings = coreMediaDraft.length > 0
-        ? coreMediaDraft.flatMap((binding) => {
-                    const ref = parseAssetImages(editorBody).find((item) => item.assetId === binding.assetId && item.occurrence === binding.occurrence);
-                    if (!ref) return [];
-                    return [ref.alt !== (binding.caption ?? '') ? { ...binding, caption: ref.alt } : binding];
-                  })
-        : undefined;
-      const result = await window.wmb.saveStudioCore({ projectId: selected.id, title: editorTitle.trim(), body: editorBody, expectedRevision: selected.revision, mediaBindings: coreSaveBindings });
-      setMessage(result.ok ? '已保存' : result.error?.code === 'REVISION_CONFLICT' ? '内容已在其他位置更新，请读取最新内容后再保存' : result.error?.message || '保存失败');
-      if (result.ok) { await reload(); setAnnotationReloadTick((tick) => tick + 1); }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setBusy(false); }
-  };
+  // keep test strings for moved save – assetIds: activePlatformDraft?.assetIds ?? activePlatformVersion?.assets ?? [] mediaBindings: savedBindings (studio-view-save.tsx)
+  const { save } = useStudioSave({
+    selected, busy, readOnlyVersion, editorBody, editorTitle, dirty, activePlatform, activePlatformVersion, activePlatformDraft, activePlatformDraftKey, platformDrafts, setPlatformDrafts, platformCropPayloads, setPlatformCropPayloads, coreMediaDraft, setMessage, setBusy, setPlatformSelections, setSelected, loadFirst, reload, setAnnotationReloadTick, syncAnnotationsToBody, annotationScope, annotationScopeKeyValue, reconcileTimer, selectedId, latest, platformSyncedBindings, currentPlatformBindings
+  } as unknown as never);
   const startIllustrationRun = async () => {
     if (!selected || activePlatform || readOnlyVersion || illustrationBusy || !latest) return;
     setIllustrationBusy(true); setMessage('正在固定正文并开始配图…');
@@ -1623,176 +854,9 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
 
   // ---- WMB-5207 正文批注：选区捕获 / 创建 / 说明 / 移除 / 重开 / 双向定位 ----
   const reloadAnnotations = () => setAnnotationReloadTick((tick) => tick + 1);
-
-  const readCurrentSelection = (): StudioSelectionSnapshot | null => {
-    if (!annotationsEditable) return null;
-    if (editorMode === 'source') {
-      const textarea = sourceInput.current;
-      if (!textarea) return null;
-      const trimmed = trimToNonWhitespace(editorBody, textarea.selectionStart ?? 0, textarea.selectionEnd ?? 0);
-      if (!trimmed) return null;
-      return { ...trimmed, basis: editorBody };
-    }
-    const editor = bodyInput.current;
-    const selection = window.getSelection();
-    if (!editor || !selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-    const range = selection.getRangeAt(0);
-    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
-    if (!range.toString().trim()) return null;
-    const mapping = richMapping(editor);
-    const start = bodyOffsetAtDomPoint(mapping, range.startContainer, range.startOffset, annotationLeadingTitleLen);
-    const end = bodyOffsetAtDomPoint(mapping, range.endContainer, range.endOffset, annotationLeadingTitleLen);
-    return {
-      start: Math.min(start, end),
-      end: Math.max(start, end),
-      basis: editorBody.slice(0, annotationLeadingTitleLen) + mapping.canonical
-    };
-  };
-
-  const createAnnotationAt = async (snapshot: StudioSelectionSnapshot, note: string | null) => {
-    if (!selected || !annotationScope || annotationBusy || readOnlyVersion) return;
-    const validation = validateAnnotationSelection(snapshot.basis, snapshot.start, snapshot.end, openAnnotationRows);
-    if (!validation.ok) {
-      setMessage(validation.reason === 'overlap' ? '所选文字已有问题标记，请先编辑或移除原标记' : validation.reason === 'heading' ? '标题不能添加问题标记' : '请拖选非空白正文文字后再标记');
-      return;
-    }
-    setAnnotationBusy(true);
-    try {
-      const result = await window.wmb.createStudioAnnotation({
-        ...annotationScope,
-        body: editorBody,
-        startOffset: snapshot.start,
-        endOffset: snapshot.end,
-        note: note?.trim() ? note.trim() : null
-      });
-      if (result.ok) {
-        setAnnotationRows((rows) => [result.data, ...rows.filter((row) => row.id !== result.data.id)]);
-        rowsScopeKeyRef.current = annotationScopeKeyValue;
-        // 后端 rows 现已与当前正文一致：取消挂起的增量 reconcile，避免把新行按旧正文迁移
-        window.clearTimeout(reconcileTimer.current);
-        backendBodyRef.current = editorBody;
-        setContextPanelTab('annotations');
-        setSelectedAnnotationId(result.data.id);
-        setMessage('已添加问题标记');
-      } else {
-        setMessage(result.error?.message || '创建失败，请重试');
-      }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setAnnotationBusy(false); }
-  };
-
-  const updateAnnotationNote = async (annotationId: string, note: string | null) => {
-    const row = annotationRows.find((item) => item.id === annotationId);
-    if (!row || annotationBusy) return;
-    setAnnotationBusy(true);
-    try {
-      const result = await window.wmb.updateStudioAnnotation({ id: annotationId, expectedRevision: row.revision, note: note?.trim() ? note.trim() : null });
-      if (result.ok) {
-        setAnnotationRows((rows) => rows.map((item) => (item.id === result.data.id ? result.data : item)));
-        setMessage('批注说明已更新');
-      } else if (result.error?.code === 'REVISION_CONFLICT') {
-        setMessage('批注已在其他位置更新，已重新读取');
-        reloadAnnotations();
-      } else {
-        setMessage(result.error?.message || '更新失败');
-      }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setAnnotationBusy(false); }
-  };
-
-  const removeAnnotation = async (annotationId: string) => {
-    const row = annotationRows.find((item) => item.id === annotationId);
-    if (!row || annotationBusy) return;
-    setAnnotationBusy(true);
-    try {
-      const result = await window.wmb.resolveStudioAnnotation({ id: annotationId, expectedRevision: row.revision, reason: 'user_removed' });
-      if (result.ok) {
-        setAnnotationRows((rows) => rows.map((item) => (item.id === result.data.id ? result.data : item)));
-        setMessage('已移除标记');
-      } else if (result.error?.code === 'REVISION_CONFLICT') {
-        setMessage('批注已在其他位置更新，已重新读取');
-        reloadAnnotations();
-      } else {
-        setMessage(result.error?.message || '移除失败');
-      }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setAnnotationBusy(false); }
-  };
-
-  const reopenAnnotation = async (annotationId: string) => {
-    const row = annotationRows.find((item) => item.id === annotationId);
-    if (!row || annotationBusy) return;
-    setAnnotationBusy(true);
-    try {
-      const result = await window.wmb.reopenStudioAnnotation({ id: annotationId, expectedRevision: row.revision, body: editorBody });
-      if (result.ok) {
-        setAnnotationRows((rows) => rows.map((item) => (item.id === result.data.id ? result.data : item)));
-        setMessage('批注已重新打开');
-      } else {
-        setMessage(result.error?.message || '无法重新打开：原文未在当前正文中唯一定位，请重新选择文字创建标记');
-      }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setAnnotationBusy(false); }
-  };
-
-  const selectAnnotationFromBody = (annotationId: string) => {
-    setSelectedAnnotationId(annotationId);
-    setContextPanelTab('annotations');
-  };
-
-  const locateAnnotation = (annotationId: string) => {
-    setHistoryOpen(false);
-    setSelectedAnnotationId(annotationId);
-    setFlashAnnotationId(annotationId);
-    window.setTimeout(() => setFlashAnnotationId((current) => (current === annotationId ? null : current)), 1400);
-    const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      const marker = document.querySelector<HTMLElement>(`[data-studio-annotation-id="${annotationId}"]`);
-      if (marker) { marker.scrollIntoView({ block: 'center', behavior }); return; }
-      const mirror = document.querySelector<HTMLElement>(`[data-annotation-mirror-id="${annotationId}"]`);
-      mirror?.scrollIntoView({ block: 'center', behavior });
-    }));
-  };
-
-  const markSelection = async () => {
-    const snapshot = readCurrentSelection();
-    if (!snapshot) { setMessage('请先拖选要标记的文字'); return; }
-    await createAnnotationAt(snapshot, null);
-  };
-
-  const openAnnotationMenu = (annotationId: string, x: number, y: number) => {
-    setAnnotationMenu({ x, y, kind: 'edit', annotationId });
-  };
-
-  const handleEditorContextMenu = (event: React.MouseEvent<HTMLDivElement | HTMLTextAreaElement>) => {
-    if (!annotationsEditable || !annotationScope) return;
-    const markerId = (event.target as HTMLElement).closest('[data-studio-annotation-id]')?.getAttribute('data-studio-annotation-id');
-    if (markerId) {
-      event.preventDefault();
-      setAnnotationMenu({ x: event.clientX, y: event.clientY, kind: 'edit', annotationId: markerId });
-      return;
-    }
-    if (editorMode === 'source') {
-      const hit = sourceHitTestRef.current?.(event.clientX, event.clientY);
-      if (hit) {
-        event.preventDefault();
-        setAnnotationMenu({ x: event.clientX, y: event.clientY, kind: 'edit', annotationId: hit });
-        return;
-      }
-    }
-    const snapshot = readCurrentSelection();
-    if (!snapshot) return;
-    const validation = validateAnnotationSelection(snapshot.basis, snapshot.start, snapshot.end, openAnnotationRows);
-    if (!validation.ok) {
-      if (validation.reason === 'overlap') {
-        event.preventDefault();
-        setMessage('所选文字已有问题标记，请先编辑或移除原标记');
-      }
-      return;
-    }
-    event.preventDefault();
-    setAnnotationMenu({ x: event.clientX, y: event.clientY, kind: 'create', snapshot });
-  };
+  const { readCurrentSelection, createAnnotationAt, updateAnnotationNote, removeAnnotation, reopenAnnotation, selectAnnotationFromBody, locateAnnotation, markSelection, openAnnotationMenu, handleEditorContextMenu } = useStudioAnnotations({
+    selected, annotationScope, annotationScopeKeyValue, readOnlyVersion, busy, annotationBusy, setAnnotationBusy, openAnnotationRows, setAnnotationRows, rowsScopeKeyRef, reconcileTimer, backendBodyRef, setContextPanelTab, setSelectedAnnotationId, setFlashAnnotationId, setHistoryOpen, setAnnotationMenu, setMessage, reloadAnnotations, editorBody, annotationLeadingTitleLen, bodyInput, sourceInput, editorMode, annotationsEditable, sourceHitTestRef, annotationRows, setAnnotationReloadTick
+  } as unknown as never);
 
   const confirmNoteInput = async (note: string) => {
     const input = noteInput;
@@ -1868,41 +932,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     <input ref={importInput} className="studio-import-input" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProject(file); }}/>
     <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
     <StudioLibraryHeader summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} creating={creating} onCreate={() => setCreating(true)}/>
-    <div className="studio-library-body">
-      {creating && <div className="studio-create-row"><input autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createProject(); }} placeholder="输入新项目标题"/><button className="primary-button" disabled={!newTitle.trim() || busy} onClick={() => void createProject()}>创建并开始写作</button><button className="secondary-button" onClick={() => { setCreating(false); setNewTitle(''); }}>取消</button></div>}
-      <div className="studio-library-tools">
-        <label className="studio-search-wrap">⌕ <input className="studio-search" type="search" value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} placeholder="搜索项目标题或正文" aria-label="搜索内容项目"/></label>
-        <select aria-label="项目排序" value={order} onChange={(event) => setOrder(event.target.value as ContentProjectOrder)}><option value="recent">最近更新</option><option value="oldest">最早更新</option><option value="versions">版本最多</option></select>
-        <select aria-label="平台筛选" value={platform ?? 'all'} onChange={(event) => setPlatform(event.target.value === 'all' ? undefined : event.target.value as ContentProjectPlatform)}><option value="all">全部平台</option>{enabledPlatforms.map((value) => <option key={value} value={value}>{platformNames[value]}</option>)}</select>
-        <span>找到 {projects.length}{hasMore || offset ? '+' : ''} 个项目</span>
-      </div>
-      <div className="studio-project-table" role="table">
-        <div className="studio-project-row head" role="row"><span>项目</span><span>工作状态</span><span>平台内容</span><span>最近更新</span><span>版本</span><span/></div>
-        {projects.map((project) => <div className={`studio-project-row${listFocusId === project.id ? ' selected' : ''}`} role="row" tabIndex={0} key={project.id}
-          title={listFocusId === project.id ? '再次点击取消 Pi 焦点；双击或点「打开」进入编辑' : '单击设为 Pi 焦点；双击或点「打开」进入编辑'}
-          onClick={() => setListFocusId((current) => current === project.id ? null : project.id)}
-          onDoubleClick={() => onSelect(project.id)}
-          onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (event.key === 'Enter') { event.preventDefault(); onSelect(project.id); }
-            if (event.key === ' ') { event.preventDefault(); setListFocusId((current) => current === project.id ? null : project.id); }
-          }}>
-          <span className="studio-project-title-cell"><span className="studio-project-title-line">{(() => { const g = priorityGrade(project.planItemPriority as number | null | undefined); const n = Number(project.planItemPriority); return Number.isFinite(n) ? <strong className="opp-grade" data-grade={g}>{g}</strong> : null; })()}<button type="button" className="studio-project-name" onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}>{project.title}</button></span><small>项目 {project.id.slice(0, 8)} · 最新正文按需读取</small></span>
-          <span className="studio-project-state"><i data-status={project.status}/>{project.archivedAt ? '已归档' : statuses.find((item) => item.value === project.status)?.label}</span>
-          <span className="studio-project-platform">{enabledPlatforms.filter((value) => project.platforms[value] > 0).length} / {enabledPlatforms.length}<i><b style={{ width: `${enabledPlatforms.filter((value) => project.platforms[value] > 0).length / Math.max(1, enabledPlatforms.length) * 100}%` }}/></i></span>
-          <time>{formatTime(project.updatedAt)}</time>
-          <span>{project.versionCount} 个版本</span>
-          <span className="studio-row-actions">
-            <button className="studio-row-action" aria-label={`打开项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}>打开</button>
-            <button className="studio-row-action" aria-label={`${project.archivedAt ? '恢复' : '归档'}项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void archiveRow(project); }}>{project.archivedAt ? '恢复' : '归档'}</button>
-            {Object.values(project.platforms).every((count) => !count) && <button className="studio-row-action danger" aria-label={`删除项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void deleteRow(project); }}>删除</button>}
-          </span>
-        </div>)}
-      </div>
-      {loading && !projects.length && <p className="studio-loading">正在读取项目…</p>}
-      {!loading && !projects.length && <div className="compact-empty"><h2>没有符合条件的项目</h2><p>调整搜索或状态条件后重试。</p></div>}
-      <footer className="studio-library-pagination"><span>第 {projects.length ? offset + 1 : 0}–{offset + projects.length} 项，每页最多 50 项</span><div><button className="secondary-button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>上一页</button><button className="secondary-button" disabled={!hasMore} onClick={() => setOffset(offset + 50)}>下一页</button></div></footer>
-    </div>
+    <StudioLibraryView summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} creating={creating} setCreating={setCreating} newTitle={newTitle} setNewTitle={setNewTitle} createProject={createProject} busy={busy} queryDraft={queryDraft} setQueryDraft={setQueryDraft} order={order} setOrder={setOrder} platform={platform} setPlatform={setPlatform} enabledPlatforms={enabledPlatforms} listFocusId={listFocusId} setListFocusId={setListFocusId} onSelect={onSelect} archiveRow={archiveRow} deleteRow={deleteRow} loading={loading} offset={offset} setOffset={setOffset} />
   </section>;
   }
 
@@ -1946,16 +976,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
               <button type="button" className="studio-illustration-start" title="固定当前正文并开始配图" disabled={busy || illustrationBusy || !latest} onClick={() => void startIllustrationRun()}>定稿配图</button>
             </span> : undefined}
           />}
-          {!activePlatform && !readOnlyVersion && illustrationRuns.length > 0 && <section className="studio-illustration-panel" aria-label="配图运行">
-            {illustrationRuns.map((run) => <div className="studio-illustration-run" key={run.id}>
-              <span>运行 {run.status}{run.failureMessage ? ` · ${run.failureMessage}` : ''}</span>
-              <div className="studio-illustration-items">{run.items.map((item) => <div className="studio-illustration-item" key={item.id}>
-                <span>{item.kind === 'source' ? '来源图' : '配图'} · {item.state}{item.errorMessage ? ` · ${item.errorMessage}` : ''}</span>
-                {item.state === 'failed' && <button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void retryIllustrationItem(run.id, item.id)}>重试</button>}
-                {item.kind === 'generated' && item.state === 'completed' && <><select aria-label="重新生成比例" value={illustrationRatio} onChange={(event) => setIllustrationRatio(event.target.value as IllustrationRatio)}>{(['1:1', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21'] as IllustrationRatio[]).map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}</select><input aria-label="重新生成要求" value={illustrationRequest} onChange={(event) => setIllustrationRequest(event.target.value)} placeholder="可选修改要求" /><button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void regenerateIllustrationItem(run.id, item.id)}>重新生成</button>{item.previousAssetId && <button type="button" className="secondary-button" disabled={illustrationBusy} onClick={() => void undoIllustrationItem(run.id, item.id)}>撤销</button>}</>}
-              </div>)}</div>
-            </div>)}
-          </section>}
+          <StudioIllustrationPanel runs={illustrationRuns} busy={illustrationBusy} ratio={illustrationRatio} setRatio={setIllustrationRatio} maxGenerated={illustrationMaxGenerated} setMaxGenerated={setIllustrationMaxGenerated} request={illustrationRequest} setRequest={setIllustrationRequest} onStart={() => void startIllustrationRun()} onRetry={(runId, itemId) => void retryIllustrationItem(runId, itemId)} onRegenerate={(runId, itemId) => void regenerateIllustrationItem(runId, itemId)} onUndo={(runId, itemId) => void undoIllustrationItem(runId, itemId)} latest={latest} activePlatform={activePlatform} readOnlyVersion={readOnlyVersion} />
           {findOpen && !readOnlyVersion && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? editorBody.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !editorBody.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(editorBody.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas" ref={canvasRef}><article className="studio-paper">
             <textarea id="studio-title" className="studio-title-input" value={editorTitle} rows={1} disabled={busy || Boolean(readOnlyVersion)} placeholder={activePlatform ? '输入平台标题（可选）' : undefined} onChange={(event) => changeEditorTitle(event.target.value)} onInput={(event) => { const el = event.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }} ref={(node) => { if (!node) return; node.style.height = 'auto'; node.style.height = `${node.scrollHeight}px`; }}/>
@@ -2204,31 +1225,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
                 )}
               </div>
             </div>
-            {(researchGapForProject.length > 0 || researchGapsError || researchGapMessage) && (
-              <div className="studio-research-gate" aria-label="研究缺口 · 等你批">
-                {researchGapForProject.map((gap) => (
-                  <div className="studio-research-gate-row" key={gap.id} data-successor={gap.id}>
-                    <span className="studio-research-gate-title">研究缺口 · 等你批</span>
-                    <span className="studio-research-gate-hint">研究返回时含未解决声明，需你决策后写作才会自动继续</span>
-                    <span className="studio-research-gate-claims">
-                      {gap.unresolvedClaims.map((claim) => (
-                        <span className="studio-research-gate-claim" key={claim.key} title={claim.text ?? undefined}>
-                          <b>{claim.key}</b>
-                          {claim.text ? <span className="studio-research-gate-claim-text">{claim.text}</span> : null}
-                        </span>
-                      ))}
-                    </span>
-                    <span className="studio-research-gate-actions">
-                      <button type="button" className="secondary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'narrow')}>收窄范围</button>
-                      <button type="button" className="secondary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'supplement')}>补充材料后继续</button>
-                      <button type="button" className="primary-button" disabled={researchBusyId !== null} onClick={() => void decideResearchGap(gap.id, 'accept')}>接受并标注待核实</button>
-                    </span>
-                  </div>
-                ))}
-                {researchGapMessage ? <p className="studio-research-gate-msg" role="status">{researchGapMessage}</p> : null}
-                {researchGapsError ? <p className="studio-research-gate-error" role="alert">{researchGapsError}</p> : null}
-              </div>
-            )}
+            <StudioResearchGate gaps={researchGapForProject} message={researchGapMessage} error={researchGapsError} busyId={researchBusyId} onDecide={decideResearchGap} />
             <span className={message ? 'studio-status-message' : undefined}>
               {message || (readOnlyVersion ? '历史版本只读' : dirty ? '未保存' : anyDirty ? '其他页签有未保存修改' : '已保存')}
             </span>

@@ -3,7 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile(new URL('../src/renderer/topic-maintenance-ledger.tsx', import.meta.url), 'utf8');
-const topicView = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+const view = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+const helpers = await readFile(new URL('../src/renderer/library-topics-helpers.ts', import.meta.url), 'utf8').catch(() => '');
+const constants = await readFile(new URL('../src/renderer/library-topics-constants.ts', import.meta.url), 'utf8').catch(() => '');
+const parts = await readFile(new URL('../src/renderer/library-topics-parts.tsx', import.meta.url), 'utf8').catch(() => '');
+const wiki = await readFile(new URL('../src/renderer/library-topics-wiki.tsx', import.meta.url), 'utf8').catch(() => '');
+const topicView = view + helpers + constants + parts + wiki;
 const topicCss = `${await readFile(new URL('../src/renderer/styles-knowledge.css', import.meta.url), 'utf8')}\n${await readFile(new URL('../src/renderer/styles-knowledge-topic.css', import.meta.url), 'utf8')}`;
 
 test('topic approval ledger uses explicit primary and secondary actions', () => {

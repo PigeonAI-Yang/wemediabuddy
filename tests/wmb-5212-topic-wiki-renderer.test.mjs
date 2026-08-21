@@ -10,7 +10,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const topicView = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+const view = await readFile(new URL('../src/renderer/library-topics-view.tsx', import.meta.url), 'utf8');
+const helpers = await readFile(new URL('../src/renderer/library-topics-helpers.ts', import.meta.url), 'utf8').catch(() => '');
+const constants = await readFile(new URL('../src/renderer/library-topics-constants.ts', import.meta.url), 'utf8').catch(() => '');
+const parts = await readFile(new URL('../src/renderer/library-topics-parts.tsx', import.meta.url), 'utf8').catch(() => '');
+const wiki = await readFile(new URL('../src/renderer/library-topics-wiki.tsx', import.meta.url), 'utf8').catch(() => '');
+const topicView = view + helpers + constants + parts + wiki;
 const appShell = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
 const appTypes = await readFile(new URL('../src/renderer/app-types.ts', import.meta.url), 'utf8');
 const topicCss = await readFile(new URL('../src/renderer/styles-knowledge-topic.css', import.meta.url), 'utf8');

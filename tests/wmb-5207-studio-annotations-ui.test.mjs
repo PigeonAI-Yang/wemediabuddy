@@ -180,6 +180,8 @@ test('WMB-5207 UI: whitespace normalization collapses newline runs and trims', (
 // ---------------------------------------------------------------------------
 
 const studioView = await readFile(new URL('../src/renderer/studio-view.tsx', import.meta.url), 'utf8');
+const annotationsSource = await readFile(new URL('../src/renderer/studio-view-annotations.tsx', import.meta.url), 'utf8');
+const studioViewPlusAnnotations = studioView + annotationsSource;
 const panels = await readFile(new URL('../src/renderer/studio-view-panels.tsx', import.meta.url), 'utf8');
 const layer = await readFile(new URL('../src/renderer/studio-annotation-layer.tsx', import.meta.url), 'utf8');
 const helpers = await readFile(new URL('../src/renderer/studio-annotations.ts', import.meta.url), 'utf8');
@@ -195,55 +197,55 @@ test('WMB-5207 UI: preload annotation methods consumed by exact contract names',
     'reopenStudioAnnotation',
     'reconcileStudioAnnotations'
   ]) {
-    assert.match(studioView, new RegExp(`window\\.wmb\\.${method}\\(`), `studio-view calls ${method}`);
+    assert.match(studioViewPlusAnnotations, new RegExp(`window\\.wmb\\.${method}\\(`), `studio-view calls ${method}`);
     assert.match(wmbTypes, new RegExp(`${method}\\(`), `global.d.ts declares ${method}`);
   }
-  assert.match(studioView, /mode: 'incremental' \| 'replacement'/);
-  assert.match(studioView, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'replacement'\)/);
-  assert.match(studioView, /reason: 'user_removed'/);
+  assert.match(studioViewPlusAnnotations, /mode: 'incremental' \| 'replacement'/);
+  assert.match(studioViewPlusAnnotations, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'replacement'\)/);
+  assert.match(studioViewPlusAnnotations, /reason: 'user_removed'/);
 });
 
 test('WMB-5207 UI: creation never injects marker syntax into the body', () => {
   // 创建路径只传 body/startOffset/endOffset/note，不传 quotedText，也不改写正文
-  assert.match(studioView, /createStudioAnnotation\(\{\s*\.\.\.annotationScope,\s*body: editorBody,\s*startOffset: snapshot\.start,\s*endOffset: snapshot\.end,\s*note:/s);
-  assert.doesNotMatch(studioView, /createStudioAnnotation[\s\S]{0,400}quotedText/);
+  assert.match(studioViewPlusAnnotations, /createStudioAnnotation\(\{\s*\.\.\.annotationScope,\s*body: editorBody,\s*startOffset: snapshot\.start,\s*endOffset: snapshot\.end,\s*note:/s);
+  assert.doesNotMatch(studioViewPlusAnnotations, /createStudioAnnotation[\s\S]{0,400}quotedText/);
   // 装饰层与正文分离：富文本用独立 wrap + 绝对定位层，源码用镜像层
-  assert.match(studioView, /studio-rich-annotate-wrap/);
-  assert.match(studioView, /studio-source-annotate-wrap/);
+  assert.match(studioViewPlusAnnotations, /studio-rich-annotate-wrap/);
+  assert.match(studioViewPlusAnnotations, /studio-source-annotate-wrap/);
   assert.match(layer, /className="studio-annotation-mirror"/);
   assert.match(layer, /className="studio-annotation-layer"/);
   // 正文编辑路径（changeBody / htmlToMarkdown）不产生任何批注字符
-  assert.doesNotMatch(studioView, /changeBody\([^)]*annotation/i);
+  assert.doesNotMatch(studioViewPlusAnnotations, /changeBody\([^)]*annotation/i);
   assert.doesNotMatch(layer, /execCommand/);
 });
 
 test('WMB-5207 UI: onFocusChange publishes current draft and open annotations', () => {
-  assert.match(studioView, /studioDocument: annotationScope \? \{/);
-  assert.match(studioView, /projectId: selected\.id/);
-  assert.match(studioView, /documentKind: annotationScope\.documentKind/);
-  assert.match(studioView, /currentBody: editorBody/);
-  assert.match(studioView, /bodyFingerprint: computeBodyFingerprint\(editorBody\)/);
-  assert.match(studioView, /dirty\s*$/m);
-  assert.match(studioView, /openAnnotations: rowsCurrent \? openAnnotationRows\.map/);
-  assert.match(studioView, /quotedText: row\.quotedText/);
-  assert.match(studioView, /prefixContext: context\.prefixContext/);
+  assert.match(studioViewPlusAnnotations, /studioDocument: annotationScope \? \{/);
+  assert.match(studioViewPlusAnnotations, /projectId: selected\.id/);
+  assert.match(studioViewPlusAnnotations, /documentKind: annotationScope\.documentKind/);
+  assert.match(studioViewPlusAnnotations, /currentBody: editorBody/);
+  assert.match(studioViewPlusAnnotations, /bodyFingerprint: computeBodyFingerprint\(editorBody\)/);
+  assert.match(studioViewPlusAnnotations, /dirty\s*$/m);
+  assert.match(studioViewPlusAnnotations, /openAnnotations: rowsCurrent \? openAnnotationRows\.map/);
+  assert.match(studioViewPlusAnnotations, /quotedText: row\.quotedText/);
+  assert.match(studioViewPlusAnnotations, /prefixContext: context\.prefixContext/);
   // 始终反映当前可编辑草稿：焦点效果依赖 editorBody/editorTitle/dirty
-  assert.match(studioView, /editorBody, editorTitle, dirty, annotationScopeKeyValue, openAnnotationRows\]/);
+  assert.match(studioViewPlusAnnotations, /editorBody, editorTitle, dirty, annotationScopeKeyValue, openAnnotationRows\]/);
 });
 
 test('WMB-5207 UI: read-only history, title and preview are annotation-disabled', () => {
-  assert.match(studioView, /annotationsEditable = Boolean\(selected && annotationScope && !readOnlyVersion && !busy\)/);
-  assert.match(studioView, /if \(!annotationsEditable\) return null;/);
-  assert.match(studioView, /if \(!annotationsEditable \|\| !annotationScope\) return;/);
+  assert.match(studioViewPlusAnnotations, /annotationsEditable = Boolean\(selected && annotationScope && !readOnlyVersion && !busy\)/);
+  assert.match(studioViewPlusAnnotations, /if \(!annotationsEditable\) return null;/);
+  assert.match(studioViewPlusAnnotations, /if \(!annotationsEditable \|\| !annotationScope\) return;/);
   // 只读历史不渲染装饰层
-  assert.match(studioView, /!readOnlyVersion && <StudioAnnotationOverlay/);
+  assert.match(studioViewPlusAnnotations, /!readOnlyVersion && <StudioAnnotationOverlay/);
 });
 
 test('WMB-5207 UI: scope isolation covers core and every platform version', () => {
-  assert.match(studioView, /documentKind: 'platform'/);
-  assert.match(studioView, /documentId: activePlatformVersion\?\.id \?\? activePlatformVersion\?\.contentVersionId \?\? latest\?\.id/);
-  assert.match(studioView, /documentKind: 'core'/);
-  assert.match(studioView, /platform: activePlatform/);
+  assert.match(studioViewPlusAnnotations, /documentKind: 'platform'/);
+  assert.match(studioViewPlusAnnotations, /documentId: activePlatformVersion\?\.id \?\? activePlatformVersion\?\.contentVersionId \?\? latest\?\.id/);
+  assert.match(studioViewPlusAnnotations, /documentKind: 'core'/);
+  assert.match(studioViewPlusAnnotations, /platform: activePlatform/);
 });
 
 test('WMB-5207 UI: keyboard toolbar and accessible names', () => {
@@ -253,8 +255,8 @@ test('WMB-5207 UI: keyboard toolbar and accessible names', () => {
   assert.match(layer, /role="menu"/);
   assert.match(layer, /role="menuitem"/);
   assert.match(layer, /role="dialog"/);
-  assert.match(studioView, /标记为有问题/);
-  assert.match(studioView, /标记并说明…/);
+  assert.match(studioViewPlusAnnotations, /标记为有问题/);
+  assert.match(studioViewPlusAnnotations, /标记并说明…/);
   assert.match(layer, /编辑说明|添加说明/);
   assert.match(layer, /移除标记/);
   assert.match(layer, /重新打开/);
@@ -265,8 +267,8 @@ test('WMB-5207 UI: keyboard toolbar and accessible names', () => {
 });
 
 test('WMB-5207 UI: reduced motion honored for locate and transitions', () => {
-  assert.match(studioView, /prefers-reduced-motion: reduce/);
-  assert.match(studioView, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)\.matches \? 'auto' : 'smooth'/);
+  assert.match(studioViewPlusAnnotations, /prefers-reduced-motion: reduce/);
+  assert.match(studioViewPlusAnnotations, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)\.matches \? 'auto' : 'smooth'/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
@@ -284,11 +286,11 @@ test('WMB-5207 UI: annotation styles use theme tokens without hardcoded color by
 test('WMB-5207 UI: optimistic incremental migration stays a pure local function', () => {
   assert.match(helpers, /export function shiftAnnotationRanges/);
   assert.match(helpers, /status: 'resolved', resolvedReason: 'edited'/);
-  assert.match(studioView, /shiftAnnotationRanges\(rows, previous, basis\)/);
-  assert.match(studioView, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'incremental'\)/);
+  assert.match(studioViewPlusAnnotations, /shiftAnnotationRanges\(rows, previous, basis\)/);
+  assert.match(studioViewPlusAnnotations, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'incremental'\)/);
   // 保存先等待权威增量同步，避免防抖或在途 reconcile 与正文事务竞态。
-  assert.match(studioView, /await syncAnnotationsToBody\(annotationScope, annotationScopeKeyValue, editorBody, 'incremental'\)/);
-  assert.match(studioView, /setMessage\('批注同步失败，正文尚未保存，请重试'\)/);
+  assert.match(studioViewPlusAnnotations, /await syncAnnotationsToBody\(annotationScope, annotationScopeKeyValue, editorBody, 'incremental'\)/);
+  assert.match(studioViewPlusAnnotations, /setMessage\('批注同步失败，正文尚未保存，请重试'\)/);
   // 外部替换只接受后端权威 reconcile。
-  assert.match(studioView, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'replacement'\)/);
+  assert.match(studioViewPlusAnnotations, /syncAnnotationsToBody\(scope, scopeKey, editorBody, 'replacement'\)/);
 });

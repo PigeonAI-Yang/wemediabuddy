@@ -6,6 +6,8 @@ import { PlatformMark } from './platform-mark';
 import { formatTime, platformNames, statuses } from './studio-view-helpers';
 import { studioPlatformTab, type StudioTab } from './studio-platform-tabs';
 import { StudioAnnotationsPanel } from './studio-annotation-layer';
+import { priorityGrade } from './today-view-parts';
+import type { ContentProjectOrder } from '../main/content';
 
 export type StudioAnnotationViewProps = {
   tab: 'annotations' | 'versions';
@@ -241,4 +243,49 @@ export function StudioHistoryModal({ open, selected, setTab, setViewedVersionId,
       </>}
     </div>
   </AppModal>;
+}
+export function StudioLibraryView({ summary, projects, hasMore, status, archived, setStatus, setArchived, creating, setCreating, newTitle, setNewTitle, createProject, busy, queryDraft, setQueryDraft, order, setOrder, platform, setPlatform, enabledPlatforms, listFocusId, setListFocusId, onSelect, archiveRow, deleteRow, loading, offset, setOffset }: {
+  summary: ContentProjectStatusSummary | null; projects: ContentProjectSummary[]; hasMore: boolean;
+  status?: ContentProjectStatus; archived: boolean; setStatus: (v?: ContentProjectStatus) => void; setArchived: (v: boolean) => void;
+  creating: boolean; setCreating: (v: boolean) => void; newTitle: string; setNewTitle: (v: string) => void; createProject: () => void; busy: boolean;
+  queryDraft: string; setQueryDraft: (v: string) => void; order: ContentProjectOrder; setOrder: (v: ContentProjectOrder) => void;
+  platform?: ContentProjectPlatform; setPlatform: (v?: ContentProjectPlatform) => void; enabledPlatforms: ContentProjectPlatform[];
+  listFocusId: string | null; setListFocusId: (v: string | null | ((prev: string | null) => string | null)) => void; onSelect: (id: string) => void;
+  archiveRow: (p: ContentProjectSummary) => void; deleteRow: (p: ContentProjectSummary) => void; loading: boolean; offset: number; setOffset: (v: number) => void;
+}): React.JSX.Element {
+  return <div className="studio-library-body">
+      {creating && <div className="studio-create-row"><input autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void createProject(); }} placeholder="输入新项目标题"/><button className="primary-button" disabled={!newTitle.trim() || busy} onClick={() => void createProject()}>创建并开始写作</button><button className="secondary-button" onClick={() => { setCreating(false); setNewTitle(''); }}>取消</button></div>}
+      <div className="studio-library-tools">
+        <label className="studio-search-wrap">⌕ <input className="studio-search" type="search" value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} placeholder="搜索项目标题或正文" aria-label="搜索内容项目"/></label>
+        <select aria-label="项目排序" value={order} onChange={(event) => setOrder(event.target.value as ContentProjectOrder)}><option value="recent">最近更新</option><option value="oldest">最早更新</option><option value="versions">版本最多</option></select>
+        <select aria-label="平台筛选" value={platform ?? 'all'} onChange={(event) => setPlatform(event.target.value === 'all' ? undefined : event.target.value as ContentProjectPlatform)}><option value="all">全部平台</option>{enabledPlatforms.map((value) => <option key={value} value={value}>{platformNames[value]}</option>)}</select>
+        <span>找到 {projects.length}{hasMore || offset ? '+' : ''} 个项目</span>
+      </div>
+      <div className="studio-project-table" role="table">
+        <div className="studio-project-row head" role="row"><span>项目</span><span>工作状态</span><span>平台内容</span><span>最近更新</span><span>版本</span><span/></div>
+        {projects.map((project) => <div className={`studio-project-row${listFocusId === project.id ? ' selected' : ''}`} role="row" tabIndex={0} key={project.id}
+          title={listFocusId === project.id ? '再次点击取消 Pi 焦点；双击或点「打开」进入编辑' : '单击设为 Pi 焦点；双击或点「打开」进入编辑'}
+          onClick={() => setListFocusId((current) => current === project.id ? null : project.id)}
+          onDoubleClick={() => onSelect(project.id)}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === 'Enter') { event.preventDefault(); onSelect(project.id); }
+            if (event.key === ' ') { event.preventDefault(); setListFocusId((current) => current === project.id ? null : project.id); }
+          }}>
+          <span className="studio-project-title-cell"><span className="studio-project-title-line">{(() => { const g = priorityGrade(project.planItemPriority as number | null | undefined); const n = Number(project.planItemPriority); return Number.isFinite(n) ? <strong className="opp-grade" data-grade={g}>{g}</strong> : null; })()}<button type="button" className="studio-project-name" onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}>{project.title}</button></span><small>项目 {project.id.slice(0, 8)} · 最新正文按需读取</small></span>
+          <span className="studio-project-state"><i data-status={project.status}/>{project.archivedAt ? '已归档' : statuses.find((item) => item.value === project.status)?.label}</span>
+          <span className="studio-project-platform">{enabledPlatforms.filter((value) => project.platforms[value] > 0).length} / {enabledPlatforms.length}<i><b style={{ width: `${enabledPlatforms.filter((value) => project.platforms[value] > 0).length / Math.max(1, enabledPlatforms.length) * 100}%` }}/></i></span>
+          <time>{formatTime(project.updatedAt)}</time>
+          <span>{project.versionCount} 个版本</span>
+          <span className="studio-row-actions">
+            <button className="studio-row-action" aria-label={`打开项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}>打开</button>
+            <button className="studio-row-action" aria-label={`${project.archivedAt ? '恢复' : '归档'}项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void archiveRow(project); }}>{project.archivedAt ? '恢复' : '归档'}</button>
+            {Object.values(project.platforms).every((count) => !count) && <button className="studio-row-action danger" aria-label={`删除项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void deleteRow(project); }}>删除</button>}
+          </span>
+        </div>)}
+      </div>
+      {loading && !projects.length && <p className="studio-loading">正在读取项目…</p>}
+      {!loading && !projects.length && <div className="compact-empty"><h2>没有符合条件的项目</h2><p>调整搜索或状态条件后重试。</p></div>}
+      <footer className="studio-library-pagination"><span>第 {projects.length ? offset + 1 : 0}–{offset + projects.length} 项，每页最多 50 项</span><div><button className="secondary-button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>上一页</button><button className="secondary-button" disabled={!hasMore} onClick={() => setOffset(offset + 50)}>下一页</button></div></footer>
+    </div>;
 }

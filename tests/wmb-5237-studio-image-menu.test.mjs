@@ -183,6 +183,8 @@ test('WMB-5237 menu: renderMarkdown end-to-end emits figures for asset images an
 
 const helpersSource = await readFile(path.join(root, 'src/renderer/studio-view-helpers.ts'), 'utf8');
 const studioViewSource = await readFile(path.join(root, 'src/renderer/studio-view.tsx'), 'utf8');
+const imageHandlersSource = await readFile(path.join(root, 'src/renderer/studio-view-image-handlers.tsx'), 'utf8');
+const studioViewPlusImageHandlers = studioViewSource + imageHandlersSource;
 const cssSource = await readFile(path.join(root, 'src/renderer/styles-studio.css'), 'utf8');
 
 test('WMB-5237 menu: htmlToMarkdown returns a single image token from figure and never copies figcaption', () => {
@@ -209,47 +211,47 @@ test('WMB-5237 menu: status bar projects only the current version body via parse
 });
 
 test('WMB-5237 menu: mutations always route through changeBody (dirty/history/批注迁移/版本保存)', () => {
-  assert.match(studioViewSource, /const next = replaceAssetImageToken\(editorBody, pending\.assetId, pending\.occurrence, result\.markdown\);/);
-  assert.match(studioViewSource, /const next = removeAssetImageToken\(editorBody, ref\.assetId, ref\.occurrence\);/);
-  assert.match(studioViewSource, /const next = updateAssetImageAlt\(editorBody, ref\.assetId, ref\.occurrence, alt\);/);
+  assert.match(studioViewPlusImageHandlers, /const next = replaceAssetImageToken\(editorBody, pending\.assetId, pending\.occurrence, result\.markdown\);/);
+  assert.match(studioViewPlusImageHandlers, /const next = removeAssetImageToken\(editorBody, ref\.assetId, ref\.occurrence\);/);
+  assert.match(studioViewPlusImageHandlers, /const next = updateAssetImageAlt\(editorBody, ref\.assetId, ref\.occurrence, alt\);/);
   // 三种修改路径都经过 changeBody
-  const bodies = studioViewSource.match(/changeBody\(next\)/g) ?? [];
+  const bodies = studioViewPlusImageHandlers.match(/changeBody\(next\)/g) ?? [];
   assert.ok(bodies.length >= 3, `changeBody(next) should appear in replace/remove/caption flows, got ${bodies.length}`);
 });
 
 test('WMB-5237 menu: replace imports independently via importStudioImage and swaps in place (no extra insert)', () => {
-  assert.match(studioViewSource, /window\.wmb\.importStudioImage\(\{/);
+  assert.match(studioViewPlusImageHandlers, /window\.wmb\.importStudioImage\(\{/);
   // 替换路径不调用 insertMarkdown（插入入口只在原格式栏）
-  const replaceBlock = studioViewSource.slice(studioViewSource.indexOf('const replaceAssetImage ='), studioViewSource.indexOf('const removeAssetImage ='));
+  const replaceBlock = studioViewPlusImageHandlers.slice(studioViewPlusImageHandlers.indexOf('const replaceAssetImage ='), studioViewPlusImageHandlers.indexOf('const removeAssetImage ='));
   assert.ok(!replaceBlock.includes('insertMarkdown'), 'replace must not insert a new token');
   assert.ok(replaceBlock.includes('replaceImageInput'), 'replace must use its own hidden file input');
 });
 
 test('WMB-5237 menu: platform bindings + assetIds derive only from body references; core untouched', () => {
   // 平台草稿绑定由正文引用对账：去旧增新，重复 occurrence 不误删（seenAssets 去重，元数据保留）
-  assert.match(studioViewSource, /const refs = parseAssetImages\(nextBody\);/);
-  assert.match(studioViewSource, /syncPlatformBindingsToRefs\(base, refs\)/);
-  assert.match(studioViewSource, /buildAssetIdsFromPlatformBindings\(mediaBindings\)/);
+  assert.match(studioViewPlusImageHandlers, /const refs = parseAssetImages\(nextBody\);/);
+  assert.match(studioViewPlusImageHandlers, /syncPlatformBindingsToRefs\(base, refs\)/);
+  assert.match(studioViewPlusImageHandlers, /buildAssetIdsFromPlatformBindings\(mediaBindings\)/);
   // 同步只对平台生效（核心正文不维护绑定投影）
   assert.match(studioViewSource, /if \(!activePlatform\) return;/);
   // 保存仍走现有 saveStudioPlatform（assetIds 来自草稿或版本；mediaBindings 完整传递）
-  assert.match(studioViewSource, /assetIds: activePlatformDraft\?\.assetIds \?\? activePlatformVersion\?\.assets \?\? \[\]/);
-  assert.match(studioViewSource, /mediaBindings: savedBindings/);
+  assert.match(studioViewPlusImageHandlers, /assetIds: activePlatformDraft\?\.assetIds \?\? activePlatformVersion\?\.assets \?\? \[\]/);
+  assert.match(studioViewPlusImageHandlers, /mediaBindings: savedBindings/);
 });
 
 test('WMB-5237 menu: read-only history can view and locate but cannot modify', () => {
   assert.match(studioViewSource, /!readOnlyVersion && <>[\s\S]*?移出/);
-  assert.match(studioViewSource, /<button type="button" onClick=\{\(\) => locateAssetImage\(ref\)\}>定位<\/button>/);
+  assert.match(studioViewPlusImageHandlers, /<button type="button" onClick=\{\(\) => locateAssetImage\(ref\)\}>定位<\/button>/);
   // 只读版本禁止替换入口
   assert.match(studioViewSource, /if \(readOnlyVersion \|\| busy\) return;/);
 });
 
 test('WMB-5237 menu: locate selects the token in source and the Nth matching figure in rich mode', () => {
-  assert.match(studioViewSource, /textarea\.setSelectionRange\(ref\.start, ref\.end\)/);
-  assert.match(studioViewSource, /figure\[data-wmb-asset\]/);
-  assert.match(studioViewSource, /getAttribute\('data-wmb-asset'\) === ref\.assetId\)\[ref\.occurrence\]/);
-  assert.match(studioViewSource, /scrollIntoView\(\{ block: 'center', behavior \}\)/);
-  assert.match(studioViewSource, /prefers-reduced-motion/);
+  assert.match(studioViewPlusImageHandlers, /textarea\.setSelectionRange\(ref\.start, ref\.end\)/);
+  assert.match(studioViewPlusImageHandlers, /figure\[data-wmb-asset\]/);
+  assert.match(studioViewPlusImageHandlers, /getAttribute\('data-wmb-asset'\) === ref\.assetId\)\[ref\.occurrence\]/);
+  assert.match(studioViewPlusImageHandlers, /scrollIntoView\(\{ block: 'center', behavior \}\)/);
+  assert.match(studioViewPlusImageHandlers, /prefers-reduced-motion/);
 });
 
 test('WMB-5237 menu: popup closes on Escape and outside clicks', () => {
