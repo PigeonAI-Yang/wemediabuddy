@@ -2,7 +2,7 @@
 
 日期：2026-08-21
 基线：master 全量 `node --test --test-concurrency=1 tests/*.test.mjs` 约 27 个预存失败（stash 双向对比确认与巨型文件拆分无关）。
-终验：**1791 pass / 0 fail / 3 skip（xiaohongshu-mcp 二进制缺失显式跳过）**；`npm run typecheck` 0 错误。提交 `7bbd200`。
+终验：**1794 pass / 0 fail / 0 skip**（2026-08-21 深夜恢复受管二进制 v2.1.1 后全量覆盖；sha256 校验通过，提交 f762b6a）；`npm run typecheck` 0 错误。提交 `7bbd200`。
 
 ## 四类修复与判定依据
 
