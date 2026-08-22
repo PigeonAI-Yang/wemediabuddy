@@ -18,7 +18,7 @@ const config: ForgeConfig = {
     asar: true,
     icon: 'images/icon',
     ...(windowsSign ? { windowsSign } : {}),
-    extraResource: ['node_modules/playwright-core', '.r', '.pi/extensions', 'skills', 'resources/xiaohongshu-mcp']
+    extraResource: ['node_modules/playwright-core', 'node_modules/undici', '.r', '.pi/extensions', 'skills', 'resources/xiaohongshu-mcp']
   },
   makers: [
     new MakerSquirrel({

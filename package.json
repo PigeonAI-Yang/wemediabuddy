@@ -44,6 +44,7 @@
     "playwright-core": "1.62.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "undici": "7.29.0",
     "zod": "^4.4.3"
   }
 }

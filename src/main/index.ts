@@ -79,6 +79,7 @@ import { installProductionWikiIndexProjection } from './wiki-index-triggers';
 import { runLegacyKnowledgeInitAtStartup } from './legacy-knowledge-init';
 import { handleSquirrelLifecycle } from './squirrel-lifecycle';
 import { createDesktopLifecycle } from './desktop-lifecycle';
+import { initSystemProxy, proxyEnvForChildren } from './proxy-config';
 if(process.env.WMB_ACCEPTANCE_USER_DATA)app.setPath('userData',process.env.WMB_ACCEPTANCE_USER_DATA); if(process.env.WMB_ACCEPTANCE_CDP_PORT)app.commandLine.appendSwitch('remote-debugging-port',process.env.WMB_ACCEPTANCE_CDP_PORT);
 protocol.registerSchemesAsPrivileged([
   {
@@ -197,7 +198,7 @@ async function ensurePi(dataRoot: DataRoot, options: { skipCandidateKeys?: Itera
         try {
           await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
           worker = new PiRpcSupervisor(process.execPath, [piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', runtime.getPiSessionFile() || layout.sessionFile, '-e', extensionPath, '-e', piVisionExtensionFromRuntimeRoot(runtimeRoot), '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []), '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT], {
-            ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: config.model, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || ''
+            ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: config.model, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || '', ...proxyEnvForChildren()
           }, (event) => {
             runtime.guardLease(lease, () => {
               broadcastPiRuntimeProgress(event, 'dock');
@@ -303,8 +304,8 @@ async function withKnowledgeCompilePi<T>(dataRootPath: string, run: (runtime: Pi
           ELECTRON_RUN_AS_NODE: '1',
           PI_CODING_AGENT_DIR: layout.agentDir,
           WMB_PI_API_KEY: config.apiKey,
-          WMB_MCP_URL: currentMcp()?.url ?? '',
-          WMB_XHS_MCP_URL: currentXhs()?.getUrl() ?? ''
+          WMB_XHS_MCP_URL: currentXhs()?.getUrl() ?? '',
+          ...proxyEnvForChildren()
         }, (event) => {
           if (event.type === 'wmb_process_crashed') {
             broadcastPiEvent({ type: 'failed', error: String(event.error ?? '知识编译 Pi 进程已退出。'), scope: 'task' });
@@ -696,6 +697,7 @@ const desktopLifecycle = createDesktopLifecycle({
 });
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
+  await initSystemProxy();
   const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await syncPiSkillsForDataRoots(app.getPath('userData'), app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills'), registry.workspaces.map((workspace) => workspace.rootPath));
   migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   if (dataRoot) await refreshRuntime(dataRoot);

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import * as z from 'zod';
+import { proxyEnvForChildren } from './proxy-config.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import { migrateDatabase } from './db/migrations.ts';
 import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
@@ -614,7 +615,8 @@ export async function startDailyIntelligence(input: {
         PI_CODING_AGENT_DIR: layout.agentDir,
         WMB_PI_API_KEY: nextConfig.apiKey,
         WMB_MCP_URL: input.mcpUrl,
-        WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
+        WMB_XHS_MCP_URL: input.xhsMcpUrl || '',
+        ...proxyEnvForChildren()
       }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
       input.onRuntime?.(runtime);
       return runtime;
@@ -914,7 +916,8 @@ export async function startStudioDraft(input: {
         PI_CODING_AGENT_DIR: layout.agentDir,
         WMB_PI_API_KEY: nextConfig.apiKey,
         WMB_MCP_URL: input.mcpUrl,
-        WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
+        WMB_XHS_MCP_URL: input.xhsMcpUrl || '',
+        ...proxyEnvForChildren()
       }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
       input.onRuntime?.(runtime);
       return runtime;
@@ -1050,8 +1053,8 @@ export async function startResultsReview(input: {
         ELECTRON_RUN_AS_NODE: '1',
         PI_CODING_AGENT_DIR: layout.agentDir,
         WMB_PI_API_KEY: nextConfig.apiKey,
-        WMB_MCP_URL: input.mcpUrl,
-        WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
+        WMB_XHS_MCP_URL: input.xhsMcpUrl || '',
+        ...proxyEnvForChildren()
       }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
       input.onRuntime?.(runtime);
       return runtime;
