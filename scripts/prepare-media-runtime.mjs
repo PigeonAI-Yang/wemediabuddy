@@ -34,7 +34,13 @@
  *
  * Usage:
  *   node scripts/prepare-media-runtime.mjs [--lock <path>] [--root <dir>]
- *       [--verify-only] [--quiet]
+ *       [--mirror-dir <dir>] [--verify-only] [--quiet]
+ *
+ * Offline / weak-network builds:
+ *   --mirror-dir <dir>（或 WMB_MEDIA_RUNTIME_MIRROR）：目录内与 lock 工件同名且
+ *   SHA-256 一致的文件直接复用，否则按 lock URL 下载。lock 对象不变，
+ *   lock.sha256 marker 始终为 canonical 值。
+ *   下载走系统代理：设置 HTTPS_PROXY / HTTP_PROXY / ALL_PROXY 即自动生效。
  */
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -236,9 +242,10 @@ export function extractZipEntry(buffer, entry) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Downloads a frozen artifact to a local file. Supports https:// (with
- * redirects, timeout and retries) and file:// (local mirror / air-gapped
- * builds / tests). No mutable URLs are ever resolved here.
+ * Downloads one artifact. Supports http(s) (redirects, timeout, retries, and
+ * HTTP(S)_PROXY / ALL_PROXY via undici EnvHttpProxyAgent when the environment
+ * declares a proxy) and file:// (local mirror / air-gapped builds / tests).
+ * No mutable URLs are ever resolved here.
  * @param {string} url
  * @param {string} dest
  * @param {{timeoutMs?: number, retries?: number, logger?: (msg: string) => void}} [options]
@@ -248,12 +255,23 @@ export async function downloadToFile(url, dest, { timeoutMs = 600_000, retries =
     await copyFile(fileURLToPath(url), dest);
     return;
   }
+  let dispatcher;
+  const proxyUrl = process.env.HTTPS_PROXY ?? process.env.https_proxy ?? process.env.HTTP_PROXY ?? process.env.http_proxy ?? process.env.ALL_PROXY ?? process.env.all_proxy;
+  if (proxyUrl) {
+    try {
+      const { EnvHttpProxyAgent } = await import('undici');
+      dispatcher = new EnvHttpProxyAgent();
+      logger(`[media-runtime] 使用代理 ${proxyUrl}（HTTPS_PROXY/HTTP_PROXY/ALL_PROXY）`);
+    } catch {
+      logger('[media-runtime] 检测到代理环境变量但 undici 不可用，按直连尝试');
+    }
+  }
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+      const response = await fetch(url, { signal: controller.signal, redirect: 'follow', ...(dispatcher ? { dispatcher } : {}) });
       if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
       if (!response.body) throw new Error('响应无 body');
       await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
@@ -386,10 +404,10 @@ export async function isRuntimeValid(root, lock, lockSha256) {
  * On any failure the root is removed (no partial install) and a
  * MediaRuntimePrepareError with a stable code is thrown.
  * @param {unknown} lock
- * @param {{root: string, logger?: (msg: string) => void, runInstaller?: (installerPath: string, installArgs: string[], installDir: string) => void}} options
+ * @param {{root: string, logger?: (msg: string) => void, runInstaller?: (installerPath: string, installArgs: string[], installDir: string) => void, mirrorDir?: string}} options
  * @returns {Promise<{lockSha256: string, preparedAt: string, preparedBy: string, platform: string, components: Array<{id: string, version: string}>}>}
  */
-export async function prepareMediaRuntime(lock, { root, logger = noop, runInstaller = defaultInstaller } = {}) {
+export async function prepareMediaRuntime(lock, { root, logger = noop, runInstaller = defaultInstaller, mirrorDir } = {}) {
   const errors = validateLock(lock);
   if (errors.length) {
     throw new MediaRuntimePrepareError(MEDIA_RUNTIME_CODES.MEDIA_RUNTIME_LOCK_INVALID, `lock 无效: ${errors.join('; ')}`);
@@ -413,7 +431,15 @@ export async function prepareMediaRuntime(lock, { root, logger = noop, runInstal
       // nsis 安装器必须带可执行扩展名，Windows CreateProcess 才能直接 spawn。
       const artifactExt = component.kind === 'nsis' ? '.exe' : component.kind === 'zip' ? '.zip' : '';
       const artifactPath = path.join(staging, `${component.id}.artifact${artifactExt}`);
-      await downloadToFile(component.url, artifactPath, { logger });
+      // 本地镜像优先：WMB_MEDIA_RUNTIME_MIRROR / --mirror-dir 下存在与 lock sha256 一致的
+      // 工件时直接复用（离线/弱网构建），否则按 lock URL 下载。lock 对象不变，marker 保持 canonical。
+      const mirrorCandidate = mirrorDir ? path.join(path.resolve(mirrorDir), path.basename(new URL(component.url, 'file:///').pathname)) : null;
+      if (mirrorCandidate && existsSync(mirrorCandidate) && (await sha256File(mirrorCandidate)) === component.sha256) {
+        await copyFile(mirrorCandidate, artifactPath);
+        logger(`[media-runtime] ${component.id}: 采用本地镜像 ${mirrorCandidate}`);
+      } else {
+        await downloadToFile(component.url, artifactPath, { logger });
+      }
       const artifactSha = await sha256File(artifactPath);
       if (artifactSha !== component.sha256) {
         throw new MediaRuntimePrepareError(
@@ -495,6 +521,7 @@ async function main() {
   const argv = process.argv.slice(2);
   let lockPath = path.join(process.cwd(), 'media-runtime.lock.json');
   let root = process.env.WMB_MEDIA_RUNTIME_ROOT ?? path.join(process.cwd(), '.r', 'media-runtime');
+  let mirrorDir = process.env.WMB_MEDIA_RUNTIME_MIRROR ?? '';
   let verifyOnly = false;
   let quiet = false;
   for (let i = 0; i < argv.length; i++) {
@@ -502,6 +529,7 @@ async function main() {
     if (arg === '--lock') lockPath = argv[++i];
     else if (arg === '--root') root = argv[++i];
     else if (arg === '--verify-only') verifyOnly = true;
+    else if (arg === '--mirror-dir') mirrorDir = argv[++i];
     else if (arg === '--quiet') quiet = true;
     else {
       console.error(`[media-runtime] 未知参数: ${arg}`);
@@ -547,7 +575,7 @@ async function main() {
       logger(`[media-runtime] 采用既有运行时 ${root}（lock.sha256=${lockSha256}）。`);
       process.exit(MEDIA_RUNTIME_EXIT.OK);
     }
-    await prepareMediaRuntime(lock, { root, logger });
+    await prepareMediaRuntime(lock, { root, logger, mirrorDir: mirrorDir || undefined });
     console.log(`[media-runtime] 准备完成 ${root}（${lock.components.length} 组件，${lock.components.reduce((s, c) => s + c.files.length, 0)} 文件，lock.sha256=${lockSha256}）。`);
     process.exit(MEDIA_RUNTIME_EXIT.OK);
   } catch (error) {
