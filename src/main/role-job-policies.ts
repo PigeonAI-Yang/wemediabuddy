@@ -96,6 +96,10 @@ export async function runScanPolicy(ctx: EmployeePolicyContext): Promise<Employe
 
 /** planner：判定/方案（judgeOnly 领域原语，水印/赛道门保留）。 */
 export function runJudgePolicy(ctx: EmployeePolicyContext): Promise<EmployeePolicyRun> {
+  const targeted = typeof ctx.spec.planItemId === 'string' ? ctx.spec.planItemId.trim() : '';
+  if (targeted) {
+    return runTargetedPlannerPolicy(ctx);
+  }
   return startWorkspaceDailyIntelligence({
     dataRootPath: ctx.runtime.identity.rootPath,
     businessDate: ctx.businessDate,
@@ -110,7 +114,158 @@ export function runJudgePolicy(ctx: EmployeePolicyContext): Promise<EmployeePoli
   });
 }
 
-/** writer：普通核心初稿先派外部研究；研究续派或已批准专项调查资料包才可直接写作。 */
+export function targetedPlannerPrompt(task: AgentTask, ctx: EmployeePolicyContext): string {
+  const pid = ctx.spec.planItemId ?? '';
+  return [
+    '执行 WeMediaBuddy 定向策划任务（planner / plan_item targeting，bounded）。',
+    `task_id=${task.id}`,
+    `job_id=${ctx.jobId}`,
+    `plan_item_id=${pid}`,
+    `business_date=${ctx.businessDate}`,
+    `brief=${ctx.brief}`,
+    '约束（有界契约，必须严格遵守，违规即失败）：',
+    '0. 禁止旁路：禁止调用 read、bash、grep、find、ls、cat、sqlite3、fs、node:fs、node:sqlite 等文件/命令/SQLite 工具；禁止直接读写文件系统、SQLite、data-root、会话文件或源码；禁止直接 UPDATE/INSERT plan_items。业务事实只通过 WMB MCP 工具获取与提交。',
+    '1. 读：必须通过 WMB MCP 读取任务授权（wmb_get_agent_task / wmb_get_task_grant / wmb_list_task_grants）并通过 WMB MCP 的 wmb_get_plan_item（plan_item.get）能力读取冻结的 plan_item（传入 exact planItemId，需 task_id + plan_item_id 两个精确键，经 assertPlannerScoped 校验）。',
+    '2. 写：必须且只能调用 wmb_submit_plan_item（plan_item.submit）恰好一次，使用 exact planItemId 与 expectedRevision（从 wmb_get_plan_item 读取 frozen 项获取 revision/planning_status/sourceIds 等提交所需字段），每次写必须携带 taskId、grantId、workerLeaseId（本次自动授权已签发，见系统提示），requestId 使用 job 派生稳定 ID（如 ' + ctx.jobId + ':plan_item:submit），禁止 shell 生成。提交 payload 必须一次满足质量门：遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5 传播型写作契约 — 每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做的一句话动作）」与「一个中心主张」并体现在 targetAudience/angle/pointOfView/title/openingGuidance；标题必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”，抽象主张必须配人/场景/利害/后果，证据服务主张不让证据罗列成为主体，保留可防守的张力禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开，平台适配（小红书/视频等）是重写钩子/节奏/收藏/分享/评论动机不是缩短，标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议。若读回项命中 legacy exact fallback，必须用真实证据重写 whyNow（需写清窗口与错过成本）/timeliness/targetAudience（具体情境人+卡点）/angle/pointOfView/platforms/formats/openingGuidance/structureGuidance，禁止保留模板或沿用旧课程大纲体（治理/评测/复跑/课程式套话直接视为未重写而失败）；scoreReasons 必须为 {status:"scored",score,reasons:[...]}，reasons 恰含 reader_immediacy_benefit(20)、tension_curiosity_gap(20)、why_now_window(20)、save_share_comment_motive(20)、evidence_credibility(15)、account_fit(5) 六项，每项含 criterion/weight/score/reason，weight 必须一致且 score 0..weight，总分等于六项和且 0..100；availableMaterials/missingMaterials 必须基于读回资料。自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口是否写清/是否有转藏评动机）缺一不得提交。不得先用不满足质量门的 payload 试错。',
+    '3. 校验：提交后必须通过 WMB MCP 读回（wmb_get_plan_item / plan_item.get）验证 planning_status=ready_for_review；未达到 ready_for_review 不得谎报成功。',
+    '4. 禁止：不得调用 plans.save，不得直接操作数据库或文件，不得并发提交其他 plan_item，不得伪造读回。',
+    '5. 完成后用简洁中文总结做了什么；若提交被模板或校验拒绝，必须说明 reason，不得伪造成功。'
+  ].join('\n');
+}
+
+export async function runTargetedPlannerPolicy(ctx: EmployeePolicyContext): Promise<EmployeePolicyRun> {
+  const runtime = ctx.runtime;
+  const lane = 'planner-targeted';
+  const planItemId = ctx.spec.planItemId ?? '';
+  if (!planItemId.trim()) throw Object.assign(new Error('planItemId_required'), { code: 'validation_failed' });
+  let pi: PiRpcSupervisor | null = null;
+  let workDir: string | undefined;
+  let createdTask: AgentTask | null = null;
+  const onAbort = () => {
+    if (pi?.isActive) void pi.abortTurn().catch(() => {});
+    void pi?.stop().catch(() => {});
+  };
+  if (!ctx.signal.aborted) ctx.signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    const contextRefs = {
+      roleId: 'planner' as const,
+      jobId: ctx.jobId,
+      brief: ctx.brief,
+      manager: 'desk',
+      workspaceId: runtime.identity.workspaceId,
+      planItemId
+    };
+    const prerequisite = await resolveAgentPiPrerequisite(runtime, {
+      intent: 'daily_judge',
+      roleId: 'planner',
+      businessDate: ctx.businessDate,
+      contextRefs
+    });
+    if (prerequisite.waiting) return { task: prerequisite.waiting.task, reused: true };
+    const policySnapshot = prerequisite.policySnapshot;
+    const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
+    const startRequestId = `daily_judge:${ctx.jobId}:targeted:${planItemId}:${randomUUID()}`;
+    const started = await dispatchStartAgentTask(runtime, {
+      intent: 'daily_judge',
+      businessDate: ctx.businessDate,
+      contextRefs: taskContextRefs
+    }, taskCommandContext(lane, startRequestId, undefined, ctx.workerLeaseId));
+    const task = started.task;
+    createdTask = task;
+    const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'planner') ?? policySnapshot;
+    if (started.reused && !['resume_pending', 'starting'].includes(task.phase)) return { task, reused: true };
+    if (ctx.signal.aborted) {
+      await bestEffortCancelTask(runtime, task.id, lane, ctx.workerLeaseId);
+      return { task: getAgentTask(runtime.database, task.id) ?? task, reused: started.reused };
+    }
+    let grantId: string | null = null;
+    try {
+      grantId = await ctx.onTaskReady(task.id);
+    } catch (error) {
+      await bestEffortCancelTask(runtime, task.id, lane, ctx.workerLeaseId);
+      throw error;
+    }
+    const layout = await ensurePiConversationLayout(runtime.identity.rootPath);
+    const extensionPath = await preparePiExtension(layout.agentDir);
+    workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-planner-targeted-'));
+    const createRuntime = async (nextConfig: ResolvedPiConfig) => {
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      return new PiRpcSupervisor(process.execPath, [
+        await piCliPath(runtime.identity.rootPath), '--mode', 'rpc', '--session', ctx.sessionFile, '-e', extensionPath,
+        '--provider', 'wmb-api', '--model', nextConfig.model,
+        '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: ctx.workerLeaseId })
+      ], {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        PI_CODING_AGENT_DIR: layout.agentDir,
+        WMB_PI_API_KEY: nextConfig.apiKey,
+        WMB_MCP_URL: ctx.mcpUrl,
+        WMB_XHS_MCP_URL: ctx.xhsMcpUrl
+      }, (event) => ctx.onEvent(event as Record<string, unknown>), workDir);
+    };
+    const registerPiStop = () => ctx.registerStoppable(async () => {
+      if (pi?.isActive) await pi.abortTurn().catch(() => {});
+      await pi?.stop().catch(() => {});
+    });
+    const startedRuntime = await startPiRuntimeWithFallback({
+      roleId: 'planner',
+      policySnapshot: taskPolicySnapshot,
+      taskId: task.id,
+      createRuntime,
+      onEvent: (event) => ctx.onEvent(event as unknown as Record<string, unknown>)
+    });
+    pi = startedRuntime.runtime;
+    registerPiStop();
+    let finalAssistantText: string | null = null;
+    await runPiPromptWithFallback({
+      roleId: 'planner',
+      policySnapshot: taskPolicySnapshot,
+      taskId: task.id,
+      initial: startedRuntime,
+      createRuntime,
+      onEvent: (event) => ctx.onEvent(event as unknown as Record<string, unknown>),
+      onRuntimeChanged: (nextRuntime) => {
+        pi = nextRuntime;
+        registerPiStop();
+      },
+      run: async (activeRuntime) => {
+        const result = await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({ dispatchId: `daily_judge:${task.id}`, target: 'employee', delivery: 'direct', safe: { originLabel: '定向策划', title: '定向策划', goal: '精确提交单一策划项至 ready_for_review', acceptance: 'plan_item_ready 读回 ready_for_review' }, prompt: targetedPlannerPrompt(task, ctx) }), { timeoutMs: promptTimeoutMs() });
+        finalAssistantText = result.text;
+      }
+    });
+    const current = getAgentTask(runtime.database, task.id);
+    if (current && current.status === 'running' && current.controlAction === 'cancel') {
+      const cancelled = await dispatchCancelAgentTask(runtime, task.id, taskCommandContext(lane, `${task.id}:cancel:control`, task.id, ctx.workerLeaseId));
+      return { task: cancelled, reused: started.reused, finalAssistantText };
+    }
+    return { task: current ?? task, reused: started.reused, finalAssistantText };
+  } catch (error) {
+    if (createdTask) {
+      const latest = getAgentTask(runtime.database, createdTask.id);
+      if (latest?.status === 'running') {
+        if (ctx.signal.aborted) {
+          await bestEffortCancelTask(runtime, createdTask.id, lane, ctx.workerLeaseId);
+        } else {
+          const modelFailure = roleModelNeedsUserFailure(error);
+          if (modelFailure) {
+            const waiting = await dispatchNeedsUserAgentTask(runtime, createdTask.id, modelFailure.code, modelFailure.message, taskCommandContext(lane, `${createdTask.id}:needs-user:model`, createdTask.id, ctx.workerLeaseId));
+            return { task: waiting, reused: false, finalAssistantText: null };
+          }
+          try {
+            await dispatchFailAgentTask(runtime, createdTask.id, JOB_ERROR_CODES.PLANNER_JUDGE_FAILED, error instanceof Error ? error.message : String(error), taskCommandContext(lane, `${createdTask.id}:fail`, createdTask.id, ctx.workerLeaseId));
+          } catch {}
+        }
+      }
+    }
+    throw error;
+  } finally {
+    ctx.signal.removeEventListener('abort', onAbort);
+    await pi?.stop().catch(() => {});
+    if (workDir) await rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }).catch(() => {});
+  }
+}
+
+/** writer：普通核心初稿先派外部研究；研究续派或已批准专项调查资料包才可直接写作。prohibited 显式豁免进受限写作。 */
 export function runDraftPolicy(ctx: EmployeePolicyContext): Promise<EmployeePolicyRun> {
   const projectId = ctx.spec.projectId ?? '';
   const investigation = projectId ? readProjectInvestigation(ctx.runtime.database, projectId) : null;
@@ -119,14 +274,17 @@ export function runDraftPolicy(ctx: EmployeePolicyContext): Promise<EmployeePoli
     && investigation.direction
     && ['ready_to_write', 'writing', 'completed'].includes(investigation.status)
   );
+  const evidenceReady = isResearchSuccessorRow(ctx.runtime.database, ctx.jobId) || approvedInvestigation;
+  const researchMode = ctx.spec.researchMode ?? 'auto';
   return startStudioDraft({
     dataRootPath: ctx.runtime.identity.rootPath,
     businessDate: ctx.businessDate,
     projectId,
     writerTask: ctx.spec.writerTask ?? 'core_draft',
     brief: ctx.brief,
-    researchReady: isResearchSuccessorRow(ctx.runtime.database, ctx.jobId) || approvedInvestigation,
-    // WMB-5116：每 job 唯一 start request identity——同 date/project 新工单不再复用确定性
+    researchReady: evidenceReady,
+    // @ts-ignore researchMode passthrough pending type update
+    researchMode: researchMode as 'auto' | 'required' | 'prohibited',
     // `studio_draft:<date>:<project>:start`，避免在 dispatchStart 处 REQUEST_REPLAY_CONFLICT。
     startRequestId: `${ctx.jobId}:studio-draft:start`,
     mcpUrl: ctx.mcpUrl,
@@ -139,7 +297,6 @@ export function runDraftPolicy(ctx: EmployeePolicyContext): Promise<EmployeePoli
     onRuntime: (rt) => ctx.registerStoppable(() => rt.stop())
   });
 }
-
 /**
  * WMB-5173：research 策略（WMB-5172 执行器接线）。研究工单 = reporter + research 块，
  * 由角色注册表派生 intent='research'；执行入口 startResearchJob 读 context_refs 的

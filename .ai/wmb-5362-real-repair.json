@@ -1,0 +1,156 @@
+{
+  "ok": true,
+  "databasePath": "J:/PigeonYang/WeMediaBuddyData/wmb.db",
+  "schemaVersion": 78,
+  "sourceIds": [
+    "c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7",
+    "8844ca91-8b38-4c6f-ac9c-09537d20fb3e"
+  ],
+  "topic": {
+    "id": "2d7438de-99b1-41f8-999f-8d142162dd58",
+    "canonicalKey": "ai 模型发布、免费额度与实测",
+    "title": "AI 模型发布、免费额度与实测"
+  },
+  "entity": {
+    "id": "ent-e9f78521313ace20144f706650d7f9e7",
+    "canonicalName": "GLM-5.3-Flash",
+    "aliasesJson": "[\"Ox Alpha\"]",
+    "revision": 2,
+    "aliases": [
+      "Ox Alpha"
+    ]
+  },
+  "links": [
+    {
+      "topicId": "2d7438de-99b1-41f8-999f-8d142162dd58",
+      "sourceId": "8844ca91-8b38-4c6f-ac9c-09537d20fb3e",
+      "relation": "primary"
+    },
+    {
+      "topicId": "2d7438de-99b1-41f8-999f-8d142162dd58",
+      "sourceId": "c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7",
+      "relation": "primary"
+    },
+    {
+      "topicId": "2d7438de-99b1-41f8-999f-8d142162dd58",
+      "sourceId": "c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7",
+      "relation": "supporting"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "d202ed79-ba10-4264-bf6f-8abed60741e7",
+      "kind": "knowledge_route",
+      "status": "succeeded",
+      "dedupeKey": "knowledge_route:8844ca91-8b38-4c6f-ac9c-09537d20fb3e:r1",
+      "payloadJson": "{\"sourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"revision\":1,\"outcome\":\"routed\",\"topicIds\":[\"2d7438de-99b1-41f8-999f-8d142162dd58\"],\"entityId\":\"ent-e9f78521313ace20144f706650d7f9e7\",\"reactivationJobIds\":[\"13770e9d-96a6-4050-86df-e30db1bb96f9\"],\"reason\":\"当前资料明确揭示 Ox Alpha 与 GLM-5.3-Flash 的产品身份，并归入现有 AI 模型发布与实测主题。\",\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha finally has a name: GLM-5.3-Flash.\"}]}",
+      "lastError": null
+    },
+    {
+      "id": "17ee9b21-d833-4463-808c-d5b6551fdc9b",
+      "kind": "knowledge_compile",
+      "status": "succeeded",
+      "dedupeKey": "knowledge_compile:8844ca91-8b38-4c6f-ac9c-09537d20fb3e:r1:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "payloadJson": "{\"sourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"revision\":1,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"outcome\":\"compiled\",\"result\":{\"sourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"sourceRevision\":1,\"workspaceId\":\"a755adf2-4e8d-4abd-b616-4d7934f730f1\",\"topics\":[{\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"requestId\":\"compile:source:8844ca91-8b38-4c6f-ac9c-09537d20fb3e:r1:topic:2d7438de-99b1-41f8-999f-8d142162dd58\",\"result\":\"ok\",\"replay\":false}],\"failed\":null,\"broadcast\":true}}",
+      "lastError": null
+    },
+    {
+      "id": "13770e9d-96a6-4050-86df-e30db1bb96f9",
+      "kind": "knowledge_reactivate_sources",
+      "status": "succeeded",
+      "dedupeKey": "knowledge_reactivate_sources:ent-e9f78521313ace20144f706650d7f9e7:r2:8aabcc1e-f390-42c2-8b3c-b17529e654ba:r1:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "payloadJson": "{\"sourceId\":\"8aabcc1e-f390-42c2-8b3c-b17529e654ba\",\"sourceRevision\":1,\"currentSourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"currentSourceRevision\":1,\"entityId\":\"ent-e9f78521313ace20144f706650d7f9e7\",\"entityRevision\":2,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"reason\":\"身份确认后重激活：当前资料明确揭示 Ox Alpha 与 GLM-5.3-Flash 的产品身份，并归入现有 AI 模型发布与实测主题。\",\"matchedAliases\":[\"GLM-5.3-Flash\"],\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha finally has a name: GLM-5.3-Flash.\"}],\"outcome\":\"reactivated\",\"compileJobId\":\"d6b25850-557a-40c2-a7c3-b436ea753079\",\"evidencePack\":{\"reactivationJobId\":\"13770e9d-96a6-4050-86df-e30db1bb96f9\",\"reactivationReason\":\"身份确认后重激活：当前资料明确揭示 Ox Alpha 与 GLM-5.3-Flash 的产品身份，并归入现有 AI 模型发布与实测主题。\",\"entityId\":\"ent-e9f78521313ace20144f706650d7f9e7\",\"entityRevision\":2,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"sourceId\":\"8aabcc1e-f390-42c2-8b3c-b17529e654ba\",\"sourceRevision\":1,\"currentSourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"currentSourceRevision\":1,\"matchedAliases\":[\"GLM-5.3-Flash\"],\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha finally has a name: GLM-5.3-Flash.\"}]}}",
+      "lastError": null
+    },
+    {
+      "id": "2d9b4e06-696a-4358-8927-0b492a02c5d8",
+      "kind": "knowledge_reactivate_sources",
+      "status": "succeeded",
+      "dedupeKey": "knowledge_reactivate_sources:ent-e9f78521313ace20144f706650d7f9e7:r2:c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7:r16:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "payloadJson": "{\"sourceId\":\"c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7\",\"sourceRevision\":16,\"currentSourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"currentSourceRevision\":1,\"entityId\":\"ent-e9f78521313ace20144f706650d7f9e7\",\"entityRevision\":2,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"reason\":\"WMB-5362 冻结真实场景补偿：强身份确认后重激活被旧查询截断的历史 Source。\",\"matchedAliases\":[\"Ox Alpha\"],\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha\"}],\"outcome\":\"reactivated\",\"compileJobId\":\"8960ee25-e1e3-4644-a0a7-7dd3e2ec82b9\",\"evidencePack\":{\"reactivationJobId\":\"2d9b4e06-696a-4358-8927-0b492a02c5d8\",\"reactivationReason\":\"WMB-5362 冻结真实场景补偿：强身份确认后重激活被旧查询截断的历史 Source。\",\"entityId\":\"ent-e9f78521313ace20144f706650d7f9e7\",\"entityRevision\":2,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"sourceId\":\"c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7\",\"sourceRevision\":16,\"currentSourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"currentSourceRevision\":1,\"matchedAliases\":[\"Ox Alpha\"],\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha\"}]}}",
+      "lastError": null
+    },
+    {
+      "id": "8960ee25-e1e3-4644-a0a7-7dd3e2ec82b9",
+      "kind": "knowledge_compile",
+      "status": "succeeded",
+      "dedupeKey": "knowledge_compile:c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7:r16:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "payloadJson": "{\"sourceId\":\"c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7\",\"revision\":16,\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"outcome\":\"compiled\",\"result\":{\"sourceId\":\"c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7\",\"sourceRevision\":16,\"workspaceId\":\"a755adf2-4e8d-4abd-b616-4d7934f730f1\",\"topics\":[{\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"requestId\":\"compile:source:c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7:r16:topic:2d7438de-99b1-41f8-999f-8d142162dd58\",\"result\":\"ok\",\"replay\":false}],\"failed\":null,\"broadcast\":true}}",
+      "lastError": null
+    }
+  ],
+  "receiptCount": 3,
+  "receipts": [
+    {
+      "id": "5e6440fb-c3ff-4934-87ff-58a9e9aed499",
+      "requestId": "knowledge-route:8844ca91-8b38-4c6f-ac9c-09537d20fb3e:r1",
+      "summary": "Source 8844ca91-8b38-4c6f-ac9c-09537d20fb3e 已完成 Entity/Topic 路由；证据缺口保留为待核实。",
+      "impactJson": "{\"sourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"sourceRevision\":1,\"routeReason\":\"当前资料明确揭示 Ox Alpha 与 GLM-5.3-Flash 的产品身份，并归入现有 AI 模型发布与实测主题。\",\"evidenceGaps\":[{\"code\":\"COMPUTE_PROVIDER_UNVERIFIED\",\"statement\":\"100T 免费容量是否由国产算力集群提供仍缺可靠证据。\",\"locator\":\"L1\",\"excerpt\":\"Ox Alpha finally has a name: GLM-5.3-Flash.\"}]}",
+      "createdAt": "2026-08-27T23:17:19.264Z"
+    },
+    {
+      "id": "45dd37cc-0e76-4c57-8122-5dae733ebc5a",
+      "requestId": "compile:source:8844ca91-8b38-4c6f-ac9c-09537d20fb3e:r1:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "summary": "来源 8844ca91-8b38-4c6f-ac9c-09537d20fb3e r1 已整理：新增 1 条认识、更新 0 条、跳过 0 条低价值/复述、实体匹配 0 个/新建 0 个、主题认识更新 1 个。",
+      "impactJson": "{\"sourceId\":\"8844ca91-8b38-4c6f-ac9c-09537d20fb3e\",\"sourceRevision\":1,\"scope\":\"global\",\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"asOf\":\"2026-08-27T15:23:43.160Z\"}",
+      "createdAt": "2026-08-27T23:17:19.304Z"
+    },
+    {
+      "id": "bd9f6ac3-ae3d-4ca1-af15-27de2a7f979b",
+      "requestId": "compile:source:c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7:r16:topic:2d7438de-99b1-41f8-999f-8d142162dd58",
+      "summary": "来源 c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7 r16 已整理：新增 0 条认识、更新 0 条、跳过 0 条低价值/复述、实体匹配 0 个/新建 0 个、主题认识更新 0 个。",
+      "impactJson": "{\"sourceId\":\"c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7\",\"sourceRevision\":16,\"scope\":\"global\",\"topicId\":\"2d7438de-99b1-41f8-999f-8d142162dd58\",\"asOf\":\"2026-08-22T17:16:13.295Z\"}",
+      "createdAt": "2026-08-27T23:19:01.684Z"
+    }
+  ],
+  "plan": {
+    "id": "4ec1419b-9032-44b1-89c8-8f6cdf9ae540",
+    "revision": 1,
+    "planItemId": "66e77c11-8252-47d8-86f5-2e5515c022cb"
+  },
+  "planItem": {
+    "id": "66e77c11-8252-47d8-86f5-2e5515c022cb",
+    "planningStatus": "ready_for_review",
+    "score": 87
+  },
+  "decisions": [
+    {
+      "sourceId": "8844ca91-8b38-4c6f-ac9c-09537d20fb3e",
+      "sourceRevision": 1,
+      "decision": "selected",
+      "reasonCode": "IDENTITY_AND_OUTCOME_EVIDENCE",
+      "reason": "该资料同时提供正式身份与可量化任务实测，支撑为什么现在值得重判。",
+      "planItemId": "66e77c11-8252-47d8-86f5-2e5515c022cb"
+    },
+    {
+      "sourceId": "c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7",
+      "sourceRevision": 16,
+      "decision": "selected",
+      "reasonCode": "REACTIVATED_CROSS_DAY_EVIDENCE",
+      "reason": "身份揭晓后，旧的 100T 免费额度声称成为当前选题不可缺少的跨日证据。",
+      "planItemId": "66e77c11-8252-47d8-86f5-2e5515c022cb"
+    }
+  ],
+  "detailReadback": {
+    "title": "GLM-5.3 Flash 免费 100T：真正值得关注的不是“免费”两个字",
+    "sources": [
+      "c0ee77c3-173d-4ad3-83e9-cfa15ddfffb7",
+      "8844ca91-8b38-4c6f-ac9c-09537d20fb3e"
+    ],
+    "decisionCount": 2,
+    "evidenceGaps": [
+      {
+        "code": "COMPUTE_PROVIDER_UNVERIFIED",
+        "statement": "100T 免费容量是否由国产算力集群提供仍缺可靠证据。",
+        "locator": "L1",
+        "excerpt": "Ox Alpha"
+      },
+      {
+        "code": "COMPUTE_PROVIDER_UNVERIFIED",
+        "statement": "100T 免费容量是否由国产算力集群提供仍缺可靠证据。",
+        "locator": "L1",
+        "excerpt": "Ox Alpha finally has a name: GLM-5.3-Flash."
+      }
+    ]
+  }
+}

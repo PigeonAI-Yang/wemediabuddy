@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { classifyTimeliness, fingerprintPlanItem, listFermentingBundle, TIMELINESS_WINDOW_HOURS, type FermentingBundle, type TimelinessClass } from './ferment.ts';
-import { hasProjectForPlanItemOrSources, sameStory, toUtcIsoBound } from './ferment-read.ts';
+import { addDaysDate, hasProjectForPlanItemOrSources, sameStory, toUtcIsoBound } from './ferment-read.ts';
 import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
 
 export type TodaySource = {
@@ -38,10 +38,29 @@ export type TodayPlanItem = {
   availableMaterials: string[];
   missingMaterials: string[];
   trendEvidence: XPostTrend[];
+  planningStatus?: string | null;
+  revision?: number | null;
+  planningProvenanceJson?: string | null;
+  scoreReasonsJson?: string | null;
 };
-
 type SourceRow = Omit<TodaySource, 'categories' | 'avatarUrl'> & { categories: string; evidence: string | null };
 type TodayPlan = { id: string; planDate: string; summary: string; items: TodayPlanItem[] };
+
+/** Lightweight same-day task snapshot for Today truthful projection (renderer-owned). */
+export type TodayRunTaskSnapshot = {
+  id?: string;
+  status?: string;
+  phase?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  progress?: Record<string, unknown> | null;
+  events?: Array<{ message?: string }>;
+  createdAt?: string;
+  updatedAt?: string;
+  heartbeatAt?: string;
+  checkpoint?: Record<string, unknown> | null;
+  emptyQualified?: boolean;
+};
 
 function readEvidenceAvatar(evidence: string | null | undefined): string | null {
   if (!evidence) return null;
@@ -98,7 +117,8 @@ function loadPlanItems(database: DatabaseSync, planId: string): TodayPlanItem[] 
     target_audience AS targetAudience, angle, point_of_view AS pointOfView, platforms_json AS platforms,
     formats_json AS formats, title_guidance AS titleGuidance, opening_guidance AS openingGuidance,
     structure_guidance AS structureGuidance, effort_estimate AS effortEstimate, source_ids_json AS sourceIds,
-    available_materials_json AS availableMaterials, missing_materials_json AS missingMaterials
+    available_materials_json AS availableMaterials, missing_materials_json AS missingMaterials,
+    planning_status AS planningStatus, revision, planning_provenance_json AS planningProvenanceJson, score_reasons_json AS scoreReasonsJson
     FROM plan_items WHERE plan_id = ? ORDER BY priority ASC, sort_order ASC`).all(planId) as Array<Omit<TodayPlanItem, 'platforms' | 'formats' | 'sourceIds' | 'availableMaterials' | 'missingMaterials' | 'trendEvidence'> & { platforms: string; formats: string; sourceIds: string; availableMaterials: string; missingMaterials: string }>;
   return rows.map((item) => {
     const sourceIds = JSON.parse(item.sourceIds) as string[];
@@ -137,6 +157,88 @@ function loadLatestNonEmptyPlan(database: DatabaseSync, options: { excludePlanId
   return { ...plan, items: loadPlanItems(database, plan.id) };
 }
 
+export function getTodayPlanExhaustion(database: DatabaseSync, planDate: string): { total: number; unresolved: number; rejected: number; isExhausted: boolean; hasPlan: boolean } {
+  const plan = loadPlan(database, planDate);
+  if (!plan || !plan.items.length) return { total: 0, unresolved: 0, rejected: 0, isExhausted: false, hasPlan: false };
+  let unresolved = 0;
+  let rejected = 0;
+  const carryByObject = database.prepare(`SELECT state FROM work_carry_items WHERE object_type='plan_item' AND object_id = ?`);
+  const carryByFp = database.prepare(`SELECT state FROM work_carry_items WHERE fingerprint = ?`);
+  for (const item of plan.items) {
+    const status = item.planningStatus ?? null;
+    const isPlanningRejected = status === 'rejected';
+    let isCarryDismissed = false;
+    try {
+      const byObject = carryByObject.get(item.id) as { state: string } | undefined;
+      if (byObject?.state === 'dismissed') isCarryDismissed = true;
+      else {
+        const fp = fingerprintPlanItem({ title: item.title, topicId: item.topicId, sourceIds: item.sourceIds ?? [] });
+        const byFp = carryByFp.get(fp) as { state: string } | undefined;
+        if (byFp?.state === 'dismissed') isCarryDismissed = true;
+      }
+    } catch {}
+    const isRejectedEffective = isPlanningRejected || isCarryDismissed;
+    if (isRejectedEffective) rejected += 1;
+    else if (status === 'draft' || status === 'ready_for_review') unresolved += 1;
+  }
+  const isExhausted = plan.items.length > 0 && unresolved === 0 && rejected === plan.items.length;
+  return { total: plan.items.length, unresolved, rejected, isExhausted, hasPlan: true };
+}
+function collectSameDayTasks(database: DatabaseSync, planDate: string): TodayRunTaskSnapshot[] {
+  try {
+    const rows = database.prepare(`
+      SELECT id, status, phase, error_code AS errorCode, error_message AS errorMessage,
+             progress_json AS progressJson, events_json AS eventsJson,
+             checkpoint_json AS checkpointJson,
+             created_at AS createdAt, updated_at AS updatedAt, heartbeat_at AS heartbeatAt
+      FROM agent_tasks
+      WHERE business_date = ? AND intent IN ('daily_intelligence','daily_scan','daily_judge','page_agents')
+      ORDER BY updated_at DESC
+      LIMIT 12
+    `).all(planDate) as Array<{
+      id: string; status: string; phase: string; errorCode: string | null; errorMessage: string | null;
+      progressJson: string | null; eventsJson: string | null; checkpointJson: string | null;
+      createdAt: string; updatedAt: string; heartbeatAt: string | null;
+    }>;
+    return rows.map((row) => {
+      let progress: Record<string, unknown> | null = null;
+      let events: Array<{ message?: string }> | null = null;
+      let checkpoint: Record<string, unknown> | null = null;
+      let emptyQualified = false;
+      try { progress = row.progressJson ? JSON.parse(row.progressJson) as Record<string, unknown> : null; } catch { progress = null; }
+      try { events = row.eventsJson ? JSON.parse(row.eventsJson) as Array<{ message?: string }> : null; } catch { events = null; }
+      try {
+        if (row.checkpointJson) {
+          checkpoint = JSON.parse(row.checkpointJson) as Record<string, unknown>;
+          const flag = checkpoint.emptyQualified === true || checkpoint.dailyEmptyQualified === true || (checkpoint as Record<string, unknown>).qualifiedEmpty === true;
+          emptyQualified = Boolean(flag);
+        }
+      } catch { checkpoint = null; }
+      let errorMessage = row.errorMessage;
+      if (!errorMessage && checkpoint && typeof checkpoint.summary === 'string' && String(checkpoint.summary).trim()) {
+        errorMessage = String(checkpoint.summary).trim();
+      }
+      return {
+        id: row.id,
+        status: row.status,
+        phase: row.phase,
+        errorCode: row.errorCode,
+        errorMessage,
+        progress,
+        events: events ?? undefined,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        heartbeatAt: row.heartbeatAt ?? undefined,
+        checkpoint,
+        emptyQualified,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+
 export function getToday(database: DatabaseSync, planDate: string): {
   sources: TodaySource[];
   sourcesTotal: number;
@@ -149,6 +251,10 @@ export function getToday(database: DatabaseSync, planDate: string): {
   fermenting: FermentingBundle;
   /** 有效资料库口径：当日已移出（archived）条数，供 feed 行尾「另有 N 条与本赛道无关」计数。 */
   archivedTodayCount: number;
+  /** Same-day manager/judge tasks for truthful Today projection (partial/failed over unqualified empty succeeded). */
+  sameDayTasks: TodayRunTaskSnapshot[];
+  /** Derived exhaustion for Today CTA: uses planning_status + work_carry dismissed */
+  exhaustion: { total: number; unresolved: number; rejected: number; isExhausted: boolean; hasPlan: boolean };
 } {
 
   // Freshness rail: prefer sources collected on the plan date.
@@ -192,7 +298,9 @@ export function getToday(database: DatabaseSync, planDate: string): {
   const poolNow = new Date(dayEnd);
   // No plan is not a human blocker: the primary CTA is「开始今日情报」, not a fake todo card.
   const topicMaintenance = { pending: Number((database.prepare("SELECT count(*) AS count FROM topic_maintenance_proposals WHERE status='proposed'").get() as { count: number }).count) };
-  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: getOpportunityPool(database, { now: poolNow }), pendingActions: [], topicMaintenance, fermenting, archivedTodayCount };
+  const sameDayTasks = collectSameDayTasks(database, planDate);
+  const exhaustion = getTodayPlanExhaustion(database, planDate);
+  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: getOpportunityPool(database, { now: poolNow }), pendingActions: [], topicMaintenance, fermenting, archivedTodayCount, sameDayTasks, exhaustion };
 }
 
 export type OpportunityPoolItem = {
@@ -220,10 +328,13 @@ export type OpportunityPoolItem = {
   trendEvidence: XPostTrend[];
   createdAt: string;
   isNew: boolean;
+  planningStatus: string | null;
+  revision: number | null;
+  planningProvenanceJson: string | null;
+  scoreReasonsJson: string | null;
   carry: { id: string; state: string; revision: number } | null;
   demotion: { publishedAt: string; platform: string } | null;
 };
-
 export type OpportunityPoolOptions = {
   now?: Date;
   demoteHours?: number;
@@ -260,8 +371,11 @@ export type LatestPlanItemRow = {
   effortEstimate: string;
   availableMaterials: string;
   missingMaterials: string;
+  planningStatus: string | null;
+  revision: number | null;
+  planningProvenanceJson: string | null;
+  scoreReasonsJson: string | null;
 };
-
 /** 每个 plan_date 最近「非空」方案下的 plan_items（原始行）。台账与选题池共用。 */
 export function latestPlanItemRowsByDate(database: DatabaseSync, limit = 200): LatestPlanItemRow[] {
   return database.prepare(`
@@ -271,6 +385,7 @@ export function latestPlanItemRowsByDate(database: DatabaseSync, limit = 200): L
       pi.title_guidance AS titleGuidance, pi.opening_guidance AS openingGuidance,
       pi.structure_guidance AS structureGuidance, pi.effort_estimate AS effortEstimate,
       pi.available_materials_json AS availableMaterials, pi.missing_materials_json AS missingMaterials,
+      pi.planning_status AS planningStatus, pi.revision AS revision, pi.planning_provenance_json AS planningProvenanceJson, pi.score_reasons_json AS scoreReasonsJson,
       pi.created_at AS createdAt, p.plan_date AS planDate
     FROM plan_items pi
     JOIN plans p ON p.id = pi.plan_id
@@ -379,6 +494,10 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
       trendEvidence: listXPostTrends(database, { sourceIds }),
       createdAt: row.createdAt,
       isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
+      planningStatus: row.planningStatus ?? null,
+      revision: row.revision ?? null,
+      planningProvenanceJson: row.planningProvenanceJson ?? null,
+      scoreReasonsJson: row.scoreReasonsJson ?? null,
       carry: carry ? { id: carry.id, state: carry.state, revision: carry.revision } : null,
       demotion: row.topicId ? latestPublicationByTopic.get(row.topicId) ?? null : null
     });
@@ -386,6 +505,172 @@ export function getOpportunityPool(database: DatabaseSync, options: OpportunityP
   return dedupeOpenProposals(pool);
 }
 
-export function getFermentingOnly(database: DatabaseSync, planDate: string): FermentingBundle {
-  return listFermentingBundle(database, planDate);
+export function getTodayOverviewMetrics(database: DatabaseSync, planDate: string): {
+  updatedAt: string;
+  sources: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+  opportunities: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+  projects: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null>; pending: number | null };
+  publications: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+} {
+  const updatedAt = new Date().toISOString();
+  function buildChange(current: number, previous: number): { changeText: string; changeTone?: 'up' | 'down' | 'neutral' } {
+    if (previous === 0 && current === 0) return { changeText: '—', changeTone: 'neutral' };
+    if (previous === 0 && current > 0) return { changeText: `新增 ${current}`, changeTone: 'up' };
+    const delta = current - previous;
+    const pct = Math.round((delta / previous) * 100);
+    const tone: 'up' | 'down' | 'neutral' = delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral';
+    const sign = delta > 0 ? '+' : '';
+    return { changeText: `较昨日 ${sign}${pct}%`, changeTone: tone };
+  }
+  // --- sources ---
+  let sourcesValue: number | null = null;
+  let sourcesChangeText = '—';
+  let sourcesTone: 'up' | 'down' | 'neutral' | undefined;
+  let sourcesSeries: Array<number | null> = Array(7).fill(null);
+  try {
+    const dayStart = toUtcIsoBound(`${planDate}T00:00:00.000+08:00`);
+    const dayEnd = toUtcIsoBound(`${planDate}T23:59:59.999+08:00`);
+    const prevDate = addDaysDate(planDate, -1);
+    const prevStart = toUtcIsoBound(`${prevDate}T00:00:00.000+08:00`);
+    const prevEnd = toUtcIsoBound(`${prevDate}T23:59:59.999+08:00`);
+    const todayRow = database.prepare(`SELECT COUNT(*) AS total FROM source_items WHERE management_status != 'archived' AND collected_at >= ? AND collected_at <= ?`).get(dayStart, dayEnd) as { total: number } | undefined;
+    const prevRow = database.prepare(`SELECT COUNT(*) AS total FROM source_items WHERE management_status != 'archived' AND collected_at >= ? AND collected_at <= ?`).get(prevStart, prevEnd) as { total: number } | undefined;
+    const cur = Number(todayRow?.total ?? 0);
+    const prev = Number(prevRow?.total ?? 0);
+    sourcesValue = cur;
+    const ch = buildChange(cur, prev);
+    sourcesChangeText = ch.changeText;
+    sourcesTone = ch.changeTone;
+    sourcesSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysDate(planDate, -i);
+      const s = toUtcIsoBound(`${d}T00:00:00.000+08:00`);
+      const e = toUtcIsoBound(`${d}T23:59:59.999+08:00`);
+      try {
+        const r = database.prepare(`SELECT COUNT(*) AS total FROM source_items WHERE management_status != 'archived' AND collected_at >= ? AND collected_at <= ?`).get(s, e) as { total: number } | undefined;
+        sourcesSeries.push(Number(r?.total ?? 0));
+      } catch { sourcesSeries.push(null); }
+    }
+  } catch {
+    sourcesValue = null;
+    sourcesChangeText = '—';
+    sourcesTone = undefined;
+    sourcesSeries = Array(7).fill(null);
+  }
+  // --- opportunities (approved plan_items for planDate) ---
+  let oppValue: number | null = null;
+  let oppChangeText = '—';
+  let oppTone: 'up' | 'down' | 'neutral' | undefined;
+  let oppSeries: Array<number | null> = Array(7).fill(null);
+  try {
+    const todayPlanIdRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(planDate) as { id: string } | undefined;
+    const curOpp = todayPlanIdRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(todayPlanIdRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+    const prevDate = addDaysDate(planDate, -1);
+    const prevPlanIdRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(prevDate) as { id: string } | undefined;
+    const prevOpp = prevPlanIdRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(prevPlanIdRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+    oppValue = curOpp;
+    const ch = buildChange(curOpp, prevOpp);
+    oppChangeText = ch.changeText;
+    oppTone = ch.changeTone;
+    oppSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysDate(planDate, -i);
+      try {
+        const pidRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(d) as { id: string } | undefined;
+        const cnt = pidRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(pidRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+        oppSeries.push(cnt);
+      } catch { oppSeries.push(null); }
+    }
+  } catch {
+    oppValue = null;
+    oppChangeText = '—';
+    oppTone = undefined;
+    oppSeries = Array(7).fill(null);
+  }
+  // --- projects (active projects) ---
+  let projValue: number | null = null;
+  let projPending: number | null = null;
+  let projChangeText = '—';
+  let projTone: 'up' | 'down' | 'neutral' | undefined;
+  let projSeries: Array<number | null> = Array(7).fill(null);
+  try {
+    const activeRow = database.prepare(`SELECT COUNT(*) AS total FROM content_projects WHERE archived_at IS NULL AND status != 'completed'`).get() as { total: number } | undefined;
+    const pendingRow = database.prepare(`SELECT COUNT(*) AS total FROM content_projects WHERE archived_at IS NULL AND status IN ('idea','review','ready')`).get() as { total: number } | undefined;
+    const curProj = Number(activeRow?.total ?? 0);
+    projValue = curProj;
+    projPending = Number(pendingRow?.total ?? 0);
+    // For change, compare active count vs count of projects updated before yesterday? Simplify: compare to previous logical snapshot as same as pending? Use previous day's active snapshot via created/updated? Use flat for now.
+    // Compute previous day's active via query with updated_at? Instead use same value minus maybe? Keep neutral.
+    // Better: try historical active at prev day end via archived_at and created_at.
+    let prevProj = curProj;
+    try {
+      const prevDate = addDaysDate(planDate, -1);
+      const prevEnd = toUtcIsoBound(`${prevDate}T23:59:59.999+08:00`);
+      const histRow = database.prepare(`SELECT COUNT(*) AS total FROM content_projects WHERE created_at <= ? AND (archived_at IS NULL OR archived_at > ?) AND status != 'completed'`).get(prevEnd, prevEnd) as { total: number } | undefined;
+      prevProj = Number(histRow?.total ?? curProj);
+    } catch { prevProj = curProj; }
+    const ch = buildChange(curProj, prevProj);
+    projChangeText = projPending != null && projPending > 0 ? `待处理 ${projPending}` : ch.changeText;
+    projTone = ch.changeTone;
+    if (projPending != null && projPending > 0) projTone = 'up';
+    projSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysDate(planDate, -i);
+      const e = toUtcIsoBound(`${d}T23:59:59.999+08:00`);
+      try {
+        const r = database.prepare(`SELECT COUNT(*) AS total FROM content_projects WHERE created_at <= ? AND (archived_at IS NULL OR archived_at > ?) AND status != 'completed'`).get(e, e) as { total: number } | undefined;
+        projSeries.push(Number(r?.total ?? 0));
+      } catch { projSeries.push(curProj); }
+    }
+    if (projSeries.every((v) => v === curProj)) {
+      // ensure variety if history not available, keep flat
+    }
+  } catch {
+    projValue = null;
+    projPending = null;
+    projChangeText = '—';
+    projTone = undefined;
+    projSeries = Array(7).fill(null);
+  }
+  // --- publications (last 7 days) ---
+  let pubValue: number | null = null;
+  let pubChangeText = '—';
+  let pubTone: 'up' | 'down' | 'neutral' | undefined;
+  let pubSeries: Array<number | null> = Array(7).fill(null);
+  try {
+    const dayEnd = toUtcIsoBound(`${planDate}T23:59:59.999+08:00`);
+    const weekStart = toUtcIsoBound(`${addDaysDate(planDate, -6)}T00:00:00.000+08:00`);
+    const prevWeekStart = toUtcIsoBound(`${addDaysDate(planDate, -13)}T00:00:00.000+08:00`);
+    const prevWeekEnd = toUtcIsoBound(`${addDaysDate(planDate, -7)}T23:59:59.999+08:00`);
+    const curRow = database.prepare(`SELECT COUNT(*) AS total FROM publications WHERE status = 'published' AND published_at >= ? AND published_at <= ?`).get(weekStart, dayEnd) as { total: number } | undefined;
+    const prevRow = database.prepare(`SELECT COUNT(*) AS total FROM publications WHERE status = 'published' AND published_at >= ? AND published_at <= ?`).get(prevWeekStart, prevWeekEnd) as { total: number } | undefined;
+    const curPub = Number(curRow?.total ?? 0);
+    const prevPub = Number(prevRow?.total ?? 0);
+    pubValue = curPub;
+    const ch = buildChange(curPub, prevPub);
+    pubChangeText = ch.changeText;
+    pubTone = ch.changeTone;
+    pubSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDaysDate(planDate, -i);
+      const s = toUtcIsoBound(`${d}T00:00:00.000+08:00`);
+      const e = toUtcIsoBound(`${d}T23:59:59.999+08:00`);
+      try {
+        const r = database.prepare(`SELECT COUNT(*) AS total FROM publications WHERE status = 'published' AND published_at >= ? AND published_at <= ?`).get(s, e) as { total: number } | undefined;
+        pubSeries.push(Number(r?.total ?? 0));
+      } catch { pubSeries.push(null); }
+    }
+  } catch {
+    pubValue = null;
+    pubChangeText = '—';
+    pubTone = undefined;
+    pubSeries = Array(7).fill(null);
+  }
+  return {
+    updatedAt,
+    sources: { value: sourcesValue, changeText: sourcesChangeText, changeTone: sourcesTone, series: sourcesSeries },
+    opportunities: { value: oppValue, changeText: oppChangeText, changeTone: oppTone, series: oppSeries },
+    projects: { value: projValue, changeText: projChangeText, changeTone: projTone, series: projSeries, pending: projPending },
+    publications: { value: pubValue, changeText: pubChangeText, changeTone: pubTone, series: pubSeries },
+  };
 }

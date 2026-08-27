@@ -2,14 +2,18 @@ import { dialog, ipcMain } from 'electron';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { broadcastDataChanged } from './data-changed.ts';
-import { getProposalLedger, restoreDismissedProposal, summarizeProposalLedger, type ProposalTab } from './proposals.ts';
+import { getProposalDetail, getProposalLedger, restoreDismissedProposal, summarizeProposalLedger, type ProposalTab } from './proposals.ts';
 import { dismissCarryForPlanItem, listFermentingBundle, refreshWorkCarry, setCarryState, shanghaiDate, type CarryState } from './ferment.ts';
 import {
   copyContentVersionToNewProject, createContentProjectWithVersion, createProjectFromPlanItem, deleteContentProject,
   getContentProject, getContentProjectStatusSummary, getStudio, listContentProjects, saveCoreVersion, savePlatformVersion, updateContentProject,
   type ContentProjectOrder, type ContentProjectPlatform, type ContentProjectStatus
 } from './content.ts';
-import { getToday } from './workbench.ts';
+import { advanceApprovedPlanItem } from './daily-content-article.ts';
+import { ensurePlannerTask } from './planning-stage-intake.ts';
+import { submitPlanItemForReview, transitionPlanItem } from './planning-stage.ts';
+import { mergeSimilarCarryItems, upsertCarryFromPlanItem } from './ferment.ts';
+import { getToday, getTodayOverviewMetrics } from './workbench.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { getActiveJobSpawner } from './job-spawner.ts';
 import { readCrewInstanceProjection } from './crew-instance-projection.ts';
@@ -32,9 +36,11 @@ import {
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData, requireReceiptData } from './business-command.ts';
 import { failure } from './result.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
+import { linkTopicSources } from './knowledge.ts';
 
 export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependencies): void {
   ipcMain.handle('today:get', (_event, planDate: string) => readWorkspaceDatabase(dependencies, () => null, database => getToday(database, planDate)));
+  ipcMain.handle('today:overview-metrics', (_event, planDate: string) => readWorkspaceDatabase(dependencies, () => null, database => getTodayOverviewMetrics(database, planDate)));
   ipcMain.handle('agents:roster-status', (_event, input: { businessDate?: string } = {}) => readWorkspaceDatabase(dependencies, () => [], database => {
     const runtime = dependencies.getActiveRuntime();
     const workers = runtime?.getWorkerSnapshots?.() ?? [];
@@ -208,6 +214,8 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     readWorkspaceDatabase(dependencies, () => null, database => getProposalLedger(database, input)));
   ipcMain.handle('proposals:summary', (_event, planDate: string) =>
     readWorkspaceDatabase(dependencies, () => null, database => summarizeProposalLedger(database, { planDate })));
+  ipcMain.handle('proposals:detail', (_event, planItemId: string) =>
+    readWorkspaceDatabase(dependencies, () => null, database => getProposalDetail(database, planItemId)));
   ipcMain.handle('today:list-fermenting', (_event, planDate: string) => readWorkspaceDatabase(dependencies, () => null, database => listFermentingBundle(database, planDate)));
   ipcMain.handle('studio:get', () => readWorkspaceDatabase(dependencies, () => null, database => getStudio(database)));
   ipcMain.handle('studio:list', (_event, input: { query?: string; status?: ContentProjectStatus; archived?: boolean; order?: ContentProjectOrder; platform?: ContentProjectPlatform; limit?: number; offset?: number }) =>
@@ -249,11 +257,10 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
   });
   ipcMain.handle('today:create-project', async (_event, planItemId: string) => {
     const runtime = await requireBusinessRuntime(dependencies);
-    const receipt = await dispatchBusinessCommand(runtime, { command: 'content.create', requestId: freshRequestId(), actor: ownerUiActor,
-      input: { planItemId }, boundIdentity: { entityType: 'plan_item', entityId: planItemId }, entityType: 'content_project',
-      execute: (database, value) => { const data = createProjectFromPlanItem(database, value.planItemId, false); return { data,
-        entityId: data.id, afterRevision: data.revision, readback: getContentProject(database, data.id) }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'content.create_from_plan' }); return data;
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'plan_item.advance', requestId: freshRequestId(), actor: ownerUiActor,
+      input: { planItemId }, boundIdentity: { entityType: 'plan_item', entityId: planItemId }, entityType: 'plan_item',
+      execute: (database, value) => { const data = advanceApprovedPlanItem(database, value.planItemId); return { data, entityId: value.planItemId, readback: data }; } });
+    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'plan_item.advance' }); return data;
   });
 
   ipcMain.handle('studio:create-project', async (_event, input: { title: string; body: string }) => {
@@ -584,5 +591,126 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     });
     if (receipt.ok) broadcastDataChanged({ scopes: ['studio'], reason: 'studio.asset.clip' });
     return receiptAsCommandResult(receipt);
+  });
+
+  ipcMain.handle('plan-item:request-planning', async (_event, input: { planItemId: string; requestId?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.request_planning',
+      requestId,
+      actor: ownerUiActor,
+      input: { planItemId: input.planItemId },
+      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId },
+      entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const row = database.prepare('SELECT id, planning_status, source_ids_json FROM plan_items WHERE id=?').get(normalized.planItemId) as { id:string; planning_status:string; source_ids_json:string }|undefined;
+        if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
+        if (row.planning_status !== 'draft' && row.planning_status !== 'rejected') throw Object.assign(new Error('conflict: only draft/rejected can request planning'), { code: 'conflict' });
+        let sourceIds: string[] = [];
+        try { sourceIds = JSON.parse(row.source_ids_json || '[]') as string[]; } catch {}
+        const result = ensurePlannerTask(database, { planItemId: normalized.planItemId, sourceIds, requestId });
+        return { data: { planItemId: normalized.planItemId, taskId: result.taskId, jobId: result.jobId, reused: !result.created }, entityId: normalized.planItemId, readback: { taskId: result.taskId, jobId: result.jobId, reused: !result.created } };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'plan_item.request_planning' });
+    return data;
+  });
+
+  ipcMain.handle('plan-item:approve', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.approve',
+      requestId,
+      actor: ownerUiActor,
+      input: { planItemId: input.planItemId, expectedRevision: input.expectedRevision, reason: input.reason },
+      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId },
+      entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const result = transitionPlanItem(database, { planItemId: normalized.planItemId, expectedRevision: normalized.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'approved', by: 'owner_ui', reason: normalized.reason ?? 'approve' });
+        const item = database.prepare('SELECT topic_id, title, priority, timeliness, source_ids_json, plan_id FROM plan_items WHERE id=?').get(normalized.planItemId) as { topic_id:string|null; title:string; priority:number; timeliness:string; source_ids_json:string; plan_id:string }|undefined;
+        if (item) {
+          if (item.topic_id) {
+            const sids = JSON.parse(item.source_ids_json || '[]') as string[];
+            linkTopicSources(database, item.topic_id, sids, new Date().toISOString());
+          }
+          try {
+            const plan = database.prepare('SELECT plan_date FROM plans WHERE id=?').get(item.plan_id) as { plan_date:string }|undefined;
+            const planDate = plan?.plan_date ?? new Date().toISOString().slice(0,10);
+            upsertCarryFromPlanItem(database, { planItemId: normalized.planItemId, title: item.title, priority: item.priority, timeliness: item.timeliness, topicId: item.topic_id ?? null, sourceIds: JSON.parse(item.source_ids_json || '[]') as string[], originPlanDate: planDate, reason: '已批准: ' + item.title });
+            mergeSimilarCarryItems(database);
+          } catch {}
+        }
+        let adv = null;
+        try { adv = advanceApprovedPlanItem(database, normalized.planItemId); } catch {}
+        return { data: { ...(result as unknown as Record<string, unknown>), advance: adv }, entityId: normalized.planItemId, beforeRevision: normalized.expectedRevision, afterRevision: (result as unknown as { revision:number }).revision, readback: { ...(result as unknown as Record<string, unknown>), advance: adv } };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['today', 'proposals', 'studio'], reason: 'plan_item.approve' });
+    return data;
+  });
+
+  ipcMain.handle('plan-item:reject', async (_event, input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.reject',
+      requestId,
+      actor: ownerUiActor,
+      input: { planItemId: input.planItemId, expectedRevision: input.expectedRevision, reason: input.reason },
+      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId },
+      entityType: 'plan_item',
+      execute: (database, normalized) => {
+        if (!normalized.reason || !String(normalized.reason).trim()) throw Object.assign(new Error('validation_failed: reason_required'), { code: 'validation_failed' });
+        const result = transitionPlanItem(database, { planItemId: normalized.planItemId, expectedRevision: normalized.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'rejected', by: 'owner_ui', reason: normalized.reason });
+        return { data: result as unknown as Record<string, unknown>, entityId: normalized.planItemId, beforeRevision: normalized.expectedRevision, afterRevision: (result as unknown as { revision:number }).revision, readback: result };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'plan_item.reject' });
+    return data;
+  });
+
+  ipcMain.handle('plan-item:rework', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.rework',
+      requestId,
+      actor: ownerUiActor,
+      input: { planItemId: input.planItemId, expectedRevision: input.expectedRevision, reason: input.reason },
+      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId },
+      entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const result = transitionPlanItem(database, { planItemId: normalized.planItemId, expectedRevision: normalized.expectedRevision, expectedStatus: 'rejected', toStatus: 'draft', by: 'owner_ui', reason: normalized.reason ?? 'rework' });
+        return { data: result as unknown as Record<string, unknown>, entityId: normalized.planItemId, beforeRevision: normalized.expectedRevision, afterRevision: (result as unknown as { revision:number }).revision, readback: result };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['today', 'proposals'], reason: 'plan_item.rework' });
+    return data;
+  });
+
+  ipcMain.handle('plan-item:advance', async (_event, input: { planItemId: string; requestId?: string }) => {
+    const runtime = await requireBusinessRuntime(dependencies);
+    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
+    const receipt = await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.advance',
+      requestId,
+      actor: ownerUiActor,
+      input: { planItemId: input.planItemId },
+      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId },
+      entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const data = advanceApprovedPlanItem(database, normalized.planItemId);
+        return { data: data as unknown as Record<string, unknown>, entityId: normalized.planItemId, readback: data };
+      }
+    });
+    const data = requireReceiptData(receipt);
+    broadcastDataChanged({ scopes: ['today', 'studio'], reason: 'plan_item.advance' });
+    return data;
   });
 }

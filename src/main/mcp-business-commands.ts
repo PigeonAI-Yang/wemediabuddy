@@ -1,9 +1,53 @@
+import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
 import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
 import { getAsset, linkProjectAsset, markdownImageForAsset, registerStagedAsset, stageAssetBytes } from './assets.ts';
 import { createContentProjectWithVersion, getContentProject, saveCoreVersion, savePlatformVersion, type SavedCoreVersion, type SavedPlatformVersion } from './content.ts';
+import { finalizeDerivativeVersionInternal, saveDerivativeVersionInternal } from './content-derivative.ts';
+import { submitPlanItemForReview, transitionPlanItem } from './planning-stage.ts';
+import { ensurePlannerTask } from './planning-stage-intake.ts';
+import { advanceApprovedPlanItem } from './daily-content-article.ts';
+import { mergeSimilarCarryItems, upsertCarryFromPlanItem } from './ferment.ts';
+import { shanghaiDate } from './ferment.ts';
+import { isRoleId } from '../shared/agent-capabilities.ts';
+function getTaskRole(database: import("node:sqlite").DatabaseSync, taskId?: string): string | null {
+  if (!taskId) return null;
+  try {
+    const t = getAgentTask(database, taskId) as unknown as Record<string, unknown>;
+    if (!t) return null;
+    const ctxRole = (t as { contextRefs?: Record<string, unknown> }).contextRefs?.roleId as string | undefined;
+    if (ctxRole && isRoleId(ctxRole)) return ctxRole;
+    if ((t as { intent?: string }).intent === 'daily_judge') return 'planner';
+    if ((t as { intent?: string }).intent === 'daily_scan') return 'reporter';
+    if ((t as { intent?: string }).intent === 'research') return 'reporter';
+    if ((t as { intent?: string }).intent === 'studio_draft') return 'writer';
+    if ((t as { intent?: string }).intent === 'page_library') return 'librarian';
+    return null;
+  } catch { return null; }
+}
+function assertPlannerScoped(database: import("node:sqlite").DatabaseSync, callerTaskId: string | undefined, planItemId: string){
+  if (!callerTaskId) return;
+  const role = getTaskRole(database, callerTaskId);
+  if (!role) throw Object.assign(new Error('TASK_SCOPE_BROADENED: planner task role not found'), { code: 'TASK_SCOPE_BROADENED' });
+  if (role === 'desk') return;
+  if (role !== 'planner') throw Object.assign(new Error('TASK_SCOPE_BROADENED: only planner scoped to its planItem can submit/request'), { code: 'TASK_SCOPE_BROADENED' });
+  const task = getAgentTask(database, callerTaskId) as unknown as Record<string, unknown> | null;
+  if (!task) throw Object.assign(new Error('TASK_SCOPE_BROADENED: planner task not found'), { code: 'TASK_SCOPE_BROADENED' });
+  const refs = (task as { contextRefs?: Record<string, unknown> }).contextRefs ?? {};
+  const ctxPlan = (refs as Record<string, unknown>).planItemId ?? (refs as Record<string, unknown>).plan_item_id ?? null;
+  if (!ctxPlan || String(ctxPlan) !== String(planItemId)) {
+    throw Object.assign(new Error('TASK_SCOPE_BROADENED: planner not scoped to this planItem'), { code: 'TASK_SCOPE_BROADENED' });
+  }
+}
+function assertDeskOrOwner(database: import("node:sqlite").DatabaseSync, callerTaskId: string | undefined, actorType: string){
+  if (actorType === 'owner_ui' || actorType === 'scheduler' || actorType === 'browser_adapter') return;
+  if (!callerTaskId) throw Object.assign(new Error('TASK_SCOPE_BROADENED: desk required'), { code: 'TASK_SCOPE_BROADENED' });
+  const role = getTaskRole(database, callerTaskId);
+  if (role !== 'desk') throw Object.assign(new Error('TASK_SCOPE_BROADENED: only desk or Owner UI can approve/reject/rework/advance'), { code: 'TASK_SCOPE_BROADENED' });
+}
+
 import { reviewInvestigationResearch, saveInvestigationDirection, saveInvestigationOutline } from './project-investigation.ts';
 import {
   createContentProjectFromBrief,
@@ -11,7 +55,8 @@ import {
   createKnowledgeSuggestion,
   updateCreativeBrief
 } from './knowledge-canvas.ts';
-import { createKnowledgeDomain, recordKnowledgeBatch, updateKnowledgeDomain } from './knowledge.ts';
+import { createKnowledgeDomain, linkTopicSources, recordKnowledgeBatch, updateKnowledgeDomain } from './knowledge.ts';
+import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
 import { createTopicMaintenanceProposal } from './topic-maintenance.ts';
 import { saveCurrentPlan, type PlanItemInput } from './planning.ts';
 import { saveReview } from './reviews.ts';
@@ -38,10 +83,26 @@ const authority = (input: Authority) => ({
   workerLeaseId: input.worker_lease_id
 });
 
-/** First-pass Studio writers may only hand off research; no content/image mutation is permitted. */
-export function assertStudioDraftResearchReady(runtime: Pick<ActiveWorkspaceRuntime, 'database'>, taskId: string): void {
+/** First-pass Studio writers may only hand off research; no content/image mutation is permitted. Exempt via verified prohibited context only. */
+export function assertStudioDraftResearchReady(runtime: Pick<ActiveWorkspaceRuntime, 'database'>, taskId: string, projectId?: string): void {
   const task = getAgentTask(runtime.database, taskId);
-  if (task?.intent === 'studio_draft' && task.contextRefs.researchGate === 'required') {
+  if (!task) return;
+  const refs = task.contextRefs as Record<string, unknown>;
+  const gate = refs.researchGate as string | undefined;
+  const mode = (refs.researchMode ?? refs.research_mode) as string | undefined;
+  const intent = task.intent;
+  const roleId = refs.roleId as string | undefined;
+  if (gate === 'exempt') {
+    const projectOk = !projectId || refs.projectId === projectId;
+    const valid = intent === 'studio_draft' && roleId === 'writer' && mode === 'prohibited' && projectOk;
+    if (!valid) {
+      throw Object.assign(new Error('RESEARCH_GATE_EXEMPT_INVALID: 豁免上下文不匹配，禁止保存。'), {
+        code: 'RESEARCH_GATE_EXEMPT_INVALID'
+      });
+    }
+    return;
+  }
+  if (gate === 'required') {
     throw Object.assign(new Error('RESEARCH_REQUIRED: 当前核心初稿必须先完成外部研究交接，禁止保存正文或导入配图。'), {
       code: 'RESEARCH_REQUIRED'
     });
@@ -97,6 +158,48 @@ function projectImageBytes(input: { bytes_base64?: string; svg_text?: string; mi
   const stem = (input.file_name?.trim() || 'project-image').replace(/\.[^.]+$/, '') || 'project-image';
   return { bytes, mimeType, fileName: `${stem}${extension}` };
 }
+
+export function readScopedPlanItem(
+  database: import('node:sqlite').DatabaseSync,
+  taskId: string,
+  planItemId: string
+): Record<string, unknown> {
+  assertPlannerScoped(database, taskId, planItemId);
+  const row = database.prepare('SELECT id, revision, planning_status, planning_provenance_json, title, priority, why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate, source_ids_json, available_materials_json, missing_materials_json, score_reasons_json, topic_id, plan_id, sort_order, created_at, updated_at FROM plan_items WHERE id = ?').get(planItemId) as Record<string, unknown> | undefined;
+  if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
+  const parseJson = (value: unknown, fallback: unknown) => {
+    try { return JSON.parse(String(value ?? (Array.isArray(fallback) ? '[]' : '{}'))); } catch { return fallback; }
+  };
+  return {
+    id: row.id,
+    revision: row.revision,
+    planning_status: row.planning_status,
+    planning_provenance: parseJson(row.planning_provenance_json, {}),
+    title: row.title,
+    priority: row.priority,
+    why_now: row.why_now,
+    timeliness: row.timeliness,
+    target_audience: row.target_audience,
+    angle: row.angle,
+    point_of_view: row.point_of_view,
+    platforms: parseJson(row.platforms_json, []),
+    formats: parseJson(row.formats_json, []),
+    title_guidance: row.title_guidance,
+    opening_guidance: row.opening_guidance,
+    structure_guidance: row.structure_guidance,
+    effort_estimate: row.effort_estimate,
+    source_ids: parseJson(row.source_ids_json, []),
+    available_materials: parseJson(row.available_materials_json, []),
+    missing_materials: parseJson(row.missing_materials_json, []),
+    score_reasons: parseJson(row.score_reasons_json, {}),
+    topic_id: row.topic_id,
+    plan_id: row.plan_id,
+    sort_order: row.sort_order,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
 
 export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWorkspaceRuntime): void {
   server.registerTool('agent_tasks.report_progress', {
@@ -244,14 +347,16 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     })).min(1) }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, items } = input;
-    return text(await dispatchBusinessCommand(runtime, {
+    const receipt = await dispatchBusinessCommand(runtime, {
       command: 'knowledge.record_batch', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: { items }, boundIdentity: { entityType: 'knowledge_batch' }, entityType: 'knowledge_batch',
       execute: (database, normalized) => {
         const data = recordKnowledgeBatch(database, normalized, false);
         return { data, readback: data };
       }
-    }));
+    });
+    if (receipt.ok) wakePersistentKnowledgeJobs();
+    return text(receipt);
   });
 
   server.registerTool('knowledge.topic_maintenance_propose', {
@@ -266,7 +371,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     return text(await dispatchBusinessCommand(runtime, {
       command: 'knowledge.topic_maintenance_propose', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: { ...commandInput, supersedesProposalId: supersedes_proposal_id, taskId: task_id }, boundIdentity: { entityType: 'topic_maintenance_proposal' }, entityType: 'topic_maintenance_proposal',
-      execute: (database, normalized) => { const data = createTopicMaintenanceProposal(database, normalized as any); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; }
+      execute: (database, normalized) => { const data = createTopicMaintenanceProposal(database, normalized as Parameters<typeof createTopicMaintenanceProposal>[1]); return { data, entityId: data.id, afterRevision: data.revision, readback: data }; }
     }));
   });
 
@@ -296,7 +401,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     })) }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_date, summary, items } = input;
-    return text(await dispatchBusinessCommand(runtime, {
+    const receipt = await dispatchBusinessCommand(runtime, {
       command: 'plans.save', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: { planDate: plan_date, timezone: 'Asia/Shanghai', summary, items: items as PlanItemInput[] },
       boundIdentity: { planDate: plan_date }, entityType: 'plan',
@@ -304,6 +409,162 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
         assertPublishingPlatforms(database, normalized.items.flatMap((item) => item.platforms));
         const data = saveCurrentPlan(database, normalized, false);
         return { data, entityId: data.id, afterRevision: data.revision, readback: data };
+      }
+    });
+    if (receipt.ok) wakePersistentKnowledgeJobs();
+    return text(receipt);
+  });
+
+  // WMB-5351 plan_item.* commands
+  server.registerTool('plan_item.request_planning', {
+    description: '为草稿确保一项 Planner 工单；幂等复用活动任务',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int().optional() }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.request_planning', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        assertPlannerScoped(database, task_id, normalized.planItemId);
+        const row = database.prepare('SELECT id, planning_status, source_ids_json FROM plan_items WHERE id=?').get(normalized.planItemId) as { id:string; planning_status:string; source_ids_json:string }|undefined;
+        if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
+        if (row.planning_status !== 'draft' && row.planning_status !== 'rejected') throw Object.assign(new Error('conflict: only draft/rejected can request planning'), { code: 'conflict' });
+        let sourceIds: string[] = [];
+        try { sourceIds = JSON.parse(row.source_ids_json || '[]') as string[]; } catch {}
+        const result = ensurePlannerTask(database, { planItemId: normalized.planItemId, sourceIds, requestId: request_id });
+        return { data: { planItemId: normalized.planItemId, taskId: result.taskId, jobId: result.jobId, reused: !result.created }, entityId: normalized.planItemId, readback: { taskId: result.taskId, jobId: result.jobId, reused: !result.created } };
+      }
+    }));
+  });
+
+  server.registerTool('plan_item.get', {
+    description: '只读获取当前 Planner 任务精确绑定的冻结 plan_item；不需要写授权，不产生业务写入。',
+    inputSchema: { task_id: z.string(), plan_item_id: z.string() }
+  }, async ({ task_id, plan_item_id }) => text(readScopedPlanItem(runtime.database, task_id, plan_item_id)));
+
+  server.registerTool('plan_item.submit', {
+    description: '提交既有草稿/驳回项为待审',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), title: z.string().optional(), why_now: z.string().optional(), timeliness: z.string().optional(), target_audience: z.string().optional(), angle: z.string().optional(), point_of_view: z.string().optional(), platforms: z.array(z.string()).optional(), formats: z.array(z.string()).optional(), opening_guidance: z.string().optional(), structure_guidance: z.string().optional(), source_ids: z.array(z.string()).optional(), available_materials: z.array(z.string()).optional(), missing_materials: z.array(z.string()).optional(), score_reasons: z.record(z.string(), z.unknown()).optional() }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, ...rest } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.submit', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id, expectedRevision: expected_revision, item: rest }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const command = normalized as { planItemId: string; expectedRevision: number };
+        assertPlannerScoped(database, task_id, command.planItemId);
+        const existing = database.prepare('SELECT * FROM plan_items WHERE id=?').get(command.planItemId) as Record<string, unknown> | undefined;
+        if (!existing) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
+        const item: Parameters<typeof submitPlanItemForReview>[1]['item'] = {
+          title: rest.title ?? existing.title as string,
+          whyNow: rest.why_now ?? existing.why_now as string,
+          timeliness: rest.timeliness ?? existing.timeliness as string,
+          targetAudience: rest.target_audience ?? existing.target_audience as string,
+          angle: rest.angle ?? existing.angle as string,
+          pointOfView: rest.point_of_view ?? existing.point_of_view as string,
+          platforms: rest.platforms ?? JSON.parse((existing.platforms_json as string) || '[]'),
+          formats: rest.formats ?? JSON.parse((existing.formats_json as string) || '[]'),
+          titleGuidance: existing.title_guidance as string ?? '',
+          openingGuidance: rest.opening_guidance ?? existing.opening_guidance as string,
+          structureGuidance: rest.structure_guidance ?? existing.structure_guidance as string,
+          effortEstimate: existing.effort_estimate as string ?? '',
+          sourceIds: rest.source_ids ?? JSON.parse((existing.source_ids_json as string) || '[]'),
+          availableMaterials: rest.available_materials ?? JSON.parse((existing.available_materials_json as string) || '[]'),
+          missingMaterials: rest.missing_materials ?? JSON.parse((existing.missing_materials_json as string) || '[]'),
+          scoreReasons: rest.score_reasons ?? JSON.parse((existing.score_reasons_json as string) || '{}'),
+          topicId: existing.topic_id as string | null ?? null,
+          priority: existing.priority as number ?? 0
+        };
+        const submitBy = task_id ? (getTaskRole(database, task_id) || 'planner') : 'planner';
+        const result = submitPlanItemForReview(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, item, by: submitBy });
+        return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
+      }
+    }));
+  });
+
+  server.registerTool('plan_item.approve', {
+    description: '内部批准策划',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.approve', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const command = normalized as { planItemId: string; expectedRevision: number; reason?: string };
+        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
+        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
+        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'approved', by: byActor, reason: command.reason ?? 'approve' });
+        const item = database.prepare('SELECT topic_id, title, priority, timeliness, source_ids_json, plan_id FROM plan_items WHERE id=?').get(command.planItemId) as { topic_id:string|null; title:string; priority:number; timeliness:string; source_ids_json:string; plan_id:string }|undefined;
+        if (item) {
+          if (item.topic_id) {
+            const sids = JSON.parse(item.source_ids_json || '[]') as string[];
+            linkTopicSources(database, item.topic_id, sids, new Date().toISOString());
+          }
+          try {
+            const plan = database.prepare('SELECT plan_date FROM plans WHERE id=?').get(item.plan_id) as { plan_date:string }|undefined;
+            const planDate = plan?.plan_date ?? shanghaiDate();
+            upsertCarryFromPlanItem(database, { planItemId: command.planItemId, title: item.title, priority: item.priority, timeliness: item.timeliness, topicId: item.topic_id ?? null, sourceIds: JSON.parse(item.source_ids_json || '[]') as string[], originPlanDate: planDate, reason: `已批准: ${item.title}` });
+            mergeSimilarCarryItems(database);
+          } catch {}
+        }
+        let advance: ReturnType<typeof advanceApprovedPlanItem> | null = null;
+        try { advance = advanceApprovedPlanItem(database, command.planItemId); } catch {}
+        const data = { ...result, advance };
+        return { data, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: data };
+      }
+    }));
+  });
+
+  server.registerTool('plan_item.reject', {
+    description: '内部驳回策划',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().min(1) }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.reject', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const command = normalized as { planItemId: string; expectedRevision: number; reason: string };
+        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
+        if (!command.reason.trim()) throw Object.assign(new Error('validation_failed: reason_required'), { code: 'validation_failed' });
+        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
+        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'rejected', by: byActor, reason: command.reason });
+        return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
+      }
+    }));
+  });
+
+  server.registerTool('plan_item.rework', {
+    description: '驳回后退回草稿',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.rework', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const command = normalized as { planItemId: string; expectedRevision: number; reason?: string };
+        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
+        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
+        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'rejected', toStatus: 'draft', by: byActor, reason: command.reason ?? 'rework' });
+        return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
+      }
+    }));
+  });
+
+  server.registerTool('plan_item.advance', {
+    description: '统一生产推进（幂等）',
+    inputSchema: { ...authoritySchema, plan_item_id: z.string() }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id } = input;
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.advance', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { planItemId: plan_item_id }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
+        const data = advanceApprovedPlanItem(database, normalized.planItemId);
+        return { data: data as unknown as Record<string, unknown>, entityId: normalized.planItemId, readback: data };
       }
     }));
   });
@@ -323,11 +584,10 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     })
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, project_id } = input;
-    assertStudioDraftResearchReady(runtime, task_id);
+    assertStudioDraftResearchReady(runtime, task_id, project_id);
     const decoded = projectImageBytes(input);
     const staged = await stageAssetBytes(runtime.identity.rootPath, {
       bytes: decoded.bytes,
-      fileName: decoded.fileName,
       mimeType: decoded.mimeType,
       origin: 'mcp-project-image'
     });
@@ -364,7 +624,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     inputSchema: { ...authoritySchema, project_id: z.string(), body: z.string(), content_version_id: z.string().optional(), platform: z.enum(['x', 'xiaohongshu', 'wechat', 'zhihu']).optional(), format: z.string().optional(), expected_revision: z.number().optional(), version_id: z.string().optional(), title: z.string().optional(), media_bindings: z.array(contentBindingSchema).max(24).optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, project_id, content_version_id, expected_revision, version_id, media_bindings, ...fields } = input;
-    assertStudioDraftResearchReady(runtime, task_id);
+    assertStudioDraftResearchReady(runtime, task_id, project_id);
     const commandInput = {
       ...fields,
       projectId: project_id,
@@ -403,6 +663,55 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
           expectedRevision: normalized.expectedRevision!, mediaBindings: normalized.mediaBindings
         }, false));
         return { data, entityId: data.id, beforeRevision: normalized.expectedRevision, afterRevision: data.projectRevision, readback: data };
+      }
+    }));
+  });
+
+  const formatDecisionSchema = z.object({
+    goal: z.string().min(1),
+    audience: z.string().min(1),
+    suitableForm: z.string().min(1),
+    reason: z.string().min(12),
+    durationRange: z.string().min(1).optional(),
+    narrativeStructure: z.string().min(1),
+    visualDensity: z.string().min(1),
+    paceAndTone: z.string().min(1),
+    needsPresence: z.boolean().optional(),
+    needsDemo: z.boolean().optional()
+  }).strict();
+
+  server.registerTool('content_derivative.save_version', {
+    description: '基于指定文章定稿版本保存并定稿一份视频文案；写入不可变衍生版本并返回 ready 版本。',
+    inputSchema: {
+      ...authoritySchema,
+      project_id: z.string(),
+      source_content_version_id: z.string(),
+      title: z.string().min(1),
+      body: z.string().min(1),
+      format_decision: formatDecisionSchema,
+      author: z.string().optional()
+    }
+  }, async (input) => {
+    const { request_id, task_id, grant_id, worker_lease_id, project_id, source_content_version_id, title, body, format_decision, author } = input;
+    const commandInput = {
+      projectId: project_id,
+      sourceContentVersionId: source_content_version_id,
+      title,
+      body,
+      formatDecisionJson: JSON.stringify(format_decision),
+      author: author ?? 'ai'
+    };
+    return text(await dispatchBusinessCommand<typeof commandInput, Record<string, unknown>>(runtime, {
+      command: 'content_derivative.save_version',
+      requestId: request_id,
+      ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: commandInput,
+      boundIdentity: { projectId: project_id, sourceContentVersionId: source_content_version_id },
+      entityType: 'content_derivative_version',
+      execute: (database, normalized) => {
+        const draft = saveDerivativeVersionInternal(database, normalized) as { version_number: number };
+        const data = finalizeDerivativeVersionInternal(database, { projectId: normalized.projectId, expectedLatestVersionNumber: Number(draft.version_number) }) as Record<string, unknown>;
+        return { data, entityId: String(data.id), readback: data };
       }
     }));
   });

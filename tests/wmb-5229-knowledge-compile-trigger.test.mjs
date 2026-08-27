@@ -77,6 +77,14 @@ function modelOf(text) {
   return async () => text;
 }
 
+function routeAwareModelOf(compileText) {
+  const unresolved = fenced({ wmb_knowledge_route: {
+    reason: '当前没有可确认的 Topic。', entityCandidates: [], topicCandidates: [],
+    selectedEntityKey: null, selectedTopicKey: null, evidenceGaps: []
+  } });
+  return async (prompt) => prompt.includes('wmb_knowledge_route') ? unresolved : compileText;
+}
+
 function linkTopic(database, sourceId, topicId) {
   const now = new Date().toISOString();
   database.prepare(`INSERT INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at) VALUES(?,?,?,?,?)
@@ -145,7 +153,7 @@ test('WMB-5229 command entry: upsert_batch schedules async compile for linked to
     seeded.database.close();
     runtime = ActiveWorkspaceRuntime.open(root, { openDatabase: migrateDatabase, createEpoch: () => 'runtime-current' });
     const database = runtime.database;
-    setSourceKnowledgeCompileDeps(depsFor(root, modelOf(fenced(goodManifest()))));
+    setSourceKnowledgeCompileDeps(depsFor(root, routeAwareModelOf(fenced(goodManifest()))));
 
     const events = [];
     setDataChangedPublisher((event) => events.push(event));
@@ -187,7 +195,7 @@ test('WMB-5229 command entry: upsert_batch schedules async compile for linked to
 
 // ============ B. 命令入口：未关联 Topic → 干净 no-op（零写、零广播） ============
 
-test('WMB-5229 command entry: unlinked source compiles nothing and broadcasts nothing', async () => {
+test('WMB-5229 command entry: unlinked source records unresolved routing, writes no knowledge and broadcasts nothing', async () => {
   const root = await makeRoot();
   let runtime;
   try {
@@ -195,7 +203,7 @@ test('WMB-5229 command entry: unlinked source compiles nothing and broadcasts no
     seeded.database.close();
     runtime = ActiveWorkspaceRuntime.open(root, { openDatabase: migrateDatabase, createEpoch: () => 'runtime-current' });
     const database = runtime.database;
-    setSourceKnowledgeCompileDeps(depsFor(root, modelOf(fenced(goodManifest()))));
+    setSourceKnowledgeCompileDeps(depsFor(root, routeAwareModelOf(fenced(goodManifest()))));
 
     const receipt = await dispatchSourceUpsertBatch(runtime, {
       requestId: `cmd-unlinked-${randomUUID()}`, actor: owner,
@@ -204,7 +212,10 @@ test('WMB-5229 command entry: unlinked source compiles nothing and broadcasts no
     assert.equal(receipt.ok, true);
     const events = await captureBroadcasts(() => drain());
 
-    assert.equal(compileOperations(database).length, 0, '未关联 Topic 不产生编译操作');
+    const unresolvedOps = compileOperations(database);
+    assert.equal(unresolvedOps.length, 1, '未关联 Topic 留下可审计的路由未决操作');
+    assert.equal(unresolvedOps[0].result, 'error');
+    assert.equal(unresolvedOps[0].errorCode, 'TOPIC_UNRESOLVED');
     assert.equal(count(database, 'knowledge_update_receipts'), 0);
     assert.equal(count(database, 'knowledge_change_sets'), 0);
     assert.equal(count(database, 'knowledge_notes'), 0);

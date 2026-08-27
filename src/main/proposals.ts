@@ -8,8 +8,9 @@ import {
   parseSourceIds,
   type OpportunityPoolItem
 } from './workbench.ts';
+import { isScoredReadyForReview, isScoringPending } from '../shared/propagation.ts';
 
-export type ProposalTab = 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
+export type ProposalTab = 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired' | 'scoring_pending';
 
 export type ProposalLedgerItem = {
   planItemId: string;
@@ -39,6 +40,25 @@ export type ProposalLedgerItem = {
   carry: { id: string; state: string; revision: number; reason: string | null } | null;
   adoptedProjectId: string | null;
   isNew: boolean;
+  planningStatus: string;
+  revision: number;
+  planningProvenanceJson: string | null;
+  scoreReasonsJson: string | null;
+  scoreSnapshot?: null | {
+    total: number;
+    audienceFit: number;
+    viewpointRoom: number;
+    evidenceAvailability: number;
+    timelinessLifecycle: number;
+    articleVideoTransfer: number;
+    executionCost: number;
+    risks: readonly string[];
+    hardRiskCodes?: readonly string[];
+    route?: string;
+    proposalReason?: string;
+    dimensionEvidence?: Record<string, { evidence?: string; reason?: string }>;
+    duplicate?: boolean;
+  };
 };
 
 export type ProposalLedgerCounts = {
@@ -47,6 +67,7 @@ export type ProposalLedgerCounts = {
   adopted: number;
   dismissed: number;
   expired: number;
+  scoring_pending: number;
 };
 
 export type ProposalLedgerResult = {
@@ -65,6 +86,14 @@ export type ProposalLedgerInput = {
   now?: Date;
 };
 
+export type ProposalDetail = {
+  item: ProposalLedgerItem;
+  sources: Array<{ id: string; title: string; author: string | null; url: string; publishedAt: string | null; verificationStatus: string; revision: number }>;
+  score: { status?: string; score?: number; reasons?: Array<{ criterion: string; weight: number; score: number; reason?: string }> } | null;
+  sourceDecisions: Array<{ sourceId: string; sourceRevision: number; decision: string; reasonCode: string; reason: string }>;
+  evidenceGaps: Array<{ code?: string; statement?: string }>;
+};
+
 type CarryRow = { id: string; state: string; revision: number; reason: string | null };
 type Disposition = {
   state: 'adopted' | 'dismissed' | 'expired' | 'open';
@@ -75,7 +104,7 @@ type Disposition = {
 };
 
 function emptyCounts(): ProposalLedgerCounts {
-  return { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0 };
+  return { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0, scoring_pending: 0 };
 }
 
 function findAdoptedProjectId(database: DatabaseSync, planItemId: string, sourceIds: string[]): string | null {
@@ -144,6 +173,21 @@ function dispositionOfPlanItem(
   }
   return { state: 'open', carry, adoptedProjectId: null, expiresAt, timelinessClass };
 }
+function loadScoreSnapshotMap(database: DatabaseSync): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  try {
+    const rows = database.prepare("SELECT source_item_id, score_snapshot_json FROM daily_content_targets WHERE source_item_id IS NOT NULL").all() as Array<{source_item_id:string; score_snapshot_json:string}>;
+    for (const r of rows) { try { map.set(r.source_item_id, JSON.parse(r.score_snapshot_json)); } catch {} }
+  } catch {}
+  return map;
+}
+function enrichItemsWithScore(database: DatabaseSync, items: ProposalLedgerItem[]): void {
+  const scoreBySource = loadScoreSnapshotMap(database);
+  for (const it of items) {
+    for (const sid of it.sourceIds) { const v = scoreBySource.get(sid); if (v) { (it as unknown as Record<string, unknown>).scoreSnapshot = v; break; } }
+  }
+}
+
 
 function loadCarryMap(database: DatabaseSync): Map<string, CarryRow> {
   const map = new Map<string, CarryRow>();
@@ -159,6 +203,44 @@ function loadCarryMap(database: DatabaseSync): Map<string, CarryRow> {
   }
   return map;
 }
+function fetchAllLedgerRows(database: DatabaseSync, limit = 2000): Array<{
+  planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
+  whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
+  targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
+  structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
+  planningStatus: string; revision: number; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
+}> {
+  return database.prepare(`
+    SELECT pi.id AS planItemId, pi.title, pi.priority, pi.timeliness, pi.topic_id AS topicId,
+      pi.why_now AS whyNow, pi.angle, pi.point_of_view AS pointOfView, pi.source_ids_json AS sourceIds,
+      pi.target_audience AS targetAudience, pi.platforms_json AS platforms, pi.formats_json AS formats,
+      pi.title_guidance AS titleGuidance, pi.opening_guidance AS openingGuidance,
+      pi.structure_guidance AS structureGuidance, pi.effort_estimate AS effortEstimate,
+      pi.available_materials_json AS availableMaterials, pi.missing_materials_json AS missingMaterials,
+      pi.created_at AS createdAt, p.plan_date AS planDate,
+      pi.planning_status AS planningStatus, pi.revision AS revision,
+      pi.planning_provenance_json AS planningProvenanceJson, pi.score_reasons_json AS scoreReasonsJson
+    FROM plan_items pi
+    JOIN plans p ON p.id = pi.plan_id
+    WHERE p.id IN (
+      SELECT p2.id FROM plans p2
+      WHERE EXISTS (SELECT 1 FROM plan_items pi2 WHERE pi2.plan_id = p2.id)
+        AND p2.created_at = (
+          SELECT MAX(p3.created_at) FROM plans p3
+          WHERE p3.plan_date = p2.plan_date
+            AND EXISTS (SELECT 1 FROM plan_items pi3 WHERE pi3.plan_id = p3.id)
+        )
+    )
+    ORDER BY pi.priority ASC, p.plan_date DESC, pi.sort_order ASC
+    LIMIT ?
+  `).all(limit) as Array<{
+    planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
+    whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
+    targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
+    structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
+    planningStatus: string; revision: number; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
+  }>;
+}
 
 function buildProposalLedger(
   database: DatabaseSync,
@@ -169,10 +251,11 @@ function buildProposalLedger(
   const tab = input.tab ?? 'today';
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
   const offset = Math.max(0, Math.floor(input.offset ?? 0));
-  const rows = latestPlanItemRowsByDate(database, 2000);
+  const rows = fetchAllLedgerRows(database, 2000);
   const carryByFingerprint = loadCarryMap(database);
   const counts = emptyCounts();
   const openItems: OpportunityPoolItem[] = [];
+  const pendingScoringItems: OpportunityPoolItem[] = [];
   const terminalItems: ProposalLedgerItem[] = [];
   const newHours = 6;
 
@@ -192,13 +275,55 @@ function buildProposalLedger(
       carryByFingerprint
     );
 
-    const state: ProposalTab = disposition.state === 'open'
-      ? (row.planDate === input.planDate ? 'today' : 'shelved')
-      : disposition.state;
-    counts[state] += 1;
-    if (!withDetails) continue;
+    if (disposition.state !== 'open') {
+      const state: ProposalTab = disposition.state;
+      counts[state] += 1;
+      if (!withDetails) continue;
+      if (state !== tab) continue;
+      terminalItems.push({
+        planItemId: row.planItemId,
+        planDate: row.planDate,
+        createdAt: row.createdAt,
+        title: row.title,
+        priority: row.priority,
+        timeliness: row.timeliness,
+        timelinessClass: disposition.timelinessClass,
+        expiresAt: disposition.expiresAt,
+        topicId: row.topicId,
+        sourceIds,
+        whyNow: row.whyNow,
+        angle: row.angle,
+        pointOfView: row.pointOfView,
+        targetAudience: row.targetAudience,
+        platforms: parseSourceIds(row.platforms),
+        formats: parseSourceIds(row.formats),
+        titleGuidance: row.titleGuidance,
+        openingGuidance: row.openingGuidance,
+        structureGuidance: row.structureGuidance,
+        effortEstimate: row.effortEstimate,
+        availableMaterials: parseSourceIds(row.availableMaterials),
+        missingMaterials: parseSourceIds(row.missingMaterials),
+        trendEvidence: [],
+        state,
+        carry: disposition.carry,
+        adoptedProjectId: disposition.adoptedProjectId,
+        isNew: false,
+        planningStatus: row.planningStatus,
+        revision: row.revision,
+        planningProvenanceJson: row.planningProvenanceJson,
+        scoreReasonsJson: row.scoreReasonsJson
+      });
+      continue;
+    }
 
-    if (disposition.state === 'open') {
+    // Open disposition: split by scoring eligibility (SSOT)
+    const checkItem = { planning_status: row.planningStatus, score_reasons_json: row.scoreReasonsJson } as unknown;
+    const eligible = isScoredReadyForReview(checkItem);
+    const pending = isScoringPending(checkItem);
+    if (eligible) {
+      const state: ProposalTab = row.planDate === input.planDate ? 'today' : 'shelved';
+      counts[state] += 1;
+      if (!withDetails) continue;
       openItems.push({
         planItemId: row.planItemId,
         planDate: row.planDate,
@@ -224,19 +349,66 @@ function buildProposalLedger(
         trendEvidence: listXPostTrends(database, { sourceIds }),
         createdAt: row.createdAt,
         isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
+        planningStatus: row.planningStatus,
+        revision: row.revision,
+        planningProvenanceJson: row.planningProvenanceJson,
+        scoreReasonsJson: row.scoreReasonsJson,
         carry: disposition.carry
-          ? { id: disposition.carry.id, state: disposition.carry.state, revision: disposition.carry.revision }
+          ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
           : null,
         demotion: null
       });
+      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
+      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
+      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
+      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
+      continue;
+      pendingScoringItems.push({
+        planItemId: row.planItemId,
+        planDate: row.planDate,
+        title: row.title,
+        priority: row.priority,
+        timeliness: row.timeliness,
+        timelinessClass: disposition.timelinessClass,
+        expiresAt: disposition.expiresAt,
+        topicId: row.topicId,
+        sourceIds,
+        whyNow: row.whyNow,
+        angle: row.angle,
+        pointOfView: row.pointOfView,
+        targetAudience: row.targetAudience,
+        platforms: parseSourceIds(row.platforms),
+        formats: parseSourceIds(row.formats),
+        titleGuidance: row.titleGuidance,
+        openingGuidance: row.openingGuidance,
+        structureGuidance: row.structureGuidance,
+        effortEstimate: row.effortEstimate,
+        availableMaterials: parseSourceIds(row.availableMaterials),
+        missingMaterials: parseSourceIds(row.missingMaterials),
+        trendEvidence: listXPostTrends(database, { sourceIds }),
+        createdAt: row.createdAt,
+        isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
+        planningStatus: row.planningStatus,
+        revision: row.revision,
+        planningProvenanceJson: row.planningProvenanceJson,
+        scoreReasonsJson: row.scoreReasonsJson,
+        carry: disposition.carry
+          ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
+          : null,
+        demotion: null
+      });
+      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
+      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
+      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
+      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
       continue;
     }
-
-    if (state !== tab) continue;
-    terminalItems.push({
+    // Fallback open but neither eligible nor pending (should not happen): treat as pending for honesty
+    counts.scoring_pending += 1;
+    if (!withDetails) continue;
+    pendingScoringItems.push({
       planItemId: row.planItemId,
       planDate: row.planDate,
-      createdAt: row.createdAt,
       title: row.title,
       priority: row.priority,
       timeliness: row.timeliness,
@@ -256,12 +428,22 @@ function buildProposalLedger(
       effortEstimate: row.effortEstimate,
       availableMaterials: parseSourceIds(row.availableMaterials),
       missingMaterials: parseSourceIds(row.missingMaterials),
-      trendEvidence: [],
-      state,
-      carry: disposition.carry,
-      adoptedProjectId: disposition.adoptedProjectId,
-      isNew: false
+      trendEvidence: listXPostTrends(database, { sourceIds }),
+      createdAt: row.createdAt,
+      isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
+      planningStatus: row.planningStatus,
+      revision: row.revision,
+      planningProvenanceJson: row.planningProvenanceJson,
+      scoreReasonsJson: row.scoreReasonsJson,
+      carry: disposition.carry
+        ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
+        : null,
+      demotion: null
     });
+    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
+    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
+    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
+    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
   }
 
   if (!withDetails) {
@@ -279,7 +461,9 @@ function buildProposalLedger(
     counts.today = todayCount;
     counts.shelved = shelvedCount;
     const filtered = deduped.filter((item) => (tab === 'today' ? item.planDate === input.planDate : item.planDate < input.planDate));
-    const items: ProposalLedgerItem[] = filtered.slice(offset, offset + limit).map((item) => ({
+    const items: ProposalLedgerItem[] = filtered.slice(offset, offset + limit).map((item) => {
+      const meta = item as unknown as Record<string, unknown>;
+      return {
       planItemId: item.planItemId,
       planDate: item.planDate,
       createdAt: item.createdAt,
@@ -306,13 +490,66 @@ function buildProposalLedger(
       state: tab,
       carry: item.carry ? { ...item.carry, reason: null } : null,
       adoptedProjectId: null,
-      isNew: item.isNew
-    }));
+      isNew: item.isNew,
+      planningStatus: String(meta.__planningStatus ?? 'draft'),
+      revision: Number(meta.__revision ?? 1),
+      planningProvenanceJson: (meta.__provenance as string | null) ?? null,
+      scoreReasonsJson: (meta.__score as string | null) ?? null
+    };});
+    enrichItemsWithScore(database, items);
     return { tab, items, total: filtered.length, hasMore: offset + items.length < filtered.length, counts };
+  }
+
+  if (tab === 'scoring_pending') {
+    const deduped = dedupeOpenProposals(pendingScoringItems);
+    // Truthful count for scoring_pending is deduped length (avoid story duplicate inflating)
+    counts.scoring_pending = deduped.length;
+    const filtered = deduped.filter((item) => item.planDate === input.planDate);
+    // If current date has pending, show those; otherwise show all pending
+    const itemsSource = filtered.length ? filtered : deduped;
+    const items: ProposalLedgerItem[] = itemsSource.slice(offset, offset + limit).map((item) => {
+      const meta = item as unknown as Record<string, unknown>;
+      return {
+        planItemId: item.planItemId,
+        planDate: item.planDate,
+        createdAt: item.createdAt,
+        title: item.title,
+        priority: item.priority,
+        timeliness: item.timeliness,
+        timelinessClass: item.timelinessClass,
+        expiresAt: item.expiresAt,
+        topicId: item.topicId,
+        sourceIds: item.sourceIds,
+        whyNow: item.whyNow,
+        angle: item.angle,
+        pointOfView: item.pointOfView,
+        targetAudience: item.targetAudience,
+        platforms: item.platforms,
+        formats: item.formats,
+        titleGuidance: item.titleGuidance,
+        openingGuidance: item.openingGuidance,
+        structureGuidance: item.structureGuidance,
+        effortEstimate: item.effortEstimate,
+        availableMaterials: item.availableMaterials,
+        missingMaterials: item.missingMaterials,
+        trendEvidence: item.trendEvidence,
+        state: tab,
+        carry: item.carry ? { ...item.carry, reason: null } : null,
+        adoptedProjectId: null,
+        isNew: item.isNew,
+        planningStatus: String(meta.__planningStatus ?? 'draft'),
+        revision: Number(meta.__revision ?? 1),
+        planningProvenanceJson: (meta.__provenance as string | null) ?? null,
+        scoreReasonsJson: (meta.__score as string | null) ?? null
+      };
+    });
+    enrichItemsWithScore(database, items);
+    return { tab, items, total: itemsSource.length, hasMore: offset + items.length < itemsSource.length, counts };
   }
 
   terminalItems.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.priority - b.priority);
   const pageItems = terminalItems.slice(offset, offset + limit);
+  enrichItemsWithScore(database, pageItems);
   return {
     tab,
     items: pageItems,
@@ -324,6 +561,34 @@ function buildProposalLedger(
 
 export function getProposalLedger(database: DatabaseSync, input: ProposalLedgerInput): ProposalLedgerResult {
   return buildProposalLedger(database, input, true);
+}
+
+export function getProposalDetail(database: DatabaseSync, planItemId: string): ProposalDetail | null {
+  const ledger = buildProposalLedger(database, { planDate: '0000-00-00', tab: 'adopted', limit: 2000 }, true);
+  const all = fetchAllLedgerRows(database).find((row) => row.planItemId === planItemId);
+  if (!all) return null;
+  const page = buildProposalLedger(database, { planDate: all.planDate, tab: 'today', limit: 2000 }, true);
+  const terminalTabs: ProposalTab[] = ['shelved', 'adopted', 'dismissed', 'expired', 'scoring_pending'];
+  const item = page.items.find((entry) => entry.planItemId === planItemId)
+    ?? terminalTabs.flatMap((tab) => buildProposalLedger(database, { planDate: all.planDate, tab, limit: 2000 }, true).items).find((entry) => entry.planItemId === planItemId);
+  void ledger;
+  if (!item) return null;
+  const sourceIds = item.sourceIds;
+  const sources = sourceIds.length ? database.prepare(`SELECT id,title,author,canonical_url AS url,published_at AS publishedAt,
+    verification_status AS verificationStatus,revision FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')}) ORDER BY collected_at ASC`).all(...sourceIds) as ProposalDetail['sources'] : [];
+  const sourceDecisions = database.prepare(`SELECT source_id AS sourceId,source_revision AS sourceRevision,decision,
+    reason_code AS reasonCode,reason FROM plan_source_decisions WHERE plan_id=(SELECT plan_id FROM plan_items WHERE id=?) ORDER BY created_at,source_id`).all(planItemId) as ProposalDetail['sourceDecisions'];
+  let score: ProposalDetail['score'] = null;
+  try { score = JSON.parse(item.scoreReasonsJson || 'null'); } catch { score = null; }
+  const evidenceGaps: ProposalDetail['evidenceGaps'] = [];
+  const jobs = database.prepare("SELECT payload_json AS payloadJson FROM jobs WHERE kind='knowledge_reactivate_sources' AND status='succeeded' ORDER BY finished_at DESC LIMIT 100").all() as Array<{ payloadJson: string }>;
+  for (const row of jobs) {
+    try {
+      const payload = JSON.parse(row.payloadJson) as { sourceId?: string; currentSourceId?: string; evidenceGaps?: ProposalDetail['evidenceGaps'] };
+      if ((sourceIds.includes(payload.sourceId ?? '') || sourceIds.includes(payload.currentSourceId ?? '')) && Array.isArray(payload.evidenceGaps)) evidenceGaps.push(...payload.evidenceGaps);
+    } catch { /* malformed historical job is ignored */ }
+  }
+  return { item, sources, score, sourceDecisions, evidenceGaps };
 }
 
 export function summarizeProposalLedger(

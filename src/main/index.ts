@@ -9,11 +9,16 @@ import { readSettings } from './settings';
 import { startMcp, type McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
 import { refreshXhsRuntime, registerXhsIpc } from './ipc-xhs';
-import { stopManagedBrowsers, type BrowserRuntime } from './browser'; import { configureBrowserProfileRegistryPath, openBrowserProfileRegistry } from './browser-config';
+import { stopManagedBrowsers, type BrowserRuntime } from './browser';
+import { configureBrowserProfileRegistryPath, openBrowserProfileRegistry } from './browser-config';
 import { migratePiConfigToInstallation, readPiConfig, resolveRoleModelPolicySnapshot, resolveRolePiConfigChain, roleModelCandidateKey, savePiConfig, type ResolvedPiConfig } from './pi-config';
+import { registerDailyContentCycleIpc } from './ipc-daily-content-cycle.ts';
+import { registerDailyContentArticleIpc } from './ipc-daily-content-article.ts';
+import { registerContentDerivativeIpc } from './ipc-content-derivative.ts';
+import { registerDailyIterationIpc } from './ipc-daily-iteration.ts';
 import { startPiRuntimeWithFallback } from './pi-config-fallback';
-import { setSourceKnowledgeCompileDeps, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
-import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, type KnowledgeBackfillDeps } from './knowledge-backfill';
+import { setSourceKnowledgeCompileDeps, stopPersistentKnowledgeJobs, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
+import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, stopKnowledgeBackfillJobs, type KnowledgeBackfillDeps } from './knowledge-backfill';
 import { getMaintenanceRun, KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
@@ -51,8 +56,12 @@ import { decideDailyStartGate } from './daily-start-gate.ts';
 import { releaseDailyStageLock, tryAcquireDailyStageLock } from './daily-stage-lock.ts';
 import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { DailyScanScheduler } from './daily-scan-scheduler';
-import { hasEnabledDailySources } from './daily-intelligence-channels';
+import { DailyOrchestrationScheduler } from './daily-orchestration-scheduler.ts';
+import { createProductionDailyHandlers, orchestrateDailyContent, type DailyOrchestrationDeps, type OrchestrationContext, type OrchestrationMutationSpec } from './daily-orchestration.ts';
+import { dispatchBusinessCommand } from './business-command.ts';
 import { shanghaiDate } from './ferment';
+import { getTodayPlanExhaustion } from './workbench.ts';
+import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner, resumePendingInvestigationSupervisorReviews } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
@@ -111,6 +120,31 @@ async function uiCommandResult<T>(work: () => Promise<T>): Promise<{ ok: true; d
     return { ok: false, data: null, error: { code: typeof value?.code === 'string' ? value.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error), ...(value?.details ? { details: value.details } : {}) } };
   }
 }
+async function dispatchOrchestrationMutation<T>(runtime: ActiveWorkspaceRuntime, spec: OrchestrationMutationSpec<T>, context: OrchestrationContext): Promise<T> {
+  const actor = context.source === 'today'
+    ? ownerUiActor
+    : context.source === 'mcp'
+      ? { type: 'external_agent' as const, id: 'mcp', label: 'MCP' }
+      : { type: 'scheduler' as const, id: 'daily-orchestration', label: 'Daily Orchestration' };
+  const receipt = await dispatchBusinessCommand(runtime, {
+    command: spec.command,
+    requestId: randomUUID(),
+    actor,
+    input: { source: context.source, entityId: spec.entityId },
+    boundIdentity: {},
+    entityType: spec.entityType,
+    execute: () => {
+      const data = spec.execute();
+      return { data, entityId: spec.entityId, readback: data };
+    }
+  });
+  if (!receipt.ok) {
+    const error = receipt.error ?? { code: 'COMMAND_FAILED', message: 'Daily orchestration mutation failed.' };
+    throw Object.assign(new Error(error.message), { code: error.code, details: error.details });
+  }
+  return receipt.data as T;
+}
+
 async function withRuntimeWorker<T>(
   taskId: string | null,
   onEvent: (event: Record<string, unknown>) => void,
@@ -365,13 +399,19 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   // WMB-5230：注册存量高价值 Source 分批回溯编译依赖（同款编译管线；checkpoint 可恢复）。
   setKnowledgeBackfillDeps(createKnowledgeBackfillDeps(dataRoot.path));
   try {
+    // WMB-5337: build production handlers once per runtime; orchestrator reference stays stable for Today/MCP/scheduler dedup
+    productionDailyHandlers = createProductionDailyHandlers({
+      runMutation: (spec, context) => dispatchOrchestrationMutation(runtime, spec, context)
+    });
+    // keep stable orchestrator reference — it reads productionDailyHandlers by closure variable
+    if (!productionDailyOrchestrator) productionDailyOrchestrator = _stableProductionOrchestrator;
     await dispatchRecoverInterruptedPublications(runtime);
     await dispatchRecoverOrphanedXListOperations(runtime, activeXListOperationIds);
     await dispatchRecoverInterruptedAgentTasks(runtime);
 
     await dispatchRecoverRunningMetricJobs(runtime);
     await dispatchSchedulePublishedPublicationMetricJobs(runtime);
-    const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime);
+    const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime, productionDailyOrchestrator);
     runtime.setMcp(mcp);
     stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
     stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
@@ -512,8 +552,16 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     scanSchedulerRef?.stop();
     scanSchedulerRef = scanScheduler;
     scanScheduler.start();
-    // WMB-5216：统一 ChangeSet 提交后局部 Lint 触发注册 + 周期 Lint 走既有 jobs 表驱动。
-    registerKnowledgeChangeSetLintTrigger();
+    // WMB-5337: Daily orchestration scheduler (Asia/Shanghai daily timing, workspace-configurable persisted time, Today auto toggle)
+    orchestrationSchedulerRef?.stop();
+    orchestrationSchedulerRef = new DailyOrchestrationScheduler({
+      getDatabase: () => activeRuntime === runtime && runtime.isActive ? runtime.database : null,
+      getWorkspaceId: () => runtime.identity.workspaceId,
+      getDataRoot: () => dataRoot.path,
+      orchestrate: productionDailyOrchestrator ?? orchestrateDailyContent,
+      onError: (e) => console.error('[daily-orchestration-scheduler]', e)
+    });
+    orchestrationSchedulerRef.start();
     // WMB-5238：ChangeSet 提交后索引增量投影生产接线（动态导入 IndexStore；模块未就绪不阻断启动）。
     void installProductionWikiIndexProjection().catch((error) => {
       console.error('[wiki-index] production projection wiring failed', error);
@@ -530,12 +578,14 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
         console.error('[knowledge-backfill] startup backfill failed', error);
       });
     }
-    lintSchedulerRef?.stop();
+    await lintSchedulerRef?.stop();
+    lintSchedulerRef = null;
     lintSchedulerRef = new KnowledgeLintScheduler({ runtime, isCurrent: () => activeRuntime === runtime && runtime.isActive });
     lintSchedulerRef.start();
     // WMB-5236：全库维护调度器（单飞；重启后自动恢复 persisted running run 并继续；
     // 执行期间挂起滚动周期 Lint，避免双驱动同一 lint checkpoint；paused/completed/failed 恢复滚动 Lint）。
-    maintenanceSchedulerRef?.stop();
+    await maintenanceSchedulerRef?.stop();
+    maintenanceSchedulerRef = null;
     maintenanceSchedulerRef = new KnowledgeMaintenanceScheduler({
       runtime,
       deps: () => createMaintenanceDeps(dataRoot.path),
@@ -554,24 +604,23 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   } catch (error) {
     scanSchedulerRef?.stop();
     scanSchedulerRef = null;
-    lintSchedulerRef?.stop();
-    lintSchedulerRef = null;
-    maintenanceSchedulerRef?.stop();
-    maintenanceSchedulerRef = null;
-    mediaArchiveSchedulerRef?.stop();
-    mediaArchiveSchedulerRef = null;
-    sourceBodyArchiveSchedulerRef?.stop();
-    sourceBodyArchiveSchedulerRef = null;
-    if (activeRuntime === runtime) activeRuntime = null;
-    setSourceKnowledgeCompileDeps(null);
-    setKnowledgeBackfillDeps(null);
+    orchestrationSchedulerRef?.stop();
+    orchestrationSchedulerRef = null;
+    await stopPersistentKnowledgeJobs();
+    await stopKnowledgeBackfillJobs();
     await stopKnowledgeCompileModel().catch(() => {});
     await runtime.stop({ drain: false }).catch(() => {});
     throw error;
   }
 }
 type TimerHandle = ReturnType<typeof setInterval>;
-let scanSchedulerRef: DailyScanScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null, stopMediaGovernanceScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null; let maintenanceSchedulerRef: KnowledgeMaintenanceScheduler | null = null; let mediaArchiveSchedulerRef: MediaArchiveScheduler | null = null; let sourceBodyArchiveSchedulerRef: SourceBodyArchiveScheduler | null = null;
+let scanSchedulerRef: DailyScanScheduler | null = null; let orchestrationSchedulerRef: DailyOrchestrationScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null, stopMediaGovernanceScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null; let maintenanceSchedulerRef: KnowledgeMaintenanceScheduler | null = null; let mediaArchiveSchedulerRef: MediaArchiveScheduler | null = null; let sourceBodyArchiveSchedulerRef: SourceBodyArchiveScheduler | null = null;
+// WMB-5337 shared production orchestrator (stable reference reused across scheduler/Today/MCP for in-flight dedup)
+let productionDailyHandlers: DailyOrchestrationDeps | null = null;
+const _stableProductionOrchestrator: typeof orchestrateDailyContent = (input) => orchestrateDailyContent(input, productionDailyHandlers ?? ({} as DailyOrchestrationDeps));
+let productionDailyOrchestrator: typeof orchestrateDailyContent | null = _stableProductionOrchestrator;
+export function _getProductionDailyOrchestratorForTest(): typeof productionDailyOrchestrator { return productionDailyOrchestrator; }
+export function _getProductionDailyHandlersForTest(): typeof productionDailyHandlers { return productionDailyHandlers; }
 async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
   const dataRootPath = runtime?.identity.rootPath;
@@ -670,7 +719,24 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
-  stopRuntime: async () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null; mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null; sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null; const runtime = activeRuntime; try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; } },
+  stopRuntime: async () => {
+    scanSchedulerRef?.stop(); scanSchedulerRef = null;
+    orchestrationSchedulerRef?.stop(); orchestrationSchedulerRef = null;
+    productionDailyOrchestrator = null; productionDailyHandlers = null;
+    lintSchedulerRef?.stop(); lintSchedulerRef = null;
+    await maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null;
+    mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null;
+    sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null;
+    if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; }
+    stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null;
+    stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null;
+    stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null;
+    await stopPersistentKnowledgeJobs();
+    await stopKnowledgeBackfillJobs();
+    await stopKnowledgeCompileModel().catch(() => {});
+    const runtime = activeRuntime;
+    try { await runtime?.stop({ drain: false }); } finally { if (activeRuntime === runtime) activeRuntime = null; }
+  },
   relaunch: async (dataRoot) => {
     // Packaged/acceptance: full process relaunch. Dev: soft runtime refresh keeps Vite alive.
     if (!dataRoot || app.isPackaged || process.env.WMB_ACCEPTANCE_USER_DATA) { app.relaunch(); app.quit(); return; }
@@ -690,7 +756,21 @@ const desktopLifecycle = createDesktopLifecycle({
   defaultBrowserProfileId,
   getActiveRuntime: () => activeRuntime,
   clearActiveRuntime: (runtime) => { if (activeRuntime === runtime) activeRuntime = null; },
-  stopBackgroundWork: () => { scanSchedulerRef?.stop(); scanSchedulerRef = null; lintSchedulerRef?.stop(); lintSchedulerRef = null; maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null; mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null; sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null; if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; } stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null; stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null; stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null; },
+  stopBackgroundWork: async () => {
+    scanSchedulerRef?.stop(); scanSchedulerRef = null;
+    orchestrationSchedulerRef?.stop(); orchestrationSchedulerRef = null;
+    productionDailyOrchestrator = null; productionDailyHandlers = null;
+    lintSchedulerRef?.stop(); lintSchedulerRef = null;
+    await maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null;
+    mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null;
+    sourceBodyArchiveSchedulerRef?.stop(); sourceBodyArchiveSchedulerRef = null;
+    if (orphanSweepTimer) { clearInterval(orphanSweepTimer); orphanSweepTimer = null; }
+    stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = null;
+    stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = null;
+    stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = null;
+    await stopPersistentKnowledgeJobs();
+    await stopKnowledgeBackfillJobs();
+  },
   abortPi: async () => { if (currentPi()?.isActive) await currentPi()?.abortTurn().catch(() => {}); },
   setShuttingDown: (value) => { shuttingDown = value; },
   restoreWindow: () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }, isShuttingDown: () => shuttingDown,
@@ -1025,12 +1105,21 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
           error: null
         };
       } catch (managerError) {
+        const pendingCode = (managerError as unknown as { code?: string })?.code;
+        if (pendingCode === 'PENDING_REVIEW') {
+          return { ok: false, data: null, error: { code: 'PENDING_REVIEW', message: (managerError as Error).message } };
+        }
         console.error('[manager-dispatch]', managerError);
         // Fail closed to manager path only if serial focus; otherwise continue legacy with warning.
       }
     }
 
     const active = getActiveDailyIntelligenceTask(runtime.database, businessDate);
+    // Pending review (draft/ready) blocks new root collection on same date; exhausted (all rejected) explicitly allows.
+    const legacyExhaustion = getTodayPlanExhaustion(runtime.database, businessDate);
+    if (legacyExhaustion.hasPlan && legacyExhaustion.unresolved > 0 && !legacyExhaustion.isExhausted) {
+      return { ok: false, data: null, error: { code: 'PENDING_REVIEW', message: `本轮有 ${legacyExhaustion.unresolved} 条选题等待确认；确认完成后再开始下一轮。` } };
+    }
     const previous = getLatestDailyIntelligenceTask(runtime.database, businessDate);
     const runKey = dailyRunKey(dataRoot.path, businessDate);
     const gate = decideDailyStartGate({
@@ -1119,7 +1208,7 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
     broadcastPiEvent({ type: 'agent_task', task });
     return { ok: true, data: { task, reused: Boolean(active) }, error: null };
   });
-  ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string }) => {
+  ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string; brief?: string; researchMode?: string; research_mode?: string }) => {
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
     if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
@@ -1132,19 +1221,24 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
       && investigation.direction
       && ['ready_to_write', 'writing', 'completed'].includes(investigation.status)
     );
+    const rawMode = (input as unknown as { researchMode?: string; research_mode?: string }).researchMode ?? (input as unknown as { researchMode?: string; research_mode?: string }).research_mode;
+    const briefVal = (input as unknown as { brief?: string }).brief;
+    const researchMode = typeof rawMode === 'string' ? rawMode : undefined;
     broadcastPiEvent({ type: 'starting' });
     try {
       const result = await withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startStudioDraft({
         dataRootPath: dataRoot.path,
         businessDate: input.businessDate,
         projectId: input.projectId,
+        brief: briefVal,
         mcpUrl: mcp.url,
         xhsMcpUrl: currentXhs()?.getUrl() || '',
         researchReady,
+        // @ts-ignore researchMode passthrough for WMB-5347 writer research mode (type pending update)
+        researchMode: researchMode as 'auto' | 'required' | 'prohibited' | undefined,
         activeRuntime: runtime,
         ...hooks
       }));
-      broadcastPiEvent({ type: 'agent_task', task: result.task });
       broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
       return { ok: true, data: result, error: null };
     } catch (error) {
@@ -1189,7 +1283,13 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
   setDeskJobNotifyBridges({ getPi: currentPi, getRuntime: () => activeRuntime });
   registerExecutionGrantIpc(ipcMain, () => activeRuntime);
   registerPublishingResultsIpc({ getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('发布浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); } });
- registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals, getActiveRuntime: () => activeRuntime }); registerXListIpc({ loadSelectedDataRoot, getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('X 浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); }, wakeObservationScheduler: () => activeRuntime?.getScheduler<XObservationScheduler>()?.wake() }); registerXhsIpc({ loadSelectedDataRoot, getXhs: currentXhs, setXhs: (runtime) => { activeRuntime?.setXhs(runtime); }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, currentXhs()) });
+  registerDailyContentCycleIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime, dailyOrchestrator: productionDailyOrchestrator ?? undefined } as never);
+  registerDailyContentArticleIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
+  registerDailyIterationIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
+  registerContentDerivativeIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
+  registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelProposals, getActiveRuntime: () => activeRuntime });
+  registerXListIpc({ loadSelectedDataRoot, getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('X 浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); }, wakeObservationScheduler: () => activeRuntime?.getScheduler<XObservationScheduler>()?.wake() });
+  registerXhsIpc({ loadSelectedDataRoot, getXhs: currentXhs, setXhs: (runtime) => { activeRuntime?.setXhs(runtime); }, refreshXhs: (dataRoot) => refreshXhsRuntime(dataRoot, currentXhs()) });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

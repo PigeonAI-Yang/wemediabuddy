@@ -49,7 +49,7 @@ import { getSource, type SourceRecord } from './sources.ts';
 import { getSourceBodyCache } from './source-body-cache.ts';
 import { compileSourceKnowledge } from './knowledge-compiler.ts';
 import { generateKnowledgeCandidatePlan, type KnowledgeCandidatesModelCall } from './knowledge-candidates.ts';
-import { knowledgeCompileTopicRequestId } from './knowledge-compile-trigger.ts';
+import { enqueueKnowledgeRouteJob, knowledgeCompileTopicRequestId, wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
 
 export const KNOWLEDGE_BACKFILL_COMMAND = 'knowledge.backfill';
 export const KNOWLEDGE_BACKFILL_ACTOR_LABEL = 'knowledge-backfill';
@@ -101,14 +101,14 @@ export function evaluateBackfillSource(row: BackfillSourceRow): BackfillSourceEv
   if (row.verificationStatus === 'rejected') {
     return Object.freeze({ eligible: false, signals: Object.freeze(signals), bodyKind, skipReason: 'rejected' as const });
   }
-  if (row.hasActiveTopic !== 1) {
-    return Object.freeze({ eligible: false, signals: Object.freeze(signals), bodyKind, skipReason: 'no_active_topic' as const });
-  }
   if (bodyKind === 'none') {
     return Object.freeze({ eligible: false, signals: Object.freeze(signals), bodyKind, skipReason: 'weak_material' as const });
   }
   if (signals.length === 0) {
     return Object.freeze({ eligible: false, signals: Object.freeze(signals), bodyKind, skipReason: 'no_value_signal' as const });
+  }
+  if (row.hasActiveTopic !== 1) {
+    return Object.freeze({ eligible: false, signals: Object.freeze(signals), bodyKind, skipReason: 'no_active_topic' as const });
   }
   return Object.freeze({ eligible: true, signals: Object.freeze(signals), bodyKind, skipReason: null });
 }
@@ -468,11 +468,15 @@ async function processSource(
     const skipStatus: BackfillSourceStatus = evaluation.skipReason === 'no_active_topic'
       ? 'skipped_no_topic'
       : (evaluation.skipReason === 'weak_material' || evaluation.skipReason === 'rejected') ? 'skipped_weak' : 'skipped_no_signal';
+    if (evaluation.skipReason === 'no_active_topic') {
+      enqueueKnowledgeRouteJob(database, { sourceId, revision });
+      wakePersistentKnowledgeJobs();
+    }
     return Object.freeze({
       outcome: Object.freeze({ sourceId, revision, status: skipStatus, signals: evaluation.signals, topics: Object.freeze([]) }),
       broadcast: false,
       retry: false,
-      processed: false
+      processed: evaluation.skipReason === 'no_active_topic'
     });
   }
 
@@ -738,6 +742,12 @@ function state(): BackfillState {
 
 export function setKnowledgeBackfillDeps(deps: KnowledgeBackfillDeps | null): void {
   state().deps = deps;
+}
+
+/** 停止接收新的全局回溯调度，并等待当前批次完成后再允许关闭/切换数据根。 */
+export async function stopKnowledgeBackfillJobs(): Promise<void> {
+  state().deps = null;
+  await drainKnowledgeBackfillQueue();
 }
 
 export function getKnowledgeBackfillDeps(): KnowledgeBackfillDeps | null {

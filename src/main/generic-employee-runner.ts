@@ -27,9 +27,11 @@ import {
   normalizeSourceIds,
   readbackContentVersion,
   readbackLibraryMutation,
+  readbackPlanItemReady,
   readbackPlansRevision,
   readbackScanPhase,
   readbackXiaohongshuPlatformVersion,
+  readbackVideoScript,
   roleFailureCode,
   type JobExecutionOutcome,
   type JobObjectBoundary,
@@ -63,10 +65,12 @@ function successCodeFor(readback: RoleJobReadbackV1): string {
     case 'plans_revision': return 'PLANS_REVISION';
     case 'content_version': return 'CONTENT_VERSION';
     case 'xiaohongshu_platform_version': return 'XIAOHONGSHU_PLATFORM_VERSION';
+    case 'video_script': return 'VIDEO_SCRIPT_VERSION';
     case 'sources_mutated': return 'SOURCES_MUTATED';
     case 'topic_maintenance_proposed': return 'TOPIC_MAINTENANCE_PROPOSED';
     case 'noop_confirmed': return 'NOOP_CONFIRMED';
     case 'research_evidence': return 'RESEARCH_EVIDENCE';
+    case 'plan_item_ready': return 'PLAN_ITEM_READY_FOR_REVIEW';
   }
 }
 
@@ -89,18 +93,27 @@ export function createGenericEmployeeRunner(
       console.error('[generic-employee-runner] MCP unavailable');
       return failedOutcome(JOB_ERROR_CODES.MCP_UNAVAILABLE, 'MCP 不可用');
     }
-    if (aborted(ctx.signal)) return cancelledOutcome();
-
     const roleId = ctx.job.roleId;
     // WMB-5141：优先使用 spawn 原始请求（保留 channelIds/sourceFeedIds/sourceIds/scope），
-    // 无合同任务（测试直连 ctx）回落 JobRecord 重建。
+    // 无合同任务（测试直连 ctx）回落 JobRecord 重建；planner 需保留 planItemId 以维持 exact 锁与 readback。
+    const fallbackPlanItemId = (() => {
+      const jobAny = ctx.job as unknown as Record<string, unknown>;
+      const direct = jobAny['planItemId'];
+      if (typeof direct === 'string' && direct.trim()) return direct.trim();
+      const locks = jobAny['resourceLocks'];
+      if (Array.isArray(locks) && typeof locks[0] === 'string' && (locks[0] as string).startsWith('plan-item:')) {
+        const tail = (locks[0] as string).split(':').pop();
+        if (tail && tail.trim()) return tail.trim();
+      }
+      return null;
+    })();
     const request: RoleJobRequest = ctx.request ?? (roleId === 'writer'
       ? { roleId, brief: ctx.job.brief, projectId: ctx.job.projectId ?? '', writerTask: ctx.job.writerTask ?? 'core_draft', businessDate: ctx.job.businessDate }
       : roleId === 'librarian'
         ? { roleId, brief: ctx.job.brief }
         : roleId === 'reporter'
           ? { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate }
-          : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate });
+          : { roleId, brief: ctx.job.brief, businessDate: ctx.job.businessDate, planItemId: fallbackPlanItemId });
     const spec = deriveRoleJobSpec(request, runtime.identity.workspaceId);
     const sessionStartedAt = new Date().toISOString();
 
@@ -182,9 +195,9 @@ export function createGenericEmployeeRunner(
         ctx.onTaskBound?.(run.task.id, null);
       }
       const outcome = await assembleOutcome(ctx, spec, run, sessionStartedAt);
-      // librarian 的 agent_task 终态由 runner 在 lease 仍绑定 task 时统一写入（§6 step 7）；
-      // reporter/planner/writer 的 agent_task 终态已由领域原语写入。
-      if (spec.policy === 'organize') {
+      // librarian 与 targeted planner 的 agent_task 终态由 runner 在 lease 仍绑定时统一写入（§6 step 7）；
+      // reporter/planner daily/writer 的 agent_task 终态已由领域原语写入；targeted planner 需 honest 终端（无 fake succeeded）。
+      if (spec.policy === 'organize' || spec.readback === 'plan_item_ready') {
         await writeAgentTaskTerminal(ctx, outcome, run.task.id);
       }
       return outcome;
@@ -387,9 +400,11 @@ async function readbackFor(ctx: JobExecuteContext, spec: RoleJobSpec, run: Emplo
     case 'plans_revision':
       return readbackPlansRevision(db, spec.businessDate, task.id);
     case 'content_version':
-      return readbackContentVersion(db, spec.projectId ?? '');
+      return readbackContentVersion(db, spec.projectId ?? '', task.id);
     case 'xiaohongshu_platform_version':
       return readbackXiaohongshuPlatformVersion(db, spec.projectId ?? '');
+    case 'video_script':
+      return readbackVideoScript(db, spec.projectId ?? '');
     case 'library_mutation':
       // WMB-5121 §8.3：传策略捕获的内存末条文本（免读文件），未捕获时 readbackLibraryMutation 读会话文件兜底。
       return readbackLibraryMutation(db, task.id, sessionStartedAt, ctx.sessionFile, run.finalAssistantText);
@@ -397,7 +412,18 @@ async function readbackFor(ctx: JobExecuteContext, spec: RoleJobSpec, run: Emplo
       // WMB-5173：research 读回 = EvidencePack 已落盘（WMB-5172 执行器写 result_refs_json）；
       // 无证据即 null，走既有 JOB_READBACK_MISSING 保守失败，不伪造成功。
       return researchEvidenceReadback(task);
+    case 'plan_item_ready': {
+      // Targeted planner 精确项读回：必须是 plan_items.planning_status=ready_for_review 的 exact planItemId。
+      // 优先 Pi 会话捕获的 readback（若有），否则查库；task 仍 running 也允许 succeeded 读回（Pi 已提交）。
+      const pid = spec.planItemId;
+      if (!pid) return null;
+      if (run.readback && run.readback.kind === 'plan_item_ready' && (run.readback as unknown as { planItemId: string }).planItemId === pid) {
+        return run.readback;
+      }
+      return readbackPlanItemReady(db, pid);
+    }
   }
+  return null;
 }
 
 /** research 任务读回：result_refs_json 的 EvidencePack 是业务证据（缺 → null 保守失败）。 */

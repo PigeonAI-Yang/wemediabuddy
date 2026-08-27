@@ -1,10 +1,12 @@
 import type { ContentProjectDetail } from '../main/content';
 import type { TodayPlanItem, TodaySource } from '../main/workbench';
+import type { ProposalDetail, ProposalLedgerResult } from '../main/proposals';
 import type { XListBinding, XListOperation, XListOperationKind } from '../main/x-lists';
 import type { CommandResult } from '../main/result';
 import type { CommandReceiptV1 } from '../main/command-dispatcher';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from '../main/workspace-proposals';
 import type { IntelligenceChannelsSummary, IntelligenceModule, SourceScanReceipt, WebsiteTrialRead } from '../main/intelligence-channels';
+import type { ZhihuTopicCategory, ZhihuTopicCategoryRead, ZhihuTopicCategorySnapshot } from '../main/zhihu-hot-channel';
 import type { WebsiteCandidate } from '../main/website-channel';
 import type { XListResolution } from '../main/x-list-channel';
 import type { ChannelProposalInput, IntelligenceChannelProposal, IntelligenceChannelProposalBinding } from '../main/intelligence-channel-proposals';
@@ -99,6 +101,15 @@ declare global {
           items: Array<{ rank: number; name: string; url: string; description: string; language: string; stars: string; gained: string }>;
         }>;
       } | null>;
+      listZhihuHotObservations(limit?: number): Promise<{
+        businessDate: string | null;
+        collectedAt: string | null;
+        sourceUrl: string;
+        items: Array<{ sourceItemId: string; rank: number; title: string; url: string; heatText: string | null; excerpt: string | null; collectedAt: string }>;
+        latestScan: { status: 'succeeded' | 'failed' | 'needs_user'; checkedAt: string; errorMessage: string | null } | null;
+      }>;
+      readZhihuHotCategory(category?: ZhihuTopicCategory, limit?: number): Promise<ZhihuTopicCategoryRead>;
+      refreshZhihuHotCategory(category?: ZhihuTopicCategory, limit?: number): Promise<{ category: ZhihuTopicCategory; status: 'succeeded' | 'failed' | 'needs_user'; receipt: SourceScanReceipt; snapshot: ZhihuTopicCategoryRead }>;
       getIntelligenceChannels(): Promise<{ summary: IntelligenceChannelsSummary; receipts: SourceScanReceipt[] }>;
       resolveWebsiteCandidates(input: { inputText: string }): Promise<WebsiteCandidate[]>;
       trialReadWebsite(input: { url: string }): Promise<WebsiteTrialRead>;
@@ -374,23 +385,9 @@ declare global {
       startDailyIntelligence(input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'>; legacyPipeline?: boolean }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       startStudioDraft(input: { businessDate: string; projectId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; phase: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
       startResultsReview(input: { businessDate: string; publicationId: string }): Promise<{ ok: boolean; data: { task: { id: string; status: string; errorMessage: string | null }; reused: boolean } | null; error: { code: string; message: string } | null }>;
-      getProposalLedger(input: { planDate: string; tab?: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired'; limit?: number; offset?: number }): Promise<{
-        tab: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
-        items: Array<{
-          planItemId: string; planDate: string; createdAt: string; title: string; priority: number;
-          timeliness: string | null; timelinessClass: 'breaking' | 'hot' | 'evergreen'; expiresAt: string | null;
-          topicId: string | null; sourceIds: string[]; whyNow: string; angle: string; pointOfView: string;
-          targetAudience: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string;
-          structureGuidance: string; effortEstimate: string; availableMaterials: string[]; missingMaterials: string[];
-          trendEvidence: TodayPlanItem['trendEvidence'];
-          state: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired';
-          carry: { id: string; state: string; revision: number; reason: string | null } | null;
-          adoptedProjectId: string | null; isNew: boolean;
-        }>;
-        total: number; hasMore: boolean;
-        counts: { today: number; shelved: number; adopted: number; dismissed: number; expired: number };
-      } | null>;
+      getProposalLedger(input: { planDate: string; tab?: 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired'; limit?: number; offset?: number }): Promise<ProposalLedgerResult | null>;
       getProposalLedgerSummary(planDate: string): Promise<{ today: number; shelved: number; adopted: number; dismissed: number; expired: number } | null>;
+      getProposalDetail(planItemId: string): Promise<ProposalDetail | null>;
       getToday(planDate: string): Promise<{
         sources: TodaySource[];
         sourcesTotal: number;
@@ -423,10 +420,13 @@ declare global {
           trendEvidence: TodayPlanItem['trendEvidence'];
           createdAt: string;
           isNew: boolean;
+          planningStatus: string | null;
+          revision: number | null;
+          planningProvenanceJson: string | null;
+          scoreReasonsJson: string | null;
           carry: { id: string; state: string; revision: number } | null;
           demotion: { publishedAt: string; platform: string } | null;
         }>;
-        pendingActions: string[];
         topicMaintenance: { pending: number };
         fermenting: {
           items: Array<{
@@ -476,6 +476,13 @@ declare global {
           topics: Array<{ topicId: string; title: string; activeCount: number; watchingCount: number; latestTitle: string | null; fermentedDays: number }>;
           pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
         };
+      } | null>;
+      getTodayOverviewMetrics(planDate: string): Promise<{
+        updatedAt: string;
+        sources: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+        opportunities: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+        projects: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null>; pending: number | null };
+        publications: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
       } | null>;
       getAgentsRoster(input?: { businessDate?: string }): Promise<Array<{ roleId: string; labelZh: string; roomZh: string; status: 'idle' | 'running' | 'blocked' | 'unknown'; summary: string; taskId: string | null; intent: string | null; phase: string | null; progressLabel: string | null; progressRatio: number | null; createdAt: string | null; updatedAt: string | null; finishedAt: string | null; writeCommandCount: number; instances: CrewInstance[] }>>;
       getCrewInstanceProjection(): Promise<CrewProjection>;
@@ -527,6 +534,11 @@ declare global {
       dismissPlanItem(input: { planItemId: string; reason?: string }): Promise<any>;
       restoreProposal(input: { planItemId: string; reason?: string }): Promise<any>;
       createProjectFromPlanItem(planItemId: string): Promise<{ id: string; revision: number; created: boolean }>;
+      requestPlanItem(input: { planItemId: string; requestId?: string }): Promise<{ planItemId: string; taskId: string; jobId: string; reused: boolean }>;
+      approvePlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<unknown>;
+      rejectPlanItem(input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }): Promise<unknown>;
+      reworkPlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<unknown>;
+      advancePlanItem(input: { planItemId: string; requestId?: string }): Promise<{ projectId: string; role: 'reporter' | 'writer'; jobId: string | null; taskId: string | null; reusedProject: boolean; reusedJob: boolean }>;
       getStudio(): Promise<Array<{
         id: string;
         title: string;
@@ -575,6 +587,18 @@ declare global {
       }): Promise<{ ok: boolean; data: ContentProjectDetail | null; error: { code: string; message: string } | null }>;
       saveStudioCore(input: { projectId: string; title: string; body: string; expectedRevision: number; mediaBindings?: ContentMediaBindingDraft[] }): Promise<{ ok: boolean; data: unknown; error: { code: string; message: string } | null }>;
       saveStudioPlatform(input: { projectId: string; contentVersionId: string; platform: 'x' | 'xiaohongshu' | 'wechat' | 'zhihu'; format: string; title?: string; body: string; assetIds?: string[]; mediaBindings?: PlatformMediaBindingDraft[]; cropPayloads?: PlatformCropPayload[]; clipPayloads?: PlatformClipPayload[]; expectedRevision?: number; versionId?: string }): Promise<{ ok: boolean; data: { id: string; revision: number } | null; error: { code: string; message: string } | null }>;
+      ensureContentDerivative(projectId: string, requestId?: string): Promise<unknown>;
+      saveDerivativeVersion(input: { projectId: string; sourceContentVersionId: string; title: string; body: string; formatDecisionJson?: string; author?: string; requestId?: string }): Promise<unknown>;
+      finalizeDerivativeVersion(input: { projectId: string; expectedLatestVersionNumber?: number | null; requestId?: string }): Promise<unknown>;
+      getStudioDualProjection(projectId: string): Promise<{
+        projectId: string;
+        article: { latestVersionId: string | null; status: string | null; versionCount: number; versions: Array<{ id: string; version_number: number; created_at: string; author: string }> };
+        derivative: { id: string | null; latestVersion: Record<string, unknown> | null; versions: Record<string, unknown>[]; isStale: boolean; readiness: string; formatDecision: Record<string, unknown> | null };
+        compare: { articleVersionId: string | null; scriptSourceVersionId: string | null; isAligned: boolean };
+        readiness: string;
+        isStale: boolean;
+      }>;
+      getStudioDerivative(projectId: string): Promise<unknown>;
       listStudioAssets(projectId: string): Promise<Array<{
         id: string;
         relativePath: string;
@@ -585,8 +609,11 @@ declare global {
         width: number | null;
         height: number | null;
         durationMs: number | null;
-        createdAt: string;
       }>>;
+      ensureDraftIteration(input: { businessDate: string; projectId: string; predecessorContentVersionId: string; predecessorTargetId?: string | null; requestId?: string }): Promise<{ ok: boolean; data: Record<string, unknown> | null; error: { code: string; message: string } | null }>;
+      ensurePublishedIteration(input: { businessDate: string; projectId: string; predecessorPublicationId: string; predecessorContentVersionId: string; requestId?: string }): Promise<{ ok: boolean; data: Record<string, unknown> | null; error: { code: string; message: string } | null }>;
+      createIterationVersion(input: { projectId: string; predecessorContentVersionId: string; body?: string; requestId?: string }): Promise<{ ok: boolean; data: Record<string, unknown> | null; error: { code: string; message: string } | null }>;
+      getYesterdayIteration(businessDate: string): Promise<{ cycle: Record<string, unknown> | null; draftIterations: Array<Record<string, unknown>>; publishedIterations: Array<Record<string, unknown>> }>;
       // WMB-5210 M1 知识飞轮边界（通道/类型见 src/shared/knowledge-flywheel.ts；入参透传，main boundary 校验）。
       submitKnowledgeChangeSet(input: KnowledgeChangeSetApplyInput): Promise<KnowledgeChangeSetApplyResult>;
       listKnowledgeEntities(input?: KnowledgeEntityReadFilter): Promise<KnowledgeFlywheelListResult<KnowledgeEntityRecord>>;

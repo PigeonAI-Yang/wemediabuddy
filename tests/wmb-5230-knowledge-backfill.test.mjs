@@ -28,6 +28,7 @@ const {
   setKnowledgeBackfillDeps,
   getKnowledgeBackfillDeps,
   scheduleKnowledgeBackfill,
+  stopKnowledgeBackfillJobs,
   drainKnowledgeBackfillQueue,
   knowledgeBackfillInFlight
 } = await import('../src/main/knowledge-backfill.ts');
@@ -543,6 +544,48 @@ test('WMB-5230 scheduler surface: set deps, bounded startup batch, drain, teardo
       await drainKnowledgeBackfillQueue();
     }
   } finally {
+    try { database?.close(); } catch {}
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// ============ H. 关闭边界：解绑依赖后等待在飞回溯批次 ============
+
+test('WMB-5358 backfill teardown waits for an in-flight batch before disabling future wakes', async () => {
+  const root = await makeRoot('wmb-5358-backfill-teardown-');
+  let database;
+  try {
+    ({ database } = await makeDatabase(root));
+    const topic = seedTopic(database, '关闭边界主题');
+    const source = seedSource(database, { title: 'src-teardown', verificationStatus: 'verified' });
+    linkTopic(database, source.id, topic.id);
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let started = false;
+    const deps = {
+      databasePath: path.join(root, 'wmb.db'),
+      openDatabase: migrateDatabase,
+      compileSource: async ({ topics }) => {
+        started = true;
+        await gate;
+        return { topics: topics.map((item) => ({ ...item, result: 'ok' })) };
+      }
+    };
+    setKnowledgeBackfillDeps(deps);
+    assert.equal(scheduleKnowledgeBackfill(), true);
+    while (!started) await new Promise((resolve) => setTimeout(resolve, 5));
+
+    let stopped = false;
+    const stopping = stopKnowledgeBackfillJobs().then(() => { stopped = true; });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(stopped, false, '关闭必须等待在飞回溯批次完成');
+    release();
+    await stopping;
+    assert.equal(stopped, true);
+    assert.equal(getKnowledgeBackfillDeps(), null, '关闭后不再接受新的全局唤醒');
+    assert.equal(knowledgeBackfillInFlight(), 0);
+  } finally {
+    await stopKnowledgeBackfillJobs();
     try { database?.close(); } catch {}
     await rm(root, { recursive: true, force: true });
   }

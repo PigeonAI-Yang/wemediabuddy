@@ -3,6 +3,7 @@ import { listFermentingBundle, shanghaiDate, type FermentingBundle } from './fer
 import { listWatchingSources } from './knowledge.ts';
 import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
+import { listReactivatedEvidencePacks, type ReactivatedEvidencePack } from './knowledge-reactivation.ts';
 
 export type BriefIdentity = {
   displayName: string;
@@ -65,6 +66,9 @@ export type EditorialBrief = {
     watching: BriefWatchingSource[];
     fermenting: FermentingBundle;
     trends: XPostTrend[];
+  };
+  continuity: {
+    reactivated: readonly ReactivatedEvidencePack[];
   };
   increment: {
     watermark: string | null;
@@ -165,9 +169,22 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   const trends = listXPostTrends(database, { limit: 20 });
 
   const since = watermark ?? new Date(now.getTime() - fallbackHours * 3_600_000).toISOString();
-  // 最新优先：截断时保留最新资料（旧实现升序截断会把最新资料丢掉）。
-  // 有效资料库口径：增量只读未移出（archived）资料；被判不相关的条目不进增量、只进透明计数行。
-  const incrementRows = database.prepare(`
+  // Editorial signal quota: guarantee bounded demand/social signals before filling recent rows.
+  // Signals are real questions/comments/controversy where represented (current schema: categories_json contains signal_only/demand/question)
+  // and retain trust labels (never promoted to primary evidence). No source-specific hardcoding.
+  const SIGNAL_QUOTA = Math.min(10, Math.max(4, Math.floor(sourceLimit * 0.17))); // ~17% for 60 → 10, bounded
+  const signalRows = database.prepare(`
+    SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
+      collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
+      timeliness, priority
+    FROM source_items
+    WHERE collected_at > ? AND management_status != 'archived'
+      AND (categories_json LIKE '%signal_only%' OR categories_json LIKE '%demand%' OR categories_json LIKE '%question%' OR categories_json LIKE '%controversy%')
+    ORDER BY collected_at DESC
+    LIMIT ?
+  `).all(since, SIGNAL_QUOTA) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
+  // Recent rows including potential overflow for deduplication
+  const recentRows = database.prepare(`
     SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
       collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
       timeliness, priority
@@ -176,12 +193,23 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
     ORDER BY collected_at DESC
     LIMIT ?
   `).all(since, sourceLimit + 1) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
-  const truncated = incrementRows.length > sourceLimit;
-  const sources: BriefIncrementSource[] = incrementRows.slice(0, sourceLimit).reverse().map((row) => ({
+  // Merge: guaranteed signals first, then fill with recent not already included
+  const signalIds = new Set(signalRows.map((r) => r.id));
+  const filteredRecent = recentRows.filter((r) => !signalIds.has(r.id));
+  const neededFromRecent = Math.max(0, sourceLimit - signalRows.length);
+  const combined = [...signalRows, ...filteredRecent.slice(0, neededFromRecent)];
+  // If signals filled quota but recent had more beyond limit, we already handled truncated via recentRows overflow check
+  // To preserve recency ordering: sort combined by collected_at DESC before slice, but signals should not be dropped if they are older
+  // Instead, we keep signal guarantee: sort combined DESC, then slice to sourceLimit, ensuring at least min(signalRows.length, SIGNAL_QUOTA) signals survive
+  combined.sort((a, b) => String(b.collectedAt).localeCompare(String(a.collectedAt)));
+  const truncated = recentRows.length > neededFromRecent;
+  const orderedRows = combined.slice(0, sourceLimit).sort((a, b) => String(a.collectedAt).localeCompare(String(b.collectedAt)));
+  const sources: BriefIncrementSource[] = orderedRows.map((row) => ({
     ...row,
     summary: typeof row.summary === 'string' && row.summary.length > 500 ? `${row.summary.slice(0, 500)}…` : row.summary,
     categories: parseJsonArray(row.categories)
   }));
+  const reactivated = listReactivatedEvidencePacks(database, { limit: 20, since });
   // 本轮透明计数：source_lane_judgments（WMB-4941 流水表，migrateDatabase 必经 v46）在 since 窗口内
   // 被判 irrelevant 的条数 + 原因码 Top3，供编辑自审（「本轮另判 N 条与本赛道无关」）。
   const laneFilteredCountRow = database.prepare(`
@@ -207,6 +235,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
     identity,
     history: { publishedDays, published, reviews, findings },
     inventory: { watching, fermenting, trends },
+    continuity: { reactivated },
     increment: { watermark, since, sources, truncated, laneFiltered }
   };
 }
@@ -250,6 +279,10 @@ export function renderEditorialBrief(brief: EditorialBrief): string {
     viewsPerHour: trend.viewsPerHour, velocityChange: trend.velocityChange,
     capturedAt: trend.snapshots.at(-1)?.capturedAt ?? null
   })))}`);
+  lines.push('');
+
+  lines.push('■ 本轮重新激活的跨日证据（仅这些 Source 与本轮增量可供 Planner 引用）');
+  lines.push(brief.continuity.reactivated.length ? JSON.stringify(brief.continuity.reactivated, null, 1) : '（无）');
   lines.push('');
 
   const scope = brief.increment.watermark ? `水印 ${brief.increment.watermark} 之后` : `回看自 ${brief.increment.since}`;

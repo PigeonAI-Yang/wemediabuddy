@@ -16,7 +16,7 @@ type DesktopLifecycleInput = {
   defaultBrowserProfileId(): string;
   getActiveRuntime(): ActiveWorkspaceRuntime | null;
   clearActiveRuntime(runtime: ActiveWorkspaceRuntime | null): void;
-  stopBackgroundWork(): void;
+  stopBackgroundWork(): Promise<void>;
   abortPi(): Promise<void>;
   setShuttingDown(value: boolean): void;
   restoreWindow(): void;
@@ -65,7 +65,7 @@ export function createDesktopLifecycle(input: DesktopLifecycleInput): DesktopLif
     },
     cancelPrepareForInstall: () => input.getActiveRuntime()?.reopenClaims(),
     beforeQuitAndInstall: async () => {
-      input.stopBackgroundWork();
+      await input.stopBackgroundWork();
       await input.abortPi();
       const runtime = input.getActiveRuntime();
       await runtime?.stop({ drain: false });
@@ -105,7 +105,7 @@ export function createDesktopLifecycle(input: DesktopLifecycleInput): DesktopLif
       void (async () => {
         const runtime = input.getActiveRuntime();
         try {
-          input.stopBackgroundWork();
+          await input.stopBackgroundWork();
           await input.abortPi().catch(() => {});
           await runtime?.closeClaimsAndDrain().catch(() => {});
           await runtime?.stop({ drain: false }).catch(() => {});

@@ -15,11 +15,12 @@ import {
   type ManagerTaskCheckpoint,
   type ManagerTaskView
 } from './manager-task.ts';
-import { getActiveDailyIntelligenceTask, getAgentTask, getLatestDailyIntelligenceTaskSince, type AgentTask } from './agent-tasks.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { shanghaiDate } from './ferment.ts';
 import { runDockManagerPrompt, markDockOrchestrationFailed } from './ipc-pi-dock.ts';
-
+import { getTodayPlanExhaustion } from './workbench.ts';
+import { isScoringPending } from '../shared/propagation.ts';
+import { getActiveDailyIntelligenceTask, getAgentTask, getLatestDailyIntelligenceTaskSince, type AgentTask } from './agent-tasks.ts';
 export type DispatchManagerDailyInput = {
   businessDate: string;
   modules?: Array<'official_web' | 'x_lists'>;
@@ -44,13 +45,19 @@ function schedulerActor() {
  * WMB-5178 §5/§10.1：今日情报编排生产者（Owner 触发 + 应用代写 + 派发到 Dock）。
  * 返回完整安全字段（originLabel/title/goal/acceptance）供信封盖章；任一缺失由 builder 在派发前抛错。
  */
-export function buildTodayIntelligenceDispatch(businessDate: string, managerTaskId: string): {
+export function buildTodayIntelligenceDispatch(businessDate: string, managerTaskId: string, scoringRecovery?: { planId: string; itemIds: string[]; sourceIds: string[] }): {
   dispatchId: string;
   message: string;
   orchestration: { dispatchId: string; delivery: 'direct'; safe: { originLabel: string; title: string; goal: string; acceptance: string } };
 } {
   const dispatchId = randomUUID();
-  const message = [
+  const message = scoringRecovery ? [
+    `继续当前计划 ${scoringRecovery.planId} 的传播评分（${businessDate}）。`,
+    `只允许一次 planner/judge 续跑；冻结 planItemIds=${scoringRecovery.itemIds.join(',')}；sourceIds=${scoringRecovery.sourceIds.join(',')}。`,
+    '必须调用 wmb_run_daily_stage(stage=judge) 恰好一次；禁止 reporter/scan，禁止新建或替换 plan。',
+    '成功后逐项读回六维评分与 ready_for_review；失败原样报告可重试错误并保留 pending。',
+    `managerTaskId=${managerTaskId}`
+  ].join('\n') : [
     `请执行今日情报编排（${businessDate}）。`,
     '验收：可信渠道回执 + 当日可批方案。',
     '你是主管，编排方式由你选：',
@@ -216,6 +223,34 @@ export async function dispatchManagerDailyIntelligence(
       shouldStartLegacyPipeline: false
     };
   }
+  // Pending review blocks new root collection on same date; exhausted (all rejected) explicitly allows new round.
+  // Uses existing plan_items planning_status; no new schema.
+  const currentPlan = runtime.database.prepare('SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 ORDER BY created_at DESC LIMIT 1').get(businessDate) as { id: string } | undefined;
+  const pendingRows = currentPlan ? runtime.database.prepare(`SELECT id, source_ids_json AS sourceIdsJson, planning_status AS planningStatus, score_reasons_json AS scoreReasonsJson FROM plan_items WHERE plan_id = ? ORDER BY sort_order`).all(currentPlan.id) as Array<{ id: string; sourceIdsJson: string; planningStatus: string; scoreReasonsJson: string }> : [];
+  const scoringRows = pendingRows.filter((row) => isScoringPending({ planning_status: row.planningStatus, score_reasons_json: row.scoreReasonsJson }));
+  const scoringRecovery = currentPlan && scoringRows.length ? {
+    planId: currentPlan.id,
+    itemIds: scoringRows.map((row) => row.id),
+    sourceIds: [...new Set(scoringRows.flatMap((row) => { try { return JSON.parse(row.sourceIdsJson) as string[]; } catch { return []; } }))]
+  } : undefined;
+  const exhaustion = getTodayPlanExhaustion(runtime.database, businessDate);
+  if (!scoringRecovery && exhaustion.hasPlan && exhaustion.unresolved > 0 && !exhaustion.isExhausted) {
+    // Has unresolved draft/ready_for_review - keep waiting for user confirmation, do not start new collection.
+    // Preserve idempotency: second start attempt while pending must not create duplicate manager.
+    // Return focus_existing with current active (may be null) to signal blocked; caller will treat as reused.
+    if (gate.active) {
+      return {
+        action: 'focus_existing',
+        focusDialog: true,
+        managerTask: gate.active,
+        shouldStartLegacyPipeline: false
+      };
+    }
+    // No active manager but still pending - synthesize a blocked focus_existing without new task creation.
+    // Throwing would also block, but returning focus_existing with empty manager keeps handler's ok shape.
+    // We reuse the latest manager view if any, else create a synthetic error via exception.
+    throw Object.assign(new Error(`本轮有 ${exhaustion.unresolved} 条选题等待确认；确认完成后再开始下一轮。`), { code: 'PENDING_REVIEW', details: exhaustion });
+  }
 
   const started = await dispatchStartAgentTask(runtime, {
     intent: MANAGER_TASK_INTENT,
@@ -235,12 +270,12 @@ export async function dispatchManagerDailyIntelligence(
   const checkpoint = createManagerTaskCheckpoint({
     businessDate,
     status: 'running',
-    phase: 'dispatch_reporter',
-    summary: '主管已接单：今日情报 · 准备派记者扫描',
+    phase: scoringRecovery ? 'dispatch_planner' : 'dispatch_reporter',
+    summary: scoringRecovery ? `主管已接单：继续评分 · ${scoringRecovery.itemIds.length} 条` : '主管已接单：今日情报 · 准备派记者扫描',
     children: [{
-      roleId: 'reporter',
-      brief: '扫描今日情报渠道并回报',
-      intent: 'daily_scan',
+      roleId: scoringRecovery ? 'planner' : 'reporter',
+      brief: scoringRecovery ? '同计划补齐传播评分' : '扫描今日情报渠道并回报',
+      intent: scoringRecovery ? 'daily_judge' : 'daily_scan',
       status: 'queued'
     }],
     legacyPipeline: input.legacyPipeline !== false
@@ -276,7 +311,7 @@ export async function dispatchManagerDailyIntelligence(
 
   // 真主管 Pi 回合：与手动发消息同一通道，由主管自己 wmb_spawn_job 派工。
   // 不 await：按钮立刻返回；工具行/回复走 onPiEvent。WMB-5178：经 canonical 信封显式盖章 + 完整安全字段。
-  const dispatch = buildTodayIntelligenceDispatch(businessDate, view.id);
+  const dispatch = buildTodayIntelligenceDispatch(businessDate, view.id, scoringRecovery);
   void runDockManagerPrompt({
     message: dispatch.message,
     page: 'agents',
@@ -373,7 +408,9 @@ export async function syncManagerTaskFromLegacyChild(
   }
 
   const prev = manager.checkpoint;
-  const nextSummary = status === 'waiting_human' ? `${summary} · 需要你回今日批准` : summary;
+  const nextSummary = status === 'waiting_human'
+    ? (child.status === 'partial' || child.status === 'needs_user' ? `${summary} · 评分未完成，可重试` : `${summary} · 需要你回今日批准`)
+    : summary;
   if (prev.status === status && prev.phase === phase && prev.summary === nextSummary && JSON.stringify(prev.children) === JSON.stringify(children)) return manager;
   const synced = await updateManagerTaskCheckpoint(runtime, manager.id, {
     status,

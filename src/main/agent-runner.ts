@@ -1,5 +1,7 @@
 import { dailyControlWatchdogDecision } from './daily-control-policy.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { getSource } from './sources.ts';
+import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,9 +61,38 @@ import { preparePiExtension } from './pi-extension.ts';
 import { piTaskAuthorityPrompt } from './pi-operator-skill.ts';
 import type { ResolvedPiConfig } from './pi-config.ts';
 import { saveCurrentPlan } from './planning.ts';
+import { submitPlanItemForReview } from './planning-stage.ts';
 import { getToday } from './workbench.ts';
 import { buildJobContextRefs, buildJobObjectBoundary, readJobContractFromRefs } from './job-object-boundary.ts';
+import { PROPAGATION_CRITERIA } from '../shared/propagation.ts';
 
+const SCORE_CRITERIA_RECORD: Record<string, number> = PROPAGATION_CRITERIA;
+const scoreReasonsSchema = z.object({
+  status: z.literal('scored'),
+  score: z.number().min(0).max(100),
+  reasons: z.array(z.object({
+    criterion: z.string(),
+    weight: z.number(),
+    score: z.number(),
+    reason: z.string().optional()
+  })).length(6)
+}).superRefine((val, ctx) => {
+  const seen = new Set<string>();
+  let total = 0;
+  for (const r of val.reasons) {
+    const exp = SCORE_CRITERIA_RECORD[r.criterion];
+    if (exp === undefined || seen.has(r.criterion)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_reasons_criteria_invalid', path: ['reasons'] });
+      continue;
+    }
+    seen.add(r.criterion);
+    if (r.weight !== exp || r.score < 0 || r.score > exp) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_reason_value_invalid', path: ['reasons'] });
+    } else total += r.score;
+  }
+  if (seen.size !== 6) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_reasons_six_required' });
+  if (total !== val.score) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_total_mismatch' });
+});
 const planOutputItemSchema = z.object({
   title: z.string().min(1).refine((title) => !title.includes('普通人'), {
     message: '标题不得把受众身份词「普通人」写进发布标题；请改用题材的具体对象、问题、动作或证据'
@@ -83,12 +114,21 @@ const planOutputItemSchema = z.object({
   missingMaterials: z.array(z.string()).optional(),
   topicId: z.string().optional(),
   reviewIds: z.array(z.string()).optional(),
-  methodFindingIds: z.array(z.string()).optional()
+  methodFindingIds: z.array(z.string()).optional(),
+  scoreReasons: scoreReasonsSchema.optional()
+});
+const planSourceDecisionSchema = z.object({
+  sourceId: z.string().min(1),
+  sourceRevision: z.number().int().min(1).optional(),
+  decision: z.enum(['selected', 'excluded', 'unresolved', 'blocked']),
+  reasonCode: z.string().min(1),
+  reason: z.string().min(1)
 });
 const planOutputSchema = z.object({
   planDate: z.string().optional(),
   summary: z.string().min(1),
-  items: z.array(planOutputItemSchema).max(12)
+  items: z.array(planOutputItemSchema).max(12),
+  sourceDecisions: z.array(planSourceDecisionSchema).optional()
 });
 
 export type DailyPlanOutput = z.infer<typeof planOutputSchema>;
@@ -194,6 +234,16 @@ export function readAssistantTexts(raw: string, baseline = 0): string[] {
   return texts;
 }
 
+function stableJsonForPlan(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJsonForPlan).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((k) => `${JSON.stringify(k)}:${stableJsonForPlan(record[k])}`).join(',')}}`;
+}
+function planDispatchRequestId(baseRequestId: string, input: unknown): string {
+  const hash = createHash('sha256').update(stableJsonForPlan(input)).digest('hex').slice(0, 12);
+  return `${baseRequestId}:${hash}`;
+}
 export async function savePlanFromSynthesisOutput(
   dependency: AgentTaskMutationDependency,
   task: AgentTask,
@@ -203,7 +253,9 @@ export async function savePlanFromSynthesisOutput(
   grantId?: string | null,
   sessionBaseline = 0,
   /** 有效资料 id 白名单（赛道门通过后）：引用白名单外 sourceId 的方案项被丢弃（四问只跑在有效资料上）。 */
-  allowedSourceIds?: ReadonlySet<string>
+  allowedSourceIds?: ReadonlySet<string>,
+  /** 本轮必须逐条留下编辑决策的冻结候选（增量 + reactivated evidence）。 */
+  candidateSourceIds?: ReadonlySet<string>
 ): Promise<{ itemCount: number; filteredCount: number }> {
   const plan = parseDailyPlanOutput(readAssistantTexts(await readFile(sessionFile, 'utf8'), sessionBaseline).join('\n'));
   const items = allowedSourceIds
@@ -217,11 +269,27 @@ export async function savePlanFromSynthesisOutput(
       return { itemCount: existing.items.length, filteredCount: plan.items.length };
     }
   }
-  const input = { planDate: task.businessDate, timezone: 'Asia/Shanghai', summary: plan.summary, items };
+  let candidateSources: Array<{ sourceId: string; sourceRevision: number }> | undefined;
+  if (candidateSourceIds) {
+    const ids = [...candidateSourceIds].sort();
+    const db = 'database' in dependency ? dependency.database : dependency;
+    const rows = ids.length ? db.prepare(`SELECT id,revision FROM source_items WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids) as Array<{ id: string; revision: number }> : [];
+    const revisions = new Map(rows.map((row) => [row.id, row.revision]));
+    candidateSources = ids.map((sourceId) => {
+      const sourceRevision = revisions.get(sourceId);
+      if (!sourceRevision) throw new Error(`PLAN_SOURCE_CANDIDATE_NOT_FOUND:${sourceId}`);
+      return { sourceId, sourceRevision };
+    });
+  }
+  const input = {
+    planDate: task.businessDate, timezone: 'Asia/Shanghai', summary: plan.summary, items,
+    ...(candidateSources ? { candidateSources, sourceDecisions: plan.sourceDecisions ?? [] } : {})
+  };
+  const derivedRequestId = planDispatchRequestId(planRequestId, input);
   if ('database' in dependency) {
     requireReceiptData(await dispatchBusinessCommand(dependency, {
       command: 'plans.save',
-      requestId: planRequestId,
+      requestId: derivedRequestId,
       actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
       taskId: task.id,
       workerLeaseId,
@@ -234,10 +302,11 @@ export async function savePlanFromSynthesisOutput(
         return { data, entityId: data.id, afterRevision: data.revision, readback: data };
       }
     }));
+    wakePersistentKnowledgeJobs();
   } else {
     const saved = saveCurrentPlan(dependency, input);
     dependency.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)')
-      .run('plans.save', planRequestId, JSON.stringify(saved), new Date().toISOString());
+      .run('plans.save', derivedRequestId, JSON.stringify(saved), new Date().toISOString());
   }
   return { itemCount: items.length, filteredCount: plan.items.length - items.length };
 }
@@ -277,6 +346,45 @@ export type DailyIntelligenceRun = {
   reused: boolean;
   savedCount?: number;
 };
+
+type ScoringRecoveryItem = { id: string; revision: number; title: string; sourceIds: string[] };
+type ScoringRecovery = { planId: string; items: ScoringRecoveryItem[] };
+
+export function getCurrentScoringRecovery(database: DatabaseSync, businessDate: string): ScoringRecovery | null {
+  const plan = database.prepare('SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 ORDER BY created_at DESC LIMIT 1').get(businessDate) as { id: string } | undefined;
+  if (!plan) return null;
+  const rows = database.prepare(`SELECT id, revision, title, source_ids_json AS sourceIdsJson, score_reasons_json AS scoreReasonsJson
+    FROM plan_items WHERE plan_id = ? AND planning_status IN ('draft','rejected') ORDER BY sort_order`).all(plan.id) as Array<{ id: string; revision: number; title: string; sourceIdsJson: string; scoreReasonsJson: string }>;
+  const items = rows.filter((row) => {
+    try { const score = JSON.parse(row.scoreReasonsJson || '{}'); return score.status !== 'scored' || !Array.isArray(score.reasons) || score.reasons.length !== 6; } catch { return true; }
+  }).map((row) => ({ id: row.id, revision: row.revision, title: row.title, sourceIds: JSON.parse(row.sourceIdsJson || '[]') as string[] }));
+  return items.length ? { planId: plan.id, items } : null;
+}
+
+function scoringRecoveryPrompt(base: string, recovery: ScoringRecovery): string {
+  return `${base}\n\n【评分恢复硬约束】当前计划 ${recovery.planId} 已存在，禁止创建或替换计划，禁止扫描/记者。只为以下冻结条目补齐六维传播评分；输出 items 必须与清单一一对应，title 与 sourceIds 原样保留，不得增删或换源：\n${JSON.stringify(recovery.items)}\n每项 scoreReasons 必须通过总分等于六项之和的校验。`;
+}
+
+async function applyScoringRecovery(dependency: AgentTaskMutationDependency, task: AgentTask, sessionFile: string, baseline: number, recovery: ScoringRecovery, workerLeaseId?: string, grantId?: string | null): Promise<number> {
+  const output = parseDailyPlanOutput(readAssistantTexts(await readFile(sessionFile, 'utf8'), baseline).join('\n'));
+  if (output.items.length !== recovery.items.length) throw new Error(`scoring_recovery_item_count_mismatch: expected ${recovery.items.length}, got ${output.items.length}`);
+  for (const frozen of recovery.items) {
+    const candidate = output.items.find((item) => item.title === frozen.title && stableJsonForPlan([...item.sourceIds].sort()) === stableJsonForPlan([...frozen.sourceIds].sort()));
+    if (!candidate) throw new Error(`scoring_recovery_item_mismatch: ${frozen.id}`);
+    if ('database' in dependency) {
+      requireReceiptData(await dispatchBusinessCommand(dependency, {
+        command: 'plan_item.submit', requestId: `${task.id}:scoring-recovery:${frozen.id}:${frozen.revision}`,
+        actor: { type: 'pi', id: 'pi', label: 'Pi worker' }, taskId: task.id, workerLeaseId, grantId: grantId ?? undefined,
+        input: { planItemId: frozen.id, expectedRevision: frozen.revision, item: candidate, by: 'planner', reason: 'scoring_recovery' },
+        boundIdentity: { entityType: 'plan_item', entityId: frozen.id }, entityType: 'plan_item',
+        execute: (db, value) => ({ data: submitPlanItemForReview(db, value), entityId: frozen.id })
+      }));
+    } else {
+      submitPlanItemForReview(dependency, { planItemId: frozen.id, expectedRevision: frozen.revision, item: candidate, by: 'planner', reason: 'scoring_recovery' });
+    }
+  }
+  return recovery.items.length;
+}
 
 function skillSourcePath(): string {
   // Prefer the repo/runtime copy next to this module. Electron getAppPath() can point at
@@ -339,9 +447,11 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     '判断要求：',
     '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
     '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
+    '2.1 传播评分六维（总分 100，必须覆盖全部维度，evidence 仅作门槛不代替传播力）：reader_immediacy_benefit 20（读者即时收益/今天就能用、可复制动作/可对比回执）、tension_curiosity_gap 20（张力或好奇缺口/反直觉/利益冲突/代价揭示）、why_now_window 20（为何现在窗口、时效紧迫感、今天做比明天值钱的错过成本）、save_share_comment_motive 20（收藏/分享/评论动机、是否值得转给同事/群/是否有谈资）、evidence_credibility 15（证据可追溯性与可信度、是否可验收、是否一手来源，仅作是否进入评分的门槛，高分证据不自动等于高传播）、account_fit 5（与本账号受众/定位契合度）。每项必须给出 criterion/weight/score/reason，weight 必须与上述权重一致，score 0..weight，总分与分项和必须一致；未达门槛的候选降权或不写入方案，禁止为凑数虚构分数。',
     '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
-    '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。反常识、夸张或需要解释的方向只放 titleGuidance。',
-    '3. 机会 priority：0=SSS，1=S，2=A，3=B，4=C，5=D，6=E，7=F。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。',
+    '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；标题必须包含一个可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。张力/好奇缺口必须在标题或 openingGuidance 中显式兑现，禁止把“夸张反常识只放 titleGuidance”的旧禁令当作不写钩子的理由。',
+    '2.8 传播型写作契约（SSOT：skills/evidence-grounded-writer/SKILL.md §5 — 与选题到成稿全链一致）：每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做的一句话动作）」与「一个中心主张」，并在 title/angle/pointOfView/openingGuidance 中体现；openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”；抽象主张必须在 angle/pointOfView 阶段即配人/场景/利害/后果；证据服务主张，不让证据罗列成为选题主体；保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；平台适配（小红书/视频等）是重写钩子/节奏/转藏评动机，不是缩短；标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议；每个候选自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口与错过成本是否写清/是否有明确的收藏/分享/评论动机）缺一不进方案。',
+    '3. 机会 priority：0=最优先内部排程，1=次优先，…7=最低，仅作为内部排程顺序，不决定对外可见的传播等级；可见传播等级 SSS/S/A/B/C/D/E/F 仅由上述传播总分经共享阈值映射（90→SSS 80→S 70→A 60→B 50→C 40→D 30→E 其余 F）由系统计算，你不得直接指定或输出等级字段；priority 数值不得用于伪装传播推荐。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。',
     '3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。',
     '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。',
     deepDiveRule,
@@ -351,7 +461,7 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     `  "planDate": "${task.businessDate}",`,
     '  "summary": "一句话概括今日判断",',
     '  "items": [{',
-    '    "title": "直白可发布的标题（爆点只放 titleGuidance）",',
+    '    "title": "直白可发布的标题（必须含数字/对比/反转/代价钩子且可被正文兑现）",',
     '    "priority": 1,',
     '    "whyNow": "为什么是现在（具体事实+时效）",',
     '    "timeliness": "热点 2-3 天",',
@@ -366,12 +476,14 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     '    "effortEstimate": "约 40 分钟",',
     '    "topicId": "多日/持续/余波跟进项填简报「存量」中的真实主题 id，其余省略",',
     '    "sourceIds": ["简报「增量」块中的真实 id"],',
+    '    "scoreReasons": {"status":"scored","score":82,"reasons":[{"criterion":"reader_immediacy_benefit","weight":20,"score":16,"reason":"读者今天可用的具体动作"},{"criterion":"tension_curiosity_gap","weight":20,"score":15,"reason":"反直觉冲突引发好奇"},{"criterion":"why_now_window","weight":20,"score":16,"reason":"窗口期内错过成本清晰"},{"criterion":"save_share_comment_motive","weight":20,"score":15,"reason":"值得收藏转发的谈资"},{"criterion":"evidence_credibility","weight":15,"score":12,"reason":"真实可追溯来源支撑"},{"criterion":"account_fit","weight":5,"score":4,"reason":"与账号定位契合"}]},',
     '    "availableMaterials": [],',
     '    "missingMaterials": []',
-    '  }]',
+    '  }],',
+    '  "sourceDecisions": [{"sourceId":"本轮增量或重新激活证据中的真实 id","decision":"selected|excluded|unresolved|blocked","reasonCode":"稳定原因码","reason":"具体原因"}]',
     '}',
     '```',
-    '没有答得出四问的机会时 items 输出 []。'
+    'sourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过上述六维总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；evidence 高分仅作门槛，不直接等同高传播。'
   ].join('\n');
 }
 
@@ -410,6 +522,23 @@ export function buildDailyGateRun(database: Parameters<typeof assembleEditorialB
   return { lane: profile.intelligencePackId, autoRelevant, pending };
 }
 
+export function buildPlannerSourceBoundary(
+  database: Parameters<typeof assembleEditorialBrief>[0],
+  task: AgentTask,
+  relevantIds?: ReadonlySet<string>
+): Readonly<{ candidateIds: ReadonlySet<string>; allowedIds: ReadonlySet<string> }> {
+  const brief = assembleEditorialBrief(database, {
+    now: new Date(), businessDate: task.businessDate, watermark: resolveJudgeWatermark(database, task)
+  });
+  const incrementIds = brief.increment.sources.map((source) => source.id);
+  const reactivatedIds = brief.continuity.reactivated.flatMap((pack) => pack.sources.map((source) => source.id));
+  const candidateIds = new Set([...incrementIds, ...reactivatedIds]);
+  const allowedIds = relevantIds
+    ? new Set([...relevantIds, ...reactivatedIds])
+    : new Set(candidateIds);
+  return Object.freeze({ candidateIds, allowedIds });
+}
+
 export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string, options: { nativeSearch?: boolean; gateRun?: DailyGateRun } = {}): string {
   const watermark = resolveJudgeWatermark(database, task);
   const brief = assembleEditorialBrief(database, {
@@ -433,11 +562,20 @@ export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof c
   if (!cancelled.ok) throw new Error(cancelled.error.message);
   return cancelled.data;
 }
-
 export type DailyLaneGateApplied = Readonly<{
   relevantIds: ReadonlySet<string>;
   archivedCount: number;
+  unresolved: boolean;
+  unresolvedIds: ReadonlySet<string>;
 }>;
+
+function judgingFingerprint(source: { title?: unknown; canonicalUrl?: unknown; canonical_url?: unknown; feedId?: unknown; feed_id?: unknown; summary?: unknown }): string {
+  const title = String((source as Record<string, unknown>).title ?? '');
+  const url = String((source as Record<string, unknown>).canonicalUrl ?? (source as Record<string, unknown>).canonical_url ?? '');
+  const feed = String((source as Record<string, unknown>).feedId ?? (source as Record<string, unknown>).feed_id ?? '');
+  const summary = String((source as Record<string, unknown>).summary ?? '');
+  return createHash('sha256').update(`${title}|${url}|${feed}|${summary}`).digest('hex').slice(0, 12);
+}
 
 function gateJudgmentInput(candidate: LaneGateCandidate, decision: 'relevant' | 'irrelevant', reasonCode: LaneReasonCode, reason?: string) {
   return {
@@ -448,38 +586,38 @@ function gateJudgmentInput(candidate: LaneGateCandidate, decision: 'relevant' | 
     expectedRevision: candidate.revision
   };
 }
-
 async function writeLaneGateBatch(
   dependency: AgentTaskMutationDependency,
   task: AgentTask,
   input: { workspaceLane: string; judgedBy: 'system' | 'agent'; judgedAt: string; judgments: Array<ReturnType<typeof gateJudgmentInput>> },
   requestId: string,
   workerLeaseId?: string
-): Promise<void> {
-  if (input.judgments.length === 0) return;
-  const withLiveRevisions = (database: Parameters<typeof applyLaneGateBatch>[0], value: typeof input) => {
-    // 扫/判并行时 source revision 可能已前进：写前刷新，避免整轮 REVISION_CONFLICT。
-    const judgments = value.judgments.map((item) => {
-      const row = database.prepare('SELECT revision AS revision FROM source_items WHERE id=?').get(item.sourceId) as { revision: number } | undefined;
-      return row ? { ...item, expectedRevision: row.revision } : item;
-    });
-    return { ...value, judgments };
+): Promise<{ unresolved: boolean; unresolvedIds: string[] }> {
+  if (input.judgments.length === 0) return { unresolved: false, unresolvedIds: [] };
+  const doDispatch = async (value: typeof input, rid: string) => {
+    if ('database' in dependency) {
+      requireReceiptData(await dispatchBusinessCommand(dependency, {
+        command: 'sources.lane_gate',
+        requestId: rid,
+        actor: schedulerActor('daily-intelligence'),
+        taskId: task.id,
+        workerLeaseId,
+        input: value,
+        boundIdentity: { entityType: 'lane_judgment', workspaceLane: value.workspaceLane },
+        entityType: 'lane_judgment',
+        execute: (commandDatabase, v) => ({ data: applyLaneGateBatch(commandDatabase, v, { transaction: false }) })
+      }));
+    } else {
+      applyLaneGateBatch(dependency, value);
+    }
   };
-  if ('database' in dependency) {
-    requireReceiptData(await dispatchBusinessCommand(dependency, {
-      command: 'sources.lane_gate',
-      requestId,
-      actor: schedulerActor('daily-intelligence'),
-      taskId: task.id,
-      workerLeaseId,
-      input,
-      boundIdentity: { entityType: 'lane_judgment', workspaceLane: input.workspaceLane },
-      entityType: 'lane_judgment',
-      execute: (commandDatabase, value) => ({ data: applyLaneGateBatch(commandDatabase, withLiveRevisions(commandDatabase, value), { transaction: false }) })
-    }));
-  } else {
-    // 裸数据库（测试）路径：domain helper 自带事务。
-    applyLaneGateBatch(dependency, withLiveRevisions(dependency, input));
+  try {
+    await doDispatch(input, requestId);
+    return { unresolved: false, unresolvedIds: [] };
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code !== 'REVISION_CONFLICT') throw error;
+    return { unresolved: true, unresolvedIds: input.judgments.map((j) => j.sourceId) };
   }
 }
 
@@ -500,20 +638,18 @@ export async function applyDailyLaneGate(
   judgedAt: string,
   workerLeaseId?: string
 ): Promise<DailyLaneGateApplied> {
-  if (gateRun.lane === null) return { relevantIds: new Set<string>(), archivedCount: 0 };
+  if (gateRun.lane === null) return { relevantIds: new Set<string>(), archivedCount: 0, unresolved: false, unresolvedIds: new Set<string>() };
   const autoRelevantIds = gateRun.autoRelevant.map((candidate) => candidate.sourceId);
   if (gateRun.pending.length === 0) {
-    // 本轮无待判资料：资料门 no-op，仅记录 Tier 0 确定性行（零模型）。
-    await writeLaneGateBatch(dependency, task, {
+    const tier0 = await writeLaneGateBatch(dependency, task, {
       workspaceLane: gateRun.lane, judgedBy: 'system', judgedAt,
       judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(candidate, 'relevant', LANE_TIER0_REASON_CODE))
     }, `${planRequestId}:gate-tier0`, workerLeaseId);
-    return { relevantIds: new Set(autoRelevantIds), archivedCount: 0 };
+    return { relevantIds: new Set(autoRelevantIds), archivedCount: 0, unresolved: tier0.unresolved, unresolvedIds: new Set(tier0.unresolvedIds) };
   }
   const gate = parseLaneGateOutput(sessionText);
   const pendingById = new Map<string, LaneGateCandidate>(gateRun.pending.map((candidate) => [candidate.sourceId, candidate]));
   const judgedIds = new Set<string>();
-  // 模型偶发编造 id / 重复 id：忽略脏项，只接受待判清单内首次判定。
   const accepted: LaneGateOutputEntry[] = [];
   for (const entry of gate.gate) {
     if (!pendingById.has(entry.sourceId)) continue;
@@ -521,7 +657,6 @@ export async function applyDailyLaneGate(
     judgedIds.add(entry.sourceId);
     accepted.push(entry);
   }
-  // 漏判：默认 relevant，避免整轮假失败打断主路径（模型偶发漏 id）。
   for (const candidate of gateRun.pending) {
     if (judgedIds.has(candidate.sourceId)) continue;
     accepted.push({ sourceId: candidate.sourceId, relevant: true, reasonCode: 'lane_relevant', reason: '模型未显式判定，系统默认保留为相关' });
@@ -536,15 +671,20 @@ export async function applyDailyLaneGate(
     else archivedCount += 1;
     return gateJudgmentInput(candidate, relevant ? 'relevant' : 'irrelevant', (entry.reasonCode ?? 'lane_relevant') as LaneReasonCode, entry.reason);
   });
-  await writeLaneGateBatch(dependency, task, {
+  const tier0 = await writeLaneGateBatch(dependency, task, {
     workspaceLane: gateRun.lane, judgedBy: 'system', judgedAt,
     judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(candidate, 'relevant', LANE_TIER0_REASON_CODE))
   }, `${planRequestId}:gate-tier0`, workerLeaseId);
-  await writeLaneGateBatch(dependency, task, {
+  const tier1 = await writeLaneGateBatch(dependency, task, {
     workspaceLane: gateRun.lane, judgedBy: 'agent', judgedAt,
     judgments: agentJudgments
   }, `${planRequestId}:gate-tier1`, workerLeaseId);
-  return { relevantIds, archivedCount };
+  const unresolved = tier0.unresolved || tier1.unresolved;
+  const unresolvedIds = new Set<string>([...tier0.unresolvedIds, ...tier1.unresolvedIds]);
+  if (unresolved) {
+    for (const id of unresolvedIds) relevantIds.delete(id);
+  }
+  return { relevantIds, archivedCount: unresolved ? 0 : archivedCount, unresolved, unresolvedIds };
 }
 export async function startDailyIntelligence(input: {
   dataRootPath: string; businessDate: string; piConfigPath?: string;
@@ -560,6 +700,7 @@ export async function startDailyIntelligence(input: {
   const lane = 'daily-intelligence';
   const startRequestId = `daily_intelligence:${input.businessDate}:start:${randomUUID()}`;
   try {
+    const scoringRecovery = getCurrentScoringRecovery(database, input.businessDate);
     const contextRefs = { planDate: input.businessDate, roleId: 'planner' as const };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, {
       intent: 'daily_judge', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
@@ -703,28 +844,89 @@ export async function startDailyIntelligence(input: {
               input.onRuntime?.(runtime);
             },
             run: async (runtime, nextConfig) => {
-              const opportunityPrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
+              const basePrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
                 nativeSearch: nextConfig.nativeSearch === true,
                 gateRun
               });
+              const opportunityPrompt = scoringRecovery ? scoringRecoveryPrompt(basePrompt, scoringRecovery) : basePrompt;
               // WMB-5178 §5：员工接收会话盖章（target=employee，行只进该员工会话文件，Dock 永不镜像）。
               await runtime.promptUntilSettled(buildOrchestrationEnvelope({ dispatchId: `daily_judge:${gateTask.id}`, target: 'employee', delivery: 'direct', safe: { originLabel: '今日情报', title: '今日情报判读', goal: '判断当日增量资料，产出可批机会方案', acceptance: '渠道回执与当日可批方案' }, prompt: opportunityPrompt }), { timeoutMs: 10 * 60_000 });
             }
           });
           synthesis = prompted.runtime;
           activeConfig = prompted.config;
-          // 第一关（赛道相关性）先于四问：解析判定块 → 应用归档写路径（fail-closed：解析失败抛错，零归档、水印不推进、下轮整批重判）；只有判相关/自动相关的资料进入四问方案。
           const sessionText = readAssistantTexts(await readFile(dailySessionFile, 'utf8'), sessionBaseline).join('\n');
-          const gateApplied = await applyDailyLaneGate(dependency, gateTask, gateRun, sessionText, planRequestId, promptBuiltAt, input.workerLeaseId);
-          const allowedSourceIds = gateRun.lane ? gateApplied.relevantIds : undefined;
-          // 结构化输出路径：从本轮会话增量读出 ```json 方案块（最后一个），校验后由系统经 dispatcher 保存（弱模型不必构造工具调用）。
-          const saved = await savePlanFromSynthesisOutput(dependency, gateTask, dailySessionFile, planRequestId, input.workerLeaseId, grantId, sessionBaseline, allowedSourceIds);
+          const gateApplied = scoringRecovery ? { relevantIds: new Set<string>(), archivedCount: 0, unresolved: false, unresolvedIds: new Set<string>() } : await applyDailyLaneGate(dependency, gateTask, gateRun, sessionText, planRequestId, promptBuiltAt, input.workerLeaseId);
+          const sourceBoundary = scoringRecovery ? null : buildPlannerSourceBoundary(database, gateTask, gateRun.lane ? gateApplied.relevantIds : undefined);
+          const allowedSourceIds = sourceBoundary?.allowedIds;
+          let savedCount = scoringRecovery
+            ? await applyScoringRecovery(dependency, gateTask, dailySessionFile, sessionBaseline, scoringRecovery, input.workerLeaseId, grantId)
+            : (await savePlanFromSynthesisOutput(dependency, gateTask, dailySessionFile, planRequestId, input.workerLeaseId, grantId, sessionBaseline, allowedSourceIds, sourceBoundary?.candidateIds)).itemCount;
+          // A newly generated plan may contain pending/invalid score payloads. Recover once
+          // in the same task so the normal path does not require an Owner click. If this
+          // single retry fails or remains incomplete, the outer failure path preserves the
+          // plan and Today exposes the existing manual "继续评分" action.
+          if (!scoringRecovery) {
+            const automaticRecovery = getCurrentScoringRecovery(database, input.businessDate);
+            if (automaticRecovery) {
+              await dispatchReportAgentTaskProgress(dependency, beforePlan.id, {
+                phase: 'validating',
+                message: `检测到 ${automaticRecovery.items.length} 条评分未完成，正在自动补齐（仅一次）。`
+              }, taskCommandContext(lane, `${beforePlan.id}:progress:auto-scoring-recovery`, beforePlan.id, input.workerLeaseId));
+              const recoveryBaseline = await readFile(dailySessionFile, 'utf8').then((text) => text.split(/\r?\n/).length).catch(() => 0);
+              const recovered = await runPiPromptWithFallback({
+                roleId: 'planner',
+                policySnapshot: taskPolicySnapshot,
+                taskId: beforePlan.id,
+                piConfigPath: input.piConfigPath,
+                initial: { runtime: synthesis, config: activeConfig },
+                createRuntime,
+                onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>),
+                onRuntimeChanged: (runtime, nextConfig) => {
+                  synthesis = runtime;
+                  activeConfig = nextConfig;
+                  activeDailyRuntimes.set(beforePlan.id, runtime);
+                  input.onRuntime?.(runtime);
+                },
+                run: async (runtime, nextConfig) => {
+                  const basePrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
+                    nativeSearch: nextConfig.nativeSearch === true,
+                    gateRun
+                  });
+                  await runtime.promptUntilSettled(buildOrchestrationEnvelope({
+                    dispatchId: `daily_judge:${gateTask.id}:auto-scoring-recovery`,
+                    target: 'employee',
+                    delivery: 'direct',
+                    safe: { originLabel: '今日情报', title: '自动续评分', goal: '补齐当前计划的传播评分', acceptance: '原计划条目全部获得有效六维评分' },
+                    prompt: scoringRecoveryPrompt(basePrompt, automaticRecovery)
+                  }), { timeoutMs: 10 * 60_000 });
+                }
+              });
+              synthesis = recovered.runtime;
+              activeConfig = recovered.config;
+              savedCount = await applyScoringRecovery(dependency, gateTask, dailySessionFile, recoveryBaseline, automaticRecovery, input.workerLeaseId, grantId);
+              const remaining = getCurrentScoringRecovery(database, input.businessDate);
+              if (remaining) throw new Error(`scoring_recovery_incomplete: ${remaining.items.length} item(s)`);
+            }
+          }
+          const saved = { itemCount: savedCount };
           const gateNote = gateApplied.archivedCount > 0 ? `，另判 ${gateApplied.archivedCount} 条与本赛道无关已移出` : '';
+          const unresolvedNote = gateApplied.unresolved ? `，${gateApplied.unresolvedIds.size} 条因内容变更待重评` : '';
           await dispatchReportAgentTaskProgress(dependency, beforePlan.id, {
-            message: saved.itemCount > 0 ? `方案已保存：${saved.itemCount} 个机会${gateNote}。` : `方案已保存：今日没有合格机会${gateNote}。`
+            message: saved.itemCount > 0 ? `方案已保存：${saved.itemCount} 个机会${gateNote}${unresolvedNote}。` : `方案已保存：今日没有合格机会${gateNote}${unresolvedNote}。`
           }, taskCommandContext(lane, `${beforePlan.id}:progress:plan-saved`, beforePlan.id, input.workerLeaseId));
-          // 增量判断水印：两关（赛道判定 + 四问方案）都成功才推进；任一失败不写入，下轮重评（判定幂等）。
-          await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { judgeWatermark: promptBuiltAt } }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
+          if (gateApplied.unresolved) {
+            await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { laneUnresolved: true, unresolvedIds: [...gateApplied.unresolvedIds] } }, taskCommandContext(lane, `${beforePlan.id}:progress:lane-unresolved`, beforePlan.id, input.workerLeaseId));
+          } else {
+            const isQualifiedEmpty = saved.itemCount === 0;
+            const checkpoint: Record<string, unknown> = { judgeWatermark: promptBuiltAt };
+            if (isQualifiedEmpty) {
+              checkpoint.emptyQualified = true;
+              checkpoint.qualifiedEmpty = true;
+              checkpoint.dailyEmptyQualified = true;
+            }
+            await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
+          }
         } catch (error) {
           const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
           const cancelled = await cancelIfRequested(latest);
@@ -801,7 +1003,7 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
       `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project，并读取最新核心版本。`,
       '3. 如果项目没有核心版本，明确失败并停止；本任务禁止调用 wmb_save_core_version，禁止生成或改写核心稿。',
-      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：标题围绕该题材独有的对象、问题、动作或证据，不自动添加「普通人」等万能受众标签，不复用固定前缀；正文自然可读，不虚构核心稿没有的事实。',
+      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：保留一个中心主张与证据不变，标题围绕该题材独有的对象、问题、动作或证据，标题必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一）且可兑现，重写开头钩子、信息节奏与收藏/分享/评论动机（平台适配是重写钩子/节奏/动机，不是缩短），不自动添加「普通人」等万能受众标签，不复用固定前缀，不虚构核心稿没有的事实，正文自然可读。标题必兑现，禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
       `5. 调用 wmb_save_platform_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，contentVersionId 必须是步骤2读到的最新核心版本 id，platform 必须是 xiaohongshu，format 必须是 text，title/body 为完整小红书版本。`,
       `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认 xiaohongshu 平台版本已保存且关联正确的核心版本。`,
       '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
@@ -833,11 +1035,12 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
     `brief=${brief}`,
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
     `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；标题围绕该题材独有的对象、问题、动作或证据，不自动添加「普通人」等万能受众标签，不复用固定前缀，不写来源未支持的数字、结果或因果；本任务禁止调用 wmb_save_platform_version，研究续派任务也禁止再次派研究。',
+    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5 传播型写作契约：(a)开写前冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做/判断/转发的一句话动作）」与「一个中心主张」— brief 中已有则直接使用并体现，缺失则自行补全；(b)标题必兑现：标题围绕该题材独有的对象、问题、动作或证据，且必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不自动添加「普通人」等万能受众标签，不复用固定前缀，不写来源未支持的数字、结果或因果，标题主张未兑现必须改标题；(c)首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义/来源介绍铺垫；(d)抽象主张必须配“人/场景/利害/后果”至少两件；(e)证据服务主张，不让证据罗列成为主体；(f)保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等套话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；(g)禁止编造数字、个人经历、引语、结果、紧迫感或争议；本任务禁止调用 wmb_save_platform_version，研究续派任务也禁止再次派研究。',
     '4. 正文阶段不自动生成、导入或插入图片；如需配图，必须在正文保存后由 Owner 显式启动定稿配图流程。',
-    `5. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为不含自动配图的完整正文。`,
-    `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存；配图由定稿流程单独处理。`,
-    '7. 最后用简洁中文回复：已保存核心正文，并给出标题和正文前两句。'
+    '5. 完成初稿后执行编辑自检（四项缺一即打回重写再保存）：(1)读者收益是否具体（今天就能用的一句话动作） (2)是否有具体利害/代价场景 (3)为何现在窗口与错过成本是否写清 (4)是否有明确的收藏/分享/评论动机；未通过不得调用 wmb_save_core_version。',
+    `6. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为不含自动配图的完整正文。`,
+    `7. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存；配图由定稿流程单独处理。`,
+    '8. 最后用简洁中文回复：已保存核心正文，并给出标题和正文前两句。'
   ].join('\n');
 }
 
