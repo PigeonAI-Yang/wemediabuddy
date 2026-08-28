@@ -5,7 +5,7 @@ import { appConfirm } from './app-confirm';
 import { toggleSingleFocus } from './pi-focus';
 import { Opportunity } from './today-view-parts';
 import { poolBadges, poolItemToPlanItem, type PoolItemLike } from './today-pool-view';
-import { approvePlanItem, getPlanningStatus, getScoreReasons, isEligibleForToday, isScoringPendingItem, pendingReasonForItem, rejectPlanItem } from './proposal-ledger';
+import { approvePlanItem, approvedProjectId, getPlanningStatus, getScoreReasons, isEligibleForToday, isScoringPendingItem, pendingReasonForItem, rejectPlanItem } from './proposal-ledger';
 type LedgerItem = ProposalLedgerItem;
 
 const PAGE_SIZE = 30;
@@ -262,8 +262,10 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
     setActionBusyId(item.planItemId);
     setError('');
     try {
-      await approvePlanItem({ planItemId: item.planItemId, expectedRevision: item.revision, reason: 'Yann 批准策划' });
-      await load(tabRef.current, 0, false);
+      const result = await approvePlanItem({ planItemId: item.planItemId, expectedRevision: item.revision, reason: 'Yann 批准策划' });
+      const projectId = approvedProjectId(result);
+      if (projectId) onOpenProject(projectId);
+      else openToday?.();
     } catch (approveError) {
       setError(approveError instanceof Error ? approveError.message : String(approveError));
     } finally {

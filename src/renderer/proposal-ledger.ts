@@ -388,6 +388,17 @@ export async function approvePlanItem(input: { planItemId: string; expectedRevis
   return result;
 }
 
+export function approvedProjectId(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const value = 'data' in result && (result as { data?: unknown }).data && typeof (result as { data: unknown }).data === 'object'
+    ? (result as { data: object }).data
+    : result;
+  const advance = (value as { advance?: unknown }).advance;
+  if (!advance || typeof advance !== 'object') return null;
+  const projectId = (advance as { projectId?: unknown }).projectId;
+  return typeof projectId === 'string' && projectId.trim() ? projectId : null;
+}
+
 export async function rejectPlanItem(input: { planItemId: string; expectedRevision: number; reason: string }): Promise<unknown> {
   if (!input.planItemId || typeof input.planItemId !== 'string') throw Object.assign(new Error('planItemId required'), { code: 'validation_failed' });
   if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) throw Object.assign(new Error('expectedRevision invalid'), { code: 'validation_failed' });
