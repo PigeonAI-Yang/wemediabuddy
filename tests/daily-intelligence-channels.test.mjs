@@ -98,7 +98,7 @@ test('one committed channel success and one channel failure finish as partial wi
     const good = website(current.database, 'good');
     const bad = website(current.database, 'bad');
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async (database, input) => {
         if (input.sourceId === bad.id) throw Object.assign(new Error('upstream unavailable'), { code: 'WEBSITE_TRIAL_FAILED' });
@@ -125,7 +125,7 @@ test('a later lane/runtime failure preserves trustworthy channel results as part
   try {
     const source = website(current.database, 'runtime');
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async (database, input) => {
         upsertSource(database, { feedId: source.sourceFeedId, originalUrl: 'https://example.com/runtime/item', title: 'Surviving item' });
@@ -183,10 +183,10 @@ test('all blocked sources annotate absence but never block judgment', async () =
     assert.equal(calls, 1, 'judgment runs on inventory despite all channels blocked');
     assert.equal(readyCalls, 1);
     assert.equal(result.task.status, 'partial');
-    assert.equal(result.task.progress.planned, 1);
+    assert.equal(result.task.progress.planned, 2);
     assert.equal(result.task.progress.processed, 1);
     assert.equal(result.task.progress.failed, 1);
-    const receipt = current.database.prepare('SELECT status, error_code AS errorCode FROM source_scan_receipts').get();
+    const receipt = current.database.prepare("SELECT status, error_code AS errorCode FROM source_scan_receipts WHERE module='x_lists'").get();
     assert.equal(receipt.status, 'needs_user');
     assert.equal(receipt.errorCode, 'CHANNEL_SOURCE_NOT_READY');
   } finally {
@@ -229,7 +229,7 @@ test('a thrown orchestration scan records an accurate durable failure instead of
   try {
     const source = website(current.database, 'throw');
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async () => {
         throw new Error('scanner aborted before receipt');
@@ -256,7 +256,7 @@ test('late X results write neither cached nor source data after binding revision
     });
     assert.equal(bound.ok, true);
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       browserConfig: { id: 'edge:test', label: 'test', executablePath: 'test', userDataDir: 'test', profileDirectory: 'Default', cdpUrl: 'http://127.0.0.1:1' },
       scanWebsite: async (database, input) => {
@@ -293,7 +293,7 @@ test('identical channel fixtures keep receipts and source items inside their own
     const leftSource = website(left.database, 'same');
     const rightSource = website(right.database, 'same');
     const run = async (current, source) => startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async (database, input) => {
         const saved = upsertSource(database, { feedId: source.sourceFeedId, originalUrl: 'https://example.com/same/item', title: `Item ${current.workspaceId}` });
@@ -319,7 +319,7 @@ test('a nonempty plan with a missing source remains rejected after a truthful sc
     const source = website(current.database, 'plan');
     let itemId = '';
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async (database, input) => {
         itemId = upsertSource(database, { feedId: source.sourceFeedId, originalUrl: 'https://example.com/plan/item', title: 'Referenced item' }).id;
@@ -434,7 +434,7 @@ test('a duplicate start observes a preflight task without scanning the same sour
     const release = new Promise((resolve) => { releaseScan = resolve; });
     let scans = 0;
     const first = startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async (database, input) => {
         scans += 1;
@@ -445,7 +445,7 @@ test('a duplicate start observes a preflight task without scanning the same sour
     });
     await entered;
     const second = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       scanWebsite: async () => { throw new Error('duplicate start must not scan'); }
     });
@@ -510,8 +510,9 @@ test('scanOnly finishes when nothing new lands, and judgeOnly routes straight to
     assert.equal(scanned.savedCount, 0);
     assert.equal(scanned.task.status, 'partial', 'no new sources finishes partial instead of leaving a zombie running task');
     assert.equal(scanned.task.errorCode, 'CHANNELS_NEEDS_USER');
-    const receipt = current.database.prepare('SELECT status FROM source_scan_receipts WHERE task_id=?').get(scanned.task.id);
+    const receipt = current.database.prepare("SELECT status FROM source_scan_receipts WHERE task_id=? AND module='x_lists'").get(scanned.task.id);
     assert.equal(receipt.status, 'needs_user');
+    const receiptCountBeforeJudge = current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count;
 
     let aiCalls = 0;
     const judged = await startWorkspaceDailyIntelligence({ dataRootPath: current.root, businessDate: '2026-08-03', mcpUrl: 'http://127.0.0.1:1/mcp', judgeOnly: true }, {
@@ -520,7 +521,7 @@ test('scanOnly finishes when nothing new lands, and judgeOnly routes straight to
     assert.equal(aiCalls, 1, 'judgeOnly routes straight to the judgment runner');
     assert.equal(judged.reused, true);
     const receiptCount = current.database.prepare('SELECT COUNT(*) AS count FROM source_scan_receipts').get().count;
-    assert.equal(receiptCount, 1, 'judgeOnly does not create new scan receipts');
+    assert.equal(receiptCount, receiptCountBeforeJudge, 'judgeOnly does not create new scan receipts');
   } finally {
     current.database.close();
     await rm(current.root, { recursive: true, force: true });

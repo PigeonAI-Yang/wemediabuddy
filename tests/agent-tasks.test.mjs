@@ -84,14 +84,14 @@ test('agent task completion requires business object readback', async () => {
       planDate: '2026-07-28',
       timezone: 'Asia/Shanghai',
       summary: 'one opportunity',
-      items: Array.from({ length: 8 }, (_, priority) => ({
+      items: ['路由', '评测', '部署', '成本', '安全', '交互', '数据', '运维'].map((domain, priority) => ({
         title: `Opportunity ${priority}`,
         priority,
         whyNow: 'now',
         timeliness: 'today',
-        targetAudience: 'builders',
-        angle: 'angle',
-        pointOfView: 'point',
+        targetAudience: `${domain}建设者`,
+        angle: `${domain}实践角度`,
+        pointOfView: `${domain}需要独立验收`,
         platforms: ['x'],
         formats: ['text'],
         titleGuidance: 'title',

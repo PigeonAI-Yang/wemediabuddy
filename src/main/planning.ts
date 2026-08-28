@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { linkTopicSources } from './knowledge.ts';
 import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
+import { isExactZhihuFallback } from './planning-stage.ts';
 
 export type PlanItemInput = { title: string; priority: number; whyNow: string; timeliness: string; targetAudience: string; angle: string; pointOfView: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string; structureGuidance: string; effortEstimate: string; sourceIds: string[]; availableMaterials?: string[]; missingMaterials?: string[]; reviewIds?: string[]; methodFindingIds?: string[]; topicId?: string; scoreReasons?: unknown };
 export type PlanSourceDecision = {
@@ -96,6 +97,9 @@ export function saveCurrentPlan(database: DatabaseSync, input: SavePlanInput, tr
   for (const item of input.items) {
     if (!Number.isInteger(item.priority) || item.priority < 0 || item.priority > 7) throw new Error('机会等级必须是 0–7 的整数。');
     if (!item.sourceIds.length) throw new Error('计划条目必须引用资料。');
+    if (isExactZhihuFallback(item as Parameters<typeof isExactZhihuFallback>[0])) {
+      throw Object.assign(new Error('validation_failed: exact_zhihu_fallback_template'), { code: 'validation_failed', errors: ['exact_zhihu_fallback_template'] });
+    }
   }
   // Thesis diversity — same normalized core claim/reader job even with different titles (intra-batch)
   if (input.items.length > 1) {

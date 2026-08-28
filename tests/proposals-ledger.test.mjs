@@ -11,6 +11,7 @@ import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { getOpportunityPool } from '../src/main/workbench.ts';
 import { getProposalLedger, summarizeProposalLedger } from '../src/main/proposals.ts';
+import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const NOW = new Date('2026-08-07T06:00:00.000Z');
 const TODAY = '2026-08-07';
@@ -46,16 +47,17 @@ function seedItem(database, { planDate, title, priority = 1, timeliness = '热�
       priority,
       whyNow: '为什么现在',
       timeliness,
-      targetAudience: '受众',
-      angle: '角度',
-      pointOfView: '观点',
+      targetAudience: `${title}受众`,
+      angle: `${title}角度`,
+      pointOfView: `${title}观点`,
       platforms: ['x'],
       formats: ['text'],
       titleGuidance: '标题',
       openingGuidance: '开头',
       structureGuidance: '结构',
       effortEstimate: '30m',
-      sourceIds: [sourceId]
+      sourceIds: [sourceId],
+      scoreReasons: scoredReasons()
     }]
   });
   const row = database.prepare(`
@@ -74,7 +76,7 @@ function seedItem(database, { planDate, title, priority = 1, timeliness = '热�
 test('empty history returns zero counts', async () => {
   await withDb(async (database) => {
     const summary = summarizeProposalLedger(database, { planDate: TODAY, now: NOW });
-    assert.deepEqual(summary, { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0 });
+    assert.deepEqual(summary, { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0, scoring_pending: 0 });
     const ledger = getProposalLedger(database, { planDate: TODAY, tab: 'today', now: NOW });
     assert.equal(ledger.items.length, 0);
   });
@@ -95,19 +97,19 @@ test('classifies today shelved adopted dismissed expired and keeps empty current
       summary: '今日递案',
       items: [
         {
-          title: '今日可批选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '受众',
-          angle: '角度', pointOfView: '观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sToday]
+          title: '今日可批选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '今日受众',
+          angle: '今日角度', pointOfView: '今日观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sToday], scoreReasons: scoredReasons()
         },
         {
-          title: '已采纳选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '受众',
-          angle: '角度', pointOfView: '观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sAdopt]
+          title: '已采纳选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '采纳受众',
+          angle: '采纳角度', pointOfView: '采纳观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sAdopt], scoreReasons: scoredReasons()
         },
         {
-          title: '已否掉选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '受众',
-          angle: '角度', pointOfView: '观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sDismiss]
+          title: '已否掉选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '否掉受众',
+          angle: '否掉角度', pointOfView: '否掉观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sDismiss], scoreReasons: scoredReasons()
         }
       ]
     });
@@ -116,6 +118,7 @@ test('classifies today shelved adopted dismissed expired and keeps empty current
 
     const adoptId = database.prepare(`SELECT id FROM plan_items WHERE title=?`).get('已采纳选题').id;
     const dismissId = database.prepare(`SELECT id FROM plan_items WHERE title=?`).get('已否掉选题').id;
+    approvePlanItems(database, [adoptId]);
     createProjectFromPlanItem(database, adoptId, false);
     dismissCarryForPlanItem(database, { planItemId: dismissId, reason: '不做' });
 
@@ -192,16 +195,17 @@ test('offset pagination returns hasMore and distinct pages', async () => {
         priority: i + 1,
         whyNow: '为什么现在',
         timeliness: '长青常驻',
-        targetAudience: '受众',
-        angle: '角度',
-        pointOfView: '观点',
+        targetAudience: `${titles[i]}受众`,
+        angle: `${titles[i]}角度`,
+        pointOfView: `${titles[i]}观点`,
         platforms: ['x'],
         formats: ['text'],
         titleGuidance: '标题',
         openingGuidance: '开头',
         structureGuidance: '结构',
         effortEstimate: '30m',
-        sourceIds: [sourceId]
+        sourceIds: [sourceId],
+        scoreReasons: scoredReasons()
       });
     }
     saveCurrentPlan(database, { planDate: TODAY, timezone: 'Asia/Shanghai', summary: '分页方案', items });

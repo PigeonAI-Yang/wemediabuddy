@@ -363,7 +363,7 @@ test('WMB-5241 ingest/query chain on one real workspace (SQLite readback)', asyn
   assert.ok(one(database, 'SELECT 1 AS one FROM knowledge_update_receipts WHERE request_id = ?', bT2RequestId), 'B/T2 回执存在');
 
   // ============================================================
-  // A3 批量部分失败诚实：knowledge.backfill 一步扫描 6 条
+  // A3 批量部分失败诚实：knowledge.backfill 一步扫描 7 条
   // ============================================================
   const backfillDeps = {
     databasePath: dbPath,
@@ -371,7 +371,7 @@ test('WMB-5241 ingest/query chain on one real workspace (SQLite readback)', asyn
     openDatabase: migrateDatabase
   };
   const step1 = await runKnowledgeBackfillStep(database, backfillDeps, { batchLimit: 10 });
-  assert.equal(step1.processed, 4, '第一步处理 4 条（A/B/D/E）；C/F/G 为排除项');
+  assert.equal(step1.processed, 5, '第一步处理 5 条（A/B/D/E + G 路由入队）；C/F 为未处理排除项');
   const byStatus1 = Object.fromEntries(step1.outcomes.map((o) => [o.sourceId, o.status]));
   assert.equal(byStatus1[a.id], 'skipped_existing_receipt', 'A 已有回执 → 跳过');
   assert.equal(byStatus1[b.id], 'skipped_existing_receipt', 'B 已由 ingest 触发编译（T1+T2 回执）→ 跳过');
@@ -386,7 +386,7 @@ test('WMB-5241 ingest/query chain on one real workspace (SQLite readback)', asyn
   assert.match(eOutcome.topics[0].code, /^BACKFILL:(PLAN|COMPILE):MODEL_CALL_FAILED$/, 'E 失败码可见');
   const cp1 = parseJson(one(database, 'SELECT value FROM app_meta WHERE key = ?', BACKFILL_CHECKPOINT_META_KEY).value);
   assert.deepEqual(cp1.counts, {
-    scanned: 7, processed: 4, compiled: 1, failed: 1,
+    scanned: 7, processed: 5, compiled: 1, failed: 1,
     skippedExistingReceipt: 2, skippedWeak: 1, skippedNoTopic: 1, skippedNoSignal: 1
   }, 'checkpoint counts 如实（无虚报成功）');
   assert.equal(cp1.status, 'running', '有待重试 → 状态 running（诚实）');
@@ -409,7 +409,7 @@ test('WMB-5241 ingest/query chain on one real workspace (SQLite readback)', asyn
   assert.equal(step2.done, true, '第二步完成');
   const cp2 = parseJson(one(database, 'SELECT value FROM app_meta WHERE key = ?', BACKFILL_CHECKPOINT_META_KEY).value);
   assert.deepEqual(cp2.counts, {
-    scanned: 8, processed: 5, compiled: 2, failed: 1,
+    scanned: 8, processed: 6, compiled: 2, failed: 1,
     skippedExistingReceipt: 2, skippedWeak: 1, skippedNoTopic: 1, skippedNoSignal: 1
   }, '重试后 compiled=2 且 failed=1 历史保留（诚实累计）');
   assert.deepEqual(cp2.pendingRetry, [], '重试队列清空');

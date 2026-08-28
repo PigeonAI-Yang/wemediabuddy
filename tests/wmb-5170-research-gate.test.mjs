@@ -34,9 +34,9 @@ test('research projections grant scope is exact two commands and existing scopes
   // 既有 scope 字节不变（零回归）。
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.daily_scan], ['agent_tasks.report_progress', 'sources.upsert_batch']);
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.daily_judge], [
-    'agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plans.save', 'sources.lane_gate'
+    'agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plan_item.request_planning', 'plan_item.submit', 'plans.save', 'sources.lane_gate'
   ]);
-  assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.studio_draft], ['agent_tasks.report_progress', 'content.save_version']);
+  assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.studio_draft], ['agent_tasks.report_progress', 'content.save_version', 'content_derivative.ensure', 'content_derivative.save_version', 'content_derivative.finalize_version']);
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.results_review], ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']);
 });
 
@@ -45,8 +45,8 @@ test('research projections grant scope is exact two commands and existing scopes
 test('research projections intent capability wiring maps research to cap.research only', () => {
   assert.deepEqual(TASK_INTENT_NEEDED_CAPS.research, ['cap.research']);
   assert.deepEqual(TASK_INTENT_NEEDED_CAPS.daily_scan, ['cap.collect']);
-  assert.deepEqual(TASK_INTENT_NEEDED_CAPS.daily_judge, ['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate']);
-  assert.deepEqual(TASK_INTENT_NEEDED_CAPS.studio_draft, ['cap.write']);
+  assert.deepEqual(TASK_INTENT_NEEDED_CAPS.daily_judge, ['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate', 'cap.planning_submit', 'cap.planning_review']);
+  assert.deepEqual(TASK_INTENT_NEEDED_CAPS.studio_draft, ['cap.write', 'cap.content_derivative']);
   assert.deepEqual(TASK_INTENT_NEEDED_CAPS.results_review, ['cap.review']);
 });
 

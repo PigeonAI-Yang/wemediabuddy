@@ -274,6 +274,9 @@ test('WMB-5237 media: migration 62 run hook backfills legacy core tokens and pla
       INSERT INTO platform_versions (id, project_id, content_version_id, platform, format, title, body, asset_ids_json, created_at, updated_at, revision)
         VALUES ('pv-2', 'proj-1', 'ver-1', 'xiaohongshu', 'image', NULL, '小红书正文', ${q(JSON.stringify(['asset-1']))}, ${q(now)}, ${q(now)}, 1);
     `);
+    // 此用例只验证 migration 62 的 run hook；后续迁移依赖完整前置 schema，另有各自 migration 测试覆盖。
+    const markLaterApplied = legacy.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)');
+    for (let version = 63; version <= 78; version += 1) markLaterApplied.run(version, now);
     legacy.close();
 
     // 升级：仅应用尚未应用的 migration 62，run hook 在迁移事务内回填。

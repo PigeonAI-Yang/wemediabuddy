@@ -7,10 +7,11 @@ import { buildDailyOpportunityPrompt, cancelDailyIntelligenceIfRequested, draftP
 import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
-import { saveCurrentPlan } from '../src/main/planning.ts';
+import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { piTaskAuthorityPrompt } from '../src/main/pi-operator-skill.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
+import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
 
 test('daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-runner-'));
@@ -18,12 +19,14 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
   try {
     const source = upsertSource(database, { originalUrl: 'https://example.com/watching', title: '长期观察资料', priority: 1 });
     updateKnowledgeSource(database, { id: source.id, expectedRevision: source.revision, managementStatus: 'watching' });
-    saveCurrentPlan(database, {
+    const topicId = createTopic(database, '跨日发酵机会').id;
+    const savedPlan = saveCurrentPlan(database, {
       planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '昨日方案', items: [{
         title: '跨日发酵机会', priority: 1, whyNow: '仍有余波', timeliness: '本周', targetAudience: '受众', angle: '解释影响', pointOfView: '持续跟进',
-        platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [source.id]
+        platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [source.id], topicId, scoreReasons: scoredReasons()
       }]
     });
+    approvePlanItems(database, [database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(savedPlan.id).id]);
     const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-03' });
     assert.equal(started.ok, true);
     const prompt = buildDailyOpportunityPrompt(database, started.data, agentRequestId(started.data.id, 'plan'));

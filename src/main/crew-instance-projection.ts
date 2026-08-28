@@ -44,7 +44,8 @@ export type CrewInstance = Readonly<{
   piSessionId: string | null;
   businessDate: string | null;
   projectId: string | null;
-  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null;
+  researchMode: 'auto' | 'required' | 'prohibited' | null;
   error: string | null;
   /** 终态稳定 code（failed/needs_user 取自 agent_task.errorCode；succeeded 无持久 code）。 */
   code: string | null;
@@ -222,6 +223,9 @@ function instanceFromPool(
     businessDate: rec.businessDate,
     projectId: rec.projectId,
     writerTask: rec.writerTask,
+    researchMode: task?.contextRefs.researchMode === 'required' || task?.contextRefs.researchMode === 'prohibited'
+      ? task.contextRefs.researchMode
+      : rec.roleId === 'writer' ? 'auto' : null,
     error: rec.error,
     code: rec.report?.code ?? null,
     research,
@@ -251,6 +255,9 @@ function instanceFromTask(task: AgentTask, contract: JobContract, status: CrewIn
     businessDate: contract.boundary.businessDate ?? task.businessDate ?? null,
     projectId: contract.boundary.projectId,
     writerTask: task.contextRefs.writerTask === 'xiaohongshu_platform_version' ? 'xiaohongshu_platform_version' : contract.roleId === 'writer' ? 'core_draft' : null,
+    researchMode: task.contextRefs.researchMode === 'required' || task.contextRefs.researchMode === 'prohibited'
+      ? task.contextRefs.researchMode
+      : contract.roleId === 'writer' ? 'auto' : null,
     error: task.errorMessage,
     code: task.errorCode,
     research,

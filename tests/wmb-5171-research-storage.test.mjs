@@ -343,7 +343,8 @@ test('WMB-5171: research context refs round-trip losslessly through agent_tasks 
   assert.ok(task, 'research task readable back');
   // context_refs_json 往返无损：readResearchGap 与 rebuildRoleJobRequest 均还原精确合同（续派方直接可用）。
   assert.deepEqual(readResearchGap(task.contextRefs), request.research, 'ResearchGap 从 context_refs 无损读回');
-  assert.deepEqual(rebuildRoleJobRequest(task.contextRefs), request, '续派重建精确还原 RoleJobRequest');
+  const { planItemId: _unusedPlanItemId, ...normalizedRequest } = request;
+  assert.deepEqual(rebuildRoleJobRequest(task.contextRefs), normalizedRequest, '续派重建精确还原已持久化 RoleJobRequest');
   // 无 research 块的既有 reporter refs 保持老路径：readResearchGap → null（不误判为研究任务）。
   const plainReporter = startAgentTask(db, { intent: 'daily_scan', businessDate: '2026-08-11', contextRefs: { jobId: 'scan-job-1', roleId: 'reporter', brief: '渠道扫描' } });
   assert.equal(plainReporter.ok, true);

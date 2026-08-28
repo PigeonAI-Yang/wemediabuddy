@@ -26,13 +26,16 @@ import {
   type SourceScanStatus
 } from './intelligence-channels.ts';
 import { persistWebsiteSourceScan, readWebsiteSourceScan, scanWebsiteSource, type ScanWebsiteSourceInput, type WebsiteSourceScanRead } from './website-channel.ts';
+import { readZhihuHotViaBrowser, commitZhihuHotScan, zhihuHotReadiness, ZHIHU_HOT_ERROR_CODES, ZHIHU_HOT_URL } from './zhihu-hot-channel.ts';
 import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
 import { collectBoundXListTimeline, persistBoundXListTimeline, readBoundXListTimeline } from './x-list-execution.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { getXListBinding } from './x-lists.ts';
 import { dispatchScheduleXObservationCapture, scheduleXObservationCapture } from './x-observation-jobs.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
 import type { DeferredSignal } from './role-job-registry.ts';
 import { dailyControlWatchdogDecision } from './daily-control-policy.ts';
+import { ensureRegistrySourceFeed } from './sources.ts';
 
 export type DailyChannelInput = {
   businessDate: string;
@@ -71,12 +74,13 @@ export type BrowserPreflight = Readonly<{
   preflightError: Readonly<{ code: string; message: string }> | null;
 }>;
 type BrowserPreflightResolver = (database: DatabaseSync, frozen: FrozenDailyChannels, configured: XListBrowserConfig | null | undefined) => Promise<BrowserPreflight>;
-
 const BROWSER_NEEDS_USER_CODES: Record<string, true> = {
   BROWSER_NEEDS_USER: true,
   ACCOUNT_MISMATCH: true,
   BROWSER_PROFILE_MISMATCH: true,
-  PROFILE_STALE: true
+  PROFILE_STALE: true,
+  ZHIHU_HOT_NEEDS_USER: true,
+  ZHIHU_HOT_CHALLENGE: true
 };
 
 /**
@@ -93,6 +97,13 @@ export function hasEnabledDailySources(database: DatabaseSync, modules: Intellig
     if (module === 'x_lists') {
       const row = database.prepare('SELECT COUNT(*) AS count FROM x_list_bindings WHERE enabled=1').get() as { count: number };
       if (row.count > 0) return true;
+    }
+    if (module === 'zhihu_hot') {
+      try {
+        const row = database.prepare("SELECT value FROM app_meta WHERE key='zhihu_hot_enabled'").get() as { value?: string } | undefined;
+        if (!row?.value) return true;
+        if (row.value !== '0' && row.value !== 'false') return true;
+      } catch { return true; }
     }
   }
   return false;
@@ -267,7 +278,24 @@ export async function startDailyChannelRun(dependency: AgentTaskMutationDependen
       message: 'X List 来源已写入扫描回执'
     });
   }
-
+  // zhihu_hot — official hot list via BrowserProfile, isolated failure does not abort other channels
+  for (const source of live.filter((item) => item.module === 'zhihu_hot')) {
+    if (await stopScanIfControlled()) break;
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      currentSource: channelSourceLabel(database, source),
+      message: `正在扫描知乎 AI 专题：${channelSourceLabel(database, source)}`
+    });
+    try {
+      await scanZhihuHot(dependency, database, task.id, input.workerLeaseId, stored.workspaceId, source, stored.sources.find((s) => s.sourceId === source.sourceId)?.revision ?? 1);
+    } catch (error) {
+      await recordAttemptFailure(dependency, database, task.id, stored.workspaceId, source, error, input.workerLeaseId);
+    }
+    await reportChannelScanProgress(dependency, database, task.id, selected.length, stored, commandContext, {
+      phase: 'scanning_sources',
+      message: '知乎 AI 专题已写入扫描回执'
+    });
+  }
   const current = getAgentTask(database, task.id);
   if (!current || current.status !== 'running') {
     return { task: current ?? task, reused: started.reused === true, shouldRunJudgment: false, frozen: stored, aggregation: current ? readDailyReceiptAggregation(database, current) : null };
@@ -303,7 +331,7 @@ async function resolveBrowserConfig(database: DatabaseSync, frozen: FrozenDailyC
   if (configured !== undefined) return { config: configured, preflightError: null };
   if (!frozen.sources.some((source) => source.module === 'x_lists')) return { config: null, preflightError: null };
   try {
-    return { config: await selectedXListBrowser(database), preflightError: null };
+    return { config: await selectedXListBrowser(database, { allowMissingExpectedAccount: true }), preflightError: null };
   } catch (error) {
     if (BROWSER_NEEDS_USER_CODES[errorCode(error)]) return { config: null, preflightError: null };
     return { config: null, preflightError: { code: errorCode(error), message: errorMessage(error) } };
@@ -328,7 +356,7 @@ async function commitWebsiteScan(dependency: AgentTaskMutationDependency, input:
 }
 
 function freezeChannels(sources: IntelligenceChannelSource[], input: DailyChannelInput): FrozenDailyChannels {
-  const modules = [...new Set(input.modules ?? ['official_web', 'x_lists'])].filter((module): module is IntelligenceModule => module === 'official_web' || module === 'x_lists');
+  const modules = [...new Set(input.modules ?? ['official_web', 'x_lists', 'zhihu_hot'])].filter((module): module is IntelligenceModule => module === 'official_web' || module === 'x_lists' || module === 'zhihu_hot');
   return {
     workspaceId: input.workspaceId,
     profileRevision: input.profileRevision,
@@ -362,6 +390,7 @@ function preflightCode(frozen: FrozenDailyChannels): { code: string } | null {
 }
 
 function channelSourceLabel(database: DatabaseSync, source: FrozenDailyChannelSource): string {
+  if (source.module === 'zhihu_hot') return '知乎 AI 专题';
   if (source.module === 'official_web') {
     const row = database.prepare('SELECT input_text AS name, canonical_url AS url FROM website_sources WHERE id=?').get(source.sourceId) as { name: string | null; url: string | null } | undefined;
     return (row?.name || row?.url || source.sourceId).trim();
@@ -373,7 +402,6 @@ function channelSourceLabel(database: DatabaseSync, source: FrozenDailyChannelSo
   }
   return source.sourceId;
 }
-
 async function reportChannelScanProgress(
   dependency: AgentTaskMutationDependency,
   database: DatabaseSync,
@@ -410,6 +438,10 @@ function sourceIsReady(database: DatabaseSync, source: FrozenDailyChannelSource,
     const row = database.prepare('SELECT enabled, revision, resolution_status AS status FROM website_sources WHERE id=?').get(source.sourceId) as { enabled: number; revision: number; status: string } | undefined;
     return Boolean(row && row.enabled && row.revision === source.revision && row.status === 'ready');
   }
+  if (source.module === 'zhihu_hot') {
+    const state = zhihuHotReadiness(database);
+    return state.state === 'ready';
+  }
   const row = source.accountKey && source.listId ? getXListBinding(database, source.accountKey, source.listId) : null;
   return Boolean(browserConfig && row?.enabled && row.id === source.sourceId && row.revision === source.revision);
 }
@@ -428,13 +460,18 @@ async function recordAttemptFailure(dependency: AgentTaskMutationDependency, dat
 }
 
 async function dispatchSourceFailureReceipt(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workspaceId: string, source: FrozenDailyChannelSource, status: SourceScanStatus, code: string, message: string, workerLeaseId?: string): Promise<void> {
-  const write = () => recordSourceScanReceipt(database, { taskId, workspaceId, module: source.module, sourceId: source.sourceId, sourceFeedId: source.sourceFeedId, status, errorCode: code, errorMessage: message });
+  const write = (targetDatabase = database) => {
+    const sourceFeedId = source.module === 'zhihu_hot'
+      ? ensureRegistrySourceFeed(targetDatabase, { registryId: 'zhihu_hot', name: '知乎 AI 专题', url: ZHIHU_HOT_URL }).id
+      : source.sourceFeedId;
+    return recordSourceScanReceipt(targetDatabase, { taskId, workspaceId, module: source.module, sourceId: source.sourceId, sourceFeedId, status, errorCode: code, errorMessage: message });
+  };
   if (!('database' in dependency)) { write(); return; }
   const receipt = await dispatchBusinessCommand(dependency, {
     command: 'intelligence_channels.scan_failed', requestId: `${taskId}:channel:${source.module}:${source.sourceId}:${source.revision}:${code}`,
     actor: { type: 'scheduler', id: 'daily-intelligence', label: 'daily-intelligence' }, input: { taskId, workspaceId, source, status, code, message },
     boundIdentity: { workspaceId, sourceId: source.sourceId, revision: source.revision }, taskId, workerLeaseId, causation: { taskId }, entityType: 'source_scan_receipt',
-    execute: () => ({ data: write() })
+    execute: (commandDatabase) => ({ data: write(commandDatabase) })
   });
   requireReceiptData(receipt);
 }
@@ -478,6 +515,44 @@ async function scanXList(dependency: AgentTaskMutationDependency, database: Data
   });
   requireReceiptData(receipt);
 }
+async function scanZhihuHot(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workerLeaseId: string | undefined, workspaceId: string, source: FrozenDailyChannelSource, _revision: number): Promise<void> {
+  const businessDate = (() => {
+    const task = database.prepare('SELECT business_date AS bd FROM agent_tasks WHERE id=?').get(taskId) as { bd?: string } | undefined;
+    return task?.bd ?? new Date().toISOString().slice(0, 10);
+  })();
+  const readiness = zhihuHotReadiness(database);
+  if (readiness.state !== 'ready') {
+    const code = readiness.code ?? ZHIHU_HOT_ERROR_CODES.NEEDS_USER;
+    throw Object.assign(new Error(readiness.message ?? '知乎 AI 专题需要处理'), { code });
+  }
+  const read = await readZhihuHotViaBrowser(database);
+  if (!('database' in dependency)) {
+    const persisted = commitZhihuHotScan(database, { taskId, workspaceId, businessDate }, read);
+    for (const sourceId of persisted.sourceIds) {
+      const row = database.prepare('SELECT revision FROM source_items WHERE id=?').get(sourceId) as { revision: number } | undefined;
+      if (row) scheduleSourceKnowledgeCompile({ sourceId, revision: row.revision });
+    }
+    return;
+  }
+  const receipt = await dispatchBusinessCommand(dependency, {
+    command: 'intelligence.zhihu_hot.scan',
+    requestId: `${taskId}:zhihu_hot:${source.sourceId}:${businessDate}:${read.collectedAt}`,
+    actor: { type: 'scheduler', id: 'daily-intelligence', label: 'daily-intelligence' },
+    input: { taskId, workspaceId, businessDate, read },
+    boundIdentity: { workspaceId, sourceId: source.sourceId },
+    taskId, workerLeaseId, causation: { taskId }, entityType: 'source_item',
+    execute: (commandDatabase, value) => {
+      const result = commitZhihuHotScan(commandDatabase, { taskId: value.taskId, workspaceId: value.workspaceId, businessDate: value.businessDate }, value.read);
+      return { data: result, entityId: result.feedId };
+    }
+  });
+  const persisted = requireReceiptData(receipt);
+  for (const sourceId of persisted.sourceIds) {
+    const row = database.prepare('SELECT revision FROM source_items WHERE id=?').get(sourceId) as { revision: number } | undefined;
+    if (row) scheduleSourceKnowledgeCompile({ sourceId, revision: row.revision });
+  }
+}
+
 
 async function finishBlocked(
   dependency: AgentTaskMutationDependency,

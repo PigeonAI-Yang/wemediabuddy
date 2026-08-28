@@ -79,6 +79,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法、证据在哪（真实 sourceIds+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。`structureGuidance` 点名六栏目之一并套骨架（迷茫诊断/经典方法/AI 实战/项目日志/方向判断/商业化实验）。答不出四问的线索不得写入方案。
 - 候选写入方案前必须先用 `wmb_get_knowledge_context` 查询同主题历史，写清它与库存资料、历史发布或复盘的具体关系；毫无关联的线索不得进入方案。
 - 保存方案使用 `wmb_save_plan`，并携带当前 request/task/grant/worker authority。非空机会必须引用真实 `sourceIds`；没有合格机会时保存空 `items`，不要凑数。
+- 定向策划只处理冻结的单一方案：先用 `wmb_get_plan_item` 精确读取 `planItemId` 和 revision，再用 `wmb_submit_plan_item` 恰好提交一次完整方案至 `ready_for_review`；不得改用 `wmb_save_plan` 覆盖整份当日方案。
 - 保存后用 `wmb_get_workbench` 回读并确认精确日期的 `plan`；不要用 `latestPlan` 代替当前任务的保存结果。历史判断使用 `wmb_get_knowledge_context`。
 - 需要用户确认的知识建议只用 `wmb_suggest_knowledge`；正式沉淀使用 `wmb_record_knowledge`。二者都是 task-authorized 业务写入，必须携带当前 request/task/grant/worker authority。
 - 资料员发现重复、命名混乱或归属错误的主题时，先读真实主题与关联，再用 `wmb_propose_topic_maintenance` 提交有序 `create/update/merge/archive/reassign` 变更集（底层 `knowledge.topic_maintenance_propose`，含 task/grant/lease）。该工具只生成待批提案：不得直接改主题。主题审批是主管的内部职权：主管用 `wmb_list_topic_maintenance` / `wmb_get_topic_maintenance` 读取完整冻结清单并呈报，由主管在内部批准或驳回当前建议，批准后才原子迁移关联并归档旧主题；不再要求用户手工审批。若批准时出现会改变结果的真实冲突，系统会持久排队并自动派资料员读取最新现场；资料员必须提交带 `supersedesProposalId` 的新版建议，旧建议不复活、不自动批准，主管不得要求用户手工改主题。历史 stale 仅作记录，不主动重提。
@@ -220,7 +221,7 @@ X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_
 - 软移出后系统判定 7 日冷却：向用户说明「7 日内不会自动重判」；恢复始终可用 `wmb_restore_source`。
 
 
-资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`（底层命令 `sources.upsert_batch`）、`wmb_get_task_grant`（底层只读映射 `task_grants.get`）、`wmb_list_task_grants`（底层只读映射 `task_grants.list`）、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。Pi 只能调用这里列出的 `wmb_*` 名称。
+资料、任务和知识：`wmb_search_sources`、`wmb_get_source`、`wmb_save_source`（底层命令 `sources.upsert_batch`）、`wmb_get_task_grant`（底层只读映射 `task_grants.get`）、`wmb_list_task_grants`（底层只读映射 `task_grants.list`）、`wmb_get_agent_task`、`wmb_report_agent_progress`、`wmb_save_plan`、`wmb_get_plan_item`、`wmb_submit_plan_item`、`wmb_get_knowledge_context`、`wmb_suggest_knowledge`、`wmb_record_knowledge`。Pi 只能调用这里列出的 `wmb_*` 名称。
 
 Wiki 知识库（WMB-5240，wmb_wiki_action 协议的等价工具面）：`wmb_wiki_maintenance_start`、`wmb_wiki_maintenance_status`、`wmb_wiki_maintenance_pause`、`wmb_wiki_maintenance_resume`、`wmb_wiki_maintenance_report`、`wmb_wiki_ingest`、`wmb_wiki_lint`、`wmb_wiki_search`、`wmb_wiki_log`、`wmb_wiki_report`、`wmb_get_fixed_versions`（固定版本只读，按 `type:objectId:versionRef` 引用读取冻结版本）。写工具（start/pause/resume、ingest、lint run）必须携带当前 taskId/grantId/workerLeaseId 并经 grant/dispatcher；只读工具（status/report、search、log、lint 状态、fixed_versions）直达正式只读 API，不接受 workspaceId / rootPath / 本地路径参数。
 

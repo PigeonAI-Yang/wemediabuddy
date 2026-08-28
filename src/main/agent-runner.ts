@@ -990,7 +990,7 @@ export async function startDailyIntelligence(input: {
   } finally { close(); }
 }
 
-export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = '', researchReady = false): string {
+export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = '', researchReady = false, researchMode: 'auto' | 'required' | 'prohibited' = 'auto'): string {
   if (writerTask === 'xiaohongshu_platform_version') {
     return [
       '执行 WeMediaBuddy Studio 小红书平台版本任务。',
@@ -1009,7 +1009,24 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
     ].join('\n');
   }
-  if (!researchReady) {
+  if (writerTask === 'video_script') {
+    return [
+      '执行 WeMediaBuddy Studio 视频文案衍生任务。',
+      `task_id=${task.id}`,
+      'intent=studio_draft',
+      `project_id=${projectId}`,
+      `brief=${brief}`,
+      `version_request_id=${requestId}`,
+      '要求：',
+      '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
+      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，读取最新定稿文章；没有定稿文章时明确失败并停止。`,
+      '3. 先判断内容最适合的真实视频形态，再据此设计结构、节奏和镜头表达；不得套固定模板，不得虚构文章没有的事实。',
+      `4. 调用 wmb_save_video_script，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，sourceContentVersionId 必须是步骤2读到的最新文章版本 id，并保存标题、完整文案与格式决策。`,
+      `5. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认视频文案已保存并准确绑定最新文章版本。`,
+      '6. 最后用简洁中文回复已保存的视频形态、标题与文案开头。'
+    ].join('\n');
+  }
+  if (!researchReady && researchMode !== 'prohibited') {
     return [
       '执行 WeMediaBuddy Studio 核心初稿的外部研究前置交接。当前轮次禁止写作。',
       `task_id=${task.id}`,
@@ -1023,6 +1040,24 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       `4. 必须调用 wmb_dispatch_research({ parentTaskId: "${task.id}", requiredClaims, channels: ["web", "x", "xhs"], brief })。即使项目已有少量关联资料，也必须派单做外部独立核查；不得改用普通 reporter/daily_scan，不得在当前写手会话临时联网。`,
       '5. 派单成功后立即结束当前交付。不得继续起草、导图、调用 wmb_import_project_image、wmb_save_core_version 或 wmb_save_platform_version；研究终态会通过 EvidencePack 与项目来源关联后单跳续派新 writer 工单。',
       '6. 最后只简洁回复：已派外部研究，等待研究完成后续写。'
+    ].join('\n');
+  }
+  if (researchMode === 'prohibited') {
+    return [
+      '执行 WeMediaBuddy Studio 核心初稿任务（受限写作·已豁免外部研究）。',
+      `task_id=${task.id}`,
+      'intent=studio_draft',
+      `project_id=${projectId}`,
+      `version_request_id=${requestId}`,
+      `brief=${brief}`,
+      '要求：',
+      '1. 严禁调用 wmb_dispatch_research；只通过 wmb_* MCP 工具读取项目资料并保存正文，禁止直接写文件或数据库，禁止最终发布。',
+      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
+      '3. 仅依据项目已关联来源写作；无法由现有来源支持的事实、数字、因果和案例必须删除或明确标为作者观点，不得用模型内置知识补证据。',
+      '4. 写出围绕一个中心主张、标题可兑现、正文自然完整的中文核心初稿；禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
+      `5. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision。`,
+      `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存。`,
+      '7. 最后用简洁中文回复：已保存受限写作核心正文，并给出标题和正文前两句。'
     ].join('\n');
   }
   return [
@@ -1049,6 +1084,7 @@ export async function startStudioDraft(input: {
   writerTask?: WriterTask;
   brief?: string;
   researchReady?: boolean;
+  researchMode?: 'auto' | 'required' | 'prohibited';
   xhsMcpUrl?: string | null; onEvent?: (event: Record<string, unknown>) => void; onRuntime?: (runtime: PiRpcSupervisor) => void;
   workerLeaseId?: string; activeRuntime?: ActiveWorkspaceRuntime;
   onTaskReady?: TaskReadyGrantHook;
@@ -1068,7 +1104,8 @@ export async function startStudioDraft(input: {
       roleId: 'writer' as const,
       projectId: input.projectId,
       writerTask,
-      researchGate: writerTask === 'core_draft' ? (input.researchReady === true ? 'satisfied' : 'required') : 'not_applicable'
+      researchGate: writerTask === 'core_draft' ? (input.researchMode === 'prohibited' ? 'exempt' : (input.researchReady === true ? 'satisfied' : 'required')) : 'not_applicable',
+      researchMode: input.researchMode ?? 'auto'
     };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, {
       intent: 'studio_draft', roleId: 'writer', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
@@ -1089,7 +1126,7 @@ export async function startStudioDraft(input: {
     // JobPool 路径已由 onTaskReady 写入真实 jobId，此处只在缺失时补，不覆盖。
     let researchContractRefs: Record<string, unknown> | undefined;
     const taskAfterReady = getAgentTask(database, task.id);
-    if (writerTask === 'core_draft' && input.researchReady !== true && !readJobContractFromRefs(taskAfterReady?.contextRefs ?? {})) {
+    if (writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited' && !readJobContractFromRefs(taskAfterReady?.contextRefs ?? {})) {
       const directRequest: RoleJobRequest = Object.freeze({
         roleId: 'writer',
         brief: input.brief?.trim() || 'Studio 直接核心初稿',
@@ -1150,7 +1187,7 @@ export async function startStudioDraft(input: {
         },
         run: async (activeRuntime) => {
           const platformTask = writerTask === 'xiaohongshu_platform_version';
-          const researchPreflight = !platformTask && input.researchReady !== true;
+          const researchPreflight = writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited';
           await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({
             dispatchId: `studio_draft:${task.id}`,
             target: 'employee',
@@ -1160,14 +1197,14 @@ export async function startStudioDraft(input: {
               : researchPreflight
                 ? { originLabel: 'Studio 核心初稿', title: '外部研究前置', goal: '派出受控外部研究并停止当前写作', acceptance: '研究派单回执与父任务交接' }
                 : { originLabel: 'Studio 核心初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
-            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', input.researchReady === true)
+            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', input.researchReady === true, input.researchMode ?? 'auto')
           }), { timeoutMs: piPromptTimeoutMs() });
         }
       });
       const afterPrompt = getAgentTask(database, task.id);
       // research.dispatch 成功会把当前父任务置为 partial；禁止继续 validating/complete 覆盖交接真相。
       if (afterPrompt && afterPrompt.status !== 'running') return { task: afterPrompt, reused: false };
-      if (writerTask === 'core_draft' && input.researchReady !== true) {
+      if (writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited') {
         const failed = await dispatchFailAgentTask(
           dependency,
           task.id,

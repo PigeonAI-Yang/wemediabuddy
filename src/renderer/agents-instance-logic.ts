@@ -52,7 +52,8 @@ export type CrewInstance = Readonly<{
   piSessionId: string | null;
   businessDate: string | null;
   projectId: string | null;
-  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null;
+  researchMode: 'auto' | 'required' | 'prohibited' | null;
   error: string | null;
   code: string | null;
   /** WMB-5174 记者卡研究摘要（research 任务非 null；数据缺失字段为 null，不伪造）。 */
@@ -257,19 +258,21 @@ export function roleOverviewStatus(active: readonly CrewInstance[], filter: Stat
  * 续派输入（按现有 jobsSpawn handler 落地）：从实例重建 RoleJobRequest 的 UI 侧参数
  * （roleId/brief/businessDate/projectId 取自投影，其余边界字段由系统按角色派生）。
  */
-export function redispatchInput(instance: Pick<CrewInstance, 'roleId' | 'brief' | 'businessDate' | 'projectId' | 'writerTask'>): {
+export function redispatchInput(instance: Pick<CrewInstance, 'roleId' | 'brief' | 'businessDate' | 'projectId' | 'writerTask' | 'researchMode'>): {
   roleId: EmployeeRole;
   brief: string;
   businessDate?: string | null;
   projectId?: string | null;
-  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null;
+  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null;
+  researchMode?: 'auto' | 'required' | 'prohibited' | null;
 } {
-  const input: { roleId: EmployeeRole; brief: string; businessDate?: string | null; projectId?: string | null; writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null } = {
+  const input: { roleId: EmployeeRole; brief: string; businessDate?: string | null; projectId?: string | null; writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null; researchMode?: 'auto' | 'required' | 'prohibited' | null } = {
     roleId: instance.roleId,
     brief: instance.brief
   };
   if (instance.businessDate) input.businessDate = instance.businessDate;
   if (instance.projectId) input.projectId = instance.projectId;
   if (instance.writerTask) input.writerTask = instance.writerTask;
+  if (instance.roleId === 'writer' && instance.researchMode) input.researchMode = instance.researchMode;
   return input;
 }

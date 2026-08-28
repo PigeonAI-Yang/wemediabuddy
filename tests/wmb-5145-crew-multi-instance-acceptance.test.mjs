@@ -664,7 +664,7 @@ test('A13 历史可重建与一键续派：重启后从 context_refs_json 指认
       assert.ok(row.sessionFile, '会话文件 ref 完整指认');
       const refs = getAgentTask(reopened.database, taskId).contextRefs;
       const rebuilt = rebuildRoleJobRequest(refs);
-      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P13 初稿', projectId: 'P13', writerTask: 'core_draft', businessDate: DATE }, 'context_refs_json 重建原 RoleJobRequest');
+      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P13 初稿', projectId: 'P13', writerTask: 'core_draft', businessDate: DATE, researchMode: 'auto' }, 'context_refs_json 重建原 RoleJobRequest');
       const uiInput = redispatchInput(row);
       assert.deepEqual(uiInput, rebuilt, 'UI 一键续派输入与持久重建一致');
       const spawner2 = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });

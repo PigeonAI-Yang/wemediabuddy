@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { listFermentingBundle, refreshWorkCarry } from '../src/main/ferment.ts';
 import { upsertSource } from '../src/main/sources.ts';
+import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
 
 // 固定时间锚点：first_seen_at / collected_at 全部用 SQL 显式回填，不依赖真实时钟。
 const FIRST_SEEN = '2026-08-05T02:00:00.000Z';
@@ -35,26 +36,29 @@ function seedPlanItem(database, { planDate, title, priority, timeliness, sourceI
     planDate, timezone: 'Asia/Shanghai', summary: `${planDate} 方案`,
     items: [{
       title, priority, whyNow: '为什么是现在', timeliness,
-      targetAudience: '受众', angle: '角度', pointOfView: '观点',
+      targetAudience: `${title}受众`, angle: `${title}角度`, pointOfView: `${title}观点`,
       platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds: [sourceId], ...(topicId ? { topicId } : {})
+      effortEstimate: '30m', sourceIds: [sourceId], scoreReasons: scoredReasons(), ...(topicId ? { topicId } : {})
     }]
   });
   const row = database.prepare(`SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date=? AND pi.title=?`).get(planDate, title);
+  approvePlanItems(database, [row.id]);
   return row.id;
 }
 
 function saveRawPlan(database, { planDate, title, priority, timeliness, sourceIds, topicId }) {
   // 与 seedPlanItem 同路径，但支持多来源（供「同故事 plan_item 引用新来源」路径）。
-  saveCurrentPlan(database, {
+  const saved = saveCurrentPlan(database, {
     planDate, timezone: 'Asia/Shanghai', summary: `${planDate} 方案`,
     items: [{
       title, priority, whyNow: '为什么是现在', timeliness,
-      targetAudience: '受众', angle: '角度', pointOfView: '观点',
+      targetAudience: `${title}受众`, angle: `${title}角度`, pointOfView: `${title}观点`,
       platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds, ...(topicId ? { topicId } : {})
+      effortEstimate: '30m', sourceIds, scoreReasons: scoredReasons(), ...(topicId ? { topicId } : {})
     }]
   });
+  const row = database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id);
+  approvePlanItems(database, [row.id]);
 }
 
 function backdateCarry(database, planItemId, at = FIRST_SEEN) {
@@ -182,11 +186,13 @@ test('migration v45 adds story_key/stage and refresh populates them', async () =
     const bundle = refreshWorkCarry(database, REFRESH_DATE);
     const topicRow = carryRow(database, topicPlanItem);
     assert.equal(topicRow.storyKey, `topic:${topicA}`, '有 topic 的故事键为 topic: 前缀，跨日稳定');
-    assert.equal(topicRow.stage, 'fermenting', '多日未完结语义 → fermenting');
+    assert.equal(topicRow.stage, 'emerging', '批准产生的 plan-item carry 本身保持 emerging，持续关注由 Topic 投影承载');
     const plainRow = carryRow(database, plainPlanItem);
     assert.ok(plainRow.storyKey.startsWith('sources:') || plainRow.storyKey.startsWith('title:'), '无 topic 行也有确定性故事键');
     assert.equal(plainRow.stage, 'emerging', '无余波无未完结 → emerging');
-    assert.ok(bundle.items.some((item) => item.objectType === 'topic' && item.objectId === topicA), '主题进 rail');
+    const projectedTopic = bundle.items.find((item) => item.objectType === 'topic' && item.objectId === topicA);
+    assert.ok(projectedTopic, '主题进 rail');
+    assert.equal(projectedTopic.stage, 'fermenting', 'Topic 投影承担持续发酵阶段');
     assert.equal(bundle.items.some((item) => item.objectId === plainPlanItem || item.objectId === topicPlanItem), false, 'plan_item 不进 rail');
   });
 });

@@ -13,6 +13,7 @@ import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { dismissCarryForPlanItem, listFermentingBundle, mergeSimilarCarryItems, upsertCarryFromPlanItem } from '../src/main/ferment.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { getOpportunityPool, getToday } from '../src/main/workbench.ts';
+import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const NOW = new Date('2026-08-05T06:00:00.000Z');
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
@@ -38,15 +39,18 @@ function seedPlanItems(database, { planDate, items, createdAt }) {
     planDate, timezone: 'Asia/Shanghai', summary: `${planDate} 方案`,
     items: items.map((item) => ({
       title: item.title, priority: item.priority, whyNow: '为什么是现在', timeliness: item.timeliness,
-      targetAudience: '受众', angle: '角度', pointOfView: '观点',
+      targetAudience: `${item.title}受众`, angle: `${item.title}角度`, pointOfView: `${item.title}观点`,
       platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds: [item.sourceId], ...(item.topicId ? { topicId: item.topicId } : {})
+      effortEstimate: '30m', sourceIds: [item.sourceId], scoreReasons: scoredReasons(), ...(item.topicId ? { topicId: item.topicId } : {})
     }))
   });
   const ids = new Map();
-  for (const row of database.prepare(`SELECT pi.id, pi.title FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date=?`).all(planDate)) {
+  for (const row of database.prepare(`SELECT pi.id, pi.title FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.id=?`).all(
+    database.prepare('SELECT id FROM plans WHERE plan_date=? AND is_current=1').get(planDate).id
+  )) {
     ids.set(row.title, row.id);
   }
+  approvePlanItems(database, [...ids.values()]);
   if (createdAt) {
     database.prepare('UPDATE plan_items SET created_at=? WHERE id IN (SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date=?)').run(createdAt, planDate);
     database.prepare('UPDATE plans SET created_at=? WHERE plan_date=?').run(createdAt, planDate);
@@ -245,27 +249,28 @@ test('listFermentingBundle only keeps cards with why-watching signal', async () 
   await withDb(async (database) => {
     const s1 = seedSource(database, 'why1');
     const s2 = seedSource(database, 'why2');
+    const keptTopic = createTopic(database, '政策后续未完结').id;
+    const droppedTopic = createTopic(database, '单发热点无后续').id;
     const kept = seedPlanItem(database, {
       planDate: '2026-08-04',
       title: '政策后续未完结',
       priority: 1,
       timeliness: '持续跟踪',
       sourceId: s1,
-      createdAt: hoursAgo(30)
+      createdAt: hoursAgo(30),
+      topicId: keptTopic
     });
-    const dropped = seedPlanItem(database, {
-      planDate: '2026-08-04',
-      title: '单发热点无后续',
-      priority: 1,
-      timeliness: '热点',
-      sourceId: s2,
-      createdAt: hoursAgo(28)
-    });
+    saveCurrentPlan(database, { planDate: '2026-08-04', timezone: 'Asia/Shanghai', summary: '无后续草案', items: [{
+      title: '单发热点无后续', priority: 1, whyNow: '单次事件', timeliness: '热点', targetAudience: '单发受众',
+      angle: '单发角度', pointOfView: '单发观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
+      openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [s2], topicId: droppedTopic
+    }] });
+    const dropped = database.prepare(`SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.id=(SELECT id FROM plans WHERE plan_date='2026-08-04' AND is_current=1)`).get().id;
     database.prepare(`UPDATE work_carry_items SET reason=?, aftershock_json='[]' WHERE object_id=?`).run('未完结影响：政策后续未出', kept);
     database.prepare(`UPDATE work_carry_items SET reason=?, aftershock_json='[]' WHERE object_id=?`).run('待处理机会', dropped);
     const bundle = listFermentingBundle(database, '2026-08-05');
     const titles = bundle.items.map((item) => item.title);
-    assert.ok(titles.includes('政策后续未完结'), '有为何关注信号应进持续关注');
+    assert.ok(titles.includes('政策后续未完结'), '有评分、已批准且有未完结信号的主题应进持续关注');
     assert.equal(titles.includes('单发热点无后续'), false, '无余波待处理不进持续关注');
   });
 });

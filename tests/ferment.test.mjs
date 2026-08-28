@@ -5,10 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { upsertSource } from '../src/main/sources.ts';
-import { saveCurrentPlan } from '../src/main/planning.ts';
+import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { getToday } from '../src/main/workbench.ts';
 import { listFermentingBundle, refreshWorkCarry, setCarryState } from '../src/main/ferment.ts';
 import { createProjectFromPlanItem } from '../src/main/content.ts';
+import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
 
 function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国产模型的 Agent 时刻到了吗？') {
   const source = upsertSource(database, {
@@ -18,7 +19,8 @@ function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国
     priority: 1,
     categories: ['official_release']
   });
-  saveCurrentPlan(database, {
+  const topicId = createTopic(database, title).id;
+  const saved = saveCurrentPlan(database, {
     planDate,
     timezone: 'Asia/Shanghai',
     summary: 'test',
@@ -36,9 +38,13 @@ function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国
       openingGuidance: 'o',
       structureGuidance: 's',
       effortEstimate: '2h',
-      sourceIds: [source.id]
+      sourceIds: [source.id],
+      topicId,
+      scoreReasons: scoredReasons()
     }]
   });
+  const planItemId = database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id).id;
+  approvePlanItems(database, [planItemId]);
   return source.id;
 }
 
