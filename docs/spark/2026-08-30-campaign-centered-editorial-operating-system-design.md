@@ -1,131 +1,158 @@
 # WeMediaBuddy Campaign-Centered Editorial Operating System Design
 
 - **Date:** 2026-08-30
-- **Status:** Owner-approved product and architecture design; specification only, no implementation begins from this document
+- **Revision:** 2 — repaired after adversarial implementability audit
+- **Status:** revised design awaiting Owner review; no Campaign implementation task is authorized by this document
 - **Core reference:** `docs/others/how-to-build-a-one-person-media-company-with-hermes-bots.md`
-- **Product scope:** Re-center WMB around a self-compounding content-production method, not around the article's six-bot implementation pattern
+- **Audit:** `docs/audits/2026-08-30-campaign-centered-editorial-operating-system-adversarial-audit.md`
 - **Implementation authority:** `TASKS.md` remains the only construction permit and progress ledger
 
 ## 1. Decision
 
-WeMediaBuddy will be re-centered from a collection of loosely connected source, planning, writing, platform-version and review flows into a **Campaign-centered editorial operating system for a one-person media company**.
+WeMediaBuddy will be re-centered as a **Campaign-centered editorial operating system for a one-person media company**.
 
-The transformation is a product-core reset, not a Campaign page added over the existing ontology.
-
-The new system will:
-
-1. continuously capture important external signals, including new model releases, product changes, research, policy changes and audience questions;
-2. turn selected signals into inspectable editorial opportunities rather than dumping raw information on the Owner;
-3. organize long-term editorial accumulation under Topics;
-4. run each bounded content action as a Campaign;
-5. separate evidence, editorial angle, flagship expression, platform-native distribution and package review;
-6. use two Owner gates: Campaign launch/angle approval and final package signoff;
-7. let Agents automatically complete the bounded work between those gates;
-8. feed publication results back into reusable Keep/Test/Stop editorial methods;
-9. migrate existing business data into the new model and retire old write paths;
-10. preserve manual final publication and all current workspace, dispatcher, grant and side-effect safety boundaries.
-
-This design deliberately covers **content-production method only**. It does not add customers, qualified conversations, demand validation, products, services, sales or revenue as formal business objects.
-
-## 2. Product thesis
-
-Writing output is no longer the primary bottleneck. The scarce capability is the repeated editorial loop:
+The product will continuously:
 
 ```text
-signal → opportunity → evidence → angle → flagship expression
-       → platform-native assets → package review → publication
-       → performance review → updated editorial methods
+capture Signals
+→ judge Editorial Opportunities
+→ advance long-term Topics
+→ launch bounded Campaigns
+→ build source-bound Evidence Packs
+→ freeze an approved Angle Brief
+→ create a flagship expression or approved exemption
+→ create platform-native assets
+→ review the complete package
+→ obtain human signoff
+→ prepare manual publication
+→ observe real performance
+→ propose Keep / Test / Stop editorial methods
 ```
 
-WMB's accumulated advantage must therefore be the quality of its accepted editorial decisions, not the quantity of generated drafts.
+The center is the editorial method and its compounding judgment, not the number or names of Agents.
 
-A one-person media company is not defined by simulating six employees. It is defined by a system that can continuously:
+This is a clean business-ontology cutover. It is **not** permission to replace every mature physical content table. Campaign becomes the new business authority while the existing content project/version subsystem is retained as the subordinate physical asset store during this migration.
 
-- notice what matters;
-- reject weak opportunities;
-- build source-bound evidence;
-- form a specific editorial claim for a specific reader;
-- develop the deepest reusable expression of that claim;
-- create different platform entryways rather than repeat one post;
-- protect factual and tonal integrity across the package;
-- learn from real results without converting one success into superstition.
+## 2. Frozen product decisions
 
-## 3. Frozen Owner decisions
+The following decisions are fixed for this design revision:
 
-The following decisions were explicitly approved during design and must not be reinterpreted during implementation:
+1. **Product-core reset:** Campaign is not an overlay page over the legacy planning flow.
+2. **Scope:** content-production method only; no customer, lead, product, service, sale or revenue objects.
+3. **Hierarchy:** Topic governs modern production Campaigns.
+4. **Signal intake:** Topic is not required before capturing or judging new information.
+5. **Human gates:** each Campaign has exactly two human Owner gates — launch/angle approval and asset-package signoff.
+6. **Separate governance action:** permanent Topic/platform method changes also require human Owner approval, but this is not a third Campaign production gate.
+7. **Primary surfaces:** Today remains the chief editor's desk; Campaign has a structured workroom.
+8. **Content architecture:** flagship-first by default; a timely Campaign may have a launch-approved exemption.
+9. **Agent organization:** preserve WMB's fixed role types; do not copy a six-bot roster into the product ontology.
+10. **Orchestration:** one workspace Actor remains the sole control authority, but Campaign work uses separate typed intents rather than reopening a terminal discovery root.
+11. **Physical storage:** retain `content_projects`, `content_versions` and `platform_versions` as the asset subsystem in this migration.
+12. **Cutover:** temporary dual-read is allowed; dual-write is prohibited; writer authority switches once behind a durable fence.
+13. **Current-work boundary:** Campaign runtime implementation must not expand WMB-5367 or any active Workspace Orchestrator task. R1 code work depends on completion of the current WMB-5365 milestone chain through WMB-5373, unless the Owner explicitly supersedes that chain at a separate checkpoint.
 
-1. **Transformation depth:** re-center the WMB product core.
-2. **Current scope:** content-production method only; no commercialization loop.
-3. **Object hierarchy:** Topic governs Campaign.
-4. **Signal boundary:** Topic is not a prerequisite for capturing new information.
-5. **Owner approval model:** two gates — launch/angle approval and final package signoff.
-6. **Primary surface:** Today remains the chief editor's desk; Campaign has a dedicated workroom.
-7. **Content architecture:** flagship-first by default, with an explicit launch-time exemption for suitable Campaigns.
-8. **Migration strategy:** in-place migration with a clean cutover; no permanent dual production system.
-9. **Architecture approach:** Campaign becomes the authoritative aggregate root for one bounded editorial action.
-10. **Agent organization:** preserve WMB's fixed role types; do not copy the source article's six-bot roster into the product ontology.
+## 3. Goals and non-goals
 
-## 4. Goals and non-goals
+### 3.1 Goals
 
-### 4.1 Goals
+- Preserve capture of important new model releases, product updates, research, policies and audience questions.
+- Stop raw Signals from becoming Today clutter.
+- Make every modern publishable asset traceable to Campaign, approved Brief revision, Evidence Pack revision, author task, package review and human signoff.
+- Separate research truth, editorial judgment, writing, platform distribution and review.
+- Let the system automatically perform bounded internal work between two human gates.
+- Prevent platform adaptation from becoming shortening or tone replacement.
+- Preserve historical publications, media, illustration, investigation, derivative and knowledge references.
+- Make stale evidence, partial signoff, unknown publication and insufficient metrics truthful durable states.
+- Make performance produce controlled method proposals rather than superstition.
+- Remove legacy production write authority in one atomic cutover.
 
-- Make each publishable body of work traceable to an approved Campaign, Brief revision, Evidence Pack revision and editorial review.
-- Preserve continuous intelligence capture and make its output actionable.
-- Make Topic the durable home of a long-term question, editorial position, Campaign history and accepted methods.
-- Make Campaign the sole production authority for one bounded editorial action.
-- Prevent research, angle selection and writing from collapsing into one uninspectable generation step.
-- Prevent platform adaptation from degrading into shortening or tone replacement.
-- Keep the Owner focused on decisions, not raw-source processing or stage-by-stage supervision.
-- Make failure, uncertainty, stale evidence and missing data truthful durable states.
-- Make publication performance change future editorial behavior through controlled method proposals.
-- Migrate all transports and workers to one Campaign domain without preserving legacy write paths.
-
-### 4.2 Non-goals
+### 3.2 Non-goals
 
 This design does not add:
 
-- customer, lead, conversation, demand, offer, product, service, sale or revenue objects;
 - automated final publication;
-- a visual multi-Agent choreography editor;
-- a generic workflow engine, workflow DSL or arbitrary stage builder;
-- six permanent Hermes-style bot identities;
-- mandatory human approval at every internal stage;
-- mandatory long-form flagship content for every Campaign;
-- automatic permanent playbook changes from one result;
-- a second database, microservice, multi-tenant backend or new transport;
-- a replacement for current CommandEnvelope, dispatcher, task-grant or workspace authority architecture.
+- a generic workflow engine or workflow DSL;
+- a multi-Agent choreography editor;
+- six permanent bot identities;
+- mandatory human approval for internal research, outline or drafting steps;
+- mandatory long-form content for every Campaign;
+- automatic permanent method updates;
+- a second database, microservice or multi-tenant backend;
+- a full physical replacement of mature content/version/publication tables;
+- Campaign runtime behavior inside the current WMB-5367 task.
+
+## 4. Authority law
+
+This section intentionally revises the previous supervisor-internal approval assumption for the three decisions below. Before Campaign implementation, the same law must be propagated to PRODUCT, PRD and SPEC.
+
+| Decision | Prepares and presents | Final actor | Agent/MCP authority |
+| --- | --- | --- | --- |
+| Campaign launch and Angle Brief approval | Strategist + desk | **human Owner UI** | read/prepare only; cannot approve |
+| Campaign asset/package signoff | Strategist + desk | **human Owner UI** | read/prepare only; cannot sign off |
+| permanent Topic/platform method update | Strategist/Librarian + desk | **human Owner UI** | proposal only; cannot approve |
+| internal task dispatch and stage advancement | workspace Actor + desk | software control plane | bounded by approved Campaign revision |
+| final platform publication | WMB prepares | **human on platform** | no final-click command exists |
+
+### 4.1 Owner-only command invariant
+
+These mutations are Owner-UI-only:
+
+- `campaign.approve_launch`
+- `campaign.reject_launch`
+- `campaign.defer_launch`
+- `campaign.signoff_assets`
+- `campaign.defer_signoff`
+- `topic.approve_method_update`
+- `topic.reject_method_update`
+
+The same request attempted by Pi, external MCP, scheduler, Reporter, Strategist, Writer, Librarian or desk must produce stable zero-write `CAMPAIGN_OWNER_UI_REQUIRED`.
+
+Desk may prepare and present exact decisions but owns no equivalent standing-write approval command.
+
+### 4.2 Decision receipts
+
+Every human decision writes an immutable receipt containing:
+
+- workspace and runtime identity;
+- Campaign/Topic identity;
+- expected aggregate revision;
+- exact Brief, asset or method proposal revisions;
+- normalized decision payload hash;
+- request ID and actor evidence;
+- decision result;
+- created time and causation.
+
+Identical replay returns the original receipt. Same request ID with a different hash returns `REQUEST_REPLAY_CONFLICT` and writes no business mutation.
 
 ## 5. Authoritative business ontology
 
 ### 5.1 Signal
 
-A Signal is an external fact or observation captured from a configured channel. Existing `source_items`, channel observations, source-body revisions and media/source provenance remain the underlying evidence identities.
+A Signal is an external fact or observation captured from configured channels. Existing `source_items`, channel observations, source-body revisions and provenance remain the source identities.
 
-A Signal answers:
+A Signal answers only:
 
 - what happened;
-- where it came from;
-- when it happened;
-- whether the source is available and verifiable.
+- where and when it was observed;
+- whether the source is retrievable and verifiable.
 
 A Signal is not automatically a Topic, Campaign or Today card.
 
 ### 5.2 Editorial Opportunity
 
-An Editorial Opportunity is the durable result of judging one or more Signals for content value.
+An Editorial Opportunity is the durable editorial judgment over one or more Signals.
 
-It answers:
+It records:
 
-- why the event may matter now;
-- which reader problem it may address;
-- what direct evidence exists;
-- how quickly the opportunity will decay;
-- whether WMB has a distinct editorial entryway;
-- whether it belongs to an existing Topic;
-- whether it justifies a new Topic or Campaign;
-- why it should be watched or rejected when weak.
+- event and urgency;
+- target audience question;
+- evidence maturity;
+- distinct editorial entryway;
+- decay time;
+- proposed Topic when known;
+- action and reason.
 
-Allowed decisions:
+Allowed action:
 
 - `rejected`
 - `watching`
@@ -133,352 +160,436 @@ Allowed decisions:
 - `propose_topic`
 - `campaign_candidate`
 
-Raw Signals remain off Today unless they become an Owner-relevant Opportunity decision.
+`proposed_topic_id` is nullable. Opportunity intake must not invent a Topic merely to satisfy a foreign key.
 
 ### 5.3 Topic
 
-A Topic is the durable identity of a long-term question or editorial territory WMB intends to understand and potentially occupy.
-
-A Topic owns:
-
-- its long-term question;
-- audience and editorial purpose;
-- accepted sources and evidence relationships;
-- viewpoint evolution;
-- active, completed and rejected Campaigns;
-- unresolved questions;
-- accepted editorial methods;
-- platform method summaries;
-- proposed method changes awaiting approval.
-
-A Topic is not required before a Signal can be captured. A new Signal can be routed to an existing Topic, propose a new Topic, create a short-lived Campaign under a broader Topic, remain watching or be rejected.
-
-### 5.4 Campaign
-
-A Campaign is the authoritative aggregate root for one bounded editorial action.
+A Topic is the durable identity of a long-term question or editorial territory.
 
 It owns:
 
-- one Topic relationship;
+- long-term question;
+- audience and editorial purpose;
+- source/evidence relationships;
+- viewpoint evolution;
+- modern and imported Campaign history;
+- unresolved questions;
+- approved editorial methods;
+- proposed method updates.
+
+### 5.4 Campaign
+
+A Campaign is the business aggregate root for one bounded editorial action.
+
+It owns:
+
+- Topic binding policy;
 - Campaign type;
-- timeliness and decay boundary;
+- timeliness and stop conditions;
 - target reader and reader outcome;
 - central tension and thesis;
-- required proof;
-- flagship strategy or approved exemption;
+- proof requirements;
+- flagship strategy or exemption;
 - target platforms;
-- all Evidence Packs, Brief revisions, content assets, package reviews, signoff decisions, publication bindings and performance reviews;
-- current phase, status, revision, causation and recovery point.
+- current approved Brief and Evidence revisions;
+- subordinate asset workspaces and asset versions;
+- review and signoff decisions;
+- publication bindings;
+- performance review and method proposals;
+- current aggregate phase, condition and revision.
 
-A Campaign is not a generic project. It exists only to take a defined editorial opportunity through evidence, expression, distribution, review and learning.
+### 5.5 Topic binding rule
 
-### 5.5 Evidence Pack
+`campaign.topic_id` follows these rules:
 
-An Evidence Pack is a versioned, source-bound research artifact. It records:
+1. it may be null while Campaign phase is `proposal`;
+2. it may remain null for an imported legacy Campaign with migration state `legacy_unknown`;
+3. a modern Campaign cannot leave human launch approval without a Topic;
+4. launch approval atomically performs exactly one of:
+   - bind an existing Topic at an expected revision;
+   - approve a proposed new Topic, create it and bind it;
+   - reject or defer the Campaign;
+5. a stale Topic/proposal revision produces zero writes.
 
-- the current event creating urgency;
+Modern Campaign production never runs topicless.
+
+### 5.6 Evidence Pack
+
+A versioned Evidence Pack records:
+
 - verified claims;
 - inference;
 - contradictions;
 - unsupported claims;
 - unknowns;
-- quotations or timestamped clips;
-- source links and revisions;
+- source and source-revision bindings;
+- quotations/timestamped clips;
 - mechanisms worth explaining;
 - what the evidence does not prove.
 
-Evidence Packs do not own headlines, sensational claims or the final editorial thesis.
+It does not own the headline or final thesis.
 
-### 5.6 Angle Brief
+### 5.7 Angle Brief
 
-The Angle Brief is the Campaign's versioned editorial contract. It records:
+The versioned Angle Brief is the Campaign editorial contract. It records:
 
 - reader;
 - reader outcome;
-- current source or urgency;
+- current source/urgency;
 - central tension;
 - thesis;
-- what becomes possible;
-- flagship format;
 - reusable object;
-- proof required;
-- sections or narrative architecture;
+- required proof;
+- flagship format or exemption;
+- narrative architecture;
 - platform entryways;
-- flagship exemption when applicable;
 - scope, expiry and stop conditions.
 
-Owner launch approval freezes one exact Brief revision. A material change requires a new revision and renewed approval.
+Human launch approval freezes one exact Brief revision and Topic binding.
 
-### 5.7 Content Asset
+### 5.8 Physical asset subsystem
 
-A Campaign contains one or more formal Content Assets:
+Campaign is the business authority, but assets continue to use the mature physical subsystem:
 
-- `flagship`
-- `platform:x`
-- `platform:xiaohongshu`
-- `platform:wechat`
-- `platform:zhihu`
-- other explicitly registered product asset types
+- `content_projects`: subordinate asset workspaces;
+- `content_versions`: immutable flagship/core versions;
+- `platform_versions`: platform asset versions;
+- existing media, illustration, investigation, derivative, publication and knowledge references remain valid.
 
-Every asset has its own identity, purpose, platform entryway, independent reader value, immutable versions, media bindings, Brief/Evidence references, review state and signoff state.
+A content project is no longer an independent modern production authority. New project/version writes require a Campaign command and an approved Campaign revision.
 
-Platform assets may reference the flagship, but their authoritative creative basis is the shared Angle Brief and Evidence Pack. WMB must not encode mechanical derivation from the flagship as the product contract.
+### 5.9 Campaign asset metadata
 
-### 5.8 Editorial Review
+Each formal Campaign asset has metadata binding an existing physical version to the Campaign contract:
 
-An Editorial Review freezes a complete set of asset revisions and checks them together for:
+- asset logical ID;
+- Campaign ID;
+- physical kind: `content_version` or `platform_version`;
+- physical version ID;
+- platform when applicable;
+- approved Brief version ID/hash;
+- Evidence Pack version ID/hash;
+- entryway type;
+- reader promise;
+- primary claim IDs;
+- evidence subset IDs;
+- reusable object;
+- novelty statement against sibling assets;
+- author actor/job ID;
+- review/signoff/publication state.
 
-- unsupported or newly introduced claims;
+This metadata provides the Campaign semantics without replacing the physical content tables.
+
+### 5.10 Editorial Review
+
+An Editorial Review freezes an exact set of Campaign asset metadata/version references and checks:
+
+- unsupported or new claims;
 - evidence drift;
-- repeated hooks, openings or arguments;
-- platform assets with no independent value;
-- Angle Brief drift;
+- repeated hooks/openings/arguments;
+- sibling assets with no independent value;
+- Brief drift;
 - tone mismatch;
 - stale evidence;
-- mismatched calls to action;
 - unapproved flagship exemption;
 - unresolved Owner risk.
 
-An asset revision created after the review invalidates that review for the changed package.
+Review provenance includes `reviewerJobId/actor`. Dispatcher rejects a review when the reviewer job equals the author job of any included asset with `CAMPAIGN_REVIEW_SELF_APPROVAL`.
 
-### 5.9 Performance Review and method proposal
+### 5.11 Performance Review and method proposal
 
-A Performance Review references real publication records and metric snapshots. It produces:
+A Performance Review references exact publication and metric snapshots. It may produce:
 
-- `keep`
-- `test`
-- `stop`
+- `keep_proposal`
+- `test_proposal`
+- `stop_proposal`
 - `insufficient_evidence`
 
-A method change is first a proposal. Agents cannot permanently update Topic or platform methods from one result.
+Permanent method updates are separate immutable proposals and require human Owner approval.
 
-## 6. Product flow
+## 6. Typed orchestration under one workspace Actor
 
-### 6.1 Intelligence flow
+Campaign does not reopen the current discovery root. The same per-workspace Actor controls three typed intent families.
 
-```text
-captured Signal
-  ↓ deduplicate, verify source, assess freshness
-assessed Opportunity
-  ├─ rejected
-  ├─ watching
-  ├─ update existing Topic
-  ├─ propose new Topic
-  └─ propose Campaign
-```
-
-Important new model releases, research, policies and product changes continue to be captured even when no Topic exists. Topic membership is a routing decision, not an intake gate.
-
-### 6.2 Campaign lifecycle
+### 6.1 Intent A — `discover_opportunities`
 
 ```text
-draft_proposal
-  ↓
-awaiting_launch_approval
-  ├─ rejected
-  ├─ deferred
-  ├─ expired
-  └─ approved
-       ↓
-researching
-       ↓
-angle_locked
-       ↓
-producing
-       ↓
-package_review
-       ├─ revision_required
-       └─ passed
-            ↓
-awaiting_signoff
-            ├─ revision_required
-            ├─ partially_signed_off
-            └─ signed_off
-                 ↓
-ready_for_manual_publish
-                 ↓
-published_partially / published
-                 ↓
-observing
-                 ↓
-reviewed
-                 ↓
-completed
+received
+→ preflight
+→ scan
+→ freeze Signal snapshot
+→ judge Opportunities
+→ freeze Campaign proposal projection
+→ awaiting_launch_decision
+→ human approve/reject/defer
+→ terminal
 ```
 
-`needs_user` is a cross-phase blocking condition with an exact reason and recovery point. It never means success.
+Outputs:
 
-### 6.3 Owner gate 1: launch and angle approval
+- rejected/watching/topic-update Opportunities;
+- Campaign proposals;
+- exact `eligibleCampaignProposalIds` projection.
 
-The Owner approves one exact Brief revision containing:
+This replaces `eligiblePlanItemIds` as the modern approval truth after cutover. The two identities must never remain concurrently writable.
 
-- Topic;
-- why now;
-- target reader;
-- reader outcome;
-- central tension;
-- provisional thesis;
-- consequential proof requirements;
-- flagship form or exemption;
-- target platforms;
-- timeliness and stop conditions.
+### 6.2 Intent B — `campaign_production`
 
-After approval, Agents may improve ordinary structure and wording within scope. The following require a new Brief revision and renewed approval:
-
-- changing the target reader;
-- changing the central thesis;
-- materially changing the reader outcome;
-- expanding target platforms;
-- changing flagship strategy;
-- continuing after the approved timeliness boundary;
-- adopting a claim contradicted by new research.
-
-### 6.4 Automatic production between gates
-
-After launch approval, WMB automatically advances bounded work:
+Created exactly once from an approved Campaign/Brief decision receipt.
 
 ```text
-complete Evidence Pack
-→ lock working Angle Brief
-→ create flagship or verify exemption
-→ create platform-native assets
-→ review the complete package
-→ present signoff package
+received
+→ validate approved Campaign/Brief/Topic fence
+→ evidence
+→ flagship or approved exemption
+→ platform assets
+→ independent package review
+→ freeze signoff projection
+→ awaiting_signoff_decision
+→ human signoff/return/defer
+→ terminal
 ```
 
-Each stage has:
+A production intent is linked by:
 
-- exact input revisions;
-- exact output artifact;
-- role owner;
-- done condition;
-- failure reason;
-- referenced job/task identity;
-- next-stage precondition.
+- `campaignId`;
+- `approvedBriefVersionId/hash`;
+- `approvedTopicId/revision`;
+- `predecessorIntentId`;
+- unique production generation.
 
-A missing field returns the work to the responsible stage. The next role must not fill gaps with plausible assumptions.
+Launch-decision transaction writes an outbox event carrying the deterministic production intent identity. The Actor creates or recovers exactly one production intent from that event.
 
-### 6.5 Owner gate 2: package signoff
+### 6.3 Intent C — `campaign_observation`
 
-The Owner receives:
+Created from real publication bindings, not from signoff alone.
 
-- flagship asset or approved exemption;
-- all platform assets;
-- consequential claim/source mapping;
-- platform entryway and independent-value statements;
-- editorial review findings;
-- unresolved risks;
-- proposed publication order.
+```text
+received
+→ validate publication/asset revisions
+→ collect metric snapshots
+→ freeze comparison context
+→ create Performance Review
+→ optionally create method proposal
+→ terminal
+```
 
-The Owner may:
+Method proposal approval is a later human governance action; it does not keep the observation root alive.
 
-- sign off the complete package;
-- sign off selected assets only;
-- return specific assets;
-- reject the Campaign;
-- defer for timing or evidence.
+### 6.4 Root and gate invariants
 
-Final platform publication remains manual.
+- Each typed intent has its own root and stage FSM.
+- A terminal root never reopens.
+- `waiting_owner` must carry explicit `decisionKind`:
+  - `campaign_launch`
+  - `campaign_signoff`
+- Method proposals are Today governance cards outside a running Campaign root.
+- All intents share the same workspace Actor row, epoch, mailbox, lease, resource admission, receipts, events, outbox/inbox and cutover fence.
+- A worker never creates the next worker task. Actor/desk creates each bounded task from durable predecessor artifacts.
+- Multi-stage Campaign production is orchestrator progression, not employee-to-employee automatic delegation.
+- The existing narrow research-successor rule remains the only worker-stage successor exception unless separately revised.
 
-## 7. Campaign types
+### 6.5 Dependency on the active Orchestrator milestone
 
-### 7.1 Flagship Campaign
+- R0 documentation reconciliation may proceed while WMB-5367–WMB-5373 continue.
+- Campaign runtime R1 cannot begin until WMB-5373 passes, unless the Owner explicitly supersedes that milestone chain.
+- Campaign work must not alter WMB-5367 acceptance, files or state machine scope.
+- The Campaign orchestrator amendment is a new separately authorized task after the current Actor foundation is proven.
 
-Used for deep methods, guides, major product judgments and durable explanations.
+## 7. Closed state models
 
-Requires:
+One scalar Campaign status is insufficient. The system uses separate aggregate, asset and decision/review state models.
 
-- complete Evidence Pack;
-- approved Angle Brief;
-- flagship asset;
-- one or more platform-native assets when platforms were approved;
+### 7.1 Campaign aggregate FSM
+
+Campaign stores `phase` and `condition` separately.
+
+`phase`:
+
+- `proposal`
+- `production`
+- `signoff`
+- `publication`
+- `observation`
+- `closed`
+
+`condition`:
+
+- `active`
+- `awaiting_owner`
+- `needs_user`
+- `deferred`
+- `expired`
+- `failed`
+- `cancelled`
+- `complete`
+- `legacy_unknown`
+
+Allowed principal transitions:
+
+```text
+proposal/active
+→ proposal/awaiting_owner
+→ production/active | proposal/deferred | closed/cancelled
+
+production/active
+→ production/needs_user | signoff/awaiting_owner | closed/expired | closed/failed
+
+signoff/awaiting_owner
+→ production/active          (returned assets)
+→ publication/active         (one or more assets signed off)
+→ signoff/deferred
+→ closed/cancelled
+
+publication/active
+→ observation/active         (real publication exists)
+→ publication/needs_user     (unknown publication)
+
+observation/active
+→ closed/complete | observation/needs_user
+```
+
+Transition predicates must be specified in SPEC. Terminal condition never returns to active; renewed work creates a successor Campaign or explicit revision workflow.
+
+### 7.2 Asset FSM
+
+Each logical Campaign asset has:
+
+- `planned`
+- `drafting`
+- `review_required`
+- `review_passed`
+- `revision_required`
+- `signed_off`
+- `excluded`
+- `publication_ready`
+- `published`
+- `failed`
+- `cancelled`
+
+Only exact asset versions are reviewed and signed.
+
+### 7.3 Decision and review records
+
+Immutable decision identities:
+
+- launch decision;
 - package review;
-- Owner signoff.
+- signoff decision per asset version;
+- publication binding/readback;
+- method proposal decision.
 
-### 7.2 Timely Campaign
+A signoff decision can independently mark each reviewed asset version:
 
-Used for high-decay opportunities such as major model releases or urgent changes.
+- `signed_off`
+- `revision_required`
+- `excluded`
+- `deferred`
 
-May omit a long-form flagship only when the launch approval records:
+### 7.4 Stale propagation
 
-- explicit exemption;
-- reason;
-- timeliness boundary;
-- at least one complete formal asset;
-- narrower evidence and platform scope.
+- A material approved Brief successor makes all downstream unpublished asset review/signoff decisions stale.
+- An Evidence Pack successor identifies changed claim IDs.
+- Assets referencing changed claims become review/signoff stale.
+- An asset-version successor invalidates that asset's review/signoff and every package review containing the old revision.
+- Unchanged signed assets remain valid only when the original signoff receipt explicitly permits independent release.
+- A published asset is never rewritten; correction creates a successor asset/publication action with preserved history.
 
-A failed flagship cannot be retroactively relabeled as an exemption.
+### 7.5 Partial signoff example
 
-### 7.3 Experimental Campaign
+For X, Xiaohongshu and WeChat assets, the Owner may:
 
-Used to test an angle, form or platform entryway.
+- sign off X;
+- request Xiaohongshu revision;
+- exclude WeChat.
+
+X may proceed to manual publication when its signoff permits independent release. Xiaohongshu returns to production, receives a new version, independent review and new signoff. WeChat remains excluded. No decision is overwritten.
+
+## 8. Fixed-role responsibilities and task provenance
+
+| Role | Responsibility | Prohibited |
+| --- | --- | --- |
+| Reporter | capture Signals, source verification, Evidence Pack, bounded research | thesis approval, unsupported completion, publication |
+| Strategist | Opportunity judgment, Angle Brief, independent package review, Performance Review | human gate approval, self-review, publication |
+| Writer | flagship/core and platform-native assets | Campaign scope change, proof-policy change, package approval |
+| Librarian | accepted evidence, Campaign history and approved methods into Topic knowledge | thesis selection, primary writing, method approval |
+| Desk/Supervisor | validate prerequisites, issue bounded tasks, advance typed intents, present human gates | human decision substitution, generic workflow invention, publication |
+
+Every artifact stores actor and job provenance. Human-authored/imported artifacts use explicit actor types and never fabricate job IDs.
+
+## 9. Campaign types
+
+### 9.1 Flagship Campaign
 
 Requires:
 
-- a specific hypothesis;
-- constrained assets and cost;
-- a defined result to observe;
-- a Performance Review that can create `test`, `stop` or `insufficient_evidence` but not automatically create a permanent `keep` rule.
+- approved Topic/Brief;
+- complete Evidence Pack;
+- flagship/core version;
+- every approved platform asset;
+- independent package review;
+- human signoff.
 
-All three types share one Campaign ontology and state model. They differ only in approved requirements and budgets.
+### 9.2 Timely Campaign
 
-## 8. Fixed-role responsibilities
+May omit a long-form flagship only when the approved launch receipt freezes:
 
-WMB preserves its fixed cross-lane role types.
+- exemption reason;
+- timeliness boundary;
+- narrowed proof requirement;
+- required platform asset set;
+- at least one complete formal asset.
 
-| Role | Campaign responsibility | Must not do |
-| --- | --- | --- |
-| Reporter | capture Signals, assess source truth, construct Evidence Packs, perform bounded successor research | approve thesis, silently fill missing evidence, publish |
-| Strategist | judge Opportunities, draft Angle Briefs, conduct independent package review, prepare Performance Reviews | publish, approve its own Owner gates, rewrite unsupported claims as facts |
-| Writer | create flagship and platform-native assets from approved Brief/Evidence revisions | change Campaign scope, alter proof requirements, organize Topic truth |
-| Librarian | integrate accepted evidence, completed Campaign history and approved methods into Topic knowledge | select Campaign thesis, write primary assets, approve methods |
-| Desk/Supervisor | validate stage prerequisites, issue bounded tasks, advance lifecycle, surface two Owner gates and truthful blockers | become a generic workflow engine, approve Owner decisions, publish |
+A production failure cannot create a retroactive exemption.
 
-Distribution and editing are task capabilities, not new permanent roles:
+### 9.3 Experimental Campaign
 
-- platform distribution is performed by Writer tasks with separate platform briefs;
-- complete-package review is performed by an independent Strategist task;
-- the same active instance may not author an asset and approve the package containing that asset.
+Requires:
 
-## 9. User experience and page responsibilities
+- specific hypothesis;
+- constrained cost/assets;
+- observation window;
+- comparison rule;
+- outcome capable of producing Test, Stop or insufficient evidence, but not automatic permanent Keep.
 
-### 9.1 Today: chief editor's desk
+All types share the same ontology and state models.
 
-Today contains only:
+## 10. User surfaces
 
-1. `awaiting_launch_approval` Campaign proposals;
-2. `awaiting_signoff` Campaign packages;
-3. `needs_user`, expiring or failed Campaign decisions;
-4. high-value read-only progress the Owner must know.
+### 10.1 Today
 
-It does not contain raw Signals, ordinary worker progress, retry streams, internal stage boards or piles of unjudged sources.
+Today shows only:
 
-### 9.2 Discovery
+- Campaign launch decisions;
+- Campaign signoff packages;
+- permanent method proposals;
+- truthful `needs_user`, expiring or failed decisions;
+- high-value read-only progress.
 
-Discovery contains:
+It does not show raw Signals, worker logs, generic internal stages or unjudged source piles.
 
-- captured Signals;
-- source status;
-- Opportunity assessment;
-- rejection and watching reasons;
-- routing to Topic or Campaign proposal.
+### 10.2 Discovery
 
-Discovery is the front line, not the approval desk.
+Discovery shows:
 
-### 9.3 Topic
+- Signals and source status;
+- Opportunity judgments;
+- rejection/watching reasons;
+- Topic/Campaign routing.
 
-Topic contains:
+### 10.3 Topic
+
+Topic shows:
 
 - long-term question and editorial purpose;
 - source/evidence relationships;
-- active and historical Campaigns;
+- modern/imported Campaigns;
 - unresolved questions;
-- accepted Keep/Test/Stop methods;
-- proposed method changes.
+- approved methods and pending method proposals.
 
-### 9.4 Campaign workroom
+### 10.4 Campaign workroom
 
-The Campaign workroom is a structured editorial case file, not a generic Kanban:
+Structured sections:
 
 - Overview
 - Research
@@ -486,353 +597,503 @@ The Campaign workroom is a structured editorial case file, not a generic Kanban:
 - Flagship
 - Distribution
 - Review
+- Publication
 - Performance
 
-It shows durable artifacts, decisions and traceability rather than Agent chat transcripts.
+The workroom displays durable artifacts and decisions, not Agent chat as business truth.
 
-### 9.5 Studio
+### 10.5 Studio, Publish and Results
 
-Studio ceases to be an independent business center. Its editor, media, annotation, illustration and platform-preview capabilities become asset-working capabilities inside a Campaign.
+- Studio capabilities become asset-working capabilities inside Campaign.
+- Publish consumes exact signed asset versions and preserves manual final publication.
+- Results may retain a cross-Campaign read model but cannot own a second review truth.
 
-### 9.6 Publication and Results
+Internal project-investigation outline/direction artifacts may remain as Agent work artifacts, but their existing approval states must be migrated to internal checks or historical records. They must not create additional mandatory human Campaign gates.
 
-Publication receives an exact signed-off asset revision and preserves current manual-final-publish boundaries.
+## 11. Physical data model
 
-Results are read and reviewed within the owning Campaign. A standalone Results page may remain as a cross-Campaign read model, but it cannot become a second review truth.
+### 11.1 New domain tables
 
-## 10. Logical data model
+Logical required identities:
 
-The design requires the following logical identities. Physical schema may use equivalent normalized tables, but it must preserve versioning, foreign-key, revision and uniqueness semantics.
-
-### 10.1 Editorial Opportunities
-
-`editorial_opportunities` stores:
-
-- identity and workspace;
-- source/observation bindings;
-- event, urgency and audience question;
-- evidence maturity;
-- proposed Topic;
-- decision and rejection/watching reason;
-- decay time;
-- revision and causation.
-
-It references source truth rather than copying full source bodies.
-
-### 10.2 Campaign aggregate
-
-`campaigns` stores stable identity and current authority:
-
-- Topic;
-- type;
-- phase and status;
-- current Brief and Evidence revisions;
-- launch/signoff decision references;
-- timeliness and stop reason;
-- current responsibility;
-- revision and lifecycle timestamps.
-
-### 10.3 Versioned artifacts
-
-Logical stores:
-
+- `editorial_opportunities`
+- `editorial_opportunity_sources`
+- `campaigns`
 - `campaign_brief_versions`
 - `campaign_evidence_packs`
 - `campaign_evidence_claims`
 - `campaign_evidence_source_bindings`
-- `campaign_assets`
-- `campaign_asset_versions`
+- `campaign_project_bindings`
+- `campaign_asset_metadata`
 - `campaign_editorial_reviews`
 - `campaign_editorial_review_items`
+- `campaign_signoff_decisions`
+- `campaign_publication_bindings`
 - `campaign_performance_reviews`
 - `topic_method_proposals`
+- `legacy_campaign_mappings`
+- `campaign_migration_quarantine`
+- `workspace_campaign_cutover_state`
 
-Approved/reviewed artifact versions are immutable. New work creates a successor version.
+Physical schema may normalize further, but it must preserve the contracts below.
 
-### 10.4 Existing infrastructure retained
+### 11.2 Retained physical asset tables
 
-The following remain authoritative in their current domain:
+Retain:
 
-- source identities and source-body revisions;
-- Topic identity;
-- assets, provenance and media bindings;
-- publications, confirmations and metric snapshots after rebinding to Campaign asset revisions;
-- Agent tasks, grants and object boundaries;
-- CommandEnvelope, dispatcher, receipts and audit;
-- ActiveWorkspaceRuntime and workspace isolation;
-- BrowserProfile binding and manual publication safety.
+- `content_projects`
+- `content_versions`
+- `platform_versions`
+- existing media-binding tables;
+- illustration and Pi-image tables;
+- project investigation tables;
+- derivative tables;
+- publications, confirmations, snapshots and metric tables;
+- knowledge usage and dossier references.
 
-## 11. Command and authorization boundary
+These tables no longer authorize modern production by themselves after cutover.
 
-All mutations continue through:
+### 11.3 Campaign/project binding
+
+`campaign_project_bindings` contains:
+
+- `campaign_id` FK;
+- `project_id` FK;
+- binding role: `primary | supporting | legacy_peer`;
+- created reason and migration mapping;
+- unique `project_id` so one physical project belongs to one Campaign;
+- partial unique one `primary` project per modern Campaign.
+
+Modern Campaigns use exactly one primary project. Imported Campaigns may temporarily contain multiple `legacy_peer` projects when one historical plan item had multiple projects; repair may later choose a primary without rewriting history.
+
+### 11.4 Asset metadata binding
+
+`campaign_asset_metadata` references exactly one physical version:
+
+- either `content_version_id` or `platform_version_id`, never both or neither;
+- unique physical version reference;
+- Campaign and project binding;
+- Brief/Evidence revisions and hashes;
+- platform entryway and novelty fields;
+- author provenance;
+- logical asset state and revision.
+
+Existing media/publication FKs remain on the physical version. Campaign uses the metadata binding to recover business meaning.
+
+### 11.5 Review and signoff
+
+A package review stores:
+
+- Campaign and aggregate revision;
+- reviewer provenance;
+- exact ordered set of asset metadata IDs and physical version IDs;
+- Brief/Evidence hashes;
+- item findings and package conclusion;
+- immutable review hash.
+
+Signoff stores one immutable row per asset version decision under one Owner decision receipt.
+
+### 11.6 Cutover fence
+
+`workspace_campaign_cutover_state` contains one workspace row:
+
+- `legacy_authoritative`
+- `migration_rehearsal`
+- `campaign_ready`
+- `campaign_authoritative`
+- `maintenance`
+- `failed`
+
+All modern and legacy production commands read this row in the dispatcher transaction.
+
+Before cutover:
+
+- legacy writes allowed;
+- Campaign production writes rejected outside rehearsal copy.
+
+After atomic cutover:
+
+- Campaign writes allowed;
+- legacy production writes return `LEGACY_PRODUCTION_WRITE_DISABLED` with zero business write.
+
+No production state permits both writers.
+
+## 12. Command contracts
+
+The table below is the minimum normative command surface to propagate into SPEC before code work.
+
+| Command | Allowed actor | Required fence | Main transaction result |
+| --- | --- | --- | --- |
+| `opportunity.assess` | Reporter/Strategist/desk with task grant | Signal snapshot + Opportunity revision | Opportunity revision and decision receipt |
+| `campaign.propose` | Strategist/desk with task grant | Opportunity revision + proposed Brief hash | Campaign proposal + Brief v1 |
+| `campaign.approve_launch` | Owner UI only | Campaign/Brief/Topic expected revisions | immutable launch receipt + Campaign production eligibility + outbox |
+| `campaign.reject_launch` | Owner UI only | Campaign/Brief expected revisions | immutable rejection receipt + terminal proposal state |
+| `campaign.defer_launch` | Owner UI only | Campaign/Brief expected revisions | immutable defer receipt + deferred state |
+| `campaign.save_evidence_pack` | Reporter with Campaign task grant | production intent + Campaign/Brief fence | new immutable Evidence Pack revision |
+| `campaign.create_project_binding` | desk/Actor internal command | approved Campaign + cutover state | primary project/binding or canonical replay |
+| `campaign.save_core_version` | Writer with Campaign task grant | approved Brief/Evidence + project binding | content version + Campaign asset metadata |
+| `campaign.save_platform_version` | Writer with Campaign task grant | approved Brief/Evidence + project binding | platform version + Campaign asset metadata |
+| `campaign.submit_package_review` | Strategist with review task grant | exact asset revision set + distinct reviewer | immutable package review and findings |
+| `campaign.signoff_assets` | Owner UI only | Campaign + review + exact asset revisions | per-asset immutable decisions + publication eligibility |
+| `campaign.defer_signoff` | Owner UI only | Campaign + review revision | immutable defer receipt |
+| `campaign.bind_publication_result` | Owner UI/browser readback adapter under existing safety contract | signed asset + publication identity | Campaign publication binding; unknown remains unknown |
+| `campaign.complete_performance_review` | Strategist with observation task grant | exact publication/metric snapshots | immutable Performance Review + optional method proposal |
+| `topic.approve_method_update` | Owner UI only | Topic + proposal expected revisions | immutable method version/decision |
+| `topic.reject_method_update` | Owner UI only | Topic + proposal expected revisions | immutable rejection decision; approved method unchanged |
+
+### 12.1 Stable errors
+
+Minimum stable Campaign errors:
+
+- `CAMPAIGN_OWNER_UI_REQUIRED`
+- `CAMPAIGN_STATE_CONFLICT`
+- `CAMPAIGN_REVISION_CONFLICT`
+- `CAMPAIGN_SCOPE_STALE`
+- `CAMPAIGN_TOPIC_REQUIRED`
+- `CAMPAIGN_BRIEF_STALE`
+- `CAMPAIGN_EVIDENCE_STALE`
+- `CAMPAIGN_ASSET_STALE`
+- `CAMPAIGN_REVIEW_STALE`
+- `CAMPAIGN_REVIEW_SELF_APPROVAL`
+- `CAMPAIGN_SIGNOFF_REQUIRED`
+- `CAMPAIGN_FLAGSHIP_EXEMPTION_REQUIRED`
+- `CAMPAIGN_CUTOVER_NOT_ACTIVE`
+- `LEGACY_PRODUCTION_WRITE_DISABLED`
+- `CAMPAIGN_MIGRATION_QUARANTINED`
+- existing workspace/grant/replay errors where applicable.
+
+Every mutation returns canonical readback proving the exact committed revisions. Text narration is never success evidence.
+
+## 13. Migration contract
+
+### 13.1 Measured baseline
+
+The audit read the active data root and found:
+
+| Object/condition | Count |
+| --- | ---: |
+| plan items | 490 |
+| content projects | 466 |
+| content versions | 545 |
+| platform versions | 11 |
+| publications | 12 |
+| reviews | 3 |
+| method findings | 2 |
+| plan items without project | 37 |
+| projects without plan item | 12 |
+| plan items with multiple projects | 1 |
+| topicless plan items | 325 |
+| topicless projects | 322 |
+| projects with multiple content versions | 26 |
+| maximum versions on one project | 12 |
+
+This baseline is evidence, not a permanent fixture. Migration rehearsal must recapture counts from its own source snapshot.
+
+### 13.2 Deterministic category rules
+
+| Legacy category | Campaign result |
+| --- | --- |
+| plan item with one linked project | one imported Campaign; project binding; plan data becomes legacy Brief evidence |
+| plan item with multiple linked projects | one imported Campaign with all projects as `legacy_peer`; no invented primary |
+| plan item without project | imported Campaign proposal with no assets |
+| project without plan item | imported Campaign with project binding and `legacy_unknown` launch history |
+| approved plan item | legacy launch status recorded as `legacy_approved`, not fabricated human Campaign receipt |
+| draft/ready plan item | imported proposal preserving exact old status |
+| topicless legacy object | `topic_id=NULL`, migration condition `legacy_unknown` |
+| content versions | preserved unchanged; create metadata bindings in version order |
+| platform versions | preserved unchanged; create platform metadata bindings |
+| publication/review/method finding | preserve existing rows; create Campaign bindings through physical versions/publications |
+| ambiguous/inconsistent FK or duplicate mapping | quarantine with reason; original row remains readable |
+
+### 13.3 Mapping identity
+
+`legacy_campaign_mappings` has unique `(legacy_object_type, legacy_object_id)` and stores:
+
+- Campaign ID;
+- migration version;
+- source snapshot hash;
+- classification rule;
+- result hash;
+- created time.
+
+Replay with the same source snapshot returns the same mapping. Different source facts after rehearsal require a new migration generation; they do not rewrite a completed mapping silently.
+
+### 13.4 Reconciliation invariant
+
+For every legacy object type:
 
 ```text
-Owner UI / Pi / external Agent / scheduler
-                    ↓
-             CommandEnvelopeV1
-                    ↓
-                dispatcher
-                    ↓
-             Campaign domain
+source_count
+= migrated_count
++ quarantined_count
++ intentionally_retained_without_campaign_count
 ```
 
-Representative product commands:
+Unclassified count must be zero.
 
-- `opportunity.assess`
-- `campaign.propose`
-- `campaign.approve_launch`
-- `campaign.reject_launch`
-- `campaign.save_evidence_pack`
-- `campaign.save_brief_revision`
-- `campaign.save_asset_version`
-- `campaign.submit_package_review`
-- `campaign.request_asset_revision`
-- `campaign.signoff_assets`
-- `campaign.defer_signoff`
-- `campaign.bind_publication_result`
-- `campaign.complete_performance_review`
-- `topic.propose_method_update`
-- `topic.approve_method_update`
+### 13.5 Rehearsal and rollback
 
-Agent writes remain limited by task grant ∩ role capability ∩ exact Campaign/object boundary. Final publish, hard delete and external-platform side-effect red lines remain unchanged.
+- Rehearsal runs only on a copied data root with Campaign writer disabled in production.
+- Rehearsal verifies all dependent publication/media/illustration/investigation/derivative/knowledge references.
+- Before atomic cutover, rollback is restoration to the untouched legacy-authoritative root/copy.
+- After Campaign-authoritative writes exist, silent downgrade to a legacy binary is prohibited; incompatible rollback enters `maintenance` and requires an explicit forward repair/rebase plan.
 
-## 12. Orchestrator boundary
+## 14. Cutover contract
 
-The workspace orchestrator may:
+### 14.1 Build-behind-fence rule
 
-- accept an approved Campaign intent;
-- dispatch product-defined stage tasks;
-- validate prerequisite artifacts and revisions;
-- resume interrupted work;
-- project Owner gates and truthful blockers to Today;
-- advance only when the current state and revisions match.
+The complete minimal Campaign vertical path is implemented and proven while normal production remains `legacy_authoritative`.
 
-It must not:
+Temporary dual-read is allowed for comparison. No command writes both legacy and Campaign truths.
 
-- allow arbitrary user/model-defined stages;
-- become a workflow editor;
-- treat chat narration as state;
-- invent Campaign scope;
-- approve launch, signoff or permanent method changes;
-- automate final publication.
+### 14.2 Atomic writer cutover
 
-## 13. Migration and clean cutover
+One dispatcher transaction or equivalently fenced migration bundle:
 
-### 13.1 Retained and enriched
+1. verifies migration rehearsal and current source fingerprint;
+2. confirms required Campaign schema/build version;
+3. sets `workspace_campaign_cutover_state=campaign_authoritative`;
+4. activates Campaign producer allowlist;
+5. disables legacy production command allowlist;
+6. writes cutover receipt/event/readback.
 
-- `source_items` remain source truth and Signal evidence.
-- `topics` retain identity and gain long-term question/method capabilities.
-- assets, source revisions, media archive/provenance and knowledge facts remain.
-- dispatcher, grants, jobs, workspace runtime and browser safety remain.
+Late legacy writers observe the current fence and write zero business rows.
 
-### 13.2 Deterministic mapping
+### 14.3 No production gap
 
-| Legacy object | New meaning |
-| --- | --- |
-| `plan_items` | Opportunity decision plus initial Campaign Brief revision |
-| `content_projects` | migration source for Campaign and assets |
-| `content_versions` | flagship asset versions |
-| `platform_versions` | platform asset versions |
-| `content_project_sources` | Evidence/source bindings |
-| `reviews` and `method_findings` | Campaign Performance Reviews and Topic method candidates |
-| `publications` and metric snapshots | bindings to exact Campaign asset revisions |
-| `work_carry_items` | retired; replaced by Campaign/Topic Today projections |
-| daily `plans` | historical run/batch context, no longer the production center |
+- Before cutover, the existing production flow remains usable.
+- At cutover, the complete Campaign path already exists.
+- No committed application version approves Campaign work without a runnable production path.
+- No committed application version permits two active production writers.
 
-Unlinked historical drafts become `imported` Campaigns. Migration must preserve their original timestamps, sources and authorship, mark absent evidence/approval as `legacy_unknown`, and never fabricate a complete modern Campaign history.
+## 15. Editorial review and platform-native acceptance
 
-Rows that cannot be mapped uniquely enter migration quarantine with the original object intact and a precise reason.
+Each platform asset must persist:
 
-### 13.3 Cutover invariant
+- `entrywayType`: capability, proof, mechanism, workflow, risk, result, personal context or registered extension;
+- reader promise;
+- primary claim set;
+- Evidence subset;
+- reusable object;
+- novelty statement against each sibling asset.
 
-After migration:
+Package review produces itemized findings, not a single model score.
 
-- UI, IPC, Pi, external MCP and scheduler create only Campaign-domain production facts;
-- legacy production commands are removed from the dispatcher;
-- legacy tables may remain only for bounded historical read or migration audit;
-- no compatibility shim may maintain two writable production authorities;
-- the old Studio, planning and Results surfaces are retired or redirected to Campaign read/write models.
+Acceptance uses adversarial golden packages:
 
-## 14. Failure and recovery semantics
+- identical opening copied across platforms;
+- paraphrased but substantively identical argument;
+- unsupported fact introduced during adaptation;
+- stale source;
+- platform asset that only quotes the flagship;
+- genuinely distinct proof/mechanism/workflow entryways.
 
-| Failure | Required durable result |
-| --- | --- |
-| Signal fetch failed | Signal/source attempt remains failed or unavailable; no verified Opportunity is fabricated |
-| Evidence insufficient | Campaign remains researching or `needs_user`; missing claims are explicit |
-| Evidence contradicts thesis | approved Brief becomes stale; downstream production stops; new launch approval required |
-| One platform asset fails | package records the missing asset; Owner may exclude, return or wait |
-| Flagship fails | Flagship Campaign cannot complete; no retroactive exemption |
-| Review finds drift/repetition | exact asset revisions return to responsible stage |
-| Timeliness expires | Campaign becomes expired; a timeless reframing requires new approval |
-| Agent/runtime restarts | resume from durable artifact and revision, never from guessed chat state |
-| Publication cannot be confirmed | publication remains unknown or `needs_user`, never silently published |
-| Metrics unavailable | Performance Review becomes `insufficient_evidence` |
-| Migration mapping ambiguous | quarantine; preserve original object; no fabricated relationship |
+Tests prove that required metadata and durable findings are produced and that known defects are blocked. They do not claim a deterministic machine can prove universal creative quality.
 
-## 15. Editorial method governance
+## 16. Keep / Test / Stop governance
 
-### 15.1 Keep
+Every method proposal freezes:
 
-A Keep proposal requires:
+- platform/account;
+- Campaign type;
+- metric names and raw snapshot IDs;
+- observation window;
+- comparison cohort;
+- known confounders;
+- applicability scope;
+- supporting Campaign IDs;
+- contradicting Campaign IDs.
 
-- support across at least two Campaigns;
-- comparable angle, structure or platform entryway;
+### 16.1 Keep proposal
+
+Requires:
+
+- at least two comparable Campaigns;
 - directionally consistent results;
-- no obvious exceptional factor sufficient to explain the result alone;
-- explicit applicability conditions.
+- comparable platform/account and observation windows, or an explicit normalization contract;
+- no known exceptional factor sufficient to explain the result alone;
+- explicit applicability limits.
 
-### 15.2 Test
+Incomparable evidence remains Test or insufficient evidence.
 
-A Test proposal is appropriate for:
+### 16.2 Test proposal
 
-- one strong result;
-- first positive signal for an entryway;
-- promising but weak evidence;
-- conflict with an accepted method;
-- a new flagship or platform form.
+Used for one strong result, first signal, conflicting evidence or a new format/entryway. It must define the next eligible Campaign and comparison method.
 
-It must define where and how the next Campaign will retest it.
+### 16.3 Stop proposal
 
-### 15.3 Stop
+Used for repeatedly weak, duplicative, costly, unsupported, platform-mismatched or factually invalidated patterns.
 
-A Stop proposal is appropriate when a pattern:
+All permanent changes require human Owner approval.
 
-- repeatedly underperforms;
-- produces duplicated platform assets;
-- costs more than its additional value;
-- repeatedly lacks evidence;
-- conflicts with platform consumption behavior;
-- has been invalidated by new facts.
+## 17. Failure and recovery semantics
 
-All Topic or platform method changes require explicit approval.
+| Failure | Durable result |
+| --- | --- |
+| Signal fetch failed | failed/unavailable Signal attempt; no verified Opportunity |
+| Evidence insufficient | production remains active/needs_user with missing claim IDs |
+| Evidence contradicts thesis | Brief becomes stale; downstream mutation fenced; new launch decision required |
+| one asset fails | other asset states remain truthful; signoff package shows exact missing/failed item |
+| flagship fails | Flagship Campaign cannot complete; no retroactive exemption |
+| review finds drift/repetition | exact asset versions return to revision_required |
+| timeliness expires | Campaign closes expired; timeless reframing is a successor Campaign/new launch decision |
+| author reviews own asset | stable zero-write rejection |
+| runtime restarts | resume from intent/artifact/revision, never chat |
+| publication unknown | unknown/needs_user; never published |
+| metrics unavailable | insufficient_evidence |
+| migration ambiguous | quarantine; original remains readable |
+| old writer after cutover | `LEGACY_PRODUCTION_WRITE_DISABLED`, zero business write |
 
-## 16. Acceptance criteria
+## 18. Revised delivery sequence
 
-### AC-1: New information remains capturable
+### R0 — Contract closure and normative propagation
 
-Given a significant official model release with no existing matching Topic, WMB:
+Documentation/design only; may occur while current Orchestrator work continues.
 
-- captures the original source;
-- creates an Opportunity with evidence, urgency and audience question;
-- can route it to an existing Topic, propose a new Topic, propose a timely Campaign, watch it or reject it;
-- does not put the raw Signal on Today without an editorial decision.
+Deliver:
 
-### AC-2: Two Owner gates work
+- authority revision in PRODUCT/PRD/SPEC;
+- typed intent amendment to Workspace Orchestrator design;
+- Campaign/Asset/Decision FSM transition tables in SPEC;
+- physical storage and FK dependency contract;
+- command schemas, actor allowlists, transaction bundles and errors;
+- migration manifest and acceptance matrix;
+- new TASKS entries in dependency order.
 
-After the Owner approves a Campaign Brief:
+R0 acceptance: an implementer can answer every actor, row, transition, fence, migration category and proof command without inference.
 
-- bounded research, asset creation and package review progress without stage-by-stage Owner clicks;
-- material scope/thesis changes return to launch approval;
-- only the complete package or a truthful blocker reaches signoff.
+### R1 — Domain and physical bindings behind disabled Campaign authority
 
-### AC-3: Platform assets are native, not mechanical rewrites
+**Dependency:** WMB-5373 complete, unless explicitly superseded.
 
-For one Campaign with X, Xiaohongshu and WeChat assets:
+Deliver:
 
-- each asset records a distinct entryway and independent value;
-- all share the approved Brief/Evidence basis;
-- package review detects repeated openings/arguments and unsupported new claims;
-- each asset adds value for a reader who has consumed another asset.
+- Opportunity/Campaign/Brief/Evidence/Review domain tables;
+- bindings to retained content project/version subsystem;
+- read models and migration classifier;
+- `workspace_campaign_cutover_state` remaining `legacy_authoritative`;
+- no normal production Campaign writes.
 
-### AC-4: Flagship exemption is controlled
+### R2 — Complete minimal Campaign vertical path behind the fence
 
-A timely Campaign may omit a long-form flagship only when the approved launch revision contains the exemption, reason, timeliness and at least one required complete asset. Production failure cannot create an exemption.
+Deliver:
 
-### AC-5: Results change future editorial methods
+```text
+official Signal
+→ Opportunity
+→ Campaign proposal
+→ human launch approval
+→ Evidence Pack
+→ flagship or approved exemption
+→ one platform asset
+→ independent package review
+→ human signoff
+→ existing manual publication preparation
+```
 
-After real publication and metric readback:
+Also deliver crash/replay, stale revision and actor authorization checks. Campaign producer remains disabled for normal production.
 
-- review references exact publication and metric snapshots;
-- one result can create Test, Stop or insufficient evidence, but not automatic permanent Keep;
-- approved method changes become available to later Campaign Briefs.
+### R3 — Real-data migration rehearsal
 
-### AC-6: Clean cutover
+On a copied current root:
 
-After migration:
+- recapture baseline;
+- classify all legacy rows;
+- run migration and reconciliation;
+- validate every dependent historical reference;
+- run the complete vertical Campaign scenario;
+- prove rollback before production cutover.
 
-- no product transport creates the legacy plan-item/content-project production chain;
-- every new formal asset traces to Campaign, Brief revision, Evidence revision and review;
-- historical data remains readable;
-- ambiguous history is not fabricated;
-- `work_carry_items` no longer owns long-term attention semantics.
+### R4 — Atomic clean cutover
 
-### AC-7: Safety does not regress
+One separately authorized milestone:
 
-- all writes pass the dispatcher;
-- Agent writes cannot cross Campaign boundaries;
-- approved revisions cannot be silently replaced;
-- final publication remains manual;
-- workspace switch/restart cannot write Campaign work into another root.
+- activate Campaign writer authority;
+- route UI, IPC, MCP and scheduler to Campaign commands;
+- disable legacy production writes;
+- switch Today/Discovery/Studio/Results projections;
+- preserve historical reads and quarantine;
+- prove old writers fail closed.
 
-## 17. Delivery milestones
+### R5 — Package acceptance and breadth
 
-### M1: Campaign domain truth and migration contract
+- verify current Windows package;
+- add remaining platform asset breadth;
+- add campaign observation and method loop;
+- retire obsolete code/UI only after caller census proves zero legacy writers;
+- update canonical operator Skill for delivered behavior.
 
-- define Opportunity, Campaign, Brief, Evidence, Asset and Review domain contracts;
-- add durable schema, commands and read models;
-- define deterministic legacy mapping and quarantine;
-- prove migration is replay-safe and does not duplicate identities;
-- keep current user path temporarily unchanged.
+## 19. Acceptance matrix
 
-### M2: Signal → Opportunity → launch gate
+| ID | Scenario | Unique proof |
+| --- | --- | --- |
+| CAM-A01 | important new Signal with no Topic | one Opportunity; no raw Today card; atomic Topic+Campaign launch |
+| CAM-A02 | non-human launch/signoff/method approval | stable `CAMPAIGN_OWNER_UI_REQUIRED`, zero business write |
+| CAM-A03 | crash between launch receipt and production intent | exactly one recovered production intent |
+| CAM-A04 | evidence contradicts approved thesis | Brief stale; downstream writes fenced; new launch required |
+| CAM-A05 | author reviews own asset | `CAMPAIGN_REVIEW_SELF_APPROVAL` and durable audit |
+| CAM-A06 | three-asset partial signoff | signed/returned/excluded states and immutable receipts |
+| CAM-A07 | asset edited after review | affected review/signoff stale; frozen unaffected behavior preserved |
+| CAM-A08 | timely flagship exemption | succeeds only when exemption existed in approved launch receipt |
+| CAM-A09 | legacy migration rehearsal | source=migrated+quarantined+retained; zero unclassified |
+| CAM-A10 | old writer after cutover | UI/IPC/MCP/scheduler all fail with zero write |
+| CAM-A11 | publication unknown | no published state; unknown survives restart |
+| CAM-A12 | incomparable method evidence | Keep rejected/downgraded to Test or insufficient evidence |
+| CAM-A13 | workspace switch during production | late old-root writes rejected; no cross-root Campaign rows |
+| CAM-A14 | duplicate/claim-drift golden packages | exact durable review findings and blocked signoff eligibility |
+| CAM-A15 | historical dependent artifacts | publications/media/illustration/investigation/derivatives/knowledge resolve unchanged |
+| CAM-A16 | no production gap | pre-cutover legacy path works; cutover version has complete Campaign path |
+| CAM-A17 | no dual writer | fence census and dynamic attempts prove exactly one writer authority |
+| CAM-A18 | plan item with multiple projects | one imported Campaign, multiple legacy_peer bindings, no invented primary |
+| CAM-A19 | topicless legacy migration | legacy_unknown preserved; modern production remains topic-required |
+| CAM-A20 | packaged real model-release flow | actual Windows package completes Signal→signoff with durable IDs/readback |
 
-- normalize channel output into Opportunity assessment;
-- implement Reporter and Strategist intake responsibilities;
-- show formal Campaign proposals on Today;
-- support Topic progress and new-Topic proposals;
-- stop creating new formal production objects through the old daily planning path.
+## 20. Go/no-go gate
 
-This is the first user-visible slice of the new method.
+Campaign runtime implementation is GO only when:
 
-### M3: Campaign workroom and automatic production
+- [ ] this repaired design is Owner-approved;
+- [ ] R0 normative propagation is complete;
+- [ ] WMB-5367 scope remained unchanged;
+- [ ] WMB-5373 is complete or explicitly superseded;
+- [ ] typed Campaign intent families and gate projections are specified;
+- [ ] Owner-vs-desk authority is command-enforced;
+- [ ] Topic binding and legacy topicless rules are specified;
+- [ ] retained physical asset strategy and dependent FKs are covered;
+- [ ] Campaign/Asset/Decision FSMs and stale propagation are specified;
+- [ ] migration manifest reconciles a fresh real-data baseline;
+- [ ] cutover has no production gap and no dual-write state;
+- [ ] command contracts and stable errors are normative;
+- [ ] CAM-A01 through CAM-A20 have mapped verification scenarios;
+- [ ] separately authorized TASKS entries exist.
 
-- deliver Research, Angle, Flagship, Distribution and Review workroom sections;
-- run fixed-role tasks under a frozen approved Brief;
-- enforce Campaign-type requirements;
-- embed Studio capabilities inside Campaign assets;
-- deliver the package signoff gate.
+## 21. Required normative consequences
 
-### M4: Publication, performance and method loop
+R0 must update:
 
-- send signed-off asset revisions to existing manual publication preparation;
-- bind publication and metrics to Campaign assets;
-- deliver Keep/Test/Stop review;
-- approve Topic/platform method changes;
-- make accepted methods available to future Campaigns.
+1. `PRODUCT.md` — new editorial lifecycle, human gate law and Campaign authority;
+2. `PRD.md` — requirements and acceptance for Signal/Opportunity/Topic/Campaign and two gates;
+3. `SPEC.md` — schema, command, FSM, actor, receipt, error, cutover and migration contracts;
+4. `TECHNICAL_DESIGN.md` — module ownership and retained physical asset subsystem;
+5. Workspace Orchestrator design — typed intent families under the same Actor;
+6. `TASKS.md` — dependency-ordered R1–R5 implementation tasks only after R0 approval;
+7. canonical WMB operator Skill — only after observable behavior is delivered.
 
-### M5: Full migration and legacy retirement
+This document does not itself authorize those edits or implementation.
 
-- migrate historical objects in place;
-- cut UI, IPC, MCP, scheduler and Skills to Campaign commands;
-- remove legacy write commands and obsolete surfaces;
-- update `PRODUCT.md`, `PRD.md`, `SPEC.md`, `TECHNICAL_DESIGN.md` and the canonical WMB operator Skill;
-- verify AC-1 through AC-7 in a current Windows package;
-- close migration only after proving there is no second writable production truth.
+## 22. Completion statement
 
-## 18. Required specification consequences
-
-Before implementation tasks are authorized, the approved design must be propagated into the normative product contracts:
-
-1. revise `PRODUCT.md` so the primary lifecycle becomes Signal → Opportunity → Topic/Campaign → Evidence → Angle → Assets → Review → Publication → Method;
-2. revise `PRD.md` requirements and acceptance criteria around Campaign authority and two Owner gates;
-3. revise `SPEC.md` with precise command, schema, status, revision and migration contracts;
-4. revise `TECHNICAL_DESIGN.md` with module ownership and dispatcher routes;
-5. reconcile the existing workspace-orchestrator design so it advances approved Campaign intents rather than becoming a second business ontology;
-6. add separately authorized implementation tasks to `TASKS.md` in milestone order;
-7. update the canonical operator Skill only when the delivered observable workflow changes.
-
-This design does not itself authorize those edits or any implementation.
-
-## 19. Completion statement
-
-The transformation is complete only when WMB can answer, from durable business facts:
+The transformation is complete only when WMB can truthfully answer from durable facts:
 
 1. What happened outside that is worth attention?
-2. Which opportunities deserve a Campaign, and why?
-3. Which Topic does the Campaign advance?
-4. What reader, outcome, tension, thesis and evidence contract did the Owner approve?
-5. Did Agents produce a deep flagship or approved exemption and genuinely distinct platform assets?
-6. What exact package does the Owner need to sign off?
-7. What real publication results changed the next Campaign's editorial methods?
+2. Which Opportunity deserves a Campaign, and why?
+3. Which Topic does the modern Campaign advance?
+4. What exact reader, outcome, thesis and evidence contract did the human Owner approve?
+5. Which exact physical asset versions were produced, by which tasks, from which Brief/Evidence revisions?
+6. Did independent review find unsupported claims, drift or duplicated platform value?
+7. Which exact assets did the human Owner sign off, return, exclude or defer?
+8. What was manually published, and what remains unknown?
+9. What comparable evidence supports Keep, Test or Stop?
+10. Which approved method is available to the next Campaign?
 
-If WMB only adds six named Agents, a Campaign board or more generated platform variants, this design has not been delivered.
+If WMB only adds named Agents, a Campaign board, extra generated variants or a parallel write path, this design has not been delivered.
