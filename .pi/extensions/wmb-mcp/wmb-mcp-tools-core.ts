@@ -255,9 +255,11 @@ const savePlan: ToolDefinition = {
             effortEstimate: { type: 'string' },
             sourceIds: { type: 'array', items: { type: 'string' } },
             availableMaterials: { type: 'array', items: { type: 'string' } },
-            missingMaterials: { type: 'array', items: { type: 'string' } }
+            missingMaterials: { type: 'array', items: { type: 'string' } },
+            editorialDecision: { type: 'object' },
+            scoreReasons: { type: 'object' }
           },
-          required: ['title', 'priority', 'whyNow', 'timeliness', 'targetAudience', 'angle', 'pointOfView', 'platforms', 'formats', 'titleGuidance', 'openingGuidance', 'structureGuidance', 'effortEstimate', 'sourceIds'],
+          required: ['title', 'priority', 'whyNow', 'timeliness', 'targetAudience', 'angle', 'pointOfView', 'platforms', 'formats', 'titleGuidance', 'openingGuidance', 'structureGuidance', 'effortEstimate', 'sourceIds', 'editorialDecision', 'scoreReasons'],
           additionalProperties: false
         }
       }
@@ -274,6 +276,153 @@ const savePlan: ToolDefinition = {
     }));
   }
 };
+
+const getPlanItem: ToolDefinition = {
+  name: 'wmb_get_plan_item',
+  label: '读取精确策划项',
+  description: '按当前 Planner 任务绑定的 planItemId 读取冻结策划项、revision、状态、资料与评分字段。只读且禁止跨任务边界。',
+  parameters: {
+    type: 'object',
+    properties: { taskId: { type: 'string' }, planItemId: { type: 'string' } },
+    required: ['taskId', 'planItemId'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('plan_item.get', {
+      task_id: String(params.taskId ?? ''),
+      plan_item_id: String(params.planItemId ?? '')
+    }));
+  }
+};
+
+function plannerEditorialDecisionPayload(value: unknown): Record<string, unknown> {
+  const input = value as Record<string, unknown>;
+  const knowledge = input.knowledgeContext as Record<string, unknown>;
+  return {
+    version: input.version,
+    candidates: (input.candidates as Array<Record<string, unknown>>).map((candidate) => ({
+      level: candidate.level,
+      thesis: candidate.thesis,
+      claim_type: candidate.claimType,
+      evidence_status: candidate.evidenceStatus,
+      evidence_boundary: candidate.evidenceBoundary,
+      score: candidate.score,
+      reason: candidate.reason,
+    })),
+    winner_level: input.winnerLevel,
+    winner_thesis: input.winnerThesis,
+    winner_reason: input.winnerReason,
+    knowledge_context: {
+      status: knowledge.status,
+      context_refs: knowledge.contextRefs,
+      query_dimensions: knowledge.queryDimensions,
+      reason: knowledge.reason,
+    },
+  };
+}
+
+function plannerScoreReasonsPayload(value: unknown): Record<string, unknown> {
+  const input = value as Record<string, unknown>;
+  const truthGate = input.truthGate as Record<string, unknown>;
+  return {
+    status: input.status,
+    version: input.version,
+    score: input.score,
+    truth_gate: {
+      status: truthGate.status,
+      reason: truthGate.reason,
+      claims: (truthGate.claims as Array<Record<string, unknown>>).map((claim) => ({
+        text: claim.text,
+        type: claim.type,
+        status: claim.status,
+        source_ids: claim.sourceIds,
+      })),
+    },
+    reasons: input.reasons,
+  };
+}
+
+const submitPlanItem: ToolDefinition = {
+  name: 'wmb_submit_plan_item',
+  label: '提交精确策划项',
+  description: '仅对当前 Planner 任务绑定的 planItemId 提交一次完整待审策划。必须使用 canonical editorial_thesis_v1、propagation_v2 与知识回执字段。',
+  parameters: {
+    type: 'object',
+    properties: {
+      ...authorityProperties,
+      planItemId: { type: 'string', minLength: 1 },
+      expectedRevision: { type: 'number', minimum: 1 },
+      title: { type: 'string', minLength: 10, maxLength: 80 },
+      priority: { type: 'number', minimum: 0, maximum: 7 },
+      whyNow: { type: 'string', minLength: 1 },
+      timeliness: { type: 'string', minLength: 1 },
+      targetAudience: { type: 'string', minLength: 1 },
+      angle: { type: 'string', minLength: 1 },
+      pointOfView: { type: 'string', minLength: 1 },
+      platforms: { type: 'array', minItems: 1, items: { type: 'string' } },
+      formats: { type: 'array', minItems: 1, items: { type: 'string' } },
+      titleGuidance: { type: 'string', minLength: 1 },
+      openingGuidance: { type: 'string', minLength: 1 },
+      structureGuidance: { type: 'string', minLength: 1 },
+      effortEstimate: { type: 'string', minLength: 1 },
+      sourceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
+      availableMaterials: { type: 'array', items: { type: 'string' } },
+      missingMaterials: { type: 'array', items: { type: 'string' } },
+      reviewIds: { type: 'array', items: { type: 'string' } },
+      methodFindingIds: { type: 'array', items: { type: 'string' } },
+      topicId: { type: ['string', 'null'] },
+      editorialDecision: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          version: { type: 'string', enum: ['editorial_thesis_v1'] },
+          candidates: { type: 'array', minItems: 3, items: { type: 'object', additionalProperties: false, properties: {
+            level: { type: 'string', enum: ['event', 'user', 'industry_or_society'] }, thesis: { type: 'string', minLength: 1 },
+            claimType: { type: 'string', enum: ['fact', 'inference', 'opinion'] }, evidenceStatus: { type: 'string', enum: ['supported', 'research_required'] },
+            evidenceBoundary: { type: 'string', minLength: 1 }, score: { type: 'number', minimum: 0, maximum: 100 }, reason: { type: 'string', minLength: 1 },
+          }, required: ['level', 'thesis', 'claimType', 'evidenceStatus', 'evidenceBoundary', 'score', 'reason'] } },
+          winnerLevel: { type: 'string', enum: ['event', 'user', 'industry_or_society'] },
+          winnerThesis: { type: 'string', minLength: 1 }, winnerReason: { type: 'string', minLength: 1 },
+          knowledgeContext: { type: 'object', additionalProperties: false, properties: {
+            status: { type: 'string', enum: ['used', 'no_relevant_context'] }, contextRefs: { type: 'array', items: { type: 'string' } },
+            queryDimensions: { type: 'array', minItems: 2, items: { type: 'string' } }, reason: { type: 'string', minLength: 1 },
+          }, required: ['status', 'contextRefs', 'queryDimensions', 'reason'] },
+        },
+        required: ['version', 'candidates', 'winnerLevel', 'winnerThesis', 'winnerReason', 'knowledgeContext'],
+      },
+      scoreReasons: {
+        type: 'object', additionalProperties: false, properties: {
+          status: { type: 'string', enum: ['scored'] }, version: { type: 'string', enum: ['propagation_v2'] }, score: { type: 'number', minimum: 0, maximum: 100 },
+          truthGate: { type: 'object', additionalProperties: false, properties: {
+            status: { type: 'string', enum: ['passed'] }, reason: { type: 'string', minLength: 1 },
+            claims: { type: 'array', minItems: 1, items: { type: 'object', additionalProperties: false, properties: {
+              text: { type: 'string', minLength: 1 }, type: { type: 'string', enum: ['fact', 'inference', 'opinion'] },
+              status: { type: 'string', enum: ['supported'] }, sourceIds: { type: 'array', items: { type: 'string' } },
+            }, required: ['text', 'type', 'status', 'sourceIds'] } },
+          }, required: ['status', 'reason', 'claims'] },
+          reasons: { type: 'array', minItems: 6, maxItems: 6, items: { type: 'object', additionalProperties: false, properties: {
+            criterion: { type: 'string', enum: ['reality_change_significance', 'tension_curiosity_gap', 'audience_stakes', 'why_now_window', 'one_sentence_relayability', 'account_fit'] },
+            weight: { type: 'number' }, score: { type: 'number' }, reason: { type: 'string', minLength: 1 },
+          }, required: ['criterion', 'weight', 'score', 'reason'] } },
+        }, required: ['status', 'version', 'score', 'truthGate', 'reasons'],
+      },
+    },
+    required: ['requestId', 'taskId', 'grantId', 'workerLeaseId', 'planItemId', 'expectedRevision', 'title', 'priority', 'whyNow', 'timeliness', 'targetAudience', 'angle', 'pointOfView', 'platforms', 'formats', 'titleGuidance', 'openingGuidance', 'structureGuidance', 'effortEstimate', 'sourceIds', 'availableMaterials', 'missingMaterials', 'editorialDecision', 'scoreReasons'],
+    additionalProperties: false
+  },
+  async execute(_toolCallId, params) {
+    return textResult(await callTool('plan_item.submit', {
+      ...authorityPayload(params), plan_item_id: String(params.planItemId), expected_revision: Number(params.expectedRevision),
+      title: params.title, priority: params.priority, why_now: params.whyNow, timeliness: params.timeliness, target_audience: params.targetAudience,
+      angle: params.angle, point_of_view: params.pointOfView, platforms: params.platforms, formats: params.formats, title_guidance: params.titleGuidance,
+      opening_guidance: params.openingGuidance, structure_guidance: params.structureGuidance, effort_estimate: params.effortEstimate,
+      source_ids: params.sourceIds, available_materials: params.availableMaterials, missing_materials: params.missingMaterials,
+      review_ids: params.reviewIds, method_finding_ids: params.methodFindingIds, topic_id: params.topicId,
+      editorial_decision: plannerEditorialDecisionPayload(params.editorialDecision), score_reasons: plannerScoreReasonsPayload(params.scoreReasons)
+    }));
+  }
+};
+
 
 const getKnowledgeContext: ToolDefinition = {
   name: 'wmb_get_knowledge_context', label: '读取历史知识',
@@ -451,4 +600,4 @@ const updateSourceStatus: ToolDefinition = {
   }))
 };
 
-export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getKnowledgeContext, getFixedVersions, suggestKnowledge, judgeSources, restoreSource, updateSourceStatus];
+export const coreTools = [getWorkbench, getAgentTask, getTaskGrant, listTaskGrants, reportAgentProgress, searchSources, getSource, saveSource, savePlan, getPlanItem, submitPlanItem, getKnowledgeContext, getFixedVersions, suggestKnowledge, judgeSources, restoreSource, updateSourceStatus];

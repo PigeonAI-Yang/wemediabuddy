@@ -1,18 +1,16 @@
-import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
+import type { DatabaseSync } from 'node:sqlite';
 import { clearAgentTaskControl, getAgentTask, reportAgentTaskProgress } from './agent-tasks.ts';
 import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
 import { getAsset, linkProjectAsset, markdownImageForAsset, registerStagedAsset, stageAssetBytes } from './assets.ts';
-import { createContentProjectWithVersion, getContentProject, saveCoreVersion, savePlatformVersion, type SavedCoreVersion, type SavedPlatformVersion } from './content.ts';
+import { assertPlanItemContentCreateAllowed, createContentProjectWithVersion, getContentProject, saveCoreVersion, savePlatformVersion, type SavedCoreVersion, type SavedPlatformVersion } from './content.ts';
 import { finalizeDerivativeVersionInternal, saveDerivativeVersionInternal } from './content-derivative.ts';
-import { submitPlanItemForReview, transitionPlanItem } from './planning-stage.ts';
-import { ensurePlannerTask } from './planning-stage-intake.ts';
-import { advanceApprovedPlanItem } from './daily-content-article.ts';
-import { mergeSimilarCarryItems, upsertCarryFromPlanItem } from './ferment.ts';
-import { shanghaiDate } from './ferment.ts';
+import { submitPlanItemForReview } from './planning-stage.ts';
 import { isRoleId } from '../shared/agent-capabilities.ts';
-function getTaskRole(database: import("node:sqlite").DatabaseSync, taskId?: string): string | null {
+import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
+import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
+function getTaskRole(database: DatabaseSync, taskId?: string): string | null {
   if (!taskId) return null;
   try {
     const t = getAgentTask(database, taskId) as unknown as Record<string, unknown>;
@@ -27,7 +25,7 @@ function getTaskRole(database: import("node:sqlite").DatabaseSync, taskId?: stri
     return null;
   } catch { return null; }
 }
-function assertPlannerScoped(database: import("node:sqlite").DatabaseSync, callerTaskId: string | undefined, planItemId: string){
+function assertPlannerScoped(database: DatabaseSync, callerTaskId: string | undefined, planItemId: string){
   if (!callerTaskId) return;
   const role = getTaskRole(database, callerTaskId);
   if (!role) throw Object.assign(new Error('TASK_SCOPE_BROADENED: planner task role not found'), { code: 'TASK_SCOPE_BROADENED' });
@@ -40,12 +38,6 @@ function assertPlannerScoped(database: import("node:sqlite").DatabaseSync, calle
   if (!ctxPlan || String(ctxPlan) !== String(planItemId)) {
     throw Object.assign(new Error('TASK_SCOPE_BROADENED: planner not scoped to this planItem'), { code: 'TASK_SCOPE_BROADENED' });
   }
-}
-function assertDeskOrOwner(database: import("node:sqlite").DatabaseSync, callerTaskId: string | undefined, actorType: string){
-  if (actorType === 'owner_ui' || actorType === 'scheduler' || actorType === 'browser_adapter') return;
-  if (!callerTaskId) throw Object.assign(new Error('TASK_SCOPE_BROADENED: desk required'), { code: 'TASK_SCOPE_BROADENED' });
-  const role = getTaskRole(database, callerTaskId);
-  if (role !== 'desk') throw Object.assign(new Error('TASK_SCOPE_BROADENED: only desk or Owner UI can approve/reject/rework/advance'), { code: 'TASK_SCOPE_BROADENED' });
 }
 
 import { reviewInvestigationResearch, saveInvestigationDirection, saveInvestigationOutline } from './project-investigation.ts';
@@ -74,6 +66,150 @@ const authoritySchema = {
   grant_id: z.string(),
   worker_lease_id: z.string().optional()
 };
+const plannerTruthClaimSchema = z.object({
+  text: z.string().min(1),
+  type: z.enum(['fact', 'inference', 'opinion']),
+  status: z.literal('supported'),
+  source_ids: z.array(z.string().min(1)),
+});
+const plannerScoreReasonSchema = z.object({
+  criterion: z.enum(['reality_change_significance', 'tension_curiosity_gap', 'audience_stakes', 'why_now_window', 'one_sentence_relayability', 'account_fit']),
+  weight: z.number().int().min(1),
+  score: z.number().min(0),
+  reason: z.string().min(1),
+});
+const plannerThesisCandidateSchema = z.object({
+  level: z.enum(['event', 'user', 'industry_or_society']),
+  thesis: z.string().min(1),
+  claim_type: z.enum(['fact', 'inference', 'opinion']),
+  evidence_status: z.enum(['supported', 'research_required']),
+  evidence_boundary: z.string().min(1),
+  score: z.number().min(0).max(100),
+  reason: z.string().min(1),
+});
+
+export const planItemSubmitInputSchema = {
+  ...authoritySchema,
+  plan_item_id: z.string().min(1),
+  expected_revision: z.number().int().min(1),
+  title: z.string().min(10).max(80),
+  priority: z.number().int().min(0).max(7),
+  why_now: z.string().min(1),
+  timeliness: z.string().min(1),
+  target_audience: z.string().min(1),
+  angle: z.string().min(1),
+  point_of_view: z.string().min(1),
+  platforms: z.array(z.string().min(1)).min(1),
+  formats: z.array(z.string().min(1)).min(1),
+  title_guidance: z.string().min(1),
+  opening_guidance: z.string().min(1),
+  structure_guidance: z.string().min(1),
+  effort_estimate: z.string().min(1),
+  source_ids: z.array(z.string().min(1)).min(1),
+  available_materials: z.array(z.string()),
+  missing_materials: z.array(z.string()),
+  review_ids: z.array(z.string()).optional(),
+  method_finding_ids: z.array(z.string()).optional(),
+  topic_id: z.string().nullable().optional(),
+  editorial_decision: z.object({
+    version: z.literal('editorial_thesis_v1'),
+    candidates: z.array(plannerThesisCandidateSchema).min(3),
+    winner_level: z.enum(['event', 'user', 'industry_or_society']),
+    winner_thesis: z.string().min(1),
+    winner_reason: z.string().min(1),
+    knowledge_context: z.object({
+      status: z.enum(['used', 'no_relevant_context']),
+      context_refs: z.array(z.string().min(1)),
+      query_dimensions: z.array(z.string().min(1)).min(2),
+      reason: z.string().min(1),
+    }),
+  }),
+  score_reasons: z.object({
+    status: z.literal('scored'),
+    version: z.literal('propagation_v2'),
+    score: z.number().min(0).max(100),
+    truth_gate: z.object({
+      status: z.literal('passed'),
+      reason: z.string().min(1),
+      claims: z.array(plannerTruthClaimSchema).min(1),
+    }),
+    reasons: z.array(plannerScoreReasonSchema).length(6),
+  }),
+} as const;
+
+function camelizePlannerSubmit(rest: Record<string, unknown>): Record<string, unknown> {
+  const editorial = rest.editorial_decision as Record<string, unknown>;
+  const knowledge = editorial.knowledge_context as Record<string, unknown>;
+  const score = rest.score_reasons as Record<string, unknown>;
+  const truthGate = score.truth_gate as Record<string, unknown>;
+  return {
+    ...rest,
+    editorialDecision: {
+      version: editorial.version,
+      candidates: (editorial.candidates as Array<Record<string, unknown>>).map((candidate) => ({
+        level: candidate.level,
+        thesis: candidate.thesis,
+        claimType: candidate.claim_type,
+        evidenceStatus: candidate.evidence_status,
+        evidenceBoundary: candidate.evidence_boundary,
+        score: candidate.score,
+        reason: candidate.reason,
+      })),
+      winnerLevel: editorial.winner_level,
+      winnerThesis: editorial.winner_thesis,
+      winnerReason: editorial.winner_reason,
+      knowledgeContext: {
+        status: knowledge.status,
+        contextRefs: knowledge.context_refs,
+        queryDimensions: knowledge.query_dimensions,
+        reason: knowledge.reason,
+      },
+    },
+    scoreReasons: {
+      status: score.status,
+      version: score.version,
+      score: score.score,
+      truthGate: {
+        status: truthGate.status,
+        reason: truthGate.reason,
+        claims: (truthGate.claims as Array<Record<string, unknown>>).map((claim) => ({
+          text: claim.text,
+          type: claim.type,
+          status: claim.status,
+          sourceIds: claim.source_ids,
+        })),
+      },
+      reasons: score.reasons,
+    },
+  };
+}
+
+export function buildPlannerReviewInput(existing: Record<string, unknown>, rest: Record<string, unknown>): Parameters<typeof submitPlanItemForReview>[1]['item'] {
+  const canonical = camelizePlannerSubmit(rest);
+  return {
+    title: canonical.title as string,
+    priority: canonical.priority as number,
+    whyNow: canonical.why_now as string,
+    timeliness: canonical.timeliness as string,
+    targetAudience: canonical.target_audience as string,
+    angle: canonical.angle as string,
+    pointOfView: canonical.point_of_view as string,
+    platforms: canonical.platforms as string[],
+    formats: canonical.formats as string[],
+    titleGuidance: canonical.title_guidance as string,
+    openingGuidance: canonical.opening_guidance as string,
+    structureGuidance: canonical.structure_guidance as string,
+    effortEstimate: canonical.effort_estimate as string,
+    sourceIds: canonical.source_ids as string[],
+    availableMaterials: canonical.available_materials as string[],
+    missingMaterials: canonical.missing_materials as string[],
+    reviewIds: (canonical.review_ids as string[] | undefined) ?? [],
+    methodFindingIds: (canonical.method_finding_ids as string[] | undefined) ?? [],
+    topicId: (canonical.topic_id as string | null | undefined) ?? (existing.topic_id as string | null ?? null),
+    editorialDecision: canonical.editorialDecision,
+    scoreReasons: canonical.scoreReasons,
+  };
+}
 type Authority = { request_id: string; task_id: string; grant_id: string; worker_lease_id?: string };
 type SavedContentVersion = SavedCoreVersion | SavedPlatformVersion;
 const authority = (input: Authority) => ({
@@ -82,6 +218,43 @@ const authority = (input: Authority) => ({
   grantId: input.grant_id,
   workerLeaseId: input.worker_lease_id
 });
+
+type PlanItemIntentIdentity = Readonly<{
+  planItemId: string;
+  businessDate: string;
+  planItemRevision: number;
+  projectId: string | null;
+  projectRevision: number | null;
+}>;
+
+function freezeMcpIntentPayload(input: Authority, payload: Record<string, unknown>): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(Object.entries({
+    ...payload,
+    taskId: input.task_id,
+    grantId: input.grant_id,
+    workerLeaseId: input.worker_lease_id
+  }).filter(([, value]) => value !== undefined)));
+}
+
+function readPlanItemIntentIdentity(database: DatabaseSync, planItemId: string): PlanItemIntentIdentity {
+  const item = database.prepare(`
+    SELECT pi.id AS planItemId, pi.revision AS planItemRevision, p.plan_date AS businessDate
+      FROM plan_items pi
+      JOIN plans p ON p.id = pi.plan_id
+     WHERE pi.id = ?
+  `).get(planItemId) as { planItemId: string; planItemRevision: number; businessDate: string } | undefined;
+  if (!item) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
+  const projects = database.prepare('SELECT id, revision FROM content_projects WHERE plan_item_id = ?').all(planItemId) as Array<{ id: string; revision: number }>;
+  if (projects.length > 1) throw Object.assign(new Error('ambiguous_project_for_plan_item'), { code: 'CONFLICT' });
+  const project = projects[0] ?? null;
+  return Object.freeze({
+    planItemId: item.planItemId,
+    businessDate: String(item.businessDate ?? ''),
+    planItemRevision: Number(item.planItemRevision),
+    projectId: project?.id ?? null,
+    projectRevision: project ? Number(project.revision) : null
+  });
+}
 
 /** First-pass Studio writers may only hand off research; no content/image mutation is permitted. Exempt via verified prohibited context only. */
 export function assertStudioDraftResearchReady(runtime: Pick<ActiveWorkspaceRuntime, 'database'>, taskId: string, projectId?: string): void {
@@ -384,6 +557,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
       command: 'content.create', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: { ...fields, planItemId: plan_item_id, sourceIds: source_ids }, boundIdentity: { planItemId: plan_item_id ?? null }, entityType: 'content_project',
       execute: (database, normalized) => {
+        assertPlanItemContentCreateAllowed(database, normalized.planItemId);
         const data = createContentProjectWithVersion(database, normalized, false);
         return { data, entityId: data.id, afterRevision: data.revision, readback: data };
       }
@@ -397,7 +571,8 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
       angle: z.string(), pointOfView: z.string(), platforms: z.array(z.string()), formats: z.array(z.string()),
       titleGuidance: z.string(), openingGuidance: z.string(), structureGuidance: z.string(), effortEstimate: z.string(),
       sourceIds: z.array(z.string()).min(1), availableMaterials: z.array(z.string()).optional(), missingMaterials: z.array(z.string()).optional(),
-      reviewIds: z.array(z.string()).optional(), methodFindingIds: z.array(z.string()).optional(), topicId: z.string().optional()
+      reviewIds: z.array(z.string()).optional(), methodFindingIds: z.array(z.string()).optional(), topicId: z.string().optional(),
+      editorialDecision: z.record(z.string(), z.unknown()), scoreReasons: z.record(z.string(), z.unknown())
     })) }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_date, summary, items } = input;
@@ -417,24 +592,26 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
 
   // WMB-5351 plan_item.* commands
   server.registerTool('plan_item.request_planning', {
-    description: '为草稿确保一项 Planner 工单；幂等复用活动任务',
+    description: '为草稿提交一项 Planner 规划意图；只返回 Actor receipt',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int().optional() }
   }, async (input) => {
-    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.request_planning', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: { planItemId: plan_item_id }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
-      execute: (database, normalized) => {
-        assertPlannerScoped(database, task_id, normalized.planItemId);
-        const row = database.prepare('SELECT id, planning_status, source_ids_json FROM plan_items WHERE id=?').get(normalized.planItemId) as { id:string; planning_status:string; source_ids_json:string }|undefined;
-        if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-        if (row.planning_status !== 'draft' && row.planning_status !== 'rejected') throw Object.assign(new Error('conflict: only draft/rejected can request planning'), { code: 'conflict' });
-        let sourceIds: string[] = [];
-        try { sourceIds = JSON.parse(row.source_ids_json || '[]') as string[]; } catch {}
-        const result = ensurePlannerTask(database, { planItemId: normalized.planItemId, sourceIds, requestId: request_id });
-        return { data: { planItemId: normalized.planItemId, taskId: result.taskId, jobId: result.jobId, reused: !result.created }, entityId: normalized.planItemId, readback: { taskId: result.taskId, jobId: result.jobId, reused: !result.created } };
-      }
-    }));
+    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision } = input;
+    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
+      planItemId: identity.planItemId,
+      expectedRevision: expected_revision ?? identity.planItemRevision,
+      projectId: identity.projectId,
+      projectRevision: identity.projectRevision
+    });
+    return text(await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.plan-item-request-planning',
+      businessDate: identity.businessDate,
+      requestId: request_id,
+      action: 'judge',
+      logicalInput: payload,
+      payload,
+      rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput));
   });
 
   server.registerTool('plan_item.get', {
@@ -443,8 +620,8 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   }, async ({ task_id, plan_item_id }) => text(readScopedPlanItem(runtime.database, task_id, plan_item_id)));
 
   server.registerTool('plan_item.submit', {
-    description: '提交既有草稿/驳回项为待审',
-    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), title: z.string().optional(), why_now: z.string().optional(), timeliness: z.string().optional(), target_audience: z.string().optional(), angle: z.string().optional(), point_of_view: z.string().optional(), platforms: z.array(z.string()).optional(), formats: z.array(z.string()).optional(), opening_guidance: z.string().optional(), structure_guidance: z.string().optional(), source_ids: z.array(z.string()).optional(), available_materials: z.array(z.string()).optional(), missing_materials: z.array(z.string()).optional(), score_reasons: z.record(z.string(), z.unknown()).optional() }
+    description: '提交既有草稿/驳回项为待审；必须提供当前 propagation_v2、editorial_thesis_v1 与知识回执的完整 canonical payload。',
+    inputSchema: planItemSubmitInputSchema
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, ...rest } = input;
     return text(await dispatchBusinessCommand(runtime, {
@@ -455,26 +632,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
         assertPlannerScoped(database, task_id, command.planItemId);
         const existing = database.prepare('SELECT * FROM plan_items WHERE id=?').get(command.planItemId) as Record<string, unknown> | undefined;
         if (!existing) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-        const item: Parameters<typeof submitPlanItemForReview>[1]['item'] = {
-          title: rest.title ?? existing.title as string,
-          whyNow: rest.why_now ?? existing.why_now as string,
-          timeliness: rest.timeliness ?? existing.timeliness as string,
-          targetAudience: rest.target_audience ?? existing.target_audience as string,
-          angle: rest.angle ?? existing.angle as string,
-          pointOfView: rest.point_of_view ?? existing.point_of_view as string,
-          platforms: rest.platforms ?? JSON.parse((existing.platforms_json as string) || '[]'),
-          formats: rest.formats ?? JSON.parse((existing.formats_json as string) || '[]'),
-          titleGuidance: existing.title_guidance as string ?? '',
-          openingGuidance: rest.opening_guidance ?? existing.opening_guidance as string,
-          structureGuidance: rest.structure_guidance ?? existing.structure_guidance as string,
-          effortEstimate: existing.effort_estimate as string ?? '',
-          sourceIds: rest.source_ids ?? JSON.parse((existing.source_ids_json as string) || '[]'),
-          availableMaterials: rest.available_materials ?? JSON.parse((existing.available_materials_json as string) || '[]'),
-          missingMaterials: rest.missing_materials ?? JSON.parse((existing.missing_materials_json as string) || '[]'),
-          scoreReasons: rest.score_reasons ?? JSON.parse((existing.score_reasons_json as string) || '{}'),
-          topicId: existing.topic_id as string | null ?? null,
-          priority: existing.priority as number ?? 0
-        };
+        const item = buildPlannerReviewInput(existing, rest);
         const submitBy = task_id ? (getTaskRole(database, task_id) || 'planner') : 'planner';
         const result = submitPlanItemForReview(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, item, by: submitBy });
         return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
@@ -483,90 +641,104 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('plan_item.approve', {
-    description: '内部批准策划',
+    description: '提交候选批准意图；只返回 Actor receipt',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.approve', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
-      execute: (database, normalized) => {
-        const command = normalized as { planItemId: string; expectedRevision: number; reason?: string };
-        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
-        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
-        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'approved', by: byActor, reason: command.reason ?? 'approve' });
-        const item = database.prepare('SELECT topic_id, title, priority, timeliness, source_ids_json, plan_id FROM plan_items WHERE id=?').get(command.planItemId) as { topic_id:string|null; title:string; priority:number; timeliness:string; source_ids_json:string; plan_id:string }|undefined;
-        if (item) {
-          if (item.topic_id) {
-            const sids = JSON.parse(item.source_ids_json || '[]') as string[];
-            linkTopicSources(database, item.topic_id, sids, new Date().toISOString());
-          }
-          try {
-            const plan = database.prepare('SELECT plan_date FROM plans WHERE id=?').get(item.plan_id) as { plan_date:string }|undefined;
-            const planDate = plan?.plan_date ?? shanghaiDate();
-            upsertCarryFromPlanItem(database, { planItemId: command.planItemId, title: item.title, priority: item.priority, timeliness: item.timeliness, topicId: item.topic_id ?? null, sourceIds: JSON.parse(item.source_ids_json || '[]') as string[], originPlanDate: planDate, reason: `已批准: ${item.title}` });
-            mergeSimilarCarryItems(database);
-          } catch {}
-        }
-        let advance: ReturnType<typeof advanceApprovedPlanItem> | null = null;
-        try { advance = advanceApprovedPlanItem(database, command.planItemId); } catch {}
-        const data = { ...result, advance };
-        return { data, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: data };
-      }
-    }));
+    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
+      planItemId: identity.planItemId,
+      expectedRevision: expected_revision,
+      projectId: identity.projectId,
+      projectRevision: identity.projectRevision,
+      decision: 'approve',
+      approvedPlanItemIds: [identity.planItemId],
+      ...(reason === undefined ? {} : { reason })
+    });
+    return text(await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.candidate-decision',
+      businessDate: identity.businessDate,
+      requestId: request_id,
+      action: 'approve_candidates',
+      logicalInput: payload,
+      payload,
+      rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput));
   });
 
   server.registerTool('plan_item.reject', {
-    description: '内部驳回策划',
+    description: '提交候选驳回意图；只返回 Actor receipt',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().min(1) }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.reject', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
-      execute: (database, normalized) => {
-        const command = normalized as { planItemId: string; expectedRevision: number; reason: string };
-        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
-        if (!command.reason.trim()) throw Object.assign(new Error('validation_failed: reason_required'), { code: 'validation_failed' });
-        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
-        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'ready_for_review', toStatus: 'rejected', by: byActor, reason: command.reason });
-        return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
-      }
-    }));
+    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
+      planItemId: identity.planItemId,
+      expectedRevision: expected_revision,
+      projectId: identity.projectId,
+      projectRevision: identity.projectRevision,
+      decision: 'reject',
+      approvedPlanItemIds: [],
+      reason
+    });
+    return text(await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.candidate-decision',
+      businessDate: identity.businessDate,
+      requestId: request_id,
+      action: 'approve_candidates',
+      logicalInput: payload,
+      payload,
+      rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput));
   });
 
   server.registerTool('plan_item.rework', {
-    description: '驳回后退回草稿',
+    description: '提交候选修复意图；只返回 Actor receipt',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.rework', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: { planItemId: plan_item_id, expectedRevision: expected_revision, reason }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
-      execute: (database, normalized) => {
-        const command = normalized as { planItemId: string; expectedRevision: number; reason?: string };
-        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
-        const byActor = task_id ? (getTaskRole(database, task_id) || 'desk') : 'owner_ui';
-        const result = transitionPlanItem(database, { planItemId: command.planItemId, expectedRevision: command.expectedRevision, expectedStatus: 'rejected', toStatus: 'draft', by: byActor, reason: command.reason ?? 'rework' });
-        return { data: result, entityId: command.planItemId, beforeRevision: command.expectedRevision, afterRevision: result.revision, readback: result };
-      }
-    }));
+    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
+      planItemId: identity.planItemId,
+      expectedRevision: expected_revision,
+      projectId: identity.projectId,
+      projectRevision: identity.projectRevision,
+      decision: 'repair',
+      invalidPlanItemIds: [identity.planItemId],
+      reason: reason ?? 'rework'
+    });
+    return text(await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.candidate-decision',
+      businessDate: identity.businessDate,
+      requestId: request_id,
+      action: 'repair_invalid_candidate',
+      logicalInput: payload,
+      payload,
+      rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput));
   });
 
   server.registerTool('plan_item.advance', {
-    description: '统一生产推进（幂等）',
+    description: '提交候选推进意图；只返回 Actor receipt',
     inputSchema: { ...authoritySchema, plan_item_id: z.string() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id } = input;
-    return text(await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.advance', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
-      input: { planItemId: plan_item_id }, boundIdentity: { planItemId: plan_item_id }, entityType: 'plan_item',
-      execute: (database, normalized) => {
-        assertDeskOrOwner(database, task_id, task_id ? 'pi' : 'owner_ui');
-        const data = advanceApprovedPlanItem(database, normalized.planItemId);
-        return { data: data as unknown as Record<string, unknown>, entityId: normalized.planItemId, readback: data };
-      }
-    }));
+    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
+      planItemId: identity.planItemId,
+      expectedRevision: identity.planItemRevision,
+      projectId: identity.projectId,
+      projectRevision: identity.projectRevision
+    });
+    return text(await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.plan-item-advance',
+      businessDate: identity.businessDate,
+      requestId: request_id,
+      action: 'stage_d',
+      logicalInput: payload,
+      payload,
+      rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput));
   });
 
   server.registerTool('content.import_image', {
