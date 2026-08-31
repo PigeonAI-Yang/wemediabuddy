@@ -19,7 +19,9 @@
     "package": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge package",
     "build": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge make",
     "publish": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge publish",
-    "icons:brand": "node scripts/build-brand-icons.mjs"
+    "icons:brand": "node scripts/build-brand-icons.mjs",
+    "check:task-ledger": "node scripts/check-task-ledger.mjs",
+    "task:close": "node scripts/task-close.mjs"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",

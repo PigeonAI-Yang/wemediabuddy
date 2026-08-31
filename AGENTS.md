@@ -12,7 +12,10 @@ Secondary agent surface (Codex / multi-agent). **Oh My Pi primary entry is `CLAU
 - Do not impose arbitrary one-wave, 15-minute, second-pass approval, mandatory reviewer, full-suite, package, or E2E rituals. Run a wider gate only when it proves a specific uncovered risk.
 - `blocked` is reserved for external credentials, permissions, unavailable services, destructive decisions, or Owner-locked product choices. Missing APIs, fields, tests, and build errors are engineering work to resolve directly.
 - Do not reopen completed tasks without current regression evidence. Do not create long evidence documents unless the task explicitly requires one.
-- When a task is truly done, update its ledger row, then commit and push only that task's exact files before starting the next task.
+- A task is not `done` merely because code exists or a test passed. For receipt-enforced tasks, agents MUST NOT hand-edit `TASKS.md` to `done`; use `npm run task:close -- <TASK-ID> <pushed-implementation-commit> -- <verification command>`.
+- `npm run check:task-ledger` is authoritative for task closure. A missing receipt, unpushed implementation/closure commit, mismatched commit paths, missing verification log, multiple `doing` rows, or stale ledger pointer keeps the task open.
+- Finish and push the current serial task before starting its successor. Untracked task-owned production, test, migration, script, configuration, or renderer files are unfinished work, not evidence of completion.
+- Historical rows are grandfathered. Machine receipts are mandatory for WMB-5324, WMB-5374, WMB-5385–WMB-5388, and every numeric task from WMB-5391 onward.
 
 
 ## Visual Design Authority
