@@ -2348,6 +2348,7 @@ export class WorkspaceOrchestratorActorStore {
             deadlines.gateMono,
             input.writeFence ?? current.writeFence,
             buildId,
+            input.migrationEpoch ?? current.migrationEpoch,
             ...acceptanceSqlValues(acceptance),
             pair.utc,
             input.workspaceId,
@@ -2362,7 +2363,7 @@ export class WorkspaceOrchestratorActorStore {
             actor_status=?, runtime_epoch=?, owner_epoch=?, authority_revision=?, lease_token=?,
             lease_expires_at_utc=?, lease_expires_at_mono=?, control_stall_deadline_utc=?,
             control_stall_deadline_mono=?, gate_deadline_utc=?, gate_deadline_mono=?,
-            write_fence=?, current_build_id=?, acceptance_run_id=?, baseline_event_sequence=?,
+            write_fence=?, current_build_id=?, migration_epoch=?, acceptance_run_id=?, baseline_event_sequence=?,
             baseline_checkpoint_revision=?, created_after_event_sequence=?,
             created_after_checkpoint_revision=?, created_after_mono=?, updated_at=?
             WHERE workspace_id=? AND runtime_epoch=? AND owner_epoch=? AND authority_revision=?

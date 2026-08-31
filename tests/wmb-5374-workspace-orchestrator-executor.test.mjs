@@ -47,6 +47,23 @@ test('WMB-5374 packaged manifest binds the runtime build row to exact app.asar i
     assert.equal(state.buildManifest.sourceCommit, 'wmb-5374-test');
     assert.equal(state.buildManifest.packageHash, packageHash);
     assert.equal(state.buildManifest.appAsarHash, appAsarHash);
+    await runtime.stop({ drain: false });
+    runtime = null;
+    const expiredDatabase = migrateDatabase(path.join(directory, 'wmb.db'));
+    expiredDatabase.prepare(`UPDATE workspace_orchestrator_actors SET lease_expires_at_utc=?, lease_expires_at_mono=0,
+      control_stall_deadline_utc=?, control_stall_deadline_mono=0, gate_deadline_utc=?, gate_deadline_mono=0 WHERE workspace_id=?`).run(
+      '1970-01-01T00:00:00.000Z', '1970-01-01T00:00:00.000Z', '1970-01-01T00:00:00.000Z', 'wmb-5374-manifest');
+    expiredDatabase.close();
+    const nextAppAsar = Buffer.from('wmb-5374-packaged-app-asar-next');
+    fs.writeFileSync(path.join(manifestDirectory, 'app.asar'), nextAppAsar);
+    const nextAppAsarHash = createHash('sha256').update(nextAppAsar).digest('hex');
+    const nextPackageHash = createHash('sha256').update('wmb-5374-package-next').digest('hex');
+    fs.writeFileSync(manifestPath, JSON.stringify({ version: 1, sourceCommit: 'wmb-5374-test-next', packageHash: nextPackageHash, appAsarHash: nextAppAsarHash, appAsar: 'app.asar' }));
+    runtime = ActiveWorkspaceRuntime.open(directory, { openDatabase: migrateDatabase, createEpoch: () => 'runtime-wmb-5374-manifest-next' });
+    const nextState = await initializeWorkspaceOrchestratorRuntime(runtime);
+    assert.equal(nextState.buildManifest.packageHash, nextPackageHash);
+    assert.equal(nextState.actor.migrationEpoch, 2);
+    assert.equal(nextState.migration.migrationEpoch, 2);
   } finally {
     if (previousManifest === undefined) delete process.env.WMB_BUILD_MANIFEST_PATH;
     else process.env.WMB_BUILD_MANIFEST_PATH = previousManifest;
