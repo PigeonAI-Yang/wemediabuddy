@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "taskId": "WMB-5386",
-  "implementationCommit": "HEAD",
+  "implementationCommit": "3fe1ce3",
   "upstream": "origin/master",
   "changedPaths": [
     ".ai/wmb-5373-adversarial-status.json",
