@@ -662,8 +662,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
         <aside className="today-rail">
           <TodayBlockers blockers={runView.blockers} onAction={onBlocker} />
           <div className="feed-list" ref={feedListRef} aria-label="入库信息流，最多显示 500 条来源记录">
-            <p className="feed-context">{sourcesAreToday ? '新收集的来源记录，不是已选选题；最多显示 500 条' : '来源记录，不是已选选题；最多显示 500 条'}</p>
-            {!sourcesAreToday && today?.sourcesDate && feedSources.length > 0 ? <p className="feed-context">今天暂无新资料，以下为最近有效入库</p> : null}
             {selectedSources.length > 0 && <div className="feed-selection-bar">已选 {selectedSources.length}/{MAX_SELECTED_SOURCES} 条资料进 Pi</div>}
             {feedSources.length ? (
               <div className="feed-stream-viewport">
