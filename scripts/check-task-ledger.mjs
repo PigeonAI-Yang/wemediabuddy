@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const ROOT = process.cwd();
 const LEDGER_PATH = path.join(ROOT, 'TASKS.md');
 const RECEIPT_ROOT = path.join(ROOT, '.ai', 'task-receipts');
+const ARCHIVE_ROOT = path.join(ROOT, '.ai', 'task-ledger', 'archive');
 const VALID_STATUSES = new Set(['todo', 'doing', 'blocked', 'done']);
 const EXPLICIT_ENFORCED_TASKS = new Set([
   'WMB-5374',
@@ -24,7 +25,7 @@ function git(args) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
-function parseRows(markdown) {
+function parseRows(markdown, source = 'TASKS.md') {
   const rows = [];
   for (const line of markdown.split(/\r?\n/u)) {
     if (!/^\| WMB-[^|]+\|/u.test(line)) continue;
@@ -39,7 +40,8 @@ function parseRows(markdown) {
       deliverable: cells[5],
       evidence: cells[6],
       owner: cells[7] ?? '',
-      line
+      line,
+      source
     });
   }
   return rows;
@@ -132,18 +134,25 @@ function verifyReceipt(row) {
   if (!row.evidence.includes(relativeReceipt)) fail('TASK_RECEIPT_NOT_LINKED', `${row.taskId}: evidence must name ${relativeReceipt}`);
 }
 
-function verifyLedger(markdown, rows) {
+function verifyLedger(markdown, activeRows, archiveRows = []) {
+  const rows = [...activeRows, ...archiveRows];
   const duplicateIds = rows.filter((row, index) => rows.findIndex((candidate) => candidate.taskId === row.taskId) !== index);
-  if (duplicateIds.length) fail('DUPLICATE_TASK_ID', duplicateIds.map((row) => row.taskId).join(','));
+  if (duplicateIds.length) fail('DUPLICATE_TASK_ID', duplicateIds.map((row) => `${row.taskId}@${row.source}`).join(','));
 
   for (const row of rows) {
     if (!VALID_STATUSES.has(row.status)) fail('TASK_STATUS_INVALID', `${row.taskId}: ${row.status}`);
   }
+  for (const row of archiveRows) {
+    if (row.status !== 'done') fail('ARCHIVE_NON_TERMINAL_TASK', `${row.taskId}@${row.source}=${row.status}`);
+  }
+  for (const row of activeRows) {
+    if (row.status === 'done' && isEnforced(row.taskId)) fail('TASK_DONE_NOT_ARCHIVED', `${row.taskId} must move to .ai/task-ledger/archive/YYYY-MM.md`);
+  }
 
-  const doing = rows.filter((row) => row.status === 'doing');
+  const doing = activeRows.filter((row) => row.status === 'doing');
   if (doing.length > 1) fail('MULTIPLE_ACTIVE_TASKS', doing.map((row) => row.taskId).join(','));
 
-  const firstTodo = rows.find((row) => row.status === 'todo');
+  const firstTodo = activeRows.find((row) => row.status === 'todo');
   const pointer = /next ledger row is (WMB-\d+)/iu.exec(markdown)?.[1] ?? null;
   if (pointer && firstTodo && pointer !== firstTodo.taskId) {
     fail('LEDGER_POINTER_MISMATCH', `summary=${pointer} firstTodo=${firstTodo.taskId}`);
@@ -152,6 +161,8 @@ function verifyLedger(markdown, rows) {
   const byId = new Map(rows.map((row) => [row.taskId, row]));
   for (const row of rows) {
     if (row.status === 'done' && isEnforced(row.taskId)) verifyReceipt(row);
+  }
+  for (const row of activeRows) {
     if (row.status !== 'doing') continue;
     const dependencies = row.dependsOn.match(/WMB-\d+/gu) ?? [];
     for (const dependency of dependencies) {
@@ -178,12 +189,21 @@ function selfTest() {
   const falseDone = `${header}\n| WMB-6002 | M | CAP | done | none | x | claimed without receipt | main |`;
   let falseDoneRejected = false;
   try {
-    verifyLedger(falseDone, parseRows(falseDone));
+    verifyLedger(header, [], parseRows(falseDone, '.ai/task-ledger/archive/2099-01.md'));
   } catch (error) {
     falseDoneRejected = String(error.message).startsWith('TASK_DONE_WITHOUT_RECEIPT:');
   }
   if (!falseDoneRejected) fail('SELF_TEST_FAILED', 'fabricated done row without receipt was accepted');
-  console.log('check-task-ledger self-test PASS: multi-doing and receipt-less done states rejected.');
+
+  const badArchive = `${header}\n| WMB-6003 | M | CAP | todo | none | x | y | main |`;
+  let badArchiveRejected = false;
+  try {
+    verifyLedger(header, [], parseRows(badArchive, '.ai/task-ledger/archive/2099-01.md'));
+  } catch (error) {
+    badArchiveRejected = String(error.message).startsWith('ARCHIVE_NON_TERMINAL_TASK:');
+  }
+  if (!badArchiveRejected) fail('SELF_TEST_FAILED', 'non-terminal monthly archive row was accepted');
+  console.log('check-task-ledger self-test PASS: multi-doing, receipt-less done, and non-terminal archive states rejected.');
 }
 
 if (process.argv.includes('--self-test')) {
@@ -191,7 +211,11 @@ if (process.argv.includes('--self-test')) {
 } else {
   if (!existsSync(LEDGER_PATH)) fail('LEDGER_MISSING', LEDGER_PATH);
   const markdown = readFileSync(LEDGER_PATH, 'utf8');
-  const rows = parseRows(markdown);
-  verifyLedger(markdown, rows);
-  console.log(`check-task-ledger PASS: ${rows.length} rows; receipts enforced for explicit current tasks and WMB-${NUMERIC_WATERLINE}+. `);
+  const activeRows = parseRows(markdown, 'TASKS.md');
+  const archiveFiles = existsSync(ARCHIVE_ROOT)
+    ? readdirSync(ARCHIVE_ROOT).filter((name) => /^\d{4}-\d{2}\.md$/u.test(name)).sort()
+    : [];
+  const archiveRows = archiveFiles.flatMap((name) => parseRows(readFileSync(path.join(ARCHIVE_ROOT, name), 'utf8'), `.ai/task-ledger/archive/${name}`));
+  verifyLedger(markdown, activeRows, archiveRows);
+  console.log(`check-task-ledger PASS: ${activeRows.length} active/legacy rows, ${archiveRows.length} monthly archived rows; receipts enforced for explicit current tasks and WMB-${NUMERIC_WATERLINE}+. `);
 }

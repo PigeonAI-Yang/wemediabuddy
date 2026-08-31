@@ -16,6 +16,8 @@ Secondary agent surface (Codex / multi-agent). **Oh My Pi primary entry is `CLAU
 - `npm run check:task-ledger` is authoritative for task closure. A missing receipt, unpushed implementation/closure commit, mismatched commit paths, missing verification log, multiple `doing` rows, or stale ledger pointer keeps the task open.
 - Finish and push the current serial task before starting its successor. Untracked task-owned production, test, migration, script, configuration, or renderer files are unfinished work, not evidence of completion.
 - Historical rows are grandfathered. Machine receipts are mandatory for WMB-5324, WMB-5374, WMB-5385–WMB-5388, and every numeric task from WMB-5391 onward.
+- `TASKS.md` is the active ledger. Newly closed receipt-enforced tasks MUST be removed from it by `task:close` and appended to `.ai/task-ledger/archive/YYYY-MM.md`, using the UTC closure month; agents MUST NOT move or edit archive rows manually.
+- Monthly archive files are append-only terminal history: every row is `done`, task IDs remain globally unique across active and archive ledgers, and dependencies may resolve through either surface. Detailed verification stays in `.ai/task-receipts/`, not duplicated into expanding active-ledger prose.
 
 
 ## Visual Design Authority

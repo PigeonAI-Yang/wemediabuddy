@@ -5,6 +5,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const LEDGER_PATH = path.join(ROOT, 'TASKS.md');
 const RECEIPT_ROOT = path.join(ROOT, '.ai', 'task-receipts');
+const ARCHIVE_ROOT = path.join(ROOT, '.ai', 'task-ledger', 'archive');
 
 function stop(code, detail) {
   console.error(`${code}: ${detail}`);
@@ -57,12 +58,15 @@ function findTaskLine(markdown, taskId) {
 const { taskId, implementationCommit, upstream, verify } = parseArguments(process.argv.slice(2));
 const receiptPath = path.join(RECEIPT_ROOT, `${taskId}.json`);
 const logPath = path.join(RECEIPT_ROOT, `${taskId}.verify.log`);
+const archiveMonth = new Date().toISOString().slice(0, 7);
+const archivePath = path.join(ARCHIVE_ROOT, `${archiveMonth}.md`);
 const relativeReceipt = path.relative(ROOT, receiptPath).replaceAll('\\', '/');
 const relativeLog = path.relative(ROOT, logPath).replaceAll('\\', '/');
+const relativeArchive = path.relative(ROOT, archivePath).replaceAll('\\', '/');
 
 if (!existsSync(LEDGER_PATH)) stop('LEDGER_MISSING', LEDGER_PATH);
 if (existsSync(receiptPath) || existsSync(logPath)) stop('TASK_RECEIPT_ALREADY_EXISTS', taskId);
-const protectedStatus = git(['status', '--porcelain=v1', '--', 'TASKS.md', relativeReceipt, relativeLog]);
+const protectedStatus = git(['status', '--porcelain=v1', '--', 'TASKS.md', relativeReceipt, relativeLog, relativeArchive]);
 if (protectedStatus) stop('TASK_CLOSURE_FILES_DIRTY', protectedStatus);
 
 const markdown = readFileSync(LEDGER_PATH, 'utf8');
@@ -118,10 +122,23 @@ writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
 task.cells[3] = 'done';
 const receiptEvidence = `Closure receipt: \`${relativeReceipt}\`.`;
 if (!task.cells[6].includes(relativeReceipt)) task.cells[6] = `${task.cells[6]} ${receiptEvidence}`.trim();
-task.lines[task.index] = `| ${task.cells.join(' | ')} |`;
-writeFileSync(LEDGER_PATH, `${task.lines.join('\n').replace(/\n+$/u, '')}\n`, 'utf8');
+const archivedRow = `| ${task.cells.join(' | ')} |`;
+mkdirSync(ARCHIVE_ROOT, { recursive: true });
+const archiveHeader = `# Task archive — ${archiveMonth}\n\n| Task | Milestone | Capability | Status | Depends on | Deliverable | Verification / evidence | Owner |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+const archiveContent = existsSync(archivePath) ? readFileSync(archivePath, 'utf8').replace(/\n*$/u, '\n') : archiveHeader;
+writeFileSync(archivePath, `${archiveContent}${archivedRow}\n`, 'utf8');
 
-git(['add', '--', 'TASKS.md', relativeReceipt, relativeLog]);
+task.lines.splice(task.index, 1);
+const nextTodoLine = task.lines.find((line) => {
+  if (!/^\| WMB-[^|]+\|/u.test(line)) return false;
+  return line.split('|').slice(1, -1).map((cell) => cell.trim())[3] === 'todo';
+});
+const nextTodoId = nextTodoLine?.split('|')[1]?.trim() ?? null;
+let nextLedger = task.lines.join('\n').replace(/\n+$/u, '');
+if (nextTodoId) nextLedger = nextLedger.replace(/next ledger row is WMB-\d+/iu, `next ledger row is ${nextTodoId}`);
+writeFileSync(LEDGER_PATH, `${nextLedger}\n`, 'utf8');
+
+git(['add', '--', 'TASKS.md', relativeArchive, relativeReceipt, relativeLog]);
 git(['commit', '-m', `chore: close ${taskId}`], { stdio: 'inherit', code: 'TASK_CLOSURE_COMMIT_FAILED' });
 
 const upstreamMatch = /^(?<remote>[^/]+)\/(?<branch>.+)$/u.exec(upstream);
