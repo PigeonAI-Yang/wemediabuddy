@@ -10,8 +10,8 @@
   },
   "acceptance": {
     "decision": "rejected",
-    "passed": 27,
-    "notExecuted": 2,
+    "passed": 28,
+    "notExecuted": 1,
     "failed": 0
   },
   "scenarios": [
@@ -38,7 +38,7 @@
     { "id": "A49", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A50", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A51", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
-    { "id": "A52", "status": "not_executed", "blocker": "APPROVAL_EXECUTOR_API_MISSING", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A52", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A53", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
     { "id": "A54", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
     { "id": "A55", "status": "not_executed", "blocker": "WMB-5374:INSTALL_RUNTIME_REQUIRED", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
