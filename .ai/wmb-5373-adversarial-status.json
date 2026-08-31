@@ -10,8 +10,8 @@
   },
   "acceptance": {
     "decision": "rejected",
-    "passed": 26,
-    "notExecuted": 3,
+    "passed": 27,
+    "notExecuted": 2,
     "failed": 0
   },
   "scenarios": [
@@ -36,7 +36,7 @@
     { "id": "A47", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A48", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A49", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
-    { "id": "A50", "status": "not_executed", "blocker": "SOURCE_PROVENANCE_API_MISSING", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A50", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A51", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A52", "status": "not_executed", "blocker": "APPROVAL_EXECUTOR_API_MISSING", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
     { "id": "A53", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
