@@ -50,6 +50,19 @@ test('parseDailyPlanOutput reads the last json fence', () => {
   assert.deepEqual(plan.items[0].sourceIds, ['src-1']);
 });
 
+test('optional topicId accepts model null as an omitted topic binding', () => {
+  const plan = parseDailyPlanOutput(validBlock.replace('"sourceIds": ["src-1"],', '"sourceIds": ["src-1"],\n    "topicId": null,'));
+  assert.equal(plan.items[0].topicId, undefined);
+});
+
+test('winner thesis is canonicalized as the persisted point of view', () => {
+  const plan = parseDailyPlanOutput(validBlock.replace(
+    '"pointOfView": "可靠性比分数重要"',
+    '"pointOfView": "一段措辞不同但非空的中心观点"',
+  ));
+  assert.equal(plan.items[0].pointOfView, '可靠性比分数重要');
+});
+
 test('empty items is a valid empty plan', () => {
   const plan = parseDailyPlanOutput('```json\n{"summary":"今日无合格机会","items":[]}\n```');
   assert.equal(plan.items.length, 0);
@@ -126,7 +139,8 @@ test('real terra session plan parses and saves through the granted dispatcher pa
   seedDb.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('workspace_id', 'plan-replay-workspace', ?, ?, 1)`).run(now, now);
   for (const [id, slug] of [
     ['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'qwen-release'],
-    ['a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'aa-comparison']
+    ['a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'aa-comparison'],
+    ['unused-candidate', 'unused-candidate'],
   ]) {
     const saved = upsertSource(seedDb, { title: slug, originalUrl: `https://example.com/${slug}`, summary: `${slug} 摘要` }, false);
     seedDb.prepare('UPDATE source_items SET id=? WHERE id=?').run(id, saved.id);
@@ -147,7 +161,11 @@ test('real terra session plan parses and saves through the granted dispatcher pa
     const sessionFile = path.join(root, 'replay-session.jsonl');
     await writeFile(sessionFile, `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: fixtureText }] } })}\n`, 'utf8');
 
-    const saved = await savePlanFromSynthesisOutput(runtime, task, sessionFile, agentRequestId(task.id, 'plan'), lease.leaseId, grantId);
+    const saved = await savePlanFromSynthesisOutput(
+      runtime, task, sessionFile, agentRequestId(task.id, 'plan'), lease.leaseId, grantId, 0,
+      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5']),
+      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'unused-candidate']),
+    );
     assert.equal(saved.itemCount, 1);
 
     const plan = runtime.database.prepare(`SELECT summary FROM plans WHERE plan_date='2026-08-06' AND is_current=1`).get();

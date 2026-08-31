@@ -70,5 +70,46 @@ export const planningStageMigrations = [
       CREATE INDEX idx_plan_source_decisions_source
         ON plan_source_decisions(source_id, source_revision, created_at DESC);
     `
+  },
+  {
+    version: 82,
+    sql: `
+      -- v82: migration/system approval was never Owner consent. Preserve generated
+      -- records, but remove them from the active creation surface and review truth.
+      UPDATE content_projects
+      SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+          revision = revision + 1
+      WHERE plan_item_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM plan_items pi, json_each(pi.planning_provenance_json, '$.transitions') transition
+          WHERE pi.id = content_projects.plan_item_id
+            AND json_extract(transition.value, '$.to') = 'approved'
+            AND json_extract(transition.value, '$.by') = 'owner_ui'
+        );
+
+      UPDATE plan_items
+      SET planning_status = CASE
+            WHEN json_extract(planning_provenance_json, '$.origin') = 'daily_judge' THEN 'ready_for_review'
+            ELSE 'draft'
+          END,
+          planning_provenance_json = json_patch(
+            planning_provenance_json,
+            json_object(
+              'approval_remediation','owner_approval_required_v82',
+              'remediated_at',strftime('%Y-%m-%dT%H:%M:%SZ','now')
+            )
+          ),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+          revision = revision + 1
+      WHERE planning_status = 'approved'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM json_each(plan_items.planning_provenance_json, '$.transitions') transition
+          WHERE json_extract(transition.value, '$.to') = 'approved'
+            AND json_extract(transition.value, '$.by') = 'owner_ui'
+        );
+    `
   }
 ] as const;

@@ -103,8 +103,8 @@ test('WMB-5349 fresh DB aggregates v77 with two columns, CHECK, default and comp
   } finally { db.close(); }
 }));
 
-// 2. Upgrade: exact 9-field fingerprint -> draft + legacy_zhihu_fallback; others -> approved + legacy_approved
-test('WMB-5349 legacy upgrade exact 9-field match is draft/legacy_zhihu_fallback, remainder is approved/legacy_approved', () => withTempDir((dir) => {
+// 2. Upgrade: v77 classifies legacy rows, then v82 removes migration-only approval.
+test('WMB-5349 legacy upgrade keeps fallback draft and v82 resets migration approval to draft', () => withTempDir((dir) => {
   const { db: legacyDb, dbPath } = buildLegacyDb(dir);
   seedPlan(legacyDb, 'plan-legacy');
   insertPlanItem(legacyDb, 'plan-legacy', 'exact-fallback-1', { sort_order: 0 });
@@ -121,8 +121,9 @@ test('WMB-5349 legacy upgrade exact 9-field match is draft/legacy_zhihu_fallback
     assert.ok(ej.backfilled_at);
 
     const normal = upgraded.prepare("SELECT planning_status, planning_provenance_json FROM plan_items WHERE id='normal-1'").get();
-    assert.equal(normal.planning_status, 'approved');
+    assert.equal(normal.planning_status, 'draft');
     assert.equal(JSON.parse(normal.planning_provenance_json).legacy, 'legacy_approved');
+    assert.equal(JSON.parse(normal.planning_provenance_json).approval_remediation, 'owner_approval_required_v82');
 
     // generic migration writes no Yann UUID
     const allJson = upgraded.prepare("SELECT planning_provenance_json FROM plan_items").all().map((r) => String(r.planning_provenance_json));
@@ -134,7 +135,7 @@ test('WMB-5349 legacy upgrade exact 9-field match is draft/legacy_zhihu_fallback
 }));
 
 // 3. Near-miss: single field difference must NOT be classified as fallback (falsifiable deep-equality)
-test('WMB-5349 near-miss single field diff does NOT match fallback and becomes approved', () => withTempDir((dir) => {
+test('WMB-5349 near-miss is classified as legacy approved then remediated to draft', () => withTempDir((dir) => {
   const { db: legacyDb, dbPath } = buildLegacyDb(dir);
   seedPlan(legacyDb, 'plan-near');
   // each variant differs in exactly one of the 9 fields
@@ -149,7 +150,7 @@ test('WMB-5349 near-miss single field diff does NOT match fallback and becomes a
   try {
     for (const id of ['near-why', 'near-platform', 'near-timeliness', 'near-angle', 'near-opening']) {
       const row = upgraded.prepare("SELECT planning_status, planning_provenance_json FROM plan_items WHERE id=?").get(id);
-      assert.equal(row.planning_status, 'approved', `${id} near-miss should be approved`);
+      assert.equal(row.planning_status, 'draft', `${id} migration-only approval must be removed`);
       assert.equal(JSON.parse(row.planning_provenance_json).legacy, 'legacy_approved', `${id} near-miss legacy`);
     }
   } finally { upgraded.close(); }
@@ -167,7 +168,7 @@ test('WMB-5349 legacy IS NULL guard prevents second flip on re-execution', () =>
     const beforeFallback = upgraded.prepare("SELECT planning_status FROM plan_items WHERE id='guard-fallback'").get().planning_status;
     const beforeNormal = upgraded.prepare("SELECT planning_status FROM plan_items WHERE id='guard-normal'").get().planning_status;
     assert.equal(beforeFallback, 'draft');
-    assert.equal(beforeNormal, 'approved');
+    assert.equal(beforeNormal, 'draft');
     // re-run the two backfill UPDATEs verbatim: they must affect 0 rows due to legacy IS NULL guard
     const r1 = upgraded.prepare(`
       UPDATE plan_items SET planning_status='draft',
@@ -186,7 +187,7 @@ test('WMB-5349 legacy IS NULL guard prevents second flip on re-execution', () =>
     `).run();
     assert.equal(r2.changes, 0, 'approved re-run must change 0');
     assert.equal(upgraded.prepare("SELECT planning_status FROM plan_items WHERE id='guard-fallback'").get().planning_status, 'draft');
-    assert.equal(upgraded.prepare("SELECT planning_status FROM plan_items WHERE id='guard-normal'").get().planning_status, 'approved');
+    assert.equal(upgraded.prepare("SELECT planning_status FROM plan_items WHERE id='guard-normal'").get().planning_status, 'draft');
   } finally { upgraded.close(); }
 }));
 
@@ -235,9 +236,9 @@ test('WMB-5349 composite index on (planning_status, plan_id, sort_order) and ver
     const posPlan = idxSql.indexOf('plan_id');
     const posSort = idxSql.indexOf('sort_order');
     assert.ok(posStatus < posPlan && posPlan < posSort, 'index columns must be planning_status, plan_id, sort_order in order');
-    // v78 is the unique highest schema version; the historical aggregate is not source-ordered.
+    // v82 is the unique highest schema version; the historical aggregate is not source-ordered.
     const vers = migrations.map((m) => m.version);
-    assert.equal(Math.max(...vers), 78);
+    assert.equal(Math.max(...vers), 82);
     assert.equal(new Set(vers).size, vers.length, 'migration versions must remain unique');
     // query by status uses index (EXPLAIN QUERY PLAN contains index)
     seedPlan(db, 'plan-idx');

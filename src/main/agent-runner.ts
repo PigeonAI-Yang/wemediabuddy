@@ -144,7 +144,7 @@ const planOutputItemSchema = z.object({
   sourceIds: z.array(z.string().min(1)).min(1),
   availableMaterials: z.array(z.string()).optional(),
   missingMaterials: z.array(z.string()).optional(),
-  topicId: z.string().optional(),
+  topicId: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
   reviewIds: z.array(z.string()).optional(),
   methodFindingIds: z.array(z.string()).optional(),
   editorialDecision: editorialDecisionSchema,
@@ -238,7 +238,13 @@ export function parseDailyPlanOutput(sessionText: string): DailyPlanOutput {
     const field = issue.path.join('.');
     return field ? `${field}: ${issue.message}` : issue.message;
   }).join('；')}`);
-  return parsed.data;
+  return {
+    ...parsed.data,
+    items: parsed.data.items.map((item) => ({
+      ...item,
+      pointOfView: item.editorialDecision.winnerThesis,
+    })),
+  };
 }
 
 /**
@@ -303,6 +309,7 @@ export async function savePlanFromSynthesisOutput(
     }
   }
   let candidateSources: Array<{ sourceId: string; sourceRevision: number }> | undefined;
+  let sourceDecisions = plan.sourceDecisions ?? [];
   if (candidateSourceIds) {
     const ids = [...candidateSourceIds].sort();
     const db = 'database' in dependency ? dependency.database : dependency;
@@ -313,10 +320,28 @@ export async function savePlanFromSynthesisOutput(
       if (!sourceRevision) throw new Error(`PLAN_SOURCE_CANDIDATE_NOT_FOUND:${sourceId}`);
       return { sourceId, sourceRevision };
     });
+    const selectedIds = new Set(items.flatMap((item) => item.sourceIds));
+    const modelDecisions = new Map(sourceDecisions.map((decision) => [decision.sourceId, decision]));
+    sourceDecisions = candidateSources.map(({ sourceId, sourceRevision }) => {
+      const modelDecision = modelDecisions.get(sourceId);
+      if (selectedIds.has(sourceId)) {
+        return {
+          sourceId, sourceRevision, decision: 'selected' as const,
+          reasonCode: modelDecision?.decision === 'selected' ? modelDecision.reasonCode : 'selected_by_plan_item',
+          reason: modelDecision?.decision === 'selected' ? modelDecision.reason : '该资料被保留方案项直接引用。',
+        };
+      }
+      if (modelDecision && modelDecision.decision !== 'selected') return { ...modelDecision, sourceRevision };
+      return {
+        sourceId, sourceRevision, decision: 'excluded' as const,
+        reasonCode: modelDecision ? 'filtered_by_lane_gate' : 'not_selected',
+        reason: modelDecision ? '该资料对应的方案项未通过本轮赛道白名单。' : '本轮方案未引用该冻结候选资料。',
+      };
+    });
   }
   const input = {
     planDate: task.businessDate, timezone: 'Asia/Shanghai', summary: plan.summary, items,
-    ...(candidateSources ? { candidateSources, sourceDecisions: plan.sourceDecisions ?? [] } : {})
+    ...(candidateSources ? { candidateSources, sourceDecisions } : {})
   };
   const derivedRequestId = planDispatchRequestId(planRequestId, input);
   if ('database' in dependency) {

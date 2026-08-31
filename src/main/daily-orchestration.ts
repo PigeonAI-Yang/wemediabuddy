@@ -309,11 +309,24 @@ function createProductionStageD(overrides: ProductionOrchestrationOverrides): St
     const getProj = overrides.getDailyCycleProjection ?? getDailyCycleProjection;
     const advancer = overrides.advanceApprovedPlanItem ?? advanceApprovedPlanItem;
     try {
-      // New single path: iterate approved plan_items and advance each
-      const approvedRows = database.prepare("SELECT id FROM plan_items WHERE planning_status='approved' ORDER BY updated_at DESC").all() as Array<{ id:string }>;
+      // Only the current day's explicitly Owner-approved plan may enter production.
+      // Legacy migrations and historical system approvals are not construction permission.
+      const approvedRows = database.prepare(`
+        SELECT pi.id
+        FROM plan_items pi
+        JOIN plans p ON p.id = pi.plan_id
+        WHERE p.plan_date = ?
+          AND p.is_current = 1
+          AND EXISTS (
+            SELECT 1
+            FROM json_each(pi.planning_provenance_json, '$.transitions') transition
+            WHERE json_extract(transition.value, '$.to') = 'approved'
+              AND json_extract(transition.value, '$.by') = 'owner_ui'
+          )
+        ORDER BY pi.updated_at DESC
+      `).all(businessDate) as Array<{ id:string }>;
       if (!approvedRows.length) {
-        // Fallback: still check targets for legacy but no approved items => skipped
-        return { stage: 'D', name: '研究与文章', status: 'skipped', detail: '无已批准策划' };
+        return { stage: 'D', name: '研究与文章', status: 'skipped', detail: '今日无 Owner 已批准策划' };
       }
       let enqueued = 0; let reused = 0; let reporter = 0; let writer = 0;
       for (const row of approvedRows) {

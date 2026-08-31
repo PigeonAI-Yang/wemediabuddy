@@ -11,6 +11,7 @@ const {
   orchestrateDailyContent,
   setDailyOrchestrationSchedule,
 } = await import("../src/main/daily-orchestration.ts");
+const { createProductionDailyHandlers } = await import('../src/main/daily-orchestration.ts');
 const { getNextShanghaiTickMs } =
   await import("../src/main/daily-orchestration-scheduler.ts");
 
@@ -65,6 +66,47 @@ test("WMB-5337 legacy orchestration fails closed with an exact Actor intent for 
         },
       );
     }
+  });
+});
+
+test('Stage D advances only current-day explicitly Owner-approved plan items', async () => {
+  await withDatabase(async (database) => {
+    const now = '2026-09-01T00:00:00Z';
+    const insertPlan = database.prepare(`INSERT INTO plans (id, plan_date, timezone, summary, is_current, created_at, updated_at, revision) VALUES (?, ?, 'Asia/Shanghai', ?, 1, ?, ?, 1)`);
+    const insertItem = database.prepare(`
+      INSERT INTO plan_items (
+        id, plan_id, topic_id, title, priority, why_now, timeliness, target_audience, angle, point_of_view,
+        platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate,
+        source_ids_json, available_materials_json, missing_materials_json, review_ids_json, method_finding_ids_json,
+        sort_order, created_at, updated_at, revision, score_reasons_json, planning_status, planning_provenance_json
+      ) VALUES (?, ?, NULL, ?, 0, 'why', 'today', 'audience', 'angle', 'pov', '[]', '[]', '', '', '', '', '[]', '[]', '[]', '[]', '[]', 0, ?, ?, 1, '{}', 'approved', ?)
+    `);
+    insertPlan.run('plan-today', '2026-09-01', 'today', now, now);
+    insertPlan.run('plan-old', '2026-08-31', 'old', now, now);
+    const ownerProvenance = JSON.stringify({
+      origin: 'daily_judge',
+      transitions: [{ from: 'ready_for_review', to: 'approved', by: 'owner_ui', at: now }],
+    });
+    const systemProvenance = JSON.stringify({
+      origin: 'migration',
+      legacy: 'legacy_approved',
+      transitions: [{ from: null, to: 'approved', by: 'system', at: now }],
+    });
+    insertItem.run('today-owner', 'plan-today', 'today owner', now, now, ownerProvenance);
+    insertItem.run('today-system', 'plan-today', 'today system', now, now, systemProvenance);
+    insertItem.run('old-owner', 'plan-old', 'old owner', now, now, ownerProvenance);
+
+    const advanced = [];
+    const handlers = createProductionDailyHandlers({
+      advanceApprovedPlanItem: (_database, planItemId) => {
+        advanced.push(planItemId);
+        return { role: 'reporter', reusedJob: false, reusedProject: false };
+      },
+    });
+    const result = await handlers.stageD(database, '2026-09-01');
+    assert.deepEqual(advanced, ['today-owner']);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.count, 1);
   });
 });
 
