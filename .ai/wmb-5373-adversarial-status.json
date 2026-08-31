@@ -1,0 +1,49 @@
+{
+  "taskId": "WMB-5373",
+  "executedAt": "2026-08-31",
+  "suite": {
+    "tests": 29,
+    "passedTests": 29,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "durationMs": 30440.4867
+  },
+  "acceptance": {
+    "decision": "rejected",
+    "passed": 26,
+    "notExecuted": 3,
+    "failed": 0
+  },
+  "scenarios": [
+    { "id": "A29", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A30", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A31", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A32", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A33", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A34", "status": "passed", "file": "tests/wmb-5373-adversarial-a29-a34.test.mjs" },
+    { "id": "A35", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A36", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A37", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A38", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A39", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A40", "status": "passed", "file": "tests/wmb-5373-adversarial-a35-a40.test.mjs" },
+    { "id": "A41", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A42", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A43", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A44", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A45", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A46", "status": "passed", "file": "tests/wmb-5373-adversarial-a41-a46.test.mjs" },
+    { "id": "A47", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A48", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A49", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A50", "status": "not_executed", "blocker": "SOURCE_PROVENANCE_API_MISSING", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A51", "status": "passed", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A52", "status": "not_executed", "blocker": "APPROVAL_EXECUTOR_API_MISSING", "file": "tests/wmb-5373-adversarial-a47-a52.test.mjs" },
+    { "id": "A53", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
+    { "id": "A54", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
+    { "id": "A55", "status": "not_executed", "blocker": "WMB-5374:INSTALL_RUNTIME_REQUIRED", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
+    { "id": "A56", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" },
+    { "id": "A57", "status": "passed", "file": "tests/wmb-5373-adversarial-a53-a57.test.mjs" }
+  ],
+  "evidence": ".ai/wmb-5373-evidence.md"
+}
