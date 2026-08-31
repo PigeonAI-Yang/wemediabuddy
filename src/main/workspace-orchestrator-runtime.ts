@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   createWorkspaceOrchestratorActorStore,
@@ -18,6 +21,7 @@ import {
 } from './workspace-orchestrator-stage0.ts';
 import { reconcileWorkspaceOrchestratorStartup } from './workspace-orchestrator-recovery.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
+import { stopWorkspaceOrchestratorExecutor, wakeWorkspaceOrchestratorExecutor } from './workspace-orchestrator-executor.ts';
 
 /** The sole production submission boundary for workspace orchestration. */
 export type SubmitWorkspaceOrchestratorIntentInput = {
@@ -112,12 +116,37 @@ function nowUtc(): string {
   return new Date().toISOString();
 }
 
-function readCurrentBuild(database: DatabaseSync): WorkspaceOrchestratorBuildManifest | null {
+type PackagedBuildIdentity = Readonly<{ sourceCommit: string; packageHash: string; appAsarHash: string }>;
+
+function sha256File(filePath: string): string {
+  const previousNoAsar = process.noAsar;
+  process.noAsar = true;
+  try {
+    return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+  } finally {
+    process.noAsar = previousNoAsar;
+  }
+}
+
+function readPackagedBuildIdentity(): PackagedBuildIdentity | null {
+  const manifestPath = process.env.WMB_BUILD_MANIFEST_PATH?.trim()
+    || path.join(process.resourcesPath || process.cwd(), 'wmb-build-manifest.json');
+  if (!existsSync(manifestPath)) return null;
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  const sourceCommit = String(manifest.sourceCommit ?? '').trim();
+  const packageHash = String(manifest.packageHash ?? '').trim();
+  const appAsarHash = String(manifest.appAsarHash ?? '').trim();
+  if (!sourceCommit || !/^[a-f0-9]{64}$/.test(packageHash) || !/^[a-f0-9]{64}$/.test(appAsarHash))
+    throw Object.assign(new Error('打包 build manifest 非法。'), { code: 'CUTOVER_REQUIRED' });
+  const appAsarPath = path.join(path.dirname(manifestPath), String(manifest.appAsar ?? 'app.asar'));
+  if (!existsSync(appAsarPath) || sha256File(appAsarPath) !== appAsarHash)
+    throw Object.assign(new Error('当前 app.asar 与打包 build manifest 不一致。'), { code: 'CUTOVER_REQUIRED' });
+  return Object.freeze({ sourceCommit, packageHash, appAsarHash });
+}
+
+function readCurrentBuild(database: DatabaseSync, buildId: string): WorkspaceOrchestratorBuildManifest | null {
   if (!tableExists(database, 'build_manifests')) return null;
-  const requestedBuildId = process.env.WMB_BUILD_ID?.trim();
-  const row = requestedBuildId
-    ? database.prepare('SELECT * FROM build_manifests WHERE build_id=? AND schema_epoch=? AND write_schema_epoch=?').get(requestedBuildId, SCHEMA_EPOCH, SCHEMA_EPOCH) as Record<string, unknown> | undefined
-    : database.prepare('SELECT * FROM build_manifests WHERE schema_epoch=? AND write_schema_epoch=? ORDER BY rowid DESC LIMIT 1').get(SCHEMA_EPOCH, SCHEMA_EPOCH) as Record<string, unknown> | undefined;
+  const row = database.prepare('SELECT * FROM build_manifests WHERE build_id=? AND schema_epoch=? AND write_schema_epoch=?').get(buildId, SCHEMA_EPOCH, SCHEMA_EPOCH) as Record<string, unknown> | undefined;
   if (!row) return null;
   return Object.freeze({
     buildId: String(row.build_id),
@@ -136,16 +165,18 @@ function readCurrentBuild(database: DatabaseSync): WorkspaceOrchestratorBuildMan
 }
 
 function makeBuildManifest(database: DatabaseSync): WorkspaceOrchestratorBuildManifest {
-  const existing = readCurrentBuild(database);
-  if (existing) return existing;
-  const sourceCommit = envValue('WMB_SOURCE_COMMIT', 'working-tree');
-  const packageHash = envValue('WMB_PACKAGE_HASH', hashV1({ r: 'package/v1', package: 'wemedia-buddy', version: '0.3.0' }));
-  const appAsarHash = envValue('WMB_APP_ASAR_HASH', hashV1({ r: 'app-asar/v1', executable: process.execPath }));
+  const packaged = readPackagedBuildIdentity();
+  const sourceCommit = envValue('WMB_SOURCE_COMMIT', packaged?.sourceCommit ?? 'working-tree');
+  const packageHash = envValue('WMB_PACKAGE_HASH', packaged?.packageHash ?? hashV1({ r: 'package/v1', package: 'wemedia-buddy', version: '0.3.0' }));
+  const appAsarHash = envValue('WMB_APP_ASAR_HASH', packaged?.appAsarHash ?? hashV1({ r: 'app-asar/v1', executable: process.execPath }));
   const resourcesPath = envValue('WMB_RESOURCES_PATH', process.resourcesPath || process.cwd());
-  const configuredBuildId = envValue('WMB_BUILD_ID', `wmb-runtime-${SCHEMA_EPOCH}`);
+  const defaultBuildId = packaged ? `wmb-runtime-${SCHEMA_EPOCH}-${packageHash.slice(0, 12)}` : `wmb-runtime-${SCHEMA_EPOCH}`;
+  const configuredBuildId = envValue('WMB_BUILD_ID', defaultBuildId);
   const configured = database.prepare('SELECT schema_epoch,write_schema_epoch FROM build_manifests WHERE build_id=?').get(configuredBuildId) as Record<string, unknown> | undefined;
   const buildId = configured && (rowNumber(configured.schema_epoch, 0) !== SCHEMA_EPOCH || rowNumber(configured.write_schema_epoch, 0) !== SCHEMA_EPOCH)
     ? `${configuredBuildId}-schema-${SCHEMA_EPOCH}` : configuredBuildId;
+  const existing = readCurrentBuild(database, buildId);
+  if (existing) return existing;
   const manifestHash = hashV1({
     r: 'build-manifest/v1', buildId, sourceCommit, packageHash, appAsarHash,
     schemaEpoch: SCHEMA_EPOCH, cutoverEpoch: CUTOVER_EPOCH,
@@ -160,7 +191,7 @@ function makeBuildManifest(database: DatabaseSync): WorkspaceOrchestratorBuildMa
     buildId, sourceCommit, packageHash, appAsarHash, SCHEMA_EPOCH, CUTOVER_EPOCH,
     SCHEMA_EPOCH, SCHEMA_EPOCH, SCHEMA_EPOCH, manifestHash, resourcesPath, createdAt
   );
-  return readCurrentBuild(database) ?? Object.freeze({
+  return readCurrentBuild(database, buildId) ?? Object.freeze({
     buildId, sourceCommit, packageHash, appAsarHash,
     schemaEpoch: SCHEMA_EPOCH, cutoverEpoch: CUTOVER_EPOCH,
     readSchemaMin: SCHEMA_EPOCH, readSchemaMax: SCHEMA_EPOCH,
@@ -393,6 +424,34 @@ function refreshStateActor(state: MutableRuntimeState): void {
   state.actor = actor;
   state.fence = actorFence(actor);
 }
+function actorAuthorityExpired(actor: WorkspaceOrchestratorActor, nowMono = Date.now()): boolean {
+  return actor.actorStatus !== 'active'
+    || !actor.leaseToken
+    || actor.leaseExpiresAtMono === null
+    || actor.controlStallDeadlineMono === null
+    || nowMono >= actor.leaseExpiresAtMono
+    || nowMono >= actor.controlStallDeadlineMono;
+}
+
+function rebindExpiredAuthority(state: MutableRuntimeState): void {
+  refreshStateActor(state);
+  if (!actorAuthorityExpired(state.actor)) return;
+  const acquired = state.actorStore.acquireActor({
+    workspaceId: state.actor.workspaceId,
+    currentBuildId: state.buildManifest.buildId,
+    ownerId: 'workspace-orchestrator',
+    runtimeId: state.runtime.identity.runtimeEpoch,
+    migrationEpoch: state.actor.migrationEpoch,
+    writeFence: 'allow',
+  });
+  if (!acquired.ok) throw Object.assign(new Error(acquired.message), { code: acquired.code, details: acquired.readback });
+  const gate = acquired.gate ?? state.actorStore.createStartupReconcileGate({ workspaceId: state.actor.workspaceId, fence: acquired.fence }).gate;
+  if (!gate) throw Object.assign(new Error('startup gate 创建失败。'), { code: 'ORCHESTRATOR_CONTRACT_ERROR' });
+  const reconciled = runStartupRecovery(state.runtime.database, state.actorStore, state.actor.workspaceId, acquired.fence, gate);
+  state.actor = reconciled.actor;
+  state.fence = reconciled.fence;
+  state.gate = reconciled.gate;
+}
 
 function freezeRuntimeState(state: MutableRuntimeState): WorkspaceOrchestratorRuntimeState {
   return Object.freeze({
@@ -491,21 +550,26 @@ export async function initializeWorkspaceOrchestratorRuntime(runtime: ActiveWork
     } else {
       if (!existingActor) throw Object.assign(new Error('workspace migration 存在但 Actor 缺失。'), { code: 'CUTOVER_REQUIRED' });
       const exactMigration = readMigration(database, workspaceId, existingActor.migrationEpoch);
-      const needsTakeover = existingActor.currentBuildId !== buildManifest.buildId || !exactMigration || exactMigration.status !== 'complete' || exactMigration.schemaEpoch !== buildManifest.schemaEpoch || exactMigration.manifestHash !== buildManifest.manifestHash || exactMigration.writeFence !== 'allow';
-      if (needsTakeover) {
+      const manifestTakeover = existingActor.currentBuildId !== buildManifest.buildId || !exactMigration || exactMigration.status !== 'complete' || exactMigration.schemaEpoch !== buildManifest.schemaEpoch || exactMigration.manifestHash !== buildManifest.manifestHash || exactMigration.writeFence !== 'allow';
+      const authorityTakeover = actorAuthorityExpired(existingActor);
+      if (manifestTakeover || authorityTakeover) {
         const acquired = actorStore.acquireActor({
           workspaceId,
           currentBuildId: buildManifest.buildId,
           ownerId: 'workspace-orchestrator',
           runtimeId: runtime.identity.runtimeEpoch,
-          migrationEpoch: Math.max(existingActor.migrationEpoch + 1, migrationEpoch(database, workspaceId) + 1),
+          migrationEpoch: manifestTakeover ? Math.max(existingActor.migrationEpoch + 1, migrationEpoch(database, workspaceId) + 1) : existingActor.migrationEpoch,
           writeFence: 'allow'
         });
         if (!acquired.ok) throw Object.assign(new Error(acquired.message), { code: acquired.code, details: acquired.readback });
         actor = acquired.actor;
         fence = acquired.fence;
-        migration = persistMigration(database, workspaceId, actor, buildManifest);
-        persistProducerRegistry(database, workspaceId, actor.migrationEpoch, producerRegistry);
+        if (manifestTakeover) {
+          migration = persistMigration(database, workspaceId, actor, buildManifest);
+          persistProducerRegistry(database, workspaceId, actor.migrationEpoch, producerRegistry);
+        } else {
+          migration = exactMigration!;
+        }
         gate = acquired.gate ?? (() => {
           const created = actorStore.createStartupReconcileGate({ workspaceId, fence });
           if (!created.ok || !created.gate) throw Object.assign(new Error(created.message ?? 'startup gate 创建失败。'), { code: created.code ?? 'ORCHESTRATOR_CONTRACT_ERROR' });
@@ -514,7 +578,7 @@ export async function initializeWorkspaceOrchestratorRuntime(runtime: ActiveWork
       } else {
         actor = existingActor;
         fence = actorFence(actor);
-        migration = exactMigration;
+        migration = exactMigration!;
         const existingGate = readStartupReconcileGate(database, actor.workspaceId, actor.runtimeEpoch);
         if (existingGate) gate = existingGate;
         else {
@@ -536,6 +600,12 @@ export async function initializeWorkspaceOrchestratorRuntime(runtime: ActiveWork
     runtimeStates.set(runtime, next);
     return next;
   });
+  runtime.registerShutdownResource({
+    stop: async () => {
+      await stopWorkspaceOrchestratorExecutor(runtime);
+      runtimeStates.delete(runtime);
+    },
+  });
   return freezeRuntimeState(state);
 }
 
@@ -548,7 +618,7 @@ export async function submitWorkspaceOrchestratorIntent(runtime: ActiveWorkspace
   }
   if (!state) throw Object.assign(new Error('当前 workspace Actor runtime 不可用。'), { code: 'WORKSPACE_STALE' });
   return runtime.runActorControlPlane(async () => {
-    refreshStateActor(state!);
+    rebindExpiredAuthority(state!);
     const actor = state!.actor;
     const migrationRow = runtime.database.prepare('SELECT status, write_fence, migration_epoch, manifest_hash FROM workspace_migration_state WHERE workspace_id=? ORDER BY migration_epoch DESC LIMIT 1').get(runtime.identity.workspaceId) as Record<string, unknown> | undefined;
     if (actor.writeFence !== 'allow') return fallbackReceipt(state!, input, 'EXECUTION_AUTHORIZATION_INVALID', 'workspace Actor write fence 未授权。');
@@ -610,6 +680,7 @@ export async function submitWorkspaceOrchestratorIntent(runtime: ActiveWorkspace
     const result = state!.actorStore.acceptIntent(actorInput);
     const receipt = actorResultReceipt(result, state!, input);
     refreshStateActor(state!);
+    if (receipt.ok && runtime.getMcp()) wakeWorkspaceOrchestratorExecutor(runtime);
     return receipt;
   });
 }
@@ -619,8 +690,5 @@ export function readWorkspaceOrchestratorRuntimeState(runtime: ActiveWorkspaceRu
   return state ? freezeRuntimeState(state) : null;
 }
 
-export function clearWorkspaceOrchestratorRuntimeState(runtime: ActiveWorkspaceRuntime): void {
-  runtimeStates.delete(runtime);
-}
 
 export type { ActorFence, StartupReconcileGate, WorkspaceOrchestratorActor, WorkspaceOrchestratorReceipt } from './workspace-orchestrator-actor.ts';

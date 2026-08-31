@@ -54,10 +54,12 @@ const config: ForgeConfig = {
     async postPackage(_forgeConfig, options) {
       const workspace = process.cwd();
       const installSkillsScript = path.join(workspace, 'scripts', 'install-packaged-skills.mjs');
+      const buildManifestScript = path.join(workspace, 'scripts', 'write-packaged-build-manifest.mjs');
       const skillScript = path.join(workspace, 'scripts', 'check-skill-mirrors.mjs');
       const mediaRuntimeScript = path.join(workspace, 'scripts', 'verify-packaged-media-runtime.mjs');
       const outputPaths = options.outputPaths?.length ? options.outputPaths : [];
       for (const outputPath of outputPaths) {
+        execFileSync(process.execPath, [buildManifestScript, '--output', outputPath], { stdio: 'inherit', cwd: workspace });
         execFileSync(process.execPath, [installSkillsScript, '--output', outputPath], { stdio: 'inherit', cwd: workspace });
         execFileSync(process.execPath, [
           skillScript,
