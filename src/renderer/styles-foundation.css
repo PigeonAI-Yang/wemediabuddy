@@ -356,6 +356,10 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 .status-theme { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); padding: 3px 6px; cursor: pointer; font: inherit; }
 .status-theme:hover { background: var(--surface-hover); color: var(--accent-soft); }
 .status-item { display: inline-flex; align-items: center; gap: 6px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-update-warn { max-width: 32vw; border: 0; border-radius: 6px; background: transparent; color: var(--amber); padding: 3px 8px; cursor: pointer; font: inherit; font-size: 11.5px; }
+.status-update-warn:hover { background: var(--amber-soft); color: var(--amber); }
+.status-update-warn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.status-update-warn .status-dot.warn { background: var(--amber); }
 .status-page { max-width: min(46vw, 560px); color: var(--muted); }
 .status-page[data-running="true"] { color: var(--accent-soft); }
 .status-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-low); }
@@ -368,7 +372,6 @@ body.resizing-pi { cursor: col-resize; user-select: none; }
 .status-item[data-phase="running"] .status-dot { background: var(--accent); }
 .status-item[data-phase="failed"] { color: #ff8e8e; }
 .status-item[data-phase="failed"] .status-dot { background: var(--danger); }
-.status-sep { display: none; }
 .pi-dock.collapsed { border-left: 0; overflow: visible; }
 /* Pi toggle：展开/收起同一尺寸；阴影不在按钮上（窗口外框另论） */
 .pi-dock-toggle-rail {

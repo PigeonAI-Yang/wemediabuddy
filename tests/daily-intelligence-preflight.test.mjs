@@ -58,7 +58,7 @@ test('X preflight failure records per-source failed receipts and official_web st
     });
     assert.equal(bound.ok, true);
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       preflight: async () => IDENTIFY_X_TIMEOUT_PREFLIGHT,
       scanWebsite: async (database, input) => {
@@ -93,7 +93,7 @@ test('all X sources preflight-failed aggregate failed and continue on inventory 
     });
     assert.equal(bound.ok, true);
     const run = await startDailyChannelRun(current.database, {
-      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1
+      businessDate: '2026-08-03', workspaceId: current.workspaceId, profileRevision: 1, modules: ['official_web', 'x_lists']
     }, {
       preflight: async () => IDENTIFY_X_TIMEOUT_PREFLIGHT
     });

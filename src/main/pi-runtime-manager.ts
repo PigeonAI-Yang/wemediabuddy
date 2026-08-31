@@ -1,6 +1,7 @@
 import { access, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { failure, success, type CommandResult } from './result.ts';
+import { proxyEnvForChildren } from './proxy-config.ts';
 
 export type PiRuntimeInfo = {
   version: string;
@@ -103,7 +104,7 @@ export async function probePiRuntime(runtimeRoot: string): Promise<CommandResult
   const { spawn } = await import('node:child_process');
   const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
     const child = spawn(process.execPath, [cli, '--help'], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...proxyEnvForChildren() },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     let stderr = '';

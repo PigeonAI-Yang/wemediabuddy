@@ -94,6 +94,36 @@ function formatCellTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+/** 首行有意义正文：按行抽首个非空行并裁至 42 字（与详情任务标题复用同一截断）。 */
+function firstMeaningfulBodyLine(body: string): string | null {
+  const lines = body.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed) return trimmed.slice(0, 42);
+  }
+  const trimmed = body.trim();
+  return trimmed ? trimmed.slice(0, 42) : null;
+}
+
+/** 纯确定性兜底解析器：authoritative → payload/snapshot title → 正文首行 → 项目短ID。永不返回裸 `创作项目`。 */
+export function resolvePublicationProjectTitle(projectId: string, titleMap: Record<string, string>, publications: PublicationItem[]): string {
+  const authoritative = titleMap[projectId]?.trim();
+  if (authoritative) return authoritative;
+  const related = publications.filter((item) => item.publication.projectId === projectId);
+  for (const item of related) {
+    const t = item.payload?.title?.trim() || item.snapshot?.payload?.title?.trim() || '';
+    if (t) return t;
+  }
+  for (const item of related) {
+    const body = item.payload?.body ?? item.snapshot?.payload?.body ?? null;
+    if (typeof body === 'string') {
+      const line = firstMeaningfulBodyLine(body);
+      if (line) return line;
+    }
+  }
+  return `项目 ${projectId.slice(0, 8)}`;
+}
+
 /** 单元动作词/含义：已发布项把发布时间放进含义行。 */
 function cellWordsOf(item: PublicationItem): { action: string; meaning: string } {
   const words = CELL_WORDS[cellStateKey(item)];
@@ -103,6 +133,7 @@ function cellWordsOf(item: PublicationItem): { action: string; meaning: string }
   }
   return words;
 }
+
 
 export function PublishView({ publications, refresh, openStudio, onEditProject, takeover, selectedId, onSelect, settings, enabledPlatforms }: {
   publications: PublicationItem[];
@@ -126,17 +157,25 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
   const selected = publications.find((item) => item.publication.id === selectedId) ?? publications[0] ?? null;
   useEffect(() => { if (selected && selected.publication.id !== selectedId) onSelect(selected.publication.id); }, [selected?.publication.id]);
 
-  // 项目行标题来自真实创作项目（只读查询，无协议/schema 变更）。
+  // 项目行标题来自真实创作项目（只读查询，无协议/schema 变更）。合并 active+archived 避免归档项目显示裸 `创作项目`。
   useEffect(() => {
     let active = true;
-    window.wmb.listStudioProjects({ limit: 500 }).then((result) => {
-      if (!active || !result || !Array.isArray(result.items)) return;
+    Promise.all([
+      window.wmb.listStudioProjects({ limit: 500 }),
+      window.wmb.listStudioProjects({ archived: true, limit: 500 }),
+    ]).then(([activeResult, archivedResult]) => {
+      if (!active) return;
       const map: Record<string, string> = {};
-      for (const project of result.items) map[project.id] = project.title;
+      for (const result of [activeResult, archivedResult]) {
+        if (!result || !Array.isArray(result.items)) continue;
+        for (const project of result.items) if (project.id && typeof project.title === 'string') map[project.id] = project.title;
+      }
       setProjectTitles(map);
     }).catch(() => {});
     return () => { active = false; };
   }, [publications]);
+
+  const resolveTitle = (projectId: string): string => resolvePublicationProjectTitle(projectId, projectTitles, publications);
 
   // 详情子页 Esc 返回矩阵（弹窗打开时 Esc 归弹窗处理，不触发返回）。
   useEffect(() => {
@@ -292,7 +331,7 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
               <nav className="publish-breadcrumb" aria-label="面包屑">
                 <button type="button" onClick={() => setDetailProjectId(null)}>发布</button>
                 <span className="publish-breadcrumb-sep" aria-hidden="true">/</span>
-                <span className="publish-breadcrumb-current">{projectTitles[detailProjectId ?? ''] ?? '创作项目'}</span>
+                <span className="publish-breadcrumb-current">{detailProjectId ? resolveTitle(detailProjectId) : '项目'}</span>
               </nav>
             </div>
             <div className="publish-detail-body">
@@ -326,7 +365,7 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
           <div className="publish-matrix-wrap">
             <div className="publish-matrix-scroller">
               <div className="publish-matrix" role="table" aria-label="内容和发布平台"
-                style={{ gridTemplateColumns: `var(--publish-col-content, minmax(288px, 1.45fr)) repeat(${matrixPlatforms.length}, var(--publish-col-platform, minmax(178px, 1fr)))` }}>
+                style={{ gridTemplateColumns: `var(--publish-col-content, minmax(220px, 1.45fr)) repeat(${matrixPlatforms.length}, var(--publish-col-platform, minmax(0, 1fr)))` }}>
                 <div className="publish-matrix-head" role="row">
                   <div className="publish-matrix-corner" role="columnheader"><strong>内容</strong></div>
                   {matrixPlatforms.map((platform) => (
@@ -343,7 +382,7 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
                   <div className="publish-matrix-row" role="row" key={group.projectId}>
                     <div className="publish-matrix-project" role="rowheader">
                       <button type="button" className="publish-project-name" onClick={() => setDetailProjectId(group.projectId)}>
-                        {projectTitles[group.projectId] ?? '创作项目'}
+                        {resolveTitle(group.projectId)}
                       </button>
                       <div className="publish-project-meta">
                         <small>{group.items.some(attentionOf) ? '有任务待处理' : '已全部处理'}</small>
@@ -358,8 +397,7 @@ export function PublishView({ publications, refresh, openStudio, onEditProject, 
                         <div className="publish-cell-slot" role="cell" key={platform}>
                           <button type="button" className="publish-cell" data-status={stateKey}
                             onClick={() => openTask(rep)}
-                            aria-label={`${projectTitles[group.projectId] ?? '创作项目'} ${platformNames[platform] ?? platform}：${words.action}，${words.meaning}`}>
-                            <span className="publish-cell-status"><span className={`publish-cell-dot ${STATE_TONE[stateKey] ?? 'gray'}`} aria-hidden="true"/>{words.action}</span>
+                            aria-label={`${resolveTitle(group.projectId)} ${platformNames[platform] ?? platform}：${words.action}，${words.meaning}`}>
                             <span className="publish-cell-action">{words.meaning}</span>
                             <span className="publish-cell-meta">{rep.publication.accountKey || '未识别账号'}</span>
                             <span className="publish-cell-extra publish-cell-more" aria-hidden="true">›</span>

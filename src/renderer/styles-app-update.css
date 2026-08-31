@@ -6,33 +6,9 @@
 .update-error { border-left: 3px solid var(--danger); background: var(--danger-soft); }
 .update-error p { max-width: 680px; overflow-wrap: anywhere; }
 
-
-.app-update-banner {
-  position: fixed;
-  z-index: 30;
-  top: calc(var(--topbar-height) + 12px);
-  right: calc(var(--pi-width) + 12px);
-  left: calc(var(--nav-width) + 12px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  min-height: 54px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-raised);
-  padding: 10px 12px 10px 16px;
-  color: var(--ink);
-  /* 信息横幅不拦截其下方内容的点击（只保留按钮可点）；避免横幅遮住页签/操作区。 */
-  pointer-events: none;
-}
-.app-update-banner button { pointer-events: auto; }
-.app-update-banner.error { border-color: var(--danger); background: var(--danger-soft); }
-.app-update-banner > div:first-child { display: grid; gap: 2px; min-width: 0; }
-.app-update-banner strong { font-size: 14px; font-weight: 650; }
-.app-update-banner span { overflow: hidden; color: var(--muted); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
-.app-update-banner-actions { display: flex; flex: none; gap: 8px; }
-.settings-mode .app-update-banner { right: 12px; left: 12px; }
-@media (max-width: 1279px) {
-  .app-update-banner { right: 12px; }
-}
+/* Top banner removed — updater attention now lives in the bottom status bar (warning/amber, not red). */
+.app-update-banner,
+.app-update-banner.error,
+.app-update-banner button,
+.app-update-banner-actions,
+.settings-mode .app-update-banner { display: none !important; }

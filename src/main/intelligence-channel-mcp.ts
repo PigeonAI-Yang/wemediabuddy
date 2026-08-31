@@ -100,7 +100,7 @@ function failure(error: unknown) {
   return text({ ok: false, data: null, error: { code, message: error instanceof Error ? error.message : String(error), details: {} } });
 }
 async function xContextFor(rootPath: string) {
-  try { return await currentXListContextForRoot({ path: rootPath, isNew: false }); }
+  try { return await currentXListContextForRoot({ path: rootPath, isNew: false }, { allowMissingExpectedAccount: true }); }
   catch (error) { throw Object.assign(new Error(error instanceof Error ? error.message : String(error)), { code: (error as { code?: string })?.code ?? 'BROWSER_NEEDS_USER' }); }
 }
 function stale(message: string): Error { return Object.assign(new Error(message), { code: 'CONFIRMATION_STALE' }); }

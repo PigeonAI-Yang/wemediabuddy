@@ -1,509 +1,393 @@
-import { randomUUID } from 'node:crypto';
-import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
-import { dispatchFailAgentTask, dispatchReportAgentTaskProgress, dispatchStartAgentTask } from './agent-task-commands.ts';
-import { readPiConversation, writePiConversation } from './pi-conversation.ts';
+import { randomUUID } from "node:crypto";
+import type { ActiveWorkspaceRuntime } from "./workspace-runtime.ts";
+import { hashV1 } from "./workspace-orchestrator-actor.ts";
 import {
-  MANAGER_TASK_INTENT,
-  buildManagerTaskCardText,
-  buildManagerEventText,
-  createManagerTaskCheckpoint,
-  getActiveManagerTask,
-  managerSummaryFromChildProgress,
-  managerTaskSerialDecision,
-  patchManagerCheckpoint,
-  type ManagerChildRef,
-  type ManagerTaskCheckpoint,
-  type ManagerTaskView
-} from './manager-task.ts';
-import { broadcastDataChanged } from './data-changed.ts';
-import { shanghaiDate } from './ferment.ts';
-import { runDockManagerPrompt, markDockOrchestrationFailed } from './ipc-pi-dock.ts';
-import { getTodayPlanExhaustion } from './workbench.ts';
-import { isScoringPending } from '../shared/propagation.ts';
-import { getActiveDailyIntelligenceTask, getAgentTask, getLatestDailyIntelligenceTaskSince, type AgentTask } from './agent-tasks.ts';
+  readManagerAdapterProjection,
+  type ManagerAdapterIdentity,
+  type ManagerAdapterReadModel,
+} from "./workspace-orchestrator-manager-adapter.ts";
+import {
+  submitWorkspaceOrchestratorIntent,
+  type SubmitWorkspaceOrchestratorIntentInput,
+  type WorkspaceOrchestratorReceipt,
+} from "./workspace-orchestrator-runtime.ts";
+
+export type DailyIntelligenceModule = "official_web" | "x_lists";
+
 export type DispatchManagerDailyInput = {
   businessDate: string;
-  modules?: Array<'official_web' | 'x_lists'>;
-  /** Escape hatch: skip manager and let caller run legacy only. */
-  legacyPipeline?: boolean;
+  modules?: DailyIntelligenceModule[];
+  requestId?: string;
+  logicalInput?: unknown;
+  payload?: unknown;
+  channelPolicy?: unknown;
+  profileRevision?: number;
 };
 
-export type DispatchManagerDailyResult = {
-  action: 'created' | 'focus_existing';
-  focusDialog: true;
-  managerTask: ManagerTaskView;
-  /** When created, caller should start legacy pipeline and link child. */
-  shouldStartLegacyPipeline: boolean;
-  modules?: Array<'official_web' | 'x_lists'>;
+export type DispatchManagerDailyResult = WorkspaceOrchestratorReceipt;
+
+type ManagerReceiptCode =
+  | "MANAGER_ENTRY_FAILED"
+  | "MANAGER_CONTRACT_ERROR"
+  | "MANAGER_ORCHESTRATION_MISMATCH";
+type ManagerCommandContext = {
+  requestId: string;
+  actor?: unknown;
+  taskId?: string;
+  reasonCode?: string;
 };
+type ManagerProjectionSelector = Readonly<{
+  businessDate?: string;
+  includeInactive?: boolean;
+  rootRequestId?: string;
+  orchestrationId?: string;
+  managerTaskId?: string;
+}>;
 
-function schedulerActor() {
-  return { type: 'scheduler' as const, id: 'manager-dispatch', label: 'manager-dispatch' };
-}
+type ManagerIntentRequest = Pick<
+  SubmitWorkspaceOrchestratorIntentInput,
+  | "producerId"
+  | "businessDate"
+  | "requestId"
+  | "action"
+  | "logicalInput"
+  | "payload"
+  | "channelPolicy"
+  | "profileRevision"
+  | "rootMode"
+  | "predecessorIntentId"
+>;
 
-/**
- * WMB-5178 §5/§10.1：今日情报编排生产者（Owner 触发 + 应用代写 + 派发到 Dock）。
- * 返回完整安全字段（originLabel/title/goal/acceptance）供信封盖章；任一缺失由 builder 在派发前抛错。
- */
-export function buildTodayIntelligenceDispatch(businessDate: string, managerTaskId: string, scoringRecovery?: { planId: string; itemIds: string[]; sourceIds: string[] }): {
-  dispatchId: string;
-  message: string;
-  orchestration: { dispatchId: string; delivery: 'direct'; safe: { originLabel: string; title: string; goal: string; acceptance: string } };
-} {
-  const dispatchId = randomUUID();
-  const message = scoringRecovery ? [
-    `继续当前计划 ${scoringRecovery.planId} 的传播评分（${businessDate}）。`,
-    `只允许一次 planner/judge 续跑；冻结 planItemIds=${scoringRecovery.itemIds.join(',')}；sourceIds=${scoringRecovery.sourceIds.join(',')}。`,
-    '必须调用 wmb_run_daily_stage(stage=judge) 恰好一次；禁止 reporter/scan，禁止新建或替换 plan。',
-    '成功后逐项读回六维评分与 ready_for_review；失败原样报告可重试错误并保留 pending。',
-    `managerTaskId=${managerTaskId}`
-  ].join('\n') : [
-    `请执行今日情报编排（${businessDate}）。`,
-    '验收：可信渠道回执 + 当日可批方案。',
-    '你是主管，编排方式由你选：',
-    '• 单项采集：wmb_run_daily_stage(stage=scan) 或 wmb_spawn_job(reporter)',
-    '• 单项策划：wmb_run_daily_stage(stage=judge) 或 wmb_spawn_job(planner)',
-    '• 一条龙：wmb_run_daily_stage(stage=full)',
-    '• 采完后续接策划：wmb_continue_after_scan（该续就调）',
-    '先 wmb_daily_readiness；工单终态等 JOB_EVENT 推送，不要 sleep/bash 轮询；必要时 wmb_get_job。',
-    `managerTaskId=${managerTaskId}`
-  ].join('\n');
-  return {
-    dispatchId,
-    message,
-    orchestration: {
-      dispatchId,
-      delivery: 'direct',
-      safe: { originLabel: '今日情报', title: '今日情报编排', goal: '采集并判读当日情报，产出可批方案', acceptance: '可信渠道回执 + 当日可批方案' }
-    }
-  };
-}
-
-async function appendManagerCardToDialog(dataRootPath: string, view: ManagerTaskView): Promise<void> {
-  try {
-    const conversation = await readPiConversation(dataRootPath);
-    // 同一目标+日期只保留一张活卡，避免刷屏
-    const marker = `manager_task:daily_intelligence:${view.businessDate}`;
-    const text = `${buildManagerTaskCardText(view)}\n<!-- ${marker} -->`;
-    // 清掉旧版技术检查点卡 / 其它 taskId 残留，避免对话框像日志墙
-    const cleaned = conversation.messages.filter((message) => {
-      if (message.role !== 'assistant' || typeof message.text !== 'string') return true;
-      const text = message.text;
-      if (text.includes('【主管任务】') && (text.includes('状态：') || text.includes('taskId=') || text.includes('reporter:') || text.includes('phase'))) return false;
-      if (text.includes('<!-- manager_task:daily_intelligence:') && !text.includes(marker)) return false;
-      return true;
-    });
-    const messages = [...cleaned];
-    let idx = -1;
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const message = messages[i];
-      if (message.role === 'assistant' && typeof message.text === 'string' && message.text.includes(marker)) {
-        idx = i;
-        break;
-      }
-    }
-    // 无变化不写，减少对话跳动
-    if (idx >= 0 && messages[idx].text === text) return;
-
-    const nextMessage = {
-      role: 'assistant' as const,
-      text,
-      createdAt: idx >= 0 ? messages[idx].createdAt : new Date().toISOString(),
-      segments: [{ kind: 'text' as const, text }]
-    };
-    if (idx >= 0) messages[idx] = nextMessage;
-    else messages.push(nextMessage);
-
-    await writePiConversation(dataRootPath, {
-      id: conversation.id,
-      sessionFile: conversation.sessionFile,
-      sessionId: conversation.sessionId,
-      title: conversation.title === '新会话' || conversation.title === 'Pi' || conversation.title === '这个是在说啥'
-        ? '主管 · 今日情报'
-        : conversation.title,
-      messages,
-      makeActive: true
-    });
-    broadcastDataChanged({ scopes: ['agent'], reason: 'manager.dialog_card' });
-  } catch (error) {
-    console.error('[manager-dispatch] append dialog card failed', error);
-  }
-}
-
-async function appendManagerEvent(dataRootPath: string, line: string): Promise<void> {
-  try {
-    const conversation = await readPiConversation(dataRootPath);
-    const text = buildManagerEventText(line);
-    // 去重：最后一条相同事件不重复
-    const last = conversation.messages[conversation.messages.length - 1];
-    if (last?.role === 'assistant' && last.text === text) return;
-    const messages = [
-      ...conversation.messages,
-      {
-        role: 'assistant' as const,
-        text,
-        createdAt: new Date().toISOString(),
-        segments: [{ kind: 'text' as const, text }]
-      }
-    ];
-    await writePiConversation(dataRootPath, {
-      id: conversation.id,
-      sessionFile: conversation.sessionFile,
-      sessionId: conversation.sessionId,
-      messages,
-      makeActive: true
-    });
-    broadcastDataChanged({ scopes: ['agent'], reason: 'manager.dialog_event' });
-  } catch (error) {
-    console.error('[manager-dispatch] append event failed', error);
-  }
-}
-
-export async function updateManagerTaskCheckpoint(
+function actorProjection(
   runtime: ActiveWorkspaceRuntime,
-  managerTaskId: string,
-  patch: Partial<Pick<ManagerTaskCheckpoint, 'status' | 'phase' | 'summary' | 'children' | 'legacyPipeline'>>,
-  message?: string
-): Promise<ManagerTaskView | null> {
-  const current = getAgentTask(runtime.database, managerTaskId);
-  if (!current || current.intent !== MANAGER_TASK_INTENT || current.status !== 'running') return null;
-  const base = createManagerTaskCheckpoint({ businessDate: current.businessDate });
-  const existing = (current.checkpoint && typeof current.checkpoint === 'object' && (current.checkpoint as ManagerTaskCheckpoint).kind === 'manager_task')
-    ? current.checkpoint as ManagerTaskCheckpoint
-    : base;
-  const next = patchManagerCheckpoint(existing, patch);
-  const updated = await dispatchReportAgentTaskProgress(runtime, managerTaskId, {
-    phase: next.phase,
-    checkpoint: next as unknown as Record<string, unknown>,
-    progress: {
-      opportunityCount: next.children.filter((child) => child.status === 'succeeded').length,
-      message: next.summary
-    },
-    message,
-    level: 'info'
-  }, {
-    actor: schedulerActor(),
-    requestId: randomUUID(),
-    taskId: managerTaskId
+): ManagerAdapterReadModel {
+  return readManagerAdapterProjection(runtime.database, {
+    workspaceId: runtime.identity.workspaceId,
+    includeInactive: true,
   });
-  return {
-    id: updated.id,
-    intent: MANAGER_TASK_INTENT,
-    businessDate: updated.businessDate,
-    status: updated.status,
-    phase: updated.phase,
-    progress: updated.progress,
-    checkpoint: next,
-    errorCode: updated.errorCode,
-    errorMessage: updated.errorMessage,
-    updatedAt: updated.updatedAt,
-    createdAt: updated.createdAt
-  };
 }
 
-/**
- * Owner lock path: Today intelligence button → manager task first (serial).
- * Returns focus_existing when a manager task is already active.
- */
+function managerFailureReceipt(
+  runtime: ActiveWorkspaceRuntime,
+  input: ManagerIntentRequest,
+  code: ManagerReceiptCode,
+  message: string,
+  identity?: Partial<ManagerAdapterIdentity>,
+): WorkspaceOrchestratorReceipt {
+  const workspaceId = runtime.identity.workspaceId;
+  const projection = actorProjection(runtime);
+  const actor = projection.actor;
+  const action = input.action ?? "start_new_intent";
+  const rootMode = input.rootMode ?? "owner";
+  const logicalInput =
+    input.logicalInput !== undefined
+      ? input.logicalInput
+      : (input.payload ?? null);
+  const payload =
+    input.payload !== undefined ? input.payload : (input.logicalInput ?? null);
+  const profileRevision = input.profileRevision ?? 1;
+  const normalizedPolicyHash = hashV1({
+    r: "normalized-policy/v1",
+    workspaceId,
+    profileRevision,
+    policy: input.channelPolicy ?? [],
+  });
+  const logicalInputHash = hashV1({
+    r: "logical-input/v1",
+    workspaceId,
+    businessDate: input.businessDate,
+    source: "today_ui",
+    rootMode,
+    requestedAction: action,
+    normalizedPolicyHash,
+    logicalInput,
+    acceptance: null,
+    predecessorIntentId: input.predecessorIntentId ?? null,
+    predecessorRootId: identity?.rootRequestId ?? null,
+  });
+  const payloadHash = hashV1(payload);
+  const commandReplayKey = hashV1({
+    r: "command-replay/v1",
+    workspaceId,
+    producer: input.producerId,
+    requestId: input.requestId,
+  });
+  const receiptId = hashV1({
+    r: "command-receipt/v1",
+    workspaceId,
+    requestId: input.requestId,
+    commandReplayKey,
+  });
+  const runtimeEpoch = actor?.runtimeEpoch ?? 0;
+  const ownerEpoch = actor?.ownerEpoch ?? 0;
+  const authorityRevision = actor?.authorityRevision ?? 0;
+  const checkpointRevision = actor?.checkpointRevision ?? 0;
+  const readback = Object.freeze({
+    workspaceId,
+    runtimeEpoch,
+    ownerEpoch,
+    authorityRevision,
+    checkpointRevision,
+    root: null,
+    rootCreated: false,
+    managerIdentity: identity ?? null,
+    error: { code, message },
+  });
+  return Object.freeze({
+    version: "WorkspaceOrchestratorReceiptV1",
+    receiptId,
+    ok: false,
+    status: "rejected",
+    code,
+    reasonCode: code,
+    message,
+    workspaceId,
+    runtimeEpoch,
+    ownerEpoch,
+    authorityRevision,
+    requestId: input.requestId,
+    command: "workspace_orchestrator.intent.accept",
+    commandReplayKey,
+    logicalInputHash,
+    payloadHash,
+    producerAttestationHash: null,
+    intentId: null,
+    invocationId: null,
+    mailboxSequence: null,
+    checkpointRevision,
+    readback,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function isWorkspaceOrchestratorReceipt(
+  value: unknown,
+): value is WorkspaceOrchestratorReceipt {
+  const receipt =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return (
+    receipt.version === "WorkspaceOrchestratorReceiptV1" &&
+    typeof receipt.receiptId === "string" &&
+    typeof receipt.ok === "boolean" &&
+    (receipt.status === "accepted" || receipt.status === "rejected")
+  );
+}
+
+function managerFailureFromError(
+  runtime: ActiveWorkspaceRuntime,
+  input: ManagerIntentRequest,
+  error: unknown,
+  defaultCode: ManagerReceiptCode,
+  identity?: Partial<ManagerAdapterIdentity>,
+): WorkspaceOrchestratorReceipt {
+  const errorRecord =
+    error && typeof error === "object" && !Array.isArray(error)
+      ? (error as Record<string, unknown>)
+      : {};
+  const code =
+    typeof errorRecord.code === "string" && errorRecord.code.trim()
+      ? errorRecord.code.trim()
+      : null;
+  const stableCode: ManagerReceiptCode =
+    code === "MANAGER_ENTRY_FAILED" ||
+    code === "MANAGER_CONTRACT_ERROR" ||
+    code === "MANAGER_ORCHESTRATION_MISMATCH"
+      ? code
+      : defaultCode;
+  const message = error instanceof Error ? error.message : String(error);
+  return managerFailureReceipt(runtime, input, stableCode, message, identity);
+}
+
+/** Submit the Owner Today action through the durable Actor mailbox. */
 export async function dispatchManagerDailyIntelligence(
   runtime: ActiveWorkspaceRuntime,
-  dataRootPath: string,
-  input: DispatchManagerDailyInput
+  input: DispatchManagerDailyInput,
 ): Promise<DispatchManagerDailyResult> {
-  const businessDate = input.businessDate.trim();
-  if (!businessDate) throw new Error('请选择今日情报日期。');
-
-  const active = getActiveManagerTask(runtime.database, businessDate);
-  const gate = managerTaskSerialDecision(active);
-  if (gate.action === 'focus_existing' && gate.active) {
-    return {
-      action: 'focus_existing',
-      focusDialog: true,
-      managerTask: gate.active,
-      shouldStartLegacyPipeline: false
-    };
-  }
-  // Pending review blocks new root collection on same date; exhausted (all rejected) explicitly allows new round.
-  // Uses existing plan_items planning_status; no new schema.
-  const currentPlan = runtime.database.prepare('SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 ORDER BY created_at DESC LIMIT 1').get(businessDate) as { id: string } | undefined;
-  const pendingRows = currentPlan ? runtime.database.prepare(`SELECT id, source_ids_json AS sourceIdsJson, planning_status AS planningStatus, score_reasons_json AS scoreReasonsJson FROM plan_items WHERE plan_id = ? ORDER BY sort_order`).all(currentPlan.id) as Array<{ id: string; sourceIdsJson: string; planningStatus: string; scoreReasonsJson: string }> : [];
-  const scoringRows = pendingRows.filter((row) => isScoringPending({ planning_status: row.planningStatus, score_reasons_json: row.scoreReasonsJson }));
-  const scoringRecovery = currentPlan && scoringRows.length ? {
-    planId: currentPlan.id,
-    itemIds: scoringRows.map((row) => row.id),
-    sourceIds: [...new Set(scoringRows.flatMap((row) => { try { return JSON.parse(row.sourceIdsJson) as string[]; } catch { return []; } }))]
-  } : undefined;
-  const exhaustion = getTodayPlanExhaustion(runtime.database, businessDate);
-  if (!scoringRecovery && exhaustion.hasPlan && exhaustion.unresolved > 0 && !exhaustion.isExhausted) {
-    // Has unresolved draft/ready_for_review - keep waiting for user confirmation, do not start new collection.
-    // Preserve idempotency: second start attempt while pending must not create duplicate manager.
-    // Return focus_existing with current active (may be null) to signal blocked; caller will treat as reused.
-    if (gate.active) {
-      return {
-        action: 'focus_existing',
-        focusDialog: true,
-        managerTask: gate.active,
-        shouldStartLegacyPipeline: false
-      };
-    }
-    // No active manager but still pending - synthesize a blocked focus_existing without new task creation.
-    // Throwing would also block, but returning focus_existing with empty manager keeps handler's ok shape.
-    // We reuse the latest manager view if any, else create a synthetic error via exception.
-    throw Object.assign(new Error(`本轮有 ${exhaustion.unresolved} 条选题等待确认；确认完成后再开始下一轮。`), { code: 'PENDING_REVIEW', details: exhaustion });
-  }
-
-  const started = await dispatchStartAgentTask(runtime, {
-    intent: MANAGER_TASK_INTENT,
+  const businessDate = String(input.businessDate ?? "").trim();
+  const requestId = input.requestId?.trim() || randomUUID();
+  const intentPayload =
+    input.payload !== undefined
+      ? input.payload
+      : Object.freeze({
+          businessDate,
+          modules: input.modules ? [...input.modules] : null,
+        });
+  const logicalInput =
+    input.logicalInput !== undefined ? input.logicalInput : intentPayload;
+  const request: ManagerIntentRequest = {
+    producerId: "today.agent-start-daily-intelligence",
     businessDate,
-    contextRefs: {
-      page: 'agents',
-      roleId: 'desk',
-      goal: 'daily_intelligence',
-      manager: true,
-      workspaceId: runtime.identity.workspaceId
-    }
-  }, {
-    actor: schedulerActor(),
-    requestId: `manager-daily:${businessDate}:${randomUUID()}`
-  });
+    requestId,
+    action: "full",
+    logicalInput,
+    payload: intentPayload,
+    channelPolicy: input.channelPolicy,
+    profileRevision: input.profileRevision,
+    rootMode: "owner",
+  };
+  if (!businessDate) {
+    return managerFailureReceipt(
+      runtime,
+      request,
+      "MANAGER_ENTRY_FAILED",
+      "请选择今日情报日期。",
+    );
+  }
+  try {
+    const receipt = await submitWorkspaceOrchestratorIntent(runtime, request);
+    return isWorkspaceOrchestratorReceipt(receipt)
+      ? receipt
+      : managerFailureReceipt(
+          runtime,
+          request,
+          "MANAGER_CONTRACT_ERROR",
+          "Actor typed intent 未返回 canonical receipt。",
+        );
+  } catch (error) {
+    return managerFailureFromError(
+      runtime,
+      request,
+      error,
+      "MANAGER_ENTRY_FAILED",
+    );
+  }
+}
 
-  const checkpoint = createManagerTaskCheckpoint({
+/** Cancel one exact indexed root; no date or task-history inference is allowed. */
+export async function cancelManagerDailyIntelligence(
+  runtime: ActiveWorkspaceRuntime,
+  managerTaskId: string,
+  context: ManagerCommandContext,
+): Promise<WorkspaceOrchestratorReceipt> {
+  const normalizedManagerTaskId = managerTaskId.trim();
+  const requestId = context.requestId?.trim() || randomUUID();
+  const readRequest: ManagerIntentRequest = {
+    producerId: "today.agent-start-daily-intelligence",
+    businessDate: "",
+    requestId,
+    action: "cancel_root",
+    logicalInput: null,
+    payload: null,
+    rootMode: "owner",
+  };
+  if (!normalizedManagerTaskId) {
+    return managerFailureReceipt(
+      runtime,
+      readRequest,
+      "MANAGER_ENTRY_FAILED",
+      "缺少 managerTaskId。",
+    );
+  }
+
+  const projection = actorProjection(runtime);
+  const matches = projection.roots.filter(
+    (root) =>
+      root.identity.workspaceId === runtime.identity.workspaceId &&
+      root.identity.managerTaskId === normalizedManagerTaskId,
+  );
+  if (matches.length !== 1) {
+    return managerFailureReceipt(
+      runtime,
+      readRequest,
+      "MANAGER_ORCHESTRATION_MISMATCH",
+      matches.length === 0
+        ? "未找到与 managerTaskId 精确绑定的 orchestrator root。"
+        : "managerTaskId 绑定了多个 orchestrator root，拒绝猜测。",
+      {
+        managerTaskId: normalizedManagerTaskId,
+        workspaceId: runtime.identity.workspaceId,
+      },
+    );
+  }
+
+  const root = matches[0];
+  const identity = root.identity;
+  const businessDate = root.origin.businessDate.trim();
+  const rootMode = root.origin.rootMode === "scheduler" ? "scheduler" : "owner";
+  if (
+    !identity.rootRequestId ||
+    !identity.orchestrationId ||
+    !identity.managerTaskId ||
+    !businessDate
+  ) {
+    return managerFailureReceipt(
+      runtime,
+      { ...readRequest, businessDate, rootMode },
+      "MANAGER_ORCHESTRATION_MISMATCH",
+      "root/orchestration/manager identity 不完整。",
+      identity,
+    );
+  }
+
+  const identityPayload = Object.freeze({
+    workspaceId: identity.workspaceId,
+    rootRequestId: identity.rootRequestId,
+    rootGeneration: identity.rootGeneration,
+    orchestrationId: identity.orchestrationId,
+    managerTaskId: identity.managerTaskId,
+    stageRequestId: identity.stageRequestId,
+    scopeHash: identity.scopeHash,
+    projectionHash: identity.projectionHash,
+    eligibleIdsHash: identity.eligibleIdsHash,
+    expectedRootCheckpointRevision: identity.checkpointRevision,
+    expectedIndexRevision: identity.indexRevision,
+    reasonCode: context.reasonCode?.trim() || "CANCELLED_BY_AUTHORIZED_SYSTEM",
+  });
+  const request: ManagerIntentRequest = {
+    ...readRequest,
     businessDate,
-    status: 'running',
-    phase: scoringRecovery ? 'dispatch_planner' : 'dispatch_reporter',
-    summary: scoringRecovery ? `主管已接单：继续评分 · ${scoringRecovery.itemIds.length} 条` : '主管已接单：今日情报 · 准备派记者扫描',
-    children: [{
-      roleId: scoringRecovery ? 'planner' : 'reporter',
-      brief: scoringRecovery ? '同计划补齐传播评分' : '扫描今日情报渠道并回报',
-      intent: scoringRecovery ? 'daily_judge' : 'daily_scan',
-      status: 'queued'
-    }],
-    legacyPipeline: input.legacyPipeline !== false
-  });
-
-  const updated = await dispatchReportAgentTaskProgress(runtime, started.task.id, {
-    phase: 'dispatch_reporter',
-    checkpoint: checkpoint as unknown as Record<string, unknown>,
-    progress: { message: checkpoint.summary },
-    message: '主管已接单：今日情报',
-    level: 'info'
-  }, {
-    actor: schedulerActor(),
-    requestId: randomUUID(),
-    taskId: started.task.id
-  });
-
-  const view: ManagerTaskView = {
-    id: updated.id,
-    intent: MANAGER_TASK_INTENT,
-    businessDate: updated.businessDate,
-    status: updated.status,
-    phase: updated.phase,
-    progress: updated.progress,
-    checkpoint,
-    errorCode: updated.errorCode,
-    errorMessage: updated.errorMessage,
-    updatedAt: updated.updatedAt,
-    createdAt: updated.createdAt
+    rootMode,
+    logicalInput: identityPayload,
+    payload: identityPayload,
   };
-
-  broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'manager.task_created' });
-
-  // 真主管 Pi 回合：与手动发消息同一通道，由主管自己 wmb_spawn_job 派工。
-  // 不 await：按钮立刻返回；工具行/回复走 onPiEvent。WMB-5178：经 canonical 信封显式盖章 + 完整安全字段。
-  const dispatch = buildTodayIntelligenceDispatch(businessDate, view.id, scoringRecovery);
-  void runDockManagerPrompt({
-    message: dispatch.message,
-    page: 'agents',
-    pageLabel: '班组 · 主管',
-    objectType: 'manager_task',
-    objectId: view.id,
-    orchestration: dispatch.orchestration
-  }).catch(async (error) => {
-    console.error('[manager-dispatch] dock manager prompt failed', error);
-    try {
-      await dispatchFailAgentTask(runtime, view.id, 'MANAGER_DOCK_FAILED', error instanceof Error ? error.message : String(error), {
-        actor: schedulerActor(),
-        requestId: randomUUID(),
-        taskId: view.id
-      });
-      // §8/§16-3 接受后失败：同 dispatchId 原地更新为「安排失败 + 人类可读错误」；接受前失败无行则 no-op。
-      await markDockOrchestrationFailed(dataRootPath, dispatch.dispatchId, error instanceof Error ? error.message : String(error));
-      broadcastDataChanged({ scopes: ['agent', 'today'], reason: 'manager.dock_failed' });
-    } catch (failError) {
-      console.error('[manager-dispatch] fail manager after dock error', failError);
-    }
-  });
-
-  return {
-    action: 'created',
-    focusDialog: true,
-    managerTask: view,
-    shouldStartLegacyPipeline: false,
-    modules: input.modules
-  };
-}
-
-/** Bridge legacy daily child task progress into manager checkpoint summary. */
-export async function syncManagerTaskFromLegacyChild(
-  runtime: ActiveWorkspaceRuntime,
-  businessDate: string,
-  child: AgentTask | null | undefined
-): Promise<ManagerTaskView | null> {
-  const manager = getActiveManagerTask(runtime.database, businessDate);
-  if (!manager || !child) return manager;
-  if (!(child.intent === 'daily_scan' || child.intent === 'daily_judge' || child.intent === 'daily_intelligence')) return manager;
-
-  const plannerPhase = child.intent === 'daily_intelligence' && ['running_pi', 'judging_opportunities', 'synthesizing', 'validating', 'plan_ready', 'completed'].includes(child.phase);
-  const roleId = child.intent === 'daily_judge' || plannerPhase ? 'planner' : 'reporter';
-  const childStatus =
-    child.status === 'running' ? 'running'
-      : child.status === 'succeeded' ? 'succeeded'
-        : child.status === 'cancelled' ? 'cancelled'
-          : child.status === 'partial' ? 'succeeded'
-            : child.status === 'failed' || child.status === 'interrupted' ? 'failed'
-              : 'queued';
-
-  const summary = managerSummaryFromChildProgress({
-    phase: child.phase,
-    childLabel: roleId === 'reporter' ? '记者扫描' : '策划生成方案',
-    processed: typeof child.progress?.processed === 'number' ? child.progress.processed : undefined,
-    planned: typeof child.progress?.planned === 'number' ? child.progress.planned : undefined,
-    message: typeof child.progress?.message === 'string' ? child.progress.message : (child.events.at(-1)?.message ?? null)
-  });
-
-  const children = [...manager.checkpoint.children];
-  const idx = children.findIndex((row) => row.roleId === roleId);
-  const row: ManagerChildRef = {
-    roleId,
-    brief: roleId === 'reporter' ? '扫描今日情报渠道并回报' : '基于扫描生成今日方案',
-    intent: child.intent,
-    jobId: children[idx]?.jobId ?? null,
-    taskId: child.id,
-    status: childStatus as ManagerChildRefStatus,
-    startedAt: children[idx]?.startedAt ?? child.createdAt,
-    finishedAt: child.status === 'running' ? null : child.finishedAt
-  };
-  if (idx >= 0) children[idx] = row;
-  else children.push(row);
-
-  let phase = manager.checkpoint.phase;
-  let status = manager.checkpoint.status;
-  if (roleId === 'reporter' && child.status === 'running') {
-    phase = 'monitor_reporter';
-    status = 'running';
-  } else if (roleId === 'reporter' && (child.status === 'succeeded' || child.status === 'partial')) {
-    phase = 'dispatch_planner';
-    status = 'running';
-  } else if (roleId === 'planner' && child.status === 'running') {
-    phase = 'monitor_planner';
-    status = 'running';
-  } else if (roleId === 'planner' && (child.status === 'succeeded' || child.status === 'partial' || child.status === 'needs_user')) {
-    phase = 'report';
-    status = 'waiting_human';
-  } else if (child.status === 'failed' || child.status === 'interrupted') {
-    status = 'failed';
-  } else if (child.status === 'cancelled') {
-    status = 'cancelled';
+  try {
+    const receipt = await submitWorkspaceOrchestratorIntent(runtime, request);
+    return isWorkspaceOrchestratorReceipt(receipt)
+      ? receipt
+      : managerFailureReceipt(
+          runtime,
+          request,
+          "MANAGER_CONTRACT_ERROR",
+          "Actor cancel_root 未返回 canonical receipt。",
+          identity,
+        );
+  } catch (error) {
+    return managerFailureFromError(
+      runtime,
+      request,
+      error,
+      "MANAGER_CONTRACT_ERROR",
+      identity,
+    );
   }
-
-  const prev = manager.checkpoint;
-  const nextSummary = status === 'waiting_human'
-    ? (child.status === 'partial' || child.status === 'needs_user' ? `${summary} · 评分未完成，可重试` : `${summary} · 需要你回今日批准`)
-    : summary;
-  if (prev.status === status && prev.phase === phase && prev.summary === nextSummary && JSON.stringify(prev.children) === JSON.stringify(children)) return manager;
-  const synced = await updateManagerTaskCheckpoint(runtime, manager.id, {
-    status,
-    phase,
-    summary: nextSummary,
-    children
-  });
-  // 进度由真 Pi 工具结果与 jobs/agent events 驱动；不再做假 tool 投影。
-  return synced;
 }
 
-
-type ManagerChildRefStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'blocked';
-
-
-/** F2: 工单事件回写 manager checkpoint.children（jobId↔taskId）。 */
-export async function syncManagerTaskFromJob(
+/** Read only the canonical Actor/ManagerAdapter projection, optionally narrowed by exact identity. */
+export function readManagerProjection(
   runtime: ActiveWorkspaceRuntime,
-  input: {
-    businessDate?: string | null;
-    jobId: string;
-    roleId?: string | null;
-    intent?: string | null;
-    status?: string | null;
-    taskId?: string | null;
-    brief?: string | null;
-  }
-): Promise<ManagerTaskView | null> {
-  const businessDate = (input.businessDate || '').trim() || shanghaiDate();
-  const manager = getActiveManagerTask(runtime.database, businessDate);
-  if (!manager) return null;
-
-  const roleId = (
-    input.roleId === 'reporter' || input.roleId === 'planner' || input.roleId === 'writer' || input.roleId === 'librarian'
-      ? input.roleId
-      : input.intent === 'daily_judge' ? 'planner'
-        : input.intent === 'studio_draft' ? 'writer'
-          : input.intent === 'daily_scan' || input.intent === 'daily_intelligence' ? 'reporter'
-            : null
-  ) as 'reporter' | 'planner' | 'writer' | 'librarian' | null;
-  if (!roleId) return manager;
-
-  const childStatus =
-    input.status === 'running' || input.status === 'queued' ? (input.status as 'running' | 'queued')
-      : input.status === 'succeeded' ? 'succeeded'
-        : input.status === 'cancelled' ? 'cancelled'
-          : input.status === 'failed' ? 'failed'
-            : input.status === 'partial' ? 'succeeded'
-              : 'running';
-
-  const children = [...manager.checkpoint.children];
-  let idx = children.findIndex((row) => row.jobId === input.jobId);
-  if (idx < 0) idx = children.findIndex((row) => row.roleId === roleId && (!row.jobId || row.status === 'queued'));
-  const prev = idx >= 0 ? children[idx] : null;
-  const row = {
-    roleId,
-    brief: (input.brief || prev?.brief || `${roleId} 工单`).slice(0, 200),
-    intent: input.intent ?? prev?.intent ?? null,
-    jobId: input.jobId,
-    taskId: input.taskId ?? prev?.taskId ?? null,
-    status: childStatus as ManagerChildRefStatus,
-    startedAt: prev?.startedAt ?? (childStatus === 'queued' ? null : new Date().toISOString()),
-    finishedAt: childStatus === 'running' || childStatus === 'queued' ? null : new Date().toISOString()
-  };
-  if (idx >= 0) children[idx] = row;
-  else children.push(row);
-
-  let phase = manager.checkpoint.phase;
-  let status = manager.checkpoint.status;
-  if (roleId === 'reporter' && childStatus === 'running') { phase = 'monitor_reporter'; status = 'running'; }
-  else if (roleId === 'reporter' && (childStatus === 'succeeded')) { phase = 'dispatch_planner'; status = 'running'; }
-  else if (roleId === 'planner' && childStatus === 'running') { phase = 'monitor_planner'; status = 'running'; }
-  else if (roleId === 'planner' && childStatus === 'succeeded') { phase = 'report'; status = 'waiting_human'; }
-  else if (roleId === 'writer' && childStatus === 'running') { status = 'running'; }
-  else if (childStatus === 'failed') { status = 'failed'; }
-  else if (childStatus === 'cancelled') { status = 'cancelled'; }
-
-  return updateManagerTaskCheckpoint(runtime, manager.id, {
-    status,
-    phase,
-    summary: manager.checkpoint.summary,
-    children
+  selector: ManagerProjectionSelector = {},
+): ManagerAdapterReadModel {
+  const projection = readManagerAdapterProjection(runtime.database, {
+    workspaceId: runtime.identity.workspaceId,
+    businessDate: selector.businessDate?.trim() || undefined,
+    includeInactive: selector.includeInactive,
   });
-}
-
-
-export function readManagerProjection(runtime: ActiveWorkspaceRuntime, businessDate: string): {
-  managerTask: ManagerTaskView | null;
-  legacyChild: AgentTask | null;
-} {
-  const managerTask = getActiveManagerTask(runtime.database, businessDate);
-  const legacyChild = managerTask
-    ? getLatestDailyIntelligenceTaskSince(runtime.database, businessDate, managerTask.createdAt)
-    : getActiveDailyIntelligenceTask(runtime.database, businessDate);
-  return { managerTask, legacyChild };
+  const hasIdentitySelector = Boolean(
+    selector.rootRequestId?.trim() ||
+    selector.orchestrationId?.trim() ||
+    selector.managerTaskId?.trim(),
+  );
+  if (!hasIdentitySelector) return projection;
+  const rootRequestId = selector.rootRequestId?.trim();
+  const orchestrationId = selector.orchestrationId?.trim();
+  const managerTaskId = selector.managerTaskId?.trim();
+  const roots = projection.roots.filter(
+    (root) =>
+      (!rootRequestId || root.identity.rootRequestId === rootRequestId) &&
+      (!orchestrationId || root.identity.orchestrationId === orchestrationId) &&
+      (!managerTaskId || root.identity.managerTaskId === managerTaskId),
+  );
+  return Object.freeze({ ...projection, roots: Object.freeze(roots) });
 }

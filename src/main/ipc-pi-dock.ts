@@ -408,7 +408,7 @@ export async function runDockManagerPrompt(input: {
   const orchestration = input.orchestration ?? null;
   const wrapped =
     `[WMB_CONTEXT]\npage=${page}\npageLabel=${pageLabel}\nobjectType=${objectType}\nobjectId=${objectId}\n` +
-    `contextRule=你是主管。自动编排是你的工具：scan/judge/full 用 wmb_run_daily_stage；采完要续策划用 wmb_continue_after_scan；也可 wmb_spawn_job 派单项。先 readiness，再按你的判断选用工具；用 list_jobs/roster 监工并汇报。\n` +
+    `contextRule=你是主管。每日动作必须使用带 typed action 的 MCP 工具，并从 readiness 回读明确的 predecessor intent/root identity；不得按 businessDate 或最新任务猜测身份，员工工作只读 JOB_EVENT 终态后再汇报。\n` +
     `[USER_MESSAGE]\n${input.message}`;
   const authorize = async (message: string): Promise<string> => {
     const active = deps.getActiveRuntime?.() ?? null;
@@ -468,6 +468,12 @@ export async function runDockManagerPrompt(input: {
       // §10.3：direct 以 canonical raw user entry 已建立为接受证据；agent_start 回调 async，先持久化 accepted 行，运行时缓冲外向事件直到持久化成功再释放。
       const current = await readPiConversation(dataRoot.path);
       const createdAt = new Date().toISOString();
+      try {
+        runtime = await deps.ensurePi(dataRoot);
+      } catch (error) {
+        lastAuthorityStatus = { ok: false, reason: 'pi_unavailable' };
+        throw error;
+      }
       const authorized = await authorize(wrapped);
       const envelope = buildDockOrchestrationMessage({
         dispatchId: orchestration.dispatchId,
@@ -483,7 +489,6 @@ export async function runDockManagerPrompt(input: {
         createdAt,
         title: current.title === '新会话' || current.title === 'Pi' ? '主管 · 今日情报' : current.title
       })) ?? current;
-      runtime = await deps.ensurePi(dataRoot);
       const result = await runtime.promptUntilSettled(envelope, {
         onStreaming: async () => {
           const saved = await appendAcceptedDockRow(dataRoot.path, {
@@ -905,6 +910,14 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
         // §10.3 direct：raw user entry 已建立 = 接受证据；接受前不写编排行。agent_start 回调 async 持久化 accepted 行，运行时缓冲外向事件直到持久化成功才释放。
         const current = await readPiConversation(dataRoot.path);
         const createdAt = new Date().toISOString();
+        // 先确认 Pi 真正可用，再冻结 authority 到编排信封。否则首次启动的瞬时失败会注入
+        // pi_unavailable，而下方第二次 ensurePi 即使成功，过期 blocked 标记仍会毒化已恢复的回合。
+        try {
+          runtime = await ensurePi(dataRoot);
+        } catch (error) {
+          lastAuthorityStatus = { ok: false, reason: 'pi_unavailable' };
+          throw error;
+        }
         const authorized = await authorize(raw);
         const envelope = buildDockOrchestrationMessage({
           dispatchId: orchestration.dispatchId,
@@ -919,7 +932,6 @@ export function registerPiDockIpc({ loadSelectedDataRoot, ensurePi, getPi, getPi
           safe: orchestration.safe,
           createdAt
         })) ?? current;
-        runtime = await ensurePi(dataRoot);
         const result = await runtime.promptUntilSettled(envelope, {
           onStreaming: async () => {
             const saved = await appendAcceptedDockRow(dataRoot.path, {

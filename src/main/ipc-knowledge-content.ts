@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { dispatchBusinessCommand, requireReceiptData } from './business-command.ts';
 import { getGitHubRankings } from './github-rankings.ts';
 import { readRankingCache, writeRankingCache } from './ranking-cache.ts';
+import { listZhihuHotObservations, type ZhihuHotObservationList } from './zhihu-hot-channel.ts';
 import {
   deleteKnowledgeSource, listKnowledgeSources, listWatchingSources, markSourcesWatching, updateKnowledgeSource,
   type ManagementStatus, type VerificationStatus
@@ -18,6 +19,7 @@ import {
 } from '../shared/source-body-archive.ts';
 import { getWireHealthLedger } from './source-wire-health.ts';
 import { dispatchSourceUpsertBatch, dispatchLaneRestore } from './source-commands.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { assertAiOnlyRoute, readWorkspaceProfile } from './workspace-profiles.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import {
@@ -67,6 +69,11 @@ export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencie
       execute: (database, input) => { writeRankingCache(database, input); return { data: input, entityId: 'github-ai', readback: readRankingCache(database) }; } });
     return requireReceiptData(receipt);
   });
+  ipcMain.handle('zhihu-hot:list-observations', (_event, limit = 50) => readWorkspaceDatabase(
+    dependencies,
+    (): ZhihuHotObservationList => ({ businessDate: null, collectedAt: null, sourceUrl: 'https://www.zhihu.com/topic/19551275/hot', items: [], latestScan: null }),
+    database => listZhihuHotObservations(database, Number(limit))
+  ));
 
   ipcMain.handle('knowledge:list-sources', (_event, input = {}) => readWorkspaceDatabase(dependencies, () => null, database => listKnowledgeSources(database, input)));
   ipcMain.handle('knowledge:update-source', async (_event, input: {
@@ -78,7 +85,9 @@ export function registerKnowledgeContentIpc(dependencies: BusinessIpcDependencie
       input, boundIdentity: { entityType: 'source_item', entityId: input.id }, entityType: 'source_item',
       execute: (database, value) => { const data = updateKnowledgeSource(database, value, false); return { data, entityId: data.id,
         beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
-    const data = requireReceiptData(receipt); broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' }); return data;
+    const data = requireReceiptData(receipt);
+    scheduleSourceKnowledgeCompile({ sourceId: data.id, revision: data.revision });
+    broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' }); return data;
   });
   // WMB-5247 删除门：删除前经 knowledge:delete-source 命令内的 sourceDeleteGate 检查；有外部 Asset
   // 引用 → 返回 { blocked:true, summary }（渲染层展示清单并要求显式确认）；确认后带

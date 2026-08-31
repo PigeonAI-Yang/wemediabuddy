@@ -45,6 +45,22 @@ export const REPO_ROOT = path.resolve(E2E_ROOT, '..', '..');
 export const RUNTIME_DIR = path.join(E2E_ROOT, '.runtime');
 export const ARTIFACTS_DIR = path.join(E2E_ROOT, '.artifacts');
 export const DEFAULT_UPDATE_TAG = process.env.WMB_E2E_UPDATE_TAG || 'v0.3.0';
+const RUN_MANIFEST = '.wmb-e2e-run.json';
+
+function isUnderArtifactsDir(dir) {
+  const relative = path.relative(ARTIFACTS_DIR, path.resolve(dir));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function writeRunManifest(dir, patch) {
+  try {
+    const file = path.join(dir, RUN_MANIFEST);
+    const prior = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) ?? {}) : {};
+    writeFileSync(file, `${JSON.stringify({ ...prior, ...patch }, null, 2)}\n`);
+  } catch {
+    // Lifecycle metadata is best-effort; it must never change the scenario result.
+  }
+}
 
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -358,6 +374,15 @@ export async function launchApp(options = {}) {
     await options.seedFixture(workspace);
   }
   const artifactsDir = options.artifactsDir ?? mkdtempSync(path.join(ensureDir(ARTIFACTS_DIR), `${options.name ?? 'run'}-`));
+  const runManifest = {
+    version: 1,
+    pid: process.pid,
+    state: 'active',
+    startedAt: new Date().toISOString(),
+    keepRuntime: options.keepRuntime === true
+  };
+  writeRunManifest(runtimeDir, { ...runManifest, kind: 'runtime' });
+  if (isUnderArtifactsDir(artifactsDir)) writeRunManifest(artifactsDir, { ...runManifest, kind: 'artifacts' });
   const env = {
     ...process.env,
     WMB_ACCEPTANCE_USER_DATA: userDataDir,
@@ -575,6 +600,7 @@ export const helpers = Object.freeze({ waitForAppReady, navigateTo, captureEvide
 export async function withApp(handler, options = {}) {
   const started = await launchApp(options);
   const { app, page, workspace, runtimeDir, artifactsDir, evidence } = started;
+  let finalState = 'passed';
   try {
     const result = await handler({
       app,
@@ -590,6 +616,7 @@ export async function withApp(handler, options = {}) {
     });
     return { ok: true, result, evidence, artifactsDir, workspace, runtimeDir };
   } catch (error) {
+    finalState = 'failed';
     try {
       await captureEvidence({ app, page, evidence, artifactsDir, name: 'failure' });
     } catch {
@@ -603,8 +630,11 @@ export async function withApp(handler, options = {}) {
   } finally {
     try { started.detach(); } catch { /* noop */ }
     try { await closeApp(app); } catch { /* noop */ }
+    const finishedAt = new Date().toISOString();
+    writeRunManifest(runtimeDir, { state: finalState, finishedAt, keepRuntime: options.keepRuntime === true });
+    if (isUnderArtifactsDir(artifactsDir)) writeRunManifest(artifactsDir, { state: finalState, finishedAt, keepRuntime: options.keepRuntime === true });
     if (options.keepRuntime !== true) {
-      try { rmSync(runtimeDir, { recursive: true, force: true }); } catch { /* locked on win32; .runtime is gitignored */ }
+      try { rmSync(runtimeDir, { recursive: true, force: true }); } catch { /* locked on win32; cleanup script retries later */ }
     }
   }
 }

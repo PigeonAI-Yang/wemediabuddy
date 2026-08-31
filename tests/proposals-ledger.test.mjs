@@ -11,7 +11,7 @@ import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { getOpportunityPool } from '../src/main/workbench.ts';
 import { getProposalLedger, summarizeProposalLedger } from '../src/main/proposals.ts';
-import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const NOW = new Date('2026-08-07T06:00:00.000Z');
 const TODAY = '2026-08-07';
@@ -37,6 +37,66 @@ function seedSource(database, id) {
   }, false).id;
 }
 
+function completeFields(title) {
+  const thesisByTitle = {
+    '今日可批选题': {
+      targetAudience: '今天要决定是否追进实时热点的内容主编',
+      angle: '核对首发时间与受众影响，判断今天是否值得抢发',
+      pointOfView: '只有窗口仍开放且读者利益明确的热点才应占用今日产能'
+    },
+    '已采纳选题': {
+      targetAudience: '正在把批准方案交给制作团队的项目负责人',
+      angle: '检查证据包是否足以直接进入项目制作',
+      pointOfView: '批准必须同时落成可追踪项目，不能只改变选题状态'
+    },
+    '已否掉选题': {
+      targetAudience: '需要清理低价值候选而不想丢失决策记录的编辑',
+      angle: '从机会成本和后续可恢复性解释否决决定',
+      pointOfView: '低价值候选应退出今日队列，但否决记录必须可审计'
+    },
+    '量子计算突破': {
+      targetAudience: '正在判断量子计算新闻是否改变技术路线的研发负责人',
+      angle: '区分实验室指标突破与可部署能力之间的距离',
+      pointOfView: '单项量子指标刷新不等于企业现在就该迁移计算任务'
+    },
+    '英国租房指南': {
+      targetAudience: '本周准备在英国签约但看不懂押金条款的新租客',
+      angle: '用签约前检查清单拆解押金保护与退租风险',
+      pointOfView: '租客最大的可控损失发生在签字前而不是退租争议时'
+    },
+    '小红书封面公式': {
+      targetAudience: '内容可靠但封面点击率持续偏低的小红书创作者',
+      angle: '从信息层级与首屏承诺诊断封面而非追逐模板',
+      pointOfView: '高点击封面靠清晰兑现读者收益，不靠堆叠流行装饰'
+    },
+    '独立开发变现': {
+      targetAudience: '产品已上线却没有稳定付费用户的独立开发者',
+      angle: '从首批付费访谈倒推功能与定价取舍',
+      pointOfView: '独立产品应先验证谁愿意付钱，再扩充功能规模'
+    },
+    '路径规划算法': {
+      targetAudience: '正在处理配送延迟和路线成本的调度工程师',
+      angle: '比较动态约束下的实时重规划代价',
+      pointOfView: '真实路径规划的关键不是最短距离，而是约束变化后的稳定重算'
+    }
+  };
+  const thesis = thesisByTitle[title] ?? {
+    targetAudience: `正在评估 ${title} 并负责真实内容交付的具体读者`,
+    angle: `从 ${title} 的可核验证据与真实成本切入`,
+    pointOfView: `${title} 只有通过真实证据验证后才值得投入制作`
+  };
+  return {
+    whyNow: '官方今日公布关键变化，未来两天是解释窗口，错过后需要重新核对事实。',
+    timeliness: '热点 2-3 天',
+    ...thesis,
+    platforms: ['x'], formats: ['text'],
+    titleGuidance: '标题突出事件变化与读者实际成本之间的反差。',
+    openingGuidance: '先给出一条可核验事实，再说明它为什么影响当前选择。',
+    structureGuidance: '第一段交代事件；第二段展示证据；第三段给出行动判断。',
+    effortEstimate: '30m', scoreReasons: scoredReasons(80, NOW.toISOString()), editorialDecision: editorialDecision(thesis.pointOfView)
+  };
+}
+
 function seedItem(database, { planDate, title, priority = 1, timeliness = '热点 2-3 天', sourceId, createdAt }) {
   saveCurrentPlan(database, {
     planDate,
@@ -45,19 +105,9 @@ function seedItem(database, { planDate, title, priority = 1, timeliness = '热�
     items: [{
       title,
       priority,
-      whyNow: '为什么现在',
+      ...completeFields(title),
       timeliness,
-      targetAudience: `${title}受众`,
-      angle: `${title}角度`,
-      pointOfView: `${title}观点`,
-      platforms: ['x'],
-      formats: ['text'],
-      titleGuidance: '标题',
-      openingGuidance: '开头',
-      structureGuidance: '结构',
-      effortEstimate: '30m',
       sourceIds: [sourceId],
-      scoreReasons: scoredReasons()
     }]
   });
   const row = database.prepare(`
@@ -99,19 +149,19 @@ test('classifies today shelved adopted dismissed expired and keeps empty current
         {
           title: '今日可批选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '今日受众',
           angle: '今日角度', pointOfView: '今日观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sToday], scoreReasons: scoredReasons()
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sToday], scoreReasons: scoredReasons(), editorialDecision: editorialDecision('今日观点')
         },
         {
           title: '已采纳选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '采纳受众',
           angle: '采纳角度', pointOfView: '采纳观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sAdopt], scoreReasons: scoredReasons()
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sAdopt], scoreReasons: scoredReasons(), editorialDecision: editorialDecision('采纳观点')
         },
         {
           title: '已否掉选题', priority: 1, whyNow: '为什么现在', timeliness: '热点 2-3 天', targetAudience: '否掉受众',
           angle: '否掉角度', pointOfView: '否掉观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
-          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sDismiss], scoreReasons: scoredReasons()
+          openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [sDismiss], scoreReasons: scoredReasons(), editorialDecision: editorialDecision('否掉观点')
         }
-      ]
+      ].map((item) => ({ ...item, ...completeFields(item.title) }))
     });
     database.prepare(`UPDATE plan_items SET created_at=? WHERE title IN ('今日可批选题','已采纳选题','已否掉选题')`).run(hoursAgo(2));
     database.prepare(`UPDATE plans SET created_at=? WHERE plan_date=? AND is_current=1`).run(hoursAgo(2), TODAY);
@@ -205,7 +255,8 @@ test('offset pagination returns hasMore and distinct pages', async () => {
         structureGuidance: '结构',
         effortEstimate: '30m',
         sourceIds: [sourceId],
-        scoreReasons: scoredReasons()
+        scoreReasons: scoredReasons(80, NOW.toISOString()), editorialDecision: editorialDecision(titles[i]),
+        ...completeFields(titles[i])
       });
     }
     saveCurrentPlan(database, { planDate: TODAY, timezone: 'Asia/Shanghai', summary: '分页方案', items });

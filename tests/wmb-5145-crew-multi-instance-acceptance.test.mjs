@@ -158,7 +158,7 @@ test('A1 同角色多实例显式可见：两记者并行 running，进度独立
     const gate = new Promise((resolve) => { release = resolve; });
     const bound = [];
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async (ctx) => {
         const b = await bindTask(ctx);
         bound.push(b);
@@ -212,7 +212,7 @@ test('A1 同角色多实例显式可见：两记者并行 running，进度独立
 test('A2 实例按任务创建：空态零实例卡 + 五角色分组；spawn 后实例卡出现', async () => {
   await withRuntime(async ({ runtime }) => {
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async (ctx) => { await bindTask(ctx); return SUCCEEDED; }
     });
     const empty = projectionOf(spawner, runtime);
@@ -252,7 +252,7 @@ test('A3 终态退出活动视图：三终态退出 + 历史可指认；needs_us
   await withRuntime(async ({ runtime }) => {
     let cancelledTaskId = null;
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 3,
+      maxWorkers: 5,
       execute: async (ctx) => {
         const { taskId } = await bindTask(ctx);
         if (ctx.job.brief === '失败') {
@@ -307,7 +307,7 @@ test('A3 终态退出活动视图：三终态退出 + 历史可指认；needs_us
 // A4 不预设空槽：全空态无待命/占位坐席文案；页头摘要 0；UI 状态词无虚构待命态
 test('A4 不预设空槽：全空态无待命/占位坐席文案，摘要 0，无虚构待命态', async () => {
   await withRuntime(async ({ runtime }) => {
-    const spawner = new JobSpawner(runtime, { maxWorkers: 2, execute: async () => SUCCEEDED });
+    const spawner = new JobSpawner(runtime, { maxWorkers: 5, execute: async () => SUCCEEDED });
     const proj = projectionOf(spawner, runtime);
     assert.deepEqual(headerCounts(proj.summary), { running: 0, queued: 0, needsUser: 0 }, '页头摘要工作中 0 · 排队 0');
     setActiveJobSpawner(spawner);
@@ -324,31 +324,33 @@ test('A4 不预设空槽：全空态无待命/占位坐席文案，摘要 0，�
   });
 });
 
-// A5 并发 = 系统容量：maxWorkers=2 三张跨角色单 → 2 running + 1 queued，FIFO 晋升；maxWorkers=0 拒收
-test('A5 并发 = 系统容量：3 张跨角色单 → 2 running + 1 queued，释放后晋升；maxWorkers=0 拒收', async () => {
+// A5 并发 = 系统容量：maxWorkers=5 六张跨角色单 → 5 running + 1 queued，FIFO 晋升；maxWorkers=0 拒收
+test('A5 并发 = 系统容量：6 张跨角色单 → 5 running + 1 queued，释放后晋升；maxWorkers=0 拒收', async () => {
   await withRuntime(async ({ runtime }) => {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     let active = 0;
     let peak = 0;
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async () => { active += 1; peak = Math.max(peak, active); await gate; active -= 1; return SUCCEEDED; }
     });
     const j1 = spawner.spawn({ roleId: 'reporter', brief: '扫 A', businessDate: DATE });
     const j2 = spawner.spawn({ roleId: 'planner', brief: '判 A', businessDate: DATE });
     const j3 = spawner.spawn({ roleId: 'writer', brief: '写 A', projectId: 'P1', businessDate: DATE });
-    await waitFor(() => spawner.get(j3.id)?.status === 'queued');
-    assert.equal(spawner.get(j1.id)?.status, 'running');
-    assert.equal(spawner.get(j2.id)?.status, 'running');
-    assert.equal(spawner.get(j3.id)?.status, 'queued', '第三张跨角色单排队（FIFO）');
+    const j4 = spawner.spawn({ roleId: 'reporter', brief: '扫 B', businessDate: '2026-08-10', channelIds: ['c2'] });
+    const j5 = spawner.spawn({ roleId: 'planner', brief: '判 B', businessDate: '2026-08-10' });
+    const j6 = spawner.spawn({ roleId: 'writer', brief: '写 B', projectId: 'P2', businessDate: DATE });
+    await waitFor(() => spawner.get(j6.id)?.status === 'queued');
+    for (const job of [j1, j2, j3, j4, j5]) assert.equal(spawner.get(job.id)?.status, 'running');
+    assert.equal(spawner.get(j6.id)?.status, 'queued', '第六张跨角色单排队（FIFO）');
     const proj = projectionOf(spawner, runtime);
-    assert.equal(proj.summary.running, 2);
+    assert.equal(proj.summary.running, 5);
     assert.equal(proj.summary.queued, 1);
     release();
-    const done = await Promise.all([j1, j2, j3].map((job) => spawner.await(job.id, 10_000)));
+    const done = await Promise.all([j1, j2, j3, j4, j5, j6].map((job) => spawner.await(job.id, 10_000)));
     assert.ok(done.every((d) => d.status === 'succeeded'), '释放后排队单自动晋升并成功');
-    assert.ok(peak <= 2, `并发峰值不超过系统容量（峰值 ${peak}）`);
+    assert.ok(peak <= 5, `并发峰值不超过系统容量（峰值 ${peak}）`);
     spawner.dispose();
     const disabled = new JobSpawner(runtime, { maxWorkers: 0, execute: async () => SUCCEEDED });
     assert.throws(() => disabled.spawn({ roleId: 'reporter', brief: 'x', businessDate: DATE }), (e) => e.code === 'JOB_SPAWN_DISABLED', 'maxWorkers=0 派工停用');
@@ -356,25 +358,28 @@ test('A5 并发 = 系统容量：3 张跨角色单 → 2 running + 1 queued，�
   });
 });
 
-// A6 并发 ≠ 角色配额：两记者占满 2 槽；调 maxWorkers=4 第三记者单直接运行，零角色/注册表改动
-test('A6 并发 ≠ 角色配额：两记者占满容量；调 maxWorkers=4 第三记者单直接运行', async () => {
+// A6 并发 ≠ 角色配额：五记者占满 5 槽；调 maxWorkers=6 第六记者单直接运行，零角色/注册表改动
+test('A6 并发 ≠ 角色配额：五记者占满容量；调 maxWorkers=6 第六记者单直接运行', async () => {
   await withRuntime(async ({ runtime }) => {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
-    const spawner = new JobSpawner(runtime, { maxWorkers: 2, execute: async () => { await gate; return SUCCEEDED; } });
+    const spawner = new JobSpawner(runtime, { maxWorkers: 5, execute: async () => { await gate; return SUCCEEDED; } });
     const a = spawner.spawn({ roleId: 'reporter', brief: '扫 A', businessDate: DATE, channelIds: ['c1'] });
     const b = spawner.spawn({ roleId: 'reporter', brief: '扫 B', businessDate: DATE, channelIds: ['c2'] });
-    await waitFor(() => spawner.get(a.id)?.status === 'running' && spawner.get(b.id)?.status === 'running');
-    assert.equal(spawner.getMaxWorkers(), 2);
-    assert.equal(spawner.pool.activeEmployeeCount(), 2, '同角色两实例占满系统容量（容量非角色配额）');
     const c = spawner.spawn({ roleId: 'reporter', brief: '扫 C', businessDate: DATE, channelIds: ['c3'] });
-    await waitFor(() => spawner.get(c.id)?.status === 'queued');
-    spawner.setMaxWorkers(4);
-    await waitFor(() => spawner.get(c.id)?.status === 'running');
-    assert.equal(spawner.get(c.id).status, 'running', '容量提升后第三张同角色单直接运行');
-    assert.equal(spawner.getMaxWorkers(), 4);
+    const d = spawner.spawn({ roleId: 'reporter', brief: '扫 D', businessDate: DATE, channelIds: ['c4'] });
+    const e = spawner.spawn({ roleId: 'reporter', brief: '扫 E', businessDate: DATE, channelIds: ['c5'] });
+    await waitFor(() => [a, b, c, d, e].every((job) => spawner.get(job.id)?.status === 'running'));
+    assert.equal(spawner.getMaxWorkers(), 5);
+    assert.equal(spawner.pool.activeEmployeeCount(), 5, '同角色五实例占满系统容量（容量非角色配额）');
+    const f = spawner.spawn({ roleId: 'reporter', brief: '扫 F', businessDate: DATE, channelIds: ['c6'] });
+    await waitFor(() => spawner.get(f.id)?.status === 'queued');
+    spawner.setMaxWorkers(6);
+    await waitFor(() => spawner.get(f.id)?.status === 'running');
+    assert.equal(spawner.get(f.id).status, 'running', '容量提升后第六张同角色单直接运行');
+    assert.equal(spawner.getMaxWorkers(), 6);
     release();
-    await Promise.all([a, b, c].map((job) => spawner.await(job.id, 10_000)));
+    await Promise.all([a, b, c, d, e, f].map((job) => spawner.await(job.id, 10_000)));
     spawner.dispose();
   });
 });
@@ -384,7 +389,7 @@ test('A6 并发 ≠ 角色配额：两记者占满容量；调 maxWorkers=4 第�
 // `roleHasPagePassThrough`/`pageScopePassThrough` 已删除；spawn 拒绝与不进员工槽保留。
 test('A7 主管非员工工位：spawn 拒绝、不进员工投影；standing 全量内部写权、红线不可达；desk 行 = 主管/主编席', async () => {
   await withRuntime(async ({ runtime }) => {
-    const spawner = new JobSpawner(runtime, { maxWorkers: 2, execute: async () => SUCCEEDED });
+    const spawner = new JobSpawner(runtime, { maxWorkers: 5, execute: async () => SUCCEEDED });
     assert.throws(() => spawner.spawn({ roleId: 'desk', brief: 'nope' }), (e) => e.code === 'ROLE_NOT_SPAWNABLE', 'spawn(roleId:desk) 拒绝');
     assert.equal(spawner.pool.activeEmployeeCount(), 0, 'desk 不占员工容量');
     const proj = projectionOf(spawner, runtime);
@@ -412,6 +417,7 @@ test('A7 主管非员工工位：spawn 拒绝、不进员工投影；standing �
     }
   });
 });
+
 
 // A8 实例权限交集：grant ∩ 角色能力 ∩ 边界；跨角色命令真实拦截 + 审计 + 零业务写
 test('A8 实例权限交集：写手只读借阅无组织命令；资料员无 plans.save/content.*/reviews.save；越界拦截', async () => {
@@ -492,7 +498,7 @@ test('A9 资源边界（对象级硬隔离）：跨项目写 BLOCKED + 审计 + 
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async (ctx) => { if (ctx.job.brief === '第一张') await gate; return SUCCEEDED; }
     });
     const j1 = spawner.spawn({ roleId: 'writer', brief: '第一张', projectId: 'p-same', businessDate: '2026-08-09' });
@@ -555,7 +561,7 @@ test('A11 needs_user 数据流：code + 部分读回呈报；零资源；不自�
   await withRuntime(async ({ runtime, database }) => {
     let executeCalls = 0;
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async (ctx) => {
         executeCalls += 1;
         if (ctx.job.brief === '同键复检') return SUCCEEDED;
@@ -597,7 +603,7 @@ test('A12 取消 ≤5s：running 取消总门 ≤5s，任务/池双 cancelled，
     let boundTaskId = null;
     const seen = [];
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
+      maxWorkers: 5,
       execute: async (ctx) => {
         const { taskId } = await bindTask(ctx);
         boundTaskId = taskId;
@@ -634,7 +640,7 @@ test('A13 历史可重建与一键续派：重启后从 context_refs_json 指认
     const runtime = openRuntime(root, 'epoch-1', 'ws-5145-rebuild');
     try {
       const spawner = new JobSpawner(runtime, {
-        maxWorkers: 2,
+        maxWorkers: 5,
         execute: async (ctx) => {
           const b = await bindTask(ctx);
           taskId = b.taskId;
@@ -652,7 +658,7 @@ test('A13 历史可重建与一键续派：重启后从 context_refs_json 指认
     }
     const reopened = openRuntime(root, 'epoch-2', 'ws-5145-rebuild');
     try {
-      const proj = readCrewInstanceProjection({ database: reopened.database, pool: new JobPool(2) });
+      const proj = readCrewInstanceProjection({ database: reopened.database, pool: new JobPool(5) });
       assert.equal(proj.summary.history, 1, '重启后历史只从持久面重建（池已清空）');
       const row = proj.history.find((i) => i.jobId === persistedJobId);
       assert.ok(row, '历史实例以 jobId 完整指认');
@@ -667,7 +673,7 @@ test('A13 历史可重建与一键续派：重启后从 context_refs_json 指认
       assert.deepEqual(rebuilt, { roleId: 'writer', brief: '写 P13 初稿', projectId: 'P13', writerTask: 'core_draft', businessDate: DATE, researchMode: 'auto' }, 'context_refs_json 重建原 RoleJobRequest');
       const uiInput = redispatchInput(row);
       assert.deepEqual(uiInput, rebuilt, 'UI 一键续派输入与持久重建一致');
-      const spawner2 = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });
+      const spawner2 = new JobSpawner(reopened, { maxWorkers: 5, execute: async () => SUCCEEDED });
       const j2 = spawner2.spawn(uiInput);
       assert.equal((await spawner2.await(j2.id, 10_000)).status, 'succeeded', '一键续派直接再 spawn');
       spawner2.dispose();

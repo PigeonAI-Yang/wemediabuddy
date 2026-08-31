@@ -10,3 +10,7 @@ tests/e2e/.runtime/
 /.tmp-*
 /0
 tests/e2e/.artifacts/
+/tmp/approved-chain-rollback-drill-*/
+/tmp/rollback-drill/
+/tmp/wmb*-e2e-data/
+/tmp/wmb*-e2e-userdata/

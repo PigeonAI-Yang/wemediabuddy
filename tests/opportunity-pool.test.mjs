@@ -13,7 +13,7 @@ import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { dismissCarryForPlanItem, listFermentingBundle, mergeSimilarCarryItems, upsertCarryFromPlanItem } from '../src/main/ferment.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { getOpportunityPool, getToday } from '../src/main/workbench.ts';
-import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const NOW = new Date('2026-08-05T06:00:00.000Z');
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
@@ -38,10 +38,23 @@ function seedPlanItems(database, { planDate, items, createdAt }) {
   saveCurrentPlan(database, {
     planDate, timezone: 'Asia/Shanghai', summary: `${planDate} 方案`,
     items: items.map((item) => ({
-      title: item.title, priority: item.priority, whyNow: '为什么是现在', timeliness: item.timeliness,
-      targetAudience: `${item.title}受众`, angle: `${item.title}角度`, pointOfView: `${item.title}观点`,
-      platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds: [item.sourceId], scoreReasons: scoredReasons(), ...(item.topicId ? { topicId: item.topicId } : {})
+      title: item.title,
+      priority: item.priority,
+      whyNow: '官方今天公布了关键变化，未来两天是解释窗口，错过后需要重新核对事实。',
+      timeliness: item.timeliness,
+      targetAudience: item.targetAudience ?? `正在决定是否围绕“${item.title}”采取行动的具体负责人`,
+      angle: item.angle ?? `从“${item.title}”的可核验证据、现实成本和行动边界切入`,
+      pointOfView: item.pointOfView ?? `“${item.title}”只有通过真实证据验证后才值得投入制作资源`,
+      platforms: ['x'],
+      formats: ['text'],
+      titleGuidance: '标题突出事件变化与读者实际成本之间的反差。',
+      openingGuidance: '首段先给出一条可核验事实，再说明它为什么影响当前选择。',
+      structureGuidance: '第一段交代事件；第二段展示证据；第三段给出行动判断。',
+      effortEstimate: '30m',
+      sourceIds: [item.sourceId],
+      scoreReasons: scoredReasons(item.score ?? 80, NOW.toISOString()),
+      editorialDecision: editorialDecision(item.pointOfView ?? `“${item.title}”只有通过真实证据验证后才值得投入制作资源`),
+      ...(item.topicId ? { topicId: item.topicId } : {})
     }))
   });
   const ids = new Map();
@@ -50,7 +63,6 @@ function seedPlanItems(database, { planDate, items, createdAt }) {
   )) {
     ids.set(row.title, row.id);
   }
-  approvePlanItems(database, [...ids.values()]);
   if (createdAt) {
     database.prepare('UPDATE plan_items SET created_at=? WHERE id IN (SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date=?)').run(createdAt, planDate);
     database.prepare('UPDATE plans SET created_at=? WHERE plan_date=?').run(createdAt, planDate);
@@ -89,8 +101,18 @@ test('pool unions current plans across dates and excludes adopted, dismissed and
     const ids1 = seedPlanItems(database, {
       planDate: '2026-08-04',
       items: [
-        { title: '昨日热点仍在窗内', priority: 1, timeliness: '热点 2-3 天', sourceId: s1 },
-        { title: '已采纳机会', priority: 1, timeliness: '热点', sourceId: s2 }
+        {
+          title: '昨日热点仍在窗内', priority: 1, timeliness: '热点 2-3 天', sourceId: s1,
+          targetAudience: '今天需要判断旧热点是否仍值得追进的内容主编',
+          angle: '核对传播曲线与新增事实，判断窗口是否仍然开放',
+          pointOfView: '昨日热点只要新增事实仍影响读者决策，今天仍可进入制作'
+        },
+        {
+          title: '已采纳机会', priority: 1, timeliness: '热点', sourceId: s2,
+          targetAudience: '准备把批准方案交给制作团队的项目负责人',
+          angle: '检查批准动作能否同步生成可追踪的内容项目',
+          pointOfView: '批准必须落成唯一项目，不能只留下一个状态变化'
+        }
       ],
       createdAt: hoursAgo(20)
     });
@@ -99,6 +121,7 @@ test('pool unions current plans across dates and excludes adopted, dismissed and
     const dismissedId = seedPlanItem(database, { planDate: '2026-08-05', title: '被否决机会', priority: 0, timeliness: '热点', sourceId: s3, createdAt: hoursAgo(2) });
     seedPlanItem(database, { planDate: '2026-07-06', title: '长青方法常驻', priority: 2, timeliness: '长青方法论', sourceId: s5, createdAt: hoursAgo(30 * 24) });
 
+    approvePlanItems(database, [adoptedId]);
     createProjectFromPlanItem(database, adoptedId, false);
     dismissCarryForPlanItem(database, { planItemId: dismissedId, reason: '不想做' });
 
@@ -127,7 +150,7 @@ test('dismissed fingerprint is never revived by reseeding', async () => {
   });
 });
 
-test('publish within 24h demotes same-topic opportunities to the tail with annotation', async () => {
+test('publish within 24h annotates same-topic opportunities without changing score order', async () => {
   await withDb(async (database) => {
     const topicA = createTopic(database, '主题A').id;
     const topicB = createTopic(database, '主题B').id;
@@ -136,8 +159,18 @@ test('publish within 24h demotes same-topic opportunities to the tail with annot
     seedPlanItems(database, {
       planDate: '2026-08-05',
       items: [
-        { title: '同主题机会', priority: 0, timeliness: '热点', sourceId: s1, topicId: topicA },
-        { title: '独立话题机会', priority: 3, timeliness: '热点', sourceId: s2, topicId: topicB }
+        {
+          title: '同主题机会', priority: 0, timeliness: '热点', sourceId: s1, topicId: topicA,
+          targetAudience: '刚发布过同主题内容并在判断是否继续跟进的编辑',
+          angle: '展示最近发布记录，同时依据新证据判断是否仍应制作',
+          pointOfView: '近期发布只能提醒内容重复风险，不能覆盖新候选的传播分排序'
+        },
+        {
+          title: '独立话题机会', priority: 3, timeliness: '热点', sourceId: s2, topicId: topicB,
+          targetAudience: '需要在全新赛道验证读者需求的独立创作者',
+          angle: '从未覆盖受众的具体问题切入，验证首轮内容价值',
+          pointOfView: '新话题应凭自身证据与读者收益竞争，而不是因陌生自动靠前'
+        }
       ],
       createdAt: hoursAgo(1)
     });
@@ -145,10 +178,10 @@ test('publish within 24h demotes same-topic opportunities to the tail with annot
 
     const pool = getOpportunityPool(database, { now: NOW });
     assert.equal(pool.length, 2);
-    assert.equal(pool[0].title, '独立话题机会', 'non-demoted item sorts first even at lower priority');
-    assert.equal(pool[1].title, '同主题机会');
-    assert.equal(pool[1].demotion?.platform, 'x');
-    assert.equal(pool[1].isNew, true);
+    assert.equal(pool[0].title, '同主题机会', 'publication annotation must not override the frozen score/date/priority order');
+    assert.equal(pool[0].demotion?.platform, 'x');
+    assert.equal(pool[0].isNew, true);
+    assert.equal(pool[1].title, '独立话题机会');
   });
 });
 
@@ -177,6 +210,7 @@ test('story variants with overlapping sources merge into the newest carry row', 
     const a = seedPlanItem(database, { planDate: '2026-08-04', title: '配偶签证收入要求观察', priority: 1, timeliness: '长青', sourceId: ids[0], createdAt: hoursAgo(30) });
     const b = seedPlanItem(database, { planDate: '2026-08-04', title: '担保人收入证明细则', priority: 1, timeliness: '长青', sourceId: ids[1], createdAt: hoursAgo(20) });
     const c = seedPlanItem(database, { planDate: '2026-08-05', title: '居住时长门槛核对', priority: 1, timeliness: '长青', sourceId: ids[2], createdAt: hoursAgo(2) });
+    approvePlanItems(database, [a, b, c]);
     // 让三条 carry 共享来源（标题/指纹不同的演化版本），并显式拉开 last_seen 保证 keeper 是丙。
     const carryRows = database.prepare(`SELECT id, object_id FROM work_carry_items WHERE object_type='plan_item'`).all();
     const byObject = new Map(carryRows.map((row) => [row.object_id, row.id]));
@@ -205,8 +239,9 @@ test('disjoint stories never merge', async () => {
   await withDb(async (database) => {
     const s1 = upsertSource(database, { title: 'x1', originalUrl: 'https://example.com/x1' }, false).id;
     const s2 = upsertSource(database, { title: 'x2', originalUrl: 'https://example.com/x2' }, false).id;
-    seedPlanItem(database, { planDate: '2026-08-04', title: '故事一', priority: 1, timeliness: '长青', sourceId: s1, createdAt: hoursAgo(30) });
-    seedPlanItem(database, { planDate: '2026-08-05', title: '故事二', priority: 1, timeliness: '长青', sourceId: s2, createdAt: hoursAgo(2) });
+    const storyOne = seedPlanItem(database, { planDate: '2026-08-04', title: '故事一', priority: 1, timeliness: '长青', sourceId: s1, createdAt: hoursAgo(30) });
+    const storyTwo = seedPlanItem(database, { planDate: '2026-08-05', title: '故事二', priority: 1, timeliness: '长青', sourceId: s2, createdAt: hoursAgo(2) });
+    approvePlanItems(database, [storyOne, storyTwo]);
     assert.equal(mergeSimilarCarryItems(database), 0, '零来源重合不合并');
     const active = database.prepare(`SELECT COUNT(*) AS count FROM work_carry_items WHERE object_type='plan_item' AND state='active'`).get();
     assert.equal(active.count, 2);
@@ -225,6 +260,7 @@ test('similar titles without shared sources merge into one story at save time', 
       sourceId: s1,
       createdAt: hoursAgo(30)
     });
+    approvePlanItems(database, [a]);
     // 先把旧行 last_seen 拉到更早：保存乙时 saveCurrentPlan 末尾的 merge 会按 last_seen 选乙做 keeper。
     const byObject = new Map(database.prepare(`SELECT id, object_id FROM work_carry_items WHERE object_type='plan_item'`).all().map((row) => [row.object_id, row.id]));
     database.prepare('UPDATE work_carry_items SET last_seen_at=? WHERE id=?').run(hoursAgo(30), byObject.get(a));
@@ -236,6 +272,7 @@ test('similar titles without shared sources merge into one story at save time', 
       sourceId: s2,
       createdAt: hoursAgo(2)
     });
+    approvePlanItems(database, [b]);
     const stateOf = (planItemId) => database.prepare(`SELECT state FROM work_carry_items WHERE object_id=?`).get(planItemId)?.state;
     assert.equal(stateOf(a), 'dismissed', '保存乙时的 save-time merge 已把旧措辞并入乙');
     assert.equal(stateOf(b), 'active', '最新出现的一行保留');
@@ -260,6 +297,7 @@ test('listFermentingBundle only keeps cards with why-watching signal', async () 
       createdAt: hoursAgo(30),
       topicId: keptTopic
     });
+    approvePlanItems(database, [kept]);
     saveCurrentPlan(database, { planDate: '2026-08-04', timezone: 'Asia/Shanghai', summary: '无后续草案', items: [{
       title: '单发热点无后续', priority: 1, whyNow: '单次事件', timeliness: '热点', targetAudience: '单发受众',
       angle: '单发角度', pointOfView: '单发观点', platforms: ['x'], formats: ['text'], titleGuidance: '标题',
@@ -279,6 +317,7 @@ test('carry rows in expired state are excluded from the pool', async () => {
   await withDb(async (database) => {
     const sourceId = seedSource(database, 'exp');
     const planItemId = seedPlanItem(database, { planDate: '2026-08-04', title: 'carry 已过期', priority: 1, timeliness: '长青方法论', sourceId, createdAt: hoursAgo(2) });
+    approvePlanItems(database, [planItemId]);
     const fingerprintRow = database.prepare(`SELECT id FROM work_carry_items WHERE object_type='plan_item' AND object_id=?`).get(planItemId);
     database.prepare(`UPDATE work_carry_items SET state='expired' WHERE id=?`).run(fingerprintRow.id);
     assert.equal(getOpportunityPool(database, { now: NOW }).length, 0, 'expired carry state terminates pool membership even for evergreen items');
@@ -289,14 +328,14 @@ test('getToday exposes the pool alongside plan and sources', async () => {
   await withDb(async (database) => {
     const sourceId = seedSource(database, 't1');
     seedPlanItem(database, { planDate: '2026-08-05', title: '池内机会', priority: 1, timeliness: '热点', sourceId, createdAt: hoursAgo(1) });
-    const today = getToday(database, '2026-08-05');
+    const today = getToday(database, '2026-08-05', { now: NOW });
     assert.ok(Array.isArray(today.pool));
     assert.equal(today.pool[0]?.title, '池内机会');
     assert.equal(today.plan?.items[0]?.title, '池内机会', 'day plan remains available alongside the pool');
   });
 });
 
-test('same story different wording collapses to one chair card (keeper: lowest priority, then newest createdAt)', async () => {
+test('same story different wording collapses after score-first sorting', async () => {
   await withDb(async (database) => {
     const sA = seedSource(database, 'kA');
     const sB = seedSource(database, 'kB');
@@ -304,21 +343,20 @@ test('same story different wording collapses to one chair card (keeper: lowest p
     const sD = seedSource(database, 'kD');
     // 同 story 不同措辞、不同日期：字面指纹各异（各落一条 carry），播种时标题 bigram 与来源都无重合，
     // 播种期 save-time merge 不触发；下面用 SQL 制造来源重合，专测选题池投影级 storyKey 去重（验收 C9）。
-    seedPlanItem(database, { planDate: '2026-08-05', title: '旧措辞甲', priority: 1, timeliness: '长青方法论', sourceId: sA, createdAt: hoursAgo(30) });
-    seedPlanItem(database, { planDate: '2026-08-04', title: '新措辞乙', priority: 1, timeliness: '长青方法论', sourceId: sB, createdAt: hoursAgo(2) });
-    // 优先级数字更低（priority 0）但更旧：验证 priority 优先于 createdAt。
-    seedPlanItem(database, { planDate: '2026-08-03', title: '高优先级旧版', priority: 0, timeliness: '长青方法论', sourceId: sC, createdAt: hoursAgo(30) });
-    seedPlanItem(database, { planDate: '2026-08-02', title: '低优先级新版', priority: 1, timeliness: '长青方法论', sourceId: sD, createdAt: hoursAgo(2) });
+    seedPlanItems(database, { planDate: '2026-08-05', items: [{ title: '旧措辞甲', priority: 0, score: 70, timeliness: '长青方法论', sourceId: sA }], createdAt: hoursAgo(30) });
+    seedPlanItems(database, { planDate: '2026-08-04', items: [{ title: '新措辞乙', priority: 3, score: 90, timeliness: '长青方法论', sourceId: sB }], createdAt: hoursAgo(2) });
+    seedPlanItems(database, { planDate: '2026-08-03', items: [{ title: '高分旧版', priority: 4, score: 95, timeliness: '长青方法论', sourceId: sC }], createdAt: hoursAgo(30) });
+    seedPlanItems(database, { planDate: '2026-08-02', items: [{ title: '低分新版', priority: 0, score: 60, timeliness: '长青方法论', sourceId: sD }], createdAt: hoursAgo(2) });
     database.prepare(`UPDATE plan_items SET source_ids_json=? WHERE title IN ('旧措辞甲','新措辞乙')`).run(JSON.stringify([sA, sB]));
-    database.prepare(`UPDATE plan_items SET source_ids_json=? WHERE title IN ('高优先级旧版','低优先级新版')`).run(JSON.stringify([sC, sD]));
+    database.prepare(`UPDATE plan_items SET source_ids_json=? WHERE title IN ('高分旧版','低分新版')`).run(JSON.stringify([sC, sD]));
 
     const pool = getOpportunityPool(database, { now: NOW });
     assert.equal(pool.length, 2, '每 story 只留一张主席卡');
     const titles = pool.map((item) => item.title);
-    assert.ok(titles.includes('新措辞乙'), '同优先级取最新 createdAt 作 keeper');
-    assert.ok(titles.includes('高优先级旧版'), '低 priority 数字优先于 createdAt 作 keeper');
-    assert.equal(titles.includes('旧措辞甲'), false, '同 story 旧措辞不并排');
-    assert.equal(titles.includes('低优先级新版'), false, '同 story 低优先级行不并排');
+    assert.ok(titles.includes('新措辞乙'), '更高传播分保留，即使 priority 更低');
+    assert.ok(titles.includes('高分旧版'), '更高传播分保留，即使 createdAt 更旧');
+    assert.equal(titles.includes('旧措辞甲'), false, '同 story 低分措辞不并排');
+    assert.equal(titles.includes('低分新版'), false, '同 story 低分新行不并排');
   });
 });
 
@@ -345,7 +383,7 @@ test('empty current plan does not remove prior non-empty plan items from the poo
     assert.equal(pool.length, 1);
     assert.equal(pool[0].title, '仍可批的旧方案');
 
-    const today = getToday(database, '2026-08-05');
+    const today = getToday(database, '2026-08-05', { now: NOW });
     assert.equal(today.plan?.items.length, 0, 'current plan remains the empty run record');
     assert.equal(today.latestPlan?.items[0]?.title, '仍可批的旧方案');
     assert.equal(today.pool[0]?.title, '仍可批的旧方案');

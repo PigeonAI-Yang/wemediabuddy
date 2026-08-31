@@ -51,3 +51,10 @@ Before changing brand-level tokens in foundation — including `--accent*`, `--a
 2. Reuse existing CSS variables; never invent new brand hex.
 3. Run `node --test tests/design-tokens-drift.test.mjs` after CSS token-related edits.
 4. If foundation tokens changed (after owner approval), run `node scripts/sync-design-doc-from-foundation.mjs`.
+
+## E2E artifact retention
+
+- `npm run e2e` automatically runs `scripts/cleanup-e2e-artifacts.mjs` before and after the run; cleanup warnings must never replace the runner's original exit status.
+- The policy keeps active/current runs, at most 20 recent failure evidence roots for 14 days, and recent success evidence for 24 hours. Older successful E2E roots, stale generated rollback-drill/test fixtures, and regenerable caches are removed only from the script's explicit allow-list.
+- `npm run e2e:cleanup` may be used for the same bounded cleanup plus WMBData's generated repair/rollback backup copies and aged logs/caches. It preserves `wmb.db`, `wmb.db-wal`, `wmb.db-shm`, assets, generic/ambiguous backups, and any path with an active process.
+- Do not add ad-hoc cleanup that deletes user data, source, Git state, current databases, or production exports; add new generated paths to the allow-list and `.gitignore` only when their naming is unambiguous.

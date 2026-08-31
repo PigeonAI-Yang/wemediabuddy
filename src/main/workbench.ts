@@ -1,8 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
-import { classifyTimeliness, fingerprintPlanItem, listFermentingBundle, TIMELINESS_WINDOW_HOURS, type FermentingBundle, type TimelinessClass } from './ferment.ts';
+import { classifyTimeliness, fingerprintPlanItem, listFermentingBundle, shanghaiDate, TIMELINESS_WINDOW_HOURS, type FermentingBundle, type TimelinessClass } from './ferment.ts';
 import { addDaysDate, hasProjectForPlanItemOrSources, sameStory, toUtcIsoBound } from './ferment-read.ts';
 import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
-
+import { buildTodayRecommendationProjection, type TodayRecommendationProjection } from './today-recommendation.ts';
+import { readManagerAdapterProjection, type ManagerAdapterProjection, type ManagerAdapterReadModel } from './workspace-orchestrator-manager-adapter.ts';
 export type TodaySource = {
   id: string;
   title: string;
@@ -238,14 +239,164 @@ function collectSameDayTasks(database: DatabaseSync, planDate: string): TodayRun
   }
 }
 
+function parseJsonStrings(value: unknown): string[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
-export function getToday(database: DatabaseSync, planDate: string): {
+function loadAuthoritativeOpportunityItems(
+  database: DatabaseSync,
+  ids: readonly string[],
+  asOf: Date
+): Map<string, OpportunityPoolItem> {
+  if (!ids.length) return new Map();
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = database.prepare(`SELECT pi.id AS planItemId, p.plan_date AS planDate, pi.title, pi.priority,
+      pi.timeliness, pi.topic_id AS topicId, pi.source_ids_json AS sourceIds, pi.why_now AS whyNow,
+      pi.angle, pi.point_of_view AS pointOfView, pi.target_audience AS targetAudience,
+      pi.platforms_json AS platforms, pi.formats_json AS formats, pi.title_guidance AS titleGuidance,
+      pi.opening_guidance AS openingGuidance, pi.structure_guidance AS structureGuidance,
+      pi.effort_estimate AS effortEstimate, pi.available_materials_json AS availableMaterials,
+      pi.missing_materials_json AS missingMaterials, pi.created_at AS createdAt,
+      pi.planning_status AS planningStatus, pi.revision, pi.planning_provenance_json AS planningProvenanceJson,
+      pi.score_reasons_json AS scoreReasonsJson
+    FROM plan_items pi JOIN plans p ON p.id = pi.plan_id
+    WHERE pi.id IN (${placeholders})`).all(...ids) as Array<Record<string, unknown>>;
+  const carryByItem = database.prepare("SELECT id,state,revision FROM work_carry_items WHERE object_type='plan_item' AND object_id=? ORDER BY updated_at DESC LIMIT 1");
+  const result = new Map<string, OpportunityPoolItem>();
+  for (const row of rows) {
+    const planItemId = String(row.planItemId ?? '');
+    if (!planItemId) continue;
+    const sourceIds = parseJsonStrings(row.sourceIds);
+    const createdAt = String(row.createdAt ?? '');
+    const createdMs = Date.parse(createdAt);
+    const timeliness = row.timeliness === null || row.timeliness === undefined ? null : String(row.timeliness);
+    const timelinessClass = classifyTimeliness(timeliness);
+    const windowHours = TIMELINESS_WINDOW_HOURS[timelinessClass];
+    const expiresAt = Number.isFinite(createdMs) && windowHours !== null ? new Date(createdMs + windowHours * 3_600_000).toISOString() : null;
+    const carryRow = carryByItem.get(planItemId) as { id: string; state: string; revision: number } | undefined;
+    result.set(planItemId, {
+      planItemId,
+      planDate: String(row.planDate ?? ''),
+      title: String(row.title ?? ''),
+      priority: Number(row.priority ?? 0),
+      timeliness,
+      timelinessClass,
+      expiresAt,
+      topicId: row.topicId === null || row.topicId === undefined ? null : String(row.topicId),
+      sourceIds,
+      whyNow: String(row.whyNow ?? ''),
+      angle: String(row.angle ?? ''),
+      pointOfView: String(row.pointOfView ?? ''),
+      targetAudience: String(row.targetAudience ?? ''),
+      platforms: parseJsonStrings(row.platforms),
+      formats: parseJsonStrings(row.formats),
+      titleGuidance: String(row.titleGuidance ?? ''),
+      openingGuidance: String(row.openingGuidance ?? ''),
+      structureGuidance: String(row.structureGuidance ?? ''),
+      effortEstimate: String(row.effortEstimate ?? ''),
+      availableMaterials: parseJsonStrings(row.availableMaterials),
+      missingMaterials: parseJsonStrings(row.missingMaterials),
+      trendEvidence: listXPostTrends(database, { sourceIds }),
+      createdAt,
+      isNew: Number.isFinite(createdMs) && createdMs >= asOf.getTime() - 6 * 3_600_000,
+      planningStatus: row.planningStatus === null || row.planningStatus === undefined ? null : String(row.planningStatus),
+      revision: row.revision === null || row.revision === undefined ? null : Number(row.revision),
+      planningProvenanceJson: row.planningProvenanceJson === null || row.planningProvenanceJson === undefined ? null : String(row.planningProvenanceJson),
+      scoreReasonsJson: row.scoreReasonsJson === null || row.scoreReasonsJson === undefined ? null : String(row.scoreReasonsJson),
+      carry: carryRow ? { id: carryRow.id, state: carryRow.state, revision: carryRow.revision } : null,
+      demotion: null
+    });
+  }
+  return result;
+}
+
+function buildOrchestratorRecommendation(
+  database: DatabaseSync,
+  legacy: TodayRecommendationProjection,
+  roots: readonly ManagerAdapterProjection[],
+  businessDate: string,
+  asOf: Date
+): TodayRecommendationProjection {
+  const frozen = roots.filter((root) => root.projectionState === 'frozen' && !root.projectionError);
+  const ids: string[] = [];
+  for (const root of frozen) for (const id of root.eligiblePlanItemIds) if (!ids.includes(id)) ids.push(id);
+  const byId = new Map(legacy.eligible.map((item) => [item.planItemId, item]));
+  for (const [id, item] of loadAuthoritativeOpportunityItems(database, ids, asOf)) if (!byId.has(id)) byId.set(id, item);
+  const eligible = ids.map((id) => byId.get(id)).filter((item): item is OpportunityPoolItem => Boolean(item));
+  const pending = frozen.reduce((count, root) => count + root.pendingPlanItemIds.length, 0);
+  const invalid = frozen.reduce((count, root) => count + root.invalidPlanItemIds.length, 0);
+  const repairable: TodayRecommendationProjection['repairable'] = [
+    ...frozen.flatMap((root) => root.pendingPlanItemIds.map((planItemId) => ({
+      planItemId,
+      revision: byId.get(planItemId)?.revision ?? 1,
+      reasonCode: 'score_pending' as const,
+      reason: '编排 Projection 仍在等待评分'
+    }))),
+    ...frozen.flatMap((root) => root.invalidPlanItemIds.map((planItemId) => ({
+      planItemId,
+      revision: byId.get(planItemId)?.revision ?? 1,
+      reasonCode: 'score_invalid' as const,
+      reason: '编排 Projection 标记为 invalid，需修复'
+    })))
+  ];
+  const emptyQualified = frozen.length > 0 && frozen.every((root) => root.emptyQualified && root.eligiblePlanItemIds.length === 0);
+  const hasError = roots.some((root) => root.projectionError);
+  const emptyReason: TodayRecommendationProjection['emptyReason'] = pending > 0
+    ? 'scoring_incomplete'
+    : invalid > 0 || hasError ? 'invalid_needs_repair'
+      : ids.length > 0 ? 'has_recommendation'
+        : emptyQualified ? 'clean_empty' : 'run_active';
+  return {
+    ...legacy,
+    primary: eligible[0] ?? null,
+    eligible,
+    counts: {
+      todayReady: ids.filter((id) => byId.get(id)?.planDate === businessDate).length,
+      carriedReady: ids.filter((id) => byId.get(id)?.planDate !== businessDate).length,
+      scoringPending: pending,
+      invalid
+    },
+    repairable,
+    context: { businessDate, asOf: asOf.toISOString() },
+    emptyReason
+  };
+}
+
+function authoritativeOpportunityCount(database: DatabaseSync, businessDate: string, now: Date): number | null {
+  const model = readManagerAdapterProjection(database, { businessDate });
+  if (!model.roots.length) return null;
+  const ids: string[] = [];
+  for (const root of model.roots) {
+    if (root.projectionState !== 'frozen' || root.projectionError) continue;
+    for (const id of root.eligiblePlanItemIds) if (!ids.includes(id)) ids.push(id);
+  }
+  void now;
+  return ids.length;
+}
+
+function getOpportunityCountForDate(database: DatabaseSync, businessDate: string, now: Date): number {
+  const authoritative = authoritativeOpportunityCount(database, businessDate, now);
+  if (authoritative !== null) return authoritative;
+  const projection = buildTodayRecommendationProjection(database, businessDate, { now });
+  return projection.eligible.length;
+}
+
+
+export function getToday(database: DatabaseSync, planDate: string, options: { now?: Date } = {}): {
   sources: TodaySource[];
   sourcesTotal: number;
   sourcesDate: string | null;
   plan: TodayPlan | null;
   latestPlan: TodayPlan | null;
   pool: OpportunityPoolItem[];
+  recommendation: TodayRecommendationProjection;
+  /** All durable orchestrator roots for this workspace/date; never reduced to a latest root. */
+  orchestrator: ManagerAdapterReadModel;
   pendingActions: string[];
   topicMaintenance: { pending: number };
   fermenting: FermentingBundle;
@@ -295,12 +446,22 @@ export function getToday(database: DatabaseSync, planDate: string): {
   // current plan 可为当日空运行记录；主席兜底用最近非空方案（含同日被降级旧 plan）。
   const latestPlan = plan && plan.items.length > 0 ? null : loadLatestNonEmptyPlan(database, { excludePlanId: plan?.id ?? null });
   // 选题池与今日读模型同用 planDate 上海日界（dayEnd）锚定，避免真实墙钟漂移使当日窗口内机会提前过期。
-  const poolNow = new Date(dayEnd);
+  const poolNow = options.now ?? new Date();
   // No plan is not a human blocker: the primary CTA is「开始今日情报」, not a fake todo card.
   const topicMaintenance = { pending: Number((database.prepare("SELECT count(*) AS count FROM topic_maintenance_proposals WHERE status='proposed'").get() as { count: number }).count) };
   const sameDayTasks = collectSameDayTasks(database, planDate);
   const exhaustion = getTodayPlanExhaustion(database, planDate);
-  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: getOpportunityPool(database, { now: poolNow }), pendingActions: [], topicMaintenance, fermenting, archivedTodayCount, sameDayTasks, exhaustion };
+  let recommendation = buildTodayRecommendationProjection(database, planDate, { now: poolNow });
+  const orchestrator = readManagerAdapterProjection(database, { businessDate: planDate });
+  if (orchestrator.roots.length > 0) {
+    recommendation = buildOrchestratorRecommendation(database, recommendation, orchestrator.roots, planDate, poolNow);
+  }
+  if (!recommendation.primary) {
+    const active = sameDayTasks.find((item) => item.status === 'running');
+    if (active) recommendation.emptyReason = ['judging_opportunities', 'synthesizing', 'validating'].includes(active.phase ?? '') ? 'scoring_active' : 'run_active';
+    else if (!plan && sameDayTasks.length === 0 && orchestrator.roots.length === 0) recommendation.emptyReason = 'not_started';
+  }
+  return { sources, sourcesTotal, sourcesDate: latestSourceDate, plan, latestPlan, pool: recommendation.eligible, recommendation, orchestrator, pendingActions: [], topicMaintenance, fermenting, archivedTodayCount, sameDayTasks, exhaustion };
 }
 
 export type OpportunityPoolItem = {
@@ -433,86 +594,23 @@ export function dedupeOpenProposals(items: OpportunityPoolItem[]): OpportunityPo
  */
 export function getOpportunityPool(database: DatabaseSync, options: OpportunityPoolOptions = {}): OpportunityPoolItem[] {
   const now = options.now ?? new Date();
-  const demoteHours = options.demoteHours ?? 24;
-  const newHours = options.newHours ?? 6;
-  const rows = latestPlanItemRowsByDate(database, 200);
-
-  const demoteSince = new Date(now.getTime() - demoteHours * 3_600_000).toISOString();
-  const latestPublicationByTopic = new Map<string, { publishedAt: string; platform: string }>(
-    (database.prepare(`
-      SELECT cp.topic_id AS topicId, p.platform, p.published_at AS publishedAt
-      FROM publications p
-      JOIN platform_versions pv ON pv.id = p.platform_version_id
-      JOIN content_projects cp ON cp.id = pv.project_id
-      WHERE p.status = 'published' AND p.published_at IS NOT NULL AND p.published_at >= ? AND cp.topic_id IS NOT NULL
-      ORDER BY p.published_at DESC
-    `).all(demoteSince) as Array<{ topicId: string; platform: string; publishedAt: string }>)
-      .filter((row, index, all) => all.findIndex((other) => other.topicId === row.topicId) === index)
-      .map((row) => [row.topicId, { publishedAt: row.publishedAt, platform: row.platform }])
-  );
-
-  const carryStmt = database.prepare(`SELECT id, state, revision FROM work_carry_items WHERE object_type='plan_item' AND fingerprint=?`);
-  const pool: OpportunityPoolItem[] = [];
-  for (const row of rows) {
-    const sourceIds = parseSourceIds(row.sourceIds);
-    if (hasProjectForPlanItemOrSources(database, row.planItemId, sourceIds)) continue;
-    const fingerprint = fingerprintPlanItem({ title: row.title, topicId: row.topicId, sourceIds });
-    const carry = carryStmt.get(fingerprint) as { id: string; state: string; revision: number } | undefined;
-    if (carry && (carry.state === 'dismissed' || carry.state === 'expired' || carry.state === 'done')) continue;
-
-    const timelinessClass = classifyTimeliness(row.timeliness);
-    const windowHours = TIMELINESS_WINDOW_HOURS[timelinessClass];
-    // 坏日期（created_at 不可解析）不炸整页：视为无时效窗（不推进过期判断），其余字段照常渲染。
-    const createdMs = Date.parse(row.createdAt);
-    const expiresAt = windowHours === null || !Number.isFinite(createdMs)
-      ? null
-      : new Date(createdMs + windowHours * 3_600_000).toISOString();
-    if (expiresAt && Date.parse(expiresAt) <= now.getTime()) continue;
-
-    pool.push({
-      planItemId: row.planItemId,
-      planDate: row.planDate,
-      title: row.title,
-      priority: row.priority,
-      timeliness: row.timeliness,
-      timelinessClass,
-      expiresAt,
-      topicId: row.topicId,
-      sourceIds,
-      whyNow: row.whyNow,
-      angle: row.angle,
-      pointOfView: row.pointOfView,
-      targetAudience: row.targetAudience,
-      platforms: parseSourceIds(row.platforms),
-      formats: parseSourceIds(row.formats),
-      titleGuidance: row.titleGuidance,
-      openingGuidance: row.openingGuidance,
-      structureGuidance: row.structureGuidance,
-      effortEstimate: row.effortEstimate,
-      availableMaterials: parseSourceIds(row.availableMaterials),
-      missingMaterials: parseSourceIds(row.missingMaterials),
-      trendEvidence: listXPostTrends(database, { sourceIds }),
-      createdAt: row.createdAt,
-      isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
-      planningStatus: row.planningStatus ?? null,
-      revision: row.revision ?? null,
-      planningProvenanceJson: row.planningProvenanceJson ?? null,
-      scoreReasonsJson: row.scoreReasonsJson ?? null,
-      carry: carry ? { id: carry.id, state: carry.state, revision: carry.revision } : null,
-      demotion: row.topicId ? latestPublicationByTopic.get(row.topicId) ?? null : null
-    });
-  }
-  return dedupeOpenProposals(pool);
+  const businessDate = shanghaiDate(now);
+  const legacy = buildTodayRecommendationProjection(database, businessDate, { now });
+  const orchestrator = readManagerAdapterProjection(database, { businessDate });
+  return orchestrator.roots.length > 0
+    ? buildOrchestratorRecommendation(database, legacy, orchestrator.roots, businessDate, now).eligible
+    : legacy.eligible;
 }
 
-export function getTodayOverviewMetrics(database: DatabaseSync, planDate: string): {
+export function getTodayOverviewMetrics(database: DatabaseSync, planDate: string, options: { now?: Date } = {}): {
   updatedAt: string;
   sources: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
   opportunities: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
   projects: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null>; pending: number | null };
   publications: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
 } {
-  const updatedAt = new Date().toISOString();
+  const metricNow = options.now ?? new Date();
+  const updatedAt = metricNow.toISOString();
   function buildChange(current: number, previous: number): { changeText: string; changeTone?: 'up' | 'down' | 'neutral' } {
     if (previous === 0 && current === 0) return { changeText: '—', changeTone: 'neutral' };
     if (previous === 0 && current > 0) return { changeText: `新增 ${current}`, changeTone: 'up' };
@@ -557,17 +655,16 @@ export function getTodayOverviewMetrics(database: DatabaseSync, planDate: string
     sourcesTone = undefined;
     sourcesSeries = Array(7).fill(null);
   }
-  // --- opportunities (approved plan_items for planDate) ---
+  // --- opportunities (same authoritative recommendation projection as Today) ---
   let oppValue: number | null = null;
   let oppChangeText = '—';
   let oppTone: 'up' | 'down' | 'neutral' | undefined;
   let oppSeries: Array<number | null> = Array(7).fill(null);
   try {
-    const todayPlanIdRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(planDate) as { id: string } | undefined;
-    const curOpp = todayPlanIdRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(todayPlanIdRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+    const curOpp = getOpportunityCountForDate(database, planDate, metricNow);
     const prevDate = addDaysDate(planDate, -1);
-    const prevPlanIdRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(prevDate) as { id: string } | undefined;
-    const prevOpp = prevPlanIdRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(prevPlanIdRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+    const prevAsOf = new Date(toUtcIsoBound(`${prevDate}T23:59:59.999+08:00`));
+    const prevOpp = getOpportunityCountForDate(database, prevDate, prevAsOf);
     oppValue = curOpp;
     const ch = buildChange(curOpp, prevOpp);
     oppChangeText = ch.changeText;
@@ -576,8 +673,7 @@ export function getTodayOverviewMetrics(database: DatabaseSync, planDate: string
     for (let i = 6; i >= 0; i--) {
       const d = addDaysDate(planDate, -i);
       try {
-        const pidRow = database.prepare(`SELECT id FROM plans WHERE plan_date = ? AND is_current = 1 LIMIT 1`).get(d) as { id: string } | undefined;
-        const cnt = pidRow ? Number((database.prepare(`SELECT COUNT(*) AS total FROM plan_items WHERE plan_id = ? AND planning_status = 'approved'`).get(pidRow.id) as { total: number } | undefined)?.total ?? 0) : 0;
+        const cnt = getOpportunityCountForDate(database, d, new Date(toUtcIsoBound(`${d}T23:59:59.999+08:00`)));
         oppSeries.push(cnt);
       } catch { oppSeries.push(null); }
     }

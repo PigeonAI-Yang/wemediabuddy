@@ -28,9 +28,10 @@ import {
   updateCreativeBrief, updateKnowledgeCanvas, updateKnowledgeRelation, validateKnowledgeSelectionManifest
 } from './knowledge-canvas.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, runtimeForNullableMutation, type BusinessIpcDependencies } from './ipc-business-context.ts';
-import { ensureJobsSpawner } from './ipc-jobs.ts';
 import { kickTopicReproposals, resumeTopicReproposal } from './topic-maintenance-reproposal.ts';
+import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import { recordCreativeBriefUsage } from './knowledge-usage-integration.ts';
+import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
 import {
   emptyMaintenanceStatus, getMaintenanceStatus, pauseMaintenanceRun, resumeMaintenanceRun, startMaintenanceRun
 } from './knowledge-maintenance.ts';
@@ -56,9 +57,12 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
     const receipt = await dispatchBusinessCommand(runtime, { command: `knowledge.topic_maintenance_${decision}`, requestId: input.requestId ?? freshRequestId(), actor: ownerUiActor,
       input: { id: input.id, expectedRevision: input.expectedRevision, decision }, boundIdentity: { entityType: 'topic_maintenance_proposal', entityId: input.id }, entityType: 'topic_maintenance_proposal',
       execute: (database, value) => { const data = decideTopicMaintenanceProposal(database, value); return { data, entityId: data.id, beforeRevision: value.expectedRevision, afterRevision: data.revision, readback: data }; } });
-    if (receipt.ok) broadcastDataChanged({ scopes: ['library', 'today'], reason: `topic_maintenance.${decision}` });
+    if (receipt.ok) {
+      wakePersistentKnowledgeJobs();
+      broadcastDataChanged({ scopes: ['library', 'today'], reason: `topic_maintenance.${decision}` });
+    }
     if (receipt.ok && decision === 'approve' && (receipt.data as { status?: string } | null)?.status === 'stale') {
-      await kickTopicReproposals(runtime, ensureJobsSpawner({ getActiveRuntime: dependencies.getActiveRuntime }));
+      await kickTopicReproposals(runtime, (input) => submitWorkspaceOrchestratorIntent(runtime, input));
     }
     return receiptAsCommandResult(receipt);
   });
@@ -68,7 +72,7 @@ export function registerKnowledgeBusinessIpc(dependencies: BusinessIpcDependenci
     const receipt = await dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_reproposal_retry', requestId: input.requestId ?? freshRequestId(), actor: ownerUiActor,
       input: { proposalId: input.id }, boundIdentity: { entityType: 'topic_maintenance_reproposal_job', entityId: input.id }, entityType: 'topic_maintenance_reproposal_job',
       execute: (database, value) => { const data = resumeTopicReproposal(database, value.proposalId, new Date().toISOString()); return { data, entityId: data.proposalId, readback: data }; } });
-    if (receipt.ok) { broadcastDataChanged({ scopes: ['library', 'today', 'agent'], reason: 'topic_maintenance.reproposal_resume' }); await kickTopicReproposals(runtime, ensureJobsSpawner({ getActiveRuntime: dependencies.getActiveRuntime })); }
+    if (receipt.ok) { broadcastDataChanged({ scopes: ['library', 'today', 'agent'], reason: 'topic_maintenance.reproposal_resume' }); await kickTopicReproposals(runtime, (input) => submitWorkspaceOrchestratorIntent(runtime, input)); }
     return receipt;
   });
   ipcMain.handle('knowledge-canvas:list', () => readWorkspaceDatabase(dependencies, () => [], database => listKnowledgeCanvases(database)));

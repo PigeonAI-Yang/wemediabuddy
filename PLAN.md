@@ -948,3 +948,20 @@ Order:
 
 Gate: 一条真实 Source 可更新多个既有 Wiki 页面；一批 Sources 可断点摄取；高价值 Query 固定引用并写回；全库维护可由 Owner 或 Pi 启动、暂停、继续并在重启后恢复；Lint 实际检测矛盾、陈旧、孤立、缺页、缺交叉引用、重复、无证据和研究缺口；统一搜索命中 Wiki 正文与固定版本知识；全局 index/log/report 可读；图片结论绑定资产与 Source revision；关系图可导航；所有变化具备 ChangeSet、Receipt、版本和恢复路径。任何一项只存在于设计文档、测试 fixture 或单轮 Pi 文本均不算完成。
 
+## M-5330 知乎热题驱动每日文章×视频文案闭环（PRD §2.6 / SPEC CAP-029 / REQ-032）
+
+Scope: 嵌入现有闭环的知乎热榜 intelligence module + 每日周期/目标 + 视频文案衍生一条龙。知乎仅作热门问题情报源，不经营知乎、不新增回答编辑器/发布链。复用 Today/Plan/Proposal Ledger/Content Project/Research Gate/Studio/Results 与现有班组；不建第二工作台/服务/数据库/内容身份，不重构 Artifact 图，不改发布红线。Canonical design `docs/spark/2026-08-22-zhihu-hot-question-content-loop-PLAN.md`（正式 Owner lock 2026-08-22）。
+
+Order (依赖顺序：基础立法→扫描→评分→周期/目标→迭代→文章→衍生→编排→验收；WMB-5330 只做基础):
+
+1. `WMB-5330` — **基础冻结（当前任务）**：PRD §2.6 + REQ-032/AC-030 立法、SPEC CAP-029 + EVAL-033 立法、TECHNICAL_DESIGN v75 记载、PLAN M-5330 立法；v75 迁移（`zhihu_hot_observations` 唯一观察、`daily_content_cycles` UNIQUE business_date、`daily_content_targets` carry 前驱 lineage + 冻结 score/format JSON、 `content_derivatives`/`content_derivative_versions` 不可变版本行与触发器）随空库与遗留 v74 库升级；`src/shared/daily-content-loop.ts` 冻结命令/类型单源、`src/shared/agent-capabilities.ts` 三新能力（Reporter 扫榜、Planner 周期/目标、Writer 衍生版本、Desk 站立含、无发布授）与 `filterCommandsForRole` 交集；仅声明契约，无浏览器/Today/Studio/调度运行时。机器门禁：空/遗留迁移、唯一性、不可变、命令注册、角色过滤。
+2. `WMB-5331` — 知乎热榜 intelligence module（浏览器 readiness、官方热榜 DOM、去重 Source/observation、逐源 receipt、渠道卡）；不使未公开 API。
+3. `WMB-5332` — 六维评分、硬风险、30 天重复、自动/边界/拒绝三路与 Proposal Ledger。
+4. `WMB-5333` — Daily Cycle/Target 状态机、默认 2 条、partial/skip/replace/carry-once、幂等 ensure 与 Today 投影。
+5. `WMB-5334` — 昨日未发布与已发布迭代队列、Review/指标/新证据汇总、本地新版本不触发线上更新。
+6. `WMB-5335` — target→Plan Item→Content Project、Research Gate、文章主稿/定稿与状态投影。
+7. `WMB-5336` — video_script 衍生身份/不可变版本、format decision 自适应形态、Writer 任务、Studio 双产物/stale。
+8. `WMB-5337` — 阶段 A–E Desk 编排、自动/手动归一、重启重派、数据根隔离、局部失败与结算 receipt。
+9. `WMB-5338` — A1–A12 真实闭环验收、打包证据、clean cutover、永久文档与证据更新。
+
+Gate M-5330: 迁移在空库与 v74 遗留库升级且五表/触发器/FK 完整；Reporter/Planner/Writer 命令分别仅由对应角色(+desk)可达且无发布权限；空库可插入完整循环样本且唯一/不可变/外键校验生效；`content_derivative_versions` immutable；全部新增写经 CommandEnvelopeV1 + active-root dispatcher；**WMB-5330 之后**才允许的运行时/浏览器/Today/Studio/调度变更在 M-5330 内为零。Gate M-5338: 真实热题完成 Source→Score→Target→Research→Article→Video Script→Completed；两类昨日迭代成立；无自动发布、第二工作台、重复身份或跨根泄漏；全量打包证据齐。

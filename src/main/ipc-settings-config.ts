@@ -14,6 +14,8 @@ import type { RoleModelPolicies } from '../shared/pi-config.ts';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
 import { deletePiSkill, listPiSkills, savePiSkill, syncPiSkillsForDataRoots, type PiSkillInput } from './pi-skill-library';
+import { getScoringSettings, setScoringSettings } from './zhihu-hot-scoring.ts';
+import type { ZhihuScoringSettings } from './zhihu-hot-scoring.ts';
 
 const OWNER_BROWSER_CONFIRMATION_MESSAGES = {
   create: '将创建独立登录环境，并绑定到当前工作空间。',
@@ -61,6 +63,12 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       boundProfile: null,
       legacySource: { path: '', detected: false, metadataDetected: false, entryCount: 0 }
     };
+    let zhihuScoring: ZhihuScoringSettings | null = null;
+    try {
+      const dbScoring = new DatabaseSync(path.join(dataRoot.path, 'wmb.db'), { readOnly: true });
+      zhihuScoring = getScoringSettings(dbScoring);
+      dbScoring.close();
+    } catch {}
     return {
       ...settings,
       mcp: getMcp() ? { status: 'ready', url: getMcp()!.url } : { status: 'not_started', url: null },
@@ -75,8 +83,21 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       boundBrowserProfile: browserState.boundProfile,
       legacyBrowserSource: browserState.legacySource,
       pi,
-      workspace
+      workspace,
+      zhihuScoring
     };
+  });
+  ipcMain.handle('zhihu-scoring:get', async () => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const db = new DatabaseSync(path.join(dataRoot.path, 'wmb.db'), { readOnly: true });
+    try { return getScoringSettings(db); } finally { db.close(); }
+  });
+  ipcMain.handle('zhihu-scoring:set', async (_event, input: { autoThreshold?: number; boundaryThreshold?: number; targetCount?: number }) => {
+    const dataRoot = await loadSelectedDataRoot();
+    if (!dataRoot) throw new Error('请先选择数据根目录。');
+    const db = new DatabaseSync(path.join(dataRoot.path, 'wmb.db'));
+    try { return setScoringSettings(db, input); } finally { db.close(); }
   });
   const requireRoot = async () => {
     const dataRoot = await loadSelectedDataRoot();

@@ -171,6 +171,7 @@ button.page-command-stat { cursor: pointer; }
   padding: var(--page-space);
   display: flex;
   flex-direction: column;
+  gap: 18px;
 }
 /* 命令条：运行/空闲/完成同高锁死，不随状态跳变 */
 .today-command {
@@ -749,6 +750,19 @@ strong[data-grade="C"] {
 strong[data-grade="D"] { color: var(--accent-ink); background: color-mix(in srgb, var(--grade-c) 52%, var(--mark-ink)); }
 strong[data-grade="E"] { color: var(--accent-ink); background: color-mix(in srgb, var(--muted-low) 72%, var(--mark-ink)); }
 strong[data-grade="F"] { color: var(--accent-ink); background: color-mix(in srgb, var(--muted-low) 45%, var(--mark-ink)); }
+/* Pending / draft neutral: must never look like SSS/S/A/B gold. Uses muted surface, no glow. */
+strong[data-grade="待评分"],
+strong[data-grade="pending"],
+strong[data-grade="草案"] {
+  background: color-mix(in srgb, var(--muted-low) 10%, var(--surface));
+  color: var(--muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  animation: none;
+}
+strong[data-grade="待评分"]::after,
+strong[data-grade="pending"]::after,
+strong[data-grade="草案"]::after { display: none; }
 @keyframes grade-sheen {
   0% { transform: translateX(-75%) skewX(-18deg); }
   100% { transform: translateX(75%) skewX(-18deg); }

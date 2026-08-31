@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Theme } from './app-types';
 import { BrowserSettings } from './browser-settings';
 import { IntelligenceChannelsView } from './intelligence-channels-view';
@@ -7,6 +7,7 @@ import { AgentsSettingsPanel } from './agents-settings-panel';
 import { appConfirm } from './app-confirm';
 import { AppUpdateSettings } from './app-update-settings';
 import { SettingsIcon, type SettingsIconName } from './settings-icons';
+import { TodayDailyCycle } from './today-daily-cycle';
 import type { WmbRoleId, WmbRoleModelCandidate, WmbRoleModelPolicy, WmbSettingsSnapshot } from './wmb-settings-types';
 
 const ROLE_DEFINITIONS: Array<{ id: WmbRoleId; label: string; description: string }> = [
@@ -152,12 +153,19 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   setBrowserChoice: (value: string) => void; refresh: () => void; theme: Theme;
   setTheme: (value: Theme) => void; back: () => void;
 }): React.JSX.Element {
-  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'agent' | 'diagnostics' | 'about';
+  type SettingsSection = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'daily-automation' | 'agent' | 'diagnostics' | 'about';
+  const dailyAutomationBusinessDate = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }, []);
   const [section, setSection] = useState<SettingsSection>(() => {
     const requested = sessionStorage.getItem('wmb.settingsSection');
     sessionStorage.removeItem('wmb.settingsSection');
     if (requested === 'lists') return 'channels';
-    const allowed: SettingsSection[] = ['general', 'ai', 'skills', 'data', 'browser', 'channels', 'agent', 'diagnostics', 'about'];
+    const allowed: SettingsSection[] = ['general', 'ai', 'skills', 'data', 'browser', 'channels', 'daily-automation', 'agent', 'diagnostics', 'about'];
     return allowed.includes(requested as SettingsSection) ? requested as SettingsSection : 'ai';
   });
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
@@ -375,6 +383,9 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
       { id: 'browser', label: '浏览器与账号', icon: 'browser' },
       { id: 'channels', label: '情报渠道', icon: 'channels' }
     ] },
+    { label: '自动化', items: [
+      { id: 'daily-automation', label: '每日自动化', icon: 'daily-automation' }
+    ] },
     { label: '系统', items: [
       { id: 'agent', label: '智能体接入', icon: 'agent' },
       { id: 'data', label: '数据与存储', icon: 'data' },
@@ -388,6 +399,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     data: { title: '数据与存储', description: '' },
     browser: { title: '浏览器与账号', description: '设置登录环境，并确认各平台使用的账号。' },
     channels: { title: '情报渠道', description: '' },
+    'daily-automation': { title: '每日自动化', description: '定时、自动执行、立即执行与最近结算；由此统一管理每日编排。前置依赖请检查浏览器与情报渠道。' },
     agent: { title: '智能体与角色', description: '' },
     diagnostics: { title: '系统诊断', description: '' },
     about: { title: '关于 WMB', description: '' }
@@ -588,6 +600,28 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           />
         )}
         {section === 'channels' && settings && <IntelligenceChannelsView settingsMode workspaceId={settings.workspace.id} />}
+        {section === 'daily-automation' && (
+          <section className="settings-section settings-daily-automation" aria-label="每日自动化控制">
+            <TodayDailyCycle
+              businessDate={dailyAutomationBusinessDate}
+              openSettings={(target) => {
+                if (target === 'browser' || target === 'channels') setSection(target);
+                else if (target === 'daily-automation') setSection('daily-automation');
+                else setSection('browser');
+              }}
+            />
+            <div className="settings-row settings-daily-automation-links">
+              <div>
+                <h3>前置依赖</h3>
+                <p>浏览器登录与情报渠道决定每日编排能否正常执行。</p>
+              </div>
+              <div className="settings-row-actions">
+                <button type="button" className="secondary-button" onClick={() => setSection('browser')}>去浏览器与账号</button>
+                <button type="button" className="secondary-button" onClick={() => setSection('channels')}>去情报渠道</button>
+              </div>
+            </div>
+          </section>
+        )}
         {section === 'agent' && settings && <section className="settings-section settings-section-agent">
           <div className="settings-row settings-row-compact">
             <div>

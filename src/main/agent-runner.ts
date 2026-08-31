@@ -64,12 +64,23 @@ import { saveCurrentPlan } from './planning.ts';
 import { submitPlanItemForReview } from './planning-stage.ts';
 import { getToday } from './workbench.ts';
 import { buildJobContextRefs, buildJobObjectBoundary, readJobContractFromRefs } from './job-object-boundary.ts';
-import { PROPAGATION_CRITERIA } from '../shared/propagation.ts';
+import { PROPAGATION_V2_CRITERIA } from '../shared/propagation.ts';
 
-const SCORE_CRITERIA_RECORD: Record<string, number> = PROPAGATION_CRITERIA;
+const SCORE_CRITERIA_RECORD: Record<string, number> = PROPAGATION_V2_CRITERIA;
 const scoreReasonsSchema = z.object({
   status: z.literal('scored'),
+  version: z.literal('propagation_v2'),
   score: z.number().min(0).max(100),
+  truthGate: z.object({
+    status: z.literal('passed'),
+    reason: z.string().min(1),
+    claims: z.array(z.object({
+      text: z.string().min(1),
+      type: z.enum(['fact', 'inference', 'opinion']),
+      status: z.literal('supported'),
+      sourceIds: z.array(z.string().min(1))
+    })).min(1)
+  }),
   reasons: z.array(z.object({
     criterion: z.string(),
     weight: z.number(),
@@ -93,6 +104,27 @@ const scoreReasonsSchema = z.object({
   if (seen.size !== 6) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_reasons_six_required' });
   if (total !== val.score) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'score_total_mismatch' });
 });
+const editorialDecisionSchema = z.object({
+  version: z.literal('editorial_thesis_v1'),
+  candidates: z.array(z.object({
+    level: z.enum(['event', 'user', 'industry_or_society']),
+    thesis: z.string().min(1),
+    claimType: z.enum(['fact', 'inference', 'opinion']),
+    evidenceStatus: z.enum(['supported', 'research_required']),
+    evidenceBoundary: z.string().min(1),
+    score: z.number().min(0).max(100),
+    reason: z.string().min(1),
+  })).min(3),
+  winnerLevel: z.enum(['event', 'user', 'industry_or_society']),
+  winnerThesis: z.string().min(1),
+  winnerReason: z.string().min(1),
+  knowledgeContext: z.object({
+    status: z.enum(['used', 'no_relevant_context']),
+    contextRefs: z.array(z.string().min(1)),
+    queryDimensions: z.array(z.string().min(1)).min(2),
+    reason: z.string().min(1),
+  }),
+});
 const planOutputItemSchema = z.object({
   title: z.string().min(1).refine((title) => !title.includes('普通人'), {
     message: '标题不得把受众身份词「普通人」写进发布标题；请改用题材的具体对象、问题、动作或证据'
@@ -115,7 +147,8 @@ const planOutputItemSchema = z.object({
   topicId: z.string().optional(),
   reviewIds: z.array(z.string()).optional(),
   methodFindingIds: z.array(z.string()).optional(),
-  scoreReasons: scoreReasonsSchema.optional()
+  editorialDecision: editorialDecisionSchema,
+  scoreReasons: scoreReasonsSchema
 });
 const planSourceDecisionSchema = z.object({
   sourceId: z.string().min(1),
@@ -447,7 +480,9 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     '判断要求：',
     '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
     '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
-    '2.1 传播评分六维（总分 100，必须覆盖全部维度，evidence 仅作门槛不代替传播力）：reader_immediacy_benefit 20（读者即时收益/今天就能用、可复制动作/可对比回执）、tension_curiosity_gap 20（张力或好奇缺口/反直觉/利益冲突/代价揭示）、why_now_window 20（为何现在窗口、时效紧迫感、今天做比明天值钱的错过成本）、save_share_comment_motive 20（收藏/分享/评论动机、是否值得转给同事/群/是否有谈资）、evidence_credibility 15（证据可追溯性与可信度、是否可验收、是否一手来源，仅作是否进入评分的门槛，高分证据不自动等于高传播）、account_fit 5（与本账号受众/定位契合度）。每项必须给出 criterion/weight/score/reason，weight 必须与上述权重一致，score 0..weight，总分与分项和必须一致；未达门槛的候选降权或不写入方案，禁止为凑数虚构分数。',
+    '2.1 产品最高目标：在真实性边界内最大化传播价值。真实性仅作门槛，是准入硬门，不计入传播分；认知价值与实用价值都可入选，账号适配不得压过重大产业/社会意义。传播评分使用 propagation_v2（总分100）：reality_change_significance 25（现实发生了多大变化、旧认知是否失效）、tension_curiosity_gap 20（冲突/反差/认知缺口）、audience_stakes 20（对具体读者的利益、身份或判断影响）、why_now_window 15（窗口与错过成本）、one_sentence_relayability 15（一句话是否值得转述）、account_fit 5（账号适配）。每项必须给 criterion/weight/score/reason，总分严格等于六项和。',
+    '2.2 中心主张竞争（硬门）：每个机会必须先生成 event（表面事件）、user（用户影响）、industry_or_society（产业/社会二阶意义）三个语义不同的候选主张，不得只换标题措辞；逐条记录 claimType=fact|inference|opinion、evidenceStatus=supported|research_required、可写证据边界、传播分与比较理由。winner 必须是传播分最高且 evidenceStatus=supported 的候选，pointOfView 必须与 winnerThesis 一致。若最高价值候选仍需研究，保留它并将本项保持未就绪/进入补料，不得退而选择安全小题。',
+    '2.3 真实性硬门与知识回执：scoreReasons.version 必须为 propagation_v2，truthGate.status 必须 passed；每个核心 claim 明确 fact/inference/opinion、supported 状态与真实 sourceIds（纯观点可空）。必须先用 wmb_get_knowledge_context 查询实体及至少两个关联维度（例如模型实体+国产芯片/推理集群/商业部署/服务规模），并在 editorialDecision.knowledgeContext 记录 used+真实 contextRefs，或 no_relevant_context+明确原因。未经支持的产业推断不得伪装成事实。',
     '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
     '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；标题必须包含一个可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。张力/好奇缺口必须在标题或 openingGuidance 中显式兑现，禁止把“夸张反常识只放 titleGuidance”的旧禁令当作不写钩子的理由。',
     '2.8 传播型写作契约（SSOT：skills/evidence-grounded-writer/SKILL.md §5 — 与选题到成稿全链一致）：每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做的一句话动作）」与「一个中心主张」，并在 title/angle/pointOfView/openingGuidance 中体现；openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”；抽象主张必须在 angle/pointOfView 阶段即配人/场景/利害/后果；证据服务主张，不让证据罗列成为选题主体；保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；平台适配（小红书/视频等）是重写钩子/节奏/转藏评动机，不是缩短；标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议；每个候选自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口与错过成本是否写清/是否有明确的收藏/分享/评论动机）缺一不进方案。',
@@ -476,14 +511,15 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     '    "effortEstimate": "约 40 分钟",',
     '    "topicId": "多日/持续/余波跟进项填简报「存量」中的真实主题 id，其余省略",',
     '    "sourceIds": ["简报「增量」块中的真实 id"],',
-    '    "scoreReasons": {"status":"scored","score":82,"reasons":[{"criterion":"reader_immediacy_benefit","weight":20,"score":16,"reason":"读者今天可用的具体动作"},{"criterion":"tension_curiosity_gap","weight":20,"score":15,"reason":"反直觉冲突引发好奇"},{"criterion":"why_now_window","weight":20,"score":16,"reason":"窗口期内错过成本清晰"},{"criterion":"save_share_comment_motive","weight":20,"score":15,"reason":"值得收藏转发的谈资"},{"criterion":"evidence_credibility","weight":15,"score":12,"reason":"真实可追溯来源支撑"},{"criterion":"account_fit","weight":5,"score":4,"reason":"与账号定位契合"}]},',
+    '    "editorialDecision": {"version":"editorial_thesis_v1","candidates":[{"level":"event","thesis":"表面事件主张","claimType":"fact","evidenceStatus":"supported","evidenceBoundary":"来源支持边界","score":55,"reason":"比较理由"},{"level":"user","thesis":"用户影响主张","claimType":"inference","evidenceStatus":"supported","evidenceBoundary":"推断边界","score":72,"reason":"比较理由"},{"level":"industry_or_society","thesis":"产业或社会意义主张","claimType":"inference","evidenceStatus":"supported","evidenceBoundary":"推断边界","score":86,"reason":"比较理由"}],"winnerLevel":"industry_or_society","winnerThesis":"必须与 pointOfView 相同","winnerReason":"为什么它比另外两层更值得传播","knowledgeContext":{"status":"used","contextRefs":["真实知识包或版本 id"],"queryDimensions":["实体","产业关联维度"],"reason":"知识如何改变判断"}},',
+    '    "scoreReasons": {"status":"scored","version":"propagation_v2","score":86,"truthGate":{"status":"passed","reason":"事实与推断边界已核对","claims":[{"text":"核心事实或推断","type":"fact","status":"supported","sourceIds":["真实 source id"]}]},"reasons":[{"criterion":"reality_change_significance","weight":25,"score":22,"reason":"现实变化重要性"},{"criterion":"tension_curiosity_gap","weight":20,"score":18,"reason":"冲突与认知缺口"},{"criterion":"audience_stakes","weight":20,"score":17,"reason":"读者利害"},{"criterion":"why_now_window","weight":15,"score":13,"reason":"当前窗口"},{"criterion":"one_sentence_relayability","weight":15,"score":12,"reason":"一句话可转述"},{"criterion":"account_fit","weight":5,"score":4,"reason":"账号适配"}]},',
     '    "availableMaterials": [],',
     '    "missingMaterials": []',
     '  }],',
     '  "sourceDecisions": [{"sourceId":"本轮增量或重新激活证据中的真实 id","decision":"selected|excluded|unresolved|blocked","reasonCode":"稳定原因码","reason":"具体原因"}]',
     '}',
     '```',
-    'sourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过上述六维总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；evidence 高分仅作门槛，不直接等同高传播。'
+    'sourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过 propagation_v2 总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；真实性只作硬门，不因证据多而获得传播加分。'
   ].join('\n');
 }
 
@@ -1003,7 +1039,7 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
       `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project，并读取最新核心版本。`,
       '3. 如果项目没有核心版本，明确失败并停止；本任务禁止调用 wmb_save_core_version，禁止生成或改写核心稿。',
-      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：保留一个中心主张与证据不变，标题围绕该题材独有的对象、问题、动作或证据，标题必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一）且可兑现，重写开头钩子、信息节奏与收藏/分享/评论动机（平台适配是重写钩子/节奏/动机，不是缩短），不自动添加「普通人」等万能受众标签，不复用固定前缀，不虚构核心稿没有的事实，正文自然可读。标题必兑现，禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
+      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：保留一个中心主张与证据不变，并严格遵守“已批准中心主张”及其事实/推断边界，不得把产业/社会意义软化成产品测评或使用建议；标题围绕该题材独有的对象、问题、动作或证据，标题必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一）且可兑现，重写开头钩子、信息节奏与收藏/分享/评论动机（平台适配是重写钩子/节奏/动机，不是缩短），不自动添加「普通人」等万能受众标签，不复用固定前缀，不虚构核心稿没有的事实，正文自然可读。若现有证据迫使中心主张改变，停止保存并要求退回 Planner 重新批准。标题必兑现，禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
       `5. 调用 wmb_save_platform_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，contentVersionId 必须是步骤2读到的最新核心版本 id，platform 必须是 xiaohongshu，format 必须是 text，title/body 为完整小红书版本。`,
       `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认 xiaohongshu 平台版本已保存且关联正确的核心版本。`,
       '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
@@ -1054,7 +1090,7 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
       '1. 严禁调用 wmb_dispatch_research；只通过 wmb_* MCP 工具读取项目资料并保存正文，禁止直接写文件或数据库，禁止最终发布。',
       `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
       '3. 仅依据项目已关联来源写作；无法由现有来源支持的事实、数字、因果和案例必须删除或明确标为作者观点，不得用模型内置知识补证据。',
-      '4. 写出围绕一个中心主张、标题可兑现、正文自然完整的中文核心初稿；禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
+       '4. 写出围绕项目中“已批准中心主张”的中文核心初稿；该主张、传播承诺和事实/推断边界均已由 Owner 锁定，不得改成更安全但更弱的产品测评或使用建议。若现有来源迫使主线变化，停止保存并要求退回 Planner 重新批准。标题必须兑现，正文自然完整；禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
       `5. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision。`,
       `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存。`,
       '7. 最后用简洁中文回复：已保存受限写作核心正文，并给出标题和正文前两句。'
@@ -1070,7 +1106,7 @@ export function draftPrompt(task: AgentTask, projectId: string, requestId: strin
     `brief=${brief}`,
     '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
     `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5 传播型写作契约：(a)开写前冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做/判断/转发的一句话动作）」与「一个中心主张」— brief 中已有则直接使用并体现，缺失则自行补全；(b)标题必兑现：标题围绕该题材独有的对象、问题、动作或证据，且必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不自动添加「普通人」等万能受众标签，不复用固定前缀，不写来源未支持的数字、结果或因果，标题主张未兑现必须改标题；(c)首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义/来源介绍铺垫；(d)抽象主张必须配“人/场景/利害/后果”至少两件；(e)证据服务主张，不让证据罗列成为主体；(f)保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等套话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；(g)禁止编造数字、个人经历、引语、结果、紧迫感或争议；本任务禁止调用 wmb_save_platform_version，研究续派任务也禁止再次派研究。',
+    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；项目初始版本中的“已批准中心主张”、传播承诺、事实/推断边界是 Owner 锁，不得自行替换或软化。若新证据迫使主线改变，停止保存并要求退回 Planner 重新批准。遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5 传播型写作契约：(a)一个处在具体情境中的读者与一个期望读者动作必须服务已批准的一个中心主张，不得反过来把产业/社会意义降成工具测评；受众只用于内部锚定，不自动添加「普通人」等万能受众标签；(b)标题必兑现：标题围绕该题材独有的对象、问题、动作或证据，包含可被正文兑现的利益/冲突钩子，不写来源未支持的数字、结果或因果；(c)首段立刻兑现钩子；(d)抽象主张配人/场景/利害/后果至少两件；(e)证据服务主张；(f)保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期`，具体边界与怯懦的各打五十大板不同；(g)禁止编造。研究续派任务禁止再次派研究。',
     '4. 正文阶段不自动生成、导入或插入图片；如需配图，必须在正文保存后由 Owner 显式启动定稿配图流程。',
     '5. 完成初稿后执行编辑自检（四项缺一即打回重写再保存）：(1)读者收益是否具体（今天就能用的一句话动作） (2)是否有具体利害/代价场景 (3)为何现在窗口与错过成本是否写清 (4)是否有明确的收藏/分享/评论动机；未通过不得调用 wmb_save_core_version。',
     `6. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为不含自动配图的完整正文。`,

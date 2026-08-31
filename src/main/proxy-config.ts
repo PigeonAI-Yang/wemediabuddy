@@ -7,32 +7,43 @@
  *
  * 本模块在 app ready 后：
  *  1. 用 `session.defaultSession.resolveProxy()` 解析系统对代表性 https 地址的代理判定；
- *  2. 命中 PROXY 时设置 undici 全局 dispatcher（ProxyAgent），使主进程所有 Node fetch
- *     走同一代理；loopback/局域网地址始终 DIRECT，不影响本地 MCP/CDP。
- *  3. 导出 `proxyEnvForChildren()`：把解析结果以 HTTPS_PROXY/HTTP_PROXY/NO_PROXY 形式
- *     提供给 Pi 等子进程，使其自身 fetch 同样跟随。
+ *  2. 命中代理时设置 undici 全局 dispatcher；loopback/局域网地址始终 DIRECT，
+ *     不影响本地 MCP/CDP。
+ *  3. 导出 `proxyEnvForChildren()`：把解析结果以标准代理变量提供给 Pi 等子进程。
  *
- * 显式环境变量（HTTPS_PROXY 等）优先级最高：此时不再解析系统代理，仅补 NO_PROXY 默认值，
- * undici EnvHttpProxyAgent 自身语义生效。
+ * 显式环境变量（HTTPS_PROXY 等）优先级最高。所有初始化失败都降级为直连，
+ * 不得阻塞 Electron 启动。
  */
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import type { Agent, Dispatcher, EnvHttpProxyAgent, ProxyAgent } from 'undici';
 import type { Session } from 'electron';
+
+type UndiciModule = {
+  Agent: new (options?: Agent.Options) => Agent;
+  EnvHttpProxyAgent: new (options?: EnvHttpProxyAgent.Options) => EnvHttpProxyAgent;
+  ProxyAgent: new (options: ProxyAgent.Options | string) => ProxyAgent;
+  setGlobalDispatcher: (dispatcher: Dispatcher) => void;
+};
+type UndiciDispatcher = Dispatcher;
+type UndiciDispatchOptions = Dispatcher.DispatchOptions;
+type UndiciDispatchHandler = Dispatcher.DispatchHandler;
 
 /**
  * undici 是 vite external（避免与 Node 内置实现重复打包），运行期解析：
  * 1) 应用内 node_modules（开发态 = 仓库；打包态 = app.asar/node_modules，通常不存在）；
- * 2) 打包回退：resources/node_modules/undici（forge extraResource 副本）。
+ * 2) 打包回退：resources/undici（forge extraResource 副本）。
  */
-function loadUndici(): typeof import('undici') | null {
+function loadUndici(): UndiciModule | null {
   try {
-    return createRequire(import.meta.url)('undici') as typeof import('undici');
+    return createRequire(import.meta.url)('undici') as UndiciModule;
   } catch {}
   try {
     const electron = createRequire(import.meta.url)('electron') as { app?: { isPackaged?: boolean } };
-    if (electron.app?.isPackaged) {
-      const fallbackRequire = createRequire(path.join(process.resourcesPath, 'undici', 'package.json'));
-      return fallbackRequire('undici') as typeof import('undici');
+    if (electron.app?.isPackaged && typeof process.resourcesPath === 'string') {
+      const packagedRoot = path.join(process.resourcesPath, 'undici');
+      const fallbackRequire = createRequire(path.join(packagedRoot, 'package.json'));
+      return fallbackRequire(packagedRoot) as UndiciModule;
     }
   } catch {}
   return null;
@@ -45,42 +56,176 @@ export type SystemProxyConfig = {
   source: 'env' | 'system' | 'none';
 };
 
-let current: SystemProxyConfig = { proxyUrl: null, source: 'none' };
+type ClosableDispatcher = { close: () => Promise<unknown> };
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
-const PRIVATE_IPV4_PREFIXES = ['10.', '192.168.', '169.254.', '172.'];
+let current: SystemProxyConfig = { proxyUrl: null, source: 'none' };
+let childProxyEnv: Record<string, string> = {};
+let activeDispatcher: ClosableDispatcher | null = null;
+
+const PROXY_PROBES = ['https://api.github.com/', 'https://www.gyan.dev/'] as const;
+const PROXY_RESOLVE_TIMEOUT_MS = 1_000;
+const LOOPBACK_HOSTS: Record<string, true> = { localhost: true, '127.0.0.1': true, '::1': true, '0.0.0.0': true };
+
+function readEnvProxy(upper: string, lower: string): string | null {
+  const value = process.env[upper]?.trim() || process.env[lower]?.trim() || '';
+  return value || null;
+}
+
+function defaultNoProxy(value: string | null): string {
+  // Keep a user wildcard untouched: appending entries would change EnvHttpProxyAgent's
+  // wildcard semantics. The dispatcher itself still enforces the private-address bypass.
+  if (value?.trim() === '*') return '*';
+  const entries = new Map<string, string>();
+  for (const item of (value ?? '').split(/[\s,]+/)) {
+    const trimmed = item.trim();
+    if (trimmed && !entries.has(trimmed.toLowerCase())) entries.set(trimmed.toLowerCase(), trimmed);
+  }
+  // Include both bracketed and unbracketed IPv6 spellings because URL.hostname retains
+  // brackets for IPv6 literals while clients differ in how they parse NO_PROXY entries.
+  for (const item of ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']) {
+    if (!entries.has(item.toLowerCase())) entries.set(item.toLowerCase(), item);
+  }
+  return [...entries.values()].join(',');
+}
 
 function isPrivateIpv4(hostname: string): boolean {
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return false;
-  if (PRIVATE_IPV4_PREFIXES.some((prefix) => hostname.startsWith(prefix))) {
-    // 172.x 需要落在 172.16–31；其余前缀直接命中。
-    const second = Number.parseInt(hostname.split('.')[1] ?? '', 10);
-    if (hostname.startsWith('172.')) return second >= 16 && second <= 31;
-    return true;
-  }
+  const octets = hostname.split('.');
+  if (octets.length !== 4 || octets.some((item) => !/^\d{1,3}$/.test(item))) return false;
+  const values = octets.map((item) => Number.parseInt(item, 10));
+  if (values.some((value) => value > 255)) return false;
+  const [first, second] = values;
+  if (first === 10 || first === 127) return true;
+  if (first === 192 && second === 168) return true;
+  if (first === 169 && second === 254) return true;
+  if (first === 172 && second >= 16 && second <= 31) return true;
   return false;
+}
+
+function isPrivateIpv6(hostname: string): boolean {
+  const value = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (value === '::1' || value === '0:0:0:0:0:0:0:1') return true;
+  // RFC 4193 unique-local and RFC 4291 link-local ranges.
+  return /^(?:f[cd]|fe[89ab])/.test(value);
 }
 
 function isLoopbackUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true;
-    return LOOPBACK_HOSTS.has(parsed.hostname) || isPrivateIpv4(parsed.hostname);
+    const hostname = parsed.hostname.toLowerCase();
+    return LOOPBACK_HOSTS[hostname] === true
+      || hostname.endsWith('.localhost')
+      || hostname.endsWith('.local')
+      || isPrivateIpv4(hostname)
+      || isPrivateIpv6(hostname);
   } catch {
+    // Invalid/unknown origins must not be sent through a newly configured proxy.
     return true;
   }
 }
 
 /** Chromium resolveProxy 输出形如 "DIRECT" / "PROXY host:port" / "SOCKS5 host:port" / 分号链。取首个可用条目。 */
 function parseResolveProxy(result: string): string | null {
-  for (const part of result.split(';')) {
+  for (const part of String(result ?? '').split(';')) {
     const token = part.trim();
     if (!token || token.toUpperCase() === 'DIRECT') continue;
-    const scheme = /^(?:(?:HTTPS?|SOCKS[45]?)|PROXY)\s+(.+)$/i.exec(token);
-    if (scheme) return `http://${scheme[1]}`;
-    return null; // PAC 文件路径或无法识别的条目：不处理
+    const match = /^(PROXY|HTTPS?|SOCKS(?:4A?|5)?)\s+(.+)$/i.exec(token);
+    if (!match) continue;
+    const endpoint = match[2]?.trim();
+    if (!endpoint) continue;
+    return match[1]!.toUpperCase().startsWith('SOCKS') ? `socks5://${endpoint}` : `http://${endpoint}`;
   }
   return null;
+}
+
+/**
+ * ProxyAgent itself proxies every origin. Wrap it with a direct Agent so local
+ * MCP/CDP and RFC1918/link-local endpoints never traverse the external proxy.
+ */
+
+class LoopbackBypassDispatcher {
+  private readonly proxied: UndiciDispatcher;
+  private readonly direct: UndiciDispatcher;
+
+  constructor(proxied: UndiciDispatcher, direct: UndiciDispatcher) {
+    this.proxied = proxied;
+    this.direct = direct;
+  }
+
+  dispatch(options: UndiciDispatchOptions, handler: UndiciDispatchHandler): boolean {
+    const origin = typeof options.origin === 'string' ? options.origin : String(options.origin ?? '');
+    const dispatcher = isLoopbackUrl(origin) ? this.direct : this.proxied;
+    return dispatcher.dispatch(options, handler);
+  }
+
+  async close(): Promise<void> {
+    await Promise.all([this.proxied.close(), this.direct.close()]);
+  }
+
+  async destroy(error?: Error): Promise<void> {
+    await Promise.all([this.proxied.destroy(error ?? null), this.direct.destroy(error ?? null)]);
+  }
+}
+
+function installDispatcher(undici: UndiciModule, next: ClosableDispatcher): void {
+  const previous = activeDispatcher;
+  undici.setGlobalDispatcher(next as unknown as UndiciDispatcher);
+  activeDispatcher = next;
+  if (previous && previous !== next) void previous.close().catch(() => {});
+}
+
+function installDirectDispatcher(undici: UndiciModule | null): void {
+  if (!undici) return;
+  try {
+    installDispatcher(undici, new undici.Agent());
+  } catch {}
+}
+
+function setDirectState(undici: UndiciModule | null): SystemProxyConfig {
+  installDirectDispatcher(undici);
+  current = { proxyUrl: null, source: 'none' };
+  childProxyEnv = {};
+  return current;
+}
+
+function childEnvFor(proxyUrl: string, noProxy: string): Record<string, string> {
+  return {
+    HTTPS_PROXY: proxyUrl,
+    HTTP_PROXY: proxyUrl,
+    ALL_PROXY: proxyUrl,
+    NO_PROXY: noProxy
+  };
+}
+function childEnvForExplicit(input: {
+  httpProxy: string | null;
+  httpsProxy: string | null;
+  allProxy: string | null;
+  noProxy: string;
+}): Record<string, string> {
+  const fallback = input.httpsProxy ?? input.httpProxy ?? input.allProxy;
+  if (!fallback) return {};
+  return {
+    HTTPS_PROXY: input.httpsProxy ?? input.allProxy ?? input.httpProxy ?? fallback,
+    HTTP_PROXY: input.httpProxy ?? input.allProxy ?? input.httpsProxy ?? fallback,
+    ALL_PROXY: input.allProxy ?? input.httpsProxy ?? input.httpProxy ?? fallback,
+    NO_PROXY: input.noProxy
+  };
+}
+
+
+async function resolveWithDeadline(resolveProxy: (url: string) => Promise<string>, url: string): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      resolveProxy(url),
+      new Promise<string>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('resolveProxy timeout')), PROXY_RESOLVE_TIMEOUT_MS);
+        timer.unref?.();
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -88,42 +233,56 @@ function parseResolveProxy(result: string): string | null {
  * 返回最终生效的代理配置。
  */
 export async function initSystemProxy(resolveProxyImpl?: (url: string) => Promise<string>, sessionRef?: Session): Promise<SystemProxyConfig> {
-  const envProxy = process.env.HTTPS_PROXY ?? process.env.https_proxy ?? process.env.HTTP_PROXY ?? process.env.http_proxy ?? process.env.ALL_PROXY ?? process.env.all_proxy;
+  const httpProxy = readEnvProxy('HTTP_PROXY', 'http_proxy');
+  const httpsProxy = readEnvProxy('HTTPS_PROXY', 'https_proxy');
+  const allProxy = readEnvProxy('ALL_PROXY', 'all_proxy');
+  const envProxy = httpsProxy ?? httpProxy ?? allProxy;
+  const noProxy = defaultNoProxy(readEnvProxy('NO_PROXY', 'no_proxy'));
+  const undici = loadUndici();
+
+  // Explicit environment variables win over Electron's PAC/system result.
   if (envProxy) {
-    // 显式环境变量：交给 EnvHttpProxyAgent（自带 NO_PROXY 语义），不重复实现。
-    const undici = loadUndici();
-    if (undici) {
-      undici.setGlobalDispatcher(new undici.EnvHttpProxyAgent());
+    if (!undici) return setDirectState(null);
+    try {
+      const envAgent = new undici.EnvHttpProxyAgent({
+        httpProxy: httpProxy ?? allProxy ?? undefined,
+        httpsProxy: httpsProxy ?? allProxy ?? undefined,
+        noProxy
+      });
+      installDispatcher(undici, new LoopbackBypassDispatcher(envAgent, new undici.Agent()));
       current = { proxyUrl: envProxy, source: 'env' };
-    } else {
-      current = { proxyUrl: null, source: 'none' };
+      childProxyEnv = childEnvForExplicit({ httpProxy, httpsProxy, allProxy, noProxy });
+      return current;
+    } catch {
+      return setDirectState(undici);
     }
-    return current;
   }
 
   let proxyUrl: string | null = null;
   try {
     if (resolveProxyImpl) {
-      // 测试/注入路径：不触碰 electron。
-      for (const probe of ['https://api.github.com/', 'https://www.gyan.dev/']) {
-        const parsed = parseResolveProxy(await resolveProxyImpl(probe));
+      for (const probe of PROXY_PROBES) {
+        const parsed = parseResolveProxy(await resolveWithDeadline(resolveProxyImpl, probe));
         if (parsed) {
           proxyUrl = parsed;
           break;
         }
       }
     } else {
+      // Electron is intentionally loaded lazily: the test module and non-Electron
+      // tooling import this helper in plain Node, where the Electron module is absent.
       const { session } = await import('electron');
       const activeSession = sessionRef ?? session.defaultSession;
       if (activeSession) {
-        for (const probe of ['https://api.github.com/', 'https://www.gyan.dev/']) {
-          const verdict = await activeSession.resolveProxy(probe);
+        for (const probe of PROXY_PROBES) {
+          const verdict = await resolveWithDeadline((url) => activeSession.resolveProxy(url), probe);
           const parsed = parseResolveProxy(verdict);
           if (parsed) {
             proxyUrl = parsed;
             break;
           }
-          if (verdict.trim().toUpperCase().startsWith('DIRECT')) break; // 首个探测即直连，视为无系统代理
+          // PAC files can choose DIRECT for one origin and PROXY for another;
+          // continue probing instead of treating the first DIRECT as global.
         }
       }
     }
@@ -131,20 +290,14 @@ export async function initSystemProxy(resolveProxyImpl?: (url: string) => Promis
     proxyUrl = null;
   }
 
-  if (!proxyUrl) {
-    current = { proxyUrl: null, source: 'none' };
-    return current;
-  }
+  if (!proxyUrl || !undici) return setDirectState(undici);
   try {
-    const undici = loadUndici();
-    if (!undici) {
-      current = { proxyUrl: null, source: 'none' };
-      return current;
-    }
-    undici.setGlobalDispatcher(new undici.ProxyAgent({ uri: proxyUrl }));
+    const proxyAgent = new undici.ProxyAgent({ uri: proxyUrl });
+    installDispatcher(undici, new LoopbackBypassDispatcher(proxyAgent, new undici.Agent()));
     current = { proxyUrl, source: 'system' };
+    childProxyEnv = childEnvFor(proxyUrl, noProxy);
   } catch {
-    current = { proxyUrl: null, source: 'none' };
+    return setDirectState(undici);
   }
   return current;
 }
@@ -156,16 +309,11 @@ export function currentSystemProxy(): SystemProxyConfig {
 
 /**
  * 子进程环境注入：Pi 等子进程的 Node fetch 依赖标准代理变量。
- * 仅当本模块已启用代理时返回需覆盖的字段；loopback 豁免由 NO_PROXY 保证。
+ * 返回新对象，避免某个调用方修改后污染其他 Pi 进程；loopback/内网由 NO_PROXY
+ * 与主进程 dispatcher 双重保证。
  */
 export function proxyEnvForChildren(): Record<string, string> {
-  if (!current.proxyUrl) return {};
-  return {
-    HTTPS_PROXY: current.proxyUrl,
-    HTTP_PROXY: current.proxyUrl,
-    ALL_PROXY: current.proxyUrl,
-    NO_PROXY: process.env.NO_PROXY ?? process.env.no_proxy ?? 'localhost,127.0.0.1,::1'
-  };
+  return { ...childProxyEnv };
 }
 
 export const __test = { isLoopbackUrl, parseResolveProxy };

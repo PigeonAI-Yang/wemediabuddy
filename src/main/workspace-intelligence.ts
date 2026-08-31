@@ -27,6 +27,7 @@ import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { runPiPromptWithFallback, startPiRuntimeWithFallback } from './pi-config-fallback.ts';
+import { proxyEnvForChildren } from './proxy-config.ts';
 import type { ResolvedPiConfig } from './pi-config.ts';
 import { requireWorkspaceProfile, type WorkspaceProfileV1 } from './workspace-profiles.ts';
 import type { IntelligenceModule } from './intelligence-channels.ts';
@@ -161,7 +162,8 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
         PI_CODING_AGENT_DIR: layout.agentDir,
         WMB_PI_API_KEY: nextConfig.apiKey,
         WMB_MCP_URL: input.mcpUrl,
-        WMB_XHS_MCP_URL: input.xhsMcpUrl || ''
+        WMB_XHS_MCP_URL: input.xhsMcpUrl || '',
+        ...proxyEnvForChildren()
       }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
       input.onRuntime?.(runtime);
       return runtime;

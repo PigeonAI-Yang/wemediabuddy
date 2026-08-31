@@ -42,7 +42,7 @@ test('Today uses authoritative readiness and always starts all enabled Settings 
   assert.doesNotMatch(todayLegacy, /跳过当前来源/);
   assert.equal((today.match(/className="primary-button" onClick=\{onPrimary\}/g) ?? []).length, 1);
   assert.match(today, /view\.primaryCta\.kind !== 'none'/);
-  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules\?: Array<'official_web' \| 'x_lists'>; legacyPipeline\?: boolean \}\)/);
+  assert.match(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules\?: Array<'official_web' \| 'x_lists' \| 'zhihu_hot'>; legacyPipeline\?: boolean \}\)/);
   assert.doesNotMatch(preload, /startDailyIntelligence: \(input: \{ businessDate: string; modules:/);
   assert.match(main, /businessDate,?\s*modules:\s*input\.modules/);
   assert.doesNotMatch(discover, /IntelligenceChannelsView|情报渠道/);
@@ -74,7 +74,7 @@ test('daily run lifecycle is click-current, task-scoped, and returns durable par
   assert.match(workspace, partialDispatch);
   assert.match(generic, partialDispatch);
   assert.match(taskCommands, /requireCommandResultData\(\s*receiptAsCommandResult<TData>\(receipt\)\s*\)/);
-  assert.match(tasks, /tool='plans\.save' AND request_id=\?/);
+  assert.match(tasks, /command='plans\.save' AND task_id=\? AND status='ok'/);
   assert.match(tasks, /非空方案的每个条目必须引用真实资料/);
 });
 
@@ -98,8 +98,9 @@ test('Today default run freezes all enabled sources before daily scanning', asyn
         return { source, receipt: null, sourceIds: [] };
       }
     });
-    assert.deepEqual(run.frozen.modules, ['official_web', 'x_lists']);
-    assert.deepEqual(run.frozen.sources.map((source) => source.sourceId), [website.id]);
+    assert.deepEqual(run.frozen.modules, ['official_web', 'x_lists', 'zhihu_hot']);
+    assert.ok(run.frozen.sources.some((source) => source.sourceId === website.id));
+    assert.ok(run.frozen.sources.some((source) => source.module === 'zhihu_hot'));
     assert.equal(run.task.piSessionId, dailyAgentSessionId('2026-08-03', run.task.id));
     assert.equal(run.shouldRunJudgment, true);
   } finally {

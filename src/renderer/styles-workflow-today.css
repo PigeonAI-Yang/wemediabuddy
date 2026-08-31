@@ -24,6 +24,11 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .opp-grade { position: relative; overflow: hidden; isolation: isolate; flex: none; margin-top: 2px; border-radius: 5px; padding: 4px 8px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; }
+.opp-grade[data-grade="待评分"],
+.opp-grade[data-grade="pending"],
+.opp-grade[data-grade="草案"] { background: color-mix(in srgb, var(--muted-low) 10%, var(--surface)); color: var(--muted); border: 1px solid var(--border); box-shadow: none; animation: none; }
+.opp-grade[data-grade="待评分"]::after,
+.opp-grade[data-grade="pending"]::after { display: none; }
 .opp-main { flex: 1; min-width: 0; }
 .opp-title { font-size: 14px; font-weight: 650; line-height: 1.5; }
 .opp-why { margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }

@@ -87,9 +87,11 @@ export function StudioEditorTop({ selected, dirty, latestCreatedAt, documentLabe
   editorMode: 'rich' | 'source'; setEditorMode: (value: 'rich' | 'source') => void; busy: boolean; save: () => Promise<void>;
   preparePublication?: () => Promise<void>; prepareLabel?: string; prepareDisabled?: boolean;
 }): React.JSX.Element {
+  const versionLabel = selected ? (selected.versionCount === 0 ? '尚未生成正文' : `核心正文 · 第 ${selected.versionCount} 版`) : '';
+  const savedLabel = selected ? (selected.versionCount === 0 ? '尚未生成正文' : dirty ? '有未保存修改' : '已保存') : '';
   return <div className="studio-editor-top"><div className="studio-head-copy">
     <div className="studio-crumbs"><button className="studio-top-back" onClick={onBack}>创作库</button><span className="crumb-sep">/</span><b>{selected?.title ?? '正在读取'}</b></div>
-    <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>{documentLabel ?? `核心正文 · 第 ${selected.versionCount} 版`} · <b>{dirty ? '有未保存修改' : '已保存'}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latestCreatedAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
+    <span className={`studio-doc-state${dirty ? ' dirty' : ''}`}>{selected ? <>{documentLabel ?? versionLabel} · <b>{savedLabel}</b>{selected.creativeBrief && <> · 来自创作简报 <span className="pill violet">简报 v{selected.creativeBrief.revision} 已确认</span></>} · {formatTime(latestCreatedAt ?? selected.updatedAt)}</> : '正在读取项目…'}</span>
   </div><div className="studio-grow"/><button className="secondary-button" onClick={onToggleHistory} aria-expanded={historyOpen} aria-controls="studio-history-modal-dialog">版本</button>
   {!viewedVersion ? <div className="studio-mode-switch" role="group" aria-label="编辑模式"><button type="button" className={editorMode === 'source' ? 'active' : ''} onClick={() => setEditorMode('source')}>源码编辑</button><button type="button" className={editorMode === 'rich' ? 'active' : ''} onClick={() => setEditorMode('rich')}>可视化编辑</button></div> : null}
   {preparePublication && <button className="secondary-button" disabled={busy || prepareDisabled} onClick={() => void preparePublication()}>{prepareLabel ?? '准备发布'}</button>}
@@ -144,19 +146,16 @@ export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdow
     <span className="studio-formatbar-group" role="group" aria-label="段落">
       <select aria-label="段落格式" defaultValue="p" onChange={(event) => execRich('formatBlock', event.target.value)}><option value="p">正文</option><option value="h2">二级标题</option><option value="h3">三级标题</option><option value="blockquote">引用</option></select>
     </span>
-    <span className="studio-divider"/>
     <span className="studio-formatbar-group" role="group" aria-label="行内格式">
       <button type="button" title="粗体" aria-label="粗体" onClick={() => execRich('bold')}><strong>B</strong></button>
       <button type="button" title="斜体" aria-label="斜体" onClick={() => execRich('italic')}><em>I</em></button>
       <button type="button" title="删除线" aria-label="删除线" onClick={() => formatSelection('~~')}>S</button>
       <button type="button" title="行内代码" aria-label="行内代码" onClick={() => formatSelection('`')}>{'<>'}</button>
     </span>
-    <span className="studio-divider"/>
     <span className="studio-formatbar-group" role="group" aria-label="列表">
       <button type="button" title="无序列表" onClick={() => execRich('insertUnorderedList')}>• 列表</button>
       <button type="button" title="有序列表" onClick={() => execRich('insertOrderedList')}>1. 列表</button>
     </span>
-    <span className="studio-divider"/>
     <span className="studio-formatbar-group" role="group" aria-label="插入">
       <button type="button" title="插入链接" onClick={() => formatSelection('[', '](https://)', '链接文字')}>链接</button>
       <button type="button" title="插入代码块" onClick={() => insertMarkdown('\n```\n代码\n```\n')}>代码块</button>
@@ -164,7 +163,6 @@ export function StudioFormatBar({ busy, execRich, formatSelection, insertMarkdow
       <button type="button" title="插入分割线" onClick={() => insertMarkdown('\n---\n')}>分割线</button>
       <button type="button" title="插入图片" disabled={busy} onClick={() => void insertImageFile()}>图片</button>
     </span>
-    <span className="studio-divider"/>
     <span className="studio-formatbar-group" role="group" aria-label="编辑">
       <button type="button" title="清除格式" onClick={() => execRich('removeFormat')}>清除</button>
       <button type="button" title="撤销" aria-label="撤销" onClick={() => execRich('undo')}>↶</button>
@@ -276,7 +274,7 @@ export function StudioLibraryView({ summary, projects, hasMore, status, archived
           <span className="studio-project-state"><i data-status={project.status}/>{project.archivedAt ? '已归档' : statuses.find((item) => item.value === project.status)?.label}</span>
           <span className="studio-project-platform">{enabledPlatforms.filter((value) => project.platforms[value] > 0).length} / {enabledPlatforms.length}<i><b style={{ width: `${enabledPlatforms.filter((value) => project.platforms[value] > 0).length / Math.max(1, enabledPlatforms.length) * 100}%` }}/></i></span>
           <time>{formatTime(project.updatedAt)}</time>
-          <span>{project.versionCount} 个版本</span>
+          <span>{project.versionCount === 0 ? '尚未生成正文' : `${project.versionCount} 个版本`}</span>
           <span className="studio-row-actions">
             <button className="studio-row-action" aria-label={`打开项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}>打开</button>
             <button className="studio-row-action" aria-label={`${project.archivedAt ? '恢复' : '归档'}项目 ${project.title}`} onClick={(event) => { event.stopPropagation(); void archiveRow(project); }}>{project.archivedAt ? '恢复' : '归档'}</button>

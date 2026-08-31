@@ -203,6 +203,19 @@ export class ActiveWorkspaceRuntime {
       }
     });
   }
+  /** Execute durable Actor/migration/registry control-plane writes under the runtime write guard. */
+  runActorControlPlane<T>(work: () => T | Promise<T>): Promise<T> {
+    this.assertActive();
+    return this.gate.run(async () => {
+      this.writeAuthorizationDepth += 1;
+      try { return await work(); }
+      finally {
+        try { installWorkspaceWriteGuard(this.database, this.isWriteAuthorized); }
+        finally { this.writeAuthorizationDepth -= 1; }
+      }
+    });
+  }
+
 
   async closeClaimsAndDrain(timeoutMs = 5_000): Promise<void> {
     this.assertActive();
@@ -221,7 +234,7 @@ export class ActiveWorkspaceRuntime {
   /**
    * 获取 Pi worker lease。
    * - desk：主编席，全站唯一（不占 JobPool 员工槽）；旧接口 getWorker/getWorkerLease/stopWorker 只认它。
-   * - employee：员工工单，可多开；并发上限由 JobPool（默认 maxWorkers=2）强制，这里只做软上限防失控。
+   * - employee：员工工单，可多开；并发上限由 JobPool（默认 maxWorkers=5，正值低于5时按 Reporter 最低容量归一化）强制，这里只做软上限防失控。
    */
   acquireWorkerLease(taskId: string | null = null, roleId: string | null = null, purpose: 'desk' | 'employee' = 'employee'): WorkspaceRuntimeLease {
     this.assertActive();

@@ -16,6 +16,7 @@ import {
   failAgentTask,
   finishDailyIntelligenceFromReceipts,
   getActiveAgentTask,
+  getAgentTask,
   partialAgentTask,
   recoverInterruptedAgentTasks,
   reportAgentTaskProgress,
@@ -23,6 +24,7 @@ import {
   startAgentTask,
   updateAgentTaskPhase
 } from '../src/main/agent-tasks.ts';
+import { createManagerTaskCheckpoint } from '../src/main/manager-task.ts';
 
 async function withDb(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-tasks-'));
@@ -167,6 +169,86 @@ test('running agent tasks become interrupted on recovery and can be cancelled', 
     assert.equal(done.ok, true);
     assert.equal(done.data.status, 'succeeded');
     assert.equal(done.data.resultRefs.projectId, project.id);
+  });
+});
+
+test('interrupted manager cancel reconciles stale children and is idempotent', async () => {
+  await withDb((database) => {
+    const businessDate = '2026-08-08';
+    const managerStart = startAgentTask(database, {
+      intent: 'page_agents',
+      businessDate,
+      contextRefs: { managerDataRef: 'daily-source-ledger-1' }
+    });
+    assert.equal(managerStart.ok, true);
+
+    const succeededStart = startAgentTask(database, {
+      intent: 'page_today',
+      businessDate,
+      contextRefs: { businessDataRef: 'saved-plan-1' }
+    });
+    assert.equal(succeededStart.ok, true);
+    const succeeded = completeAgentTask(database, succeededStart.data.id);
+    assert.equal(succeeded.ok, true);
+
+    const failedStart = startAgentTask(database, {
+      intent: 'page_discover',
+      businessDate,
+      contextRefs: { businessDataRef: 'failed-source-1' }
+    });
+    assert.equal(failedStart.ok, true);
+    const failed = failAgentTask(database, failedStart.data.id, 'PI_EXIT', 'Pi exited');
+    assert.equal(failed.ok, true);
+
+    const staleStart = startAgentTask(database, {
+      intent: 'page_topic',
+      businessDate,
+      contextRefs: { businessDataRef: 'cancelled-child-1' }
+    });
+    assert.equal(staleStart.ok, true);
+    const stale = cancelAgentTask(database, staleStart.data.id);
+    assert.equal(stale.ok, true);
+
+    const checkpoint = createManagerTaskCheckpoint({
+      businessDate,
+      status: 'running',
+      phase: 'monitor_reporter',
+      summary: '记者扫描中',
+      children: [
+        { roleId: 'writer', brief: '保留成功历史', taskId: succeededStart.data.id, status: 'succeeded', finishedAt: '2026-08-08T01:00:00.000Z' },
+        { roleId: 'librarian', brief: '保留失败历史', taskId: failedStart.data.id, status: 'failed', finishedAt: '2026-08-08T01:01:00.000Z' },
+        { roleId: 'reporter', brief: '重启前正在运行', taskId: staleStart.data.id, status: 'running' },
+        { roleId: 'planner', brief: '重启后遗留排队项', jobId: 'recovered-job-1', status: 'queued' }
+      ]
+    });
+    const reported = reportAgentTaskProgress(database, managerStart.data.id, {
+      phase: checkpoint.phase,
+      checkpoint,
+      progress: { message: checkpoint.summary }
+    });
+    assert.equal(reported.ok, true);
+
+    assert.equal(recoverInterruptedAgentTasks(database), 1);
+    const interrupted = getAgentTask(database, managerStart.data.id);
+    assert.equal(interrupted?.status, 'interrupted');
+    assert.equal(interrupted?.checkpoint.children[2].status, 'running');
+
+    const cancelled = cancelAgentTask(database, managerStart.data.id);
+    assert.equal(cancelled.ok, true);
+    assert.equal(cancelled.data.status, 'cancelled');
+    assert.equal(cancelled.data.phase, 'cancelled');
+    assert.equal(cancelled.data.contextRefs.managerDataRef, 'daily-source-ledger-1');
+    assert.deepEqual(cancelled.data.checkpoint.children.map((child) => child.status), ['succeeded', 'failed', 'cancelled', 'cancelled']);
+    assert.equal(cancelled.data.checkpoint.status, 'cancelled');
+    assert.equal(cancelled.data.checkpoint.phase, 'done');
+    assert.equal(cancelled.data.checkpoint.children[0].finishedAt, '2026-08-08T01:00:00.000Z');
+    assert.equal(cancelled.data.checkpoint.children[1].finishedAt, '2026-08-08T01:01:00.000Z');
+    assert.equal(getAgentTask(database, succeededStart.data.id)?.contextRefs.businessDataRef, 'saved-plan-1');
+    assert.equal(getAgentTask(database, failedStart.data.id)?.contextRefs.businessDataRef, 'failed-source-1');
+
+    const again = cancelAgentTask(database, managerStart.data.id);
+    assert.equal(again.ok, true);
+    assert.deepEqual(again.data, cancelled.data);
   });
 });
 

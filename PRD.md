@@ -9,6 +9,7 @@
 - 本次文档修订：2026-08-05 结构质量修订：新增需求优先级分层、产品质量指标与产品风险章节，复合验收标准拆为原子子项，补齐画布场景与六种格式枚举；不改变任何既有 REQ/AC 语义
 - 本次文档修订：2026-08-08 班组多实例协同落档：新增 §2.4（用户可见行为）与 REQ-028/REQ-029、AC-024..AC-027，对应 Owner lock 2026-08-08（PRODUCT C9 / SPEC CAP-027 / EVAL-030 / PLAN M-5140）；不改变任何既有 REQ/AC 语义
 - 本次文档修订：2026-08-10 ResearchJob 补料与研究续派窄例外落档：新增 §2.5（用户可见行为与边界）与 REQ-031、AC-029，§2.3/§5.1 措辞增补，对应 Owner lock 2026-08-10（PRODUCT C9.2 窄例外 / SPEC CAP-028 / EVAL-032 / PLAN M-5170）；REQ-031 为 REQ-029「不新增表/列」的唯一窄例外（研究证据判定业务表 `research_claims`）；不改变任何既有 REQ/AC 语义
+- 本次文档修订：2026-08-22 知乎热题驱动每日文章×视频文案闭环：新增 §2.6、REQ-032、AC-030，SPEC CAP-029、EVAL-033，PLAN M-5330；设计真源 `docs/spark/2026-08-22-zhihu-hot-question-content-loop-PLAN.md`（正式 Owner lock 2026-08-22；只立法与共享基础，不实现浏览器/Today/Studio/调度）。
 
 ## 1. 产品愿景
 
@@ -139,7 +140,21 @@ WMB 内置 Pi 作为默认执行者，同时保留外部 Agent 通过 MCP 接续
 11. **红线与安全**：发布/硬删/平台副作用红线不变（C9.8）；X 只读 read_*，观察启动/停止与操作执行不在研究范围；XHS 仅四只读工具；`wmb_read_web_page` 静态提取优先，回退渲染只读公开网页——不创建第二平台登录态、不绕验证码/登录墙（遇验证码/登录墙返回明确失败并标记 source_unavailable）；私网/环回等非公开地址与不可信重定向拒绝，体积/类型/超时受限。
 12. **恢复与幂等**：研究任务中断可恢复（剩余预算内续跑）；取消/失败沿用既有状态机，已入库证据保留；派工（同父去重）、证据写回、claim 判定、自动续派全链幂等——重启或重放不产生第二个活动研究或续派。
 
-实现契约与验收见 SPEC CAP-028 / EVAL-032；里程碑见 PLAN M-5170；设计真源 `docs/spark/2026-08-10-agent-research-job-design.md`（正式 Owner lock 2026-08-10；只授权立法，不授权实现；**TASKS doing 仍是唯一施工许可**）。
+### 2.6 知乎热题驱动的每日内容闭环（M-5330；Owner lock 2026-08-22）
+
+知乎热榜是**新的 intelligence module**，不是知乎运营工作台。本阶段只把热门问题作为低决策成本的选题源，嵌入现有“侦察→选题→研究→创作→复盘”闭环；不提供知乎回答编辑器，不自动/手动发布知乎回答。
+
+1. **情报**：Reporter 经绑定 BrowserProfile 读取官方热榜 DOM，冻结问题历史题和当次榜位证据；同一问题不重复建 Source，新增当日 observation。
+2. **评分**：Planner 输出六维分项评分与硬风险（事实无法核验/侵权违法/需私域数据/重复角度无新增价值）；`score>=75` 且无风险自动入选、`55..75` 进 Proposal Ledger 边界、`score<55` 留档不建工单；30 天同题同角度默认重复拒绝。
+3. **每日周期/目标**：每 business date 一个 `daily_content_cycle`（默认 2 条新内容，可配 1–5，`autoThreshold > boundaryThreshold`）；不足显示缺口不凑数；已完成 = 文章定稿且视频文案就绪；发布不是完成前提；候选不足 `partial`。
+4. **昨日迭代**：次日首问两类修订目标（未发布草稿、已发布内容）`draft_revision / published_revision`，永不占用新内容配额，失败不阻塞新目标，carry 只顺延一次。
+5. **文章**：复用 `content_projects` / `content_versions`；Research Gate 未过禁止写正文。
+6. **视频文案**：一等衍生 `content_derivatives(kind=video_script)` + 不可变 `content_derivative_versions`（引用定稿版本 + 冻结 format decision）；ready 后文章新定稿即 stale，需新 ready 版本才可再次 completed。
+7. **完成口径**：`new_content` completed 须同时满足 article_ready + ready script；`carried/skipped` 不计完成不欠债。
+8. **授权**：新增命令全注册 Capability（Reporter 扫榜、Planner 周期/目标、Writer 衍生版本、Desk 站立含），三类红线（发布/硬删/平台副作用）不可达；全部写经 CommandEnvelopeV1 + active-root dispatcher，可审计、可恢复、数据根隔离。
+
+实现契约与验收见 SPEC CAP-029 / EVAL-033；里程碑见 PLAN M-5330；设计真源 `docs/spark/2026-08-22-zhihu-hot-question-content-loop-PLAN.md`（正式 Owner lock；**TASKS doing 仍是唯一施工许可；WMB-5330 只立法与共享基础，不实现浏览器/Today/Studio/调度**）。
+
 
 
 ## 3. 目标用户
@@ -562,10 +577,10 @@ MCP 最终可覆盖：
 | REQ-027 | Owner 拥有目标、观点、grant 和最终责任；Pi 与外部 Agent 是对等 task-authorized workers。工作空间业务、知识、来源、内容、任务、Pi session、grant、账号绑定和回执彼此隔离，所有有价值结果进入根内业务事实；所有命令经同一 dispatcher 以完整 identity、replay、receipt 与 audit 执行，聊天/session 不是业务真相或授权。 |
 | REQ-028 | 班组多实例（角色≠槽位）：固定五角色（§2.3）是劳动分工类型不是槽位，同一角色可同时存在多个实例且显式可见；实例按任务创建、终态退出活动视图，needs_user 停留「等你批」直至用户处理/关闭（不占并发、不持 lease/grant/锁、不自动重试）；五角色分组始终可见，空角色显示「当前无任务」，不画空槽；实例一等身份 = jobId，角色编号仅活动期显示。 |
 | REQ-029 | 共享容量与实例授权边界：共享并发池 maxWorkers（0..7，0=停用派工，默认 2）是全部角色共用的系统容量，不是角色配额；主管（desk）是软件内主管/主编席——持全站内部 standing 写权（全部 grantable 业务能力命令 ∪ INFRA，含内部准备命令，不含三类红线执行命令），任一页 dock 签发全量内部 grant，不进员工槽、内部审批归主管、单跳派工（2026-08-10 主管授权翻转）；实例权限 = 任务精确授权 ∩ 角色能力 ∩ 资源边界，dispatcher 对象级硬隔离（businessDate/projectId/sourceIds/scope），跨对象写拒绝（BLOCKED + 审计）；发布/硬删/平台副作用对任何实例与 grant 组合不可达；spawn 合同把 jobId/roleId/brief/边界参数写入既有 context_refs_json，重启后完整指认并一键续派，不新增表/列；不新增通用角色、不引入云服务/多租户/平台 API、不做可配置权限 UI、员工实例不自动转派。 |
-| REQ-030 | 资料员盘点主题家底并提交可审批的主题整理变更集；新建、改名、合并、归档和关系迁移在**主管批准前**零正式主题写入，批准后整批原子生效并完整读回（2026-08-10 主管授权翻转：内部审批归主管）。提案生成与审批共用一份持久、意图级冲突合同，只拦截会改变本次结果的真实冲突；真冲突整批零写并持久排队，由系统自动派资料员按最新现场创建一份新的待批提案，旧提案不复活、不自动 rebase、不自动生效。主管负责呈报与审批，不得要求 Owner 手工完成整理。 |
 | REQ-031 | ResearchJob 补料与研究续派（唯一窄例外）：注册表登记 `cap.research`，`research` intent 只由记者执行；系统在父任务对象边界（业务日 + projectId）内自动派研究工单（同一父任务至多一个活动研究任务）；首批研究读面只读 = Web（新增 `wmb_search_web` / `wmb_read_web_page`）+ X（read_*）+ XHS（search/detail/profile），channel resolve/trial 不承载研究；研究会话按只读白名单 fail-closed，越权读拒绝并审计，其余角色零变化；深度档预算 12 分钟 / 15 有效来源 / 40 候选 / 3 并行 / 仅一轮；required claim 四态（supported / contradicted / unresolved / source_unavailable）由系统按门槛机器校验（supported = 1 官方/一手 或 2 独立可靠二手，price/policy 须时间+摘录）；达门槛（终态 + 证据包）后系统终态处理器自动派生原角色续派工单一次（同边界、同角色、新 jobId，非重试；research→research 禁止），证据包含未解决声明时续派先入 needs_user（收窄 / 手动补料 / 接受标注待核实）；研究证据判定写入唯一业务表 `research_claims`（查询/审计面，非续派合同表；本 REQ 为 REQ-029「不新增表/列」的唯一窄例外）；Today 只上 unresolved required needs_user 卡；失败/取消不自动续派、已入库证据保留；全链幂等。 |
+| REQ-032 | 知乎热题驱动每日内容闭环（WMB-5330 基础）：知乎热榜以官方热榜 DOM 为权威情报源，Reporter 经绑定浏览器采集并以 `source_items` 为稳定身份 + `zhihu_hot_observations(source_item_id,business_date,input_fingerprint)` 冻结观察；Planner 输出六维分项评分与硬风险并按阈值自动/边界/拒绝分流；每 business date 一个 `daily_content_cycles(business_date UNIQUE)` 默认 2 条 `daily_content_targets(kind=new_content counts_toward_goal=1)`，数不足 `partial` 不凑数；昨日未发布/已发布两类修订目标 `draft_revision/published_revision counts_toward_goal=0` 不占配额、carry 只顺延一次；文章沿 `content_projects/content_versions`、Research Gate 未过禁写；视频文案以 `content_derivatives(project_id,kind)` 一等身份 + 不可变 `content_derivative_versions(derivative_id,version_number)`（冻结 format_decision_json + source_content_version_id）交付，ready 后文章新定稿即 stale；完成口径 `article_ready + ready script`；全部新增命令登记 Capability（Reporter 扫榜、Planner 周期/目标、Writer 衍生版本、Desk 站立含）且不含发布红线；全部写经 CommandEnvelopeV1 + active-root dispatcher，可审计、可恢复、数据根隔离。 |
 
-需求优先级：P0 为真实闭环主干（REQ-001 至 REQ-013、REQ-017、REQ-019、REQ-027、REQ-030），任一缺失即闭环不成立；P1 为当前范围内的重要能力（REQ-014、REQ-016、REQ-018、REQ-020 至 REQ-023、REQ-026、REQ-028、REQ-029、REQ-031），缺失阻塞对应场景的验收但不阻塞最小闭环；P2 为便利与增强（REQ-015、REQ-024、REQ-025），缺失不阻塞闭环验收。
+需求优先级：P0 为真实闭环主干（REQ-001 至 REQ-013、REQ-017、REQ-019、REQ-027、REQ-030），任一缺失即闭环不成立；P1 为当前范围内的重要能力（REQ-014、REQ-016、REQ-018、REQ-020 至 REQ-023、REQ-026、REQ-028、REQ-029、REQ-031、REQ-032），缺失阻塞对应场景的验收但不阻塞最小闭环；P2 为便利与增强（REQ-015、REQ-024、REQ-025），缺失不阻塞闭环验收。
 
 | ID | 产品级验收 |
 | --- | --- |
@@ -608,7 +623,9 @@ MCP 最终可覆盖：
 | AC-027 | 持久续派与主管边界：实例退出且应用重启（池清空）后，从 context_refs_json（jobId/roleId/brief/边界参数）+ agent_tasks/会话文件/审计完整指认并可一键续派（重建 RoleJobRequest）；主管（desk）不占员工槽、持全站内部 standing 写权（含内部审批）、spawn(roleId:'desk') 被拒；员工实例之间不自动转派；施工变更集不触碰 agent_tasks/task_grants/execution_grants 三张表 schema、不新增能力/角色，check:capabilities 通过。 |
 | AC-028 | 真实重复主题形成资料员提案后，驳回保持全部主题事实不变；批准一次事务迁移资料、选题、内容项目与复盘关系并归档旧主题。无关现场漂移不阻塞；目标 revision、canonical 占用或实际迁移成员变化返回结构化 stale 且零部分写，并与唯一持久重提请求同事务提交。提交后系统自动派资料员基于最新现场生成带 supersedes 关系的新待批提案；重复点击、重复恢复和冷重启不重复提案，历史 stale 不被复活。主题页可读完整链路，今日只投影待批摘要，主管能呈报并完成内部审批（2026-08-10 主管授权翻转），不等待 Owner 手工决定。 |
 | AC-029 | ResearchJob 窄例外端到端：写手缺料时系统自动派记者研究（同父任务边界：业务日 + projectId；同一父任务至多一个活动研究任务），智能体页以记者卡呈现进度与 claim 摘要；研究会话只可用只读白名单工具，白名单外调用（含 channel resolve/trial）被拒绝并审计，其余角色/意图零变化；证据入库按 originalUrl 去重，price/policy 证据带时间+摘录；claim 判定按门槛机器校验（伪造 supported 不达门槛 → unresolved；官方一手或两独立二手 → supported；官方推翻 → contradicted；候选全不可读 → source_unavailable）；仅一轮后终态产出证据包；达门槛自动续派恰好一次（原角色、新 jobId，重放不产生第二个），research 作父被拒；证据包含未解决 required claim → 续派先入「等你批」并列出三动作（收窄/手动补料/接受标注待核实），处理后由桌助续派，研究进度与裸资料不上 Today；中断恢复（剩余预算内续跑），取消/失败保留已入库证据且不续派；`wmb_read_web_page` 动态页回退仅渲染公开网页，验证码/登录墙明确失败，私网/环回与不可信重定向拒绝。 |
+| AC-030 | 知乎热题每日闭环基础（M-5330 冻结）：迁移在空库与遗留 v74 库上均可升级且数据/索引/触发器/FK 完整（新五表 + 触发器不可变衍生版本）；Reporter 扫榜命令与 Planner 周期/目标命令与 Writer 衍生版本命令分别仅由 reporter/planner/writer (+desk 站立) 可达且不含发布红线；空库可插入完整循环样本（observation→cycle→targets→derivative→versions）且跨表 FK/CHECK/UNIQUE 生效、重复插入冲突、carry_depth 0/1 限制、counts_toward_goal 与 kind 一致；`content_derivative_versions` 不可 UPDATE/DELETE 且可追溯 `source_content_version_id` 与冻结 JSON。 |
 
 带字母后缀的 AC 是对父项的原子分解：父项通过当且仅当全部子项通过；下游文档引用父 ID 仍然有效。
 
 ResearchJob 修订尾注（2026-08-10）：本修订对应 Owner lock 2026-08-10「ResearchJob 补料与研究续派（窄例外）」；产品条款 = §2.5 / REQ-031 / AC-029；规范与验收 = SPEC CAP-028 / EVAL-032；里程碑 = PLAN M-5170；设计真源 = `docs/spark/2026-08-10-agent-research-job-design.md`（正式 Owner lock；只授权立法，不授权实现；TASKS doing 仍是唯一施工许可）。
+知乎热题闭环修订尾注（2026-08-22）：本修订对应 Owner lock 2026-08-22「知乎热题驱动每日文章×视频文案闭环」；产品条款 = §2.6 / REQ-032 / AC-030；规范与验收 = SPEC CAP-029 / EVAL-033；里程碑 = PLAN M-5330；设计真源 `docs/spark/2026-08-22-zhihu-hot-question-content-loop-PLAN.md`（正式 Owner lock；WMB-5330 只立法与共享基础，不实现浏览器/Today/Studio/调度；**TASKS doing 仍是唯一施工许可**）。

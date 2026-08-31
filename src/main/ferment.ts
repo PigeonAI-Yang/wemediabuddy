@@ -2,6 +2,7 @@ import { broadcastDataChanged } from './data-changed.ts';
 import { markSourcesWatching } from './knowledge.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { isScoredApproved, sameThesis } from '../shared/propagation.ts';
 import {
   addDaysDate,
   addDaysIso,
@@ -326,7 +327,9 @@ export function listFermentingBundle(database: DatabaseSync, planDate = shanghai
     carrySourceIds: string | null;
   }>;
 
-  const projected = rows.map((row) => {
+  const qualifiedRows = rows.filter((row) => isTopicQualifiedForFermenting(database, row.topicId));
+
+  const projectedRaw = qualifiedRows.map((row) => {
     const activeCarry = Number(row.activeCarryCount || 0);
     const watchingCarry = Number(row.watchingCarryCount || 0);
     const sourceCount = Number(row.sourceCount || 0);
@@ -380,6 +383,8 @@ export function listFermentingBundle(database: DatabaseSync, planDate = shanghai
     return item;
   });
 
+  const projected = dedupeThesisForFermenting(database, projectedRaw);
+
   const items = projected.filter((item) => item.state === 'active').slice(0, MAX_FERMENTING);
   const watchingItems = projected.filter((item) => item.state === 'watching').slice(0, MAX_FERMENTING);
   const topicSummary = projected.slice(0, 8).map((item) => ({
@@ -397,6 +402,40 @@ export function listFermentingBundle(database: DatabaseSync, planDate = shanghai
     topics: topicSummary,
     pinnedSources: []
   };
+}
+
+function isTopicQualifiedForFermenting(database: DatabaseSync, topicId: string): boolean {
+  const planRows = database.prepare(`SELECT planning_status, score_reasons_json, point_of_view, planning_provenance_json FROM plan_items WHERE topic_id = ?`).all(topicId) as Array<{ planning_status: string; score_reasons_json: string; point_of_view: string; planning_provenance_json: string }>;
+  if (planRows.length === 0) {
+    const hasLink = database.prepare(`SELECT 1 FROM topic_source_links WHERE topic_id = ? LIMIT 1`).get(topicId);
+    return Boolean(hasLink);
+  }
+  for (const row of planRows) {
+    if (isScoredApproved(row)) return true;
+  }
+  return false;
+}
+
+function dedupeThesisForFermenting(database: DatabaseSync, items: WorkCarryItem[]): WorkCarryItem[] {
+  if (items.length <= 1) return items;
+  const thesisByTopic = new Map<string, { pointOfView: string; angle: string; targetAudience: string }>();
+  for (const item of items) {
+    const topicId = item.topicId ?? item.objectId;
+    const row = database.prepare(`SELECT point_of_view AS pov, angle, target_audience AS audience FROM plan_items WHERE topic_id = ? AND planning_status='approved' ORDER BY created_at DESC LIMIT 1`).get(topicId) as { pov: string; angle: string; audience: string } | undefined;
+    if (row) thesisByTopic.set(item.id, { pointOfView: row.pov ?? '', angle: row.angle ?? '', targetAudience: row.audience ?? '' });
+    else thesisByTopic.set(item.id, { pointOfView: item.title, angle: '', targetAudience: '' });
+  }
+  const kept: WorkCarryItem[] = [];
+  for (const cur of items) {
+    const curThesis = thesisByTopic.get(cur.id)!;
+    let dup = false;
+    for (const keeper of kept) {
+      const keepThesis = thesisByTopic.get(keeper.id)!;
+      if (sameThesis(curThesis, keepThesis)) { dup = true; break; }
+    }
+    if (!dup) kept.push(cur);
+  }
+  return kept;
 }
 
 export function setCarryState(
@@ -442,6 +481,62 @@ export function markCarryDoneForPlanItem(database: DatabaseSync, planItemId: str
   database.prepare(`UPDATE work_carry_items
     SET state='done', updated_at=?, revision=revision+1
     WHERE object_type='plan_item' AND fingerprint=? AND state IN ('active','watching')`).run(now, fingerprint);
+}
+
+export function ensureApprovedPlanItemCarryDone(
+  database: DatabaseSync,
+  input: {
+    planItemId: string;
+    title: string;
+    priority: number;
+    topicId?: string | null;
+    sourceIds: string[];
+    originPlanDate: string;
+  }
+): { id: string; state: 'done'; revision: number; created: boolean; completed: boolean } {
+  const exact = database.prepare(`SELECT id, state, revision FROM work_carry_items
+    WHERE object_type='plan_item' AND object_id=? ORDER BY created_at`).all(input.planItemId) as Array<{ id: string; state: CarryState; revision: number }>;
+  if (exact.length > 1) throw Object.assign(new Error('multiple carry items point at the approved plan item'), { code: 'AMBIGUOUS_CARRIES' });
+  const now = new Date().toISOString();
+  const fingerprint = fingerprintPlanItem(input);
+  if (exact.length === 1) {
+    const current = exact[0];
+    if (current.state === 'done') return { id: current.id, state: 'done', revision: current.revision, created: false, completed: false };
+    database.prepare(`UPDATE work_carry_items SET state='done', reason=?, updated_at=?, revision=revision+1 WHERE id=?`)
+      .run('历史批准链已修复并完成', now, current.id);
+    return { id: current.id, state: 'done', revision: current.revision + 1, created: false, completed: true };
+  }
+
+  const shared = database.prepare(`SELECT id, state, revision FROM work_carry_items
+    WHERE object_type='plan_item' AND fingerprint=?`).get(fingerprint) as { id: string; state: CarryState; revision: number } | undefined;
+  if (shared) {
+    if (shared.state === 'done') return { id: shared.id, state: 'done', revision: shared.revision, created: false, completed: false };
+    database.prepare(`UPDATE work_carry_items SET state='done', reason=?, updated_at=?, revision=revision+1 WHERE id=?`)
+      .run('历史批准链已修复并完成', now, shared.id);
+    return { id: shared.id, state: 'done', revision: shared.revision + 1, created: false, completed: true };
+  }
+  const id = randomUUID();
+  database.prepare(`INSERT INTO work_carry_items (
+      id, object_type, object_id, fingerprint, title, state, priority, topic_id, source_ids_json, origin_plan_date,
+      first_seen_at, last_seen_at, expires_at, decay_score, reason, aftershock_json, created_at, updated_at, revision, story_key
+    ) VALUES (?, 'plan_item', ?, ?, ?, 'done', ?, ?, ?, ?, ?, ?, ?, 1, ?, '[]', ?, ?, 1, ?)`).run(
+    id,
+    input.planItemId,
+    fingerprint,
+    input.title,
+    input.priority,
+    input.topicId ?? null,
+    JSON.stringify(input.sourceIds),
+    input.originPlanDate,
+    now,
+    now,
+    now,
+    '历史批准链已修复并完成',
+    now,
+    now,
+    storyKeyOf({ title: input.title, topicId: input.topicId ?? null, sourceIds: input.sourceIds })
+  );
+  return { id, state: 'done', revision: 1, created: true, completed: false };
 }
 
 export function upsertCarryFromPlanItem(

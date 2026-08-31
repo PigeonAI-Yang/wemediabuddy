@@ -52,22 +52,18 @@ test('boundary: maxWorkers domain 0..7 — negative/float rejected; 0 = dispatch
   assert.throws(() => p.submit({ roleId: 'reporter', brief: 'a', businessDate: '2026-08-09' }), /JOB_SPAWN_DISABLED/);
 });
 
-test('boundary: maxWorkers=1 serializes completely', () => {
+test('boundary: positive maxWorkers values below 5 resolve to the Reporter floor', () => {
   const pool = new JobPool(1);
-  const a = pool.submit({ roleId: 'reporter', brief: 'a', planDate: 'd1' });
-  const b = pool.submit({ roleId: 'writer', brief: 'b', projectId: 'p1' });
-  const c = pool.submit({ roleId: 'planner', brief: 'c', planDate: 'd2' });
-  assert.equal(pool.get(a.id).status, 'running');
-  assert.equal(pool.get(b.id).status, 'queued');
-  assert.equal(pool.get(c.id).status, 'queued');
-  pool.complete(a.id);
-  assert.equal(pool.get(b.id).status, 'running');
-  assert.equal(pool.get(c.id).status, 'queued');
-  pool.fail(b.id, 'x');
-  assert.equal(pool.get(c.id).status, 'running');
-  pool.cancel(c.id);
-  assert.equal(pool.get(c.id).status, 'cancelled');
-  assert.equal(pool.activeEmployeeCount(), 0);
+  assert.equal(pool.getMaxWorkers(), 5);
+  const jobs = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: `r${index}`,
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
+  assert.equal(pool.activeEmployeeCount(), 5);
+  assert.equal(pool.get(jobs[5].id).status, 'queued');
+  pool.complete(jobs[0].id);
+  assert.equal(pool.get(jobs[5].id).status, 'running');
 });
 
 test('boundary: empty brief / desk / unknown role rejected', () => {
@@ -86,24 +82,24 @@ test('boundary: cancel is idempotent on terminal', () => {
   assert.equal(pool.get(j.id).status, 'succeeded');
 });
 
-test('boundary: shrink maxWorkers does not kill running, only blocks new promote', () => {
-  const pool = new JobPool(3);
-  const jobs = [0, 1, 2].map((i) => pool.submit({ roleId: ROLES[i], brief: `r${i}`, planDate: `s${i}` }));
-  assert.equal(pool.activeEmployeeCount(), 3);
+test('boundary: shrinking to a lower setting resolves to the Reporter floor without killing running jobs', () => {
+  const pool = new JobPool(6);
+  const jobs = [0, 1, 2, 3, 4, 5].map((i) => pool.submit({ roleId: ROLES[i % ROLES.length], brief: `r${i}`, planDate: `s${i}` }));
+  assert.equal(pool.activeEmployeeCount(), 6);
   pool.setMaxWorkers(1);
+  assert.equal(pool.getMaxWorkers(), 5);
   const extra = pool.submit({ roleId: 'librarian', brief: 'late', planDate: 's9' });
   assert.equal(pool.get(extra.id).status, 'queued');
-  // running still 3 until they finish
-  assert.equal(pool.activeEmployeeCount(), 3);
+  // running still 6 until they finish; only the resolved max=5 promotes after that.
+  assert.equal(pool.activeEmployeeCount(), 6);
   for (const j of jobs) pool.complete(j.id);
-  // only one promote under max=1
   assert.equal(pool.get(extra.id).status, 'running');
   assert.equal(pool.activeEmployeeCount(), 1);
 });
 
-test('stress: 200 jobs FIFO drain at maxWorkers=4', () => {
+test('stress: 200 jobs FIFO drain at maxWorkers=5', () => {
   const N = 200;
-  const pool = new JobPool(4);
+  const pool = new JobPool(5);
   const ids = [];
   const t0 = performance.now();
   for (let i = 0; i < N; i++) {
@@ -115,13 +111,13 @@ test('stress: 200 jobs FIFO drain at maxWorkers=4', () => {
     });
     ids.push(job.id);
   }
-  assert.equal(pool.list().filter((j) => j.status === 'running').length, 4);
-  assert.equal(pool.list().filter((j) => j.status === 'queued').length, N - 4);
+  assert.equal(pool.list().filter((j) => j.status === 'running').length, 5);
+  assert.equal(pool.list().filter((j) => j.status === 'queued').length, N - 5);
 
   let completed = 0;
   while (completed < N) {
     const running = pool.list().filter((j) => j.status === 'running');
-    assert.ok(running.length <= 4);
+    assert.ok(running.length <= 5);
     for (const j of running) {
       pool.complete(j.id);
       completed += 1;
@@ -131,7 +127,7 @@ test('stress: 200 jobs FIFO drain at maxWorkers=4', () => {
   assert.equal(pool.activeEmployeeCount(), 0);
   assert.equal(pool.list().filter((j) => j.status === 'succeeded').length, N);
   assert.ok(ms < 2000, `200 job drain took ${ms}ms`);
-  console.log(`  [stress] 200 FIFO drain max4: ${ms.toFixed(1)}ms`);
+  console.log(`  [stress] 200 FIFO drain max5: ${ms.toFixed(1)}ms`);
 });
 
 test('stress: alternating cancel/complete under churn', () => {
@@ -222,6 +218,78 @@ test('stress: spawner maxWorkers=7 completes 24 jobs', async () => {
     console.log(`  [stress] 24 jobs max8: ${ms.toFixed(0)}ms peakRunning<=7 (saw ${peakRunning})`);
     spawner.dispose();
   } finally {
+    await runtime.stop({ drain: false }).catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('Reporter floor admits five concurrent jobs, preserves desk capacity, queues sixth, and releases on cancel', async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-reporter-floor-'));
+  const runtime = openRuntime(directory);
+  let desk = null;
+  let spawner = null;
+  try {
+    desk = runtime.acquireWorkerLease(null, 'desk', 'desk');
+    runtime.bindWorker(desk, { stop: async () => {} });
+    let releaseGate;
+    const gate = new Promise((resolve) => { releaseGate = resolve; });
+    let active = 0;
+    let peak = 0;
+    spawner = new JobSpawner(runtime, {
+      maxWorkers: 2,
+      execute: async ({ signal }) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => {
+          const finish = () => {
+            signal.removeEventListener('abort', finish);
+            resolve();
+          };
+          if (signal.aborted) return finish();
+          signal.addEventListener('abort', finish, { once: true });
+          gate.then(finish);
+        });
+        active -= 1;
+        return signal.aborted
+          ? { status: 'cancelled', code: 'JOB_CANCELLED', message: null, readback: null }
+          : { status: 'succeeded', code: 'OK', message: null, readback: null };
+      }
+    });
+    const jobs = Array.from({ length: 6 }, (_, index) => spawner.spawn({
+      roleId: 'reporter',
+      brief: `report-${index}`,
+      businessDate: '2026-08-29',
+      channelIds: [`channel-${index}`]
+    }));
+    assert.equal(spawner.getMaxWorkers(), 5, 'configured value below 5 resolves to the Reporter floor');
+    assert.equal(spawner.get(jobs[5].id)?.status, 'queued', 'sixth Reporter waits at the resolved cap');
+    for (let attempt = 0; attempt < 200 && (active !== 5 || runtime.getWorkerSnapshots().filter((s) => s.purpose === 'employee').length !== 5); attempt += 1) {
+      await sleep(5);
+    }
+    assert.equal(active, 5, 'five Reporter executors are concurrently admitted');
+    assert.equal(spawner.pool.activeEmployeeCount(), 5);
+    const snapshots = runtime.getWorkerSnapshots();
+    assert.equal(snapshots.filter((s) => s.purpose === 'employee').length, 5);
+    assert.equal(snapshots.filter((s) => s.purpose === 'desk').length, 1, 'desk manager retains its reserved control worker');
+    assert.equal(snapshots.length, 6, 'five employees plus one desk remain below the runtime lease cap');
+    assert.equal(peak, 5);
+
+    const cancelled = await spawner.cancel(jobs[0].id);
+    assert.equal(cancelled?.status, 'cancelled');
+    for (let attempt = 0; attempt < 200 && spawner.get(jobs[5].id)?.status !== 'running'; attempt += 1) await sleep(5);
+    assert.equal(spawner.get(jobs[5].id)?.status, 'running', 'cancellation releases a slot for the queued Reporter');
+    assert.equal(spawner.pool.activeEmployeeCount(), 5);
+    assert.equal(runtime.getWorkerSnapshots().filter((s) => s.purpose === 'employee').length, 5);
+
+    releaseGate();
+    const done = await Promise.all(jobs.map((job) => spawner.await(job.id, 10_000)));
+    assert.equal(done.filter((job) => job.status === 'cancelled').length, 1);
+    assert.equal(done.filter((job) => job.status === 'succeeded').length, 5, done.map((job) => `${job.status}:${job.error ?? ''}`).join(','));
+    assert.equal(runtime.getWorkerSnapshots().filter((s) => s.purpose === 'employee').length, 0, 'terminal jobs release employee leases');
+    assert.equal(runtime.getWorkerSnapshots().filter((s) => s.purpose === 'desk').length, 1);
+  } finally {
+    spawner?.dispose();
+    if (desk) runtime.releaseWorker(desk);
     await runtime.stop({ drain: false }).catch(() => {});
     rmSync(directory, { recursive: true, force: true });
   }
@@ -341,7 +409,7 @@ test('boundary: desk + max employees snapshots stable under load', async () => {
     assert.throws(() => runtime.acquireWorkerLease(null, 'desk', 'desk'), /lease|BUSY|释放/);
 
     const spawner = new JobSpawner(runtime, {
-      maxWorkers: 4,
+      maxWorkers: 5,
       execute: async () => {
         await new Promise((r) => setTimeout(r, 25));
         return { status: 'succeeded', code: 'OK', message: null, readback: null };
@@ -360,7 +428,7 @@ test('boundary: desk + max employees snapshots stable under load', async () => {
     await new Promise((r) => setTimeout(r, 15));
     const snaps = runtime.getWorkerSnapshots();
     assert.equal(snaps.filter((s) => s.purpose === 'desk').length, 1);
-    assert.ok(snaps.filter((s) => s.purpose === 'employee').length <= 4);
+    assert.ok(snaps.filter((s) => s.purpose === 'employee').length <= 5);
     // desk accessors still desk-scoped
     assert.equal(runtime.getWorkerLease()?.leaseId, desk.leaseId);
 
@@ -374,15 +442,12 @@ test('boundary: desk + max employees snapshots stable under load', async () => {
   }
 });
 
-test('meta: default remains 2 unless overridden', () => {
-  assert.equal(DEFAULT_MAX_WORKERS, 2);
+test('meta: default is 5 unless overridden above the floor', () => {
+  assert.equal(DEFAULT_MAX_WORKERS, 5);
   const pool = new JobPool();
-  const a = pool.submit({ roleId: 'reporter', brief: '1', planDate: 'm1' });
-  const b = pool.submit({ roleId: 'writer', brief: '2', projectId: 'm2' });
-  const c = pool.submit({ roleId: 'planner', brief: '3', planDate: 'm3' });
-  assert.equal(pool.get(a.id).status, 'running');
-  assert.equal(pool.get(b.id).status, 'running');
-  assert.equal(pool.get(c.id).status, 'queued');
+  const jobs = Array.from({ length: 6 }, (_, i) => pool.submit({ roleId: 'reporter', brief: `${i}`, planDate: `m${i}` }));
+  assert.equal(pool.activeEmployeeCount(), 5);
+  assert.equal(pool.get(jobs[5].id).status, 'queued');
 });
 
 

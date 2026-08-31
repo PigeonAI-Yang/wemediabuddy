@@ -5,6 +5,7 @@ import { failure, success, type CommandResult } from './result.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { migrateAnnotationsForCoreSave, migrateAnnotationsForPlatformSave } from './studio-annotations.ts';
 import { recordCoreDraftUsage, recordPlatformUsage } from './knowledge-usage-integration.ts';
+import type { PlanningStatus } from './planning-stage.ts';
 import {
   buildAssetIdsFromPlatformBindings,
   normalizeContentMediaBindings,
@@ -52,6 +53,71 @@ export type SavedCoreVersion = {
 };
 export type SavedPlatformVersion = { id: string; revision: number };
 
+type ThesisLock = { version: string; winnerThesis: string };
+type ThesisBoundaryFailure = {
+  reasonCode: 'THESIS_LOCK_REQUIRED' | 'THESIS_LOCK_VIOLATION';
+  message: string;
+};
+
+function parseObject(value: unknown): Record<string, unknown> | null {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch { return null; }
+  }
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+}
+
+function readThesisLock(value: unknown): ThesisLock | null {
+  const provenance = parseObject(value);
+  const lock = parseObject(provenance?.thesis_lock);
+  if (lock?.version !== 'thesis_lock_v1' || typeof lock.winnerThesis !== 'string' || !lock.winnerThesis.trim()) return null;
+  return { version: 'thesis_lock_v1', winnerThesis: lock.winnerThesis.trim() };
+}
+
+function compactThesisText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('zh-CN').replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+/** Plan-bound content creation is only valid after the canonical approval chain froze a thesis lock. */
+export function assertPlanItemContentCreateAllowed(database: DatabaseSync, planItemId?: string | null): void {
+  const normalizedId = typeof planItemId === 'string' ? planItemId.trim() : '';
+  if (!normalizedId) return;
+  const row = database.prepare(`
+    SELECT planning_status AS planningStatus, planning_provenance_json AS planningProvenance
+    FROM plan_items WHERE id=?
+  `).get(normalizedId) as { planningStatus: string; planningProvenance: string | null } | undefined;
+  if (!row) throw Object.assign(new Error('选题不存在，不能创建绑定正文。'), { code: 'NOT_FOUND' });
+  if (row.planningStatus !== 'approved') {
+    throw Object.assign(new Error(`选题尚未批准（当前状态：${row.planningStatus}），不能直接创建绑定正文。`), { code: 'PLAN_ITEM_NOT_APPROVED' });
+  }
+  if (!readThesisLock(row.planningProvenance)) {
+    throw Object.assign(new Error('选题缺少统一审批产生的中心主张锁，不能直接创建绑定正文。'), { code: 'THESIS_LOCK_REQUIRED' });
+  }
+}
+
+function coreThesisBoundaryFailure(database: DatabaseSync, projectId: string, body: string): ThesisBoundaryFailure | null {
+  const row = database.prepare(`
+    SELECT cp.plan_item_id AS planItemId, pi.planning_status AS planningStatus,
+      pi.planning_provenance_json AS planningProvenance
+    FROM content_projects cp
+    LEFT JOIN plan_items pi ON pi.id=cp.plan_item_id
+    WHERE cp.id=?
+  `).get(projectId) as { planItemId: string | null; planningStatus: string | null; planningProvenance: string | null } | undefined;
+  if (!row?.planItemId || row.planningStatus !== 'approved') return null;
+  const lock = readThesisLock(row.planningProvenance);
+  if (!lock) return { reasonCode: 'THESIS_LOCK_REQUIRED', message: '已批准选题缺少中心主张锁，不能保存或完成正文。' };
+  const needle = compactThesisText(lock.winnerThesis);
+  if (!needle || !compactThesisText(body).includes(needle)) {
+    return { reasonCode: 'THESIS_LOCK_VIOLATION', message: `正文必须保留已批准的中心主张：${lock.winnerThesis}` };
+  }
+  return null;
+}
+
+export function assertCoreVersionMatchesPlanThesis(database: DatabaseSync, projectId: string, body: string): void {
+  const failureResult = coreThesisBoundaryFailure(database, projectId, body);
+  if (failureResult) throw Object.assign(new Error(failureResult.message), { code: failureResult.reasonCode });
+}
+
 export type ContentProjectSummary = {
   id: string;
   title: string;
@@ -70,6 +136,12 @@ export type ContentProjectSummary = {
 export type ContentProjectDetail = ContentProjectSummary & {
   topicId: string | null;
   planItemId: string | null;
+  planningStatus: PlanningStatus | null;
+  planItemRevision: number | null;
+  missingMaterials: string[];
+  availableMaterials: string[];
+  scoreReasons: { status: 'pending' | 'scored'; score: number; reasons: Array<{ criterion: string; weight: number; score: number; reason?: string }>; pending_reason?: string } | null;
+  activeTasks: Array<{ id: string; roleId: string; status: string; createdAt: string }>;
   sourceIds: string[];
   sources: Array<{
     id: string; title: string; canonicalUrl: string | null; author: string | null;
@@ -193,7 +265,12 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
   const row = database.prepare(`
     SELECT p.id, p.topic_id AS topicId, p.plan_item_id AS planItemId, p.title, p.status,
       p.archived_at AS archivedAt, p.revision, p.created_at AS createdAt, p.updated_at AS updatedAt,
-      pi.priority AS planItemPriority
+      pi.priority AS planItemPriority,
+      pi.planning_status AS planningStatus,
+      pi.revision AS planItemRevision,
+      pi.missing_materials_json AS missingMaterialsJson,
+      pi.available_materials_json AS availableMaterialsJson,
+      pi.score_reasons_json AS scoreReasonsJson
     FROM content_projects p
     LEFT JOIN plan_items pi ON pi.id = p.plan_item_id
     WHERE p.id = ?
@@ -201,6 +278,11 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
     id: string; topicId: string | null; planItemId: string | null; title: string; status: ContentProjectStatus;
     archivedAt: string | null; revision: number; createdAt: string; updatedAt: string;
     planItemPriority: number | null;
+    planningStatus: PlanningStatus | null;
+    planItemRevision: number | null;
+    missingMaterialsJson: string | null;
+    availableMaterialsJson: string | null;
+    scoreReasonsJson: string | null;
   } | undefined;
   if (!row) return null;
   const revisionRows = database.prepare(`SELECT id, version_number AS number, body, created_at AS createdAt, COALESCE(author, 'ai') AS author
@@ -250,13 +332,81 @@ export function getContentProject(database: DatabaseSync, projectId: string): Co
   const decisions = database.prepare(`SELECT id, body, created_at AS createdAt, updated_at AS updatedAt, revision
     FROM content_decisions WHERE project_id = ? ORDER BY created_at`).all(projectId) as ContentProjectDetail['decisions'];
   const creativeBriefRow=database.prepare(`SELECT b.id,b.title,b.revision,b.status,b.canvas_id AS canvasId,b.context_node_ids_json AS contextNodeIdsJson
-    FROM creative_brief_projects link JOIN creative_briefs b ON b.id=link.brief_id WHERE link.project_id=?`).get(projectId) as any;
-  const creativeBrief=creativeBriefRow?{id:creativeBriefRow.id,title:creativeBriefRow.title,revision:creativeBriefRow.revision,status:creativeBriefRow.status,
-    canvasId:creativeBriefRow.canvasId,contextNodeIds:JSON.parse(creativeBriefRow.contextNodeIdsJson)}:null;
+    FROM creative_brief_projects link JOIN creative_briefs b ON b.id=link.brief_id WHERE link.project_id=?`).get(projectId) as unknown as { id: string; title: string; revision: number; status: string; canvasId: string | null; contextNodeIdsJson: string } | undefined;
+  const creativeBrief=creativeBriefRow?{id:creativeBriefRow.id,title:creativeBriefRow.title,revision:creativeBriefRow.revision,status:creativeBriefRow.status === 'confirmed' ? 'confirmed' as const : 'draft' as const,
+    canvasId:creativeBriefRow.canvasId,contextNodeIds:JSON.parse(creativeBriefRow.contextNodeIdsJson) as string[]}:null;
   const planItemPriority = row.planItemPriority == null ? null : Number(row.planItemPriority);
+  const planningStatus = (row.planningStatus as PlanningStatus | null) ?? null;
+  const planItemRevision = row.planItemRevision == null ? null : Number(row.planItemRevision);
+  let missingMaterials: string[] = [];
+  let availableMaterials: string[] = [];
+  let scoreReasons: ContentProjectDetail['scoreReasons'] = null;
+  try { if (row.missingMaterialsJson) missingMaterials = JSON.parse(row.missingMaterialsJson) as string[]; } catch {}
+  try { if (row.availableMaterialsJson) availableMaterials = JSON.parse(row.availableMaterialsJson) as string[]; } catch {}
+  try { if (row.scoreReasonsJson) scoreReasons = JSON.parse(row.scoreReasonsJson) as ContentProjectDetail['scoreReasons']; } catch {}
+  if (!Array.isArray(missingMaterials)) missingMaterials = [];
+  if (!Array.isArray(availableMaterials)) availableMaterials = [];
+  // Real Reporter/Writer tasks/jobs truth: query jobs and agent_tasks associated with this project
+  let activeTasks: ContentProjectDetail['activeTasks'] = [];
+  try {
+    const jobRows = database.prepare(`
+      SELECT id, kind, status, created_at AS createdAt
+      FROM jobs
+      WHERE payload_json LIKE '%' || ? || '%'
+        AND status IN ('pending','running','needs_user','waiting_resource')
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(projectId) as Array<{ id: string; kind: string; status: string; createdAt: string }>;
+    for (const j of jobRows) {
+      const roleId = String(j.kind ?? '');
+      if (roleId === 'reporter' || roleId === 'writer' || roleId === 'planner') {
+        activeTasks.push({ id: j.id, roleId, status: j.status, createdAt: j.createdAt });
+      }
+    }
+    // Also check agent_tasks for writer/reporter linked via context_refs_json
+    try {
+      const taskRows = database.prepare(`
+        SELECT id, context_refs_json AS refs, status, created_at AS createdAt
+        FROM agent_tasks
+        WHERE context_refs_json LIKE '%' || ? || '%'
+          AND status = 'running'
+        ORDER BY created_at DESC
+        LIMIT 20
+      `).all(projectId) as Array<{ id: string; refs: string; status: string; createdAt: string }>;
+      for (const t of taskRows) {
+        try {
+          const refs = JSON.parse(t.refs) as Record<string, unknown>;
+          const roleIdRaw = refs['roleId'] ?? refs['role'];
+          const roleId = typeof roleIdRaw === 'string' ? roleIdRaw : '';
+          if (roleId === 'reporter' || roleId === 'writer') {
+            if (!activeTasks.some((x) => x.id === t.id)) activeTasks.push({ id: t.id, roleId, status: t.status, createdAt: t.createdAt });
+          }
+        } catch {}
+      }
+    } catch {}
+    // Check project_investigations reporter/writer jobs as fallback
+    try {
+      const inv = database.prepare('SELECT reporter_job_id AS rId, writer_job_id AS wId FROM project_investigations WHERE project_id=?').get(projectId) as { rId: string | null; wId: string | null } | undefined;
+      if (inv) {
+        for (const [jid, role] of [[inv.rId, 'reporter'], [inv.wId, 'writer']] as const) {
+          if (!jid) continue;
+          const jr = database.prepare('SELECT id, kind, status, created_at AS createdAt FROM jobs WHERE id=?').get(jid) as { id: string; kind: string; status: string; createdAt: string } | undefined;
+          if (jr && ['pending','running','needs_user','waiting_resource'].includes(jr.status) && !activeTasks.some((x)=>x.id===jr.id)) {
+            activeTasks.push({ id: jr.id, roleId: role, status: jr.status, createdAt: jr.createdAt });
+          }
+        }
+      }
+    } catch {}
+  } catch {}
   return {
     ...row,
     planItemPriority: Number.isFinite(planItemPriority as number) ? (planItemPriority as number) : null,
+    planningStatus,
+    planItemRevision,
+    missingMaterials,
+    availableMaterials,
+    scoreReasons,
+    activeTasks,
     sourceIds,
     sources,
     notes,
@@ -378,16 +528,64 @@ export function createContentProjectWithVersion(
   }
 }
 
+type PlanItemInitialVersionSeed = {
+  topicId: string | null;
+  title: string;
+  whyNow: string;
+  targetAudience: string;
+  angle: string;
+  pointOfView: string;
+  titleGuidance: string;
+  openingGuidance: string;
+  structureGuidance: string;
+  sourceIds: string;
+  planningProvenance: string;
+};
+
+function readPlanItemInitialVersionSeed(database: DatabaseSync, planItemId: string): PlanItemInitialVersionSeed {
+  const item = database.prepare(`SELECT topic_id AS topicId, title, why_now AS whyNow,
+    target_audience AS targetAudience, angle, point_of_view AS pointOfView,
+    title_guidance AS titleGuidance, opening_guidance AS openingGuidance, structure_guidance AS structureGuidance,
+    source_ids_json AS sourceIds, planning_provenance_json AS planningProvenance FROM plan_items WHERE id = ?`).get(planItemId) as PlanItemInitialVersionSeed | undefined;
+  if (!item) throw new Error('内容机会不存在。');
+  return item;
+}
+
+function initialVersionBody(item: PlanItemInitialVersionSeed): string {
+  let lockSection = '';
+  try {
+    const provenance = JSON.parse(item.planningProvenance || '{}') as Record<string, unknown>;
+    const lock = provenance.thesis_lock as Record<string, unknown> | undefined;
+    if (lock?.version === 'thesis_lock_v1') {
+      lockSection = `\n\n## 已批准中心主张（写作不得改变主线）\n${String(lock.winnerThesis ?? item.pointOfView)}\n\n### 传播承诺\n${JSON.stringify(lock.propagationPromise ?? {})}\n\n### 事实、推断与观点边界\n${JSON.stringify(lock.claimBoundaries ?? [])}`;
+    }
+  } catch {}
+  return `# ${item.title}\n\n## 为什么是现在\n${item.whyNow}\n\n## 目标读者\n${item.targetAudience}\n\n## 内容角度\n${item.angle}\n\n## 核心观点\n${item.pointOfView}${lockSection}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}\n\n## 来源\n${(JSON.parse(item.sourceIds) as string[]).map((id) => `- wmb-source://${id}`).join('\n')}`;
+}
+
+export function createInitialVersionForProjectFromPlanItem(
+  database: DatabaseSync,
+  projectId: string,
+  planItemId: string
+): { id: string; versionNumber: number; createdAt: string; author: 'user' | 'ai'; body: string } {
+  const project = database.prepare('SELECT plan_item_id AS planItemId FROM content_projects WHERE id=?').get(projectId) as { planItemId: string | null } | undefined;
+  if (!project) throw Object.assign(new Error('content_project_not_found'), { code: 'NOT_FOUND' });
+  if (project.planItemId !== planItemId) throw Object.assign(new Error('project_plan_item_mismatch'), { code: 'PROJECT_PLAN_ITEM_MISMATCH' });
+  if (database.prepare('SELECT 1 FROM content_versions WHERE project_id=? LIMIT 1').get(projectId)) {
+    throw Object.assign(new Error('content_version_already_exists'), { code: 'CONTENT_VERSION_ALREADY_EXISTS' });
+  }
+  const item = readPlanItemInitialVersionSeed(database, planItemId);
+  const body = initialVersionBody(item);
+  const version = insertCoreVersion(database, projectId, body);
+  recordCoreDraftUsage(database, { contentVersionId: version.id, projectId, planItemId, author: 'ai', reason: 'approved_chain_repair' });
+  database.prepare('UPDATE content_projects SET revision=revision+1 WHERE id=?').run(projectId);
+  return { ...version, body };
+}
+
 export function createProjectFromPlanItem(database: DatabaseSync, planItemId: string, transaction = true): { id: string; revision: number; created: boolean } {
   const existing = database.prepare('SELECT id, revision FROM content_projects WHERE plan_item_id = ?').get(planItemId) as { id: string; revision: number } | undefined;
   if (existing) return { ...existing, created: false };
-  const item = database.prepare(`SELECT topic_id AS topicId, title, point_of_view AS pointOfView,
-    title_guidance AS titleGuidance, opening_guidance AS openingGuidance, structure_guidance AS structureGuidance,
-    source_ids_json AS sourceIds FROM plan_items WHERE id = ?`).get(planItemId) as {
-      topicId: string | null; title: string; pointOfView: string; titleGuidance: string;
-      openingGuidance: string; structureGuidance: string; sourceIds: string;
-    } | undefined;
-  if (!item) throw new Error('内容机会不存在。');
+  const item = readPlanItemInitialVersionSeed(database, planItemId);
   if (transaction) database.exec('BEGIN IMMEDIATE');
   try {
     const project = createContentProject(database, {
@@ -396,7 +594,7 @@ export function createProjectFromPlanItem(database: DatabaseSync, planItemId: st
       planItemId,
       sourceIds: JSON.parse(item.sourceIds) as string[]
     }, false);
-    const version = insertCoreVersion(database, project.id, `# ${item.title}\n\n## 核心观点\n${item.pointOfView}\n\n## 标题建议\n${item.titleGuidance}\n\n## 开头建议\n${item.openingGuidance}\n\n## 内容结构\n${item.structureGuidance}`);
+    const version = insertCoreVersion(database, project.id, initialVersionBody(item));
     // WMB-5215：选题采纳生成的首个核心版本与 usage 包同一事务（携带 plan_item_id 血缘）。
     recordCoreDraftUsage(database, { contentVersionId: version.id, projectId: project.id, planItemId, author: 'ai', reason: 'plan_item_adopt' });
     markCarryDoneForPlanItem(database, planItemId);
@@ -451,6 +649,11 @@ export function saveCoreVersion(
       const latest = getContentProject(database, input.projectId);
       if (transaction) database.exec('ROLLBACK');
       return failure('REVISION_CONFLICT', '内容项目已更新，请重新加载。', { current: latest });
+    }
+    const thesisFailure = coreThesisBoundaryFailure(database, input.projectId, input.body);
+    if (thesisFailure) {
+      if (transaction) database.exec('ROLLBACK');
+      return failure(thesisFailure.reasonCode, thesisFailure.message);
     }
     const latest = database.prepare('SELECT id, body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(input.projectId) as { id: string; body: string } | undefined;
     const version = insertCoreVersion(database, input.projectId, input.body, input.author ?? 'ai');
@@ -515,6 +718,14 @@ export function updateContentProject(
     if (current.revision !== input.expectedRevision) {
       if (transaction) database.exec('ROLLBACK');
       return failure('REVISION_CONFLICT', '内容项目已更新，请重新加载。', { current });
+    }
+    if (input.status === 'completed') {
+      const latestVersion = database.prepare('SELECT body FROM content_versions WHERE project_id=? ORDER BY version_number DESC LIMIT 1').get(input.projectId) as { body: string } | undefined;
+      const thesisFailure = coreThesisBoundaryFailure(database, input.projectId, latestVersion?.body ?? '');
+      if (thesisFailure) {
+        if (transaction) database.exec('ROLLBACK');
+        return failure(thesisFailure.reasonCode, thesisFailure.message);
+      }
     }
     if(input.topicId!==undefined&&input.topicId!==null&&!database.prepare("SELECT id FROM topics WHERE id=? AND status!='archived'").get(input.topicId)){
       if(transaction)database.exec('ROLLBACK');

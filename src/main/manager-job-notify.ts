@@ -3,7 +3,6 @@ import { getAgentTask } from './agent-tasks.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { PiRpcSupervisor } from './pi-runtime.ts';
 import { readPiConversation, writePiConversation } from './pi-conversation.ts';
-import { syncManagerTaskFromJob } from './manager-dispatch.ts';
 import type { RoleJobReportV1 } from './role-job-registry.ts';
 import { buildJobEventEnvelope } from '../shared/job-event-envelope.ts';
 
@@ -136,21 +135,6 @@ export async function notifyDeskJobEvent(input: {
     terminal
   });
 
-  if (runtime && type !== 'job.waiting_resource') {
-    try {
-      await syncManagerTaskFromJob(runtime, {
-        businessDate: input.job.businessDate,
-        jobId: input.job.id,
-        roleId: input.job.roleId,
-        intent: input.job.intent,
-        status: input.job.status,
-        taskId,
-        brief: input.job.brief
-      });
-    } catch (error) {
-      console.error('[manager-job-notify] checkpoint sync failed', error);
-    }
-  }
 
   if (!terminal || input.suppressDeskPrompt) return;
 

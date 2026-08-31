@@ -52,12 +52,12 @@ export async function prepareAgentXListOperation(
 }
 
 export function registerXListTools(server: McpServer, database: () => DatabaseSync, runtime?: ActiveWorkspaceRuntime): void {
-  const selectedXListBrowser = async () => {
+  const selectedXListBrowser = async (options: { allowMissingExpectedAccount?: boolean } = {}) => {
     const db = database();
     try {
       const workspaceId = (db.prepare("SELECT value FROM app_meta WHERE key='workspace_id'").get() as { value?: string } | undefined)?.value;
       if (!workspaceId) throw Object.assign(new Error('当前工作空间身份缺失。'), { code: 'BROWSER_NEEDS_USER' });
-      const config = await resolveSelectedXListBrowser(db);
+      const config = await resolveSelectedXListBrowser(db, options);
       return { ...config, workspaceId };
     } finally { db.close(); }
   };
@@ -65,8 +65,8 @@ export function registerXListTools(server: McpServer, database: () => DatabaseSy
     try { return text(await work()); }
     catch (error) { const explicit = (error as { code?: string })?.code; const code = explicit ?? (error instanceof XListNeedsUserError ? 'BROWSER_NEEDS_USER' : error instanceof Error && error.name === 'XListSupersededError' ? 'INVALID_STATE' : 'VALIDATION_ERROR'); return text({ ok: false, data: null, error: { code, message: error instanceof Error ? error.message : String(error), details: { state: code === 'BROWSER_NEEDS_USER' || code === 'ACCOUNT_MISMATCH' ? 'needs_user' : 'failed' } } }); }
   };
-  const selectedXListAccount = async () => {
-    const config = await selectedXListBrowser();
+  const selectedXListAccount = async (options: { allowMissingExpectedAccount?: boolean } = {}) => {
+    const config = await selectedXListBrowser(options);
     const index = await readXListIndex(config);
     return { config: { ...config, accountKey: index.accountKey }, accountKey: index.accountKey };
   };
@@ -80,20 +80,20 @@ export function registerXListTools(server: McpServer, database: () => DatabaseSy
   server.registerTool('x_lists.read_index', {
     description: '读取当前专用 X 登录账号可见的 List 索引（真实网页，不是仅本地绑定）。只读。后台静默浏览器，含拟人间隔。',
     inputSchema: {}
-  }, async () => xListResult(async () => readXListIndex(await selectedXListBrowser())));
+  }, async () => xListResult(async () => readXListIndex(await selectedXListBrowser({ allowMissingExpectedAccount: true }))));
   server.registerTool('x_lists.read_detail', {
     description: '读取指定 X List 的详情。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => xListResult(async () => readXListDetail(await selectedXListBrowser(), list_id)));
+  }, async ({ list_id }) => xListResult(async () => readXListDetail(await selectedXListBrowser({ allowMissingExpectedAccount: true }), list_id)));
   server.registerTool('x_lists.read_members', {
     description: '读取指定 X List 当前可见成员。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string() }
-  }, async ({ list_id }) => xListResult(async () => readXListMembers(await selectedXListBrowser(), list_id)));
+  }, async ({ list_id }) => xListResult(async () => readXListMembers(await selectedXListBrowser({ allowMissingExpectedAccount: true }), list_id)));
   server.registerTool('x_lists.read_timeline', {
     description: '读取指定 X List 当前可见动态，最多 50 条。只读真实网页。后台静默浏览器，含拟人间隔。',
     inputSchema: { list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
   }, async ({ list_id, limit }) => xListResult(async () => {
-    const { config } = await selectedXListAccount();
+    const { config } = await selectedXListAccount({ allowMissingExpectedAccount: true });
     return readXListTimeline(config, list_id, limit ?? 50);
   }));
   server.registerTool('x_lists.list_bindings', {
@@ -104,7 +104,7 @@ export function registerXListTools(server: McpServer, database: () => DatabaseSy
     description: '读取一条 X List 操作提议、冻结快照和执行状态。只读。',
     inputSchema: { id: z.string() }
   }, async ({ id }) => xListResult(async () => {
-    const { accountKey } = await selectedXListAccount();
+    const { accountKey } = await selectedXListAccount({ allowMissingExpectedAccount: true });
     const db = database();
     try {
       const operation = getXListOperation(db, id);
@@ -143,7 +143,7 @@ export function registerXListTools(server: McpServer, database: () => DatabaseSy
     description: '采集当前根已启用 List 的有限最新动态到现有资料库。只操作当前根绑定，不含确认。',
     inputSchema: { account_key: z.string(), list_id: z.string(), limit: z.number().int().min(1).max(50).optional() }
   }, async ({ account_key, list_id, limit }) => xListResult(async () => {
-    const { config, accountKey } = await selectedXListAccount();
+    const { config, accountKey } = await selectedXListAccount({ allowMissingExpectedAccount: true });
     if (!accountMatches(accountKey, account_key)) return { ok: false, data: null, error: { code: 'ACCOUNT_MISMATCH', message: '当前浏览器账号与绑定账号不一致。' } };
     const db = database();
     try { return await collectBoundXListTimeline(db, config, { accountKey: account_key, listId: list_id, limit }); }
@@ -166,7 +166,7 @@ export function registerXListTools(server: McpServer, database: () => DatabaseSy
     inputSchema: { request_id: z.string(), task_id: z.string(), grant_id: z.string(), worker_lease_id: z.string().optional(), binding_ids: z.array(z.string()).min(1).max(50) }
   }, async ({ request_id, task_id, grant_id, worker_lease_id, binding_ids }) => xListResult(async () => {
     if (!runtime) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_BUSY' });
-    const { config } = await selectedXListAccount();
+    const { config } = await selectedXListAccount({ allowMissingExpectedAccount: true });
     const readResult = await readXObservationSessionStart(runtime.database, config, { requestId: request_id, bindingIds: binding_ids });
     return dispatchBusinessCommand(runtime, {
       command: 'x_lists.observation_start', requestId: request_id,

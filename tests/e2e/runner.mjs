@@ -35,10 +35,21 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { cleanupE2eArtifacts } from '../../scripts/cleanup-e2e-artifacts.mjs';
 import { E2E_ROOT, REPO_ROOT, RUNTIME_DIR, delay, withApp } from './harness.mjs';
 
 const JOURNEYS_FILE = path.join(E2E_ROOT, 'user-journeys.json');
 const DEFAULT_RESULTS_OUT = path.join(RUNTIME_DIR, 'results.json');
+function runCleanup(stage) {
+  try {
+    const report = cleanupE2eArtifacts({ includeDataRoot: false });
+    const bytes = (items) => items.reduce((total, item) => total + Number(item.bytes ?? 0), 0);
+    console.log(`[runner] cleanup ${stage}: removed=${report.removed.length}/${bytes(report.removed)}B planned=${report.planned.length}/${bytes(report.planned)}B skipped=${report.skipped.length} errors=${report.errors.length}`);
+    if (report.errors.length) console.warn(`[runner] cleanup ${stage} warnings: ${report.errors.map((item) => `${item.path}: ${item.reason}`).join('; ')}`);
+  } catch (error) {
+    console.warn(`[runner] cleanup ${stage} unavailable: ${String(error?.message ?? error)}`);
+  }
+}
 
 function parseArgs(argv) {
   const options = { journeys: [], files: [], scenarios: [], maxParallel: 1, timeoutMs: 240_000, list: false, resultsOut: DEFAULT_RESULTS_OUT, keepRuntime: false };
@@ -210,6 +221,7 @@ async function runMatrixMode(options) {
 
   mkdirSync(path.dirname(options.resultsOut), { recursive: true });
   writeFileSync(options.resultsOut, `${JSON.stringify(results, null, 2)}\n`);
+  runCleanup('after');
   const passed = Object.values(results.journeys).filter((record) => record.status === 'passed').length;
   const failed = Object.values(results.journeys).filter((record) => record.status === 'failed').length;
   const skipped = Object.values(results.journeys).filter((record) => record.status === 'skipped').length;
@@ -257,6 +269,7 @@ async function runFileMode(options) {
 
   mkdirSync(path.dirname(options.resultsOut), { recursive: true });
   writeFileSync(options.resultsOut, `${JSON.stringify(results, null, 2)}\n`);
+  runCleanup('after');
   const passed = Object.values(results.journeys).filter((record) => record.status === 'passed').length;
   const failed = Object.values(results.journeys).filter((record) => record.status === 'failed').length;
   printSummary(results, { resultsOut: options.resultsOut, passed, failed, skipped: 0, total: Object.keys(results.journeys).length });
@@ -264,6 +277,7 @@ async function runFileMode(options) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  runCleanup('before');
   mkdirSync(RUNTIME_DIR, { recursive: true });
   if (options.files.length) await runFileMode(options);
   else await runMatrixMode(options);

@@ -15,9 +15,12 @@ import { dispatchLaneGate } from '../src/main/source-commands.ts';
 import { createSourceFeed, ensureRegistrySourceFeed, getSource, upsertSource } from '../src/main/sources.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
+import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const owner = { type: 'owner_ui', id: 'renderer', label: 'Owner UI' };
 const LANE = 'wemedia-intelligence-engine';
+const scoreReasonsForTest = JSON.stringify(scoredReasons(82));
+const editorialDecisionForTest = JSON.stringify(editorialDecision('p'));
 
 async function seedGateFixture(runtime) {
   // 活动运行时写保护：fixture 落库走 test 命令（与 lane-gate-contract 的 archive_fixture 同模式）。
@@ -240,8 +243,8 @@ test('savePlanFromSynthesisOutput drops plan items referencing sources outside t
     assert.equal(started.ok, true);
     const sessionFile = path.join(root, 'session.jsonl');
     const planText = '\`\`\`json\n{"planDate":"2026-08-07","summary":"两个候选","items":[\n' +
-      `  {"title":"引用有效资料","priority":1,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${kept.id}"]},\n` +
-      `  {"title":"引用已移出资料","priority":2,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${removed.id}"]}\n` +
+      `  {"title":"引用有效资料","priority":1,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${kept.id}"],"scoreReasons":${scoreReasonsForTest},"editorialDecision":${editorialDecisionForTest}},\n` +
+      `  {"title":"引用已移出资料","priority":2,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${removed.id}"],"scoreReasons":${scoreReasonsForTest},"editorialDecision":${editorialDecisionForTest}}\n` +
       ']}\n\`\`\`';
     await import('node:fs/promises').then((fs) => fs.writeFile(sessionFile, `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: planText }] } })}\n`, 'utf8'));
     const saved = await savePlanFromSynthesisOutput(database, started.data, sessionFile, agentRequestId(started.data.id, 'plan'), undefined, null, 0, new Set([kept.id]));

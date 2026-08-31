@@ -87,7 +87,7 @@ async function editorBody(editor: Locator): Promise<string> {
 }
 
 async function connect(cdpUrl: string) {
-  const load = createRequire(__filename);
+  const load = createRequire(import.meta.url);
   const isPackaged = process.versions.electron
     ? (load('electron') as { app: App }).app.isPackaged
     : false;

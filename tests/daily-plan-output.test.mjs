@@ -11,7 +11,11 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { ensureAutomaticTaskGrant } from '../src/main/task-grants.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
+import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
+const scoredReasonsFixture = scoredReasons(82);
+const scoredReasonsJson = JSON.stringify(scoredReasonsFixture);
+const editorialDecisionJson = JSON.stringify(editorialDecision('可靠性比分数重要'));
 const validBlock = `\`\`\`json
 {
   "planDate": "2026-08-06",
@@ -30,7 +34,9 @@ const validBlock = `\`\`\`json
     "openingGuidance": "开头",
     "structureGuidance": "结构",
     "effortEstimate": "约 40 分钟",
-    "sourceIds": ["src-1"]
+    "sourceIds": ["src-1"],
+    "scoreReasons": ${scoredReasonsJson},
+    "editorialDecision": ${editorialDecisionJson}
   }]
 }
 \`\`\``;

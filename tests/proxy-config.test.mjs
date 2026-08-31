@@ -28,21 +28,26 @@ test('isLoopbackUrl exempts loopback and private ranges, flags public', () => {
   assert.equal(__test.isLoopbackUrl('ftp://example.com/'), true); // 非 http(s) 一律不走代理
 });
 
-test('initSystemProxy with env proxy sets source=env and injects child env', async () => {
+test('initSystemProxy with env proxy preserves distinct child variables', async () => {
   const previous = { ...process.env };
-  process.env.HTTPS_PROXY = 'http://proxy.test:9999';
+  process.env.HTTP_PROXY = 'http://http-proxy.test:8080';
+  process.env.HTTPS_PROXY = 'http://https-proxy.test:8443';
+  process.env.ALL_PROXY = 'http://fallback-proxy.test:1080';
   try {
     const config = await initSystemProxy();
     assert.equal(config.source, 'env');
-    assert.equal(config.proxyUrl, 'http://proxy.test:9999');
+    assert.equal(config.proxyUrl, 'http://https-proxy.test:8443');
     const childEnv = proxyEnvForChildren();
-    assert.equal(childEnv.HTTPS_PROXY, 'http://proxy.test:9999');
+    assert.equal(childEnv.HTTPS_PROXY, 'http://https-proxy.test:8443');
+    assert.equal(childEnv.HTTP_PROXY, 'http://http-proxy.test:8080');
+    assert.equal(childEnv.ALL_PROXY, 'http://fallback-proxy.test:1080');
     assert.match(childEnv.NO_PROXY, /127\.0\.0\.1/);
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
     Object.assign(process.env, previous);
   }
 });
+
 
 test('initSystemProxy without env or resolver stays direct and emits no child env', async () => {
   const previous = { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTP_PROXY, ALL_PROXY: process.env.ALL_PROXY };

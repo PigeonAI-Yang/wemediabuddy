@@ -5,6 +5,7 @@ import test from 'node:test';
 test('Discover shows content while Settings owns channel configuration', async () => {
   const discover = await readFile(new URL('../src/renderer/discover-view.tsx', import.meta.url), 'utf8');
   const listContent = await readFile(new URL('../src/renderer/x-lists-view.tsx', import.meta.url), 'utf8');
+  const zhihuHot = await readFile(new URL('../src/renderer/zhihu-hot-view.tsx', import.meta.url), 'utf8');
   const settings = await readFile(new URL('../src/renderer/settings-view.tsx', import.meta.url), 'utf8');
   const listSettings = await readFile(new URL('../src/renderer/x-list-display-settings.tsx', import.meta.url), 'utf8');
   const main = await readFile(new URL('../src/renderer/main.tsx', import.meta.url), 'utf8');
@@ -14,8 +15,11 @@ test('Discover shows content while Settings owns channel configuration', async (
   const prd = await readFile(new URL('../PRD.md', import.meta.url), 'utf8');
   const spec = await readFile(new URL('../SPEC.md', import.meta.url), 'utf8');
   assert.doesNotMatch(discover, /IntelligenceChannelsView|情报渠道|List 管理/);
-  assert.match(discover, /rankingsEnabled \? \([\s\S]*?role="navigation" aria-label="发现内容"[\s\S]*?AI 榜单[\s\S]*?X Lists/);
+  assert.match(discover, /role="navigation" aria-label="发现内容"[\s\S]*?AI 榜单[\s\S]*?X Lists[\s\S]*?知乎热题[\s\S]*?<ZhihuHotView/);
   assert.match(discover, /!rankingsEnabled && section === 'rankings' \? 'lists'/);
+  assert.match(zhihuHot, /readZhihuHotCategory[\s\S]*refreshZhihuHotCategory[\s\S]*openExternal/);
+  assert.match(zhihuHot, /索引[\s\S]*简介[\s\S]*讨论[\s\S]*精华[\s\S]*等待回答/);
+  assert.doesNotMatch(zhihuHot, /scanIntelligenceChannel|confirmIntelligenceChannelProposal/);
   assert.match(settings, /section === 'channels'[\s\S]*?<IntelligenceChannelsView settingsMode/);
   assert.doesNotMatch(listContent, /XListComposer|XListConfirmation|接入今日情报|移出今日情报|最终确认并执行|操作记录/);
   assert.match(listSettings, /prepareXListOperation/);

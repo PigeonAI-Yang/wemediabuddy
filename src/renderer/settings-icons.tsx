@@ -11,7 +11,8 @@ export type SettingsIconName =
   | 'about'
   | 'moon'
   | 'sun'
-  | 'plus';
+  | 'plus'
+  | 'daily-automation';
 
 const paths: Record<SettingsIconName, React.JSX.Element> = {
   back: <><path d="m15 18-6-6 6-6"/><path d="M9 12h10"/></>,
@@ -27,7 +28,9 @@ const paths: Record<SettingsIconName, React.JSX.Element> = {
   moon: <><path d="M20 15.2A8 8 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z"/></>,
   sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
   plus: <><path d="M12 5v14M5 12h14"/></>,
+  'daily-automation': <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M16 5l1 2M8 5L7 7M16 19l1-2M8 19l-1-2"/><path d="M12 16a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></>,
 };
+
 
 export function SettingsIcon({ name, className }: { name: SettingsIconName; className?: string }): React.JSX.Element {
   return <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{paths[name]}</svg>;

@@ -99,6 +99,31 @@ test('real resolver and readiness consumer use a root non-default binding withou
   } finally { await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
 });
 
+test('read-only readiness ignores absent platform snapshots but rejects an invalid profile', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-browser-readiness-'));
+  try {
+    const configPath = path.join(directory, 'browser-config.json');
+    const registry = openBrowserProfileRegistry(configPath);
+    const profile = createInstallationBrowserProfile({ expectedRevision: registry.revision, label: 'Read-only', configPath }).profile;
+    configureBrowserProfileRegistryPath(configPath);
+    const database = migrateDatabase(path.join(directory, 'wmb.db'));
+    initializeWorkspaceBrowserBinding(database, profile.id);
+    markWorkspaceBrowserBindingVerified(database, {
+      profileId: profile.id, expectedBindingRevision: 1,
+      account: { platform: 'x', accountKey: 'x-owner', displayName: 'X Owner', loginState: 'authenticated' }
+    });
+    assert.equal(workspaceBrowserReady(database, 'x'), true);
+    assert.equal(workspaceBrowserReady(database, 'wechat'), false);
+    assert.equal(workspaceBrowserReady(database, 'zhihu'), false);
+    assert.equal(workspaceBrowserReady(database, 'wechat', { allowMissingExpectedAccount: true }), true);
+    assert.equal(workspaceBrowserReady(database, 'zhihu', { allowMissingExpectedAccount: true }), true);
+    database.prepare("UPDATE workspace_browser_bindings SET profile_id='missing-profile', state='verified' WHERE id='effective'").run();
+    assert.equal(workspaceBrowserReady(database, 'x', { allowMissingExpectedAccount: true }), false);
+    assert.throws(() => resolveBrowserBinding(database));
+    database.close();
+  } finally { await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+});
+
 test('reuses the running browser for the same profile when persisted config has no CDP URL', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-browser-runtime-'));
   const server = createServer((request, response) => response.writeHead(request.url === '/json/version' ? 200 : 404).end('{}'));

@@ -145,6 +145,7 @@ export function assertWorkspaceBrowserIdentity(database: DatabaseSync, input: {
   bindingRevision: number;
   platform: AccountIdentity['platform'];
   accountKey: string;
+  allowMissingExpectedAccount?: boolean;
 }): WorkspaceBrowserBinding {
   const binding = readWorkspaceBrowserBinding(database);
   requireRevision(binding, input.bindingRevision);
@@ -152,8 +153,14 @@ export function assertWorkspaceBrowserIdentity(database: DatabaseSync, input: {
     throw bindingError('BROWSER_PROFILE_MISMATCH', '浏览器档案与当前工作空间绑定不一致。', { expected: binding?.profileId ?? null, actual: input.profileId });
   }
   const expected = binding.expectedAccountSnapshot[input.platform];
-  if (!expected || expected.accountKey !== input.accountKey) {
-    throw bindingError('ACCOUNT_MISMATCH', '浏览器账号与当前工作空间预期账号不一致。', { expected: expected?.accountKey ?? null, actual: input.accountKey });
+  if (!expected) {
+    if (!input.allowMissingExpectedAccount) {
+      throw bindingError('ACCOUNT_MISMATCH', '浏览器账号与当前工作空间预期账号不一致。', { expected: null, actual: input.accountKey });
+    }
+    return binding;
+  }
+  if (expected.accountKey !== input.accountKey) {
+    throw bindingError('ACCOUNT_MISMATCH', '浏览器账号与当前工作空间预期账号不一致。', { expected: expected.accountKey, actual: input.accountKey });
   }
   if (expected.browserProfileId !== binding.profileId) {
     throw bindingError('BROWSER_PROFILE_MISMATCH', '预期账号快照属于其他浏览器档案。', { expected: binding.profileId, actual: expected.browserProfileId });

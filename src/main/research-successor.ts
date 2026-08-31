@@ -5,25 +5,27 @@
  * - 终态处理器 enqueue：INSERT OR IGNORE + dedupe_key UNIQUE ⇒ 每父工单至多一个自动续派（重放/重启幂等）。
  * - succeeded（全部 required claim 已判定）→ 续派直接 pending；partial（含 unresolved/source_unavailable
  *   required claim）→ 生产运行时自动采用最保守的 narrow 决策后进入 pending，不等待人工点击。
- * - 消费：rebuildRoleJobRequest(父任务 context_refs) + briefSuffix → JobSpawner 派生**原角色**续派工单
- *   （同一边界、同一 roleId、新 jobId）；research→research 由派生层（parentRoleId 白名单）拒绝。
+ * - 消费：校验父任务 lineage 后提交带稳定 requestId 的 Actor stage_d intent，由 Actor 负责原角色续派与边界校验。
+ *   不再由本模块重建 RoleJobRequest 或直接派工；research→research 仍由 Actor 合同拒绝。
  * - failed/cancelled 不续派（enqueue 状态门 fail-closed）。
- * - 重启只消费一次：消费先标记 running 再 spawn；reconcile 兜底「任务已终态但续派未入队」的崩溃窗口。
+ * - 重启只消费一次：续派 intent 以 successor job/attempt 身份幂等提交；既有 stale-handle 检查只读旧池状态。
  */
 
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { JobSpawner } from './job-spawner.ts';
+import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
 import { dispatchBusinessCommand } from './business-command.ts';
 import { getAgentTask } from './agent-tasks.ts';
-import { rebuildRoleJobRequest } from './job-object-boundary.ts';
 import { parseResearchEvidencePack, readResearchGap, type ResearchEvidencePack } from './research-task-state.ts';
 import type { ResearchGap } from './role-job-registry.ts';
 import { failure, success, type CommandResult } from './result.ts';
 import { recordOperation } from './operations.ts';
 
 export const RESEARCH_SUCCESSOR_KIND = 'research_successor' as const;
+type ActorIntentReceipt = Readonly<{ ok: boolean; code?: string | null; message?: string | null }>;
+export type ResearchSuccessorIntentSubmitter = (input: SubmitWorkspaceOrchestratorIntentInput) => Promise<ActorIntentReceipt>;
 
 /** 三动作（等你批决策）：收窄范围 / 手动补料 / 接受标注待核实。 */
 export type ResearchSuccessorDecision = 'narrow' | 'supplement' | 'accept';
@@ -315,35 +317,70 @@ function dueResearchSuccessors(database: DatabaseSync, now: string): ResearchSuc
   return rows.map(parseRow);
 }
 
-/** 消费：标记 running（先于 spawn——崩溃后不重消费）→ rebuildRoleJobRequest + briefSuffix → 原角色续派。 */
-export async function kickResearchSuccessors(runtime: ActiveWorkspaceRuntime, spawner: JobSpawner): Promise<number> {
+/** 消费：先确认父任务 lineage，再提交带完整身份的 Actor stage_d intent。 */
+export async function kickResearchSuccessors(runtime: ActiveWorkspaceRuntime, submitIntent: ResearchSuccessorIntentSubmitter): Promise<number> {
   const now = new Date().toISOString();
   let count = 0;
   for (const item of dueResearchSuccessors(runtime.database, now)) {
     try {
-      const existing = spawner.get(item.id);
-      if (existing) continue; // 已入池（含 waiting_resource/running）：不重复消费
-      if (spawner.getMaxWorkers() <= 0) continue; // 派工关闭：留 pending，不消费
       const parentTask = getAgentTask(runtime.database, item.payload.parentTaskId);
-      if (!parentTask) throw Object.assign(new Error(`父任务 ${item.payload.parentTaskId} 不存在，无法重建续派。`), { code: 'RESEARCH_SUCCESSOR_PARENT_MISSING' });
-      const request = rebuildRoleJobRequest(parentTask.contextRefs);
-      if (!request) throw Object.assign(new Error('父任务 context_refs 无法重建原角色工单请求（fail-closed）。'), { code: 'RESEARCH_SUCCESSOR_REBUILD_FAILED' });
-      if (request.roleId !== item.payload.parentRoleId) {
-        throw Object.assign(new Error(`续派角色 ${request.roleId} 与合同 ${item.payload.parentRoleId} 不一致（禁止 research→research/角色漂移）。`), { code: 'RESEARCH_SUCCESSOR_ROLE_MISMATCH' });
+      if (!parentTask) throw Object.assign(new Error(`父任务 ${item.payload.parentTaskId} 不存在，无法提交研究续派 intent。`), { code: 'RESEARCH_SUCCESSOR_PARENT_MISSING' });
+      const researchTask = getAgentTask(runtime.database, item.payload.researchTaskId);
+      const parentRefs = parentTask.contextRefs ?? {};
+      const researchRefs = researchTask?.contextRefs ?? {};
+      const refs = { ...parentRefs, ...researchRefs };
+      const readIdentityRef = (camel: string, snake: string): string => {
+        const values: string[] = [];
+        for (const source of [parentRefs, researchRefs]) {
+          for (const key of [camel, snake]) {
+            const value = source[key];
+            if (typeof value === 'string' && value.trim()) values.push(value.trim());
+          }
+        }
+        const unique = [...new Set(values)];
+        if (unique.length > 1) {
+          throw Object.assign(new Error(`MANAGER_ORCHESTRATION_MISMATCH: successor ${camel} 在 parent/research lineage 中冲突。`), { code: 'MANAGER_ORCHESTRATION_MISMATCH' });
+        }
+        return unique[0] ?? '';
+      };
+      const rootRequestId = readIdentityRef('rootRequestId', 'root_request_id');
+      const orchestrationId = readIdentityRef('orchestrationId', 'orchestration_id');
+      const stageRequestId = readIdentityRef('stageRequestId', 'stage_request_id');
+      if (!rootRequestId || !orchestrationId || !stageRequestId) {
+        throw Object.assign(new Error('MANAGER_ORCHESTRATION_MISMATCH: 研究续派缺少 parent/root/stage identity，拒绝按日期或 latest 任务猜测。'), { code: 'MANAGER_ORCHESTRATION_MISMATCH' });
       }
+      const identity = {
+        parentJobId: item.payload.parentJobId,
+        parentTaskId: item.payload.parentTaskId,
+        researchTaskId: item.payload.researchTaskId,
+        successorJobId: item.id,
+        parentRoleId: item.payload.parentRoleId,
+        gapId: typeof refs.gapId === 'string' ? refs.gapId : undefined,
+        rootRequestId,
+        rootGeneration: Number.isInteger(refs.rootGeneration) ? refs.rootGeneration : Number.isInteger(refs.root_generation) ? refs.root_generation : undefined,
+        rootInputHash: typeof refs.rootInputHash === 'string' ? refs.rootInputHash : typeof refs.root_input_hash === 'string' ? refs.root_input_hash : undefined,
+        managerTaskId: typeof refs.managerTaskId === 'string' ? refs.managerTaskId : typeof refs.manager_task_id === 'string' ? refs.manager_task_id : undefined,
+        orchestrationId,
+        parentStageRequestId: typeof refs.parentStageRequestId === 'string' ? refs.parentStageRequestId : typeof refs.parent_stage_request_id === 'string' ? refs.parent_stage_request_id : undefined,
+        stageRequestId,
+        sourceSnapshotHash: typeof refs.sourceSnapshotHash === 'string' ? refs.sourceSnapshotHash : typeof refs.source_snapshot_hash === 'string' ? refs.source_snapshot_hash : undefined,
+        retryGeneration: Number.isInteger(refs.retryGeneration) ? refs.retryGeneration : Number.isInteger(refs.retry_generation) ? refs.retry_generation : undefined,
+        attempt: item.attempts
+      };
       const claimed = await claimResearchSuccessor(runtime, item.id, item.attempts, now);
       if (!claimed) continue; // 并发消费者已认领
-      try {
-        spawner.spawn({ ...request, brief: `${request.brief}\n\n${item.payload.briefSuffix}` }, item.id);
-        count += 1;
-      } catch (error) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'JOB_SPAWN_DISABLED') {
-          // 认领与 spawn 之间派工被关闭：回滚为 pending（可恢复），不算消费。
-          await revertResearchSuccessorPending(runtime, item.id, now);
-          continue;
-        }
-        throw error;
-      }
+      const logicalInput = { businessDate: parentTask.businessDate, source: 'orphan_reconcile', ...identity };
+      const receipt = await submitIntent({
+        producerId: 'reconcile.research-successor-scheduler',
+        businessDate: parentTask.businessDate,
+        requestId: `reconcile.research-successor-scheduler:${item.id}:${item.attempts}`,
+        action: 'stage_d',
+        logicalInput,
+        payload: logicalInput,
+        rootMode: 'scheduler'
+      });
+      if (!receipt.ok) throw Object.assign(new Error(receipt.message ?? receipt.code ?? 'RESEARCH_SUCCESSOR_INTENT_REJECTED'), { code: receipt.code ?? 'RESEARCH_SUCCESSOR_INTENT_REJECTED' });
+      count += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await failResearchSuccessor(runtime, item.id, message, now);
@@ -356,15 +393,6 @@ async function claimResearchSuccessor(runtime: ActiveWorkspaceRuntime, id: strin
   return runSuccessorWrite(runtime, 'jobs.claim_research_successor', id, (database) => markResearchSuccessorRunning(database, id, expectedAttempts, now));
 }
 
-async function revertResearchSuccessorPending(runtime: ActiveWorkspaceRuntime, id: string, now: string): Promise<void> {
-  await runSuccessorWrite(runtime, 'jobs.revert_research_successor', id, (database) => {
-    const result = database.prepare(
-      `UPDATE jobs SET status = 'pending', attempts = attempts - 1, started_at = NULL, updated_at = ?
-       WHERE id = ? AND kind = ? AND status = 'running'`
-    ).run(now, id, RESEARCH_SUCCESSOR_KIND);
-    return Number(result.changes) === 1;
-  });
-}
 
 async function failResearchSuccessor(runtime: ActiveWorkspaceRuntime, id: string, error: string, now: string): Promise<void> {
   await runSuccessorWrite(runtime, 'jobs.fail_research_successor', id, (database) => markResearchSuccessorFailed(database, id, error, now));
@@ -551,16 +579,16 @@ export async function reconcileResearchSuccessorsViaRuntime(runtime: ActiveWorks
   );
 }
 
-/** 调度器：启动即 reconcile + stale-running 恢复 + kick，之后每 10s 一轮（对齐 topic-reproposal 范式）。 */
-export async function startResearchSuccessorScheduler(runtime: ActiveWorkspaceRuntime, spawner: JobSpawner): Promise<() => void> {
+/** 调度器：启动即 reconcile + stale-running 恢复 + Actor intent kick，之后每 10s 一轮。 */
+export async function startResearchSuccessorScheduler(runtime: ActiveWorkspaceRuntime, spawner: JobSpawner, submitIntent: ResearchSuccessorIntentSubmitter): Promise<() => void> {
   await reconcileResearchSuccessorsViaRuntime(runtime);
   await reconcileStaleRunningResearchSuccessorsViaRuntime(runtime, spawner);
-  await kickResearchSuccessors(runtime, spawner);
+  await kickResearchSuccessors(runtime, submitIntent);
   const timer = setInterval(() => {
     if (!runtime.isActive) return;
     void reconcileResearchSuccessorsViaRuntime(runtime).catch((error) => console.error('[research-successor-reconcile]', error));
     void reconcileStaleRunningResearchSuccessorsViaRuntime(runtime, spawner).catch((error) => console.error('[research-successor-stale]', error));
-    void kickResearchSuccessors(runtime, spawner).catch((error) => console.error('[research-successor-scheduler]', error));
+    void kickResearchSuccessors(runtime, submitIntent).catch((error) => console.error('[research-successor-scheduler]', error));
   }, 10_000);
   if (typeof timer.unref === 'function') timer.unref();
   return () => clearInterval(timer);

@@ -14,6 +14,7 @@ import { dispatchIssueTaskGrant } from '../src/main/task-grants.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { assertPublishingPlatforms, insertWorkspaceProfile, OFFICIAL_WORKSPACE_TEMPLATES } from '../src/main/workspace-profiles.ts';
 import { writeRootWorkspaceId } from '../src/main/workspaces.ts';
+import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 test('workspace publishing subsets reject new work while root-local List sources keep the X chain', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'wmb-platform-subsets-'));
@@ -104,7 +105,7 @@ function listChain(db, accountKey, listId, title) {
   return { sourceId: source.id, projectId: project.id, contentVersionId: project.contentVersionId };
 }
 
-const planItem = (sourceId, platforms) => ({ title: '选题', priority: 1, whyNow: '当前更新', timeliness: '今天', targetAudience: '受众', angle: '角度', pointOfView: '判断', platforms, formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30 分钟', sourceIds: [sourceId] });
+const planItem = (sourceId, platforms) => ({ title: '选题', priority: 1, whyNow: '当前更新', timeliness: '今天', targetAudience: '受众', angle: '角度', pointOfView: '判断', platforms, formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30 分钟', sourceIds: [sourceId], scoreReasons: scoredReasons(80), editorialDecision: editorialDecision('判断') });
 const planInput = (sourceId, platforms) => ({ request_id: `plan-${platforms.join('-')}`, plan_date: '2026-08-03', summary: 'denied', items: [planItem(sourceId, platforms)] });
 const counts = (db) => ({ plans: db.prepare('SELECT COUNT(*) count FROM plans').get().count, versions: db.prepare('SELECT COUNT(*) count FROM platform_versions').get().count });
 

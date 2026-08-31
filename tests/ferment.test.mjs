@@ -9,7 +9,7 @@ import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { getToday } from '../src/main/workbench.ts';
 import { listFermentingBundle, refreshWorkCarry, setCarryState } from '../src/main/ferment.ts';
 import { createProjectFromPlanItem } from '../src/main/content.ts';
-import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国产模型的 Agent 时刻到了吗？') {
   const source = upsertSource(database, {
@@ -40,7 +40,7 @@ function seedPlan(database, planDate, title = 'DeepSeek-V4-Flash 正式版：国
       effortEstimate: '2h',
       sourceIds: [source.id],
       topicId,
-      scoreReasons: scoredReasons()
+      scoreReasons: scoredReasons(), editorialDecision: editorialDecision('国产模型拐点')
     }]
   });
   const planItemId = database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id).id;

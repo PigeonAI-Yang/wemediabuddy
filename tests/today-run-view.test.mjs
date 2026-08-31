@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deriveTodayRunView, isManagerNonterminal, mapTaskToStep, projectManagerTaskForToday } from '../src/renderer/today-run-view.ts';
+import { deriveTodayRunView, isManagerNonterminal, mapTaskToStep, projectManagerTaskForToday, selectTruthfulTask } from '../src/renderer/today-run-view.ts';
 
 const base = {
   task: null,
@@ -43,15 +43,24 @@ test('idle without plan uses start CTA and empty guidance', () => {
   assert.match(view.opportunityEmptyBody, /开始今日情报/);
 });
 
-test('idle with only a historical plan labels it as recent and keeps today counts at zero', () => {
+test('historical plan without a visible recommendation renders actionable start guidance', () => {
+  const view = deriveTodayRunView({ ...base, hasRecentPlan: false });
+  assert.equal(view.step, 'idle');
+  assert.equal(view.primaryCta.label, '开始今日情报');
+  assert.equal(view.showOpportunityEmpty, true);
+  assert.notEqual(view.opportunityEmptyTitle.trim(), '');
+  assert.notEqual(view.opportunityEmptyBody.trim(), '');
+  assert.equal(view.stats?.find((stat) => stat.label === '今日新增来源')?.value, '0');
+  assert.equal(view.stats?.find((stat) => stat.label === '今日内容机会')?.value, '0');
+  assert.doesNotMatch(view.headline + view.detail, /已根据入库资料整理出/);
+});
+
+test('visible carried recommendation keeps the recent-plan state', () => {
   const view = deriveTodayRunView({ ...base, hasRecentPlan: true });
   assert.equal(view.step, 'idle');
   assert.equal(view.primaryCta.label, '开始今日情报');
   assert.equal(view.showOpportunityEmpty, false);
   assert.equal(view.headline, '当前显示最近可批选题');
-  assert.equal(view.stats?.find((stat) => stat.label === '今日新资料')?.value, '0');
-  assert.equal(view.stats?.find((stat) => stat.label === '今日内容机会')?.value, '0');
-  assert.doesNotMatch(view.headline + view.detail, /已根据入库资料整理出/);
 });
 
 test('current opportunity pool opens studio and offers rescan', () => {
@@ -64,7 +73,28 @@ test('current opportunity pool opens studio and offers rescan', () => {
   assert.equal(view.showOpportunityEmpty, false);
 });
 
-test('scanning exposes progress not a primary start button', () => {
+test('current plan without a visible recommendation never renders an empty title/body or claims approval availability', () => {
+  const view = deriveTodayRunView({ ...base, hasTodayPlan: true, opportunityCount: 0 });
+  assert.notEqual(view.opportunityEmptyTitle.trim(), '');
+  assert.notEqual(view.opportunityEmptyBody.trim(), '');
+  assert.notEqual(view.statusLine, '当前有可批选题');
+});
+test('pending draft count keeps approval CTA after manager projection is unavailable', () => {
+  const view = deriveTodayRunView({
+    ...base,
+    task: { id: 'latest', status: 'partial', phase: 'partial' },
+    pendingOpportunityCount: 4,
+    opportunityCount: 0,
+    hasTodayPlan: false
+  });
+  assert.equal(view.step, 'needs_user');
+  assert.equal(view.primaryCta.kind, 'open_manager');
+  assert.equal(view.primaryCta.label, '查看待确认选题');
+  assert.match(view.detail, /4 条选题等待确认/);
+});
+
+
+test('scanning exposes progress with an actionable conversation CTA', () => {
   const view = deriveTodayRunView({
     ...base,
     task: {
@@ -74,7 +104,8 @@ test('scanning exposes progress not a primary start button', () => {
     }
   });
   assert.equal(view.step, 'scanning');
-  assert.equal(view.primaryCta.kind, 'none');
+  assert.equal(view.primaryCta.kind, 'continue');
+  assert.equal(view.primaryCta.label, '对话中 · 查看进度');
   assert.equal(view.headline, '正在扫描情报渠道');
   assert.match(view.detail, /OpenAI/);
   assert.equal(view.progress?.currentSource, 'OpenAI');
@@ -89,7 +120,8 @@ test('judging is indeterminate and keeps single narrative', () => {
   assert.equal(view.step, 'judging');
   assert.equal(view.headline, '正在评估新资料并更新选题池');
   assert.equal(view.progress?.indeterminate, true);
-  assert.equal(view.primaryCta.kind, 'none');
+  assert.equal(view.primaryCta.kind, 'continue');
+  assert.equal(view.primaryCta.label, '对话中 · 查看进度');
 });
 
 test('partial CTA continues opportunity-pool update with no fake blockers', () => {
@@ -314,7 +346,7 @@ test('isManagerNonterminal treats running and waiting_human as nonterminal, succ
   assert.equal(isManagerNonterminal({ status: 'succeeded' }), false);
 });
 
-test('waiting-human manager remains serially nonterminal but stops projecting active work', () => {
+test('waiting-human manager projects a stable approval state instead of flashing running then idle', () => {
   const manager = {
     id: 'm1',
     status: 'running',
@@ -323,11 +355,146 @@ test('waiting-human manager remains serially nonterminal but stops projecting ac
   const child = { id: 'planner-1', status: 'succeeded', phase: 'completed', progress: { planned: 5, processed: 5 } };
   const projected = projectManagerTaskForToday(manager, child);
   assert.equal(isManagerNonterminal(manager), true, '主管串行锁保持');
-  assert.equal(projected.running, false, '无运行 child 时不得继续显示工作中');
-  assert.equal(projected.task.id, 'planner-1');
-  assert.equal(projected.task.status, 'succeeded');
-  const view = deriveTodayRunView({ ...base, task: projected.task, hasTodayPlan: true, opportunityCount: 4 });
+  assert.equal(projected.running, false, '等待确认不能伪装成后台运行');
+  assert.equal(projected.task.id, 'm1');
+  assert.equal(projected.task.status, 'needs_user');
+  assert.equal(projected.task.errorCode, 'MANAGER_WAITING_APPROVAL');
+  const view = deriveTodayRunView({
+    ...base,
+    task: projected.task,
+    sameDayTasks: [{ id: 'old-partial', status: 'partial', updatedAt: '2026-08-25T01:00:00.000Z' }],
+    hasTodayPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'needs_user');
+  assert.equal(view.headline, '选题池已更新，等待你确认');
+  assert.equal(view.primaryCta.kind, 'open_manager');
+  assert.equal(view.primaryCta.label, '查看待确认选题');
+});
+
+test('active manager projection is never replaced by earlier same-day partial task', () => {
+  const activeManager = { id: 'manager-new', status: 'running', phase: 'monitor_planner', progress: { message: '正在更新选题池' } };
+  const earlierPartial = { id: 'task-old', status: 'partial', phase: 'validating', errorMessage: '旧任务未完成', updatedAt: '2026-08-25T01:00:00.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: activeManager,
+    sameDayTasks: [earlierPartial],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'judging');
+  assert.equal(view.progress?.label, '正在更新选题池');
+  assert.notEqual(view.headline, '资料已入库，选题池还没更新完');
+});
+
+test('incomplete same-day partial hides empty succeeded: shows 资料已入库 copy', () => {
+  const succeededEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T15:32:24.000Z' };
+  const partialFailed = { id: 't-part', status: 'partial', phase: 'validating', errorMessage: '同一 requestId 已绑定不同命令或输入。', updatedAt: '2026-08-24T13:53:24.000Z', progress: { planned: 20, processed: 20 } };
+  const view = deriveTodayRunView({
+    ...base,
+    task: succeededEmpty,
+    sameDayTasks: [succeededEmpty, partialFailed],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'partial');
+  assert.equal(view.headline, '资料已入库，选题池还没更新完');
+  assert.equal(view.statusLine, '资料已入库，选题池还没更新完');
+  assert.doesNotMatch(view.opportunityEmptyTitle + view.opportunityEmptyBody + view.statusLine, /今天没有新的内容机会|暂无新机会/);
+});
+
+test('incomplete same-day failed hides empty succeeded: shows 今日情报未完成', () => {
+  const succeededEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T15:32:24.000Z' };
+  const failed = { id: 't-fail', status: 'failed', phase: 'validating', errorMessage: '今日情报失败', updatedAt: '2026-08-24T13:53:24.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: succeededEmpty,
+    sameDayTasks: [succeededEmpty, failed],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'failed');
+  assert.equal(view.headline, '今日情报未完成');
+  assert.doesNotMatch(view.opportunityEmptyTitle + view.statusLine, /今天没有新的内容机会/);
+});
+
+test('clean successful empty run without same-day failure shows genuine empty copy', () => {
+  const succeededEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T15:32:24.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: succeededEmpty,
+    sameDayTasks: [succeededEmpty],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
   assert.equal(view.step, 'done');
+  assert.equal(view.headline, '今日侦察完成，暂无新机会');
+  assert.match(view.opportunityEmptyTitle, /今天没有新的内容机会/);
+  assert.equal(view.statusLine, '今日侦察完成，暂无新机会');
+});
+
+test('nonempty approved plan shows normal opportunity view even with same-day failure present', () => {
+  const succeededEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T15:32:24.000Z' };
+  const partialFailed = { id: 't-part', status: 'partial', phase: 'validating', errorMessage: '同一 requestId 已绑定不同命令或输入。', updatedAt: '2026-08-24T13:53:24.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: succeededEmpty,
+    sameDayTasks: [succeededEmpty, partialFailed],
+    hasTodayPlan: true,
+    hasRecentPlan: false,
+    opportunityCount: 3
+  });
+  assert.equal(view.step, 'done');
+  assert.equal(view.headline, '');
   assert.equal(view.statusLine, '当前有可批选题');
-  assert.doesNotMatch(view.statusLine + view.headline, /正在评估|正在更新/);
+  assert.equal(view.showOpportunityEmpty, false);
+  assert.doesNotMatch(view.headline + view.statusLine, /资料已入库|今日情报未完成/);
+});
+
+test('selectTruthfulTask prioritizes latest same-day partial over empty succeeded when no approved plan', () => {
+  const succeeded = { id: 's1', status: 'succeeded', updatedAt: '2026-08-24T15:32:00.000Z' };
+  const partialOld = { id: 'p1', status: 'partial', updatedAt: '2026-08-24T13:00:00.000Z' };
+  const partialNew = { id: 'p2', status: 'partial', errorMessage: '综合整理失败', updatedAt: '2026-08-24T15:30:00.000Z' };
+  const picked = selectTruthfulTask(succeeded, [succeeded, partialOld, partialNew], { hasApprovedToday: false, opportunityCount: 0 });
+  assert.equal(picked?.id, 'p2');
+  const pickedWhenApproved = selectTruthfulTask(succeeded, [succeeded, partialNew], { hasApprovedToday: true, opportunityCount: 2 });
+  assert.equal(pickedWhenApproved?.id, 's1');
+});
+
+test('qualified clean empty success is not overridden by earlier partial: genuine empty', () => {
+  const qualifiedEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T16:00:00.000Z', checkpoint: { emptyQualified: true }, emptyQualified: true };
+  const partialOld = { id: 'p1', status: 'partial', errorMessage: '同一 requestId 已绑定不同命令或输入。', updatedAt: '2026-08-24T13:53:24.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: qualifiedEmpty,
+    sameDayTasks: [qualifiedEmpty, partialOld],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'done');
+  assert.equal(view.headline, '今日侦察完成，暂无新机会');
+  assert.match(view.opportunityEmptyTitle, /今天没有新的内容机会/);
+  assert.doesNotMatch(view.headline + view.statusLine, /资料已入库/);
+  const picked = selectTruthfulTask(qualifiedEmpty, [qualifiedEmpty, partialOld], { hasApprovedToday: false, opportunityCount: 0 });
+  assert.equal(picked?.id, 't-succ');
+});
+
+test('unqualified empty success is overridden by same-day partial (Wan 3.0 case)', () => {
+  const unqualifiedEmpty = { id: 't-succ', status: 'succeeded', phase: 'completed', updatedAt: '2026-08-24T15:32:24.000Z', checkpoint: { emptyQualified: false }, emptyQualified: false };
+  const partial = { id: 'p1', status: 'partial', errorMessage: '同一 requestId 已绑定不同命令或输入。', updatedAt: '2026-08-24T13:53:24.000Z' };
+  const view = deriveTodayRunView({
+    ...base,
+    task: unqualifiedEmpty,
+    sameDayTasks: [unqualifiedEmpty, partial],
+    hasTodayPlan: false,
+    hasRecentPlan: false,
+    opportunityCount: 0
+  });
+  assert.equal(view.step, 'partial');
+  assert.equal(view.headline, '资料已入库，选题池还没更新完');
 });

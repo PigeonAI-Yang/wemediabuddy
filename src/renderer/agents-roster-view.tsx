@@ -27,7 +27,7 @@ export function AgentsRosterView({
   const [projection, setProjection] = useState<CrewProjection | null>(null);
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [pool, setPool] = useState<{ maxWorkers: number; deskSnapshot: { leaseId?: string; taskId?: string | null; roleId?: string | null } | null }>({
-    maxWorkers: 2,
+    maxWorkers: 5,
     deskSnapshot: null
   });
   const [message, setMessage] = useState('');
@@ -59,7 +59,7 @@ export function AgentsRosterView({
         if (Array.isArray(rows)) setRoster(rows as RosterRow[]);
         if (status) {
           setPool({
-            maxWorkers: Number(status.maxWorkers) || 2,
+            maxWorkers: Number(status.maxWorkers) || 5,
             deskSnapshot: (status.deskSnapshot as typeof pool.deskSnapshot) ?? null
           });
         }

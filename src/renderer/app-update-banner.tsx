@@ -3,35 +3,41 @@ import type { UpdateState } from '../main/app-update';
 
 type AppUpdateBannerProps = { openSettings(): void };
 
-export function AppUpdateBanner({ openSettings }: AppUpdateBannerProps): React.JSX.Element | null {
+// Top banner removed: updater failures surface only in the bottom status bar (WMB-update-statusbar).
+// Kept for import compatibility; returns null so no workspace overlay is rendered.
+export function AppUpdateBanner(_props: AppUpdateBannerProps): React.JSX.Element | null {
+  return null;
+}
+
+export function AppUpdateStatusItem({ openSettings }: AppUpdateBannerProps): React.JSX.Element | null {
   const [state, setState] = useState<UpdateState | null>(null);
-  const [busy, setBusy] = useState(false);
   useEffect(() => {
     void window.wmb.getAppUpdateState().then(setState);
-    return window.wmb.onAppUpdateState(setState);
+    return window.wmb.onAppUpdateState(setState as (s: unknown) => void);
   }, []);
   if (!state) return null;
-  const ready = state.status === 'downloaded' && state.userIntent !== 'later';
   const failed = state.status === 'error' && Boolean(state.lastError);
-  if (!ready && !failed) return null;
-
-  const run = async (action: () => Promise<UpdateState>) => {
-    setBusy(true);
-    try { setState(await action()); }
-    catch { setState(await window.wmb.getAppUpdateState()); }
-    finally { setBusy(false); }
-  };
-  if (failed) {
-    return <section className="app-update-banner error" role="alert">
-      <div><strong>更新未完成</strong><span>{state.lastError}</span></div>
-      <button className="secondary-button" onClick={openSettings}>查看更新设置</button>
-    </section>;
-  }
-  return <section className="app-update-banner" role="status" aria-live="polite">
-    <div><strong>WeMediaBuddy v{state.availableVersion} 已准备好</strong><span>重启前会停止新任务并备份本地数据。</span></div>
-    <div className="app-update-banner-actions">
-      <button className="secondary-button" disabled={busy} onClick={() => void run(window.wmb.remindAppUpdateLater)}>稍后提醒</button>
-      <button className="primary-button" disabled={busy} onClick={() => void run(window.wmb.installAppUpdateNow)}>{busy ? '正在准备…' : '立即重启更新'}</button>
-    </div>
-  </section>;
+  if (!failed) return null;
+  const detail = String(state.lastError ?? '');
+  const title = detail ? `更新未完成 · ${detail}` : '更新未完成';
+  return (
+    <button
+      type="button"
+      className="status-item status-update-warn"
+      title={title}
+      aria-label={title}
+      aria-describedby={detail ? 'update-error-detail' : undefined}
+      onClick={openSettings}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openSettings();
+        }
+      }}
+    >
+      <span className="status-dot warn" aria-hidden="true" />
+      <span>更新未完成</span>
+      {detail ? <span id="update-error-detail" hidden>{detail}</span> : null}
+    </button>
+  );
 }

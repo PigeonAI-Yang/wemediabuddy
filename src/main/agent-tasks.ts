@@ -368,15 +368,63 @@ export function clearAgentTaskControl(database: DatabaseSync, id: string): void 
   database.prepare('UPDATE agent_tasks SET control_action = NULL WHERE id = ?').run(id);
 }
 
+type ManagerCheckpointChildRow = {
+  [key: string]: unknown;
+  status?: unknown;
+  taskId?: unknown;
+  finishedAt?: unknown;
+};
+
+function reconcileManagerCheckpointOnCancel(database: DatabaseSync, current: AgentTaskRow, now: string): string | null {
+  if (current.intent !== 'page_agents') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(current.checkpoint_json);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const checkpoint = parsed as Record<string, unknown>;
+  if (checkpoint.kind !== 'manager_task' || checkpoint.goal !== 'daily_intelligence' || !Array.isArray(checkpoint.children)) return null;
+
+  const children = checkpoint.children.map((value): unknown => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const row = value as ManagerCheckpointChildRow;
+    const previousStatus = typeof row.status === 'string' ? row.status : null;
+    // Terminal manager history is authoritative; never downgrade a completed/failed child
+    // because its persisted task row was later reused or cleaned up.
+    if (previousStatus === 'succeeded' || previousStatus === 'failed' || previousStatus === 'cancelled') return row;
+
+    const childTask = typeof row.taskId === 'string' && row.taskId ? getAgentTask(database, row.taskId) : null;
+    const status = childTask?.status === 'succeeded' || childTask?.status === 'partial'
+      ? 'succeeded'
+      : childTask?.status === 'failed'
+        ? 'failed'
+        : 'cancelled';
+    const finishedAt = typeof row.finishedAt === 'string' && row.finishedAt ? row.finishedAt : now;
+    return { ...row, status, finishedAt };
+  });
+
+  return JSON.stringify({
+    ...checkpoint,
+    status: 'cancelled',
+    phase: 'done',
+    summary: '今日情报已取消。已入库资料仍保留。',
+    children,
+    updatedAt: now
+  });
+}
+
 export function cancelAgentTask(database: DatabaseSync, id: string): CommandResult<AgentTask> {
   const current = getRow(database, id);
   if (!current) return failure('NOT_FOUND', 'Agent 任务不存在。');
   if (current.status === 'cancelled') return success(requireTask(database, id));
-  // WMB-5142 生命周期：needs_user（等你批）卡可被用户关闭/处理——needs_user → cancelled（历史可追、不再复用）。
-  if (current.status !== 'running' && current.status !== 'needs_user') return failure('INVALID_STATE', '只有运行中或等待用户处理的任务可以取消。');
+  // WMB-5142 生命周期：needs_user（等你批）卡可被用户关闭/处理；重启恢复的 interrupted 任务也允许显式取消。
+  if (current.status !== 'running' && current.status !== 'needs_user' && current.status !== 'interrupted') return failure('INVALID_STATE', '只有运行中、等待用户处理或已中断的任务可以取消。');
   const now = new Date().toISOString();
-  database.prepare(`UPDATE agent_tasks SET status = 'cancelled', phase = 'cancelled', error_code = 'CANCELLED',
-    error_message = '用户取消了任务。已入库资料仍保留在本地。', updated_at = ?, finished_at = ? WHERE id = ?`).run(now, now, id);
+  const checkpointJson = reconcileManagerCheckpointOnCancel(database, current, now);
+  database.prepare(`UPDATE agent_tasks SET status = 'cancelled', phase = 'cancelled', checkpoint_json = COALESCE(?, checkpoint_json), error_code = 'CANCELLED',
+    error_message = '用户取消了任务。已入库资料仍保留在本地。', updated_at = ?, finished_at = ? WHERE id = ?`).run(checkpointJson, now, now, id);
   recordOperation(database, {
     actorType: 'ui',
     command: 'agent_tasks.cancel',
@@ -562,9 +610,16 @@ function validateDailyIntelligence(database: DatabaseSync, taskId: string, busin
   const today = getToday(database, businessDate);
   const plan = today.plan;
   if (!plan) return failure('VALIDATION_ERROR', '成功要求存在当日 current plan。');
+  // Empty plan must not be marked succeeded when lane or persistence failed (Wan e9743/0451).
+  const hasLaneOrPlanError = database.prepare(`SELECT 1 AS ok FROM command_receipts WHERE task_id=? AND status='error' AND command IN ('sources.lane_gate','plans.save') LIMIT 1`).get(taskId) as { ok: number } | undefined;
+  const checkpointUnresolved = Boolean(task.checkpoint && ((task.checkpoint as Record<string, unknown>).laneUnresolved === true || (Array.isArray((task.checkpoint as Record<string, unknown>).unresolvedIds) && ((task.checkpoint as Record<string, unknown>).unresolvedIds as unknown[]).length > 0)));
+  if ((hasLaneOrPlanError || checkpointUnresolved) && plan.items.length === 0) {
+    return failure('VALIDATION_ERROR', '空方案不能在赛道判定或持久化失败时标记成功。');
+  }
   const planRequestId = agentRequestId(taskId, 'plan');
-  const owned = database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND request_id=?`).get(planRequestId)
-    ?? database.prepare(`SELECT 1 FROM command_receipts WHERE command='plans.save' AND request_id=? AND task_id=? AND status='ok'`).get(planRequestId, taskId);
+  const planRequestPrefix = `${planRequestId}:%`;
+  const owned = database.prepare(`SELECT 1 FROM mcp_request_results WHERE tool='plans.save' AND (request_id=? OR request_id LIKE ?)`).get(planRequestId, planRequestPrefix)
+    ?? database.prepare(`SELECT 1 FROM command_receipts WHERE command='plans.save' AND task_id=? AND status='ok' AND (request_id=? OR request_id LIKE ?)`).get(taskId, planRequestId, planRequestPrefix);
   // 允许：本任务成功写入；或本任务因空方案保底未覆盖、但当日已有非空 current plan（judge 保底路径）。
   if (!owned) {
     const anyPlanSave = database.prepare(
@@ -604,6 +659,24 @@ function validateStudioDraft(database: DatabaseSync, contextRefs: Record<string,
     const latestPlatform = project.platforms.xiaohongshu?.[0];
     if (!latestPlatform?.body?.trim()) return failure('VALIDATION_ERROR', '成功要求已保存小红书平台版本。');
     return success({ projectId, platform: 'xiaohongshu', platformVersionId: latestPlatform.id });
+  }
+  if (contextRefs.writerTask === 'video_script' || contextRefs.taskKind === 'video_script') {
+    const latest = project.revisions[0];
+    if (!latest?.body?.trim()) return failure('VALIDATION_ERROR', '成功要求已保存核心正文版本。');
+    const der = database.prepare("SELECT id FROM content_derivatives WHERE project_id=? AND kind='video_script'").get(projectId) as { id: string } | undefined;
+    if (!der) return failure('VALIDATION_ERROR', '成功要求已生成视频文案衍生。');
+    const latestScript = database.prepare("SELECT status, source_content_version_id FROM content_derivative_versions WHERE derivative_id=? ORDER BY version_number DESC LIMIT 1").get(der.id) as { status: string; source_content_version_id: string } | undefined;
+    if (!latestScript || latestScript.status !== 'ready') return failure('VALIDATION_ERROR', '成功要求存在 ready 的视频文案版本。');
+    if (latestScript.source_content_version_id !== latest.id) return failure('VALIDATION_ERROR', '视频文案必须引用最新定稿文章版本。');
+    const fdRaw = database.prepare('SELECT format_decision_json FROM content_derivative_versions WHERE derivative_id=? ORDER BY version_number DESC LIMIT 1').get(der.id) as { format_decision_json: string } | undefined;
+    if (!fdRaw) return failure('VALIDATION_ERROR', 'formatDecision 缺失。');
+    try {
+      const parsed = JSON.parse(fdRaw.format_decision_json);
+      const required = ['goal','audience','suitableForm','reason','narrativeStructure','visualDensity','paceAndTone'];
+      for (const f of required) if (!parsed[f] || typeof parsed[f] !== 'string' || !parsed[f].trim()) return failure('VALIDATION_ERROR', `formatDecision 缺少 ${f}`);
+      if (parsed.reason.trim().length < 12) return failure('VALIDATION_ERROR', 'formatDecision reason 过短');
+    } catch { return failure('VALIDATION_ERROR', 'formatDecision 非法 JSON'); }
+    return success({ projectId, contentVersionId: latest.id, versionNumber: latest.number, derivativeVersionAligned: true });
   }
   const latest = project.revisions[0];
   if (!latest?.body?.trim()) return failure('VALIDATION_ERROR', '成功要求已保存核心正文版本。');

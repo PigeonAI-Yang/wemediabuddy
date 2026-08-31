@@ -99,7 +99,15 @@ export function buildJobContextRefs(input: { jobId: string; request: RoleJobRequ
   if (input.boundary.sourceIds.length) refs.sourceIds = [...input.boundary.sourceIds];
   if (input.boundary.feedIds.length) refs.sourceFeedIds = [...input.boundary.feedIds];
   if (input.boundary.scope) refs.scope = input.boundary.scope;
-  if (input.request.roleId === 'writer') refs.writerTask = input.request.writerTask;
+  if ('planItemId' in input.request && input.request.planItemId) refs.planItemId = input.request.planItemId;
+  if (input.request.roleId === 'writer') {
+    refs.writerTask = input.request.writerTask;
+    const rm = (input.request as Extract<RoleJobRequest, { roleId: 'writer' }>).researchMode;
+    if (typeof rm === 'string') {
+      refs.researchMode = rm;
+      refs.research_mode = rm;
+    }
+  }
   // WMB-5170 research 变体：完整持久化已校验 research 块（重建精确 research 工单需要；
   // 深拷贝为普通对象，JSON 序列化后无共享冻结引用）。
   if ('research' in input.request) {
@@ -209,8 +217,13 @@ export function rebuildRoleJobRequest(refs: Record<string, unknown>): RoleJobReq
   if (contract.roleId === 'writer') {
     if (!contract.boundary.projectId) return null;
     const writerTask = refs.writerTask ?? 'core_draft';
-    if (writerTask !== 'core_draft' && writerTask !== 'xiaohongshu_platform_version') return null;
-    return Object.freeze({ roleId: 'writer', brief, projectId: contract.boundary.projectId, writerTask, businessDate });
+    if (writerTask !== 'core_draft' && writerTask !== 'xiaohongshu_platform_version' && writerTask !== 'video_script') return null;
+    const rawMode = (refs.researchMode ?? refs.research_mode) as unknown;
+    let researchMode: 'auto' | 'required' | 'prohibited';
+    if (typeof rawMode === 'string' && (rawMode === 'auto' || rawMode === 'required' || rawMode === 'prohibited')) researchMode = rawMode;
+    else if (/(?:禁止|严禁|不要|不允许)[^，。！\n]{0,12}研究/.test(brief)) researchMode = 'prohibited';
+    else researchMode = 'auto';
+    return Object.freeze({ roleId: 'writer', brief, projectId: contract.boundary.projectId, writerTask, businessDate, researchMode });
   }
   if (contract.roleId === 'reporter') {
     // WMB-5170 research 变体：refs.research 存在 → 重建精确 research 工单（含 projectId）；
@@ -263,6 +276,9 @@ function sourceIdsFromRows(rows: unknown, key: string): readonly string[] {
 const COMMAND_BOUNDARY_EXTRACTORS: Readonly<Record<string, (input: Record<string, unknown>) => JobObjectBoundary>> = Object.freeze({
   'plans.save': (input) => Object.freeze({ businessDate: stringField(input, 'planDate'), projectId: null, sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
   'content.save_version': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
+  'content_derivative.ensure': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
+  'content_derivative.save_version': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
+  'content_derivative.finalize_version': (input) => Object.freeze({ businessDate: null, projectId: stringField(input, 'projectId'), sourceIds: EMPTY_SOURCE_IDS, feedIds: EMPTY_SOURCE_IDS, scope: null }),
   // content.create 真实输入 shape：{ planItemId?, sourceIds?: string[] }（纯字符串数组，非行对象）。
   'content.create': (input) => Object.freeze({ businessDate: null, projectId: null, sourceIds: normalizeSourceIds(Array.isArray(input.sourceIds) ? input.sourceIds : []), feedIds: EMPTY_SOURCE_IDS, scope: null }),
   'knowledge.record_batch': (input) => Object.freeze({ businessDate: null, projectId: null, sourceIds: sourceIdsFromRows(input.items, 'sourceId'), feedIds: EMPTY_SOURCE_IDS, scope: null }),

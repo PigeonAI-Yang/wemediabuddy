@@ -19,6 +19,7 @@ import { createServer } from 'node:http';
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { savePlatformVersion } from '../../src/main/content.ts';
 import { importAssetBytes, linkProjectAsset, markdownImageForAsset } from '../../src/main/assets.ts';
+import { saveDerivativeVersionInternal, finalizeDerivativeVersionInternal } from '../../src/main/content-derivative.ts';
 import { insertMediaCandidates, completeMediaCandidatePreserved } from '../../src/main/db/media-archive-store.ts';
 import { sourceRevisionKey } from '../../src/shared/media-candidates.ts';
 import { enqueueVisualRun, markVisualRunRunning, markVisualRunCompleted, VISUAL_SCHEMA_VERSION } from '../../src/main/visual-source-lineage.ts';
@@ -571,6 +572,28 @@ async function assertReadonlyImageState(page) {
   }
   await closeImageMenu(page);
 }
+
+const seedVideoScriptProject = async ({ dataRoot, workspaceId }) => {
+  await seedWorkflowBase(dataRoot, workspaceId);
+  const db = openWriteDb(dataRoot);
+  try {
+    const project = seedStudioProject(db, {
+      title: 'E2E 双产物项目',
+      coreV1: '文章初稿',
+      coreV2: `教程步骤：准备材料、执行操作、检查结果。${'这是完整的文章定稿内容。'.repeat(70)}`,
+      platforms: []
+    });
+    saveDerivativeVersionInternal(db, {
+      projectId: project.projectId,
+      sourceContentVersionId: project.coreV2Id,
+      title: 'E2E 自适应视频文案',
+      body: '开场说明问题，随后演示准备、执行和检查步骤，最后收束核心结论。'
+    });
+    finalizeDerivativeVersionInternal(db, { projectId: project.projectId, expectedLatestVersionNumber: 1 });
+  } finally {
+    db.close();
+  }
+};
 
 export default [
   {
@@ -2126,5 +2149,42 @@ export default [
         await imageMock.close();
       }
     }
+  },
+  {
+    id: 'ST-009-studio-dual-output',
+    journeyIds: ['ST-009-studio-dual-output'],
+    launch: { seedFixture: seedVideoScriptProject },
+    run: async ({ page, app, evidence, artifactsDir, helpers, assert, step }) => {
+      await helpers.waitForAppReady(page);
+      await step('导航到创作页并打开双产物项目', async () => {
+        await helpers.navigateTo(page, 'studio');
+        await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
+        await openProjectByName(page, 'E2E 双产物项目');
+      });
+      await step('文章定稿与视频文案双栏真实渲染', async () => {
+        await page.waitForSelector('[data-testid="dual-script"]', { timeout: 20_000 });
+        const visible = await page.evaluate(() => {
+          const outputs = document.querySelectorAll('.studio-dual-output');
+          const article = outputs.item(0);
+          const script = outputs.item(1);
+          const panel = document.querySelector('.studio-dual-panel');
+          const articleRect = article?.getBoundingClientRect();
+          const scriptRect = script?.getBoundingClientRect();
+          return {
+            panelText: panel?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+            sideBySide: Boolean(articleRect && scriptRect && Math.abs(articleRect.top - scriptRect.top) < 2 && scriptRect.left > articleRect.left),
+            readiness: panel?.getAttribute('data-readiness') ?? '',
+            stale: panel?.getAttribute('data-stale') ?? ''
+          };
+        });
+        assert(visible.sideBySide, `桌面宽度下双产物应并排显示: ${JSON.stringify(visible)}`);
+        assert(visible.panelText.includes('文章主稿') && visible.panelText.includes('E2E 自适应视频文案') && visible.panelText.includes('开场说明问题'), `双产物内容缺失: ${visible.panelText}`);
+        assert(visible.panelText.includes('教程型长视频讲解') && visible.panelText.includes('问题-原理-分步演示-总结'), `自适应形态决策未展示: ${visible.panelText}`);
+        assert(visible.readiness === 'script_ready' && visible.stale === 'false', `双产物状态错误: ${JSON.stringify(visible)}`);
+        assert(evidence.pageerrors.length === 0, `双产物场景出现页面异常: ${JSON.stringify(evidence.pageerrors)}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'studio-dual-output' });
+      });
+      return { rendered: true, sideBySide: true, ready: true };
+    }
   }
-];
+ ];

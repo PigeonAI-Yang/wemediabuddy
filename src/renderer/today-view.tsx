@@ -26,7 +26,9 @@ import {
 } from './today-run-view';
 import { appConfirm } from './app-confirm';
 
-export type SettingsSectionId = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about';
+export type SettingsSectionId = 'general' | 'ai' | 'skills' | 'data' | 'browser' | 'channels' | 'lists' | 'agent' | 'diagnostics' | 'about' | 'daily-automation';
+type OverviewMetric = { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
+type OverviewMetrics = { updatedAt: string; sources: OverviewMetric; opportunities: OverviewMetric; projects: OverviewMetric & { pending: number | null }; publications: OverviewMetric } | null;
 
 /** WMB-5174 Today「研究缺口 · 等你批」行投影（与 src/main/research-successor-projection.ts 同构）。 */
 export type ResearchSuccessorGapItem = Readonly<{
@@ -61,10 +63,11 @@ export type TodayFermentingSelection = {
 };
 
 
-export function TodayView({ today, refresh, openStudio, openLibrary, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, onFocusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
+export function TodayView({ today, refresh, openStudio, openLibrary, openResults, openSettings, openTopic, selectedItems, onSelectionChange, selectedSources, onSelectedSourcesChange, fermentSelectedItem = null, onFermentSelectedItemChange, planDate, onStatusChange, onFocusChange, aiSourcePresentation, intelligenceChannels, piConfigured, openProposals }: {
   today: Awaited<ReturnType<typeof window.wmb.getToday>>;
   refresh: () => void; openStudio: (projectId?: string) => void;
   openLibrary: (sourceId?: string) => void;
+  openResults?: () => void;
   openSettings?: (section?: SettingsSectionId) => void;
   openTopic?: (topicId: string) => void;
   selectedItems: TodayPlanItem[]; onSelectionChange: (items: TodayPlanItem[]) => void;
@@ -89,13 +92,17 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const pinnedSourceIds = new Set((fermenting.pinnedSources || []).map((item) => item.id));
   const todayPlan = today?.plan ?? null;
   const latestPlan = today?.latestPlan ?? null;
-  const pool = today?.pool ?? null;
+  const recommendation = today?.recommendation ?? null;
+  const pool = recommendation?.eligible ?? [];
   const todayItems = todayPlan?.items ?? [];
   const pendingTopicMaintenance = today?.topicMaintenance?.pending ?? 0;
   // 主席只消费跨日期未终结 pool；历史 plan 不得绕过终态过滤后复活。
   const displayItems = resolveChairDisplayItems(pool, todayPlan, latestPlan);
-  const primary = displayItems[0] ?? null;
-  const sssCount = todayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
+  const workflowActive = running || startingRef.current || task?.status === 'running';
+  const primary = !workflowActive && recommendation?.primary
+    ? resolveChairDisplayItems([recommendation.primary], todayPlan, latestPlan)[0] ?? null
+    : null;
+  const sssCount = displayItems.filter((item) => priorityGrade(item.priority) === 'SSS').length;
   const [studioActive, setStudioActive] = useState<number | null>(null);
   const [proposalSummary, setProposalSummary] = useState<Awaited<ReturnType<typeof window.wmb.getProposalLedgerSummary>>>(null);
   const [researchGaps, setResearchGaps] = useState<ResearchSuccessorGapItem[]>([]);
@@ -112,13 +119,19 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const detailReturnSourceIdRef = useRef<string | null>(null);
   const sourcesAreToday = today?.sourcesDate === planDate;
   const todaySourcesTotal = sourcesAreToday ? (today?.sourcesTotal ?? sources.length) : 0;
-
+  const scoringPendingCount = recommendation?.counts.scoringPending ?? 0;
+  const [overviewMetrics, setOverviewMetrics] = useState<OverviewMetrics>(null);
+  const overviewSeqRef = useRef(0);
+  const overviewPlanDateRef = useRef(planDate);
   const runView = useMemo(() => deriveTodayRunView({
     task,
     localStarting: startingRef.current,
     hasTodayPlan: Boolean(todayPlan),
-    hasRecentPlan: !todayPlan && Boolean(latestPlan),
-    opportunityCount: todayItems.length,
+    hasRecentPlan: !todayPlan && displayItems.length > 0,
+    opportunityCount: displayItems.length,
+    scoringPendingCount,
+    scoringActive: scoringPendingCount > 0 && task?.status === 'running' && ['judging_opportunities', 'synthesizing', 'validating'].includes(task?.phase ?? ''),
+    scoringError: scoringPendingCount > 0 && task && ['failed', 'partial', 'interrupted'].includes(task.status ?? '') ? (task.errorMessage ?? null) : null,
     sssCount,
     sourcesTotal: todaySourcesTotal,
     studioActive,
@@ -126,9 +139,35 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
     channelsSummary: intelligenceChannels,
     controlPending: controlPending != null,
     controlPendingAction: controlPending
-  }), [task, todayPlan, latestPlan, todayItems.length, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running, controlPending]);
+  }), [task, todayPlan, latestPlan, displayItems.length, scoringPendingCount, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running, controlPending]);
+
+  useEffect(() => {
+    const asOf = today?.recommendation?.context.asOf;
+    if (!asOf) return;
+    let cancelled = false;
+    const requestPlanDate = planDate;
+    const requestSeq = ++overviewSeqRef.current;
+    overviewPlanDateRef.current = requestPlanDate;
+    void window.wmb.getTodayOverviewMetrics(requestPlanDate, asOf).then((value) => {
+      if (cancelled) return;
+      if (requestSeq !== overviewSeqRef.current) return;
+      if (overviewPlanDateRef.current !== requestPlanDate) return;
+      setOverviewMetrics((value as OverviewMetrics) ?? null);
+    }).catch(() => {
+      if (cancelled) return;
+      if (requestSeq !== overviewSeqRef.current) return;
+      if (overviewPlanDateRef.current !== requestPlanDate) return;
+    });
+    return () => { cancelled = true; };
+  }, [planDate, today?.recommendation?.context.asOf]);
+
+  const filteredOverviewMetrics = useMemo(() => {
+    if (overviewPlanDateRef.current !== planDate) return null;
+    return overviewMetrics;
+  }, [overviewMetrics, planDate]);
 
   // 入库信息流：内容超出视口时无缝自动向上滚动；悬停暂停，便于点选。
+
   useEffect(() => {
     const feed = feedListRef.current;
     if (!feed || feedSources.length < 2) return;
@@ -335,8 +374,11 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   }, [runView.statusLine, running, onStatusChange]);
 
   const create = async (item: TodayPlanItem) => {
-    const project = await window.wmb.createProjectFromPlanItem(item.id);
-    openStudio(project?.id);
+    if (!Number.isInteger(item.revision) || Number(item.revision) < 1) throw new Error('选题版本缺失，请刷新后重试。');
+    const approval = await window.wmb.approvePlanItem({ planItemId: item.id, expectedRevision: Number(item.revision), reason: 'today_primary_approve' });
+    if (!approval?.projectId) throw new Error('批准未返回项目，请刷新后重试。');
+    refresh();
+    openStudio(approval.projectId);
   };
   const poolBadgeMap = useMemo(() => {
     const nowMs = Date.now();
@@ -354,8 +396,14 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   const xChannelAbsent = Boolean(intelligenceChannels?.readiness?.some((entry) => entry.module === 'x_lists' && entry.status === 'needs_user'));
   const createFromCarry = async (item: { objectType: string; objectId: string; title?: string }) => {
     if (item.objectType === 'plan_item') {
-      const project = await window.wmb.createProjectFromPlanItem(item.objectId);
-      openStudio(project?.id);
+      const visible = displayItems.find((candidate) => candidate.id === item.objectId);
+      const detail = visible ? null : await window.wmb.getProposalDetail(item.objectId);
+      const revision = visible?.revision ?? detail?.item?.revision ?? null;
+      if (!Number.isInteger(revision) || Number(revision) < 1) throw new Error('选题版本缺失，请刷新后重试。');
+      const approval = await window.wmb.approvePlanItem({ planItemId: item.objectId, expectedRevision: Number(revision), reason: 'carry_approve' });
+      if (!approval?.projectId) throw new Error('批准未返回项目，请刷新后重试。');
+      refresh();
+      openStudio(approval.projectId);
       return;
     }
     if (item.objectType === 'topic') {
@@ -473,6 +521,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
   };
 
   const onPrimary = () => {
+    if (runView.primaryCta.kind === 'open_manager') { openProposals?.(); return; }
     if (runView.primaryCta.kind === 'open_studio') { openStudio(); return; }
     if (runView.primaryCta.kind === 'none') return;
     if (runView.primaryCta.label === '对话中 · 查看进度' || runView.headline === '主管编排中') {
@@ -585,10 +634,18 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         planDate={planDate}
         onPrimary={onPrimary}
         onSecondary={onSecondary}
+        metrics={filteredOverviewMetrics}
+        onMetricClick={(id) => {
+          if (id === 'sources') openLibrary();
+          else if (id === 'opportunities') openProposals?.();
+          else if (id === 'projects') openStudio();
+          else if (id === 'publications') openResults?.();
+        }}
+        onDailyAutomation={() => openSettings?.('daily-automation' as SettingsSectionId)}
       />
-      {openProposals && proposalSummary ? <button type="button" className="proposal-ledger-entry" onClick={openProposals} title="打开选题台账">
-        <span className="proposal-ledger-entry-title">选题台账 · {(proposalSummary.today ?? 0) + (proposalSummary.shelved ?? 0)}</span>
-        <span className="proposal-ledger-entry-counts">今日可批 · {proposalSummary.today ?? 0} ｜ 待处理 · {proposalSummary.shelved ?? 0}</span>
+      {openProposals && recommendation ? <button type="button" className="proposal-ledger-entry" onClick={openProposals} title="打开选题台账">
+        <span className="proposal-ledger-entry-title">选题台账 · {recommendation.counts.todayReady + recommendation.counts.carriedReady}</span>
+        <span className="proposal-ledger-entry-counts">今日待批准 · {recommendation.counts.todayReady} ｜ 跨日待批准 · {recommendation.counts.carriedReady} ｜ 待评分/待修复 · {recommendation.counts.scoringPending + recommendation.counts.invalid}</span>
         <span className="proposal-ledger-entry-arrow" aria-hidden="true">›</span>
       </button> : null}
       <div className="today-grid">
@@ -604,7 +661,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openSetting
         </div>
         <aside className="today-rail">
           <TodayBlockers blockers={runView.blockers} onAction={onBlocker} />
-          <div className="feed-list" ref={feedListRef} aria-label="入库信息流">
+          <div className="feed-list" ref={feedListRef} aria-label="入库信息流，最多显示 500 条来源记录">
+            <p className="feed-context">{sourcesAreToday ? '新收集的来源记录，不是已选选题；最多显示 500 条' : '来源记录，不是已选选题；最多显示 500 条'}</p>
             {!sourcesAreToday && today?.sourcesDate && feedSources.length > 0 ? <p className="feed-context">今天暂无新资料，以下为最近有效入库</p> : null}
             {selectedSources.length > 0 && <div className="feed-selection-bar">已选 {selectedSources.length}/{MAX_SELECTED_SOURCES} 条资料进 Pi</div>}
             {feedSources.length ? (

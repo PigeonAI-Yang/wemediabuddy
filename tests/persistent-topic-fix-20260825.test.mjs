@@ -10,7 +10,7 @@ import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { listFermentingBundle } from '../src/main/ferment.ts';
 import { createTopicMaintenanceProposal, decideTopicMaintenanceProposal } from '../src/main/topic-maintenance.ts';
 import { PROPAGATION_NEUTRAL_GRADE, resolvePropagationGrade } from '../src/shared/propagation.ts';
-import { approvePlanItems } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 async function withDb(run) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-persist-'));
@@ -22,12 +22,6 @@ function seedSource(db, id, title) {
   const saved = upsertSource(db, { originalUrl: `https://example.com/${id}`, title, summary: `${title} 摘要足够支撑证据维度`, categories: ['研究补料'], keywords: [], recommendedPlatforms: [], recommendedFormats: [] }, false);
   db.prepare('UPDATE source_items SET collected_at = ?, categories_json = ? WHERE id = ?').run(new Date().toISOString(), JSON.stringify(['研究补料']), saved.id);
   return saved.id;
-}
-function scoredReasons(score) {
-  const weights = [['reader_immediacy_benefit',20],['tension_curiosity_gap',20],['why_now_window',20],['save_share_comment_motive',20],['evidence_credibility',15],['account_fit',5]];
-  let remaining = score;
-  const reasons = weights.map(([criterion, weight]) => { const s = Math.min(weight, Math.max(0, remaining)); remaining -= s; return { criterion, weight, score: s, reason: `${criterion} reason` }; });
-  return { status: 'scored', score, reasons };
 }
 
 test('unscored draft cannot promote to fermenting', async () => {
@@ -51,7 +45,7 @@ test('scored approved can promote to fermenting', async () => {
     const scored = scoredReasons(82);
     const topicId = createTopic(db, '小红书 AI 涨粉方法').id;
     const saved = saveCurrentPlan(db, { planDate:'2026-08-25', timezone:'Asia/Shanghai', summary:'scored test', items: [{
-      title:'小红书 AI 涨粉：用对比钩子让收藏翻倍的 3 步模板', priority:1, whyNow:'2026-08-25 窗口期 7 天，对比钩子收藏率高 2.3 倍', timeliness:'持续/多日', targetAudience:'在小红书做 AI 内容但收藏低的人', angle:'给出可直接套用的标题与结构模板，含数字/对比钩子', pointOfView:'对比钩子比泛泛科普更易获得收藏，值得今天就用模板重做 1 篇', platforms:['xiaohongshu'], formats:['text'], titleGuidance:'标题', openingGuidance:'首段立刻兑现钩子', structureGuidance:'方向判断', effortEstimate:'约 40 分钟', sourceIds:[src], topicId, scoreReasons: scored
+      title:'小红书 AI 涨粉：用对比钩子让收藏翻倍的 3 步模板', priority:1, whyNow:'2026-08-25 窗口期 7 天，对比钩子收藏率高 2.3 倍', timeliness:'持续/多日', targetAudience:'在小红书做 AI 内容但收藏低的人', angle:'给出可直接套用的标题与结构模板，含数字/对比钩子', pointOfView:'对比钩子比泛泛科普更易获得收藏，值得今天就用模板重做 1 篇', platforms:['xiaohongshu'], formats:['text'], titleGuidance:'标题', openingGuidance:'首段立刻兑现钩子', structureGuidance:'方向判断', effortEstimate:'约 40 分钟', sourceIds:[src], topicId, scoreReasons: scored, editorialDecision: editorialDecision('对比钩子比泛泛科普更易获得收藏，值得今天就用模板重做 1 篇')
     }]});
     approvePlanItems(db, [db.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id).id]);
     const pi = db.prepare('SELECT id, planning_status, score_reasons_json, topic_id FROM plan_items WHERE plan_id=?').get(saved.id);
@@ -111,10 +105,14 @@ test('equivalent theses dedupe across active persistent topics and new promotion
     const pov = '价值不由最好的一次输出决定，而由可复跑的评测与验收标准决定，强调可验收的真实项目与公开验证';
     const angle = '选一个重复任务，写10个真实样本和验收标准，公开测试与复盘';
     const audience = '正在把提示词/Agent/自动化流程做成真实交付的人';
+    const whyNow = '本周多款 Agent 产品集中发布演示，未来两天正是区分演示效果与真实交付能力的窗口。';
+    const titleGuidance = '标题突出一次成功演示与可复跑交付能力之间的反差。';
+    const openingGuidance = '首段立即展示同一任务复跑后结果波动的证据，不从概念定义铺垫。';
+    const structureGuidance = '第一段给出复跑样本；第二段对照验收标准；第三段说明公开复盘与行动边界。';
     const scored = scoredReasons(82);
     const topicId = createTopic(db, '可复跑评测体系').id;
     const first = saveCurrentPlan(db, { planDate:'2026-08-25', timezone:'Asia/Shanghai', summary:'first', items:[{
-      title:'别再展示 AI 做成了什么，先把它放进一套能复跑的评测里', priority:1, whyNow:'窗口', timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance:'标题', openingGuidance:'开头', structureGuidance:'方向判断', effortEstimate:'40分钟', sourceIds:[src1], topicId, scoreReasons: scored
+      title:'别再展示 AI 做成了什么，先把它放进一套能复跑的评测里', priority:1, whyNow, timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance, openingGuidance, structureGuidance, effortEstimate:'40分钟', sourceIds:[src1], topicId, scoreReasons: scored, editorialDecision: editorialDecision(pov)
     }]});
     approvePlanItems(db, [db.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(first.id).id]);
     const firstBundle = listFermentingBundle(db, '2026-08-25');
@@ -122,7 +120,7 @@ test('equivalent theses dedupe across active persistent topics and new promotion
     let threw = false;
     try {
       saveCurrentPlan(db, { planDate:'2026-08-26', timezone:'Asia/Shanghai', summary:'dup', items:[{
-        title:'一次成功的 Agent 演示，为什么还不能算交付能力', priority:1, whyNow:'窗口', timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance:'标题', openingGuidance:'开头', structureGuidance:'方向判断', effortEstimate:'40分钟', sourceIds:[src2], scoreReasons: scored
+        title:'一次成功的 Agent 演示，为什么还不能算交付能力', priority:1, whyNow, timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance, openingGuidance, structureGuidance, effortEstimate:'40分钟', sourceIds:[src2], scoreReasons: scored, editorialDecision: editorialDecision(pov)
       }]});
     } catch (e) { threw = true; assert.ok(String(e.message).includes('thesis')); }
     assert.ok(threw, 'duplicate thesis across active should reject');
@@ -145,7 +143,7 @@ test('reversible retirement preserves records and fermenting excludes', async ()
     const scored = scoredReasons(75);
     const seededTopicId = createTopic(db, '可退役对比钩子主题').id;
     const saved = saveCurrentPlan(db, { planDate:'2026-08-25', timezone:'Asia/Shanghai', summary:'retire test', items:[{
-      title:'可退役主题：用对比钩子让收藏翻倍的 3 步模板', priority:1, whyNow:'窗口', timeliness:'持续/多日', targetAudience:'小红书运营', angle:'对比钩子模板', pointOfView:'对比钩子比泛泛科普更易获得收藏', platforms:['xiaohongshu'], formats:['text'], titleGuidance:'标题', openingGuidance:'开头', structureGuidance:'方向判断', effortEstimate:'40分钟', sourceIds:[src], topicId: seededTopicId, scoreReasons: scored
+      title:'可退役主题：用对比钩子让收藏翻倍的 3 步模板', priority:1, whyNow:'窗口', timeliness:'持续/多日', targetAudience:'小红书运营', angle:'对比钩子模板', pointOfView:'对比钩子比泛泛科普更易获得收藏', platforms:['xiaohongshu'], formats:['text'], titleGuidance:'标题', openingGuidance:'开头', structureGuidance:'方向判断', effortEstimate:'40分钟', sourceIds:[src], topicId: seededTopicId, scoreReasons: scored, editorialDecision: editorialDecision('对比钩子比泛泛科普更易获得收藏')
     }]});
     approvePlanItems(db, [db.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id).id]);
     const pi = db.prepare('SELECT topic_id FROM plan_items WHERE plan_id=?').get(saved.id);

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import { dispatchSourceUpsertBatch, dispatchLaneGate, dispatchLaneRestore, type SourceUpsertItemInput } from './source-commands.ts';
 import { updateKnowledgeSource } from './knowledge.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { readWorkspaceProfile } from './workspace-profiles.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { createCommandEnvelope } from './command-dispatcher.ts';
@@ -175,7 +176,11 @@ export function registerSourceMutationMcp(server: McpServer, runtime: ActiveWork
         }, false);
         return { data, entityType: 'source_item', entityId: id, afterRevision: data.revision, readback: data };
       });
-      if (receipt.ok) broadcastDataChanged({ scopes: ['sources', 'library'], reason: 'source.update_status' });
+      if (receipt.ok) {
+        const revision = Number((receipt.data as { revision?: number } | null)?.revision);
+        if (Number.isInteger(revision)) scheduleSourceKnowledgeCompile({ sourceId: id, revision });
+        broadcastDataChanged({ scopes: ['sources', 'library'], reason: 'source.update_status' });
+      }
       return text(receipt);
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'COMMAND_FAILED';

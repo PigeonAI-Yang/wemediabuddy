@@ -5,14 +5,24 @@ import {
   listSourceScanReceipts,
   readIntelligenceChannelsSummary,
   type IntelligenceChannelSource,
-  type IntelligenceModule
+  type IntelligenceModule,
+  type SourceScanReceipt
 } from './intelligence-channels.ts';
 import { currentXListContext } from './ipc-x-lists.ts';
 import type { CurrentXListContext } from './x-list-context.ts';
 import { resolveXListCandidates } from './x-list-channel.ts';
 import { readBoundXListTimeline } from './x-list-execution.ts';
-import { readWebsiteSourceScan, resolveWebsiteCandidates, trialReadWebsite } from './website-channel.ts';
+import {
+  listZhihuTopicCategoryObservations,
+  readZhihuTopicCategoryViaBrowser,
+  readZhihuHotViaBrowser,
+  normalizeZhihuTopicCategory,
+  type ZhihuTopicCategory,
+  type ZhihuTopicCategoryRead,
+} from './zhihu-hot-channel.ts';
+import { resolveWebsiteCandidates, trialReadWebsite, readWebsiteSourceScan } from './website-channel.ts';
 import { readChannelProposalContext } from './intelligence-channel-confirmation.ts';
+import { dispatchZhihuHotFailure, dispatchZhihuHotScan } from './intelligence-channel-business-command.ts';
 import { dispatchConfirmIntelligenceChannelProposal } from './intelligence-channel-command.ts';
 import { IntelligenceChannelProposalStore, type ChannelProposalInput, type IntelligenceChannelProposalBinding } from './intelligence-channel-proposals.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
@@ -36,9 +46,18 @@ export function registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelP
   });
   ipcMain.handle('intelligence-channels:resolve-website', async (_event, input: { inputText: string }) => resolveWebsiteCandidates(input));
   ipcMain.handle('intelligence-channels:trial-website', async (_event, input: { url: string }) => trialReadWebsite(input));
+  ipcMain.handle('zhihu-hot:read-category', async (_event, input: { category?: string; limit?: number } = {}) => {
+    const runtime = requiredRuntime(getActiveRuntime);
+    const category = normalizeZhihuTopicCategory(input.category);
+    const snapshot = listZhihuTopicCategoryObservations(runtime.database, category, input.limit ?? 50);
+    return { category: snapshot.category, items: snapshot.items, summary: snapshot.summary, evidenceUrl: snapshot.evidenceUrl, collectedAt: snapshot.collectedAt };
+  });
+  ipcMain.handle('zhihu-hot:refresh-category', async (_event, input: { category?: string; limit?: number } = {}) => {
+    return refreshZhihuCategory(getActiveRuntime, input);
+  });
   ipcMain.handle('intelligence-channels:resolve-x-list', async (_event, input: { inputText: string }) => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     return resolveXListCandidates(runtime.database, context.config, input, async () => context.index);
   });
   ipcMain.handle('intelligence-channels:scan-now', async (_event, input: ChannelInput) => scanNow(loadSelectedDataRoot, getActiveRuntime, input));
@@ -59,6 +78,34 @@ export function registerIntelligenceChannelsIpc({ loadSelectedDataRoot, channelP
     return dispatchConfirmIntelligenceChannelProposal(runtime, { store: channelProposals, binding, xContext });
   });
 }
+async function refreshZhihuCategory(
+  getActiveRuntime: Dependencies['getActiveRuntime'],
+  input: { category?: string; limit?: number }
+): Promise<{ category: ZhihuTopicCategory; status: 'succeeded' | 'failed' | 'needs_user'; receipt: SourceScanReceipt; snapshot: ZhihuTopicCategoryRead }> {
+  const runtime = requiredRuntime(getActiveRuntime);
+  const category = normalizeZhihuTopicCategory(input.category);
+  const sourceInput: ChannelInput = { module: 'zhihu_hot', sourceId: 'zhihu_hot', expectedRevision: 1 };
+  const taskId = manualTaskId();
+  try {
+    const read = await readZhihuTopicCategoryViaBrowser(runtime.database, category);
+    const result = await dispatchZhihuHotScan(runtime, sourceInput, taskId, {
+      items: read.items,
+      evidenceUrl: read.evidenceUrl,
+      collectedAt: read.collectedAt ?? new Date().toISOString()
+    });
+    return { category, status: result.receipt.status, receipt: result.receipt, snapshot: read };
+  } catch (error) {
+    const failure = await dispatchZhihuHotFailure(runtime, sourceInput, taskId, error);
+    const persisted = listZhihuTopicCategoryObservations(runtime.database, category, input.limit ?? 50);
+    return {
+      category,
+      status: failure.receipt.status,
+      receipt: failure.receipt,
+      snapshot: { category: persisted.category, items: persisted.items, summary: persisted.summary, evidenceUrl: persisted.evidenceUrl, collectedAt: persisted.collectedAt }
+    };
+  }
+}
+
 
 async function scanNow(
   loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'],
@@ -70,14 +117,21 @@ async function scanNow(
   try { source = sourceFor(runtime.database, input); }
   catch (error) { return dispatchChannelValidationFailure(runtime, input, error); }
   const taskId = manualTaskId();
+  if (source.module === 'zhihu_hot') {
+    try {
+      const read = await readZhihuHotViaBrowser(runtime.database);
+      return dispatchZhihuHotScan(runtime, input, taskId, read);
+    } catch (error) {
+      return dispatchZhihuHotFailure(runtime, input, taskId, error);
+    }
+  }
   if (source.module === 'official_web') {
     const scanInput = { taskId, workspaceId: runtime.identity.workspaceId, sourceId: source.sourceId };
     const read = await readWebsiteSourceScan(runtime.database, scanInput);
     return dispatchPersistWebsiteChannelScan(runtime, input, taskId, read);
   }
-
   let context: CurrentXListContext;
-  try { context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime); }
+  try { context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true }); }
   catch (error) { return dispatchRecordXChannelPreflightFailure(runtime, input, taskId, error); }
   if (!source.accountKey || !source.listId) {
     return dispatchChannelValidationFailure(runtime, input, Object.assign(new Error('X List 来源身份不完整。'), { code: 'VALIDATION_ERROR' }));

@@ -7,6 +7,8 @@ import {
   type IntelligenceModule,
   type SourceScanReceipt
 } from './intelligence-channels.ts';
+import type { ZhihuHotRead } from './zhihu-hot-channel.ts';
+import { commitZhihuHotScan, ZHIHU_HOT_URL } from './zhihu-hot-channel.ts';
 import {
   persistBoundXListTimeline,
   type BoundXListTimelineCollection,
@@ -17,6 +19,8 @@ import type { XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import type { CommandResult } from './result.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { XListBinding } from './x-lists.ts';
+import { ensureRegistrySourceFeed } from './sources.ts';
+import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import {
   persistWebsiteSourceScan,
   type ScanWebsiteSourceInput,
@@ -54,6 +58,69 @@ export async function dispatchPersistWebsiteChannelScan(
   });
   return requireReceiptData(receipt);
 }
+export async function dispatchZhihuHotScan(
+  runtime: ActiveWorkspaceRuntime,
+  input: ChannelInput,
+  taskId: string,
+  read: ZhihuHotRead
+): Promise<{ source: IntelligenceChannelSource; receipt: SourceScanReceipt; sourceIds: string[] }> {
+  const businessDate = new Date().toISOString().slice(0, 10);
+  const receipt = await dispatchBusinessCommand(runtime, {
+    command: 'intelligence.zhihu_hot.scan',
+    requestId: `${taskId}:zhihu_hot:${input.sourceId}:${read.collectedAt}`,
+    actor: owner,
+    input: { channel: input, taskId, workspaceId: runtime.identity.workspaceId, businessDate, read },
+    boundIdentity: { workspaceId: runtime.identity.workspaceId, sourceId: input.sourceId },
+    taskId,
+    entityType: 'source_item',
+    execute: (database, value) => {
+      const source = requireSource(database, value.channel);
+      if (source.module !== 'zhihu_hot') throw Object.assign(new Error('来源不匹配。'), { code: 'VALIDATION_ERROR' });
+      const result = commitZhihuHotScan(database, { taskId: value.taskId, workspaceId: value.workspaceId, businessDate: value.businessDate }, value.read as ZhihuHotRead);
+      const rec = recordSourceScanReceipt(database, { taskId: value.taskId, workspaceId: value.workspaceId, module: 'zhihu_hot', sourceId: value.channel.sourceId, sourceFeedId: result.feedId, status: 'succeeded', candidateCount: result.candidateCount, savedCount: result.savedCount });
+      return { data: { source, receipt: rec, sourceIds: result.sourceIds }, entityId: source.sourceId };
+    }
+  });
+  const data = requireReceiptData(receipt);
+  for (const sourceId of data.sourceIds) {
+    const row = runtime.database.prepare('SELECT revision FROM source_items WHERE id=?').get(sourceId) as { revision: number } | undefined;
+    if (row) scheduleSourceKnowledgeCompile({ sourceId, revision: row.revision });
+  }
+  return data;
+}
+export async function dispatchZhihuHotFailure(
+  runtime: ActiveWorkspaceRuntime,
+  input: ChannelInput,
+  taskId: string,
+  error: unknown
+): Promise<{ source: IntelligenceChannelSource; receipt: SourceScanReceipt; sourceIds: string[] }> {
+  const code = errorCodeOf(error);
+  const message = error instanceof Error ? error.message : String(error);
+  const status = (code === 'ZHIHU_HOT_NEEDS_USER' || code === 'ZHIHU_HOT_CHALLENGE' || code === 'BROWSER_NEEDS_USER') ? 'needs_user' as const : 'failed' as const;
+  const receipt = await dispatchBusinessCommand(runtime, {
+    command: 'intelligence.zhihu_hot.scan',
+    requestId: `${taskId}:zhihu_hot:${input.sourceId}:failed:${code}`,
+    actor: owner,
+    input: { channel: input, taskId, error: { code, message } },
+    boundIdentity: { workspaceId: runtime.identity.workspaceId, sourceId: input.sourceId },
+    taskId,
+    entityType: 'source_item',
+    execute: (database, value) => {
+      const source = requireSource(database, value.channel);
+      const feedId = (() => {
+        try {
+          const row = database.prepare("SELECT id FROM source_feeds WHERE registry_id='zhihu_hot'").get() as { id?: string } | undefined;
+          if (row?.id) return row.id;
+        } catch {}
+        return ensureRegistrySourceFeed(database, { registryId: 'zhihu_hot', name: '知乎 AI 专题', url: ZHIHU_HOT_URL }).id;
+      })();
+      const rec = recordSourceScanReceipt(database, { taskId: value.taskId, workspaceId: runtime.identity.workspaceId, module: 'zhihu_hot', sourceId: value.channel.sourceId, sourceFeedId: feedId, status, errorCode: code, errorMessage: message, candidateCount: 0, savedCount: 0 });
+      return { data: { source, receipt: rec, sourceIds: [] }, entityId: source.sourceId };
+    }
+  });
+  return requireReceiptData(receipt);
+}
+
 
 export async function dispatchPersistXChannelScan(
   runtime: ActiveWorkspaceRuntime,

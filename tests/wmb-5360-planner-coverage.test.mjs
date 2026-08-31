@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { buildPlannerSourceBoundary } from '../src/main/agent-runner.ts';
+import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-5360-'));
@@ -17,20 +18,16 @@ async function fixture() {
 
 function item(sourceId) {
   return {
-    title: '完整 coverage 方案', priority: 1, whyNow: '现在', timeliness: 'today',
-    targetAudience: '目标读者', angle: '角度', pointOfView: '观点', platforms: ['wechat'],
-    formats: ['article'], titleGuidance: '标题', openingGuidance: '开头',
-    structureGuidance: '结构', effortEstimate: '1d', sourceIds: [sourceId]
+    title: '完整 coverage 方案', priority: 1, whyNow: '官方今日公布覆盖率变化，未来两天是解释窗口，错过后需要重做验证。', timeliness: 'today',
+    targetAudience: '正在核对策划覆盖率并负责内容交付的具体读者', angle: '从真实任务覆盖证据切入，而不是复述任务数量。', pointOfView: '覆盖率只有绑定真实任务证据时才有决策价值。', platforms: ['wechat'],
+    formats: ['article'], titleGuidance: '标题突出覆盖缺口与真实交付之间的反差。', openingGuidance: '先展示缺口证据，再说明对交付的影响。',
+    structureGuidance: '第一段交代变化；第二段展示证据；第三段给出行动判断。', effortEstimate: '1d', sourceIds: [sourceId]
   };
 }
 
 function scoredItem(sourceId) {
-  const reasons = [
-    ['reader_immediacy_benefit', 20, 16], ['tension_curiosity_gap', 20, 15],
-    ['why_now_window', 20, 16], ['save_share_comment_motive', 20, 15],
-    ['evidence_credibility', 15, 12], ['account_fit', 5, 4]
-  ].map(([criterion, weight, score]) => ({ criterion, weight, score, reason: 'evidence' }));
-  return { ...item(sourceId), scoreReasons: { status: 'scored', score: 78, reasons } };
+  const value = item(sourceId);
+  return { ...value, scoreReasons: scoredReasons(78), editorialDecision: editorialDecision(value.pointOfView) };
 }
 
 test('WMB-5360 migration creates the single auditable plan_source_decisions table', async () => {

@@ -352,11 +352,45 @@ test('WMB-5172: canonical-URL write-back idempotent (duplicate candidate → one
   assert.equal(result.progress.processed, 2);
   assert.equal(result.progress.saved, 1, 'canonical URL 去重：重复候选不新增 source');
   assert.equal(result.progress.verified, 1, '同 sourceId 不重复计数 verified');
-  assert.equal(state.writes[0].requestId, state.writes[1].requestId, '同 URL → 同一 requestId（幂等重放）');
+  assert.equal(state.writes.length, 1, '同 URL 候选只派发一次 source 写命令');
   assert.equal(state.writes[0].requestId, `task-research-1:source:${researchSourceKeyFor('https://a.example.com/p')}`);
   assert.equal(state.sourcesByUrl.size, 1);
   assert.deepEqual(result.pack.sourceIds, ['src-1']);
   assert.equal(result.terminal, 'succeeded');
+});
+
+test('WMB-5377: duplicate URL candidates never reuse one source request identity with different command input', async () => {
+  const checkpoint = { round: 1, startedAt: new Date(T0).toISOString(), budgetLeftMs: 360_000, candidatesProcessed: 0, claimsSnapshot: {} };
+  const candidates = [
+    candidate('quote-a', 'claim_a', 'https://example.com/transcript', { title: '原访谈全文', summary: '第一段摘要', excerpt: '第一段原文', sourceKind: 'official' }),
+    candidate('quote-b', 'claim_a', 'https://example.com/transcript', { title: '原访谈推理章节', summary: '第二段摘要', excerpt: '第二段原文', sourceKind: 'official' })
+  ];
+  const { deps, state } = makeDeps({ candidates, proposals: [proposal('claim_a', 'supported', ['src-1'])] });
+  const dispatched = new Map();
+  const strictDeps = {
+    ...deps,
+    writeSource: async (input) => {
+      const commandInput = JSON.stringify({
+        title: input.title, url: canonicalizeUrl(input.url), author: input.author,
+        summary: input.summary, publishedAt: input.publishedAt, excerpt: input.excerpt
+      });
+      const previous = dispatched.get(input.requestId);
+      if (previous !== undefined && previous !== commandInput) throw Object.assign(new Error('同一 requestId 已绑定不同命令或输入。'), { code: 'REQUEST_REPLAY_CONFLICT' });
+      dispatched.set(input.requestId, commandInput);
+      state.writes.push(input);
+      return { sourceId: 'src-1', created: previous === undefined };
+    }
+  };
+  const result = await runResearchJob({
+    task: makeTask({ checkpoint }),
+    gap: makeGap({ requiredClaims: [{ key: 'claim_a', text: 'A', type: 'fact' }] }),
+    signal: new AbortController().signal
+  }, strictDeps);
+  assert.equal(result.terminal, 'succeeded');
+  assert.equal(state.writes.length, 1, '同一 canonical URL 在一轮内只派发一次 source 写命令');
+  assert.equal(dispatched.size, 1);
+  assert.equal(result.progress.processed, 2, '候选处理计数保持真实');
+  assert.equal(result.progress.verified, 1);
 });
 
 test('WMB-5172: reordered resume — URL-stable requestId, replayed created:true receipts do not inflate verified/saved', async () => {
@@ -375,17 +409,17 @@ test('WMB-5172: reordered resume — URL-stable requestId, replayed created:true
   assert.equal(run1.progress.processed, 3);
   assert.equal(run1.progress.verified, 2, '重复候选只计一次 verified');
   assert.equal(run1.progress.saved, 2, 'created:true 重放回执不虚增 saved');
-  assert.equal(state.writes[0].requestId, state.writes[1].requestId, '同 canonical URL → 同一 requestId');
-  assert.notEqual(state.writes[0].requestId, state.writes[2].requestId, '互异 URL → 互异 requestId');
+  assert.equal(state.writes.length, 2, '首轮 canonical URL 去重后只派发 A/B 两次写命令');
+  assert.notEqual(state.writes[0].requestId, state.writes[1].requestId, '互异 URL → 互异 requestId');
   state.claims = []; // 模拟 sources 回执已提交、claim 尚未落库即崩溃。
   state.candidates = [candidate('c1', 'claim_a', urlB), candidate('c0', 'claim_a', urlA), candidate('c3', 'claim_a', urlC)];
   const run2 = await runResearchJob({ task: makeTask({ checkpoint: run1.checkpoint, progress: run1.progress }), gap, signal }, deps);
   assert.equal(run2.progress.processed, 6);
   assert.equal(run2.progress.verified, 3, '重放既有证据不虚增 verified（2 既有 + 1 新）');
   assert.equal(run2.progress.saved, 3, '重放 created:true 回执不虚增 saved（2 既有 + 1 新）');
-  assert.equal(state.writes[3].requestId, state.writes[2].requestId, '乱序重放沿用原 URL requestId（幂等重放，无 REQUEST_REPLAY_CONFLICT）');
-  assert.equal(state.writes[4].requestId, state.writes[0].requestId);
-  assert.equal(state.writes[5].requestId, `task-research-1:source:${researchSourceKeyFor(urlC)}`);
+  assert.equal(state.writes[2].requestId, state.writes[1].requestId, '乱序重放沿用原 URL requestId（幂等重放，无 REQUEST_REPLAY_CONFLICT）');
+  assert.equal(state.writes[3].requestId, state.writes[0].requestId);
+  assert.equal(state.writes[4].requestId, `task-research-1:source:${researchSourceKeyFor(urlC)}`);
   assert.equal(run2.pack.sourceIds.length, 3, '既有证据 + 新证据去重后 3 个 sourceId');
 });
 

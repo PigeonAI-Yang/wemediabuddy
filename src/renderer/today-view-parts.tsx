@@ -2,6 +2,7 @@ import type { TodayPlanItem, TodaySource } from '../main/workbench';
 import { PlatformMark } from './platform-mark';
 import { formatNames, platformNames } from './app-types';
 import { poolBadgeClass, type PoolBadge } from './today-pool-view';
+import { PROPAGATION_NEUTRAL_GRADE, resolvePropagationGrade } from '../shared/propagation.ts';
 export function formatSourcePublishedAt(value?: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -25,8 +26,37 @@ export function domainOf(value: string | null): string | null {
 }
 
 /** 信息流副标题：优先展示真实信源（作者 / 域名），不再用无信息的「入库资料」。 */
+function isTrustedXHandle(value: string): boolean {
+  if (!value) return false;
+  const v = value.trim();
+  if (!v) return false;
+  if (v === '巡检打卡' || v === '未知作者' || v === '未知' || v === '账号暂不可见') return false;
+  if (v.includes('巡检') || v.includes('打卡')) return false;
+  if (/^@[A-Za-z0-9_]{1,15}$/.test(v)) return true;
+  if (/^[A-Za-z0-9_]{1,15}$/.test(v)) return true;
+  return false;
+}
+
+function normalizeXHandle(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (v === '巡检打卡') return null;
+  if (/^@[A-Za-z0-9_]{1,15}$/.test(v)) return v;
+  if (/^[A-Za-z0-9_]{1,15}$/.test(v)) return `@${v}`;
+  return null;
+}
+
 export function sourceOriginLabel(source: Pick<TodaySource, 'author' | 'canonicalUrl' | 'categories' | 'title' | 'summary'> & { pinned?: boolean }): string {
   if (source.pinned) return '重点';
+  const host = domainOf(source.canonicalUrl);
+  const isX = host === 'x.com' || host === 'twitter.com';
+  if (isX) {
+    const author = String(source.author || '').trim();
+    const handle = author ? normalizeXHandle(author) : null;
+    if (handle) return handle;
+    // No trusted X handle: placeholder, never fallback to heartbeat/task label or generic X
+    return '账号暂不可见';
+  }
   if (isHeartbeatSource(source as TodaySource)) return '巡检打卡';
   const author = String(source.author || '').trim();
   if (author) {
@@ -34,8 +64,6 @@ export function sourceOriginLabel(source: Pick<TodaySource, 'author' | 'canonica
     if (/^[A-Za-z0-9_]{1,30}$/.test(author)) return `@${author}`;
     return author;
   }
-  const host = domainOf(source.canonicalUrl);
-  if (host === 'x.com' || host === 'twitter.com') return 'X';
   if (host === 'xiaohongshu.com' || host?.endsWith('.xiaohongshu.com')) return '小红书';
   if (host === 'mp.weixin.qq.com') return '公众号';
   if (host) return host;
@@ -145,9 +173,17 @@ export function priorityGrade(value: number | null | undefined): PriorityGrade {
   if (n === 6) return 'E';
   return 'F';
 }
-
 export function priorityLabel(value: number | null | undefined): string {
   return priorityGrade(value);
+}
+// Single shared pure resolver: visible propagation grade derives solely from completed score thresholds.
+// Priority remains internal scheduling order only and is never used for display grade.
+export type PropagationDisplayGrade = string;
+export function resolveDisplayGrade(item: unknown): PropagationDisplayGrade {
+  return resolvePropagationGrade(item);
+}
+export function isPendingDisplay(item: unknown): boolean {
+  return resolvePropagationGrade(item) === PROPAGATION_NEUTRAL_GRADE;
 }
 export function Icon({ name }: { name: string }): React.JSX.Element {
   const paths: Record<string, React.JSX.Element> = {
@@ -214,7 +250,7 @@ export function DismissIconButton({ onClick, dismissLabel }: { onClick: () => vo
 
 export function Opportunity({ item, primary, selected, onToggle, onCreate, sources, badges, onDismiss, dismissLabel }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
-  onCreate: (item: TodayPlanItem) => void; sources: TodaySource[];
+  onCreate?: (item: TodayPlanItem) => void; sources: TodaySource[];
   badges?: PoolBadge[]; onDismiss?: () => void; dismissLabel?: string;
 }): React.JSX.Element {
   const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时${trend.velocityChange.status === 'value' ? ` · 加速 ${Math.round(trend.velocityChange.value).toLocaleString('zh-CN')}` : ''}` : null;
@@ -229,11 +265,11 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
   const actionCluster = () => (
     <div className="opp-actions" onClick={(event) => event.stopPropagation()}>
       {dismissButton}
-      <CreateIconButton onClick={() => onCreate(item)}/>
+      {onCreate ? <CreateIconButton onClick={() => onCreate(item)}/> : null}
     </div>
   );
   if (!primary) return <article data-opportunity-card className={`opp-row${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
-    <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{priorityGrade(item.priority)}</strong>
+    <strong className="opp-grade" data-grade={resolveDisplayGrade(item)}>{resolveDisplayGrade(item)}</strong>
     <div className="opp-main">
       <div className="opp-title">{item.title}</div>
       <div className="opp-why">{item.whyNow}</div>
@@ -250,7 +286,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
   return <article data-opportunity-card className={`opportunity-primary hero-card${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>
 
     <div className="opportunity-tags hero-tags">
-      <strong data-grade={priorityGrade(item.priority)}>{priorityLabel(item.priority)}</strong>
+      <strong data-grade={resolveDisplayGrade(item)}>{resolveDisplayGrade(item)}</strong>
       {item.platforms.map((value) => <span className={`pf-tag ${value}`} key={value}><PlatformMark platform={value}/>{platformNames[value] || value}</span>)}
       <span className="pill violet">时效 {item.timeliness}</span>
       {badgePills}

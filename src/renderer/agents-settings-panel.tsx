@@ -11,13 +11,13 @@ type Role = { roleId: string; labelZh: string; roomZh: string; skills?: readonly
 type Overlay = { roleId: string; capabilityId: string; enabled: boolean };
 
 const EMPLOYEE_ROLE_IDS = ['reporter', 'planner', 'writer', 'librarian'] as const;
-const WORKER_OPTIONS = [1, 2, 3, 4, 5, 6, 7] as const;
+const WORKER_OPTIONS = [5, 6, 7] as const;
 
 export function AgentsSettingsPanel(): JSX.Element {
   const [roles, setRoles] = useState<Role[]>([]);
   const [caps, setCaps] = useState<Cap[]>([]);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
-  const [maxWorkers, setMaxWorkers] = useState(2);
+  const [maxWorkers, setMaxWorkers] = useState(5);
   const [poolRunning, setPoolRunning] = useState(0);
   const [poolQueued, setPoolQueued] = useState(0);
   const [message, setMessage] = useState('');
@@ -32,7 +32,7 @@ export function AgentsSettingsPanel(): JSX.Element {
     setRoles(summary.roles);
     setCaps(summary.capabilities);
     setOverlays(rows);
-    setMaxWorkers(Math.max(1, Number(pool?.maxWorkers) || 2));
+    setMaxWorkers(Math.max(5, Number(pool?.maxWorkers) || 5));
     setPoolRunning(Number(pool?.running) || 0);
     setPoolQueued(Number(pool?.queued) || 0);
   };
@@ -72,9 +72,9 @@ export function AgentsSettingsPanel(): JSX.Element {
     setBusy('maxWorkers');
     setMessage('');
     try {
-      await window.wmb.jobsSetMaxWorkers(value);
+      const result = await window.wmb.jobsSetMaxWorkers(value);
       await reload();
-      setMessage(`同时开工人数已设为 ${value}。`);
+      setMessage(`同时开工人数已设为 ${result.maxWorkers}。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {

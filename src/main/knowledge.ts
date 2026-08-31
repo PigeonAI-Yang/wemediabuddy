@@ -9,6 +9,7 @@ import { CommandDispatchError } from './command-dispatcher.ts';
 import { projectSourceSaved, projectTopicSaved } from './wiki-index-triggers.ts';
 // WMB-5233：主题列表诚实三态（uncompiled / legacy_shell / compiled）。
 import { listTopicCompileStates } from './knowledge-compile-state.ts';
+import { enqueueKnowledgeCompileJob, enqueueKnowledgeRouteJob, wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -105,6 +106,8 @@ export function updateKnowledgeSource(database: DatabaseSync, input: {
   if (broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.update' });
   // WMB-5238：Source 状态/字段更新成功提交后增量投影（含归档 → 移除索引条目）。
   projectSourceSaved(database, input.id);
+  enqueueKnowledgeRouteJob(database, { sourceId: input.id, revision: next });
+  wakePersistentKnowledgeJobs();
   return { id: input.id, revision: next };
 }
 
@@ -124,7 +127,7 @@ export function deleteKnowledgeSource(database: DatabaseSync, input: { id: strin
   }
   if (transaction) database.exec('BEGIN');
   try {
-    database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(input.id);
+    unlinkSourceTopicLinks(database, input.id);
     database.prepare('DELETE FROM content_project_sources WHERE source_id=?').run(input.id);
     purgeSourceBodyHistory(database, input.id);
     database.prepare('DELETE FROM source_body_cache WHERE source_id=?').run(input.id);
@@ -183,9 +186,11 @@ export function markSourcesWatching(database: DatabaseSync, sourceIds: string[],
       continue;
     }
     update.run(now, id);
+    enqueueKnowledgeRouteJob(database, { sourceId: id, revision: row.revision + 1 });
     updated += 1;
     ids.push(id);
   }
+  if (updated > 0) wakePersistentKnowledgeJobs();
   if (updated > 0 && broadcast) broadcastDataChanged({ scopes: ['library', 'sources', 'today'], reason: 'source.watching' });
   return { updated, ids };
 }
@@ -224,6 +229,83 @@ export function upsertKnowledgeTopic(database: DatabaseSync, input: {
   return { id, created: true, revision: 1 };
 }
 
+/**
+ * 统一的 Source→Topic 关系写入口。
+ * 关系、当前 Source revision 对应的知识编译 job 与 Topic 时间线必须在同一调用方事务内写入；
+ * 调用方提交事务后再调用 wakePersistentKnowledgeJobs()。
+ */
+export function linkTopicSource(database: DatabaseSync, input: {
+  topicId: string;
+  sourceId: string;
+  relation?: TopicRelation;
+  now?: string;
+}): void {
+  const topic = database.prepare('SELECT id FROM topics WHERE id=?').get(input.topicId) as { id: string } | undefined;
+  if (!topic) throw new Error('TOPIC_NOT_FOUND');
+  const source = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.sourceId) as { id: string; revision: number } | undefined;
+  if (!source) throw new Error('SOURCE_NOT_FOUND');
+  const now = input.now ?? new Date().toISOString();
+  database.prepare(`INSERT INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(topic_id,source_id,relation) DO UPDATE SET updated_at=excluded.updated_at`)
+    .run(input.topicId, input.sourceId, input.relation ?? 'primary', now, now);
+  enqueueKnowledgeCompileJob(database, { sourceId: source.id, revision: source.revision, topicId: input.topicId });
+  database.prepare('UPDATE topics SET last_seen_at=?, updated_at=?, revision=revision+1 WHERE id=?').run(now, now, input.topicId);
+}
+
+/** 批量关系写入：校验所有 Source 后再写，避免部分关系成功。 */
+export function linkTopicSources(database: DatabaseSync, topicId: string, sourceIds: readonly string[], now = new Date().toISOString()): void {
+  const unique = [...new Set(sourceIds.filter(Boolean))];
+  const topic = database.prepare('SELECT id FROM topics WHERE id=?').get(topicId) as { id: string } | undefined;
+  if (!topic) throw new Error('TOPIC_NOT_FOUND');
+  const sources = unique.map((sourceId) => {
+    const row = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(sourceId) as { id: string; revision: number } | undefined;
+    if (!row) throw new Error('SOURCE_NOT_FOUND');
+    return row;
+  });
+  const insert = database.prepare(`INSERT INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(topic_id,source_id,relation) DO UPDATE SET updated_at=excluded.updated_at`);
+  for (const source of sources) {
+    insert.run(topicId, source.id, 'primary', now, now);
+    enqueueKnowledgeCompileJob(database, { sourceId: source.id, revision: source.revision, topicId });
+  }
+  if (sources.length) database.prepare('UPDATE topics SET last_seen_at=?, updated_at=?, revision=revision+1 WHERE id=?').run(now, now, topicId);
+}
+
+/** Topic maintenance 的原子移链入口；目标关系成功后立即按当前 Source revision 排队编译。 */
+export function moveTopicSourceLink(database: DatabaseSync, input: {
+  fromTopicId: string;
+  toTopicId: string;
+  sourceId: string;
+  relation?: string;
+  createdAt?: string;
+  now?: string;
+}): void {
+  if (input.fromTopicId === input.toTopicId) throw new Error('TOPIC_REASSIGN_SAME');
+  const relationFilter = input.relation === undefined ? '' : ' AND relation=?';
+  const params = input.relation === undefined
+    ? [input.fromTopicId, input.sourceId]
+    : [input.fromTopicId, input.sourceId, input.relation];
+  const row = database.prepare(`SELECT relation, created_at AS createdAt FROM topic_source_links
+    WHERE topic_id=? AND source_id=?${relationFilter} ORDER BY relation LIMIT 1`).get(...params) as { relation: string; createdAt: string } | undefined;
+  if (!row) throw new Error('TOPIC_REASSIGN_LINK_NOT_FOUND');
+  const target = database.prepare('SELECT id FROM topics WHERE id=?').get(input.toTopicId) as { id: string } | undefined;
+  if (!target) throw new Error('TOPIC_NOT_FOUND');
+  const source = database.prepare('SELECT id, revision FROM source_items WHERE id=?').get(input.sourceId) as { id: string; revision: number } | undefined;
+  if (!source) throw new Error('SOURCE_NOT_FOUND');
+  const now = input.now ?? new Date().toISOString();
+  database.prepare('DELETE FROM topic_source_links WHERE topic_id=? AND source_id=? AND relation=?')
+    .run(input.fromTopicId, input.sourceId, row.relation);
+  database.prepare(`INSERT OR IGNORE INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at)
+    VALUES(?,?,?,?,?)`).run(input.toTopicId, input.sourceId, row.relation, input.createdAt ?? row.createdAt, now);
+  enqueueKnowledgeCompileJob(database, { sourceId: source.id, revision: source.revision, topicId: input.toTopicId });
+  database.prepare('UPDATE topics SET last_seen_at=?, updated_at=?, revision=revision+1 WHERE id IN (?,?)').run(now, now, input.fromTopicId, input.toTopicId);
+}
+
+/** 删除 Source 时只清理关系；删除本身不应再创建编译任务。 */
+export function unlinkSourceTopicLinks(database: DatabaseSync, sourceId: string): void {
+  database.prepare('DELETE FROM topic_source_links WHERE source_id=?').run(sourceId);
+}
+
 export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Array<{
   sourceId: string; topic: { canonicalKey?: string; title: string; kind?: 'theme' | 'event'; summary?: string };
   relation?: TopicRelation; verificationStatus?: VerificationStatus; managementStatus?: ManagementStatus;
@@ -236,16 +318,15 @@ export function recordKnowledgeBatch(database: DatabaseSync, input: { items: Arr
       const source = database.prepare('SELECT revision FROM source_items WHERE id=?').get(item.sourceId) as { revision: number } | undefined;
       if (!source) throw new Error('SOURCE_NOT_FOUND');
       const topic = upsertKnowledgeTopic(database, item.topic);
-      database.prepare(`INSERT INTO topic_source_links(topic_id,source_id,relation,created_at,updated_at) VALUES(?,?,?,?,?)
-        ON CONFLICT(topic_id,source_id,relation) DO UPDATE SET updated_at=excluded.updated_at`)
-        .run(topic.id, item.sourceId, item.relation ?? 'primary', now, now);
       if (item.verificationStatus || item.managementStatus) {
         updateKnowledgeSource(database, { id: item.sourceId, expectedRevision: source.revision,
           verificationStatus: item.verificationStatus, managementStatus: item.managementStatus }, transaction);
       }
+      linkTopicSource(database, { topicId: topic.id, sourceId: item.sourceId, relation: item.relation, now });
       return { sourceId: item.sourceId, topicId: topic.id };
     });
     if (transaction) database.exec('COMMIT');
+    if (transaction) wakePersistentKnowledgeJobs();
     return results;
   } catch (error) { if (transaction) database.exec('ROLLBACK'); throw error; }
 }

@@ -161,10 +161,12 @@ test('official AI and UK profiles isolate one linked text chain without AI-only 
             assert.ok(taskRow, 'channel task must exist before judgment runner');
             const task = getAgentTask(database, taskRow.id);
             assert.ok(task);
-            assert.deepEqual(task.contextRefs.intelligenceChannels, {
-              workspaceId: uk.id, profileRevision: 1, modules: ['official_web', 'x_lists'],
-              sources: [{ module: 'official_web', sourceId: channelSource.id, sourceFeedId: channelSource.sourceFeedId, revision: channelSource.revision }]
-            });
+            const frozen = task.contextRefs.intelligenceChannels;
+            assert.equal(frozen.workspaceId, uk.id);
+            assert.equal(frozen.profileRevision, 1);
+            assert.deepEqual(frozen.modules, ['official_web', 'x_lists', 'zhihu_hot']);
+            assert.ok(frozen.sources.some((source) => source.module === 'official_web' && source.sourceId === channelSource.id && source.sourceFeedId === channelSource.sourceFeedId));
+            assert.ok(frozen.sources.some((source) => source.module === 'zhihu_hot' && source.sourceId === 'zhihu_hot'));
             saveCurrentPlan(database, { planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '今日没有新增机会', items: [] });
             database.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)').run('plans.save', agentRequestId(task.id, 'plan'), '{}', new Date().toISOString());
             const completed = completeAgentTask(database, task.id);

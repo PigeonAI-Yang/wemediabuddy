@@ -92,3 +92,40 @@ test('rebind clears every platform snapshot and snapshot metadata cannot authori
     database.close();
   } finally { await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
 });
+
+test('read-only live identity accepts absent platform markers but preserves binding and mismatch guards', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'wmb-account-read-'));
+  try {
+    const database = migrateDatabase(path.join(directory, 'wmb.db'));
+    initializeWorkspaceBrowserBinding(database, 'profile-a');
+    const binding = markWorkspaceBrowserBindingVerified(database, {
+      profileId: 'profile-a', expectedBindingRevision: 1,
+      account: { platform: 'x', accountKey: '@owner', displayName: 'Owner', loginState: 'authenticated' }
+    });
+    for (const platform of ['x', 'wechat', 'zhihu']) {
+      assert.doesNotThrow(() => assertWorkspaceBrowserIdentity(database, {
+        profileId: 'profile-a', bindingRevision: binding.bindingRevision, platform, accountKey: platform === 'x' ? '@owner' : `${platform}-live`,
+        allowMissingExpectedAccount: true
+      }));
+    }
+    assert.throws(
+      () => assertWorkspaceBrowserIdentity(database, {
+        profileId: 'profile-a', bindingRevision: binding.bindingRevision, platform: 'x', accountKey: '@other', allowMissingExpectedAccount: true
+      }),
+      { code: 'ACCOUNT_MISMATCH' }
+    );
+    assert.throws(
+      () => assertWorkspaceBrowserIdentity(database, {
+        profileId: 'profile-b', bindingRevision: binding.bindingRevision, platform: 'wechat', accountKey: 'wechat-live', allowMissingExpectedAccount: true
+      }),
+      { code: 'BROWSER_PROFILE_MISMATCH' }
+    );
+    assert.throws(
+      () => assertWorkspaceBrowserIdentity(database, {
+        profileId: 'profile-a', bindingRevision: binding.bindingRevision - 1, platform: 'zhihu', accountKey: 'zhihu-live', allowMissingExpectedAccount: true
+      }),
+      { code: 'PROFILE_STALE' }
+    );
+    database.close();
+  } finally { await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+});

@@ -87,10 +87,10 @@ function runtimeTest(name, prefix, fn, cleanup) {
   });
 }
 
-runtimeTest('spawner runs two employee jobs with maxWorkers=2', '', async (runtime) => {
+runtimeTest('spawner runs two employee jobs with maxWorkers=5', '', async (runtime) => {
   const seen = [];
   const spawner = new JobSpawner(runtime, {
-    maxWorkers: 2,
+    maxWorkers: 5,
     execute: async () => {
       await sleep(30);
       return SUCCEEDED;
@@ -108,23 +108,29 @@ runtimeTest('spawner runs two employee jobs with maxWorkers=2', '', async (runti
   spawner.dispose();
 });
 
-runtimeTest('third job queues then promotes after slot free', 'q', async (runtime) => {
+runtimeTest('sixth job queues then promotes after slot free', 'q', async (runtime) => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const spawner = new JobSpawner(runtime, {
-    maxWorkers: 2,
-    execute: async ({ job }) => {
-      if (job.roleId === 'reporter' || job.roleId === 'writer') await gate;
+    maxWorkers: 5,
+    execute: async () => {
+      await gate;
       return SUCCEEDED;
     }
   });
-  const j1 = spawner.spawn({ roleId: 'reporter', brief: '1', businessDate: '2026-08-01' });
-  const j2 = spawner.spawn({ roleId: 'writer', brief: '2', projectId: 'p2', businessDate: '2026-08-02' });
-  await waitFor(() => spawner.list().filter((job) => job.status === 'running').length >= 2, 50, 20);
-  const j3 = spawner.spawn({ roleId: 'planner', brief: '3', businessDate: '2026-08-03' });
-  assert.equal(spawner.get(j3.id)?.status, 'queued');
+  const jobs = [
+    spawner.spawn({ roleId: 'reporter', brief: '1', businessDate: '2026-08-01' }),
+    spawner.spawn({ roleId: 'writer', brief: '2', projectId: 'p2', businessDate: '2026-08-02' }),
+    spawner.spawn({ roleId: 'planner', brief: '3', businessDate: '2026-08-03' }),
+    spawner.spawn({ roleId: 'librarian', brief: '4' }),
+    spawner.spawn({ roleId: 'reporter', brief: '5', businessDate: '2026-08-05', channelIds: ['c5'] }),
+    spawner.spawn({ roleId: 'planner', brief: '6', businessDate: '2026-08-06' })
+  ];
+  await waitFor(() => spawner.list().filter((job) => job.status === 'running').length === 5, 100, 20);
+  assert.equal(spawner.get(jobs[5].id)?.status, 'queued');
   release();
-  await awaitStatus(spawner, j3.id, 'succeeded');
+  const done = await Promise.all(jobs.map((job) => spawner.await(job.id, 10_000)));
+  assert.ok(done.every((job) => job.status === 'succeeded'));
   spawner.dispose();
 });
 
@@ -175,7 +181,7 @@ runtimeTest('L0-1 lock conflict -> waiting_resource -> auto-promote on release (
   const gate = new Promise((resolve) => { release = resolve; });
   const seen = [];
   const spawner = new JobSpawner(runtime, {
-    maxWorkers: 2,
+    maxWorkers: 5,
     execute: async ({ job }) => {
       if (job.roleId === 'reporter') await gate;
       return SUCCEEDED;
@@ -200,7 +206,7 @@ runtimeTest('L0-2 lease soft cap -> waiting_resource(RESOURCE_LEASE_BUSY), resca
   for (let i = 0; i < 8; i += 1) held.push(runtime.acquireWorkerLease(null, 'reporter', 'employee'));
   const seen = [];
   const spawner = new JobSpawner(runtime, {
-    maxWorkers: 2,
+    maxWorkers: 5,
     execute: async () => SUCCEEDED,
     onEvent: (event) => seen.push(event.type)
   });
@@ -221,32 +227,35 @@ runtimeTest('L0-3 cancel matrix: queued / waiting_resource / running all end can
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const spawner = new JobSpawner(runtime, {
-    maxWorkers: 2,
+    maxWorkers: 5,
     execute: async ({ job }) => {
-      // 可控 gate 保持 reporter 单 running，避免快单提前 succeeded 造成断言竞态。
+      // 可控 gate 保持五个 Reporter running，避免快单提前 succeeded 造成断言竞态。
       if (job.roleId === 'reporter') await gate;
       return SUCCEEDED;
     }
   });
-  // a 持锁 running；b 同扫描键 → waiting_resource；c 不同渠道键 → running（角色锁不串扰）。
+  // a 持锁 running；b 同扫描键 → waiting_resource；c-f 不同渠道键 → running。
   const a = spawner.spawn({ roleId: 'reporter', brief: 'hold', businessDate: '2026-08-08' });
   const b = spawner.spawn({ roleId: 'reporter', brief: 'same-key', businessDate: '2026-08-08' });
   const c = spawner.spawn({ roleId: 'reporter', brief: 'other-key', channelIds: ['c2'], businessDate: '2026-08-08' });
-  await waitFor(() => spawner.get(b.id)?.status === 'waiting_resource' && spawner.get(c.id)?.status === 'running');
+  const d = spawner.spawn({ roleId: 'reporter', brief: 'other-key-2', channelIds: ['c3'], businessDate: '2026-08-08' });
+  const e = spawner.spawn({ roleId: 'reporter', brief: 'other-key-3', channelIds: ['c4'], businessDate: '2026-08-08' });
+  const f = spawner.spawn({ roleId: 'reporter', brief: 'other-key-4', channelIds: ['c5'], businessDate: '2026-08-08' });
+  await waitFor(() => spawner.get(b.id)?.status === 'waiting_resource' && [a, c, d, e, f].every((job) => spawner.get(job.id)?.status === 'running'));
   assert.equal(spawner.get(b.id)?.status, 'waiting_resource');
   assert.equal(spawner.get(c.id)?.status, 'running');
-  // queued：槽位已满（a+c）→ d 排队
-  const d = spawner.spawn({ roleId: 'reporter', brief: 'queued', channelIds: ['c3'], businessDate: '2026-08-08' });
-  await waitFor(() => spawner.get(d.id)?.status === 'queued');
-  assert.equal(spawner.get(d.id)?.status, 'queued');
-  const queuedCancelled = await spawner.cancel(d.id);
+  // queued：五个 running 占满容量 → g 排队。
+  const g = spawner.spawn({ roleId: 'reporter', brief: 'queued', channelIds: ['c6'], businessDate: '2026-08-08' });
+  await waitFor(() => spawner.get(g.id)?.status === 'queued');
+  assert.equal(spawner.get(g.id)?.status, 'queued');
+  const queuedCancelled = await spawner.cancel(g.id);
   assert.equal(queuedCancelled.status, 'cancelled');
   const waitingCancelled = await spawner.cancel(b.id);
   assert.equal(waitingCancelled.status, 'cancelled');
   const runningCancelled = await spawner.cancel(a.id);
   assert.equal(runningCancelled.status, 'cancelled');
   release();
-  await spawner.await(c.id, 10_000);
+  await Promise.all([c, d, e, f].map((job) => spawner.await(job.id, 10_000)));
   assert.equal(employeeSnapshotCount(runtime), 0, 'all leases released after cancels');
   spawner.dispose();
 });
@@ -451,18 +460,33 @@ runtimeTest('T-12 WMB-5119 cancel after late failed outcome stays cancelled with
   assert.equal(employeeSnapshotCount(runtime), 0, 'lease 归零');
   spawner.dispose();
 });
-
 runtimeTest('WMB-5159 maxWorkers=0 freezes queued durable jobs until capacity resumes', 'capacity-zero', async (runtime) => {
   let releaseFirst;
   const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
-  const spawner = new JobSpawner(runtime, { maxWorkers: 1, execute: async ({ job }) => { if (job.brief === 'first') await firstGate; return SUCCEEDED; } });
+  const spawner = new JobSpawner(runtime, {
+    maxWorkers: 5,
+    execute: async ({ job }) => {
+      if (job.brief === 'first' || job.brief.startsWith('hold-')) await firstGate;
+      return SUCCEEDED;
+    }
+  });
   const first = spawner.spawn({ roleId: 'reporter', brief: 'first', businessDate: '2026-08-10' });
+  const holds = [
+    spawner.spawn({ roleId: 'planner', brief: 'hold-planner', businessDate: '2026-08-11' }),
+    spawner.spawn({ roleId: 'writer', brief: 'hold-writer', projectId: 'p-capacity', businessDate: '2026-08-10' }),
+    spawner.spawn({ roleId: 'reporter', brief: 'hold-reporter', channelIds: ['capacity'], businessDate: '2026-08-10' }),
+    spawner.spawn({ roleId: 'librarian', brief: 'hold-librarian' })
+  ];
+  await waitFor(() => spawner.list().filter((job) => job.status === 'running').length === 5);
   const second = spawner.spawn({ roleId: 'librarian', brief: 'durable', scope: 'workspace' }, 'persistent-job');
   assert.equal(spawner.get(second.id).status, 'queued');
   spawner.setEnabled(false); releaseFirst();
-  await awaitStatus(spawner, first.id, 'succeeded'); await sleep(50);
+  await awaitStatus(spawner, first.id, 'succeeded');
+  await Promise.all(holds.map((job) => awaitStatus(spawner, job.id, 'succeeded')));
+  await sleep(50);
   assert.equal(spawner.get(second.id).status, 'queued', 'capacity zero must not promote queued work');
   spawner.setMaxWorkers(1);
+  assert.equal(spawner.getMaxWorkers(), 5, 'positive capacity settings retain the Reporter floor');
   await awaitStatus(spawner, second.id, 'succeeded');
   spawner.dispose();
 });

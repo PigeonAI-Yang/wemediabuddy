@@ -1,6 +1,7 @@
 import electron from 'electron';
 import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { modelLimits, modelOption, requireModelLimits, type PiModelOption } from './pi-model.ts';
@@ -10,6 +11,20 @@ import type { RoleModelCandidate as SharedRoleModelCandidate, RoleModelPolicies 
 const configKey = 'pi-api-config';
 const { app, safeStorage } = electron;
 
+function resolveUserDataPath(): string {
+  const acceptanceUserData = process.env.WMB_ACCEPTANCE_USER_DATA?.trim();
+  if (acceptanceUserData) return acceptanceUserData;
+  if (app && typeof app.getPath === 'function') {
+    try {
+      return app.getPath('userData');
+    } catch {}
+  }
+  const appData = process.env.APPDATA?.trim();
+  if (appData) return path.join(appData, 'WeMediaBuddy');
+  const home = process.env.HOME?.trim() || process.env.USERPROFILE?.trim() || (() => { try { return os.homedir(); } catch { return ''; } })();
+  if (home) return path.join(home, 'AppData', 'Roaming', 'WeMediaBuddy');
+  throw new Error('无法解析 Pi 配置路径：Electron app.getPath 不可用且未设置用户数据环境变量。');
+}
 export type RoleId = SharedRoleId;
 export const ROLE_IDS: readonly RoleId[] = Object.freeze(['desk', 'reporter', 'planner', 'writer', 'librarian'] as const);
 
@@ -480,7 +495,9 @@ export function migratePiConfigToInstallation(configPath: string, rootPaths: str
 type LegacyState = { activeId: string | null; profiles: StoredProfile[]; fallbackOrder: string[] };
 
 function defaultConfigPath(): string {
-  return path.join(app.getPath('userData'), 'pi-api-config.json');
+  const envPiPath = process.env.WMB_PI_CONFIG_PATH?.trim();
+  if (envPiPath) return envPiPath;
+  return path.join(resolveUserDataPath(), 'pi-api-config.json');
 }
 
 function readStored(configPath: string): StoredStateV3 {

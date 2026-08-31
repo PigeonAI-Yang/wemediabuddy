@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { dispatchBusinessCommand } from './business-command.ts';
-import type { JobSpawner } from './job-spawner.ts';
+import type { SubmitWorkspaceOrchestratorIntentInput, WorkspaceOrchestratorReceipt } from './workspace-orchestrator-runtime.ts';
+import { shanghaiDate } from './ferment.ts';
 import type { TopicConflictEvidence } from './topic-maintenance-conflict.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
@@ -19,6 +20,7 @@ export type TopicReproposalJob = Readonly<{
 
 type Row = { proposal_id: string; job_id: string; run_id: string; status: TopicReproposalJob['status']; conflict_json: string; attempts: number; due_at: string; last_error: string | null; successor_proposal_id: string | null };
 const MAX_ATTEMPTS = 3;
+export type TopicReproposalIntentSubmitter = (input: SubmitWorkspaceOrchestratorIntentInput) => Promise<WorkspaceOrchestratorReceipt>;
 const retryDelayMs = (attempts: number) => [5_000, 30_000][Math.min(attempts - 1, 1)];
 const parse = (row: Row): TopicReproposalJob => ({ proposalId: row.proposal_id, jobId: row.job_id, runId: row.run_id, status: row.status, conflicts: JSON.parse(row.conflict_json), attempts: row.attempts, dueAt: row.due_at, lastError: row.last_error, successorProposalId: row.successor_proposal_id });
 
@@ -74,20 +76,30 @@ export async function recordTopicReproposalFailure(runtime: ActiveWorkspaceRunti
   if (!receipt.ok) throw new Error(receipt.error?.message ?? 'TOPIC_REPROPOSAL_RETRY_FAILED');
 }
 
-export async function kickTopicReproposals(runtime: ActiveWorkspaceRuntime, spawner: JobSpawner): Promise<number> {
+export async function kickTopicReproposals(runtime: ActiveWorkspaceRuntime, submitIntent: TopicReproposalIntentSubmitter): Promise<number> {
   let count = 0;
   for (const item of dueTopicReproposals(runtime.database, new Date().toISOString())) {
     try {
-      const existing = spawner.get(item.runId);
-      if (existing && ['succeeded', 'failed', 'cancelled', 'partial', 'needs_user'].includes(existing.status)) { await recordTopicReproposalFailure(runtime, item.runId, existing.error ?? existing.status); continue; }
-      if (existing) continue;
-      spawner.spawn({
-        roleId: 'librarian', scope: 'workspace',
-        brief: `主题提案 ${item.proposalId} 因真实现场冲突未生效。读取该提案和最新主题现场，重新判断并提交一份 supersedesProposalId=${item.proposalId} 的新提案；requestId 使用 ${item.runId}:topic-reproposal。不得复制旧快照、不得自动批准、不得要求 Owner 手工整理。`
-      }, item.runId);
+      const businessDate = shanghaiDate(new Date(item.dueAt));
+      const logicalInput = {
+        businessDate,
+        source: 'content_cycle',
+        proposalId: item.proposalId,
+        reproposalJobId: item.jobId,
+        runId: item.runId
+      } as const;
+      const receipt = await submitIntent({
+        producerId: 'maintenance.topic-reproposal',
+        businessDate,
+        requestId: `maintenance.topic-reproposal:${item.runId}`,
+        action: 'stage_d',
+        logicalInput,
+        payload: logicalInput,
+        rootMode: 'scheduler'
+      });
+      if (!receipt.ok) throw Object.assign(new Error(receipt.message ?? receipt.code ?? 'TOPIC_REPROPOSAL_INTENT_REJECTED'), { code: receipt.code ?? 'TOPIC_REPROPOSAL_INTENT_REJECTED' });
       count += 1;
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'JOB_SPAWN_DISABLED') continue;
       try { await recordTopicReproposalFailure(runtime, item.runId, error instanceof Error ? error.message : String(error)); }
       catch (failureError) { console.error('[topic-reproposal-retry]', failureError); }
     }
@@ -107,9 +119,9 @@ export async function handleTopicReproposalJobEvent(runtime: ActiveWorkspaceRunt
   await recordTopicReproposalFailure(runtime, runId, type === 'job.finished' ? '资料员工单未形成新的主题提案。' : String(event.error ?? event.report ?? type));
 }
 
-export async function startTopicReproposalScheduler(runtime: ActiveWorkspaceRuntime, spawner: JobSpawner): Promise<() => void> {
-  await kickTopicReproposals(runtime, spawner);
-  const timer = setInterval(() => { if (runtime.isActive) void kickTopicReproposals(runtime, spawner).catch((error) => console.error('[topic-reproposal-scheduler]', error)); }, 10_000);
+export async function startTopicReproposalScheduler(runtime: ActiveWorkspaceRuntime, submitIntent: TopicReproposalIntentSubmitter): Promise<() => void> {
+  await kickTopicReproposals(runtime, submitIntent);
+  const timer = setInterval(() => { if (runtime.isActive) void kickTopicReproposals(runtime, submitIntent).catch((error) => console.error('[topic-reproposal-scheduler]', error)); }, 10_000);
   if (typeof timer.unref === 'function') timer.unref();
   return () => clearInterval(timer);
 }

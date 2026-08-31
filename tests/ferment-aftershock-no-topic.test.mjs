@@ -8,7 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { listFermentingBundle, refreshWorkCarry } from '../src/main/ferment.ts';
 import { upsertSource } from '../src/main/sources.ts';
-import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 // 固定时间锚点：first_seen_at / collected_at 全部用 SQL 显式回填，不依赖真实时钟。
 const FIRST_SEEN = '2026-08-05T02:00:00.000Z';
@@ -38,7 +38,7 @@ function seedPlanItem(database, { planDate, title, priority, timeliness, sourceI
       title, priority, whyNow: '为什么是现在', timeliness,
       targetAudience: `${title}受众`, angle: `${title}角度`, pointOfView: `${title}观点`,
       platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds: [sourceId], scoreReasons: scoredReasons(), ...(topicId ? { topicId } : {})
+      effortEstimate: '30m', sourceIds: [sourceId], scoreReasons: scoredReasons(), editorialDecision: editorialDecision(`${title}观点`), ...(topicId ? { topicId } : {})
     }]
   });
   const row = database.prepare(`SELECT pi.id FROM plan_items pi JOIN plans p ON p.id=pi.plan_id WHERE p.plan_date=? AND pi.title=?`).get(planDate, title);
@@ -54,7 +54,7 @@ function saveRawPlan(database, { planDate, title, priority, timeliness, sourceId
       title, priority, whyNow: '为什么是现在', timeliness,
       targetAudience: `${title}受众`, angle: `${title}角度`, pointOfView: `${title}观点`,
       platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构',
-      effortEstimate: '30m', sourceIds, scoreReasons: scoredReasons(), ...(topicId ? { topicId } : {})
+      effortEstimate: '30m', sourceIds, scoreReasons: scoredReasons(), editorialDecision: editorialDecision(`${title}观点`), ...(topicId ? { topicId } : {})
     }]
   });
   const row = database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id);

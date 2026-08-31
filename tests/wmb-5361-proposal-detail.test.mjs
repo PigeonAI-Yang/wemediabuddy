@@ -9,11 +9,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { getProposalDetail } from '../src/main/proposals.ts';
 import { upsertSource } from '../src/main/sources.ts';
-
-const reasons = [
-  ['reader_immediacy_benefit',20,16],['tension_curiosity_gap',20,15],['why_now_window',20,16],
-  ['save_share_comment_motive',20,15],['evidence_credibility',15,12],['account_fit',5,4]
-].map(([criterion,weight,score]) => ({ criterion,weight,score,reason:`${criterion} reason` }));
+import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 test('WMB-5361 getProposalDetail reads the complete approval snapshot', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-5361-'));
@@ -21,7 +17,7 @@ test('WMB-5361 getProposalDetail reads the complete approval snapshot', async ()
   try {
     const source = upsertSource(database, { title:'官方来源', originalUrl:'https://example.test/source', summary:'证据' });
     const saved = saveCurrentPlan(database, { planDate:'2026-08-28', timezone:'Asia/Shanghai', summary:'detail',
-      items:[{ title:'完整选题',priority:1,whyNow:'窗口事实',timeliness:'today',targetAudience:'目标读者',angle:'独特角度',pointOfView:'核心观点',platforms:['wechat'],formats:['article'],titleGuidance:'标题建议',openingGuidance:'开头建议',structureGuidance:'结构建议',effortEstimate:'40分钟',sourceIds:[source.id],availableMaterials:['已有A'],missingMaterials:['缺失B'],scoreReasons:{status:'scored',score:78,reasons} }],
+      items:[{ title:'完整选题',priority:1,whyNow:'窗口事实',timeliness:'today',targetAudience:'目标读者',angle:'独特角度',pointOfView:'核心观点',platforms:['wechat'],formats:['article'],titleGuidance:'标题建议',openingGuidance:'开头建议',structureGuidance:'结构建议',effortEstimate:'40分钟',sourceIds:[source.id],availableMaterials:['已有A'],missingMaterials:['缺失B'],scoreReasons:scoredReasons(78),editorialDecision:editorialDecision('核心观点') }],
       candidateSources:[{sourceId:source.id,sourceRevision:source.revision}], sourceDecisions:[{sourceId:source.id,decision:'selected',reasonCode:'included',reason:'入选'}]
     });
     const id = database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(saved.id).id;

@@ -1,13 +1,11 @@
-import { createRequire } from 'node:module';
 import type { BrowserConfig } from './browser.ts';
-import { ensurePyaireaderXBrowser } from './browser.ts';
+import { ensurePyaireaderXBrowser, loadPlaywrightCore } from './browser.ts';
 import {
   OFFICIAL_FETCH_TIMEOUT_MS, OFFICIAL_ITEMS_PER_SOURCE, describeFetchBlock, fetchWithTimeout,
   isBlockedChallengePage, safeHost,
   type PrimaryReleaseSource, type WireCheckpoint, type WireSourceHealth
 } from './intelligence-wire.ts';
 
-const require = createRequire(import.meta.url);
 
 type OfficialPageLoad = {
   body: string;
@@ -61,7 +59,7 @@ export async function loadOfficialSourcePage(input: {
 
 async function fetchOfficialPageViaBrowser(browserConfig: BrowserConfig, url: string): Promise<OfficialPageLoad | null> {
   const runtime = await ensurePyaireaderXBrowser(browserConfig, { mode: 'quiet' });
-  const { chromium } = require('playwright-core') as typeof import('playwright-core');
+  const { chromium } = loadPlaywrightCore();
   const browser = await chromium.connectOverCDP(runtime.cdpUrl);
   try {
     const context = browser.contexts()[0];

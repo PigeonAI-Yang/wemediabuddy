@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
 import type { BrowserRuntime } from './browser';
-import { startVerifiedBoundBrowser, type BoundBrowserPlatform } from './bound-browser.ts';
+import { startVerifiedBoundBrowser, type BoundBrowserPlatform, type WorkspaceBrowserVerificationOptions } from './bound-browser.ts';
 import { getPublicationDetail, listPublicationDetails } from './publishing';
 import { collectXAccountMetrics, collectXMetrics } from './platforms/x';
 import { listAccountMetricSnapshots, listMetricJobs, listPublicationMetricSnapshots } from './metrics';
@@ -23,9 +23,13 @@ export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: D
     if (!runtime?.isActive || (expected && runtime !== expected)) throw Object.assign(new Error('当前工作空间运行时不可用。'), { code: 'WORKSPACE_STALE' });
     return runtime;
   };
-  const ensureRuntimeBrowser = async (runtime: ActiveWorkspaceRuntime, platform: BoundBrowserPlatform): Promise<{ browser: BrowserRuntime; lease: WorkspaceRuntimeLease }> => {
+  const ensureRuntimeBrowser = async (
+    runtime: ActiveWorkspaceRuntime,
+    platform: BoundBrowserPlatform,
+    options: WorkspaceBrowserVerificationOptions = {}
+  ): Promise<{ browser: BrowserRuntime; lease: WorkspaceRuntimeLease }> => {
     requireRuntime(runtime);
-    const resolved = await startVerifiedBoundBrowser(runtime.database, platform, { mode: 'quiet' });
+    const resolved = await startVerifiedBoundBrowser(runtime.database, platform, { mode: 'quiet', ...options });
     requireRuntime(runtime);
     return { browser: resolved.runtime, lease: setBrowser(resolved.runtime) };
   };
@@ -36,7 +40,7 @@ export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: D
     if (!publication || publication.platform !== 'x' || publication.status !== 'published' || !publication.externalUrl || !publication.publishedAt) {
       throw new Error('只有已发布的 X 内容可以采集指标。');
     }
-    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x', { allowMissingExpectedAccount: true });
     requireRuntime(runtime);
     requireReceiptData(await dispatchSchedulePublicationMetricJobs(runtime, requestId ? `${requestId}:schedule` : randomUUID(), {
       publicationId: publication.id,
@@ -102,7 +106,7 @@ export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: D
   });
   ipcMain.handle('metrics:process-due', async () => {
     const runtime = requireRuntime();
-    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x', { allowMissingExpectedAccount: true });
     requireRuntime(runtime);
     return runtime.runExternalBrowserWork(lease, () => processDueMetricJobs(runtime, async (platform, sourceUrl) => {
       requireRuntime(runtime);
@@ -117,7 +121,7 @@ export function registerPublishingResultsIpc({ setBrowser, getActiveRuntime }: D
     const account = runtime.database.prepare(`SELECT id, account_key AS accountKey, revision FROM platform_accounts WHERE platform = 'x'`)
       .get() as { id: string; accountKey: string; revision: number } | undefined;
     if (!account) throw new Error('请先识别并保存 X 账号。');
-    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x');
+    const { browser, lease } = await ensureRuntimeBrowser(runtime, 'x', { allowMissingExpectedAccount: true });
     requireRuntime(runtime);
     const capture = await runtime.runExternalBrowserWork(lease, () => collectXAccountMetrics(browser.cdpUrl, account.accountKey));
     requireRuntime(runtime);

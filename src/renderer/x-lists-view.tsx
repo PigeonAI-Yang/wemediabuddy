@@ -115,6 +115,51 @@ function PostMetrics({ metrics, emphasize = false }: { metrics?: TimelinePost['m
   );
 }
 const LIVE_PAGE = 20;
+function isPollutedLabel(value: string): boolean {
+  const v = value.trim();
+  if (!v) return true;
+  if (v === '巡检打卡' || v === '巡检' || v === '打卡') return true;
+  if (v.includes('巡检打卡')) return true;
+  // Task/source label pollution: contains spaces with Chinese and looks like not a handle/display
+  // For handles, strictly ASCII; for display, allow Chinese but not this exact task label
+  return false;
+}
+
+function trustedXHandle(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v) return null;
+  if (v === '巡检打卡' || v === '未知作者' || v === '未知' || v === '账号暂不可见') return null;
+  if (v.includes('巡检') || v.includes('打卡')) return null;
+  if (v.includes(' ') || v.includes('·')) return null;
+  // Must be handle-like: @ + 1-15 alnum+_
+  if (/^@[A-Za-z0-9_]{1,15}$/.test(v)) return v;
+  if (/^[A-Za-z0-9_]{1,15}$/.test(v)) return `@${v}`;
+  return null;
+}
+
+function trustedDisplayName(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v) return null;
+  if (isPollutedLabel(v)) return null;
+  // Disallow handles being misused as display? keep as is; valid display can be Chinese like "程序员鱼皮"
+  if (v === '未知' || v === '未知作者') return null;
+  return v;
+}
+
+function displayNameOf(post: Pick<TimelinePost, 'displayName' | 'authorHandle'>): string {
+  const handle = trustedXHandle(post.authorHandle ?? '');
+  const display = trustedDisplayName(post.displayName ?? null);
+  if (display) return display;
+  if (handle) return handle.startsWith('@') ? handle.slice(1) : handle;
+  return '账号暂不可见';
+}
+
+function handleLabelOf(post: Pick<TimelinePost, 'authorHandle'>): string {
+  return trustedXHandle(post.authorHandle ?? null) ?? '账号暂不可见';
+}
+
 function PostVideo({ post, detail = false }: { post: Pick<TimelinePost, 'hasVideo' | 'videoPoster' | 'videoUrl' | 'url'>; detail?: boolean }): React.JSX.Element | null {
   if (!post.hasVideo && !post.videoUrl) return null;
   if (post.videoUrl && !/\.m3u8(?:$|\?)/i.test(post.videoUrl)) {
@@ -143,10 +188,6 @@ function PostVideo({ post, detail = false }: { post: Pick<TimelinePost, 'hasVide
     </div>
   );
 }
-function displayNameOf(post: Pick<TimelinePost, 'displayName' | 'authorHandle'>): string {
-  const handle = post.authorHandle ?? '';
-  return (post.displayName || (handle.startsWith('@') ? handle.slice(1) : handle) || '未知').trim();
-}
 
 function initialOf(name: string): string {
   return (name[0] || '?').toUpperCase();
@@ -171,7 +212,7 @@ function TimelineMedia({ post, detail = false }: { post: TimelinePost; detail?: 
 }
 
 function QuoteCard({ post, onOpen }: { post: TimelinePost; onOpen?: (post: TimelinePost) => void }): React.JSX.Element {
-  const handle = post.authorHandle ?? '未知作者';
+  const handle = handleLabelOf(post);
   const display = displayNameOf(post);
   return (
     <div
@@ -219,18 +260,20 @@ function TimelineCard({
   fullText?: boolean;
   emphasizeMetrics?: boolean;
 }): React.JSX.Element {
-  const handle = post.authorHandle ?? '未知作者';
+  const handle = handleLabelOf(post);
   const display = displayNameOf(post);
-  const reposter = post.postKind === 'repost' ? post.repostedBy : null;
-  const reposterName = reposter
-    ? (reposter.displayName || (reposter.handle?.startsWith('@') ? reposter.handle.slice(1) : reposter.handle) || '有人')
+  const reposterRaw = post.postKind === 'repost' ? post.repostedBy : null;
+  const reposterHandle = reposterRaw ? trustedXHandle(reposterRaw.handle ?? null) : null;
+  const reposterDisplay = reposterRaw ? trustedDisplayName(reposterRaw.displayName ?? null) : null;
+  const reposterName = reposterRaw
+    ? (reposterDisplay || (reposterHandle ? reposterHandle.slice(1) : null) || '有人')
     : '';
   return (
     <article
       className={`x-timeline-item${className ? ` ${className}` : ''}${post.postKind === 'repost' ? ' is-repost' : ''}${post.postKind === 'quote' ? ' is-quote' : ''}`}
       onClick={onOpen ? () => onOpen(post) : undefined}
     >
-      {reposter ? (
+      {reposterRaw ? (
         <div className="x-social-context" aria-label="转发">
           <MetricIcon name="repost" />
           <span>{reposterName} 转帖了</span>
@@ -478,8 +521,8 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     const page = await window.wmb.listCachedXListTimeline({ accountKey, listId, limit: TIMELINE_PAGE, offset });
     const mapped: TimelinePost[] = page.items.map((item) => ({
       url: item.originalUrl ?? item.id,
-      authorHandle: item.author,
-      displayName: item.author,
+      authorHandle: trustedXHandle(item.author ?? null),
+      displayName: null,
       avatarUrl: null,
       text: item.summary || item.title,
       postedAt: item.publishedAt ?? item.collectedAt,
@@ -537,8 +580,8 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     metrics?: Parameters<typeof normalizeMetrics>[0];
   }, stale?: boolean): TimelinePost => ({
     url: post.url,
-    authorHandle: post.authorHandle ?? null,
-    displayName: post.displayName ?? post.authorHandle ?? null,
+    authorHandle: trustedXHandle(post.authorHandle ?? null),
+    displayName: trustedDisplayName(post.displayName ?? null),
     avatarUrl: post.avatarUrl ?? null,
     text: post.text,
     postedAt: post.postedAt ?? null,
@@ -548,7 +591,13 @@ export function XListsView({ workspaceId, onStatusChange, onContextChange }: {
     videoPoster: post.videoPoster ?? null,
     videoUrl: post.videoUrl ?? null,
     postKind: post.postKind ?? 'tweet',
-    repostedBy: post.repostedBy ?? null,
+    repostedBy: post.repostedBy
+      ? {
+          handle: trustedXHandle(post.repostedBy.handle ?? null),
+          displayName: trustedDisplayName(post.repostedBy.displayName ?? null),
+          avatarUrl: post.repostedBy.avatarUrl ?? null,
+        }
+      : null,
     quotedPost: post.quotedPost ? mapBrowsePost(post.quotedPost, stale) : null,
     metrics: normalizeMetrics(post.metrics),
     origin: 'browse' as const,

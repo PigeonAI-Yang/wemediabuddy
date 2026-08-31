@@ -323,6 +323,9 @@ export async function runResearchJob(input: ResearchJobRunInput, deps: ResearchR
   let saved = saved0;
   let sourceIds: string[] = receiptSourceIds;
   const evidenceByClaim: Record<string, ResearchEvidenceItem[]> = {};
+  // 同一 canonical URL 在单轮发现中可能对应多个引文候选。只派发一次 source 命令，
+  // 避免 URL 稳定 requestId 被后续候选的不同标题/摘要重新绑定而触发 replay conflict。
+  const sourceWrites = new Map<string, ResearchSourceWriteResult | null>();
   const failuresByClaim: Record<string, { total: number; failed: number; reason: string | null }> = {};
 
   try {
@@ -375,18 +378,23 @@ export async function runResearchJob(input: ResearchJobRunInput, deps: ResearchR
           const summary = (candidate.summary ?? snippetOf(fetched.text)).trim();
           if (title && author && summary) {
             const publishedAt = candidate.publishedAt ?? fetched.publishedAt ?? null;
-            const written = await deps.writeSource({
-              claimKey: candidate.claimKey,
-              candidateKey: candidate.key,
-              url: candidate.url,
-              title,
-              author,
-              summary,
-              publishedAt,
-              excerpt: candidate.excerpt ?? null,
-              sourceKind: candidate.sourceKind,
-              requestId: agentRequestId(task.id, `source:${researchSourceKeyFor(candidate.url)}`)
-            });
+            const requestId = agentRequestId(task.id, `source:${researchSourceKeyFor(candidate.url)}`);
+            let written = sourceWrites.get(requestId);
+            if (written === undefined && !sourceWrites.has(requestId)) {
+              written = await deps.writeSource({
+                claimKey: candidate.claimKey,
+                candidateKey: candidate.key,
+                url: candidate.url,
+                title,
+                author,
+                summary,
+                publishedAt,
+                excerpt: candidate.excerpt ?? null,
+                sourceKind: candidate.sourceKind,
+                requestId
+              });
+              sourceWrites.set(requestId, written);
+            }
             if (written) {
               // 写回幂等：同 canonical URL → 同 requestId（后端按回执重放同一 sourceId）；sourceIds 含恢复种子 → 重放不虚增 verified/saved。
               const items = evidenceByClaim[candidate.claimKey] ?? [];

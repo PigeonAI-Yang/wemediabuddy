@@ -556,7 +556,7 @@ test('T11 重启可重建：context_refs_json 跨重启完整指认并重建原�
     try {
       assert.equal(readJobContract(reopened.database, taskId).jobId, persistedJobId);
       const rebuilt = rebuildRoleJobRequest(getAgentTask(reopened.database, taskId).contextRefs);
-      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '基于核心稿写小红书版', projectId: 'P11', writerTask: 'xiaohongshu_platform_version', businessDate: '2026-08-09' });
+      assert.deepEqual(rebuilt, { roleId: 'writer', brief: '基于核心稿写小红书版', projectId: 'P11', writerTask: 'xiaohongshu_platform_version', businessDate: '2026-08-09', researchMode: 'auto' });
       assert.deepEqual(buildJobObjectBoundary(rebuilt, '2026-08-09'), readJobContract(reopened.database, taskId).boundary, '重建边界与持久边界一致');
       const spawner = new JobSpawner(reopened, { maxWorkers: 1, execute: async () => SUCCEEDED });
       const job = spawner.spawn(rebuilt);

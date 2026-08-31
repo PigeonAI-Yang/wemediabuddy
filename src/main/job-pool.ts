@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RoleId } from '../shared/agent-capabilities.ts';
-import { DEFAULT_MAX_WORKERS as DEFAULT_MAX_WORKERS_LIMIT, MAX_EMPLOYEE_LEASES } from './worker-limits.ts';
+import { DEFAULT_MAX_WORKERS as DEFAULT_MAX_WORKERS_LIMIT, MAX_EMPLOYEE_LEASES, MIN_REPORTER_CONCURRENCY } from './worker-limits.ts';
 import type { JobTerminalStatus, RoleJobReportV1 } from './role-job-registry.ts';
 
 /**
@@ -32,7 +32,7 @@ export type JobRecord = Readonly<{
   businessDate: string | null;
   planDate: string | null;
   projectId: string | null;
-  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | null;
+  writerTask: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null;
   /** 角色专属资源锁键（§8.1），submit 时由注册表派生；池晋升时按此键做泊车重检。 */
   resourceLocks: readonly string[];
   status: JobStatus;
@@ -54,7 +54,7 @@ export type JobInput = Readonly<{
   businessDate?: string | null;
   planDate?: string | null;
   projectId?: string | null;
-  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | null;
+  writerTask?: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script' | null;
   resourceLocks?: readonly string[];
 }>;
 
@@ -79,7 +79,8 @@ function normalizeMaxWorkers(maxWorkers: number): number {
   if (maxWorkers > MAX_EMPLOYEE_WORKERS) {
     throw new Error(`maxWorkers 不能超过员工软上限 ${MAX_EMPLOYEE_WORKERS}（runtime 总 lease ${MAX_EMPLOYEE_WORKERS + 1}，预留 desk）。`);
   }
-  return maxWorkers;
+  // 0 remains the explicit dispatch-disable sentinel; every positive setting keeps Reporter capacity >= 5.
+  return maxWorkers === 0 ? 0 : Math.max(maxWorkers, MIN_REPORTER_CONCURRENCY);
 }
 
 export class JobPool {

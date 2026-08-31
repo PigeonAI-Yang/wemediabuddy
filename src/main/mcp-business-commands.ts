@@ -10,6 +10,7 @@ import { submitPlanItemForReview } from './planning-stage.ts';
 import { isRoleId } from '../shared/agent-capabilities.ts';
 import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
+import { executeOwnerProjectionDecision, readOwnerProjectionDecisionBinding } from './workspace-orchestrator-owner-decision.ts';
 function getTaskRole(database: DatabaseSync, taskId?: string): string | null {
   if (!taskId) return null;
   try {
@@ -207,7 +208,7 @@ export function buildPlannerReviewInput(existing: Record<string, unknown>, rest:
     methodFindingIds: (canonical.method_finding_ids as string[] | undefined) ?? [],
     topicId: (canonical.topic_id as string | null | undefined) ?? (existing.topic_id as string | null ?? null),
     editorialDecision: canonical.editorialDecision,
-    scoreReasons: canonical.scoreReasons,
+    scoreReasons: canonical.scoreReasons as Parameters<typeof submitPlanItemForReview>[1]['item']['scoreReasons'],
   };
 }
 type Authority = { request_id: string; task_id: string; grant_id: string; worker_lease_id?: string };
@@ -641,29 +642,27 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('plan_item.approve', {
-    description: '提交候选批准意图；只返回 Actor receipt',
+    description: '按当前 frozen Projection 执行 eligible 候选批准；返回 production command receipt。',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
     const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
-    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
-      planItemId: identity.planItemId,
-      expectedRevision: expected_revision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision,
-      decision: 'approve',
-      approvedPlanItemIds: [identity.planItemId],
-      ...(reason === undefined ? {} : { reason })
-    });
-    return text(await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.candidate-decision',
-      businessDate: identity.businessDate,
-      requestId: request_id,
-      action: 'approve_candidates',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput));
+    const binding = readOwnerProjectionDecisionBinding(runtime.database, runtime.identity.workspaceId, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, { ...binding, expectedRevision: expected_revision, decision: 'approve', approvedPlanItemIds: [identity.planItemId], ...(reason === undefined ? {} : { reason }) });
+    const actorReceipt = await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.candidate-decision', businessDate: identity.businessDate, requestId: request_id,
+      action: 'approve_candidates', logicalInput: payload, payload, rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput);
+    if (!actorReceipt.ok) return text(actorReceipt);
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.approve', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { ...binding, decision: 'approve', expectedRevision: expected_revision, requestId: request_id, reason },
+      boundIdentity: { entityType: 'plan_item', entityId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const data = executeOwnerProjectionDecision(database, { ...normalized, decision: 'approve' });
+        return { data, entityId: plan_item_id, beforeRevision: expected_revision, readback: data };
+      }
+    }));
   });
 
   server.registerTool('plan_item.reject', {
@@ -693,29 +692,27 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('plan_item.rework', {
-    description: '提交候选修复意图；只返回 Actor receipt',
+    description: '按当前 frozen Projection 执行 invalid 候选修复；返回 production command receipt。',
     inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int(), reason: z.string().optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision, reason } = input;
     const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
-    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
-      planItemId: identity.planItemId,
-      expectedRevision: expected_revision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision,
-      decision: 'repair',
-      invalidPlanItemIds: [identity.planItemId],
-      reason: reason ?? 'rework'
-    });
-    return text(await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.candidate-decision',
-      businessDate: identity.businessDate,
-      requestId: request_id,
-      action: 'repair_invalid_candidate',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput));
+    const binding = readOwnerProjectionDecisionBinding(runtime.database, runtime.identity.workspaceId, plan_item_id);
+    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, { ...binding, expectedRevision: expected_revision, decision: 'repair', invalidPlanItemIds: [identity.planItemId], reason: reason ?? 'rework' });
+    const actorReceipt = await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'proposal.candidate-decision', businessDate: identity.businessDate, requestId: request_id,
+      action: 'repair_invalid_candidate', logicalInput: payload, payload, rootMode: 'owner'
+    } satisfies SubmitWorkspaceOrchestratorIntentInput);
+    if (!actorReceipt.ok) return text(actorReceipt);
+    return text(await dispatchBusinessCommand(runtime, {
+      command: 'plan_item.rework', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
+      input: { ...binding, decision: 'repair', expectedRevision: expected_revision, requestId: request_id, reason: reason ?? 'rework' },
+      boundIdentity: { entityType: 'plan_item', entityId: plan_item_id }, entityType: 'plan_item',
+      execute: (database, normalized) => {
+        const data = executeOwnerProjectionDecision(database, { ...normalized, decision: 'repair' });
+        return { data, entityId: plan_item_id, beforeRevision: expected_revision, readback: data };
+      }
+    }));
   });
 
   server.registerTool('plan_item.advance', {

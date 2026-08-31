@@ -1,13 +1,14 @@
 import { broadcastDataChanged } from './data-changed.ts';
 import { normalizeTitle } from './ferment-read.ts';
-import { PROPAGATION_CRITERIA, sameThesis } from '../shared/propagation.ts';
+import { PROPAGATION_V2_CRITERIA, parsePropagationScoreReasons, isValidPropagationV2Reasons, sameThesis, validateProposalCompleteness } from '../shared/propagation.ts';
+import { validateEditorialDecision, type EditorialDecision } from '../shared/editorial-thesis.ts';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { linkTopicSources } from './knowledge.ts';
 import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
-import { isExactZhihuFallback } from './planning-stage.ts';
+import { isExactZhihuFallback, validateEditorialKnowledgeRefs, validatePlanSourceReferences, validateTruthGateSourceReferences } from './planning-stage.ts';
 
-export type PlanItemInput = { title: string; priority: number; whyNow: string; timeliness: string; targetAudience: string; angle: string; pointOfView: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string; structureGuidance: string; effortEstimate: string; sourceIds: string[]; availableMaterials?: string[]; missingMaterials?: string[]; reviewIds?: string[]; methodFindingIds?: string[]; topicId?: string; scoreReasons?: unknown };
+export type PlanItemInput = { title: string; priority: number; whyNow: string; timeliness: string; targetAudience: string; angle: string; pointOfView: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string; structureGuidance: string; effortEstimate: string; sourceIds: string[]; availableMaterials?: string[]; missingMaterials?: string[]; reviewIds?: string[]; methodFindingIds?: string[]; topicId?: string; scoreReasons?: unknown; editorialDecision?: EditorialDecision | unknown };
 export type PlanSourceDecision = {
   sourceId: string;
   sourceRevision?: number;
@@ -24,7 +25,7 @@ export type SavePlanInput = {
   sourceDecisions?: PlanSourceDecision[];
 };
 
-const SCORE_CRITERIA: Record<string, number> = PROPAGATION_CRITERIA;
+const SCORE_CRITERIA: Record<string, number> = PROPAGATION_V2_CRITERIA;
 
 function parseMaybeJson(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -36,10 +37,11 @@ function parseMaybeJson(value: unknown): unknown {
 function validateScoredReasons(value: unknown): string[] {
   if (value === undefined || value === null) return ['scoreReasons_required'];
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['scoreReasons_invalid'];
-  const score = value as { status?: unknown; score?: unknown; reasons?: unknown };
+  const score = value as { status?: unknown; version?: unknown; score?: unknown; reasons?: unknown; truthGate?: unknown };
   const errors: string[] = [];
   if (score.status === 'pending') errors.push('score_pending_not_allowed');
   else if (score.status !== 'scored') errors.push('score_status_must_be_scored');
+  if (score.version !== 'propagation_v2') errors.push('score_version_propagation_v2_required');
   if (typeof score.score !== 'number' || !Number.isFinite(score.score) || score.score < 0 || score.score > 100) errors.push('score_range_0_100');
   if (!Array.isArray(score.reasons)) return [...errors, 'score_reasons_six_required'];
   const seen = new Set<string>();
@@ -56,30 +58,42 @@ function validateScoredReasons(value: unknown): string[] {
   }
   if (seen.size !== 6 || (score.reasons as unknown[]).length !== 6) errors.push('score_reasons_six_required');
   if (typeof score.score === 'number' && Number.isFinite(score.score) && total !== score.score) errors.push('score_total_mismatch');
+  const parsed = parsePropagationScoreReasons(value);
+  if (!isValidPropagationV2Reasons(parsed)) errors.push('truth_gate_or_propagation_v2_invalid');
   return [...new Set(errors)];
 }
 
 function pendingScoreReasonsJson(): string {
   const reasons = [
-    { criterion: 'reader_immediacy_benefit', weight: 20, score: 0, reason: 'insufficient_evidence' },
+    { criterion: 'reality_change_significance', weight: 25, score: 0, reason: 'insufficient_evidence' },
     { criterion: 'tension_curiosity_gap', weight: 20, score: 0, reason: 'insufficient_evidence' },
-    { criterion: 'why_now_window', weight: 20, score: 0, reason: 'insufficient_evidence' },
-    { criterion: 'save_share_comment_motive', weight: 20, score: 0, reason: 'insufficient_evidence' },
-    { criterion: 'evidence_credibility', weight: 15, score: 0, reason: 'insufficient_evidence' },
+    { criterion: 'audience_stakes', weight: 20, score: 0, reason: 'insufficient_evidence' },
+    { criterion: 'why_now_window', weight: 15, score: 0, reason: 'insufficient_evidence' },
+    { criterion: 'one_sentence_relayability', weight: 15, score: 0, reason: 'insufficient_evidence' },
     { criterion: 'account_fit', weight: 5, score: 0, reason: 'insufficient_evidence' },
   ];
-  return JSON.stringify({ status: 'pending', score: 0, reasons, pending_reason: 'insufficient_evidence' });
+  return JSON.stringify({ status: 'pending', version: 'propagation_v2', score: 0, reasons, truthGate: { status: 'research_required', reason: 'insufficient_evidence', claims: [] }, pending_reason: 'insufficient_evidence' });
+}
+
+function rawScoreForItem(item: PlanItemInput): unknown {
+  return (item as Record<string, unknown>).scoreReasons ?? (item as Record<string, unknown>).score_reasons ?? (item as Record<string, unknown>).score_reasons_json;
 }
 
 function scoredJsonForItem(item: PlanItemInput): { json: string; status: 'draft' | 'ready_for_review' } {
-  const raw = (item as Record<string, unknown>).scoreReasons ?? (item as Record<string, unknown>).score_reasons ?? (item as Record<string, unknown>).score_reasons_json;
+  const raw = rawScoreForItem(item);
   if (raw === undefined || raw === null) {
     return { json: pendingScoreReasonsJson(), status: 'draft' };
   }
   const parsed = parseMaybeJson(raw);
   const errors = validateScoredReasons(parsed);
+  const editorial = validateEditorialDecision(item.editorialDecision, item.pointOfView);
+  if (!editorial.valid) errors.push(...editorial.errors);
   if (errors.length) throw Object.assign(new Error(`validation_failed: ${errors.join('; ')}`), { code: 'validation_failed', errors });
-  return { json: JSON.stringify(parsed), status: 'ready_for_review' };
+  const proposal = validateProposalCompleteness(item);
+  const normalized = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? { ...(parsed as Record<string, unknown>), scoredAt: typeof (parsed as Record<string, unknown>).scoredAt === 'string' ? (parsed as Record<string, unknown>).scoredAt : new Date().toISOString() }
+    : parsed;
+  return { json: JSON.stringify(normalized), status: proposal.valid ? 'ready_for_review' : 'draft' };
 }
 
 export function createTopic(database: DatabaseSync, title: string): { id: string; revision: number } {
@@ -163,6 +177,12 @@ export function saveCurrentPlan(database: DatabaseSync, input: SavePlanInput, tr
     const withoutUrl = Number((database.prepare(`SELECT COUNT(*) AS count FROM source_items WHERE id IN (${sourceIds.map(() => '?').join(',')}) AND (canonical_url IS NULL OR canonical_url = '')`).get(...sourceIds) as { count: number }).count);
     if (withoutUrl > 0) throw new Error('计划引用的资料缺少可追溯链接；深挖发现的材料必须带原始 URL 入库后才能引用。');
   }
+  for (const item of input.items) validatePlanSourceReferences(database, item.sourceIds);
+  for (const item of input.items) {
+    if (item.editorialDecision !== undefined) validateEditorialKnowledgeRefs(database, item.editorialDecision, item.pointOfView);
+    const rawScore = rawScoreForItem(item);
+    if (rawScore !== undefined) validateTruthGateSourceReferences(database, rawScore, item.sourceIds);
+  }
   const hasCoverageContract = input.candidateSources !== undefined || input.sourceDecisions !== undefined;
   const decisions = input.sourceDecisions ?? [];
   const candidates = input.candidateSources ?? [];
@@ -204,7 +224,7 @@ export function saveCurrentPlan(database: DatabaseSync, input: SavePlanInput, tr
     items.forEach((item, sortOrder) => {
       const planItemId = randomUUID();
       const { json: scoreReasonsJson, status: planningStatus } = scoredJsonForItem(item);
-      const provenanceJson = JSON.stringify({ origin: 'daily_judge', transitions: [{ from: null, to: planningStatus, by: 'system', at: now }], fingerprints: { template_exact_9fields: false } });
+      const provenanceJson = JSON.stringify({ origin: 'daily_judge', transitions: [{ from: null, to: planningStatus, by: 'system', at: now }], fingerprints: { template_exact_9fields: false }, ...(item.editorialDecision ? { editorial_decision: item.editorialDecision } : {}) });
       database.prepare(`INSERT INTO plan_items (id, plan_id, topic_id, title, priority, why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate, source_ids_json, available_materials_json, missing_materials_json, review_ids_json, method_finding_ids_json, sort_order, created_at, updated_at, revision, score_reasons_json, planning_status, planning_provenance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`).run(planItemId, id, item.topicId ?? null, item.title, item.priority, item.whyNow, item.timeliness, item.targetAudience, item.angle, item.pointOfView, JSON.stringify(item.platforms), JSON.stringify(item.formats), item.titleGuidance, item.openingGuidance, item.structureGuidance, item.effortEstimate, JSON.stringify(item.sourceIds), JSON.stringify(item.availableMaterials ?? []), JSON.stringify(item.missingMaterials ?? []), JSON.stringify(item.reviewIds ?? []), JSON.stringify(item.methodFindingIds ?? []), sortOrder, now, now, scoreReasonsJson, planningStatus, provenanceJson);
       if (item.topicId) linkTopicSources(database, item.topicId, item.sourceIds, now);
       inserted.push({ planItemId, item });

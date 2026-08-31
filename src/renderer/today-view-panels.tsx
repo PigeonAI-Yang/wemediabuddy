@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { SourceBodyCacheRecord } from '../main/source-body-cache';
 import type { TodaySource } from '../main/workbench';
 import { SourceMark } from './source-mark';
-import { CreateIconButton, MAX_SELECTED_SOURCES, domainOf, formatSourcePublishedAt, isHeartbeatSource, priorityGrade, priorityLabel, sourceOriginLabel, type SelectedTodaySource } from './today-view-parts';
+import { CreateIconButton, MAX_SELECTED_SOURCES, domainOf, formatSourcePublishedAt, isHeartbeatSource, sourceOriginLabel, type SelectedTodaySource } from './today-view-parts';
+import { resolvePropagationGrade } from '../shared/propagation.ts';
 import {
   isPreservedMediaItem,
   sourceMediaGroupLabel,
@@ -74,7 +75,7 @@ export function FermentingRail({ fermenting, createFromCarry, selectedId = null,
           }}
         >
           <div className="fermenting-row-main">
-            <strong className="opp-grade" data-grade={priorityGrade(item.priority)}>{item.objectType === 'topic' ? '主题' : priorityLabel(item.priority)}</strong>
+            <strong className="opp-grade" data-grade={item.objectType === 'topic' ? '主题' : resolvePropagationGrade(item)}>{item.objectType === 'topic' ? '主题' : resolvePropagationGrade(item)}</strong>
             <div className="fermenting-row-text">
               <h3>{item.title}</h3>
               <div className="fermenting-row-meta">

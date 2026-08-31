@@ -1,14 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { classifyTimeliness, fingerprintPlanItem, setCarryState, TIMELINESS_WINDOW_HOURS, type TimelinessClass, type WorkCarryItem } from './ferment.ts';
-import { hasProjectForPlanItemOrSources } from './ferment-read.ts';
 import { listXPostTrends, type XPostTrend } from './x-post-metrics.ts';
 import {
-  dedupeOpenProposals,
-  latestPlanItemRowsByDate,
   parseSourceIds,
   type OpportunityPoolItem
 } from './workbench.ts';
-import { isScoredReadyForReview, isScoringPending } from '../shared/propagation.ts';
+import { buildTodayRecommendationProjection } from './today-recommendation.ts';
+import { readManagerAdapterProjection, type ManagerAdapterReadModel } from './workspace-orchestrator-manager-adapter.ts';
+import type { RecommendationReasonCode } from '../shared/propagation.ts';
 
 export type ProposalTab = 'today' | 'shelved' | 'adopted' | 'dismissed' | 'expired' | 'scoring_pending';
 
@@ -44,6 +43,8 @@ export type ProposalLedgerItem = {
   revision: number;
   planningProvenanceJson: string | null;
   scoreReasonsJson: string | null;
+  repairReasonCode?: RecommendationReasonCode;
+  repairReason?: string;
   scoreSnapshot?: null | {
     total: number;
     audienceFit: number;
@@ -76,6 +77,8 @@ export type ProposalLedgerResult = {
   total: number;
   hasMore: boolean;
   counts: ProposalLedgerCounts;
+  /** Durable roots used for this date; an empty list means legacy projection is still applicable. */
+  orchestrator: ManagerAdapterReadModel;
 };
 
 export type ProposalLedgerInput = {
@@ -95,6 +98,13 @@ export type ProposalDetail = {
 };
 
 type CarryRow = { id: string; state: string; revision: number; reason: string | null };
+type LedgerRow = {
+  planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
+  whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
+  targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
+  structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
+  planningStatus: string; revision: number; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
+};
 type Disposition = {
   state: 'adopted' | 'dismissed' | 'expired' | 'open';
   carry: CarryRow | null;
@@ -107,19 +117,11 @@ function emptyCounts(): ProposalLedgerCounts {
   return { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0, scoring_pending: 0 };
 }
 
-function findAdoptedProjectId(database: DatabaseSync, planItemId: string, sourceIds: string[]): string | null {
+function findAdoptedProjectId(database: DatabaseSync, planItemId: string): string | null {
   const byPlan = database.prepare(
     `SELECT id FROM content_projects WHERE plan_item_id = ? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 1`
   ).get(planItemId);
   if (byPlan && typeof byPlan === 'object' && 'id' in byPlan && typeof byPlan.id === 'string') return byPlan.id;
-  if (!sourceIds.length) return null;
-  const bySource = database.prepare(`
-    SELECT cp.id AS id FROM content_project_sources cps
-    JOIN content_projects cp ON cp.id = cps.project_id
-    WHERE cp.archived_at IS NULL AND cps.source_id IN (${sourceIds.map(() => '?').join(',')})
-    ORDER BY cp.updated_at DESC LIMIT 1
-  `).get(...sourceIds);
-  if (bySource && typeof bySource === 'object' && 'id' in bySource && typeof bySource.id === 'string') return bySource.id;
   return null;
 }
 
@@ -153,14 +155,14 @@ function dispositionOfPlanItem(
   const expiresAt = windowHours === null ? null : new Date(Date.parse(input.createdAt) + windowHours * 3_600_000).toISOString();
   const fingerprint = fingerprintPlanItem({ title: input.title, topicId: input.topicId, sourceIds: input.sourceIds });
   const carry = carryByFingerprint.get(fingerprint) ?? null;
-  const adoptedProjectId = findAdoptedProjectId(database, input.planItemId, input.sourceIds);
-  const hasProject = Boolean(adoptedProjectId) || hasProjectForPlanItemOrSources(database, input.planItemId, input.sourceIds);
+  const adoptedProjectId = findAdoptedProjectId(database, input.planItemId);
+  const hasProject = Boolean(adoptedProjectId);
 
   if (hasProject || carry?.state === 'done') {
     return {
       state: 'adopted',
       carry,
-      adoptedProjectId: adoptedProjectId ?? findAdoptedProjectId(database, input.planItemId, input.sourceIds),
+      adoptedProjectId,
       expiresAt,
       timelinessClass
     };
@@ -203,13 +205,7 @@ function loadCarryMap(database: DatabaseSync): Map<string, CarryRow> {
   }
   return map;
 }
-function fetchAllLedgerRows(database: DatabaseSync, limit = 2000): Array<{
-  planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
-  whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
-  targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
-  structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
-  planningStatus: string; revision: number; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
-}> {
+function fetchAllLedgerRows(database: DatabaseSync): LedgerRow[] {
   return database.prepare(`
     SELECT pi.id AS planItemId, pi.title, pi.priority, pi.timeliness, pi.topic_id AS topicId,
       pi.why_now AS whyNow, pi.angle, pi.point_of_view AS pointOfView, pi.source_ids_json AS sourceIds,
@@ -232,14 +228,50 @@ function fetchAllLedgerRows(database: DatabaseSync, limit = 2000): Array<{
         )
     )
     ORDER BY pi.priority ASC, p.plan_date DESC, pi.sort_order ASC
-    LIMIT ?
-  `).all(limit) as Array<{
-    planItemId: string; title: string; priority: number; timeliness: string | null; topicId: string | null;
-    whyNow: string; angle: string; pointOfView: string; sourceIds: string; createdAt: string; planDate: string;
-    targetAudience: string; platforms: string; formats: string; titleGuidance: string; openingGuidance: string;
-    structureGuidance: string; effortEstimate: string; availableMaterials: string; missingMaterials: string;
-    planningStatus: string; revision: number; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
-  }>;
+  `).all() as LedgerRow[];
+}
+function fetchLedgerRowsByIds(database: DatabaseSync, planItemIds: readonly string[]): LedgerRow[] {
+  const ids = [...new Set(planItemIds.filter((id) => typeof id === 'string' && id.trim()))];
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  return database.prepare(`
+    SELECT pi.id AS planItemId, pi.title, pi.priority, pi.timeliness, pi.topic_id AS topicId,
+      pi.why_now AS whyNow, pi.angle, pi.point_of_view AS pointOfView, pi.source_ids_json AS sourceIds,
+      pi.target_audience AS targetAudience, pi.platforms_json AS platforms, pi.formats_json AS formats,
+      pi.title_guidance AS titleGuidance, pi.opening_guidance AS openingGuidance,
+      pi.structure_guidance AS structureGuidance, pi.effort_estimate AS effortEstimate,
+      pi.available_materials_json AS availableMaterials, pi.missing_materials_json AS missingMaterials,
+      pi.created_at AS createdAt, p.plan_date AS planDate,
+      pi.planning_status AS planningStatus, pi.revision AS revision,
+      pi.planning_provenance_json AS planningProvenanceJson, pi.score_reasons_json AS scoreReasonsJson
+    FROM plan_items pi
+    JOIN plans p ON p.id = pi.plan_id
+    WHERE pi.id IN (${placeholders})
+  `).all(...ids) as LedgerRow[];
+}
+
+function opportunityFromLedgerRow(database: DatabaseSync, row: LedgerRow, now: Date): OpportunityPoolItem {
+  const sourceIds = parseSourceIds(row.sourceIds);
+  const timelinessClass = classifyTimeliness(row.timeliness);
+  const windowHours = TIMELINESS_WINDOW_HOURS[timelinessClass];
+  const createdMs = Date.parse(row.createdAt);
+  const expiresAt = windowHours === null || !Number.isFinite(createdMs)
+    ? null
+    : new Date(createdMs + windowHours * 3_600_000).toISOString();
+  return {
+    planItemId: row.planItemId, planDate: row.planDate, title: row.title, priority: row.priority,
+    timeliness: row.timeliness, timelinessClass, expiresAt, topicId: row.topicId, sourceIds,
+    whyNow: row.whyNow, angle: row.angle, pointOfView: row.pointOfView, targetAudience: row.targetAudience,
+    platforms: parseSourceIds(row.platforms), formats: parseSourceIds(row.formats),
+    titleGuidance: row.titleGuidance, openingGuidance: row.openingGuidance,
+    structureGuidance: row.structureGuidance, effortEstimate: row.effortEstimate,
+    availableMaterials: parseSourceIds(row.availableMaterials), missingMaterials: parseSourceIds(row.missingMaterials),
+    trendEvidence: listXPostTrends(database, { sourceIds }), createdAt: row.createdAt,
+    isNew: Number.isFinite(createdMs) && createdMs >= now.getTime() - 6 * 3_600_000,
+    planningStatus: row.planningStatus, revision: row.revision,
+    planningProvenanceJson: row.planningProvenanceJson, scoreReasonsJson: row.scoreReasonsJson,
+    carry: null, demotion: null
+  };
 }
 
 function buildProposalLedger(
@@ -251,13 +283,49 @@ function buildProposalLedger(
   const tab = input.tab ?? 'today';
   const limit = Math.max(1, Math.min(input.limit ?? 50, 200));
   const offset = Math.max(0, Math.floor(input.offset ?? 0));
-  const rows = fetchAllLedgerRows(database, 2000);
+  const rows = fetchAllLedgerRows(database);
+  const rowById = new Map(rows.map((row) => [row.planItemId, row]));
+  const projection = buildTodayRecommendationProjection(database, input.planDate, { now });
+  const orchestrator = readManagerAdapterProjection(database, { businessDate: input.planDate });
+  const hasOrchestratorRoots = orchestrator.roots.length > 0;
+  const orchestratorEligibleIds: string[] = [];
+  const orchestratorPendingIds: string[] = [];
+  const orchestratorInvalidIds: string[] = [];
+  for (const root of orchestrator.roots) {
+    if (root.projectionState !== 'frozen' || root.projectionError) continue;
+    for (const id of root.eligiblePlanItemIds) if (!orchestratorEligibleIds.includes(id)) orchestratorEligibleIds.push(id);
+    for (const id of root.pendingPlanItemIds) if (!orchestratorPendingIds.includes(id)) orchestratorPendingIds.push(id);
+    for (const id of root.invalidPlanItemIds) if (!orchestratorInvalidIds.includes(id)) orchestratorInvalidIds.push(id);
+  }
+  // A frozen root is authoritative even when its item belongs to an older
+  // non-empty plan. Do not recover it through latest-plan/date heuristics.
+  if (hasOrchestratorRoots) {
+    const authoritativeRows = fetchLedgerRowsByIds(database, [
+      ...orchestratorEligibleIds,
+      ...orchestratorPendingIds,
+      ...orchestratorInvalidIds
+    ]);
+    for (const row of authoritativeRows) rowById.set(row.planItemId, row);
+  }
+  const projectionItems = new Map(projection.eligible.map((item) => [item.planItemId, item]));
+  const openItems = hasOrchestratorRoots
+    ? orchestratorEligibleIds.map((id) => projectionItems.get(id) ?? (rowById.get(id) ? opportunityFromLedgerRow(database, rowById.get(id)!, now) : null)).filter((item): item is OpportunityPoolItem => Boolean(item))
+    : projection.eligible;
+  const repairable = hasOrchestratorRoots
+    ? [...orchestratorPendingIds.map((planItemId) => ({ planItemId, revision: rowById.get(planItemId)?.revision ?? 1, reasonCode: 'score_pending' as const, reason: '编排 Projection 仍在等待评分' })), ...orchestratorInvalidIds.map((planItemId) => ({ planItemId, revision: rowById.get(planItemId)?.revision ?? 1, reasonCode: 'score_invalid' as const, reason: '编排 Projection 标记为 invalid，需修复' }))]
+    : projection.repairable;
   const carryByFingerprint = loadCarryMap(database);
   const counts = emptyCounts();
-  const openItems: OpportunityPoolItem[] = [];
-  const pendingScoringItems: OpportunityPoolItem[] = [];
   const terminalItems: ProposalLedgerItem[] = [];
-  const newHours = 6;
+  if (hasOrchestratorRoots) {
+    counts.today = orchestratorEligibleIds.filter((id) => rowById.get(id)?.planDate === input.planDate).length;
+    counts.shelved = orchestratorEligibleIds.filter((id) => rowById.get(id)?.planDate !== input.planDate).length;
+    counts.scoring_pending = orchestratorPendingIds.length + orchestratorInvalidIds.length;
+  } else {
+    counts.today = projection.counts.todayReady;
+    counts.shelved = projection.counts.carriedReady;
+    counts.scoring_pending = projection.counts.scoringPending + projection.counts.invalid;
+  }
 
   for (const row of rows) {
     const sourceIds = parseSourceIds(row.sourceIds);
@@ -316,153 +384,15 @@ function buildProposalLedger(
       continue;
     }
 
-    // Open disposition: split by scoring eligibility (SSOT)
-    const checkItem = { planning_status: row.planningStatus, score_reasons_json: row.scoreReasonsJson } as unknown;
-    const eligible = isScoredReadyForReview(checkItem);
-    const pending = isScoringPending(checkItem);
-    if (eligible) {
-      const state: ProposalTab = row.planDate === input.planDate ? 'today' : 'shelved';
-      counts[state] += 1;
-      if (!withDetails) continue;
-      openItems.push({
-        planItemId: row.planItemId,
-        planDate: row.planDate,
-        title: row.title,
-        priority: row.priority,
-        timeliness: row.timeliness,
-        timelinessClass: disposition.timelinessClass,
-        expiresAt: disposition.expiresAt,
-        topicId: row.topicId,
-        sourceIds,
-        whyNow: row.whyNow,
-        angle: row.angle,
-        pointOfView: row.pointOfView,
-        targetAudience: row.targetAudience,
-        platforms: parseSourceIds(row.platforms),
-        formats: parseSourceIds(row.formats),
-        titleGuidance: row.titleGuidance,
-        openingGuidance: row.openingGuidance,
-        structureGuidance: row.structureGuidance,
-        effortEstimate: row.effortEstimate,
-        availableMaterials: parseSourceIds(row.availableMaterials),
-        missingMaterials: parseSourceIds(row.missingMaterials),
-        trendEvidence: listXPostTrends(database, { sourceIds }),
-        createdAt: row.createdAt,
-        isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
-        planningStatus: row.planningStatus,
-        revision: row.revision,
-        planningProvenanceJson: row.planningProvenanceJson,
-        scoreReasonsJson: row.scoreReasonsJson,
-        carry: disposition.carry
-          ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
-          : null,
-        demotion: null
-      });
-      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
-      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
-      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
-      (openItems[openItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
-      continue;
-      pendingScoringItems.push({
-        planItemId: row.planItemId,
-        planDate: row.planDate,
-        title: row.title,
-        priority: row.priority,
-        timeliness: row.timeliness,
-        timelinessClass: disposition.timelinessClass,
-        expiresAt: disposition.expiresAt,
-        topicId: row.topicId,
-        sourceIds,
-        whyNow: row.whyNow,
-        angle: row.angle,
-        pointOfView: row.pointOfView,
-        targetAudience: row.targetAudience,
-        platforms: parseSourceIds(row.platforms),
-        formats: parseSourceIds(row.formats),
-        titleGuidance: row.titleGuidance,
-        openingGuidance: row.openingGuidance,
-        structureGuidance: row.structureGuidance,
-        effortEstimate: row.effortEstimate,
-        availableMaterials: parseSourceIds(row.availableMaterials),
-        missingMaterials: parseSourceIds(row.missingMaterials),
-        trendEvidence: listXPostTrends(database, { sourceIds }),
-        createdAt: row.createdAt,
-        isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
-        planningStatus: row.planningStatus,
-        revision: row.revision,
-        planningProvenanceJson: row.planningProvenanceJson,
-        scoreReasonsJson: row.scoreReasonsJson,
-        carry: disposition.carry
-          ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
-          : null,
-        demotion: null
-      });
-      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
-      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
-      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
-      (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
-      continue;
-    }
-    // Fallback open but neither eligible nor pending (should not happen): treat as pending for honesty
-    counts.scoring_pending += 1;
-    if (!withDetails) continue;
-    pendingScoringItems.push({
-      planItemId: row.planItemId,
-      planDate: row.planDate,
-      title: row.title,
-      priority: row.priority,
-      timeliness: row.timeliness,
-      timelinessClass: disposition.timelinessClass,
-      expiresAt: disposition.expiresAt,
-      topicId: row.topicId,
-      sourceIds,
-      whyNow: row.whyNow,
-      angle: row.angle,
-      pointOfView: row.pointOfView,
-      targetAudience: row.targetAudience,
-      platforms: parseSourceIds(row.platforms),
-      formats: parseSourceIds(row.formats),
-      titleGuidance: row.titleGuidance,
-      openingGuidance: row.openingGuidance,
-      structureGuidance: row.structureGuidance,
-      effortEstimate: row.effortEstimate,
-      availableMaterials: parseSourceIds(row.availableMaterials),
-      missingMaterials: parseSourceIds(row.missingMaterials),
-      trendEvidence: listXPostTrends(database, { sourceIds }),
-      createdAt: row.createdAt,
-      isNew: Date.parse(row.createdAt) >= now.getTime() - newHours * 3_600_000,
-      planningStatus: row.planningStatus,
-      revision: row.revision,
-      planningProvenanceJson: row.planningProvenanceJson,
-      scoreReasonsJson: row.scoreReasonsJson,
-      carry: disposition.carry
-        ? { id: disposition.carry!.id, state: disposition.carry!.state, revision: disposition.carry!.revision }
-        : null,
-      demotion: null
-    });
-    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__planningStatus = row.planningStatus;
-    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__revision = row.revision;
-    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__provenance = row.planningProvenanceJson;
-    (pendingScoringItems[pendingScoringItems.length - 1] as unknown as Record<string, unknown>).__score = row.scoreReasonsJson;
   }
 
   if (!withDetails) {
-    return { tab, items: [], total: counts[tab], hasMore: false, counts };
+    return { tab, items: [], total: counts[tab], hasMore: false, counts, orchestrator };
   }
 
   if (tab === 'today' || tab === 'shelved') {
-    const deduped = dedupeOpenProposals(openItems);
-    let todayCount = 0;
-    let shelvedCount = 0;
-    for (const item of deduped) {
-      if (item.planDate === input.planDate) todayCount += 1;
-      else shelvedCount += 1;
-    }
-    counts.today = todayCount;
-    counts.shelved = shelvedCount;
-    const filtered = deduped.filter((item) => (tab === 'today' ? item.planDate === input.planDate : item.planDate < input.planDate));
+    const filtered = openItems.filter((item) => (tab === 'today' ? item.planDate === input.planDate : item.planDate < input.planDate));
     const items: ProposalLedgerItem[] = filtered.slice(offset, offset + limit).map((item) => {
-      const meta = item as unknown as Record<string, unknown>;
       return {
       planItemId: item.planItemId,
       planDate: item.planDate,
@@ -491,24 +421,21 @@ function buildProposalLedger(
       carry: item.carry ? { ...item.carry, reason: null } : null,
       adoptedProjectId: null,
       isNew: item.isNew,
-      planningStatus: String(meta.__planningStatus ?? 'draft'),
-      revision: Number(meta.__revision ?? 1),
-      planningProvenanceJson: (meta.__provenance as string | null) ?? null,
-      scoreReasonsJson: (meta.__score as string | null) ?? null
+      planningStatus: item.planningStatus ?? 'draft',
+      revision: item.revision ?? 1,
+      planningProvenanceJson: item.planningProvenanceJson,
+      scoreReasonsJson: item.scoreReasonsJson
     };});
     enrichItemsWithScore(database, items);
-    return { tab, items, total: filtered.length, hasMore: offset + items.length < filtered.length, counts };
+    return { tab, items, total: filtered.length, hasMore: offset + items.length < filtered.length, counts, orchestrator };
   }
 
   if (tab === 'scoring_pending') {
-    const deduped = dedupeOpenProposals(pendingScoringItems);
-    // Truthful count for scoring_pending is deduped length (avoid story duplicate inflating)
-    counts.scoring_pending = deduped.length;
-    const filtered = deduped.filter((item) => item.planDate === input.planDate);
-    // If current date has pending, show those; otherwise show all pending
-    const itemsSource = filtered.length ? filtered : deduped;
-    const items: ProposalLedgerItem[] = itemsSource.slice(offset, offset + limit).map((item) => {
-      const meta = item as unknown as Record<string, unknown>;
+    const repairItems = repairable.flatMap((repair) => {
+      const row = rowById.get(repair.planItemId);
+      return row ? [{ repair, item: opportunityFromLedgerRow(database, row, now) }] : [];
+    });
+    const items: ProposalLedgerItem[] = repairItems.slice(offset, offset + limit).map(({ item, repair }) => {
       return {
         planItemId: item.planItemId,
         planDate: item.planDate,
@@ -537,16 +464,17 @@ function buildProposalLedger(
         carry: item.carry ? { ...item.carry, reason: null } : null,
         adoptedProjectId: null,
         isNew: item.isNew,
-        planningStatus: String(meta.__planningStatus ?? 'draft'),
-        revision: Number(meta.__revision ?? 1),
-        planningProvenanceJson: (meta.__provenance as string | null) ?? null,
-        scoreReasonsJson: (meta.__score as string | null) ?? null
+        planningStatus: item.planningStatus ?? 'draft',
+        revision: item.revision ?? 1,
+        planningProvenanceJson: item.planningProvenanceJson,
+        scoreReasonsJson: item.scoreReasonsJson,
+        repairReasonCode: repair.reasonCode,
+        repairReason: repair.reason
       };
     });
     enrichItemsWithScore(database, items);
-    return { tab, items, total: itemsSource.length, hasMore: offset + items.length < itemsSource.length, counts };
+    return { tab, items, total: repairItems.length, hasMore: offset + items.length < repairItems.length, counts, orchestrator };
   }
-
   terminalItems.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.priority - b.priority);
   const pageItems = terminalItems.slice(offset, offset + limit);
   enrichItemsWithScore(database, pageItems);
@@ -555,8 +483,10 @@ function buildProposalLedger(
     items: pageItems,
     total: counts[tab],
     hasMore: offset + pageItems.length < counts[tab],
-    counts
+    counts,
+    orchestrator
   };
+
 }
 
 export function getProposalLedger(database: DatabaseSync, input: ProposalLedgerInput): ProposalLedgerResult {

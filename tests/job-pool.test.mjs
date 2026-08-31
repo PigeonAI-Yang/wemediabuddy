@@ -23,44 +23,51 @@ import {
 import { draftPrompt } from '../src/main/agent-runner.ts';
 import { completeAgentTask, startAgentTask } from '../src/main/agent-tasks.ts';
 
-test('default maxWorkers is 2 and three FIFO jobs leave the third queued', () => {
-  assert.equal(DEFAULT_MAX_WORKERS, 2);
+test('default maxWorkers is 5 and six FIFO jobs leave the sixth queued', () => {
+  assert.equal(DEFAULT_MAX_WORKERS, 5);
   const pool = new JobPool();
-  const a = pool.submit({ roleId: 'reporter', brief: 'A', resourceLocks: ['scan:ws:d:all'] });
-  const b = pool.submit({ roleId: 'planner', brief: 'B', resourceLocks: ['plan:ws:d'] });
-  const c = pool.submit({ roleId: 'writer', brief: 'C', resourceLocks: ['project:ws:p1'] });
-  assert.equal(pool.activeEmployeeCount(), 2);
-  assert.equal(a.status, 'running');
-  assert.equal(b.status, 'running');
-  assert.equal(c.status, 'queued');
-  assert.equal(c.startedAt, null);
+  const jobs = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: `R${index}`,
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
+  assert.equal(pool.activeEmployeeCount(), 5);
+  assert.ok(jobs.slice(0, 5).every((job) => pool.get(job.id).status === 'running'));
+  assert.equal(pool.get(jobs[5].id).status, 'queued');
+  assert.equal(pool.get(jobs[5].id).startedAt, null);
 });
 
 test('completing a job promotes the FIFO next job into the freed slot', () => {
-  const pool = new JobPool(2);
-  const a = pool.submit({ roleId: 'reporter', brief: 'A', resourceLocks: ['scan:ws:d:all'] });
-  const b = pool.submit({ roleId: 'planner', brief: 'B', resourceLocks: ['plan:ws:d'] });
-  const c = pool.submit({ roleId: 'writer', brief: 'C', resourceLocks: ['project:ws:p1'] });
-  pool.complete(a.id);
-  assert.equal(pool.get(a.id).status, 'succeeded');
-  assert.equal(pool.get(a.id).finishedAt !== null, true);
-  assert.equal(pool.activeEmployeeCount(), 2);
-  const promoted = pool.get(c.id);
+  const pool = new JobPool(5);
+  const jobs = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: `R${index}`,
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
+  assert.equal(pool.get(jobs[5].id).status, 'queued');
+  pool.complete(jobs[0].id);
+  assert.equal(pool.get(jobs[0].id).status, 'succeeded');
+  assert.equal(pool.get(jobs[0].id).finishedAt !== null, true);
+  assert.equal(pool.activeEmployeeCount(), 5);
+  const promoted = pool.get(jobs[5].id);
   assert.equal(promoted.status, 'running');
   assert.equal(promoted.startedAt !== null, true);
-  assert.equal(b.status, 'running');
+  assert.ok(jobs.slice(1).every((job) => pool.get(job.id).status === 'running'));
 });
 
 test('cancel frees the slot for the next queued job', () => {
-  const pool = new JobPool(1);
-  const a = pool.submit({ roleId: 'reporter', brief: 'A', resourceLocks: ['scan:ws:d:all'] });
-  const b = pool.submit({ roleId: 'reporter', brief: 'B', resourceLocks: ['scan:ws:d:all'] });
-  assert.equal(pool.activeEmployeeCount(), 1);
-  assert.equal(pool.get(b.id).status, 'queued');
-  pool.cancel(a.id);
-  assert.equal(pool.get(a.id).status, 'cancelled');
-  assert.equal(pool.get(b.id).status, 'running');
-  assert.equal(pool.activeEmployeeCount(), 1);
+  const pool = new JobPool(5);
+  const jobs = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: `R${index}`,
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
+  assert.equal(pool.activeEmployeeCount(), 5);
+  assert.equal(pool.get(jobs[5].id).status, 'queued');
+  pool.cancel(jobs[0].id);
+  assert.equal(pool.get(jobs[0].id).status, 'cancelled');
+  assert.equal(pool.get(jobs[5].id).status, 'running');
+  assert.equal(pool.activeEmployeeCount(), 5);
 });
 
 test('L0-1 lock conflict parks into waiting_resource and auto-promotes after release', () => {
@@ -234,7 +241,8 @@ test('L1-2 derivation table: four roles map to locked intents and resource lock 
   assert.match(corePrompt, /brief=基于项目资料写核心稿/);
   const readyPrompt = draftPrompt({ id: 'task-core' }, 'p1', 'req-core', 'core_draft', '基于项目资料写核心稿', true);
   assert.match(readyPrompt, /wmb_save_core_version/);
-  assert.match(readyPrompt, /禁止调用 wmb_save_platform_version/);
+  assert.doesNotMatch(readyPrompt, /调用 wmb_save_platform_version/);
+  assert.match(readyPrompt, /禁止最终发布/);
   assert.match(readyPrompt, /brief=基于项目资料写核心稿/);
   const xhsPrompt = draftPrompt({ id: 'task-xhs' }, 'p1', 'req-xhs', 'xiaohongshu_platform_version', '基于现有 WMB 核心稿生成小红书平台版本');
   assert.match(xhsPrompt, /wmb_save_platform_version/);
@@ -276,12 +284,19 @@ test('L0-6 readback rules: scan phase / plans revision / content version / libra
       VALUES ('r1', 'ws', 'epoch', 'judge-task:plan', 'plans.save', 'h', 'pi', 'pi', 'judge-task', '{}', '{}', 'ok', '{}', ?)`).run(now);
     assert.deepEqual(readbackPlansRevision(db, '2026-08-10', 'judge-task'), { kind: 'noop_confirmed', scope: 'plan:2026-08-10' });
 
-    // writer: 项目存在且有核心版本 -> content_version；无版本 -> null
-    assert.equal(readbackContentVersion(db, 'proj-1'), null);
+    // writer: WMB-5356 因果读回——仅 exact task 的 content.save_version 成功收据可产生 content_version
+    // 占位版本不得满足不同任务；无 receipt/跨任务/跨项目一律 null（fail-closed）
+    assert.equal(readbackContentVersion(db, 'proj-1', 'writer-missing'), null);
     db.prepare("INSERT INTO content_projects (id, title, created_at, updated_at, revision) VALUES ('proj-1', '项目', ?, ?, 1)").run(now, now);
-    assert.equal(readbackContentVersion(db, 'proj-1'), null, 'no core version yet');
+    assert.equal(readbackContentVersion(db, 'proj-1', 'writer-1'), null, 'no receipt yet -> null even before version');
     db.prepare("INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES ('ver-1', 'proj-1', '正文', 1, ?)").run(now);
-    assert.deepEqual(readbackContentVersion(db, 'proj-1'), { kind: 'content_version', projectId: 'proj-1', versionId: 'ver-1' });
+    assert.equal(readbackContentVersion(db, 'proj-1', 'writer-1'), null, 'placeholder version without exact receipt must not succeed');
+    // exact successful receipt -> succeeds
+    db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+      VALUES ('r-writer-1', 'ws', 'epoch', 'writer-1:req1', 'content.save_version', 'h', 'pi', 'pi', 'writer-1', '{}', ?, 'ok', ?, ?, 'committed', ?)`).run(JSON.stringify({ data: { id: 'ver-1' } }), JSON.stringify({ id: 'ver-1' }), JSON.stringify({ id: 'ver-1' }), now);
+    assert.deepEqual(readbackContentVersion(db, 'proj-1', 'writer-1'), { kind: 'content_version', projectId: 'proj-1', versionId: 'ver-1' });
+    // 跨任务隔离：同一版本、不同任务不得复用
+    assert.equal(readbackContentVersion(db, 'proj-1', 'writer-2'), null, 'other task receipt does not satisfy');
     const xhsTask = startAgentTask(db, {
       intent: 'studio_draft',
       businessDate: '2026-08-12',
@@ -389,28 +404,30 @@ test('desk role and empty brief are rejected by the pool', () => {
 });
 
 test('list returns queued, parked, running, and terminal records with FIFO semantics', async () => {
-  const pool = new JobPool(1);
-  const a = pool.submit({ roleId: 'reporter', brief: 'A', resourceLocks: ['scan:ws:d:all'] });
-  const b = pool.submit({ roleId: 'reporter', brief: 'B', resourceLocks: ['scan:ws:d:all'] });
-  const c = pool.submit({ roleId: 'reporter', brief: 'C', resourceLocks: ['scan:ws:d:all'] });
+  const pool = new JobPool(5);
+  const [a, b, c, d, e, f] = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: String.fromCharCode(65 + index),
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
   pool.park(a.id, 'RESOURCE_LEASE_BUSY', 'busy');
-  // a 泊车（waiting_resource，不占槽）；b 晋升 running 占唯一槽；c 保持 queued。
+  const g = pool.submit({ roleId: 'reporter', brief: 'G', resourceLocks: ['scan:ws:d:6'] });
+  // a 泊车（waiting_resource，不占槽）；f 晋升补位；g 在五个 running 工单之后排队。
   assert.equal(pool.get(a.id).status, 'waiting_resource');
   assert.equal(pool.get(b.id).status, 'running');
-  assert.equal(pool.get(c.id).status, 'queued');
+  assert.equal(pool.get(g.id).status, 'queued');
   const listed = pool.list();
-  assert.deepEqual(listed.map((job) => job.status), ['queued', 'waiting_resource', 'running']);
-  assert.deepEqual(listed.map((job) => job.brief), ['C', 'A', 'B']);
+  assert.deepEqual(listed.map((job) => job.status), ['queued', 'waiting_resource', 'running', 'running', 'running', 'running', 'running']);
+  assert.deepEqual(listed.map((job) => job.brief), ['G', 'A', 'B', 'C', 'D', 'E', 'F']);
   assert.equal(pool.get('missing'), null);
-  // 槽位仍被 b 占用：parked A 不会凭空晋升（资源未释放）。
+  // 槽位仍被五个 running 工单占用：parked A 不会凭空晋升（资源未释放）。
   pool.rescan();
-  assert.equal(pool.get(a.id).status, 'waiting_resource', '唯一槽被 b 占用时 rescan 不晋升 parked');
-  // 真实容量释放（b 终态）→ FIFO：更早提交的 parked A 先于 queued C 晋升。
-  // 晋升通知为 queueMicrotask 异步派发：断言前等待一个微任务，按真实异步事件语义观测。
+  assert.equal(pool.get(a.id).status, 'waiting_resource', '容量已满时 rescan 不晋升 parked');
+  // 真实容量释放（b 终态）→ FIFO：更早提交的 parked A 先于 queued G 晋升。
   pool.complete(b.id);
   await new Promise((resolve) => queueMicrotask(resolve));
   assert.equal(pool.get(a.id).status, 'running', 'b 完成后 parked A 按 FIFO 先晋升');
-  assert.equal(pool.get(c.id).status, 'queued');
+  assert.equal(pool.get(g.id).status, 'queued');
 });
 
 test('T-01 judge-in-flight is the third park code: parks, skips self, promotes via rescan', () => {
@@ -436,20 +453,62 @@ test('T-01 judge-in-flight is the third park code: parks, skips self, promotes v
 });
 
 test('T-01b judge-park keeps FIFO order against the queued lane', async () => {
-  const pool = new JobPool(1);
-  const a = pool.submit({ roleId: 'reporter', brief: 'A', resourceLocks: ['scan:ws:d:all'] });
-  const b = pool.submit({ roleId: 'reporter', brief: 'B', resourceLocks: ['scan:ws:d:all'] });
+  const pool = new JobPool(5);
+  const [a, b, c, d, e, f] = Array.from({ length: 6 }, (_, index) => pool.submit({
+    roleId: 'reporter',
+    brief: String.fromCharCode(65 + index),
+    resourceLocks: [`scan:ws:d:${index}`]
+  }));
   pool.park(a.id, 'RESOURCE_JUDGE_IN_FLIGHT', 'judge running');
-  // a 泊车（waiting_resource，不占槽）；b 晋升占唯一槽。
+  const g = pool.submit({ roleId: 'reporter', brief: 'G', resourceLocks: ['scan:ws:d:6'] });
+  // a 泊车（waiting_resource，不占槽）；f 晋升补位；g 保持 queued。
   assert.equal(pool.get(a.id).status, 'waiting_resource');
   assert.equal(pool.get(b.id).status, 'running');
+  assert.equal(pool.get(g.id).status, 'queued');
   pool.rescan();
-  assert.equal(pool.get(a.id).status, 'waiting_resource', '唯一槽被 b 占用时 rescan 不晋升 parked');
+  assert.equal(pool.get(a.id).status, 'waiting_resource', '容量已满时 rescan 不晋升 parked');
   // b 终态释放槽位 → FIFO：更早提交的 parked A 先晋升。
   pool.complete(b.id);
   await new Promise((resolve) => queueMicrotask(resolve));
-  assert.equal(pool.get(a.id).status, 'running', 'b 终态后 parked A 按 FIFO 先晋升');
+  assert.equal(pool.get(a.id).status, 'running', 'b 终态后 parked A 先晋升');
+  assert.equal(pool.get(g.id).status, 'queued');
   pool.complete(a.id);
+});
+
+test('WMB-5356 writer readback causal proof: failed receipt + placeholder cannot succeed, exact ok receipt succeeds, cross-task/project isolated', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'wmb-5356-readback-'));
+  const db = openDatabase(directory);
+  try {
+    const now = new Date().toISOString();
+    // 占位项目+版本预先存在（模拟历史 placeholder）
+    db.prepare("INSERT INTO content_projects (id, title, created_at, updated_at, revision) VALUES ('proj-5356', '项目', ?, ?, 1)").run(now, now);
+    db.prepare("INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES ('ver-placeholder', 'proj-5356', '占位正文', 1, ?)").run(now);
+    db.prepare("INSERT INTO content_projects (id, title, created_at, updated_at, revision) VALUES ('proj-other', '他项目', ?, ?, 1)").run(now, now);
+    db.prepare("INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES ('ver-other', 'proj-other', '他项目正文', 1, ?)").run(now);
+    // 1. TASK_GRANT_NOT_FOUND（失败收据）+ 占位 -> 必须 null（fail-closed，绝不 succeeded）
+    db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, error_json, side_effect_state, created_at)
+      VALUES ('r-fail-5356', 'ws', 'epoch', 'writer-5356:fail', 'content.save_version', 'h', 'pi', 'pi', 'writer-5356', '{}', '{}', 'error', ?, 'not_started', ?)`).run(JSON.stringify({ code: 'TASK_GRANT_NOT_FOUND', message: 'Task grant 不存在。' }), now);
+    assert.equal(readbackContentVersion(db, 'proj-5356', 'writer-5356'), null, 'placeholder + TASK_GRANT_NOT_FOUND failed receipt must be JOB_READBACK_MISSING');
+    // 2. exact successful receipt -> succeed（同 receipt 复用保持接受）
+    db.prepare("INSERT INTO content_versions (id, project_id, body, version_number, created_at) VALUES ('ver-5356', 'proj-5356', 'Writer 成功正文', 2, ?)").run(now);
+    db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+      VALUES ('r-ok-5356', 'ws', 'epoch', 'writer-5356:ok', 'content.save_version', 'h2', 'pi', 'pi', 'writer-5356', '{}', ?, 'ok', ?, ?, 'committed', ?)`).run(JSON.stringify({ data: { id: 'ver-5356' } }), JSON.stringify({ id: 'ver-5356' }), JSON.stringify({ id: 'ver-5356' }), now);
+    assert.deepEqual(readbackContentVersion(db, 'proj-5356', 'writer-5356'), { kind: 'content_version', projectId: 'proj-5356', versionId: 'ver-5356' }, 'exact task ok receipt must produce version');
+    // 同收据再次查询应稳定接受
+    assert.deepEqual(readbackContentVersion(db, 'proj-5356', 'writer-5356'), { kind: 'content_version', projectId: 'proj-5356', versionId: 'ver-5356' });
+    // 3. receipt 对 another task 不计入
+    db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+      VALUES ('r-other-task', 'ws', 'epoch', 'other-task:ok', 'content.save_version', 'h3', 'pi', 'pi', 'other-task', '{}', ?, 'ok', ?, ?, 'committed', ?)`).run(JSON.stringify({ data: { id: 'ver-placeholder' } }), JSON.stringify({ id: 'ver-placeholder' }), JSON.stringify({ id: 'ver-placeholder' }), now);
+    assert.equal(readbackContentVersion(db, 'proj-5356', 'writer-other'), null, 'other task receipt must not satisfy this task');
+    // 4. receipt 版本归属他项目 -> 不计入
+    db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+      VALUES ('r-cross-proj', 'ws', 'epoch', 'writer-cross:ok', 'content.save_version', 'h4', 'pi', 'pi', 'writer-cross', '{}', ?, 'ok', ?, ?, 'committed', ?)`).run(JSON.stringify({ data: { id: 'ver-other' } }), JSON.stringify({ id: 'ver-other' }), JSON.stringify({ id: 'ver-other' }), now);
+    assert.equal(readbackContentVersion(db, 'proj-5356', 'writer-cross'), null, 'cross-project version must be rejected');
+    assert.deepEqual(readbackContentVersion(db, 'proj-other', 'writer-cross'), { kind: 'content_version', projectId: 'proj-other', versionId: 'ver-other' });
+  } finally {
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('deferred is a transient outcome status, not a terminal JobStatus', () => {

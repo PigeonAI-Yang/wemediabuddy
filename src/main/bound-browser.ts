@@ -14,6 +14,8 @@ import type { AccountIdentity } from './accounts.ts';
 export type BoundBrowserPlatform = Extract<AccountIdentity['platform'], 'x' | 'wechat' | 'zhihu'>;
 export type ResolvedBrowserBinding = { profile: BrowserProfile; binding: WorkspaceBrowserBinding };
 export type VerifiedBoundBrowser = ResolvedBrowserBinding & { runtime: BrowserRuntime; identity: AccountIdentity };
+export type WorkspaceBrowserVerificationOptions = { allowMissingExpectedAccount?: boolean };
+export type StartVerifiedBoundBrowserOptions = StartBrowserOptions & WorkspaceBrowserVerificationOptions;
 
 export function resolveBrowserBinding(database: DatabaseSync): ResolvedBrowserBinding {
   const binding = readWorkspaceBrowserBinding(database);
@@ -24,10 +26,14 @@ export function resolveBrowserBinding(database: DatabaseSync): ResolvedBrowserBi
   const profile = requireBrowserProfile(binding.profileId);
   return { profile, binding };
 }
-
-export function workspaceBrowserReady(database: DatabaseSync, platform: BoundBrowserPlatform = 'x'): boolean {
+export function workspaceBrowserReady(
+  database: DatabaseSync,
+  platform: BoundBrowserPlatform = 'x',
+  options: WorkspaceBrowserVerificationOptions = {}
+): boolean {
   try {
     const { binding } = resolveBrowserBinding(database);
+    if (options.allowMissingExpectedAccount) return true;
     const expected = binding.expectedAccountSnapshot[platform];
     return Boolean(expected && expected.browserProfileId === binding.profileId && expected.browserBindingRevision === binding.bindingRevision);
   } catch {
@@ -38,10 +44,11 @@ export function workspaceBrowserReady(database: DatabaseSync, platform: BoundBro
 export async function startVerifiedBoundBrowser(
   database: DatabaseSync,
   platform: BoundBrowserPlatform,
-  options: StartBrowserOptions = { mode: 'quiet' }
+  options: StartVerifiedBoundBrowserOptions = { mode: 'quiet' }
 ): Promise<VerifiedBoundBrowser> {
+  const { allowMissingExpectedAccount = false, ...browserOptions } = options;
   const resolved = resolveBrowserBinding(database);
-  const runtime = await startBrowser(resolved.profile, options);
+  const runtime = await startBrowser(resolved.profile, browserOptions);
   const identity = platform === 'x'
     ? await identifyXAccount(runtime.cdpUrl)
     : platform === 'wechat'
@@ -51,7 +58,8 @@ export async function startVerifiedBoundBrowser(
     profileId: resolved.profile.id,
     bindingRevision: resolved.binding.bindingRevision,
     platform,
-    accountKey: identity.accountKey
+    accountKey: identity.accountKey,
+    allowMissingExpectedAccount
   });
   return { ...resolved, runtime, identity };
 }

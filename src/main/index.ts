@@ -18,8 +18,8 @@ import { registerContentDerivativeIpc } from './ipc-content-derivative.ts';
 import { registerDailyIterationIpc } from './ipc-daily-iteration.ts';
 import { startPiRuntimeWithFallback } from './pi-config-fallback';
 import { setSourceKnowledgeCompileDeps, stopPersistentKnowledgeJobs, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
-import { createKnowledgeBackfillCompile, runKnowledgeBackfillBatch, setKnowledgeBackfillDeps, stopKnowledgeBackfillJobs, type KnowledgeBackfillDeps } from './knowledge-backfill';
-import { getMaintenanceRun, KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
+import { createKnowledgeBackfillCompile, setKnowledgeBackfillDeps, stopKnowledgeBackfillJobs, type KnowledgeBackfillDeps } from './knowledge-backfill';
+import { KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
 import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
 import { piModelsJson } from './pi-model';
@@ -28,10 +28,6 @@ import {
   agentRequestId,
   getActiveAgentTask,
   getAgentTask,
-  getLatestAgentTask,
-  getActiveDailyIntelligenceTask,
-  getLatestDailyIntelligenceTask,
-  isDailyIntelligenceFamily,
   type AgentIntent
 } from './agent-tasks';
 import { dispatchReapOrphanedPageTasks } from './page-task-orphan.ts';
@@ -42,25 +38,20 @@ import {
   dispatchPartialAgentTask,
   dispatchReportAgentTaskProgress,
   dispatchRequestAgentTaskControl,
-  dispatchRecoverInterruptedAgentTasks,
   dispatchStartAgentTask,
   dispatchUpdateAgentTaskPhase
 } from './agent-task-commands.ts';
-import { dispatchManagerDailyIntelligence, readManagerProjection, syncManagerTaskFromLegacyChild } from './manager-dispatch.ts';
+import { cancelManagerDailyIntelligence, readManagerProjection } from './manager-dispatch.ts';
 import { createDataRootSelection } from './data-root-selection';
 import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspaceIpcGate, RUNTIME_MANAGING_IPC_CHANNELS, type WorkspaceRuntimeLease } from './workspace-runtime';
+import { initializeWorkspaceOrchestratorRuntime, submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readProjectInvestigation } from './project-investigation.ts';
-import { controlAuditMessage, dailyControlAuditEnabled, isOrphanChannelScannedTask, isOrphanStartingDailyTask } from './daily-control-policy.ts';
-import { decideDailyStartGate } from './daily-start-gate.ts';
-import { releaseDailyStageLock, tryAcquireDailyStageLock } from './daily-stage-lock.ts';
-import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
+import { controlAuditMessage, dailyControlAuditEnabled } from './daily-control-policy.ts';
+import { readWorkspaceIntelligenceProfile } from './workspace-intelligence';
 import { DailyScanScheduler } from './daily-scan-scheduler';
 import { DailyOrchestrationScheduler } from './daily-orchestration-scheduler.ts';
-import { createProductionDailyHandlers, orchestrateDailyContent, type DailyOrchestrationDeps, type OrchestrationContext, type OrchestrationMutationSpec } from './daily-orchestration.ts';
-import { dispatchBusinessCommand } from './business-command.ts';
 import { shanghaiDate } from './ferment';
-import { getTodayPlanExhaustion } from './workbench.ts';
 import { hasEnabledDailySources } from './daily-intelligence-channels';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner, resumePendingInvestigationSupervisorReviews } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
@@ -103,10 +94,6 @@ protocol.registerSchemesAsPrivileged([
     }
   }
 ]);
-const dailyRuns = new Map<string, Promise<unknown>>();
-function dailyRunKey(rootPath: string, businessDate: string): string {
-  return `${rootPath}\u0000${businessDate}`;
-}
 const dailyControlInflight = new Map<string, Promise<{ ok: boolean; data: unknown; error: { code: string; message: string; details?: Readonly<Record<string, unknown>> } | null }>>(); let activeRuntime: ActiveWorkspaceRuntime | null = null;
 installActiveWorkspaceIpcGate(ipcMain, () => activeRuntime, [...RUNTIME_MANAGING_IPC_CHANNELS]);
 const workspaceProposals = new WorkspaceProposalStore(); const channelProposals = new IntelligenceChannelProposalStore();
@@ -119,30 +106,6 @@ async function uiCommandResult<T>(work: () => Promise<T>): Promise<{ ok: true; d
     const value = error as { code?: unknown; message?: unknown; details?: Readonly<Record<string, unknown>> };
     return { ok: false, data: null, error: { code: typeof value?.code === 'string' ? value.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error), ...(value?.details ? { details: value.details } : {}) } };
   }
-}
-async function dispatchOrchestrationMutation<T>(runtime: ActiveWorkspaceRuntime, spec: OrchestrationMutationSpec<T>, context: OrchestrationContext): Promise<T> {
-  const actor = context.source === 'today'
-    ? ownerUiActor
-    : context.source === 'mcp'
-      ? { type: 'external_agent' as const, id: 'mcp', label: 'MCP' }
-      : { type: 'scheduler' as const, id: 'daily-orchestration', label: 'Daily Orchestration' };
-  const receipt = await dispatchBusinessCommand(runtime, {
-    command: spec.command,
-    requestId: randomUUID(),
-    actor,
-    input: { source: context.source, entityId: spec.entityId },
-    boundIdentity: {},
-    entityType: spec.entityType,
-    execute: () => {
-      const data = spec.execute();
-      return { data, entityId: spec.entityId, readback: data };
-    }
-  });
-  if (!receipt.ok) {
-    const error = receipt.error ?? { code: 'COMMAND_FAILED', message: 'Daily orchestration mutation failed.' };
-    throw Object.assign(new Error(error.message), { code: error.code, details: error.details });
-  }
-  return receipt.data as T;
 }
 
 async function withRuntimeWorker<T>(
@@ -399,87 +362,43 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   // WMB-5230：注册存量高价值 Source 分批回溯编译依赖（同款编译管线；checkpoint 可恢复）。
   setKnowledgeBackfillDeps(createKnowledgeBackfillDeps(dataRoot.path));
   try {
-    // WMB-5337: build production handlers once per runtime; orchestrator reference stays stable for Today/MCP/scheduler dedup
-    productionDailyHandlers = createProductionDailyHandlers({
-      runMutation: (spec, context) => dispatchOrchestrationMutation(runtime, spec, context)
-    });
-    // keep stable orchestrator reference — it reads productionDailyHandlers by closure variable
-    if (!productionDailyOrchestrator) productionDailyOrchestrator = _stableProductionOrchestrator;
+    await initializeWorkspaceOrchestratorRuntime(runtime);
     await dispatchRecoverInterruptedPublications(runtime);
     await dispatchRecoverOrphanedXListOperations(runtime, activeXListOperationIds);
-    await dispatchRecoverInterruptedAgentTasks(runtime);
-
+    await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'reconcile.agent-tasks-recover',
+      businessDate: shanghaiDate(),
+      requestId: `reconcile.agent-tasks-recover:${runtime.identity.workspaceId}:${runtime.identity.runtimeEpoch}`,
+      action: 'stage_d',
+      logicalInput: { runtimeEpoch: runtime.identity.runtimeEpoch, reason: 'runtime-refresh' },
+      payload: { runtimeEpoch: runtime.identity.runtimeEpoch, reason: 'runtime-refresh' },
+      rootMode: 'scheduler'
+    });
     await dispatchRecoverRunningMetricJobs(runtime);
     await dispatchSchedulePublishedPublicationMetricJobs(runtime);
-    const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime, productionDailyOrchestrator);
+    const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime);
     runtime.setMcp(mcp);
-    stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
-    stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }));
+    stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, (input) => submitWorkspaceOrchestratorIntent(runtime, input));
+    stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }), (input) => submitWorkspaceOrchestratorIntent(runtime, input));
     // WMB-5247：媒体治理自动调度（启动立即一轮 + 每 6h 一轮：staging 清理 + 30 天无引用派生缓存 GC）。
     stopMediaGovernanceScheduler?.(); stopMediaGovernanceScheduler = startMediaGovernanceScheduler(runtime);
-    const xhs = await refreshXhsRuntime(readWorkspaceIntelligenceProfile(dataRoot.path, runtime).platforms.includes('xiaohongshu') ? dataRoot : null, null);
-    runtime.setXhs(xhs);
-    // MCP 就绪后再接力：扫完 channel_scanned 且无协调器时优先 judgeOnly。
-    try {
-      const today = shanghaiDate();
-      const orphanKey = dailyRunKey(dataRoot.path, today);
-      const orphan = getActiveDailyIntelligenceTask(runtime.database, today);
-      if (orphan && orphan.status === 'running' && !dailyRuns.has(orphanKey) && (orphan.phase === 'channel_scanned' || isOrphanStartingDailyTask(orphan) || isOrphanChannelScannedTask(orphan))) {
-        const mcpReady = currentMcp();
-        // starting 僵尸：无进度可接力，直接 partial 收尸，避免 UI 假运行数十分钟
-        if (isOrphanStartingDailyTask(orphan) && orphan.phase !== 'channel_scanned') {
-          try {
-            const finished = await dispatchPartialAgentTask(runtime, orphan.id, {
-              actor: { type: 'scheduler', id: 'daily-handoff-sweeper', label: 'daily-handoff-sweeper' },
-              requestId: `handoff-sweep-starting:${orphan.id}:${Date.now()}`,
-              taskId: orphan.id
-            });
-            broadcastPiEvent({ type: 'agent_task', task: finished });
-          } catch (sweepError) {
-            console.error('[daily-handoff-sweeper-starting]', sweepError);
-          }
-        } else if (mcpReady && orphan.phase === 'channel_scanned') {
-          const run = withRuntimeWorker(orphan.id, (event) => {
-            broadcastPiRuntimeProgress(event);
-            if (event.type === 'agent_task' || event.type === 'fallback-try' || event.type === 'fallback') broadcastPiEvent(event);
-          }, (hooks) => startWorkspaceDailyIntelligence({
-            dataRootPath: dataRoot.path,
-            businessDate: today,
-            judgeOnly: true,
-            mcpUrl: mcpReady.url,
-            xhsMcpUrl: currentXhs()?.getUrl() || '',
-            activeRuntime: runtime,
-            ...hooks
-          })).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; })
-            .catch(async (error) => {
-              console.error('[daily-handoff-judge]', error);
-              if (isOrphanChannelScannedTask(orphan)) {
-                try {
-                  const finished = await dispatchPartialAgentTask(runtime, orphan.id, {
-                    actor: { type: 'scheduler', id: 'daily-handoff-sweeper', label: 'daily-handoff-sweeper' },
-                    requestId: `handoff-sweep:${orphan.id}:${Date.now()}`,
-                    taskId: orphan.id
-                  });
-                  broadcastPiEvent({ type: 'agent_task', task: finished });
-                } catch (sweepError) {
-                  console.error('[daily-handoff-sweeper]', sweepError);
-                }
-              }
-              return null;
-            })
-            .finally(() => dailyRuns.delete(orphanKey));
-          dailyRuns.set(orphanKey, run);
-        } else if (isOrphanChannelScannedTask(orphan)) {
-          const finished = await dispatchPartialAgentTask(runtime, orphan.id, {
-            actor: { type: 'scheduler', id: 'daily-handoff-sweeper', label: 'daily-handoff-sweeper' },
-            requestId: `handoff-sweep:${orphan.id}`,
-            taskId: orphan.id
-          });
-          broadcastPiEvent({ type: 'agent_task', task: finished });
-        }
-      }
-    } catch (error) {
-      console.error('[daily-handoff-sweeper]', error);
+    const startupHandoffRows = runtime.database.prepare(`
+      SELECT id, business_date, phase
+      FROM agent_tasks
+      WHERE intent IN ('daily_intelligence', 'daily_scan', 'daily_judge')
+        AND status='running'
+        AND phase IN ('starting', 'channel_scanned', 'scanning')
+    `).all() as Array<{ id: string; business_date: string; phase: string }>;
+    for (const task of startupHandoffRows) {
+      await submitWorkspaceOrchestratorIntent(runtime, {
+        producerId: 'startup.refresh-runtime-daily-handoff',
+        businessDate: task.business_date,
+        requestId: `startup.refresh-runtime-daily-handoff:${runtime.identity.workspaceId}:${task.id}`,
+        action: 'stage_d',
+        logicalInput: { taskId: task.id, phase: task.phase, businessDate: task.business_date, reason: 'runtime-refresh' },
+        payload: { taskId: task.id, phase: task.phase, businessDate: task.business_date, reason: 'runtime-refresh' },
+        rootMode: 'scheduler'
+      });
     }
 
     const scheduler = new XObservationScheduler({ runtime, loadSelectedDataRoot, isCurrent: () => activeRuntime === runtime && runtime.isActive });
@@ -502,82 +421,54 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     sourceBodyArchiveSchedulerRef.start();
     const scanScheduler = new DailyScanScheduler({
       isCurrent: () => activeRuntime === runtime && runtime.isActive,
-      run: (modules) => {
-        // 该模块没有启用来源时直接跳过，不落任何任务/回执（防假 needs_user 任务污染今日页）。
-        if (!hasEnabledDailySources(runtime.database, modules)) return Promise.resolve({ savedCount: 0 });
+      run: async (modules) => {
+        if (!hasEnabledDailySources(runtime.database, modules)) return { savedCount: 0 };
+        const module = modules[0];
+        const producerId = module === 'official_web' ? 'scheduler.rolling-official-web' : 'scheduler.rolling-x-lists';
         const businessDate = shanghaiDate();
-        const runKey = dailyRunKey(dataRoot.path, businessDate);
-        const run = withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
-          dataRootPath: dataRoot.path,
+        const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
+          producerId,
           businessDate,
-          modules,
-          scanOnly: true,
-          mcpUrl: currentMcp()?.url ?? '',
-          xhsMcpUrl: currentXhs()?.getUrl() || '',
-          activeRuntime: runtime,
-          ...hooks
-        }), { roleId: 'reporter' }).finally(() => {
-          if (dailyRuns.get(runKey) === run) dailyRuns.delete(runKey);
+          requestId: `${producerId}:${runtime.identity.workspaceId}:${businessDate}`,
+          action: 'scan',
+          logicalInput: { businessDate, modules },
+          payload: { businessDate, modules },
+          rootMode: 'scheduler'
         });
-        dailyRuns.set(runKey, run);
-        return run;
+        return { savedCount: receipt.ok ? 1 : 0 };
       },
-      onNewSources: (modules) => {
+      onNewSources: async (modules) => {
+        const module = modules[0];
         const businessDate = shanghaiDate();
-        const owner = `scan-scheduler-judge:${businessDate}`;
-        const lock = tryAcquireDailyStageLock({ businessDate, kind: 'judge', owner });
-        if (!lock.ok) return Promise.resolve(null);
-        const runKey = dailyRunKey(dataRoot.path, businessDate);
-        const run = withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
-          dataRootPath: dataRoot.path,
+        const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
+          producerId: 'scheduler.rolling-auto-judge',
           businessDate,
-          modules,
-          judgeOnly: true,
-          mcpUrl: currentMcp()?.url ?? '',
-          xhsMcpUrl: currentXhs()?.getUrl() || '',
-          activeRuntime: runtime,
-          ...hooks
-        }), { roleId: 'planner' }).then((result) => {
-          broadcastPiEvent({ type: 'agent_task', task: result.task });
-          return result;
-        }).finally(() => {
-          releaseDailyStageLock({ businessDate, kind: 'judge', owner });
-          if (dailyRuns.get(runKey) === run) dailyRuns.delete(runKey);
+          requestId: `scheduler.rolling-auto-judge:${runtime.identity.workspaceId}:${businessDate}:${module}`,
+          action: 'judge',
+          logicalInput: { businessDate, modules },
+          payload: { businessDate, modules },
+          rootMode: 'scheduler'
         });
-        dailyRuns.set(runKey, run);
-        return run;
+        return receipt;
       },
       onError: (error) => console.error('[daily-scan-scheduler]', error)
     });
     scanSchedulerRef?.stop();
     scanSchedulerRef = scanScheduler;
     scanScheduler.start();
-    // WMB-5337: Daily orchestration scheduler (Asia/Shanghai daily timing, workspace-configurable persisted time, Today auto toggle)
-    orchestrationSchedulerRef?.stop();
-    orchestrationSchedulerRef = new DailyOrchestrationScheduler({
-      getDatabase: () => activeRuntime === runtime && runtime.isActive ? runtime.database : null,
-      getWorkspaceId: () => runtime.identity.workspaceId,
-      getDataRoot: () => dataRoot.path,
-      orchestrate: productionDailyOrchestrator ?? orchestrateDailyContent,
-      onError: (e) => console.error('[daily-orchestration-scheduler]', e)
-    });
-    orchestrationSchedulerRef.start();
     // WMB-5238：ChangeSet 提交后索引增量投影生产接线（动态导入 IndexStore；模块未就绪不阻断启动）。
     void installProductionWikiIndexProjection().catch((error) => {
       console.error('[wiki-index] production projection wiring failed', error);
     });
     // WMB-5217：历史初始化（经 CommandDispatcher 授权写；幂等续跑；失败不阻断启动）。
-    void runLegacyKnowledgeInitAtStartup(runtime).catch((error) => {
-      console.error('[knowledge-init] startup legacy init failed', error);
+    orchestrationSchedulerRef?.stop();
+    orchestrationSchedulerRef = new DailyOrchestrationScheduler({
+      getDatabase: () => activeRuntime === runtime && runtime.isActive ? runtime.database : null,
+      getWorkspaceId: () => runtime.identity.workspaceId,
+      submitIntent: (input) => submitWorkspaceOrchestratorIntent(runtime, input),
+      onError: (e) => console.error('[daily-orchestration-scheduler]', e)
     });
-    // WMB-5230：存量高价值 Raw Source 分批回溯编译（有界单批；checkpoint 续跑；不阻断启动）。
-    // WMB-5236：存在进行中的维护 run 时由维护调度器连续驱动回溯（启动单批让位，避免双驱动同一 checkpoint）。
-    const maintenanceRunAtStartup = getMaintenanceRun(runtime.database);
-    if (!maintenanceRunAtStartup || maintenanceRunAtStartup.status !== 'running') {
-      void runKnowledgeBackfillBatch().catch((error) => {
-        console.error('[knowledge-backfill] startup backfill failed', error);
-      });
-    }
+    orchestrationSchedulerRef.start();
     await lintSchedulerRef?.stop();
     lintSchedulerRef = null;
     lintSchedulerRef = new KnowledgeLintScheduler({ runtime, isCurrent: () => activeRuntime === runtime && runtime.isActive });
@@ -600,7 +491,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     });
     maintenanceSchedulerRef.start();
     if (orphanSweepTimer) clearInterval(orphanSweepTimer);
-    orphanSweepTimer = setInterval(() => { void sweepOrphanDailyTasks('interval'); }, 60_000);
+    orphanSweepTimer = setInterval(() => { void reconcileOrphanDailyTasks('interval'); }, 60_000);
   } catch (error) {
     scanSchedulerRef?.stop();
     scanSchedulerRef = null;
@@ -615,93 +506,32 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
 }
 type TimerHandle = ReturnType<typeof setInterval>;
 let scanSchedulerRef: DailyScanScheduler | null = null; let orchestrationSchedulerRef: DailyOrchestrationScheduler | null = null; let orphanSweepTimer: TimerHandle | null = null, stopTopicReproposalScheduler: (() => void) | null = null, stopResearchSuccessorScheduler: (() => void) | null = null, stopMediaGovernanceScheduler: (() => void) | null = null; let lintSchedulerRef: KnowledgeLintScheduler | null = null; let maintenanceSchedulerRef: KnowledgeMaintenanceScheduler | null = null; let mediaArchiveSchedulerRef: MediaArchiveScheduler | null = null; let sourceBodyArchiveSchedulerRef: SourceBodyArchiveScheduler | null = null;
-// WMB-5337 shared production orchestrator (stable reference reused across scheduler/Today/MCP for in-flight dedup)
-let productionDailyHandlers: DailyOrchestrationDeps | null = null;
-const _stableProductionOrchestrator: typeof orchestrateDailyContent = (input) => orchestrateDailyContent(input, productionDailyHandlers ?? ({} as DailyOrchestrationDeps));
-let productionDailyOrchestrator: typeof orchestrateDailyContent | null = _stableProductionOrchestrator;
-export function _getProductionDailyOrchestratorForTest(): typeof productionDailyOrchestrator { return productionDailyOrchestrator; }
-export function _getProductionDailyHandlersForTest(): typeof productionDailyHandlers { return productionDailyHandlers; }
-async function sweepOrphanDailyTasks(reason = 'interval'): Promise<void> {
+async function reconcileOrphanDailyTasks(reason = 'interval'): Promise<void> {
   const runtime = activeRuntime;
-  const dataRootPath = runtime?.identity.rootPath;
-  if (!runtime || !dataRootPath) return;
+  if (!runtime) return;
   try {
     await dispatchReapOrphanedPageTasks(runtime, (taskId) => runtime.getWorkerSnapshots().some((worker) => worker.taskId === taskId));
   } catch (error) {
     console.error('[page-orphan-sweeper]', reason, error);
   }
   try {
-    const today = shanghaiDate();
-    const orphanKey = dailyRunKey(dataRootPath, today);
-    if (dailyRuns.has(orphanKey)) return;
-    const orphan = getActiveDailyIntelligenceTask(runtime.database, today);
-    if (!orphan || orphan.status !== 'running') return;
-    if (orphan.phase === 'channel_scanned') {
-      const mcpReady = currentMcp();
-      if (mcpReady) {
-        const run = withRuntimeWorker(orphan.id, (event) => {
-          broadcastPiRuntimeProgress(event);
-          if (event.type === 'agent_task' || event.type === 'fallback-try' || event.type === 'fallback') broadcastPiEvent(event);
-        }, (hooks) => startWorkspaceDailyIntelligence({
-          dataRootPath,
-          businessDate: today,
-          judgeOnly: true,
-          mcpUrl: mcpReady.url,
-          xhsMcpUrl: currentXhs()?.getUrl() || '',
-          activeRuntime: runtime,
-          ...hooks
-        }), { roleId: 'planner' }).then((result) => {
-          broadcastPiEvent({ type: 'agent_task', task: result.task });
-          return result;
-        }).catch(async (error) => {
-          console.error('[daily-orphan-sweeper-judge]', reason, error);
-          try {
-            const finished = await dispatchPartialAgentTask(runtime, orphan.id, {
-              actor: { type: 'scheduler', id: 'daily-orphan-sweeper', label: 'daily-orphan-sweeper' },
-              requestId: `orphan-sweep:${orphan.id}:${Date.now()}`,
-              taskId: orphan.id
-            });
-            broadcastPiEvent({ type: 'agent_task', task: finished });
-          } catch {}
-          return null;
-        }).finally(() => {
-          if (dailyRuns.get(orphanKey) === run) dailyRuns.delete(orphanKey);
-        });
-        dailyRuns.set(orphanKey, run);
-        return;
-      }
-    }
-    if (isOrphanStartingDailyTask(orphan) || isOrphanChannelScannedTask(orphan)) {
-      const finished = await dispatchPartialAgentTask(runtime, orphan.id, {
-        actor: { type: 'scheduler', id: 'daily-orphan-sweeper', label: 'daily-orphan-sweeper' },
-        requestId: `orphan-sweep:${orphan.id}:${Date.now()}`,
-        taskId: orphan.id
+    const rows = runtime.database.prepare(`
+      SELECT id, business_date, phase
+      FROM agent_tasks
+      WHERE intent IN ('daily_intelligence', 'daily_scan', 'daily_judge')
+        AND status='running'
+        AND phase IN ('starting', 'channel_scanned', 'scanning')
+    `).all() as Array<{ id: string; business_date: string; phase: string }>;
+    for (const task of rows) {
+      await submitWorkspaceOrchestratorIntent(runtime, {
+        producerId: 'reconcile.daily-handoff-sweeper',
+        businessDate: task.business_date,
+        requestId: `reconcile.daily-handoff-sweeper:${runtime.identity.workspaceId}:${task.id}`,
+        action: 'stage_d',
+        logicalInput: { taskId: task.id, phase: task.phase, businessDate: task.business_date },
+        payload: { taskId: task.id, phase: task.phase, businessDate: task.business_date },
+        rootMode: 'scheduler'
       });
-      broadcastPiEvent({ type: 'agent_task', task: finished });
-      // starting/scanning 孤儿收尸后自动重开完整扫描，避免 UI 假运行后无人接力。
-      const mcpReady = currentMcp();
-      if (mcpReady && (isOrphanStartingDailyTask(orphan) || String(orphan.phase || '').startsWith('scanning') || orphan.phase === 'starting')) {
-        const run = withRuntimeWorker(null, (event) => {
-          broadcastPiRuntimeProgress(event);
-          if (event.type === 'agent_task' || event.type === 'fallback-try' || event.type === 'fallback') broadcastPiEvent(event);
-        }, (hooks) => startWorkspaceDailyIntelligence({
-          dataRootPath,
-          businessDate: today,
-          mcpUrl: mcpReady.url,
-          xhsMcpUrl: currentXhs()?.getUrl() || '',
-          activeRuntime: runtime,
-          ...hooks
-        }), { roleId: 'reporter' }).then((result) => {
-          broadcastPiEvent({ type: 'agent_task', task: result.task });
-          return result;
-        }).catch((error) => {
-          console.error('[daily-orphan-sweeper-restart]', reason, error);
-          return null;
-        }).finally(() => {
-          if (dailyRuns.get(orphanKey) === run) dailyRuns.delete(orphanKey);
-        });
-        dailyRuns.set(orphanKey, run);
-      }
     }
   } catch (error) {
     console.error('[daily-orphan-sweeper]', reason, error);
@@ -716,13 +546,12 @@ const { loadSelectedDataRoot, chooseDataRoot, migrate, listWorkspaces, switchWor
   defaultBrowserProfileId,
   chooseDirectory: async () => { const result = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); return result.canceled ? null : result.filePaths[0] ?? null; },
   refreshRuntime,
-  canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: dailyRuns.size }),
+  canSwitch: async (dataRoot) => assertWorkspaceSwitchable(dataRoot.path, { piActive: Boolean(currentPi()?.isActive), dailyRunCount: 0 }),
   closeMutationGate: async () => { if (activeRuntime) await activeRuntime.closeClaimsAndDrain(); },
   openMutationGate: () => activeRuntime?.reopenClaims(),
   stopRuntime: async () => {
     scanSchedulerRef?.stop(); scanSchedulerRef = null;
     orchestrationSchedulerRef?.stop(); orchestrationSchedulerRef = null;
-    productionDailyOrchestrator = null; productionDailyHandlers = null;
     lintSchedulerRef?.stop(); lintSchedulerRef = null;
     await maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null;
     mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null;
@@ -759,7 +588,6 @@ const desktopLifecycle = createDesktopLifecycle({
   stopBackgroundWork: async () => {
     scanSchedulerRef?.stop(); scanSchedulerRef = null;
     orchestrationSchedulerRef?.stop(); orchestrationSchedulerRef = null;
-    productionDailyOrchestrator = null; productionDailyHandlers = null;
     lintSchedulerRef?.stop(); lintSchedulerRef = null;
     await maintenanceSchedulerRef?.stop(); maintenanceSchedulerRef = null;
     mediaArchiveSchedulerRef?.stop(); mediaArchiveSchedulerRef = null;
@@ -781,36 +609,6 @@ app.whenReady().then(async () => {
   const dataRoot = await loadSelectedDataRoot(); const registry = await listWorkspaces(); await syncPiSkillsForDataRoots(app.getPath('userData'), app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills'), registry.workspaces.map((workspace) => workspace.rootPath));
   migratePiConfigToInstallation(path.join(app.getPath('userData'), 'pi-api-config.json'), registry.workspaces.map((workspace) => workspace.rootPath));
   if (dataRoot) await refreshRuntime(dataRoot);
-  const startupMcp = currentMcp(); const startupXhs = currentXhs();
-  if (dataRoot && startupMcp && activeRuntime) {
-    const startupRuntime = activeRuntime;
-    const pending = getLatestDailyIntelligenceTask(startupRuntime.database);
-    const shouldResume = Boolean(
-      pending
-      && isDailyIntelligenceFamily(pending.intent)
-      && pending.status === 'running'
-      && (pending.phase === 'resume_pending' || pending.phase === 'channel_scanned')
-    );
-    if (shouldResume && pending) {
-      const runKey = dailyRunKey(dataRoot.path, pending.businessDate);
-      if (!dailyRuns.has(runKey)) {
-        const run = withRuntimeWorker(pending.id, (event) => {
-          broadcastPiRuntimeProgress(event);
-          if (event.type === 'agent_task' || event.type === 'fallback-try' || event.type === 'fallback') broadcastPiEvent(event);
-        }, (hooks) => startWorkspaceDailyIntelligence({
-          dataRootPath: dataRoot.path,
-          businessDate: pending.businessDate,
-          mcpUrl: startupMcp.url,
-          xhsMcpUrl: startupXhs?.getUrl() || '',
-          activeRuntime: startupRuntime,
-          ...(pending.phase === 'channel_scanned' ? { judgeOnly: true as const } : {}),
-          ...hooks
-        }), { roleId: 'planner' }).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; })
-          .finally(() => dailyRuns.delete(runKey));
-        dailyRuns.set(runKey, run);
-      }
-    }
-  }
   registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot, listWorkspaces, switchWorkspace, createUkWorkspace, listWorkspaceProposals: workspaceConfirmation.list, selectWorkspaceProposalRoot: workspaceConfirmation.selectRoot, confirmWorkspaceProposal: workspaceConfirmation.confirm, getMcp: currentMcp, getXhs: currentXhs, getBrowser: currentBrowser, getRuntimeEpoch: () => activeRuntime?.identity.runtimeEpoch ?? null, stopPi: async () => { await activeRuntime?.stopWorker(); }, browserProfileOwner });
   desktopLifecycle.registerIpcAndStartUpdater();
   protocol.handle('wmb-asset', async (request) => {
@@ -954,15 +752,9 @@ app.whenReady().then(async () => {
     if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) return null;
     const database = runtime.database;
     if (input.id) return getAgentTask(database, input.id);
-    if (input.intent && input.businessDate) {
-      if (input.intent === 'daily_intelligence' || input.intent === 'daily_scan' || input.intent === 'daily_judge') {
-        return getActiveDailyIntelligenceTask(database, input.businessDate) ?? getLatestDailyIntelligenceTask(database, input.businessDate);
-      }
-      return getActiveAgentTask(database, input.intent, input.businessDate) ?? getLatestAgentTask(database, input.intent, input.businessDate);
-    }
-    return getLatestAgentTask(database);
+    if (input.intent && input.businessDate) return getActiveAgentTask(database, input.intent, input.businessDate);
+    return null;
   });
-  ipcMain.handle('agent:request-id', (_event, input: { taskId: string; logicalStep: string }) => agentRequestId(input.taskId, input.logicalStep));
   ipcMain.handle('agent:update-phase', async (_event, input: { id: string; phase: string; piSessionId?: string | null }) => {
     const runtime = activeRuntime;
     if (!runtime) throw new Error('当前工作空间运行时不可用。');
@@ -997,18 +789,14 @@ app.whenReady().then(async () => {
     const runtime = activeRuntime;
     if (!runtime) return null;
     const businessDate = input?.businessDate?.trim() || shanghaiDate();
-    return readManagerProjection(runtime, businessDate);
+    return readManagerProjection(runtime, { businessDate });
   });
 
   ipcMain.handle('agent:sync-manager-task', async (_event, input: { businessDate?: string } = {}) => {
     const runtime = activeRuntime;
     if (!runtime) return null;
     const businessDate = input?.businessDate?.trim() || shanghaiDate();
-    const legacyChild = readManagerProjection(runtime, businessDate).legacyChild;
-    const synced = await syncManagerTaskFromLegacyChild(runtime, businessDate, legacyChild);
-    if (legacyChild) broadcastPiEvent({ type: 'agent_task', task: legacyChild });
-    if (synced) broadcastPiEvent({ type: 'manager_task', action: 'sync', focusDialog: false, task: synced });
-    return synced;
+    return readManagerProjection(runtime, { businessDate });
   });
 
 ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action: 'skip_source' | 'save_partial' | 'cancel' }) => {
@@ -1035,7 +823,10 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
       await abortDailyIntelligence(taskId);
       // 取消 / 保存并停止 都必须立即可靠收尾，不能只等 runner 轮询。
       if (action === 'cancel') {
-        const cancelled = await uiCommandResult(() => dispatchCancelAgentTask(runtime, taskId, { actor: ownerUiActor, requestId: randomUUID(), taskId }));
+        const isManagerTask = result.data?.intent === 'page_agents';
+        const cancelled = isManagerTask
+          ? await uiCommandResult(() => cancelManagerDailyIntelligence(runtime, taskId, { actor: ownerUiActor, requestId: randomUUID(), taskId }))
+          : await uiCommandResult(() => dispatchCancelAgentTask(runtime, taskId, { actor: ownerUiActor, requestId: randomUUID(), taskId }));
         if (cancelled.ok) broadcastPiEvent({ type: 'agent_task', task: cancelled.data });
         return cancelled.ok ? cancelled : result;
       }
@@ -1053,160 +844,26 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
       dailyControlInflight.delete(flightKey);
     }
   });
-  ipcMain.handle('agent:start-daily-intelligence', async (_event, input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'>; legacyPipeline?: boolean }) => {
+  ipcMain.handle('agent:start-daily-intelligence', async (_event, input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'> }) => {
     const businessDate = input?.businessDate?.trim();
     if (!businessDate) throw new Error('请选择今日情报日期。');
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
     if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
-    const mcp = currentMcp();
-    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
-
-    // Owner lock 2026-08-08: button dispatches to manager dialog first (serial one ManagerTask).
-    if (input?.legacyPipeline !== true) {
-      try {
-        const managed = await dispatchManagerDailyIntelligence(runtime, dataRoot.path, {
-          businessDate,
-          modules: input.modules,
-          legacyPipeline: true
-        });
-        broadcastPiEvent({
-          type: 'manager_task',
-          action: managed.action,
-          focusDialog: true,
-          task: managed.managerTask
-        });
-        if (managed.action === 'focus_existing') {
-          // Serial lock: do not start a second run; UI should focus dock.
-          const child = getActiveDailyIntelligenceTask(runtime.database, businessDate);
-          return {
-            ok: true,
-            data: {
-              task: child ?? null,
-              managerTask: managed.managerTask,
-              focusDialog: true,
-              reused: true,
-              action: 'focus_existing'
-            },
-            error: null
-          };
-        }
-        // 主管真 Pi 回合已启动；员工由主管 wmb_spawn_job 派出，不再自动 fallthrough legacy。
-        return {
-          ok: true,
-          data: {
-            task: null,
-            managerTask: managed.managerTask,
-            focusDialog: true,
-            reused: false,
-            action: managed.action,
-            managerOwned: true
-          },
-          error: null
-        };
-      } catch (managerError) {
-        const pendingCode = (managerError as unknown as { code?: string })?.code;
-        if (pendingCode === 'PENDING_REVIEW') {
-          return { ok: false, data: null, error: { code: 'PENDING_REVIEW', message: (managerError as Error).message } };
-        }
-        console.error('[manager-dispatch]', managerError);
-        // Fail closed to manager path only if serial focus; otherwise continue legacy with warning.
-      }
-    }
-
-    const active = getActiveDailyIntelligenceTask(runtime.database, businessDate);
-    // Pending review (draft/ready) blocks new root collection on same date; exhausted (all rejected) explicitly allows.
-    const legacyExhaustion = getTodayPlanExhaustion(runtime.database, businessDate);
-    if (legacyExhaustion.hasPlan && legacyExhaustion.unresolved > 0 && !legacyExhaustion.isExhausted) {
-      return { ok: false, data: null, error: { code: 'PENDING_REVIEW', message: `本轮有 ${legacyExhaustion.unresolved} 条选题等待确认；确认完成后再开始下一轮。` } };
-    }
-    const previous = getLatestDailyIntelligenceTask(runtime.database, businessDate);
-    const runKey = dailyRunKey(dataRoot.path, businessDate);
-    const gate = decideDailyStartGate({
-      active: active ? {
-        status: active.status,
-        phase: active.phase,
-        intent: active.intent,
-        savedCount: Number(active.progress?.saved ?? 0)
-      } : null,
-      latest: previous ? {
-        status: previous.status,
-        phase: previous.phase,
-        intent: previous.intent,
-        savedCount: Number(previous.progress?.saved ?? 0)
-      } : null,
-      hasLiveCoordinator: dailyRuns.has(runKey)
-    });
-    if (gate.action === 'return_active' && active) {
-      broadcastPiEvent({ type: 'agent_task', task: active });
-      return { ok: true, data: { task: active, reused: true }, error: null };
-    }
-    // 无协调器的 running 孤儿先 partial 收尸，再允许 start_full / start_judge_only 开新任务。
-    if (active && active.status === 'running' && !dailyRuns.has(runKey) && (gate.action === 'start_full' || gate.action === 'start_judge_only')) {
-      try {
-        const finished = await dispatchPartialAgentTask(runtime, active.id, {
-          actor: { type: 'scheduler', id: 'daily-start-orphan-clear', label: 'daily-start-orphan-clear' },
-          requestId: `start-orphan-clear:${active.id}:${Date.now()}`,
-          taskId: active.id
-        });
-        broadcastPiEvent({ type: 'agent_task', task: finished });
-      } catch (clearError) {
-        console.error('[daily-start-orphan-clear]', clearError);
-      }
-    }
-    const needsJudgeHandoff = gate.action === 'start_judge_only';
-    let coordinatorError: unknown = null;
-    const buttonLockOwner = `today-button:${businessDate}:${needsJudgeHandoff ? 'judge' : 'scan'}`;
-    const buttonLock = tryAcquireDailyStageLock({
+    const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
+      producerId: 'today.agent-start-daily-intelligence',
       businessDate,
-      kind: needsJudgeHandoff ? 'judge' : 'scan',
-      owner: buttonLockOwner
+      requestId: randomUUID(),
+      action: 'full',
+      logicalInput: { businessDate, modules: input.modules ?? null },
+      payload: { businessDate, modules: input.modules ?? null },
+      rootMode: 'owner'
     });
-    if (!buttonLock.ok) {
-      return {
-        ok: false,
-        data: null,
-        error: { code: 'STAGE_LOCK_BUSY', message: `扫/判阶段锁占用中（${buttonLock.heldBy.kind}）。请稍后再试。` }
-      };
-    }
-    const run = withRuntimeWorker(active?.id ?? null, (event) => {
-      broadcastPiRuntimeProgress(event);
-      if (event.type === 'agent_task' || event.type === 'fallback-try' || event.type === 'fallback') broadcastPiEvent(event);
-    }, (hooks) => startWorkspaceDailyIntelligence({
-      dataRootPath: dataRoot.path,
-      businessDate,
-      modules: input.modules,
-      mcpUrl: mcp.url,
-      xhsMcpUrl: currentXhs()?.getUrl() || '',
-      activeRuntime: runtime,
-      ...(needsJudgeHandoff ? { judgeOnly: true as const } : {}),
-      ...hooks
-    }), { roleId: needsJudgeHandoff ? 'planner' : 'reporter' }).then((result) => { broadcastPiEvent({ type: 'agent_task', task: result.task }); return result; }).catch((error) => {
-      coordinatorError = error; broadcastPiEvent({ type: 'failed', error: error instanceof Error ? error.message : String(error) }); return null;
-    }).finally(() => {
-      releaseDailyStageLock({
-        businessDate,
-        kind: needsJudgeHandoff ? 'judge' : 'scan',
-        owner: buttonLockOwner
-      });
-      dailyRuns.delete(runKey);
-    });
-    // Task is created early in the channel run. Poll briefly instead of awaiting full scan.
-    let task = getActiveDailyIntelligenceTask(runtime.database, businessDate) ?? getLatestDailyIntelligenceTask(runtime.database, businessDate);
-    const startedAt = Date.now();
-    while ((!task || (task.id === previous?.id && !active && task.status !== 'running')) && Date.now() - startedAt < 2_500) {
-      await new Promise<void>((resolve) => { setTimeout(resolve, 40); });
-      task = getActiveDailyIntelligenceTask(runtime.database, businessDate) ?? getLatestDailyIntelligenceTask(runtime.database, businessDate);
-    }
-    if (!task || (task.id === previous?.id && !active && task.status !== 'running')) {
-      const result = await run;
-      if (result) return { ok: true, data: result, error: null };
-      const message = coordinatorError instanceof Error ? coordinatorError.message : coordinatorError ? String(coordinatorError) : '每日情报任务未创建。';
-      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message } };
-    }
-    dailyRuns.set(runKey, run);
-    broadcastPiEvent({ type: 'agent_task', task });
-    return { ok: true, data: { task, reused: Boolean(active) }, error: null };
+    return {
+      ok: receipt.ok,
+      data: receipt,
+      error: receipt.ok ? null : { code: receipt.code ?? 'CUTOVER_REQUIRED', message: receipt.message ?? '今日情报意图未被 Actor 接受。' }
+    };
   });
   ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string; brief?: string; researchMode?: string; research_mode?: string }) => {
     const dataRoot = await loadSelectedDataRoot();
@@ -1283,7 +940,7 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
   setDeskJobNotifyBridges({ getPi: currentPi, getRuntime: () => activeRuntime });
   registerExecutionGrantIpc(ipcMain, () => activeRuntime);
   registerPublishingResultsIpc({ getActiveRuntime: () => activeRuntime, setBrowser: (runtime): WorkspaceRuntimeLease => { if (!runtime) { activeRuntime?.releaseBrowser(); throw new Error('发布浏览器运行时不可为空。'); } if (!activeRuntime?.isActive) throw new Error('当前工作空间运行时不可用。'); return activeRuntime.bindBrowser(runtime, { stop: async () => { await disposeXListSessions(); await stopManagedBrowsers(); } }); } });
-  registerDailyContentCycleIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime, dailyOrchestrator: productionDailyOrchestrator ?? undefined } as never);
+  registerDailyContentCycleIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
   registerDailyContentArticleIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
   registerDailyIterationIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });
   registerContentDerivativeIpc({ loadSelectedDataRoot, migrate, getActiveRuntime: () => activeRuntime });

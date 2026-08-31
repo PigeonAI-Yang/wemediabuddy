@@ -4,8 +4,9 @@ import { workspaceBrowserReady } from './bound-browser.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { canonicalizeUrl, createSourceFeed } from './sources.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
+import { ZHIHU_HOT_URL } from './zhihu-hot-channel.ts';
 
-export const intelligenceModules = ['official_web', 'x_lists'] as const;
+export const intelligenceModules = ['official_web', 'x_lists', 'zhihu_hot'] as const;
 export type IntelligenceModule = typeof intelligenceModules[number];
 export type WebsiteResolutionStatus = 'ready' | 'unresolved' | 'unreadable' | 'needs_user' | 'failed';
 export type SourceScanStatus = 'succeeded' | 'failed' | 'needs_user';
@@ -233,9 +234,16 @@ export function recordSourceScanReceipt(database: DatabaseSync, input: {
   const candidateCount = input.candidateCount ?? 0; const savedCount = input.savedCount ?? 0;
   if (!Number.isInteger(candidateCount) || candidateCount < 0 || !Number.isInteger(savedCount) || savedCount < 0) throw new Error('RECEIPT_COUNT_INVALID');
   if (!database.prepare('SELECT 1 FROM source_feeds WHERE id=?').get(input.sourceFeedId)) throw new Error('SOURCE_FEED_NOT_FOUND');
-  const sourceTable = input.module === 'official_web' ? 'website_sources' : 'x_list_bindings';
-  const sourceIdentity = database.prepare(`SELECT source_feed_id AS sourceFeedId FROM ${sourceTable} WHERE id=?`).get(input.sourceId) as { sourceFeedId?: string } | undefined;
-  if (!sourceIdentity?.sourceFeedId || sourceIdentity.sourceFeedId !== input.sourceFeedId) throw new Error('SOURCE_IDENTITY_MISMATCH');
+  if (input.module === 'zhihu_hot') {
+    // Synthetic channel: ensure feed exists but no per-source table check; validate against registry feed
+    const feed = database.prepare("SELECT id FROM source_feeds WHERE id=? AND registry_id='zhihu_hot'").get(input.sourceFeedId) as { id?: string } | undefined;
+    if (!feed && input.sourceId !== 'zhihu_hot') throw new Error('SOURCE_IDENTITY_MISMATCH');
+    // allow synthetic sourceId 'zhihu_hot' with its registry feed
+  } else {
+    const sourceTable = input.module === 'official_web' ? 'website_sources' : 'x_list_bindings';
+    const sourceIdentity = database.prepare(`SELECT source_feed_id AS sourceFeedId FROM ${sourceTable} WHERE id=?`).get(input.sourceId) as { sourceFeedId?: string } | undefined;
+    if (!sourceIdentity?.sourceFeedId || sourceIdentity.sourceFeedId !== input.sourceFeedId) throw new Error('SOURCE_IDENTITY_MISMATCH');
+  }
   const checkedAt = input.checkedAt ?? new Date().toISOString();
   const current = getSourceScanReceipt(database, input);
   if (current && current.workspaceId === workspaceId && current.sourceFeedId === input.sourceFeedId && current.checkedAt === checkedAt && current.status === input.status && current.candidateCount === candidateCount && current.savedCount === savedCount && current.errorCode === (input.errorCode ?? null) && current.errorMessage === (input.errorMessage ?? null)) return current;
@@ -271,15 +279,43 @@ export function listSourceScanReceipts(database: DatabaseSync, input: {
   return (database.prepare(`${receiptSelect}${where} ORDER BY checked_at DESC, id DESC LIMIT ?`).all(...args, limit) as ReceiptRow[]).map((row) => ({ ...row }));
 }
 
-export function readIntelligenceChannelsSummary(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database)): IntelligenceChannelsSummary {
+export function readIntelligenceChannelsSummary(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database, 'x', { allowMissingExpectedAccount: true })): IntelligenceChannelsSummary {
   const websites = listWebsiteSources(database);
   const xLists = listXListBindings(database);
   const xReady = browserConfigured;
+  const zhihuReady = workspaceBrowserReady(database, 'zhihu', { allowMissingExpectedAccount: true });
+  // zhihu_hot: synthetic single source channel, enabled via app_meta flag (default true)
+  const zhihuHotEnabled = (() => {
+    try {
+      const row = database.prepare("SELECT value FROM app_meta WHERE key='zhihu_hot_enabled'").get() as { value?: string } | undefined;
+      if (!row?.value) return true;
+      return row.value !== '0' && row.value !== 'false';
+    } catch { return true; }
+  })();
+  const zhihuHotFeedId = (() => {
+    try {
+      const row = database.prepare("SELECT id FROM source_feeds WHERE registry_id='zhihu_hot'").get() as { id?: string } | undefined;
+      return row?.id ?? 'zhihu_hot';
+    } catch { return 'zhihu_hot'; }
+  })();
+  const zhihuHotStatus = (() => {
+    if (!zhihuHotEnabled) return 'disabled' as const;
+    // Derive from latest scan receipt + current executable eligibility, not stale setup metadata.
+    // A successful receipt proves the source is runnable; preserve real actionable errors.
+    try {
+      const latest = database.prepare("SELECT status FROM source_scan_receipts WHERE module='zhihu_hot' ORDER BY checked_at DESC, updated_at DESC LIMIT 1").get() as { status?: string } | undefined;
+      if (latest?.status === 'succeeded') return 'ready' as const;
+      if (latest?.status === 'needs_user') return 'needs_user' as const;
+      if (latest?.status === 'failed') return 'failed' as const;
+    } catch {}
+    return zhihuReady ? 'ready' as const : 'needs_user' as const;
+  })();
   const sources: IntelligenceChannelSource[] = [
     ...websites.map((website) => ({ module: 'official_web' as const, sourceId: website.id, sourceFeedId: website.sourceFeedId, name: website.name, canonicalUrl: website.canonicalUrl, enabled: website.enabled, status: website.enabled ? website.resolutionStatus === 'ready' ? 'ready' as const : website.resolutionStatus === 'needs_user' ? 'needs_user' as const : 'failed' as const : 'disabled' as const, revision: website.revision })),
-    ...xLists.map((binding) => ({ module: 'x_lists' as const, sourceId: binding.id, sourceFeedId: binding.sourceFeedId, name: binding.name, canonicalUrl: binding.canonicalUrl, enabled: binding.enabled, status: binding.enabled ? xReady ? 'ready' as const : 'needs_user' as const : 'disabled' as const, revision: binding.revision, accountKey: binding.accountKey, listId: binding.listId }))
+    ...xLists.map((binding) => ({ module: 'x_lists' as const, sourceId: binding.id, sourceFeedId: binding.sourceFeedId, name: binding.name, canonicalUrl: binding.canonicalUrl, enabled: binding.enabled, status: binding.enabled ? xReady ? 'ready' as const : 'needs_user' as const : 'disabled' as const, revision: binding.revision, accountKey: binding.accountKey, listId: binding.listId })),
+    { module: 'zhihu_hot' as const, sourceId: 'zhihu_hot', sourceFeedId: zhihuHotFeedId, name: '知乎 AI 专题', canonicalUrl: ZHIHU_HOT_URL, enabled: zhihuHotEnabled, status: zhihuHotStatus, revision: 1 }
   ];
-  const readiness = [readinessFor('official_web', sources), readinessFor('x_lists', sources)];
+  const readiness = [readinessFor('official_web', sources), readinessFor('x_lists', sources), readinessFor('zhihu_hot', sources)];
   return { websites, xLists, sources, readiness };
 }
 
@@ -292,7 +328,7 @@ function readinessFor(module: IntelligenceModule, sources: IntelligenceChannelSo
     status: ready.length ? blocked.length ? 'partial' : 'ready' : enabled.length ? blocked.length ? 'needs_user' : 'needs_config' : 'needs_config' };
 }
 
-export function readIntelligenceChannelReadiness(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database)): IntelligenceChannelReadiness[] {
+export function readIntelligenceChannelReadiness(database: DatabaseSync, browserConfigured = workspaceBrowserReady(database, 'x', { allowMissingExpectedAccount: true })): IntelligenceChannelReadiness[] {
   return readIntelligenceChannelsSummary(database, browserConfigured).readiness;
 }
 

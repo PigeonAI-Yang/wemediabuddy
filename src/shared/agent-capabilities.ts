@@ -35,6 +35,11 @@ export type AgentCapabilityId =
   | 'cap.internal_prepare'
   | 'cap.wiki_maintain'
   | 'cap.investigation'
+  | 'cap.planning_submit'
+  | 'cap.planning_review'
+  | 'cap.zhihu_hot_collect'
+  | 'cap.daily_content_cycle'
+  | 'cap.content_derivative'
   | 'cap.publish_prep'
   | 'cap.hard_delete'
   | 'cap.platform_mutation';
@@ -196,7 +201,7 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     id: 'cap.write',
     displayName: '写作',
     description: '内容项目创建与版本保存；资料库只读借阅',
-    commands: Object.freeze(['content.create', 'content.save_version'] as const),
+    commands: Object.freeze(['content.create', 'content.save_version', 'media.recommendations_generate'] as const),
     readProfiles: Object.freeze(['sources', 'knowledge', 'plans', 'content', 'reviews'] as const),
     defaultRoleBindings: Object.freeze({ writer: true, desk: true }),
     grantKinds: Object.freeze({ task: Object.freeze(['studio_draft'] as const), page: Object.freeze(['studio', 'proposals'] as const) }),
@@ -284,6 +289,84 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     since: '2026-08-16'
   }),
   Object.freeze({
+    id: 'cap.zhihu_hot_collect',
+    displayName: '知乎热榜采集',
+    description: 'WMB-5330 知乎热榜扫描与观察冻结；Reporter 专用（Desk 站立含）',
+    commands: Object.freeze(['intelligence.zhihu_hot.scan'] as const),
+    readProfiles: Object.freeze(['sources'] as const),
+    defaultRoleBindings: Object.freeze({ reporter: true, desk: true }),
+    grantKinds: Object.freeze({ task: Object.freeze(['zhihu_hot_scan'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'intelligence',
+    since: '2026-08-22'
+  }),
+  Object.freeze({
+    id: 'cap.daily_content_cycle',
+    displayName: '每日内容周期与目标',
+    description: 'WMB-5330 Daily Cycle/Target 状态机、阈值决策与 carry；Planner 专用（Desk 站立含）',
+    commands: Object.freeze([
+      'daily_content_cycle.ensure',
+      'daily_content_cycle.pause',
+      'daily_content_cycle.resume',
+      'daily_content_target.select',
+      'daily_content_target.replace',
+      'daily_content_target.skip',
+      'daily_content_target.carry',
+      'daily_content_target.transition',
+      'daily_iteration.draft_ensure',
+      'daily_iteration.published_ensure',
+      'daily_iteration.version_create',
+      'daily_iteration.projection'
+    ] as const),
+    readProfiles: Object.freeze(['sources', 'plans', 'content', 'reviews'] as const),
+    defaultRoleBindings: Object.freeze({ planner: true, desk: true }),
+    grantKinds: Object.freeze({ task: Object.freeze(['daily_content'] as const), page: Object.freeze(['today', 'results'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'planning',
+    since: '2026-08-22'
+  }),
+  Object.freeze({
+    id: 'cap.content_derivative',
+    displayName: '视频文案衍生',
+    description: 'WMB-5330 视频文案衍生身份与不可变版本；Writer 专用（Desk 站立含）',
+    commands: Object.freeze(['content_derivative.ensure', 'content_derivative.save_version', 'content_derivative.finalize_version'] as const),
+    readProfiles: Object.freeze(['content', 'plans', 'sources'] as const),
+    defaultRoleBindings: Object.freeze({ writer: true, desk: true }),
+    grantKinds: Object.freeze({ task: Object.freeze(['studio_draft'] as const), page: Object.freeze(['studio'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'studio',
+    since: '2026-08-22'
+  }),
+  Object.freeze({
+    id: 'cap.planning_submit',
+    displayName: '策划提交',
+    description: 'WMB-5351 策划草稿请求与提交；策划精确任务或主管',
+    commands: Object.freeze(['plan_item.request_planning', 'plan_item.submit'] as const),
+    readProfiles: Object.freeze(['plans', 'content', 'sources'] as const),
+    defaultRoleBindings: Object.freeze({ planner: true, desk: true }),
+    grantKinds: Object.freeze({ task: Object.freeze(['daily_judge', 'daily_intelligence'] as const), page: Object.freeze(['today', 'proposals'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'planning',
+    since: '2026-08-23'
+  }),
+  Object.freeze({
+    id: 'cap.planning_review',
+    displayName: '策划审批与推进',
+    description: 'WMB-5351 策划审批驳回回退与统一推进；仅主管',
+    commands: Object.freeze(['plan_item.approve', 'plan_item.reject', 'plan_item.rework', 'plan_item.advance'] as const),
+    readProfiles: Object.freeze(['plans', 'content', 'sources'] as const),
+    defaultRoleBindings: Object.freeze({ desk: true }),
+    grantKinds: Object.freeze({ task: Object.freeze(['daily_judge'] as const), page: Object.freeze(['today', 'proposals', 'publish', 'agents'] as const) }),
+    precise: false,
+    agentGrantable: true,
+    owner: 'planning',
+    since: '2026-08-23'
+  }),
+  Object.freeze({
     id: 'cap.publish_prep',
     displayName: '发布准备（红线）',
     description: '平台发布准备；仅 Precise + Owner UI',
@@ -326,14 +409,16 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
 
 export const TASK_INTENT_NEEDED_CAPS: Readonly<Record<string, readonly AgentCapabilityId[]>> = Object.freeze({
   daily_scan: Object.freeze(['cap.collect'] as const),
-  daily_judge: Object.freeze(['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate'] as const),
+  daily_judge: Object.freeze(['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate', 'cap.planning_submit', 'cap.planning_review'] as const),
   daily_intelligence: Object.freeze([
     'cap.collect',
     'cap.lane_judge',
     'cap.topic_decide',
-    'cap.knowledge_curate'
+    'cap.knowledge_curate',
+    'cap.planning_submit',
+    'cap.planning_review'
   ] as const),
-  studio_draft: Object.freeze(['cap.write'] as const),
+  studio_draft: Object.freeze(['cap.write', 'cap.content_derivative'] as const),
   results_review: Object.freeze(['cap.review'] as const),
   research: Object.freeze(['cap.research'] as const)
 });

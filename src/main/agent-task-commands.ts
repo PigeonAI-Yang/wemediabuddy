@@ -21,6 +21,7 @@ import {
 } from './agent-tasks.ts';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData } from './business-command.ts';
 import { dispatchRevokeTaskGrantsForTask } from './task-grants.ts';
+import { handleReporterSuccessAndAdvance } from './daily-content-article.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 /**
@@ -151,7 +152,11 @@ export function dispatchNeedsUserAgentTask(
 
 export function dispatchPartialAgentTask(dependency: AgentTaskMutationDependency, id: string, context: AgentTaskCommandContext): Promise<AgentTask> {
   return dispatchTask(dependency, context, 'agent_tasks.partial', { id }, id,
-    (database, input) => requireCommandResultData(partialAgentTask(database, input.id)));
+    (database, input) => {
+      const partial = requireCommandResultData(partialAgentTask(database, input.id));
+      try { handleReporterSuccessAndAdvance(database, input.id); } catch {}
+      return partial;
+    });
 }
 
 export function dispatchResearchHandoffAgentTask(
@@ -174,7 +179,11 @@ export function dispatchFinishDailyIntelligence(
 
 export function dispatchCompleteAgentTask(dependency: AgentTaskMutationDependency, id: string, context: AgentTaskCommandContext): Promise<AgentTask> {
   return dispatchTask(dependency, context, 'agent_tasks.complete', { id }, id,
-    (database, input) => requireCommandResultData(completeAgentTask(database, input.id)));
+    (database, input) => {
+      const completed = requireCommandResultData(completeAgentTask(database, input.id));
+      try { handleReporterSuccessAndAdvance(database, input.id); } catch {}
+      return completed;
+    });
 }
 
 

@@ -19,38 +19,128 @@ test('task grants expose the canonical internal business command IDs', () => {
     'agent_tasks.report_progress',
     'content.create',
     'content.save_version',
+    'content_derivative.ensure',
+    'content_derivative.save_version',
+    'content_derivative.finalize_version',
+    'daily_content_cycle.ensure',
+    'daily_content_cycle.pause',
+    'daily_content_cycle.resume',
+    'daily_content_target.carry',
+    'daily_content_target.replace',
+    'daily_content_target.select',
+    'daily_content_target.skip',
+    'daily_content_target.transition',
+    'daily_iteration.draft_ensure',
+    'daily_iteration.published_ensure',
+    'daily_iteration.projection',
+    'daily_iteration.version_create',
+    'intelligence.zhihu_hot.scan',
     'intelligence_channels.proposal_apply',
     'intelligence_channels.proposal_apply_safe',
+    'investigation.direction_save',
     'investigation.outline_save',
     'investigation.review_research',
-    'investigation.direction_save',
     'knowledge.creative_brief_create',
     'knowledge.creative_brief_create_project',
     'knowledge.creative_brief_update',
     'knowledge.domain_create',
     'knowledge.domain_update',
-    'knowledge_flywheel.change_set_apply',
     'knowledge.lint',
     'knowledge.maintenance',
     'knowledge.record_batch',
-    'knowledge.topic_maintenance_propose',
     'knowledge.topic_maintenance_approve',
+    'knowledge.topic_maintenance_propose',
     'knowledge.topic_maintenance_reject',
     'knowledge.topic_maintenance_reproposal_retry',
     'knowledge.suggestion_create',
+    'knowledge_flywheel.change_set_apply',
+    'media.recommendations_generate',
+    'plan_item.advance',
+    'plan_item.approve',
+    'plan_item.reject',
+    'plan_item.request_planning',
+    'plan_item.rework',
+    'plan_item.submit',
     'plans.save',
     'publication.snapshot_create',
     'reviews.save',
-    'sources.upsert_batch',
     'sources.lane_gate',
     'sources.lane_restore',
     'sources.update_status',
+    'sources.upsert_batch',
     'x_lists.observation_start',
     'x_lists.observation_stop',
     'x_lists.operation_execute',
     'x_lists.prepare'
   ]);
 });
+test('ordinary Pi chat grants (page_today/page_studio) are legally issued and unregistered commands are still rejected', async () => {
+  await withRuntime(async ({ runtime }) => {
+    // Ordinary chat on Today page: desk role should get a legal grant (deskStanding now includes media)
+    const todayTask = (await dispatchStartAgentTask(runtime, {
+      intent: 'page_today',
+      businessDate: '2026-08-23',
+      contextRefs: { workspaceId: runtime.identity.workspaceId, page: 'today', roleId: 'desk' }
+    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'ordinary-chat-today-task' })).task;
+    assert.equal(todayTask.status, 'running');
+    const todayGrantId = await ensureAutomaticTaskGrant(runtime, todayTask.id, new Date(), 'desk');
+    const todayGrant = getTaskGrant(runtime.database, todayGrantId);
+    assert.equal(todayGrant.status, 'active');
+    // Today grant must be subset of TASK_INTERNAL and contain core page_today commands
+    for (const cmd of todayGrant.allowedCommands) assert.ok(TASK_INTERNAL_COMMANDS.includes(cmd), `today grant contains unregistered ${cmd}`);
+    assert.ok(todayGrant.allowedCommands.includes('sources.upsert_batch'));
+    assert.ok(todayGrant.allowedCommands.includes('plans.save'));
+    // Studio page grant should include media.recommendations_generate (now grantable via cap.write)
+    const studioTask = (await dispatchStartAgentTask(runtime, {
+      intent: 'page_studio',
+      businessDate: '2026-08-23',
+      contextRefs: { workspaceId: runtime.identity.workspaceId, page: 'studio', roleId: 'desk' }
+    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'ordinary-chat-studio-task' })).task;
+    const studioGrantId = await ensureAutomaticTaskGrant(runtime, studioTask.id, new Date(), 'desk');
+    const studioGrant = getTaskGrant(runtime.database, studioGrantId);
+    assert.equal(studioGrant.status, 'active');
+    assert.ok(studioGrant.allowedCommands.includes('media.recommendations_generate'), 'studio desk grant must include media.recommendations_generate');
+    assert.ok(studioGrant.allowedCommands.includes('content.save_version'));
+    for (const cmd of studioGrant.allowedCommands) assert.ok(TASK_INTERNAL_COMMANDS.includes(cmd));
+    // Unregistered commands must still be rejected (use fresh task to avoid TASK_GRANT_EXISTS masking)
+    const probeTask = (await dispatchStartAgentTask(runtime, {
+      intent: 'page_today',
+      businessDate: '2026-08-23',
+      contextRefs: { workspaceId: runtime.identity.workspaceId, page: 'today', roleId: 'desk' }
+    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'ordinary-chat-probe-task' })).task;
+    let threwBroadened = false;
+    try {
+      await dispatchIssueTaskGrant(runtime, {
+        requestId: 'grant-unregistered',
+        taskId: probeTask.id,
+        ownerGoal: 'probe unregistered',
+        allowedCommands: ['not.a.real.command'],
+        workers: [{ type: 'pi', id: 'pi' }],
+        relevantContext: {},
+        expiresAt: expiry()
+      });
+    } catch (error) {
+      threwBroadened = error?.code === 'TASK_SCOPE_BROADENED';
+    }
+    assert.equal(threwBroadened, true, 'unregistered command must be rejected with TASK_SCOPE_BROADENED');
+    let threwMixed = false;
+    try {
+      await dispatchIssueTaskGrant(runtime, {
+        requestId: 'grant-mixed',
+        taskId: probeTask.id,
+        ownerGoal: 'probe mixed',
+        allowedCommands: ['sources.upsert_batch', 'fake.invalid_command'],
+        workers: [{ type: 'pi', id: 'pi' }],
+        relevantContext: {},
+        expiresAt: expiry()
+      });
+    } catch (error) {
+      threwMixed = error?.code === 'TASK_SCOPE_BROADENED';
+    }
+    assert.equal(threwMixed, true, 'mixed valid+fake must be rejected');
+  });
+});
+
 
 test('Pi and an external Agent continue one task under a durable grant while stale authority writes zero', async () => {
   await withRuntime(async ({ root, runtime, database }) => {
@@ -233,8 +323,8 @@ test('a grant from another root authorizes zero writes', async () => {
 test('ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers', async () => {
   await withRuntime(async ({ runtime, database }) => {
     const expectedByIntent = {
-      daily_intelligence: ['agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plans.save', 'sources.upsert_batch', 'sources.lane_gate'],
-      studio_draft: ['agent_tasks.report_progress', 'content.save_version'],
+      daily_intelligence: ['agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plan_item.request_planning', 'plan_item.submit', 'plans.save', 'sources.upsert_batch', 'sources.lane_gate'],
+      studio_draft: ['agent_tasks.report_progress', 'content.save_version', 'content_derivative.ensure', 'content_derivative.save_version', 'content_derivative.finalize_version'],
       results_review: ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']
     };
     for (const [intent, expected] of Object.entries(expectedByIntent)) {

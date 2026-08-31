@@ -30,6 +30,7 @@ import { PiRpcSupervisor } from './pi-runtime.ts';
 import { piModelsJson } from './pi-model.ts';
 import { piCliFromRuntimeRoot, resolvePiRuntimeRoot } from './pi-runtime-manager.ts';
 import { runPiPromptWithFallback, startPiRuntimeWithFallback } from './pi-config-fallback.ts';
+import { proxyEnvForChildren } from './proxy-config.ts';
 import type { ResolvedPiConfig } from './pi-config.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import type { TaskReadyGrantHook } from './task-grants.ts';
@@ -358,7 +359,8 @@ export async function startResearchJob(input: {
         WMB_XHS_MCP_URL: input.xhsMcpUrl || '',
         // WMB-5170 客户端身份接缝：env 派生 _meta 注入 + 服务端 lease 校验，闭合运行时路径。
         WMB_AGENT_TASK_ID: task.id,
-        WMB_WORKER_LEASE_ID: input.workerLeaseId || ''
+        WMB_WORKER_LEASE_ID: input.workerLeaseId || '',
+        ...proxyEnvForChildren()
       }, (event) => input.onEvent?.(event as Record<string, unknown>), workDir);
       input.onRuntime?.(runtime);
       return runtime;

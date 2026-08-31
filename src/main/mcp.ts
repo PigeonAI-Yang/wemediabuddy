@@ -1,5 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { McpServer, createMcpHandler, type CallToolResult, type McpHttpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -35,6 +36,9 @@ import { buildRoleRoster } from './role-roster.ts';
 import { shanghaiDate } from './ferment.ts';
 import { roleReadTools } from '../shared/agent-capabilities.ts';
 import { recordRoleAuthorityBlocked } from './operations.ts';
+import { getDailyOrchestrationSchedule, setDailyOrchestrationSchedule } from './daily-orchestration.ts';
+import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
+import { dispatchBusinessCommand } from './business-command.ts';
 export type McpRuntime = { url: string; close: () => Promise<void> };
 
 /** MCP 统一文本结果形状（全部工具 handler 与读门拦截共用）。 */
@@ -67,6 +71,7 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'knowledge.topic_maintenance_get': 'wmb_get_topic_maintenance',
   'content.import_image': 'wmb_import_project_image',
   'content.save_version': 'wmb_save_core_version',
+  'content_derivative.save_version': 'wmb_save_video_script',
   'content.create': 'wmb_create_content_project',
   'content.get': 'wmb_get_content',
   'content.list': 'wmb_list_content_projects',
@@ -126,12 +131,13 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'workspaces.proposals.prepare': 'wmb_prepare_workspace_profile',
   'research.search_web': 'wmb_search_web',
   'research.read_web_page': 'wmb_read_web_page',
+  'plan_item.get': 'wmb_get_plan_item',
+  'plan_item.submit': 'wmb_submit_plan_item',
   'xhs_check_login_status': 'xhs_check_login_status',
   'xhs_search_feeds': 'xhs_search_feeds',
   'xhs_get_feed_detail': 'xhs_get_feed_detail',
   'xhs_user_profile': 'xhs_user_profile'
 });
-
 /** WMB-5170 §6.2：research 会话读白名单 = roleReadTools('reporter') + 基础设施 + 唯一写回。 */
 const RESEARCH_READ_ALLOWED: ReadonlySet<string> = new Set([
   ...roleReadTools('reporter'),
@@ -404,63 +410,100 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
   if (runtime) {
     registerJobToolsMcp(server, runtime, database);
     server.registerTool('daily.readiness', {
-      description: '读取今日扫/判就绪状态与建议下一阶段。只读；是否续接由主管决定并调用 continue/run_stage/spawn。',
+      description: '读取当前 workspace 的 Actor、startup gate 与 ManagerAdapter 权威投影。只读。',
       inputSchema: { business_date: z.string().optional() }
     }, async ({ business_date }) => {
       return text(describeDailyReadiness(runtime, business_date || undefined));
     });
     server.registerTool('daily.continue_after_scan', {
-      description: '主管工具：在扫描完成后显式续接策划（自动编排续接能力的可控入口）。认为该续就调；认为只要单项采集就不要调。',
-      inputSchema: { business_date: z.string().optional() }
-    }, async ({ business_date }) => {
-      const mcp = runtime.getMcp<McpRuntime>();
-      if (!mcp?.url) return text({ ok: false, error: 'MCP_UNAVAILABLE' });
-      try {
-        return text(await continueAfterScan({
-          runtime,
-          dataRootPath: runtime.identity.rootPath,
-          mcpUrl: mcp.url,
-          xhsMcpUrl: '',
-          businessDate: business_date
-        }));
-      } catch (error) {
-        return text({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      description: '提交带 predecessor intent/root identity 的 typed judge intent；缺少身份时由 Actor 网关拒绝。',
+      inputSchema: {
+        request_id: z.string().min(1),
+        business_date: z.string().optional(),
+        predecessor_intent_id: z.string().min(1),
+        root_request_id: z.string().min(1),
+        orchestration_id: z.string().optional(),
+        stage_request_id: z.string().optional(),
+        scope_hash: z.string().optional(),
+        projection_hash: z.string().optional(),
+        eligible_ids_hash: z.string().optional()
       }
+    }, async ({ request_id, business_date, predecessor_intent_id, root_request_id, orchestration_id, stage_request_id, scope_hash, projection_hash, eligible_ids_hash }) => {
+      return text(await continueAfterScan({
+        runtime,
+        requestId: request_id,
+        businessDate: business_date,
+        predecessorIntentId: predecessor_intent_id,
+        rootRequestId: root_request_id,
+        orchestrationId: orchestration_id,
+        stageRequestId: stage_request_id,
+        scopeHash: scope_hash,
+        projectionHash: projection_hash,
+        eligibleIdsHash: eligible_ids_hash
+      }));
     });
     server.registerTool('daily.run_stage', {
-      description: '主管启动今日情报阶段。stage=scan 单项采集；stage=judge 单项策划；stage=full 一条龙。自动编排能力由主管选用，不是禁用。',
+      description: '提交 typed daily intent。stage=scan、judge 或 full。',
       inputSchema: {
+        request_id: z.string().min(1),
         stage: z.enum(['scan', 'judge', 'full']),
         business_date: z.string().optional(),
         modules: z.array(z.enum(['official_web', 'x_lists'])).optional()
       }
-    }, async ({ stage, business_date, modules }) => {
-      const mcp = runtime.getMcp<McpRuntime>();
-      if (!mcp?.url) return text({ ok: false, error: 'MCP_UNAVAILABLE' });
-      try {
-        const result = await runManagerDailyStage({
-          runtime,
-          dataRootPath: runtime.identity.rootPath,
-          mcpUrl: mcp.url,
-          xhsMcpUrl: '',
-          stage,
-          businessDate: business_date,
-          modules
-        });
-        return text(result);
-      } catch (error) {
-        return text({ ok: false, error: error instanceof Error ? error.message : String(error) });
-      }
+    }, async ({ request_id, stage, business_date, modules }) => {
+      return text(await runManagerDailyStage({
+        runtime,
+        requestId: request_id,
+        stage,
+        businessDate: business_date,
+        modules
+      }));
+    });
+    server.registerTool('daily.orchestrate', {
+      description: '提交 typed Stage D daily intent。',
+      inputSchema: { request_id: z.string().min(1), business_date: z.string().optional() }
+    }, async ({ request_id, business_date }) => {
+      return text(await submitWorkspaceOrchestratorIntent(runtime, {
+        producerId: 'mcp.daily-orchestrate',
+        businessDate: business_date?.trim() || shanghaiDate(),
+        requestId: request_id,
+        action: 'stage_d',
+        logicalInput: { source: 'mcp', action: 'stage_d' },
+        payload: { source: 'mcp', action: 'stage_d' },
+        rootMode: 'owner'
+      }));
+    });
+    server.registerTool('daily.orchestration_schedule_get', {
+      description: '读取每日编排调度时间与自动开关（Asia/Shanghai）。只读。',
+      inputSchema: {}
+    }, async () => {
+      const db = database();
+      try { return text(getDailyOrchestrationSchedule(db)); } finally { db.close(); }
+    });
+    server.registerTool('daily.orchestration_schedule_set', {
+      description: '设置每日编排调度时间与自动开关。',
+      inputSchema: { time: z.string().optional(), auto_enabled: z.boolean().optional() }
+    }, async ({ time, auto_enabled }) => {
+      const receipt = await dispatchBusinessCommand(runtime, {
+        command: 'daily_orchestration.set_schedule',
+        requestId: randomUUID(),
+        actor: { type: 'external_agent', id: 'mcp', label: 'MCP' },
+        input: { time: time ?? undefined, autoEnabled: auto_enabled ?? undefined },
+        boundIdentity: {},
+        entityType: 'daily_orchestration',
+        execute: (database, input) => {
+          const result = setDailyOrchestrationSchedule(database, input);
+          return { data: result, entityId: 'schedule', readback: result };
+        }
+      });
+      return text(receipt);
     });
 
   }
 
 return server;
 }
-
 export async function startMcp(rootPath: string, gate?: WorkspaceRuntimeGate, application?: WorkspaceApplicationMcp, runtime?: ActiveWorkspaceRuntime): Promise<McpRuntime> {
-  // Keep the handler reference: its close() aborts in-flight modern exchanges and closes their
-  // per-request McpServer instances — the only total session release. toNodeHandler alone drops it.
   const mcpHandler = createMcpHandler(() => createServerFor(rootPath, application, runtime));
   const handler = toNodeHandler(mcpHandler);
   const http = createServer((request, response) => {

@@ -14,6 +14,7 @@
     "e2e": "node tests/e2e/runner.mjs",
     "e2e:smoke": "node tests/e2e/runner.mjs --file tests/e2e/navigation.test.mjs --scenario smoke-launch-exit",
     "e2e:gate": "node tests/e2e/coverage-gate.mjs",
+    "e2e:cleanup": "node scripts/cleanup-e2e-artifacts.mjs",
     "sync:design": "node scripts/sync-design-doc-from-foundation.mjs",
     "verify:xhs-resources": "node scripts/verify-xiaohongshu-mcp-resources.mjs",
     "package": "npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge package",

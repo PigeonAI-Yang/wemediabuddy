@@ -183,6 +183,16 @@ export async function stopManagedBrowsers(): Promise<void> {
   managedRuntimes.clear();
 }
 
+export function loadPlaywrightCore(): typeof import('playwright-core') {
+  const load = createRequire(import.meta.url);
+  const isPackaged = process.versions.electron
+    ? (load('electron') as typeof import('electron')).app.isPackaged
+    : false;
+  return load(isPackaged
+    ? path.join(process.resourcesPath, 'playwright-core')
+    : 'playwright-core') as typeof import('playwright-core');
+}
+
 async function listeningPid(cdpUrl: string): Promise<number> {
   if (process.platform !== 'win32') return 0;
   const port = portFromCdpUrl(cdpUrl);
@@ -195,13 +205,7 @@ async function listeningPid(cdpUrl: string): Promise<number> {
 }
 
 async function setBrowserWindowState(cdpUrl: string, windowState: 'quiet' | 'visible' | 'minimized' | 'normal'): Promise<void> {
-  const load = createRequire(import.meta.url);
-  const isPackaged = process.versions.electron
-    ? (load('electron') as typeof import('electron')).app.isPackaged
-    : false;
-  const { chromium } = load(isPackaged
-    ? path.join(process.resourcesPath, 'playwright-core')
-    : 'playwright-core') as typeof import('playwright-core');
+  const { chromium } = loadPlaywrightCore();
   const browser = await chromium.connectOverCDP(cdpUrl);
   try {
     const context = browser.contexts()[0];

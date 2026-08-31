@@ -427,6 +427,23 @@ declare global {
           carry: { id: string; state: string; revision: number } | null;
           demotion: { publishedAt: string; platform: string } | null;
         }>;
+        recommendation: {
+          primary: Awaited<ReturnType<Window['wmb']['getToday']>> extends { recommendation: { primary: infer T } } ? T : unknown;
+          eligible: Array<{
+            planItemId: string; planDate: string; title: string; priority: number; timeliness: string | null;
+            timelinessClass: 'breaking' | 'hot' | 'evergreen'; expiresAt: string | null; topicId: string | null;
+            sourceIds: string[]; whyNow: string; angle: string; pointOfView: string; targetAudience: string;
+            platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string;
+            structureGuidance: string; effortEstimate: string; availableMaterials: string[]; missingMaterials: string[];
+            trendEvidence: TodayPlanItem['trendEvidence']; createdAt: string; isNew: boolean; planningStatus: string | null;
+            revision: number | null; planningProvenanceJson: string | null; scoreReasonsJson: string | null;
+            carry: { id: string; state: string; revision: number } | null; demotion: { publishedAt: string; platform: string } | null;
+          }>;
+          counts: { todayReady: number; carriedReady: number; scoringPending: number; invalid: number };
+          repairable: Array<{ planItemId: string; revision: number; reasonCode: 'score_pending' | 'score_invalid' | 'proposal_incomplete' | 'score_stale'; reason: string }>;
+          context: { businessDate: string; asOf: string };
+          emptyReason: 'has_recommendation' | 'run_active' | 'scoring_active' | 'scoring_incomplete' | 'invalid_needs_repair' | 'clean_empty' | 'not_started';
+        };
         topicMaintenance: { pending: number };
         fermenting: {
           items: Array<{
@@ -477,7 +494,7 @@ declare global {
           pinnedSources: Array<{ id: string; title: string; collectedAt: string; priority: number | null; summary: string | null; canonicalUrl: string | null; fermentedDays: number; reason: string }>;
         };
       } | null>;
-      getTodayOverviewMetrics(planDate: string): Promise<{
+      getTodayOverviewMetrics(planDate: string, asOf?: string): Promise<{
         updatedAt: string;
         sources: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
         opportunities: { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
@@ -533,9 +550,8 @@ declare global {
       setCarryState(input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }): Promise<any>;
       dismissPlanItem(input: { planItemId: string; reason?: string }): Promise<any>;
       restoreProposal(input: { planItemId: string; reason?: string }): Promise<any>;
-      createProjectFromPlanItem(planItemId: string): Promise<{ id: string; revision: number; created: boolean }>;
       requestPlanItem(input: { planItemId: string; requestId?: string }): Promise<{ planItemId: string; taskId: string; jobId: string; reused: boolean }>;
-      approvePlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<unknown>;
+      approvePlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<{ id: string; revision: number; planningStatus: 'approved'; projectId: string; projectRevision: number; contentVersionId: string; carryState: 'done' | null }>;
       rejectPlanItem(input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }): Promise<unknown>;
       reworkPlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<unknown>;
       advancePlanItem(input: { planItemId: string; requestId?: string }): Promise<{ projectId: string; role: 'reporter' | 'writer'; jobId: string | null; taskId: string | null; reusedProject: boolean; reusedJob: boolean }>;

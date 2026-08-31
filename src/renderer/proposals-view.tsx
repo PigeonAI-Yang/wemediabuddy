@@ -12,7 +12,7 @@ const PAGE_SIZE = 30;
 
 const TABS: Array<{ id: ProposalTab; label: string }> = [
   { id: 'today', label: '今日可批' },
-  { id: 'scoring_pending', label: '待评分' },
+  { id: 'scoring_pending', label: '待评分待修复' },
   { id: 'shelved', label: '待处理' },
   { id: 'adopted', label: '已采纳' },
   { id: 'dismissed', label: '已否掉' },
@@ -351,7 +351,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
 
   const emptyCopy: Record<ProposalTab, { title: string; body: string; action?: { label: string; onClick: () => void } }> = {
     today: { title: '今日没有待批选题', body: '所有选题都已处理。去「发现」看看今天有什么新动静。', action: openToday ? { label: '回到今日', onClick: openToday } : undefined },
-    scoring_pending: { title: '暂无待评分选题', body: '评分未完成的草稿会显示在这里，点“继续评分”完成传播评分。' },
+    scoring_pending: { title: '暂无待评分或待修复选题', body: '评分未完成或方案不完整的条目会显示在这里，可继续评分或重新策划。' },
     shelved: { title: '没有待处理选题', body: '跨日未终结的选题会留在这里，不会悄悄消失。' },
     adopted: { title: '还没有已采纳选题', body: '从「今日可批」采纳第一条选题后，会记录在这里。' },
     dismissed: { title: '还没有否掉的选题', body: '否掉的选题会留痕在这里，可恢复。' },
@@ -371,7 +371,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
           </div>
           <div className="page-command-stats" aria-label="台账计数">
             <div className="page-command-stat"><strong>{counts.today ?? 0}</strong><span>今日可批</span></div>
-            <div className="page-command-stat"><strong>{counts.scoring_pending ?? 0}</strong><span>待评分</span></div>
+            <div className="page-command-stat"><strong>{counts.scoring_pending ?? 0}</strong><span>待评分待修复</span></div>
             <div className="page-command-stat"><strong>{counts.shelved ?? 0}</strong><span>待处理</span></div>
             <div className="page-command-stat"><strong>{counts.adopted ?? 0}</strong><span>已采纳</span></div>
             <div className="page-command-stat"><strong>{counts.dismissed ?? 0}</strong><span>已否掉</span></div>
@@ -424,7 +424,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
           const baseBadges = poolBadges(poolItem, Date.now(), planDate);
           const planningStatus = getPlanningStatus(item) ?? 'draft';
           const isPendingScoring = isScoringPendingItem(item);
-          const pendingReason = isPendingScoring ? pendingReasonForItem(item) : null;
+          const pendingReason = item.repairReason ?? (isPendingScoring ? pendingReasonForItem(item) : null);
           const badges = isPendingScoring
             ? [...baseBadges, { kind: 'pending' as const, text: pendingReason ?? '评分未完成' }]
             : baseBadges;

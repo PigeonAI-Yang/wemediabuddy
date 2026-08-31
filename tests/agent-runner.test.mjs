@@ -11,7 +11,7 @@ import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
 import { piTaskAuthorityPrompt } from '../src/main/pi-operator-skill.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
-import { approvePlanItems, scoredReasons } from './helpers/planning-fixture.mjs';
+import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 test('daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-runner-'));
@@ -23,7 +23,7 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const savedPlan = saveCurrentPlan(database, {
       planDate: '2026-08-02', timezone: 'Asia/Shanghai', summary: '昨日方案', items: [{
         title: '跨日发酵机会', priority: 1, whyNow: '仍有余波', timeliness: '本周', targetAudience: '受众', angle: '解释影响', pointOfView: '持续跟进',
-        platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [source.id], topicId, scoreReasons: scoredReasons()
+        platforms: ['x'], formats: ['text'], titleGuidance: '标题', openingGuidance: '开头', structureGuidance: '结构', effortEstimate: '30m', sourceIds: [source.id], topicId, editorialDecision: editorialDecision('持续跟进'), scoreReasons: scoredReasons()
       }]
     });
     approvePlanItems(database, [database.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(savedPlan.id).id]);
@@ -113,18 +113,17 @@ test('writer prompts keep audience identity out of core and platform titles', ()
   assert.match(xhs, /不自动添加「普通人」等万能受众标签/);
 });
 
-test('daily IPC leaves task creation to the shared channel coordinator and deduplicates by root/date', async () => {
+test('daily IPC submits one typed owner intent and does not create legacy tasks or run caches', async () => {
   const source = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const start = source.indexOf("ipcMain.handle('agent:start-daily-intelligence'");
   const end = source.indexOf("ipcMain.handle('agent:start-studio-draft'", start);
   assert.ok(start >= 0 && end > start);
   const handler = source.slice(start, end);
-  const coordinator = handler.indexOf('startWorkspaceDailyIntelligence');
-  assert.ok(coordinator > 0);
-  assert.doesNotMatch(handler.slice(0, coordinator), /startAgentTask|resolveAgentPiPrerequisite/);
-  assert.match(handler, /dailyRunKey\(dataRoot\.path, businessDate\)|const runKey = `\$\{dataRoot\.path\}/);
-  assert.match(handler, /dailyRuns\.has\(runKey\)/);
-  assert.match(handler, /dailyRuns\.set\(runKey, run\)/);
+  assert.match(handler, /submitWorkspaceOrchestratorIntent\(runtime/);
+  assert.match(handler, /producerId: 'today\.agent-start-daily-intelligence'/);
+  assert.match(handler, /action: 'full'/);
+  assert.match(handler, /rootMode: 'owner'/);
+  assert.doesNotMatch(handler, /startWorkspaceDailyIntelligence|startAgentTask|resolveAgentPiPrerequisite|dailyRuns/);
 });
 
 test('Pi task authority prompt carries exact automatic task, grant and lease values', () => {

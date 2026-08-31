@@ -583,6 +583,43 @@ test('ipc orchestration direct callback awaits accepted-row persistence before c
   });
 });
 
+test('runDockManagerPrompt does not retry a failed Pi startup with a poisoned authority envelope', async () => {
+  await withRoot(async (root) => {
+    const runtime = new PiRpcSupervisor('node', [], {});
+    let ensureCalls = 0;
+    let prompted = '';
+    let promptCalled;
+    const promptStarted = new Promise((resolve) => { promptCalled = resolve; });
+    runtime.prompt = async (message) => { prompted = message; promptCalled(); return { type: 'response', success: true }; };
+    runtime.getEntries = async () => ({ data: { entries: [{ type: 'message', id: 'a-retry', timestamp: createdAt, message: { role: 'assistant', content: [{ type: 'text', text: '已恢复' }] } }] } });
+    runtime.getState = async () => ({ data: { sessionId: 's-retry', sessionFile: 's-retry.jsonl' } });
+    const deps = {
+      loadSelectedDataRoot: async () => ({ path: root }),
+      ensurePi: async () => {
+        ensureCalls += 1;
+        if (ensureCalls === 1) throw new Error('transient startup failure');
+        return runtime;
+      },
+      getPi: () => null,
+      setPiSessionFile: () => {},
+      getActiveRuntime: () => null
+    };
+    assert.throws(() => registerPiDockIpc(deps), TypeError);
+    await assert.rejects(
+      runDockManagerPrompt({ message: '执行今日情报编排', orchestration: { dispatchId: 'd-first', delivery: 'direct', safe } }),
+      /transient startup failure/
+    );
+    assert.equal(ensureCalls, 1, '首次启动失败必须原样结束，禁止同一回合二次启动并携带过期 blocked 标记');
+
+    const recovered = runDockManagerPrompt({ message: '执行今日情报编排', orchestration: { dispatchId: 'd-second', delivery: 'direct', safe } });
+    await promptStarted;
+    runtime.read(runtimeChunk());
+    await recovered;
+    assert.equal(ensureCalls, 2, '恢复重试是新的干净回合，每回合只启动一次');
+    assert.equal(prompted.includes('[WMB_AUTHORITY_BLOCKED] reason=pi_unavailable'), false, '恢复后的信封不得继承上次启动失败');
+  });
+});
+
 test('pi:chat direct orchestration callback awaits appendAcceptedDockRow before closeTurnGate', async () => {
   const source = await readFile(new URL('../src/main/ipc-pi-dock.ts', import.meta.url), 'utf8');
   const chat = source.slice(source.indexOf("ipcMain.handle('pi:chat'"));
@@ -592,6 +629,25 @@ test('pi:chat direct orchestration callback awaits appendAcceptedDockRow before 
   const close = stream.indexOf('closeTurnGate()');
   assert.ok(append >= 0 && close >= 0, '回调内必须 await 持久化并关闭回合门');
   assert.ok(append < close, '先 await appendAcceptedDockRow 持久化成功，再 closeTurnGate 释放新回合');
+});
+
+test('pi:chat direct orchestration starts Pi before authority is frozen into the envelope', async () => {
+  const source = await readFile(new URL('../src/main/ipc-pi-dock.ts', import.meta.url), 'utf8');
+  const chat = source.slice(source.indexOf("ipcMain.handle('pi:chat'"));
+  const directStart = chat.indexOf('// §10.3 direct');
+  const direct = chat.slice(directStart, chat.indexOf("const current = await readPiConversation(dataRoot.path);", directStart) + 1_500);
+  const ensure = direct.indexOf('runtime = await ensurePi(dataRoot);');
+  const authorize = direct.indexOf('const authorized = await authorize(raw);');
+  const envelope = direct.indexOf('const envelope = buildDockOrchestrationMessage');
+  assert.ok(ensure >= 0 && authorize >= 0 && envelope >= 0, 'direct 编排必须启动 Pi、生成 authority 并构建信封');
+  assert.ok(ensure < authorize && authorize < envelope, '必须先确认 Pi 可用，再冻结 authority；禁止把瞬时 pi_unavailable 带入已恢复的 Pi 回合');
+
+  const managerStart = source.indexOf('// §10.3：direct');
+  const manager = source.slice(managerStart, source.indexOf('const result = await runtime.promptUntilSettled', managerStart));
+  const managerEnsure = manager.indexOf('runtime = await deps.ensurePi(dataRoot);');
+  const managerAuthorize = manager.indexOf('const authorized = await authorize(wrapped);');
+  assert.ok(managerStart >= 0 && managerEnsure >= 0 && managerAuthorize >= 0, '主管实际 direct 路径必须包含 Pi 启动和 authority 冻结');
+  assert.ok(managerEnsure < managerAuthorize, '主管实际 direct 路径同样必须先启动 Pi 再冻结 authority');
 });
 
 test('Studio direct runs default to a deterministic per-task employee session beside the Dock session; explicit override wins', async () => {

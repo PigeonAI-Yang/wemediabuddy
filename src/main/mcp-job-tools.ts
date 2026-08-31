@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 import type { DatabaseSync } from 'node:sqlite';
@@ -11,10 +12,33 @@ import { dispatchResearchForEvidenceGap, handoffParentAfterResearchDispatch } fr
 import { RESEARCH_DEFAULT_BUDGET } from './research-job-runner.ts';
 import { handleResearchSuccessorJobEvent } from './research-successor.ts';
 import { handleInvestigationJobEvent } from './project-investigation.ts';
-import type { RoleJobReportV1 } from './role-job-registry.ts';
+import { parseRoleJobRequest, type RoleJobReportV1 } from './role-job-registry.ts';
+import { shanghaiDate } from './ferment.ts';
+import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import type { McpRuntime } from './mcp.ts';
 
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
+
+async function submitMcpRoleJobIntent(runtime: ActiveWorkspaceRuntime, input: unknown) {
+  const request = parseRoleJobRequest(input);
+  const requestedBusinessDate = 'businessDate' in request ? request.businessDate : null;
+  const businessDate = typeof requestedBusinessDate === 'string' && requestedBusinessDate.length > 0
+    ? requestedBusinessDate
+    : shanghaiDate();
+  const payloadSource = 'businessDate' in request
+    ? { ...request, businessDate }
+    : request;
+  const payload = Object.freeze(Object.fromEntries(Object.entries(payloadSource).filter(([, value]) => value !== undefined)));
+  return submitWorkspaceOrchestratorIntent(runtime, {
+    producerId: 'mcp.jobs-spawn',
+    businessDate,
+    requestId: randomUUID(),
+    action: 'stage_d',
+    logicalInput: payload,
+    payload,
+    rootMode: 'owner'
+  });
+}
 
 /**
  * WMB-5116：jobs.* 员工工单 MCP 工具（jobs.list/get/spawn/cancel/message/messages）
@@ -102,13 +126,12 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
     inputSchema: z.discriminatedUnion('role_id', [
       z.object({ role_id: z.literal('reporter'), brief: z.string().min(1), business_date: z.string().optional(), channel_ids: z.array(z.string()).optional(), source_feed_ids: z.array(z.string()).optional() }).strict(),
       z.object({ role_id: z.literal('planner'), brief: z.string().min(1), business_date: z.string().optional() }).strict(),
-      z.object({ role_id: z.literal('writer'), brief: z.string().min(1), business_date: z.string().optional(), project_id: z.string().min(1), writer_task: z.enum(['core_draft', 'xiaohongshu_platform_version']) }).strict(),
+      z.object({ role_id: z.literal('writer'), brief: z.string().min(1), business_date: z.string().optional(), project_id: z.string().min(1), writer_task: z.enum(['core_draft', 'xiaohongshu_platform_version', 'video_script']), research_mode: z.enum(['auto', 'required', 'prohibited']).optional(), researchMode: z.enum(['auto', 'required', 'prohibited']).optional() }).strict(),
       z.object({ role_id: z.literal('librarian'), brief: z.string().min(1), source_ids: z.array(z.string()).optional(), scope: z.literal('workspace').optional() }).strict()
     ])
   }, async (input) => {
-    const spawner = managerSpawner();
     if (input.role_id === 'reporter') {
-      return text(spawner.spawn({
+      return text(await submitMcpRoleJobIntent(runtime, {
         roleId: 'reporter',
         brief: input.brief,
         businessDate: input.business_date ?? null,
@@ -117,22 +140,26 @@ export function registerJobToolsMcp(server: McpServer, runtime: ActiveWorkspaceR
       }));
     }
     if (input.role_id === 'planner') {
-      return text(spawner.spawn({
+      return text(await submitMcpRoleJobIntent(runtime, {
         roleId: 'planner',
         brief: input.brief,
         businessDate: input.business_date ?? null
       }));
     }
     if (input.role_id === 'writer') {
-      return text(spawner.spawn({
+      const writerInput = input as { brief: string; business_date?: string; project_id: string; writer_task: 'core_draft' | 'xiaohongshu_platform_version' | 'video_script'; research_mode?: 'auto' | 'required' | 'prohibited'; researchMode?: 'auto' | 'required' | 'prohibited' };
+      const rm = writerInput.researchMode ?? writerInput.research_mode;
+      const request: Record<string, unknown> = {
         roleId: 'writer',
-        brief: input.brief,
-        businessDate: input.business_date ?? null,
-        projectId: input.project_id,
-        writerTask: input.writer_task
-      }));
+        brief: writerInput.brief,
+        businessDate: writerInput.business_date ?? null,
+        projectId: writerInput.project_id,
+        writerTask: writerInput.writer_task
+      };
+      if (rm !== undefined) request.researchMode = rm;
+      return text(await submitMcpRoleJobIntent(runtime, request));
     }
-    return text(spawner.spawn({
+    return text(await submitMcpRoleJobIntent(runtime, {
       roleId: 'librarian',
       brief: input.brief,
       sourceIds: input.source_ids ?? null,

@@ -13,7 +13,7 @@ import { getXPostTrend, listXPostMetricSnapshots, listXPostTrends } from './x-po
 import type { ActiveWorkspaceRuntime, WorkspaceRuntimeLease } from './workspace-runtime.ts';
 import type { BrowserRuntime } from './browser.ts';
 import { dispatchAcceptXListOperation, readXListExecutionReplay } from './x-list-command.ts';
-import { startVerifiedBoundBrowser } from './bound-browser.ts';
+import { startVerifiedBoundBrowser, type WorkspaceBrowserVerificationOptions } from './bound-browser.ts';
 import {
   createXListOperationPersistence,
   dispatchArmXListOperation,
@@ -45,16 +45,16 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
   ipcMain.handle('x-lists:get-cached-index', async () => readXListIndexFromRuntime(requiredRuntime(getActiveRuntime)));
   ipcMain.handle('x-lists:read-index', async () => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     const value = context.index;
     if (value.lists.length > 0) await dispatchPersistXListIndex(runtime, { browserId: context.browserId, expectedAccountKey: context.accountKey, value });
     return value;
   });
-  ipcMain.handle('x-lists:read-detail', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, getActiveRuntime, (config) => readXListDetail(config, listId)));
-  ipcMain.handle('x-lists:read-members', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, getActiveRuntime, (config) => readXListMembers(config, listId)));
+  ipcMain.handle('x-lists:read-detail', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, getActiveRuntime, (config) => readXListDetail(config, listId), { allowMissingExpectedAccount: true }));
+  ipcMain.handle('x-lists:read-members', async (_event, listId: string) => withXListBrowser(loadSelectedDataRoot, getActiveRuntime, (config) => readXListMembers(config, listId), { allowMissingExpectedAccount: true }));
   ipcMain.handle('x-lists:read-timeline', async (_event, input: { listId: string; limit?: number; knownUrls?: string[] }) => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     const continuing = Array.isArray(input.knownUrls) && input.knownUrls.length > 0;
     const value = await withTimeout(
       readXListTimeline(context.config, input.listId, input.limit, { knownUrls: input.knownUrls }),
@@ -95,7 +95,7 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
   });
   ipcMain.handle('x-lists:read-post', async (_event, input: { statusUrl: string; replyLimit?: number; bypassCache?: boolean }) => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     const cacheScope = { workspaceId: context.workspaceId, browserId: context.browserId, accountKey: context.accountKey };
     if (!input.bypassCache) {
       const cached = await dispatchReadXListPostCache(runtime, cacheScope, input.statusUrl);
@@ -125,7 +125,7 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
   ipcMain.handle('x-lists:list-post-trends', async (_event, input: { bindingId: string; limit?: number }) => listXPostTrends(requiredRuntime(getActiveRuntime).database, { bindingId: input.bindingId, limit: input.limit }));
   ipcMain.handle('x-lists:start-observation', async (_event, input: { requestId: string; bindingIds: string[] }) => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     const read = await readXObservationSessionStart(runtime.database, context.config, input);
     const result = await dispatchStartXObservation(runtime, context.config, input, read);
     if (result.ok) wakeObservationScheduler?.();
@@ -192,7 +192,7 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
   });
   ipcMain.handle('x-lists:collect-timeline', async (_event, input: { accountKey: string; listId: string; limit?: number }) => {
     const runtime = requiredRuntime(getActiveRuntime);
-    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+    const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, { allowMissingExpectedAccount: true });
     const read = await readBoundXListTimeline(runtime.database, context.config, input);
     return dispatchPersistBoundXListTimeline(runtime, context.config, input, read, context.accountKey);
   });
@@ -201,9 +201,10 @@ export function registerXListIpc({ loadSelectedDataRoot, getActiveRuntime, setBr
 async function withXListBrowser<T>(
   loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'],
   getActiveRuntime: Dependencies['getActiveRuntime'],
-  action: (config: XListBrowserConfig) => Promise<T>
+  action: (config: XListBrowserConfig) => Promise<T>,
+  options: WorkspaceBrowserVerificationOptions = {}
 ): Promise<T> {
-  const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime);
+  const context = await currentXListContext(loadSelectedDataRoot, getActiveRuntime, options);
   try { return await action(context.config); }
   catch (error) {
     if (error instanceof XListNeedsUserError) throw needsUser(error);
@@ -258,12 +259,13 @@ async function runAcceptedXListOperationForRuntime(runtime: ActiveWorkspaceRunti
 
 export async function currentXListContext(
   loadSelectedDataRoot: Dependencies['loadSelectedDataRoot'],
-  getActiveRuntime: Dependencies['getActiveRuntime']
+  getActiveRuntime: Dependencies['getActiveRuntime'],
+  options: WorkspaceBrowserVerificationOptions = {}
 ): Promise<CurrentXListContext> {
   try {
     const runtime = requiredRuntime(getActiveRuntime);
     const root = await requiredRoot(loadSelectedDataRoot);
-    const browser = await selectedXListBrowser(runtime.database);
+    const browser = await selectedXListBrowser(runtime.database, options);
     const index = await readXListIndex({ ...browser, workspaceId: runtime.identity.workspaceId });
     return {
       root, workspaceId: runtime.identity.workspaceId, browserId: browser.id, accountKey: index.accountKey,

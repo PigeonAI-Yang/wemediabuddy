@@ -175,9 +175,9 @@ const ROLE_READ_SNAPSHOT = Object.freeze({
 // —— 批内 intent 所需能力（exact 冻结）——
 const INTENT_NEEDED_SNAPSHOT = Object.freeze({
   daily_scan: Object.freeze(['cap.collect']),
-  daily_judge: Object.freeze(['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate']),
-  daily_intelligence: Object.freeze(['cap.collect', 'cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate']),
-  studio_draft: Object.freeze(['cap.write']),
+  daily_judge: Object.freeze(['cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate', 'cap.planning_submit', 'cap.planning_review']),
+  daily_intelligence: Object.freeze(['cap.collect', 'cap.lane_judge', 'cap.topic_decide', 'cap.knowledge_curate', 'cap.planning_submit', 'cap.planning_review']),
+  studio_draft: Object.freeze(['cap.write', 'cap.content_derivative']),
   results_review: Object.freeze(['cap.review'])
 });
 

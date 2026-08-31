@@ -1,12 +1,12 @@
 import type { IntelligenceChannelReadiness, IntelligenceChannelsSummary, IntelligenceModule } from '../main/intelligence-channels';
 
-export const intelligenceModules: IntelligenceModule[] = ['official_web', 'x_lists'];
+export const intelligenceModules: IntelligenceModule[] = ['official_web', 'x_lists', 'zhihu_hot'];
 
 export const intelligenceModuleLabels: Record<IntelligenceModule, string> = {
   official_web: '官网',
-  x_lists: 'X Lists'
+  x_lists: 'X Lists',
+  zhihu_hot: '知乎 AI 专题'
 };
-
 export function channelReadiness(summary: IntelligenceChannelsSummary | null | undefined, module: IntelligenceModule): IntelligenceChannelReadiness {
   return summary?.readiness.find((item) => item.module === module) ?? {
     module, configuredCount: 0, enabledCount: 0, readyCount: 0, blockedCount: 0, status: 'needs_config'

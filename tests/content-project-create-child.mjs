@@ -42,13 +42,26 @@ try {
       tools.set(tool.name, tool);
     }
   });
-  const saved = await tools.get('wmb_create_content_project').execute('create', {
+  const denied = await tools.get('wmb_create_content_project').execute('draft-bypass', {
     requestId: 'wmb-1101-skill-draft',
     taskId: task.id,
     grantId: grant.data.id,
     title: 'Skill 新稿',
     body: '独立正文',
     planItemId
+  });
+  const deniedReceipt = JSON.parse(denied.details.content[0].text);
+  if (deniedReceipt.ok !== false || deniedReceipt.error?.code !== 'PLAN_ITEM_NOT_APPROVED') {
+    throw new Error(`draft plan item unexpectedly created through content.create: ${JSON.stringify(denied.details)}`);
+  }
+
+  const saved = await tools.get('wmb_create_content_project').execute('create', {
+    requestId: 'wmb-1101-skill-draft-independent',
+    taskId: task.id,
+    grantId: grant.data.id,
+    title: 'Skill 新稿',
+    body: '独立正文',
+    sourceIds: [source.id]
   });
   const created = JSON.parse(saved.details.content[0].text).data;
   const read = await tools.get('wmb_get_content').execute('read', { projectId: created.id });
@@ -64,8 +77,8 @@ try {
   const linkedSources = readDb.prepare('SELECT source_id AS sourceId FROM content_project_sources WHERE project_id=?').all(created.id);
 
   if (before !== 1 || after !== 1) throw new Error('new article changed the existing project');
-  if (linkedPlanItemId !== planItemId) throw new Error('MCP content.create did not preserve the plan item link');
-  if (lineage.topicId !== topic.id || linkedSources.length !== 1 || linkedSources[0].sourceId !== source.id) throw new Error('MCP content.create did not inherit plan topic/source lineage');
+  if (linkedPlanItemId !== null) throw new Error('independent MCP content.create unexpectedly linked a plan item');
+  if (lineage.topicId !== null || linkedSources.length !== 1 || linkedSources[0].sourceId !== source.id) throw new Error('MCP content.create did not preserve the explicit source lineage');
   if (created.versionNumber !== 1 || skillDraft?.title !== 'Skill 新稿' || skillDraft.revisions[0]?.body !== '独立正文'
     || exactReadback?.id !== created.id || exactReadback?.title !== 'Skill 新稿'
     || exactReadback?.revisions[0]?.number !== 1 || exactReadback?.revisions[0]?.body !== '独立正文') {

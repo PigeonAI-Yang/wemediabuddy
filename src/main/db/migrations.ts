@@ -14,6 +14,7 @@ import { piImageBatchMigrations } from './pi-image-batch-migrations.ts';
 import { illustrationMigrations } from './illustration-migrations.ts';
 import { zhihuHotContentLoopMigrations } from './zhihu-hot-content-loop-migrations.ts';
 import { planningStageMigrations } from './planning-stage-migrations.ts';
+import { workspaceOrchestratorMigrations } from './workspace-orchestrator-migrations.ts';
 import { registerSourceBodyRevisionPurgeGate } from '../source-body-cache.ts';
 
 export const migrations = [
@@ -623,7 +624,8 @@ export const migrations = [
       CREATE INDEX studio_annotations_scope ON studio_annotations(project_id, document_kind, document_id, status);
     `
   },
-  ...sourceBodyArchiveMigrations, ...piImageBatchMigrations, ...illustrationMigrations, ...zhihuHotContentLoopMigrations, ...planningStageMigrations
+  ...sourceBodyArchiveMigrations, ...piImageBatchMigrations, ...illustrationMigrations, ...zhihuHotContentLoopMigrations, ...planningStageMigrations,
+  ...workspaceOrchestratorMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

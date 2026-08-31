@@ -183,8 +183,9 @@ External Agent ─MCP─┘
 - `precise_execution_grants`
 - `command_receipts`
 - `publication_snapshots`
-
 `operation_log` remains the minimal audit history; `command_receipts` owns normalized replay/result evidence and does not duplicate domain truth. Existing `mcp_request_results` remains readable while callers migrate, then becomes a read-only compatibility projection. The new tables and binding metadata are root-local. Browser registry/physical profile paths stay installation-owned.
+
+**M-5330 / v75 Zhihu hot loop foundation (WMB-5330 only):** `zhihu_hot_observations` (immutable per scan), `daily_content_cycles` (`business_date UNIQUE`, `target_count 1..5`, `revision`), `daily_content_targets` (`counts_toward_goal 0|1` + kind lineage checks, partial uniques `cycle+source` / `cycle+predecessor`, `carry_depth 0|1`, frozen `score_snapshot_json`, `format_decision_json` placeholder), `content_derivatives(project_id,kind unique)` and `content_derivative_versions(derivative+version unique, immutable triggers, `source_content_version_id` trace + frozen `format_decision_json`)` are SQLite sole-truth under `wmb.db`, written only through `CommandEnvelopeV1` + `CommandDispatcher` + `dispatchBusinessCommand` on the active-root connection with `workspaceId+runtimeEpoch` validation, inputHash replay, revision conflict and audit. `content_derivative_versions` is `BEFORE UPDATE/DELETE RAISE(ABORT,'CONTENT_DERIVATIVE_VERSION_IMMUTABLE')`. All late migrations include v75; fresh and legacy v74 roots migrate without data/index/trigger/FK loss; no publish/second workbench/service/database/identity/runtime UI/browser/scheduler is added in M-5330.
 
 平台特有字段和原始指标使用 JSON 保存；跨平台稳定字段使用普通列。不同平台不建立重复业务表。
 

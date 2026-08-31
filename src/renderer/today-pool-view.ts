@@ -26,6 +26,10 @@ export type PoolItemLike = {
   createdAt: string;
   isNew: boolean;
   demotion: { publishedAt: string; platform: string } | null;
+  planningStatus?: string | null;
+  revision?: number | null;
+  planningProvenanceJson?: string | null;
+  scoreReasonsJson?: string | null;
 };
 
 export type PoolBadge =
@@ -66,6 +70,10 @@ export function poolItemToPlanItem(item: PoolItemLike): TodayPlanItem {
     sourceIds: item.sourceIds,
     availableMaterials: item.availableMaterials,
     missingMaterials: item.missingMaterials,
+    planningStatus: item.planningStatus ?? null,
+    revision: item.revision ?? null,
+    planningProvenanceJson: item.planningProvenanceJson ?? null,
+    scoreReasonsJson: item.scoreReasonsJson ?? null,
     trendEvidence: item.trendEvidence
   };
 }
@@ -76,16 +84,40 @@ export function poolItemToPlanItem(item: PoolItemLike): TodayPlanItem {
  * 因此池为空即意味着没有任何可展示的机会。回退到今日/最近非空方案会把这些已被终结的
  * 条目重新搬回主区（否掉最后一条机会后卡片“复活”），故不再回退。
  * 当日空 current plan 只是运行记录，由 pool 跨日并集兜底，主区不会被掏空。
+ * 投影层 reconciliation：卡片的传播评分等级必须来自与 pool 项同一 planItemId 的权威 plan_item
+ * （current/latest plan），而非 pool 自身缺失或跨标题匹配置信，避免标题碰撞导致的错级。
  */
 export function resolveChairDisplayItems<TPool extends PoolItemLike, TPlan extends { items: TodayPlanItem[] }>(
   pool: TPool[] | null | undefined,
-  _todayPlan: TPlan | null | undefined,
-  _latestPlan: TPlan | null | undefined
+  todayPlan: TPlan | null | undefined,
+  latestPlan: TPlan | null | undefined
 ): TodayPlanItem[] {
-  if (pool && pool.length > 0) return pool.map(poolItemToPlanItem);
-  return [];
+  if (!pool || pool.length === 0) return [];
+  const authoritative = new Map<string, TodayPlanItem>();
+  for (const item of todayPlan?.items ?? []) {
+    if (item?.id) authoritative.set(item.id, item);
+  }
+  for (const item of latestPlan?.items ?? []) {
+    if (item?.id && !authoritative.has(item.id)) authoritative.set(item.id, item);
+  }
+  return pool.map((poolItem) => {
+    const auth = authoritative.get(poolItem.planItemId);
+    if (!auth) return poolItemToPlanItem(poolItem);
+    const merged: PoolItemLike = {
+      ...poolItem,
+      planningStatus: auth.planningStatus ?? poolItem.planningStatus ?? null,
+      revision: auth.revision ?? poolItem.revision ?? null,
+      planningProvenanceJson: auth.planningProvenanceJson ?? poolItem.planningProvenanceJson ?? null,
+      scoreReasonsJson: auth.scoreReasonsJson ?? poolItem.scoreReasonsJson ?? null,
+    };
+    // Fallback: if authoritative explicitly provides a score but pool missing, use auth; if auth is pending/draft, preserve pending semantics.
+    if (auth.planningStatus != null) merged.planningStatus = auth.planningStatus;
+    if (auth.scoreReasonsJson != null) merged.scoreReasonsJson = auth.scoreReasonsJson;
+    if (auth.revision != null) merged.revision = auth.revision;
+    if (auth.planningProvenanceJson != null) merged.planningProvenanceJson = auth.planningProvenanceJson;
+    return poolItemToPlanItem(merged);
+  });
 }
-
 export function poolBadgeClass(badge: PoolBadge): string {
   if (badge.kind === 'new') return 'pool-new';
   if (badge.kind === 'timeliness') return `pool-${badge.tone}`;

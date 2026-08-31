@@ -254,7 +254,7 @@ test('WMB-5295: 普通核心初稿强制先派外部研究，只有研究就绪�
   const successor = draftPrompt(task, 'project-1', 'version-request', 'core_draft', 'EvidencePack', true);
   assert.doesNotMatch(successor, /外部研究前置交接/);
   assert.match(successor, /wmb_save_core_version/);
-  assert.match(successor, /研究续派任务也禁止再次派研究/);
+  assert.match(successor, /研究续派任务禁止再次派研究/);
 
   const platform = draftPrompt(task, 'project-1', 'platform-request', 'xiaohongshu_platform_version');
   assert.match(platform, /wmb_save_platform_version/);

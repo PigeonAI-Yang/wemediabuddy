@@ -26,6 +26,7 @@ import { useStudioAnnotations } from './studio-view-annotations';
 import { useStudioSave } from './studio-view-save';
 import { useStudioRecommendations } from './studio-view-recommendations';
 import { useStudioImageHandlers } from './studio-view-image-handlers';
+import { StudioDerivativePanel } from './studio-derivative-panel';
 
 type StudioSelectionSnapshot = { start: number; end: number; basis: string };
 
@@ -126,6 +127,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   const coreDirty = Boolean(selected) && (title.trim() !== selected?.title.trim() || body !== (latest?.body ?? '') || !coreMediaBindingsEqual(coreMediaDraft, coreMediaBase));
   const dirty = activePlatform ? Boolean(activePlatformDraft && isStudioPlatformDraftDirty(activePlatformDraft)) : coreDirty;
   const anyDirty = coreDirty || Object.values(platformDrafts).some(isStudioPlatformDraftDirty);
+  const versionCount = selected?.versionCount ?? 0;
   const annotationScope = useMemo<StudioDocumentScope | null>(() => {
     if (!selected) return null;
     if (activePlatform) {
@@ -787,25 +789,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(false); }
   };
-  const writeDraft = async () => {
-    if (!selected || busy) return;
-    setBusy(true); setMessage('Pi 正在写初稿…');
-    try {
-      const result = await window.wmb.startStudioDraft({ businessDate: planDate, projectId: selected.id });
-      const task = result.data?.task;
-      setMessage(result.ok
-        ? task?.phase === 'research_dispatched'
-          ? '已派外部研究，完成后将自动续写'
-          : task?.status === 'failed'
-            ? task.errorMessage || '外部研究未成功派出'
-            : task?.status === 'needs_user'
-              ? task.errorMessage || '需要用户处理'
-              : 'Pi 初稿任务已完成'
-        : result.error?.message || '初稿失败');
-      await reload();
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
-    finally { setBusy(false); }
-  };
   const update = async (change: { status?: ContentProjectStatus; archived?: boolean; topicId?:string|null }) => {
     if (!selected || busy) return;
     setBusy(true);
@@ -970,16 +953,12 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
             toggleFind={() => setFindOpen((value) => !value)}
             onMarkSelection={() => { void markSelection(); }}
             canMark={annotationsEditable}
-            illustrationTools={!activePlatform ? <span className="studio-formatbar-group studio-formatbar-illustration" role="group" aria-label="定稿配图">
-              <label><span>比例</span><select aria-label="比例" value={illustrationRatio} onChange={(event) => setIllustrationRatio(event.target.value as IllustrationRatio)}>{(['1:1', '4:3', '3:4', '16:9', '9:16', '21:9', '9:21'] as IllustrationRatio[]).map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}</select></label>
-              <label><span>张数</span><input aria-label="生成张数" type="number" min={0} max={6} value={illustrationMaxGenerated} onChange={(event) => setIllustrationMaxGenerated(Math.min(6, Math.max(0, Number(event.target.value) || 0)))} /></label>
-              <button type="button" className="studio-illustration-start" title="固定当前正文并开始配图" disabled={busy || illustrationBusy || !latest} onClick={() => void startIllustrationRun()}>定稿配图</button>
-            </span> : undefined}
           />}
           <StudioIllustrationPanel runs={illustrationRuns} busy={illustrationBusy} ratio={illustrationRatio} setRatio={setIllustrationRatio} maxGenerated={illustrationMaxGenerated} setMaxGenerated={setIllustrationMaxGenerated} request={illustrationRequest} setRequest={setIllustrationRequest} onStart={() => void startIllustrationRun()} onRetry={(runId, itemId) => void retryIllustrationItem(runId, itemId)} onRegenerate={(runId, itemId) => void regenerateIllustrationItem(runId, itemId)} onUndo={(runId, itemId) => void undoIllustrationItem(runId, itemId)} latest={latest} activePlatform={activePlatform} readOnlyVersion={readOnlyVersion} />
           {findOpen && !readOnlyVersion && <div className="studio-findbar"><input value={findText} onChange={(event) => setFindText(event.target.value)} placeholder="查找正文"/><input id="studio-replace" placeholder="替换为"/><span>{findText ? editorBody.split(findText).length - 1 : 0} 处匹配</span><button disabled={!findText || !editorBody.includes(findText)} onClick={() => { const replacement = (document.querySelector('#studio-replace') as HTMLInputElement)?.value ?? ''; changeBody(editorBody.split(findText).join(replacement)); }}>全部替换</button><button onClick={() => setFindOpen(false)}>关闭</button></div>}
           <div className="studio-canvas" ref={canvasRef}><article className="studio-paper">
             <textarea id="studio-title" className="studio-title-input" value={editorTitle} rows={1} disabled={busy || Boolean(readOnlyVersion)} placeholder={activePlatform ? '输入平台标题（可选）' : undefined} onChange={(event) => changeEditorTitle(event.target.value)} onInput={(event) => { const el = event.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }} ref={(node) => { if (!node) return; node.style.height = 'auto'; node.style.height = `${node.scrollHeight}px`; }}/>
+            {versionCount === 0 && !readOnlyVersion && !activePlatform && <div className="studio-v0-empty" data-testid="studio-v0-body">尚未生成正文</div>}
             {readOnlyVersion || editorMode === 'rich' ? (
               <div className="studio-rich-annotate-wrap" ref={richWrapRef}>
                 <div
@@ -1227,9 +1206,10 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
             </div>
             <StudioResearchGate gaps={researchGapForProject} message={researchGapMessage} error={researchGapsError} busyId={researchBusyId} onDecide={decideResearchGap} />
             <span className={message ? 'studio-status-message' : undefined}>
-              {message || (readOnlyVersion ? '历史版本只读' : dirty ? '未保存' : anyDirty ? '其他页签有未保存修改' : '已保存')}
+              {message || (readOnlyVersion ? '历史版本只读' : versionCount === 0 ? '尚未生成正文' : dirty ? '未保存' : anyDirty ? '其他页签有未保存修改' : '已保存')}
             </span>
           </div>
+          <StudioDerivativePanel projectId={selected.id} />
         </>}
         {tab === 'sources' && <section className="studio-detail-list">{selected.sources.length ? selected.sources.map((source) => <article key={source.id}><span>资料来源</span><h3>{source.title}</h3><p>{source.summary || '暂无摘要'}</p><small className="studio-source-meta"><SourcePlatformMark canonicalUrl={source.canonicalUrl} aiSourcePresentation={aiSourcePresentation}/><span>{[source.author, source.publishedAt && formatTime(source.publishedAt)].filter(Boolean).join(' · ')}</span></small>{source.canonicalUrl && <button className="secondary-button" onClick={() => void window.wmb.openExternal(source.canonicalUrl!)}>打开原文 ↗</button>}</article>) : <div className="compact-empty"><h2>没有关联资料</h2><p>该项目尚未绑定资料来源。</p></div>}</section>}
         {tab === 'investigation' && <StudioInvestigationPanel projectId={selected.id} sources={selected.sources} onOpenSource={onOpenSource} onOpenWriting={() => setTab('core')} onIndicatorChange={setInvestigationIndicator} />}

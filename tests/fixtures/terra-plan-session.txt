@@ -28,7 +28,38 @@
       "missingMaterials": [
         "针对中文真实 Agent 工作流的独立复现实测",
         "Qwen3.8-Max 的官方定价、可用渠道与上下文/工具调用限制说明"
-      ]
+      ],
+      "scoreReasons": {
+        "status": "scored",
+        "version": "propagation_v2",
+        "score": 82,
+        "scoredAt": "2026-08-06T12:00:00.000Z",
+        "truthGate": {
+          "status": "passed",
+          "reason": "公开排名与成本数据均有来源，观点边界明确",
+          "claims": [{ "text": "Agentic Index 第一不是自动采购结论", "type": "opinion", "status": "supported", "sourceIds": [] }]
+        },
+        "reasons": [
+          { "criterion": "reality_change_significance", "weight": 25, "score": 22, "reason": "新模型改变 Agent 选型版图" },
+          { "criterion": "tension_curiosity_gap", "weight": 20, "score": 17, "reason": "Agent 第一与通用能力成本形成冲突" },
+          { "criterion": "audience_stakes", "weight": 20, "score": 17, "reason": "直接影响团队模型采购与部署" },
+          { "criterion": "why_now_window", "weight": 15, "score": 12, "reason": "8 月 6 日新发布，热点窗口" },
+          { "criterion": "one_sentence_relayability", "weight": 15, "score": 10, "reason": "第一不是默认选择，可一句话转述" },
+          { "criterion": "account_fit", "weight": 5, "score": 4, "reason": "适合 AI 工程选型内容" }
+        ]
+      },
+      "editorialDecision": {
+        "version": "editorial_thesis_v1",
+        "candidates": [
+          { "level": "event", "thesis": "Qwen3.8-Max 拿下 Agentic Index 第一", "claimType": "fact", "evidenceStatus": "supported", "evidenceBoundary": "Qwen 官方公告", "score": 55, "reason": "事件明确但只是排名复述" },
+          { "level": "user", "thesis": "团队不能只看 Agent 排名决定默认模型", "claimType": "inference", "evidenceStatus": "supported", "evidenceBoundary": "公开能力与成本对照", "score": 72, "reason": "影响实际采购决策" },
+          { "level": "industry_or_society", "thesis": "Agentic Index 第一是一个很强的信号，但不是采购结论：做 Agent 的团队应先验证任务匹配度，再并列比较通用能力、单位任务成本、是否需要开源权重与可控部署；Qwen3.8-Max 的价值在于它让“Agent 优先”的选择更有竞争力，而不是自动替代所有模型。", "claimType": "opinion", "evidenceStatus": "supported", "evidenceBoundary": "双源公开数据只支持选型判断，不证明全面替代", "score": 82, "reason": "同时解释排名意义与采购边界" }
+        ],
+        "winnerLevel": "industry_or_society",
+        "winnerThesis": "Agentic Index 第一是一个很强的信号，但不是采购结论：做 Agent 的团队应先验证任务匹配度，再并列比较通用能力、单位任务成本、是否需要开源权重与可控部署；Qwen3.8-Max 的价值在于它让“Agent 优先”的选择更有竞争力，而不是自动替代所有模型。",
+        "winnerReason": "传播价值和决策价值均高于排名复述",
+        "knowledgeContext": { "status": "no_relevant_context", "contextRefs": [], "queryDimensions": ["Qwen3.8-Max", "Agent 模型选型"], "reason": "夹具未提供可固定引用的历史知识版本" }
+      }
     }
   ]
 }

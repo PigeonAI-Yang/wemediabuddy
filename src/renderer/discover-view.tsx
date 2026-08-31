@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { RankingContext, RankingContextItem, XListPiContext } from './app-types';
 import { XListsView } from './x-lists-view';
+import { ZhihuHotView } from './zhihu-hot-view';
 import { workspaceStorageKey } from './workspace-storage';
 
 // 发现页:AI 榜单是临时发现流,不是已入库资产;点「入库」才通过 upsertSource 真正写入资料库。
@@ -17,9 +18,9 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
   const stored = (key: string) => workspaceId ? localStorage.getItem(workspaceStorageKey(workspaceId, key)) : null;
   const [sourceId, setSourceId] = useState(() => stored('discoverSource') ?? 'github');
   const [boardId, setBoardId] = useState(() => stored('discoverBoard') ?? 'github-daily');
-  const [section, setSection] = useState<'rankings' | 'lists'>(() => {
+  const [section, setSection] = useState<'rankings' | 'lists' | 'zhihu'>(() => {
     const saved = stored('discoverSection');
-    return saved === 'rankings' || saved === 'lists' ? saved : rankingsEnabled ? 'rankings' : 'lists';
+    return saved === 'rankings' || saved === 'lists' || saved === 'zhihu' ? saved : rankingsEnabled ? 'rankings' : 'lists';
   });
   const [rankingError, setRankingError] = useState('');
   const [loadingRankings, setLoadingRankings] = useState(false);
@@ -102,20 +103,21 @@ export function DiscoverView({ workspace, workspaceId, rankingContext, onRanking
     <section className="page-command" aria-label="发现概览">
       <div className="page-command-main">
         <div className="page-command-copy">
-          {rankingsEnabled ? (
-            <div className="page-command-stats" role="navigation" aria-label="发现内容">
-              <button type="button" className={`page-command-stat${activeSection === 'rankings' ? ' active' : ''}`} onClick={() => setSection('rankings')}>
-                <strong>榜单</strong><span>AI 榜单</span>
-              </button>
-              <button type="button" className={`page-command-stat${activeSection === 'lists' ? ' active' : ''}`} onClick={() => setSection('lists')}>
-                <strong>Lists</strong><span>X Lists</span>
-              </button>
-            </div>
-          ) : null}
+          <div className="page-command-stats" role="navigation" aria-label="发现内容">
+            {rankingsEnabled ? <button type="button" className={`page-command-stat${activeSection === 'rankings' ? ' active' : ''}`} aria-current={activeSection === 'rankings' ? 'page' : undefined} onClick={() => setSection('rankings')}>
+              <strong>榜单</strong><span>AI 榜单</span>
+            </button> : null}
+            <button type="button" className={`page-command-stat${activeSection === 'lists' ? ' active' : ''}`} aria-current={activeSection === 'lists' ? 'page' : undefined} onClick={() => setSection('lists')}>
+              <strong>Lists</strong><span>X Lists</span>
+            </button>
+            <button type="button" className={`page-command-stat${activeSection === 'zhihu' ? ' active' : ''}`} aria-current={activeSection === 'zhihu' ? 'page' : undefined} onClick={() => setSection('zhihu')}>
+              <strong>知乎热题</strong><span>AI 话题</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
-    {activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : <div onClick={(event) => {
+    {activeSection === 'lists' ? <XListsView workspaceId={workspaceId} onStatusChange={onStatusChange} onContextChange={onXListContextChange}/> : activeSection === 'zhihu' ? <ZhihuHotView/> : <div onClick={(event) => {
     const target = event.target as HTMLElement;
     if (!target.closest('[data-ranking-item], button, a, input, select, textarea')) onRankingContextChange({ boards: [], items: [] });
   }}>

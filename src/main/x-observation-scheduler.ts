@@ -71,7 +71,7 @@ export class XObservationScheduler {
         isCurrent: () => !this.stopped && generation === this.generation && runtime.isActive && (!this.input.isCurrent || this.input.isCurrent()),
         getConfig: (payload) => this.input.getConfig
           ? this.input.getConfig(database, payload)
-          : selectedXListBrowser(database).then((config) => ({ ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }))
+          : selectedXListBrowser(database, { allowMissingExpectedAccount: true }).then((config) => ({ ...config, workspaceId: payload.workspaceId, accountKey: payload.accountKey }))
       });
       if (!runtime.isActive || (this.input.isCurrent && !this.input.isCurrent())) return;
       const dueAt = nextXObservationDueAt(database);
