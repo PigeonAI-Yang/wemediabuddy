@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5387",
+  "implementationCommit": "e9bf6e4",
+  "upstream": "origin/master",
+  "changedPaths": [
+    ".ai/wmb-5373-adversarial-status.json",
+    "TASKS.md"
+  ],
+  "verification": {
+    "command": "node --test --test-name-pattern A52 tests/wmb-5373-adversarial-a47-a52.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5387.verify.log"
+  },
+  "closedAt": "2026-08-31T17:21:22.675Z"
+}
