@@ -39,6 +39,10 @@ export type PrimaryReleaseSource = {
   fallbackUrls: string[];
 };
 
+export function loadOfficialWebsiteSources(skillRoot: string): PrimaryReleaseSource[] {
+  return loadPrimaryReleaseSources(skillRoot).filter((source) => source.collector === 'official-web');
+}
+
 type SourceIndexEntry = {
   id?: unknown;
   name?: unknown;

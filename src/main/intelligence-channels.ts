@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { workspaceBrowserReady } from './bound-browser.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import { canonicalizeUrl, createSourceFeed } from './sources.ts';
+import { loadOfficialWebsiteSources } from './intelligence-wire.ts';
 import { listXListBindings, type XListBinding } from './x-lists.ts';
 import { ZHIHU_HOT_URL } from './zhihu-hot-channel.ts';
 
@@ -150,6 +151,50 @@ export function createWebsiteSource(database: DatabaseSync, input: {
   } catch (error) { if (!input.transaction) database.exec('ROLLBACK'); throw error; }
   if (input.notify !== false) broadcastDataChanged({ scopes: ['sources', 'today'], reason: 'intelligence.website.create' });
   return getWebsiteSource(database, id)!;
+}
+
+export function syncOfficialWebsiteSources(database: DatabaseSync, skillRoot: string): { configured: number; existing: number } {
+  const sources = loadOfficialWebsiteSources(skillRoot);
+  let configured = 0;
+  let existing = 0;
+  const now = new Date().toISOString();
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    for (const source of sources) {
+      const canonicalUrl = canonicalizeUrl(source.url);
+      const present = database.prepare(`SELECT 1 FROM website_sources w
+        JOIN source_feeds f ON f.id=w.source_feed_id
+        WHERE w.canonical_url=? OR f.registry_id=? LIMIT 1`).get(canonicalUrl, source.id);
+      if (present) { existing += 1; continue; }
+      let feed = database.prepare('SELECT id, name, url FROM source_feeds WHERE registry_id=?').get(source.id) as { id: string; name: string; url: string | null } | undefined;
+      if (!feed) {
+        const created = createSourceFeed(database, { name: source.name, url: canonicalUrl, registryId: source.id });
+        feed = { id: created.id, name: source.name, url: canonicalUrl };
+      } else if (feed.name !== source.name || !feed.url || canonicalizeUrl(feed.url) !== canonicalUrl) {
+        database.prepare('UPDATE source_feeds SET name=?, url=?, updated_at=?, revision=revision+1 WHERE id=?')
+          .run(source.name, canonicalUrl, now, feed.id);
+      }
+      const trialRead: WebsiteTrialRead = {
+        title: source.name,
+        url: canonicalUrl,
+        requestedUrl: canonicalUrl,
+        readable: true,
+        itemCount: 0,
+        summary: '由当前工作空间的官方来源注册表配置。'
+      };
+      database.prepare(`INSERT INTO website_sources (id, source_feed_id, input_text, canonical_url, enabled,
+        resolution_status, resolution_json, last_checked_at, created_at, updated_at, revision)
+        VALUES (?, ?, ?, ?, 1, 'ready', ?, NULL, ?, ?, 1)`).run(
+        randomUUID(), feed.id, source.name, canonicalUrl, JSON.stringify(trialRead), now, now
+      );
+      configured += 1;
+    }
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+  return { configured, existing };
 }
 
 export function getWebsiteSource(database: DatabaseSync, id: string): WebsiteSource | null {

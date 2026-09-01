@@ -20,7 +20,7 @@ import { startPiRuntimeWithFallback } from './pi-config-fallback';
 import { setSourceKnowledgeCompileDeps, stopPersistentKnowledgeJobs, type SourceKnowledgeCompileDeps } from './knowledge-compile-trigger';
 import { createKnowledgeBackfillCompile, setKnowledgeBackfillDeps, stopKnowledgeBackfillJobs, type KnowledgeBackfillDeps } from './knowledge-backfill';
 import { KnowledgeMaintenanceScheduler, type KnowledgeMaintenanceDeps } from './knowledge-maintenance';
-import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
+import { ensurePiConversationLayout, listPiConversations, readPiConversation, setPiConversationArchived, startNewPiConversation, switchPiConversation, writePiConversation } from './pi-conversation'; import { PI_AUTHORITY_SYSTEM_PROMPT, skillSourcePath } from './pi-operator-skill'; import { syncPiSkillsForDataRoots } from './pi-skill-library';
 import { humanizePiProviderError, isPiProviderFallbackError, PiRpcSupervisor } from './pi-runtime';
 import { piModelsJson } from './pi-model';
 import { getPiRuntimeInfo, resolvePiRuntimeRoot, piCliFromRuntimeRoot, piVisionExtensionFromRuntimeRoot, updatePiRuntime, rollbackPiRuntime } from './pi-runtime-manager';
@@ -53,6 +53,8 @@ import { DailyScanScheduler } from './daily-scan-scheduler';
 import { DailyOrchestrationScheduler } from './daily-orchestration-scheduler.ts';
 import { shanghaiDate } from './ferment';
 import { hasEnabledDailySources } from './daily-intelligence-channels';
+import { syncOfficialWebsiteSources } from './intelligence-channels.ts';
+import { requireWorkspaceProfile } from './workspace-profiles.ts';
 import { registerKnowledgeContentIpc } from './ipc-knowledge-content';
 import { ensureJobsSpawner, registerJobsIpc, resetJobsIpcSpawner, resumePendingInvestigationSupervisorReviews } from './ipc-jobs.ts'; import { startTopicReproposalScheduler } from './topic-maintenance-reproposal.ts'; import { startResearchSuccessorScheduler } from './research-successor.ts';
 import { setActiveJobSpawner } from './job-spawner.ts';
@@ -355,7 +357,16 @@ function createMaintenanceDeps(dataRootPath: string): KnowledgeMaintenanceDeps {
 
 async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
   if (activeRuntime?.isActive && activeRuntime.identity.rootPath === path.resolve(dataRoot.path)) return;
-  const runtime = ActiveWorkspaceRuntime.open(dataRoot.path, { openDatabase: migrateDatabase });
+  const runtime = ActiveWorkspaceRuntime.open(dataRoot.path, {
+    openDatabase: (databasePath) => {
+      const database = migrateDatabase(databasePath);
+      const profile = requireWorkspaceProfile(database);
+      if (profile.intelligencePackId === 'wemedia-intelligence-engine') {
+        syncOfficialWebsiteSources(database, skillSourcePath(profile.intelligencePackId));
+      }
+      return database;
+    }
+  });
   activeRuntime = runtime;
   // WMB-5229：注册 Source 保存后的知识编译触发依赖（后台独立 Pi RPC，懒启动）。
   setSourceKnowledgeCompileDeps(createKnowledgeCompileDeps(dataRoot.path));

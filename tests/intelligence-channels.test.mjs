@@ -8,7 +8,8 @@ import {
   createWebsiteSource,
   listSourceScanReceipts,
   readIntelligenceChannelsSummary,
-  recordSourceScanReceipt
+  recordSourceScanReceipt,
+  syncOfficialWebsiteSources
 } from '../src/main/intelligence-channels.ts';
 import { bindXList } from '../src/main/x-lists.ts';
 import { createSourceFeed } from '../src/main/sources.ts';
@@ -51,6 +52,27 @@ test('website sources are root-local, canonical-unique, and ready-only', async (
   } finally {
     first.database.close(); second.database.close();
     await Promise.all([rm(first.root, { recursive: true, force: true }), rm(second.root, { recursive: true, force: true })]);
+  }
+});
+
+test('AI official registry bootstraps root-local website channels exactly once', async () => {
+  const { root, database } = await makeRoot('wmb-intel-official-bootstrap-');
+  try {
+    const skillRoot = path.resolve('skills/wemedia-intelligence-engine');
+    const first = syncOfficialWebsiteSources(database, skillRoot);
+    assert.ok(first.configured >= 10);
+    assert.equal(first.existing, 0);
+    const sources = database.prepare(`SELECT w.canonical_url AS canonicalUrl, w.enabled, w.resolution_status AS resolutionStatus,
+      w.last_checked_at AS lastCheckedAt, f.registry_id AS registryId
+      FROM website_sources w JOIN source_feeds f ON f.id=w.source_feed_id ORDER BY f.registry_id`).all();
+    assert.equal(sources.length, first.configured);
+    assert.ok(sources.every((source) => source.registryId && source.enabled === 1 && source.resolutionStatus === 'ready'));
+    assert.ok(sources.every((source) => source.lastCheckedAt === null));
+    const replay = syncOfficialWebsiteSources(database, skillRoot);
+    assert.deepEqual(replay, { configured: 0, existing: first.configured });
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM website_sources').get().count, first.configured);
+  } finally {
+    database.close(); await rm(root, { recursive: true, force: true });
   }
 });
 
