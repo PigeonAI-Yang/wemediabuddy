@@ -257,31 +257,6 @@ function readPlanItemIntentIdentity(database: DatabaseSync, planItemId: string):
   });
 }
 
-/** First-pass Studio writers may only hand off research; no content/image mutation is permitted. Exempt via verified prohibited context only. */
-export function assertStudioDraftResearchReady(runtime: Pick<ActiveWorkspaceRuntime, 'database'>, taskId: string, projectId?: string): void {
-  const task = getAgentTask(runtime.database, taskId);
-  if (!task) return;
-  const refs = task.contextRefs as Record<string, unknown>;
-  const gate = refs.researchGate as string | undefined;
-  const mode = (refs.researchMode ?? refs.research_mode) as string | undefined;
-  const intent = task.intent;
-  const roleId = refs.roleId as string | undefined;
-  if (gate === 'exempt') {
-    const projectOk = !projectId || refs.projectId === projectId;
-    const valid = intent === 'studio_draft' && roleId === 'writer' && mode === 'prohibited' && projectOk;
-    if (!valid) {
-      throw Object.assign(new Error('RESEARCH_GATE_EXEMPT_INVALID: 豁免上下文不匹配，禁止保存。'), {
-        code: 'RESEARCH_GATE_EXEMPT_INVALID'
-      });
-    }
-    return;
-  }
-  if (gate === 'required') {
-    throw Object.assign(new Error('RESEARCH_REQUIRED: 当前核心初稿必须先完成外部研究交接，禁止保存正文或导入配图。'), {
-      code: 'RESEARCH_REQUIRED'
-    });
-  }
-}
 
 const MAX_PROJECT_IMAGE_BYTES = 20 * 1024 * 1024;
 const IMAGE_EXTENSION: Readonly<Record<string, string>> = Object.freeze({
@@ -753,7 +728,6 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     })
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, project_id } = input;
-    assertStudioDraftResearchReady(runtime, task_id, project_id);
     const decoded = projectImageBytes(input);
     const staged = await stageAssetBytes(runtime.identity.rootPath, {
       bytes: decoded.bytes,
@@ -793,7 +767,6 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     inputSchema: { ...authoritySchema, project_id: z.string(), body: z.string(), content_version_id: z.string().optional(), platform: z.enum(['x', 'xiaohongshu', 'wechat', 'zhihu']).optional(), format: z.string().optional(), expected_revision: z.number().optional(), version_id: z.string().optional(), title: z.string().optional(), media_bindings: z.array(contentBindingSchema).max(24).optional() }
   }, async (input) => {
     const { request_id, task_id, grant_id, worker_lease_id, project_id, content_version_id, expected_revision, version_id, media_bindings, ...fields } = input;
-    assertStudioDraftResearchReady(runtime, task_id, project_id);
     const commandInput = {
       ...fields,
       projectId: project_id,

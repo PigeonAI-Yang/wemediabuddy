@@ -249,7 +249,7 @@ test('WMB-5364 approval fails closed when a cited source loses its canonical URL
   });
 });
 
-test('WMB-5364 plan-bound content creation requires an approved item and thesis lock', async () => {
+test('WMB-5364 plan-bound content creation requires approval only', async () => {
   await withDb(async (database) => {
     const draft = createPlan(database);
     assert.throws(
@@ -257,23 +257,20 @@ test('WMB-5364 plan-bound content creation requires an approved item and thesis 
       (error) => error?.code === 'PLAN_ITEM_NOT_APPROVED',
     );
 
-    const approvedWithoutLock = createPlan(database, { winner: '第二个不同的产业主张，避免计划内重复。' });
+    const approved = createPlan(database, { winner: '第二个不同的产业主张，避免计划内重复。' });
     const transitioned = transitionPlanItem(database, {
-      planItemId: approvedWithoutLock.id,
-      expectedRevision: approvedWithoutLock.revision,
+      planItemId: approved.id,
+      expectedRevision: approved.revision,
       expectedStatus: 'ready_for_review',
       toStatus: 'approved',
       by: 'owner',
     });
-    assert.equal(transitioned.id, approvedWithoutLock.id);
-    assert.throws(
-      () => assertPlanItemContentCreateAllowed(database, approvedWithoutLock.id),
-      (error) => error?.code === 'THESIS_LOCK_REQUIRED',
-    );
+    assert.equal(transitioned.id, approved.id);
+    assert.doesNotThrow(() => assertPlanItemContentCreateAllowed(database, approved.id));
   });
 });
 
-test('WMB-5364 Writer cannot save or complete content that drops the locked thesis', async () => {
+test('WMB-5364 Writer can revise an approved topic without a thesis text gate', async () => {
   await withDb(async (database) => {
     const item = createPlan(database);
     database.exec('BEGIN IMMEDIATE');
@@ -285,21 +282,20 @@ test('WMB-5364 Writer cannot save or complete content that drops the locked thes
     });
     database.exec('COMMIT');
 
-    const offTopic = '本文只讨论免费额度和调用成本，不讨论国产算力商业化。';
+    const revisedBody = '本文只讨论免费额度和调用成本，不讨论国产算力商业化。';
     const saved = saveCoreVersion(database, {
       projectId: approved.projectId,
-      body: offTopic,
+      body: revisedBody,
       expectedRevision: approved.projectRevision,
     });
-    assert.equal(saved.ok, false);
-    assert.equal(saved.error.code, 'THESIS_LOCK_VIOLATION');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id=?').get(approved.projectId).count, 1);
+    assert.equal(saved.ok, true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM content_versions WHERE project_id=?').get(approved.projectId).count, 2);
 
     const completed = updateContentProject(database, {
       projectId: approved.projectId,
-      expectedRevision: approved.projectRevision,
+      expectedRevision: saved.data.projectRevision,
       status: 'completed',
     });
-    assert.equal(completed.ok, true, 'the valid initial version remains completable');
+    assert.equal(completed.ok, true);
   });
 });

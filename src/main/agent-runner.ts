@@ -127,29 +127,27 @@ const editorialDecisionSchema = z.object({
   }),
 });
 const planOutputItemSchema = z.object({
-  title: z.string().min(1).refine((title) => !title.includes('普通人'), {
-    message: '标题不得把受众身份词「普通人」写进发布标题；请改用题材的具体对象、问题、动作或证据'
-  }),
-  priority: z.number().int().min(0).max(7),
-  whyNow: z.string().min(1),
-  timeliness: z.string().min(1),
-  targetAudience: z.string().min(1),
-  angle: z.string().min(1),
+  title: z.string().min(1),
+  priority: z.number().int().min(0).default(0),
+  whyNow: z.string().default(''),
+  timeliness: z.string().default('今日'),
+  targetAudience: z.string().default(''),
+  angle: z.string().default(''),
   pointOfView: z.string().min(1),
-  platforms: z.array(z.string()).min(1),
-  formats: z.array(z.string()).min(1),
-  titleGuidance: z.string(),
-  openingGuidance: z.string(),
-  structureGuidance: z.string(),
-  effortEstimate: z.string(),
+  platforms: z.array(z.string()).default(['wechat']),
+  formats: z.array(z.string()).default(['article']),
+  titleGuidance: z.string().default(''),
+  openingGuidance: z.string().default(''),
+  structureGuidance: z.string().default(''),
+  effortEstimate: z.string().default(''),
   sourceIds: z.array(z.string().min(1)).min(1),
   availableMaterials: z.array(z.string()).optional(),
   missingMaterials: z.array(z.string()).optional(),
   topicId: z.preprocess((value) => value === null ? undefined : value, z.string().optional()),
   reviewIds: z.array(z.string()).optional(),
   methodFindingIds: z.array(z.string()).optional(),
-  editorialDecision: editorialDecisionSchema,
-  scoreReasons: scoreReasonsSchema
+  editorialDecision: editorialDecisionSchema.optional(),
+  scoreReasons: scoreReasonsSchema.optional()
 });
 const planSourceDecisionSchema = z.object({
   sourceId: z.string().min(1),
@@ -165,7 +163,7 @@ const planSourceDecisionSchema = z.object({
 const planOutputSchema = z.object({
   planDate: z.string().optional(),
   summary: z.string().min(1),
-  items: z.array(planOutputItemSchema).max(12),
+  items: z.array(planOutputItemSchema).max(24),
   sourceDecisions: z.array(planSourceDecisionSchema).optional()
 });
 
@@ -243,13 +241,7 @@ export function parseDailyPlanOutput(sessionText: string): DailyPlanOutput {
     const field = issue.path.join('.');
     return field ? `${field}: ${issue.message}` : issue.message;
   }).join('；')}`);
-  return {
-    ...parsed.data,
-    items: parsed.data.items.map((item) => ({
-      ...item,
-      pointOfView: item.editorialDecision.winnerThesis,
-    })),
-  };
+  return parsed.data;
 }
 
 /**
@@ -313,127 +305,33 @@ function readPersistedTaskPlanCount(
   }
 }
 
-export function constrainPlanItemToAllowedSources(
-  item: DailyPlanOutput['items'][number],
-  allowedSourceIds: ReadonlySet<string>
-): DailyPlanOutput['items'][number] | null {
-  const sourceIds = item.sourceIds.filter((id) => allowedSourceIds.has(id));
-  if (sourceIds.length === 0) return null;
-  const claims = item.scoreReasons.truthGate.claims.map((claim) => ({
-    ...claim,
-    sourceIds: claim.sourceIds.filter((id) => allowedSourceIds.has(id))
-  }));
-  if (claims.some((claim) => claim.type !== 'opinion' && claim.sourceIds.length === 0)) return null;
-  return {
-    ...item,
-    sourceIds,
-    scoreReasons: {
-      ...item.scoreReasons,
-      truthGate: { ...item.scoreReasons.truthGate, claims }
-    }
-  };
-}
 
 export async function savePlanFromSynthesisOutput(
   dependency: AgentTaskMutationDependency,
   task: AgentTask,
   sessionFile: string,
-  planRequestId: string,
-  workerLeaseId?: string,
-  grantId?: string | null,
+  _planRequestId: string,
+  _workerLeaseId?: string,
+  _grantId?: string | null,
   sessionBaseline = 0,
-  /** 有效资料 id 白名单（赛道门通过后）：引用白名单外 sourceId 的方案项被丢弃（四问只跑在有效资料上）。 */
-  allowedSourceIds?: ReadonlySet<string>,
-  /** 本轮必须逐条留下编辑决策的冻结候选（增量 + reactivated evidence）。 */
-  candidateSourceIds?: ReadonlySet<string>
+  _allowedSourceIds?: ReadonlySet<string>,
+  _candidateSourceIds?: ReadonlySet<string>
 ): Promise<{ itemCount: number; filteredCount: number }> {
   const plan = parseDailyPlanOutput(readAssistantTexts(await readFile(sessionFile, 'utf8'), sessionBaseline).join('\n'));
-  const items = allowedSourceIds
-    ? plan.items.flatMap((item) => {
-        const constrained = constrainPlanItemToAllowedSources(item, allowedSourceIds);
-        return constrained ? [constrained] : [];
-      })
-    : plan.items;
   const database = 'database' in dependency ? dependency.database : dependency;
-  const persistedItemCount = readPersistedTaskPlanCount(database, task.id, task.businessDate);
-  if (persistedItemCount !== null) {
-    return { itemCount: persistedItemCount, filteredCount: plan.items.length - items.length };
+  if (plan.items.length === 0) {
+    const existing = getToday(database, task.businessDate).plan;
+    if (existing?.items.length) return { itemCount: existing.items.length, filteredCount: 0 };
   }
-  // 空方案不得覆盖同日已有非空 current plan（弱模型漏输出 / 全被赛道门过滤时保底）。
-  if (items.length === 0) {
-    const db = database;
-    const existing = getToday(db, task.businessDate).plan;
-    if (existing && existing.items.length > 0) {
-      return { itemCount: existing.items.length, filteredCount: plan.items.length };
-    }
-  }
-  let candidateSources: Array<{ sourceId: string; sourceRevision: number }> | undefined;
-  let sourceDecisions: PlanSourceDecision[] = (plan.sourceDecisions ?? []).map((decision) => ({
-    ...decision,
-    reasonCode: decision.reasonCode ?? 'selected_by_plan_item',
-    reason: decision.reason ?? '该资料被保留方案项直接引用。'
-  }));
-  if (candidateSourceIds) {
-    const ids = [...candidateSourceIds].sort();
-    const db = database;
-    const rows = ids.length ? db.prepare(`SELECT id,revision FROM source_items WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids) as Array<{ id: string; revision: number }> : [];
-    const revisions = new Map(rows.map((row) => [row.id, row.revision]));
-    candidateSources = ids.map((sourceId) => {
-      const sourceRevision = revisions.get(sourceId);
-      if (!sourceRevision) throw new Error(`PLAN_SOURCE_CANDIDATE_NOT_FOUND:${sourceId}`);
-      return { sourceId, sourceRevision };
-    });
-    const selectedIds = new Set(items.flatMap((item) => item.sourceIds));
-    const modelDecisions = new Map(sourceDecisions.map((decision) => [decision.sourceId, decision]));
-    sourceDecisions = candidateSources.map(({ sourceId, sourceRevision }) => {
-      const modelDecision = modelDecisions.get(sourceId);
-      if (selectedIds.has(sourceId)) {
-        return {
-          sourceId,
-          sourceRevision,
-          decision: 'selected' as const,
-          reasonCode: modelDecision?.decision === 'selected' ? modelDecision.reasonCode ?? 'selected_by_plan_item' : 'selected_by_plan_item',
-          reason: modelDecision?.decision === 'selected' ? modelDecision.reason ?? '该资料被保留方案项直接引用。' : '该资料被保留方案项直接引用。',
-        };
-      }
-      if (modelDecision && modelDecision.decision !== 'selected') {
-        return { ...modelDecision, sourceRevision, reasonCode: modelDecision.reasonCode!, reason: modelDecision.reason! };
-      }
-      return {
-        sourceId, sourceRevision, decision: 'excluded' as const,
-        reasonCode: modelDecision ? 'filtered_by_lane_gate' : 'not_selected',
-        reason: modelDecision ? '该资料对应的方案项未通过本轮赛道白名单。' : '本轮方案未引用该冻结候选资料。',
-      };
-    });
-  }
-  const input = {
-    planDate: task.businessDate, timezone: 'Asia/Shanghai', summary: plan.summary, items,
-    ...(candidateSources ? { candidateSources, sourceDecisions } : {})
-  };
-  const derivedRequestId = planDispatchRequestId(planRequestId, input);
-  if ('database' in dependency) {
-    requireReceiptData(await dispatchBusinessCommand(dependency, {
-      command: 'plans.save',
-      requestId: derivedRequestId,
-      actor: { type: 'pi', id: 'pi', label: 'Pi worker' },
-      taskId: task.id,
-      workerLeaseId,
-      grantId: grantId ?? undefined,
-      input,
-      boundIdentity: { planDate: task.businessDate },
-      entityType: 'plan',
-      execute: (commandDatabase, value) => {
-        const data = saveCurrentPlan(commandDatabase, value, false);
-        return { data, entityId: data.id, afterRevision: data.revision, readback: data };
-      }
-    }));
-    wakePersistentKnowledgeJobs();
-  } else {
-    const saved = saveCurrentPlan(dependency, input);
-    dependency.prepare('INSERT INTO mcp_request_results(tool,request_id,result_json,created_at) VALUES(?,?,?,?)')
-      .run('plans.save', derivedRequestId, JSON.stringify(saved), new Date().toISOString());
-  }
-  return { itemCount: items.length, filteredCount: plan.items.length - items.length };
+  const persist = () => saveCurrentPlan(database, {
+    planDate: task.businessDate,
+    timezone: 'Asia/Shanghai',
+    summary: plan.summary,
+    items: plan.items
+  });
+  if ('database' in dependency) await dependency.runActorControlPlane(persist);
+  else persist();
+  return { itemCount: plan.items.length, filteredCount: 0 };
 }
 
 function schedulerActor(lane: string) {
@@ -537,83 +435,35 @@ async function prepareSkillDir(agentDir: string): Promise<void> {
   await cp(skillSourcePath(), target, { recursive: true, force: true });
 }
 
-function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, options: { nativeSearch?: boolean; gate?: { autoRelevantIds: string[]; pendingIds: string[] } | null } = {}): string {
-  const deepDiveRule = options.nativeSearch
-    ? '5. 对四问证据不足的候选，可用模型自带的联网搜索补充证据；搜索发现的材料必须先用 wmb_save_source 带原始 URL 入库，之后才能作为 sourceIds 写入方案。'
-    : '5. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源。';
-  const modelReasonCodes = (LANE_REASON_CODES as readonly string[]).filter((code) => code !== 'official_source' && code !== 'editor_override' && code !== 'lane_relevant');
-  const gateSection = options.gate
-    ? [
-        '',
-        '■ 第一关：赛道相关性判定（资料门，必须先做这一关）',
-        `以下 ${options.gate.autoRelevantIds.length} 条增量资料已由系统按官方信源规则判定为赛道相关（Tier 0，无需你判定，四问可直接使用）：${options.gate.autoRelevantIds.join('、')}`,
-        `其余 ${options.gate.pendingIds.length} 条增量资料必须逐条判定赛道相关性：是当前赛道（「身份」块：服务「正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人」的方向与真实项目素材，五维=时代认知/个人方向/AI 实践/公开验证/产品化）的有效素材 → relevant:true；不是 → relevant:false + reasonCode + 一句话 reason。纯模型公告若既不改变现实判断、又没有实际使用价值才算无关；揭示能力边界、成本结构、分发入口、竞争格局或社会能力重大变化的模型发布可凭认知价值进入策划，不得因缺少“马上动手”动作而过滤。泛泛的书籍摘抄、励志口号、无法验证的收入承诺 → irrelevant。reasonCode 只能从以下选择：${modelReasonCodes.join(' / ')}。`,
-        '先输出赛道判定 JSON 块（每条待判资料都必须出现且只出现一次，缺失或重复任何一条整轮失败）：',
-        '```json',
-        '{ "gate": [{ "sourceId": "简报「增量」块中的真实 id", "relevant": true }, { "sourceId": "…", "relevant": false, "reasonCode": "lifestyle_noise", "reason": "一句话原因" }] }',
-        '```'
-      ]
-    : [];
-  const closingLine = options.gate
-    ? '6. 输出顺序：先输出上面的赛道判定 ```json 块，再输出方案 ```json 块。方案块结构必须严格如下（sourceIds 只能从简报「增量」块选择真实 id，且只能引用你判 relevant 或系统已判相关的 id；不要输出其它任何文字）。两个块都必须是可被 JSON.parse 直接解析的合法 JSON；输出前逐块检查括号配对、对象只关闭一次、相邻字段有逗号。方案块使用单行紧凑 JSON，禁止为了排版额外插入闭合括号：'
-    : '6. 收尾只输出一个 ```json 代码块，结构必须严格如下（sourceIds 只能从简报「增量」块选择真实 id；不要输出其它任何文字）。代码块必须是可被 JSON.parse 直接解析的单行紧凑 JSON；输出前检查括号配对、对象只关闭一次、相邻字段有逗号，禁止为了排版额外插入闭合括号：';
+function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string): string {
   return [
-    '执行 WeMediaBuddy 今日情报判断任务。',
-    `task_id=${task.id}`,
-    `intent=${task.intent}`,
+    '你是内容主编。阅读下面今天采集到的资讯，直接提出一批值得创作的选题。',
     `plan_date=${task.businessDate}`,
-    'skill=wemedia-intelligence-engine',
     `plan_request_id=${planRequestId}`,
-    `checkpoint=${JSON.stringify(task.checkpoint)}`,
     '',
     briefText,
-    ...gateSection,
     '',
-    '判断要求：',
-    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯直接丢弃；模型发布、参数或价格新闻若改变能力边界、成本结构、分发入口、竞争格局或社会能力，可凭认知价值入选，不要求改写成工具测评。泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
-    '1.1 最终方案是该业务日期的完整当前方案，不是最后一次增量的临时结果。必须复核简报中当天全部有效资料，并保留仍成立的较早机会；不得因为 judgeWatermark 推进而只提交最后一批新增资料。',
-    '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。实用型机会要有可动手动作（真实来源+本人实践/案例+具体动作）；认知型机会的读者动作可以是重新判断、比较或转述，不得为了制造“可执行性”把重大模型发布、能力变化或产业信号降成个人测评。无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
-    '2.1 产品最高目标：在真实性边界内最大化传播价值。真实性仅作门槛，是准入硬门，不计入传播分；认知价值与实用价值都可入选，账号适配不得压过重大产业/社会意义。传播评分使用 propagation_v2（总分100）：reality_change_significance 25（现实发生了多大变化、旧认知是否失效）、tension_curiosity_gap 20（冲突/反差/认知缺口）、audience_stakes 20（对具体读者的利益、身份或判断影响）、why_now_window 15（窗口与错过成本）、one_sentence_relayability 15（一句话是否值得转述）、account_fit 5（账号适配）。每项必须给 criterion/weight/score/reason，总分严格等于六项和。',
-    '2.2 中心主张竞争（硬门）：每个机会必须先生成 event（表面事件）、user（用户影响）、industry_or_society（产业/社会二阶意义）三个语义不同的候选主张，不得只换标题措辞；逐条记录 claimType=fact|inference|opinion、evidenceStatus=supported|research_required、可写证据边界、传播分与比较理由。winner 必须是传播分最高且 evidenceStatus=supported 的候选，pointOfView 必须与 winnerThesis 一致。若最高价值候选仍需研究，保留它并将本项保持未就绪/进入补料，不得退而选择安全小题。',
-    '2.2.1 主张选择的反降级规则（硬门）：可执行性、容易做实验、容易产出回执都不是 propagation_v2 的独立加分项。若多来源已支持模型能力边界、长任务可靠性、成本结构、分发入口或竞争格局发生变化，必须先比较“这次发布改变了什么旧判断、谁因此重新决策”，不得仅因个人测试更容易落地，就让“先测三个任务/别开最高档/先试一次”之类战术小题击败传播价值更高的认知主张。个人实测可作为正文证据、行动建议或后续选题，但不能取代本次重大变化本身。',
-    '2.3 真实性硬门与知识回执：scoreReasons.version 必须为 propagation_v2，truthGate.status 必须 passed；每个核心 claim 明确 fact/inference/opinion、supported 状态与真实 sourceIds（纯观点可空）。sourceIds 只能逐字复制简报「增量」块中的 id；wmb_get_knowledge_context 返回的 sources/evidence ID 只服务知识关联，除非同一 id 已在简报「增量」块出现，否则严禁加入 sourceIds。必须先用 wmb_get_knowledge_context 查询实体及至少两个关联维度（例如模型实体+国产芯片/推理集群/商业部署/服务规模），并在 editorialDecision.knowledgeContext 记录 used+真实 contextRefs，或 no_relevant_context+明确原因。contextRefs 必须把工具返回的父级 ID 与版本 ID 组合成完整 canonical ref：wiki_page:<pageId>:<currentVersionId> 或 knowledge_note:<noteId>:<versionId>；严禁只复制 wver-* / ver-* 裸版本 ID。未经支持的产业推断不得伪装成事实。',
-    '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。',
-    '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；标题必须包含一个可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。张力/好奇缺口必须在标题或 openingGuidance 中显式兑现，禁止把“夸张反常识只放 titleGuidance”的旧禁令当作不写钩子的理由。',
-    '2.8 传播型写作契约（SSOT：skills/evidence-grounded-writer/SKILL.md §5 — 与选题到成稿全链一致）：每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作」与「一个中心主张」，并在 title/angle/pointOfView/openingGuidance 中体现；实用型动作可以是今天动手，认知型动作可以是重新判断、比较或转述，动作必须服务赢家主张，不得反过来把赢家压成工具测评；openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”；抽象主张必须在 angle/pointOfView 阶段即配人/场景/利害/后果；证据服务主张，不让证据罗列成为选题主体；保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；平台适配（小红书/视频等）是重写钩子/节奏/转藏评动机，不是缩短；标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议；每个候选自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口与错过成本是否写清/是否有明确的收藏/分享/评论动机）缺一不进方案。',
-    '3. 机会 priority：0=最优先内部排程，1=次优先，…7=最低，仅作为内部排程顺序，不决定对外可见的传播等级；可见传播等级 SSS/S/A/B/C/D/E/F 仅由上述传播总分经共享阈值映射（90→SSS 80→S 70→A 60→B 50→C 40→D 30→E 其余 F）由系统计算，你不得直接指定或输出等级字段；priority 数值不得用于伪装传播推荐。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。',
-    '3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。',
-    '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。',
-    deepDiveRule,
-    closingLine,
+    '要求：',
+    '1. 合并重复报道，但不要把不同事件或不同观点合成一个题。',
+    '2. 尽量给出 10 到 20 个有明显差异的选题；资讯确实不足时可以少于 10 个，但不要因为格式、评分或资料不完整而丢掉有价值的方向。',
+    '3. 每个选题说清楚：标题、现在为什么值得写、核心观点，以及它来自哪些 sourceId。',
+    '4. 标题要具体、自然、可直接用于创作，不要写成新闻摘要，不要重复同一个角度。',
+    '5. 不调用工具，不输出分析过程，只输出一个 JSON 代码块。',
+    '',
     '```json',
-    '{',
-    `  "planDate": "${task.businessDate}",`,
-    '  "summary": "一句话概括今日判断",',
-    '  "items": [{',
-    '    "title": "直白可发布的标题（必须含数字/对比/反转/代价钩子且可被正文兑现）",',
-    '    "priority": 1,',
-    '    "whyNow": "为什么是现在（具体事实+时效）",',
-    '    "timeliness": "热点 2-3 天",',
-    '    "targetAudience": "目标读者",',
-    '    "angle": "表达角度",',
-    '    "pointOfView": "核心观点",',
-    '    "platforms": ["x"],',
-    '    "formats": ["text"],',
-    '    "titleGuidance": "标题建议",',
-    '    "openingGuidance": "开头建议",',
-    '    "structureGuidance": "点名六栏目之一并套对应骨架",',
-    '    "effortEstimate": "约 40 分钟",',
-    '    "topicId": "多日/持续/余波跟进项填简报「存量」中的真实主题 id，其余省略",',
-    '    "sourceIds": ["简报「增量」块中的真实 id"],',
-    '    "editorialDecision": {"version":"editorial_thesis_v1","candidates":[{"level":"event","thesis":"表面事件主张","claimType":"fact","evidenceStatus":"supported","evidenceBoundary":"来源支持边界","score":55,"reason":"比较理由"},{"level":"user","thesis":"用户影响主张","claimType":"inference","evidenceStatus":"supported","evidenceBoundary":"推断边界","score":72,"reason":"比较理由"},{"level":"industry_or_society","thesis":"产业或社会意义主张","claimType":"inference","evidenceStatus":"supported","evidenceBoundary":"推断边界","score":86,"reason":"比较理由"}],"winnerLevel":"industry_or_society","winnerThesis":"必须与 pointOfView 相同","winnerReason":"为什么它比另外两层更值得传播","knowledgeContext":{"status":"used","contextRefs":["wiki_page:<pageId>:<currentVersionId>","knowledge_note:<noteId>:<versionId>"],"queryDimensions":["实体","产业关联维度"],"reason":"知识如何改变判断"}},',
-    '    "scoreReasons": {"status":"scored","version":"propagation_v2","score":86,"truthGate":{"status":"passed","reason":"事实与推断边界已核对","claims":[{"text":"核心事实或推断","type":"fact","status":"supported","sourceIds":["真实 source id"]}]},"reasons":[{"criterion":"reality_change_significance","weight":25,"score":22,"reason":"现实变化重要性"},{"criterion":"tension_curiosity_gap","weight":20,"score":18,"reason":"冲突与认知缺口"},{"criterion":"audience_stakes","weight":20,"score":17,"reason":"读者利害"},{"criterion":"why_now_window","weight":15,"score":13,"reason":"当前窗口"},{"criterion":"one_sentence_relayability","weight":15,"score":12,"reason":"一句话可转述"},{"criterion":"account_fit","weight":5,"score":4,"reason":"账号适配"}]},',
-    '    "availableMaterials": [],',
-    '    "missingMaterials": []',
-    '  }],',
-    '  "sourceDecisions": [{"sourceId":"本轮增量或重新激活证据中的真实 id","decision":"selected|excluded|unresolved|blocked","reasonCode":"稳定原因码","reason":"具体原因"}]',
-    '}',
-    '```',
-    'sourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过 propagation_v2 总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；真实性只作硬门，不因证据多而获得传播加分。'
+    JSON.stringify({
+      planDate: task.businessDate,
+      summary: '今天值得创作的方向',
+      items: [{
+        title: '具体选题标题',
+        whyNow: '现在为什么值得写',
+        pointOfView: '这篇内容要表达的核心观点',
+        angle: '切入角度',
+        targetAudience: '最关心这个问题的人',
+        sourceIds: ['简报中的真实 sourceId']
+      }]
+    }),
+    '```'
   ].join('\n');
 }
 
@@ -689,16 +539,13 @@ export function buildPlannerSourceBoundary(
   return Object.freeze({ candidateIds, allowedIds });
 }
 
-export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string, options: { nativeSearch?: boolean; gateRun?: DailyGateRun } = {}): string {
-  const brief = assembleDailyPlannerBrief(database, task);
-  const gateRun = options.gateRun ?? buildDailyGateRun(database, task);
-  const gate = gateRun.lane
-    ? {
-        autoRelevantIds: gateRun.autoRelevant.map((candidate) => candidate.sourceId),
-        pendingIds: gateRun.pending.map((candidate) => candidate.sourceId)
-      }
-    : null;
-  return dailyPrompt(task, planRequestId, renderEditorialBrief(brief), { nativeSearch: options.nativeSearch, gate });
+export function buildDailyOpportunityPrompt(
+  database: Parameters<typeof assembleEditorialBrief>[0],
+  task: AgentTask,
+  planRequestId: string,
+  _options: { nativeSearch?: boolean; gateRun?: DailyGateRun } = {}
+): string {
+  return dailyPrompt(task, planRequestId, renderEditorialBrief(assembleDailyPlannerBrief(database, task)));
 }
 
 export function cancelDailyIntelligenceIfRequested(database: Parameters<typeof cancelAgentTask>[0], task: AgentTask | null | undefined): AgentTask | null {
@@ -850,7 +697,6 @@ export async function startDailyIntelligence(input: {
   const lane = 'daily-intelligence';
   const startRequestId = `daily_intelligence:${input.businessDate}:start:${randomUUID()}`;
   try {
-    const scoringRecovery = getCurrentScoringRecovery(database, input.businessDate);
     const contextRefs = { planDate: input.businessDate, roleId: 'planner' as const };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, {
       intent: 'daily_judge', roleId: 'planner', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
@@ -974,11 +820,9 @@ export async function startDailyIntelligence(input: {
         let activeConfig = startedRuntime.config;
         activeDailyRuntimes.set(beforePlan.id, synthesis);
         try {
-          const promptBuiltAt = new Date().toISOString();
           const planRequestId = agentRequestId(beforePlan.id, 'plan');
           const sessionBaseline = await readFile(dailySessionFile, 'utf8').then((text) => text.split(/\r?\n/).length).catch(() => 0);
-          const gateTask = getAgentTask(database, beforePlan.id) ?? beforePlan;
-          const gateRun = buildDailyGateRun(database, gateTask);
+          const planningTask = getAgentTask(database, beforePlan.id) ?? beforePlan;
           const prompted = await runPiPromptWithFallback({
             roleId: 'planner',
             policySnapshot: taskPolicySnapshot,
@@ -993,90 +837,28 @@ export async function startDailyIntelligence(input: {
               activeDailyRuntimes.set(beforePlan.id, runtime);
               input.onRuntime?.(runtime);
             },
-            run: async (runtime, nextConfig) => {
-              const basePrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
-                nativeSearch: nextConfig.nativeSearch === true,
-                gateRun
-              });
-              const opportunityPrompt = scoringRecovery ? scoringRecoveryPrompt(basePrompt, scoringRecovery) : basePrompt;
-              // WMB-5178 §5：员工接收会话盖章（target=employee，行只进该员工会话文件，Dock 永不镜像）。
-              await runtime.promptUntilSettled(buildOrchestrationEnvelope({ dispatchId: `daily_judge:${gateTask.id}`, target: 'employee', delivery: 'direct', safe: { originLabel: '今日情报', title: '今日情报判读', goal: '判断当日增量资料，产出可批机会方案', acceptance: '渠道回执与当日可批方案' }, prompt: opportunityPrompt }), { timeoutMs: 10 * 60_000 });
+            run: async (runtime) => {
+              await runtime.promptUntilSettled(
+                buildDailyOpportunityPrompt(database, planningTask, planRequestId),
+                { timeoutMs: 10 * 60_000 }
+              );
             }
           });
           synthesis = prompted.runtime;
           activeConfig = prompted.config;
-          const sessionText = readAssistantTexts(await readFile(dailySessionFile, 'utf8'), sessionBaseline).join('\n');
-          const gateApplied = scoringRecovery ? { relevantIds: new Set<string>(), archivedCount: 0, unresolved: false, unresolvedIds: new Set<string>() } : await applyDailyLaneGate(dependency, gateTask, gateRun, sessionText, planRequestId, promptBuiltAt, input.workerLeaseId);
-          const sourceBoundary = scoringRecovery ? null : buildPlannerSourceBoundary(database, gateTask, gateRun.lane ? gateApplied.relevantIds : undefined);
-          const allowedSourceIds = sourceBoundary?.allowedIds;
-          let savedCount = scoringRecovery
-            ? await applyScoringRecovery(dependency, gateTask, dailySessionFile, sessionBaseline, scoringRecovery, input.workerLeaseId, grantId)
-            : (await savePlanFromSynthesisOutput(dependency, gateTask, dailySessionFile, planRequestId, input.workerLeaseId, grantId, sessionBaseline, allowedSourceIds, sourceBoundary?.candidateIds)).itemCount;
-          // A newly generated plan may contain pending/invalid score payloads. Recover once
-          // in the same task so the normal path does not require an Owner click. If this
-          // single retry fails or remains incomplete, the outer failure path preserves the
-          // plan and Today exposes the existing manual "继续评分" action.
-          if (!scoringRecovery) {
-            const automaticRecovery = getCurrentScoringRecovery(database, input.businessDate);
-            if (automaticRecovery) {
-              await dispatchReportAgentTaskProgress(dependency, beforePlan.id, {
-                phase: 'validating',
-                message: `检测到 ${automaticRecovery.items.length} 条评分未完成，正在自动补齐（仅一次）。`
-              }, taskCommandContext(lane, `${beforePlan.id}:progress:auto-scoring-recovery`, beforePlan.id, input.workerLeaseId));
-              const recoveryBaseline = await readFile(dailySessionFile, 'utf8').then((text) => text.split(/\r?\n/).length).catch(() => 0);
-              const recovered = await runPiPromptWithFallback({
-                roleId: 'planner',
-                policySnapshot: taskPolicySnapshot,
-                taskId: beforePlan.id,
-                piConfigPath: input.piConfigPath,
-                initial: { runtime: synthesis, config: activeConfig },
-                createRuntime,
-                onEvent: (event) => input.onEvent?.(event as unknown as Record<string, unknown>),
-                onRuntimeChanged: (runtime, nextConfig) => {
-                  synthesis = runtime;
-                  activeConfig = nextConfig;
-                  activeDailyRuntimes.set(beforePlan.id, runtime);
-                  input.onRuntime?.(runtime);
-                },
-                run: async (runtime, nextConfig) => {
-                  const basePrompt = buildDailyOpportunityPrompt(database, gateTask, planRequestId, {
-                    nativeSearch: nextConfig.nativeSearch === true,
-                    gateRun
-                  });
-                  await runtime.promptUntilSettled(buildOrchestrationEnvelope({
-                    dispatchId: `daily_judge:${gateTask.id}:auto-scoring-recovery`,
-                    target: 'employee',
-                    delivery: 'direct',
-                    safe: { originLabel: '今日情报', title: '自动续评分', goal: '补齐当前计划的传播评分', acceptance: '原计划条目全部获得有效六维评分' },
-                    prompt: scoringRecoveryPrompt(basePrompt, automaticRecovery)
-                  }), { timeoutMs: 10 * 60_000 });
-                }
-              });
-              synthesis = recovered.runtime;
-              activeConfig = recovered.config;
-              savedCount = await applyScoringRecovery(dependency, gateTask, dailySessionFile, recoveryBaseline, automaticRecovery, input.workerLeaseId, grantId);
-              const remaining = getCurrentScoringRecovery(database, input.businessDate);
-              if (remaining) throw new Error(`scoring_recovery_incomplete: ${remaining.items.length} item(s)`);
-            }
-          }
-          const saved = { itemCount: savedCount };
-          const gateNote = gateApplied.archivedCount > 0 ? `，另判 ${gateApplied.archivedCount} 条与本赛道无关已移出` : '';
-          const unresolvedNote = gateApplied.unresolved ? `，${gateApplied.unresolvedIds.size} 条因内容变更待重评` : '';
+          const saved = await savePlanFromSynthesisOutput(
+            dependency,
+            planningTask,
+            dailySessionFile,
+            planRequestId,
+            input.workerLeaseId,
+            grantId,
+            sessionBaseline
+          );
           await dispatchReportAgentTaskProgress(dependency, beforePlan.id, {
-            message: saved.itemCount > 0 ? `方案已保存：${saved.itemCount} 个机会${gateNote}${unresolvedNote}。` : `方案已保存：今日没有合格机会${gateNote}${unresolvedNote}。`
+            message: saved.itemCount > 0 ? `已生成 ${saved.itemCount} 个选题。` : '今天没有生成选题。',
+            checkpoint: { judgeWatermark: new Date().toISOString() }
           }, taskCommandContext(lane, `${beforePlan.id}:progress:plan-saved`, beforePlan.id, input.workerLeaseId));
-          if (gateApplied.unresolved) {
-            await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint: { laneUnresolved: true, unresolvedIds: [...gateApplied.unresolvedIds] } }, taskCommandContext(lane, `${beforePlan.id}:progress:lane-unresolved`, beforePlan.id, input.workerLeaseId));
-          } else {
-            const isQualifiedEmpty = saved.itemCount === 0;
-            const checkpoint: Record<string, unknown> = { judgeWatermark: promptBuiltAt };
-            if (isQualifiedEmpty) {
-              checkpoint.emptyQualified = true;
-              checkpoint.qualifiedEmpty = true;
-              checkpoint.dailyEmptyQualified = true;
-            }
-            await dispatchReportAgentTaskProgress(dependency, beforePlan.id, { checkpoint }, taskCommandContext(lane, `${beforePlan.id}:progress:judge-watermark`, beforePlan.id, input.workerLeaseId));
-          }
         } catch (error) {
           const latest = getAgentTask(database, beforePlan.id) ?? beforePlan;
           const cancelled = await cancelIfRequested(latest);
@@ -1140,92 +922,45 @@ export async function startDailyIntelligence(input: {
   } finally { close(); }
 }
 
-export function draftPrompt(task: AgentTask, projectId: string, requestId: string, writerTask: WriterTask = 'core_draft', brief = '', researchReady = false, researchMode: 'auto' | 'required' | 'prohibited' = 'auto'): string {
+export function draftPrompt(
+  task: AgentTask,
+  projectId: string,
+  requestId: string,
+  writerTask: WriterTask = 'core_draft',
+  brief = '',
+  _researchReady = false,
+  _researchMode: 'auto' | 'required' | 'prohibited' = 'auto'
+): string {
   if (writerTask === 'xiaohongshu_platform_version') {
     return [
-      '执行 WeMediaBuddy Studio 小红书平台版本任务。',
+      '把这个内容项目改写成完整的小红书版本。',
       `task_id=${task.id}`,
-      'intent=studio_draft',
       `project_id=${projectId}`,
+      `request_id=${requestId}`,
       `brief=${brief}`,
-      `version_request_id=${requestId}`,
-      '要求：',
-      '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project，并读取最新核心版本。`,
-      '3. 如果项目没有核心版本，明确失败并停止；本任务禁止调用 wmb_save_core_version，禁止生成或改写核心稿。',
-      '4. 基于最新核心稿改写一份适合小红书发布的完整中文版本：保留一个中心主张与证据不变，并严格遵守“已批准中心主张”及其事实/推断边界，不得把产业/社会意义软化成产品测评或使用建议；标题围绕该题材独有的对象、问题、动作或证据，标题必须包含可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一）且可兑现，重写开头钩子、信息节奏与收藏/分享/评论动机（平台适配是重写钩子/节奏/动机，不是缩短），不自动添加「普通人」等万能受众标签，不复用固定前缀，不虚构核心稿没有的事实，正文自然可读。若现有证据迫使中心主张改变，停止保存并要求退回 Planner 重新批准。标题必兑现，禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
-      `5. 调用 wmb_save_platform_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，contentVersionId 必须是步骤2读到的最新核心版本 id，platform 必须是 xiaohongshu，format 必须是 text，title/body 为完整小红书版本。`,
-      `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认 xiaohongshu 平台版本已保存且关联正确的核心版本。`,
-      '7. 最后用简洁中文回复：已保存小红书平台版本，并给出标题和正文前两句。'
+      `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取最新正文，再调用 wmb_save_platform_version 保存小红书版本。不要发布。`
     ].join('\n');
   }
   if (writerTask === 'video_script') {
     return [
-      '执行 WeMediaBuddy Studio 视频文案衍生任务。',
+      '把这个内容项目改写成完整的视频口播稿。',
       `task_id=${task.id}`,
-      'intent=studio_draft',
       `project_id=${projectId}`,
+      `request_id=${requestId}`,
       `brief=${brief}`,
-      `version_request_id=${requestId}`,
-      '要求：',
-      '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，读取最新定稿文章；没有定稿文章时明确失败并停止。`,
-      '3. 先判断内容最适合的真实视频形态，再据此设计结构、节奏和镜头表达；不得套固定模板，不得虚构文章没有的事实。',
-      `4. 调用 wmb_save_video_script，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，sourceContentVersionId 必须是步骤2读到的最新文章版本 id，并保存标题、完整文案与格式决策。`,
-      `5. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认视频文案已保存并准确绑定最新文章版本。`,
-      '6. 最后用简洁中文回复已保存的视频形态、标题与文案开头。'
-    ].join('\n');
-  }
-  if (!researchReady && researchMode !== 'prohibited') {
-    return [
-      '执行 WeMediaBuddy Studio 核心初稿的外部研究前置交接。当前轮次禁止写作。',
-      `task_id=${task.id}`,
-      'intent=studio_draft',
-      `project_id=${projectId}`,
-      `brief=${brief}`,
-      '要求：',
-      '1. 只通过 wmb_* MCP 工具读业务数据；禁止直接写文件或数据库，禁止生成图片，禁止保存任何正文或平台版本。',
-      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，读取项目标题、现有资料和写作要求。`,
-      '3. 不得把模型内置知识、项目标题中的说法或搜索摘要当作已核查证据。围绕文章对象与版本、工作机制与适用边界、关键事实或数字、现实使用案例、失败案例/反证与风险，整理 4—8 条可由外部来源核查的 requiredClaims；每条使用稳定英文 key、清晰中文 text，type 仅用 fact/price/policy。',
-      `4. 必须调用 wmb_dispatch_research({ parentTaskId: "${task.id}", requiredClaims, channels: ["web", "x", "xhs"], brief })。即使项目已有少量关联资料，也必须派单做外部独立核查；不得改用普通 reporter/daily_scan，不得在当前写手会话临时联网。`,
-      '5. 派单成功后立即结束当前交付。不得继续起草、导图、调用 wmb_import_project_image、wmb_save_core_version 或 wmb_save_platform_version；研究终态会通过 EvidencePack 与项目来源关联后单跳续派新 writer 工单。',
-      '6. 最后只简洁回复：已派外部研究，等待研究完成后续写。'
-    ].join('\n');
-  }
-  if (researchMode === 'prohibited') {
-    return [
-      '执行 WeMediaBuddy Studio 核心初稿任务（受限写作·已豁免外部研究）。',
-      `task_id=${task.id}`,
-      'intent=studio_draft',
-      `project_id=${projectId}`,
-      `version_request_id=${requestId}`,
-      `brief=${brief}`,
-      '要求：',
-      '1. 严禁调用 wmb_dispatch_research；只通过 wmb_* MCP 工具读取项目资料并保存正文，禁止直接写文件或数据库，禁止最终发布。',
-      `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-      '3. 仅依据项目已关联来源写作；无法由现有来源支持的事实、数字、因果和案例必须删除或明确标为作者观点，不得用模型内置知识补证据。',
-       '4. 写出围绕项目中“已批准中心主张”的中文核心初稿；该主张、传播承诺和事实/推断边界均已由 Owner 锁定，不得改成更安全但更弱的产品测评或使用建议。若现有来源迫使主线变化，停止保存并要求退回 Planner 重新批准。标题必须兑现，正文自然完整；禁止编造数字、个人经历、引语、结果、紧迫感或争议。',
-      `5. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision。`,
-      `6. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存。`,
-      '7. 最后用简洁中文回复：已保存受限写作核心正文，并给出标题和正文前两句。'
+      `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取最新正文，再调用 wmb_save_video_script 保存口播稿。不要发布。`
     ].join('\n');
   }
   return [
-    '执行 WeMediaBuddy Studio 核心初稿任务。',
+    '根据这个选题直接写一篇完整、自然、可编辑的中文文章。',
     `task_id=${task.id}`,
-    'intent=studio_draft',
     `project_id=${projectId}`,
-    `version_request_id=${requestId}`,
-    '要求：',
+    `request_id=${requestId}`,
     `brief=${brief}`,
-    '1. 只通过 wmb_* MCP 工具读写业务数据，禁止直接写文件或数据库，禁止最终发布。',
-    `2. 先调用 wmb_get_content({ projectId: "${projectId}" }) 与 wmb_get_workbench，定位指定 project。`,
-    '3. 仅依据项目已关联来源、已批准专项调查资料包或本次 research successor 的 EvidencePack 写一篇完整中文核心初稿正文；项目初始版本中的“已批准中心主张”、传播承诺、事实/推断边界是 Owner 锁，不得自行替换或软化。若新证据迫使主线改变，停止保存并要求退回 Planner 重新批准。遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5 传播型写作契约：(a)一个处在具体情境中的读者与一个期望读者动作必须服务已批准的一个中心主张，不得反过来把产业/社会意义降成工具测评；受众只用于内部锚定，不自动添加「普通人」等万能受众标签；(b)标题必兑现：标题围绕该题材独有的对象、问题、动作或证据，包含可被正文兑现的利益/冲突钩子，不写来源未支持的数字、结果或因果；(c)首段立刻兑现钩子；(d)抽象主张配人/场景/利害/后果至少两件；(e)证据服务主张；(f)保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期`，具体边界与怯懦的各打五十大板不同；(g)禁止编造。研究续派任务禁止再次派研究。',
-    '4. 正文阶段不自动生成、导入或插入图片；如需配图，必须在正文保存后由 Owner 显式启动定稿配图流程。',
-    '5. 完成初稿后执行编辑自检（四项缺一即打回重写再保存）：(1)读者收益是否具体（今天就能用的一句话动作） (2)是否有具体利害/代价场景 (3)为何现在窗口与错过成本是否写清 (4)是否有明确的收藏/分享/评论动机；未通过不得调用 wmb_save_core_version。',
-    `6. 调用 wmb_save_core_version，requestId 必须是 ${requestId}，projectId 必须是 ${projectId}，expectedRevision 使用步骤2读到的当前项目 revision，body 为不含自动配图的完整正文。`,
-    `7. 再调用 wmb_get_content({ projectId: "${projectId}" })，确认核心版本正文已保存；配图由定稿流程单独处理。`,
-    '8. 最后用简洁中文回复：已保存核心正文，并给出标题和正文前两句。'
+    `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题和关联资讯。`,
+    '围绕选题的核心观点完成标题和正文；不要再派任务，不要启动其他流程。',
+    `完成后调用 wmb_save_core_version，requestId 使用 ${requestId}，projectId 使用 ${projectId}，expectedRevision 使用读取到的项目 revision。`,
+    '保存后结束。不要发布。'
   ].join('\n');
 }
 
@@ -1248,14 +983,13 @@ export async function startStudioDraft(input: {
   const writerTask = input.writerTask ?? 'core_draft';
   const { dependency, database, close } = mutationDependency(input);
   const lane = 'studio-draft';
-  const startRequestId = input.startRequestId ?? `studio_draft:${input.businessDate}:${input.projectId}:start`;
+  const startRequestId = input.startRequestId ?? `studio_draft:${input.businessDate}:${input.projectId}:${randomUUID()}`;
   try {
     const contextRefs = {
       roleId: 'writer' as const,
       projectId: input.projectId,
       writerTask,
-      researchGate: writerTask === 'core_draft' ? (input.researchMode === 'prohibited' ? 'exempt' : (input.researchReady === true ? 'satisfied' : 'required')) : 'not_applicable',
-      researchMode: input.researchMode ?? 'auto'
+      researchMode: 'prohibited' as const
     };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, {
       intent: 'studio_draft', roleId: 'writer', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
@@ -1263,8 +997,7 @@ export async function startStudioDraft(input: {
     if (prerequisite.waiting) return prerequisite.waiting;
     const policySnapshot = prerequisite.policySnapshot;
     const taskContextRefs = { ...contextRefs, modelPolicySnapshot: policySnapshot };
-    const conversation = await readPiConversation(input.dataRootPath);
-    const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs: taskContextRefs, piSessionId: conversation.sessionId }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
+    const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs: taskContextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
     const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'writer') ?? policySnapshot;
@@ -1272,33 +1005,13 @@ export async function startStudioDraft(input: {
     const layout = await ensurePiConversationLayout(input.dataRootPath);
     const extensionPath = await preparePiExtension(layout.agentDir);
     const requestId = agentRequestId(task.id, writerTask === 'core_draft' ? 'core_version' : 'xiaohongshu_platform_version');
-    // 旧 Studio 直接 IPC 不经过 JobPool；为研究续派补一份同型持久合同。
-    // JobPool 路径已由 onTaskReady 写入真实 jobId，此处只在缺失时补，不覆盖。
-    let researchContractRefs: Record<string, unknown> | undefined;
-    const taskAfterReady = getAgentTask(database, task.id);
-    if (writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited' && !readJobContractFromRefs(taskAfterReady?.contextRefs ?? {})) {
-      const directRequest: RoleJobRequest = Object.freeze({
-        roleId: 'writer',
-        brief: input.brief?.trim() || 'Studio 直接核心初稿',
-        businessDate: input.businessDate,
-        projectId: input.projectId,
-        writerTask: 'core_draft'
-      });
-      researchContractRefs = {
-        ...(taskAfterReady?.contextRefs ?? {}),
-        ...buildJobContextRefs({
-          jobId: `direct-writer:${task.id}`,
-          request: directRequest,
-          boundary: buildJobObjectBoundary(directRequest, input.businessDate)
-        })
-      };
-    }
-    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId, contextRefs: researchContractRefs }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
+    const piSessionId = `studio-${task.id}`;
+    await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
       await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
-        await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || path.join(path.dirname(layout.sessionFile), `studio-${task.id}.jsonl`)), '-e', extensionPath,
+        await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || path.join(path.dirname(layout.sessionFile), `${piSessionId}.jsonl`)), '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
       ], {
         ...process.env,
@@ -1336,34 +1049,15 @@ export async function startStudioDraft(input: {
           input.onRuntime?.(nextRuntime);
         },
         run: async (activeRuntime) => {
-          const platformTask = writerTask === 'xiaohongshu_platform_version';
-          const researchPreflight = writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited';
-          await activeRuntime.promptUntilSettled(buildOrchestrationEnvelope({
-            dispatchId: `studio_draft:${task.id}`,
-            target: 'employee',
-            delivery: 'direct',
-            safe: platformTask
-              ? { originLabel: 'Studio 小红书版本', title: '小红书平台版本', goal: '基于最新核心稿生成并保存小红书平台版本', acceptance: '小红书平台版本读回' }
-              : researchPreflight
-                ? { originLabel: 'Studio 核心初稿', title: '外部研究前置', goal: '派出受控外部研究并停止当前写作', acceptance: '研究派单回执与父任务交接' }
-                : { originLabel: 'Studio 核心初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
-            prompt: draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', input.researchReady === true, input.researchMode ?? 'auto')
-          }), { timeoutMs: piPromptTimeoutMs() });
+          await activeRuntime.promptUntilSettled(
+            draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', true, 'prohibited'),
+            { timeoutMs: piPromptTimeoutMs() }
+          );
         }
       });
       const afterPrompt = getAgentTask(database, task.id);
       // research.dispatch 成功会把当前父任务置为 partial；禁止继续 validating/complete 覆盖交接真相。
       if (afterPrompt && afterPrompt.status !== 'running') return { task: afterPrompt, reused: false };
-      if (writerTask === 'core_draft' && input.researchReady !== true && input.researchMode !== 'prohibited') {
-        const failed = await dispatchFailAgentTask(
-          dependency,
-          task.id,
-          'RESEARCH_DISPATCH_MISSING',
-          '外部研究未成功派出；本轮未写作，也未保存正文。',
-          taskCommandContext(lane, `${task.id}:fail:research-dispatch-missing`, task.id, input.workerLeaseId)
-        );
-        return { task: failed, reused: false };
-      }
       await dispatchUpdateAgentTaskPhase(dependency, task.id, 'validating', {}, taskCommandContext(lane, `${task.id}:phase:validating`, task.id, input.workerLeaseId));
       const completed = await dispatchCompleteAgentTask(dependency, task.id, taskCommandContext(lane, `${task.id}:complete`, task.id, input.workerLeaseId));
       return { task: completed, reused: false };

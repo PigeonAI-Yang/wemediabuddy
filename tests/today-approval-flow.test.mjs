@@ -69,12 +69,12 @@ test('Today recommendation action uses approve bridge and never bypasses approva
   assert.match(createBody, /openStudio/, 'successful approval must open the returned project');
 });
 
-test('approval command does not swallow project creation/advance errors', async () => {
+test('approval directly creates the selected content project', async () => {
   const source = await readFile(new URL('../src/main/ipc-today-studio-business.ts', import.meta.url), 'utf8');
   const handler = source.match(/ipcMain\.handle\('plan-item:approve'[\s\S]*?\n  \}\);/)?.[0] ?? '';
   assert.ok(handler, 'plan-item:approve handler must exist');
-  assert.doesNotMatch(handler, /try\s*\{\s*adv\s*=\s*advanceApprovedPlanItem[\s\S]*?catch\s*\{\s*\}/, 'approval must not turn advance failure into ok + null');
-  assert.match(handler, /executeOwnerProjectionDecision/, 'approval must execute the exact frozen Projection decision and return its production result');
+  assert.match(handler, /approvePlanItemAndCreateProject/);
+  assert.doesNotMatch(handler, /submitWorkspaceOrchestratorIntent|executeOwnerProjectionDecision|Projection/);
 });
 
 test('approval transaction creates one complete project, closes carry, and advances the projection', async () => {

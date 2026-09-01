@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { buildDailyOpportunityPrompt, buildPlannerSourceBoundary, cancelDailyIntelligenceIfRequested, constrainPlanItemToAllowedSources, draftPrompt, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
+import { buildDailyOpportunityPrompt, buildPlannerSourceBoundary, cancelDailyIntelligenceIfRequested, draftPrompt, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
 import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
@@ -40,64 +40,21 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /■ 增量/);
     assert.match(prompt, /长期观察资料/);
     assert.match(prompt, /跨日发酵机会/);
-    assert.match(prompt, /为什么是现在/);
-    assert.match(prompt, /五维/);
-    assert.match(prompt, /六栏目/);
-    // 新身份：以方向与真实项目描述受众，不把身份标签锚定成标题素材
-    assert.match(prompt, /正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人/);
-    assert.match(prompt, /受众描述只用于内部判断，不是标题素材/);
-    assert.match(prompt, /内部生成至少三个不同切口的候选/);
-    assert.match(prompt, /不得使用「普通人」等万能受众标签/);
-    for (const dimension of ['时代认知', '个人方向', 'AI 实践', '公开验证', '产品化']) assert.match(prompt, new RegExp(dimension), `missing dimension ${dimension}`);
-    assert.match(prompt, /可执行性、容易做实验、容易产出回执都不是 propagation_v2 的独立加分项/);
-    assert.match(prompt, /不得仅因个人测试更容易落地/);
-    assert.match(prompt, /个人实测可作为正文证据、行动建议或后续选题/);
-    assert.match(prompt, /wiki_page:<pageId>:<currentVersionId>/);
-    assert.match(prompt, /knowledge_note:<noteId>:<versionId>/);
-    assert.match(prompt, /严禁只复制 wver-\* \/ ver-\* 裸版本 ID/);
-    assert.match(prompt, /wmb_get_knowledge_context 返回的 sources\/evidence ID 只服务知识关联/);
-    assert.match(prompt, /JSON\.parse 直接解析/);
-    assert.match(prompt, /单行紧凑 JSON/);
-    for (const column of ['迷茫诊断', '经典方法', 'AI 实战', '项目日志', '方向判断', '商业化实验']) assert.match(prompt, new RegExp(column), `missing column ${column}`);
-    assert.doesNotMatch(prompt, /内容→信任→付费/);
-    assert.doesNotMatch(prompt, /认知\/技能\/表达/);
-    assert.doesNotMatch(prompt, /实验日志/);
-    assert.doesNotMatch(prompt, /原则卡/);
-    // 旧运营安全门保持不变
-    assert.match(prompt, /仅可调用 wmb_get_knowledge_context/);
-    assert.match(prompt, /尤其禁止 wmb_get_workbench/);
-    assert.match(prompt, /收尾只输出一个 ```json 代码块/);
-    assert.match(prompt, /"planDate": "2026-08-03"/);
-    assert.doesNotMatch(prompt, /先调用 wmb_get_workbench/);
-    assert.match(prompt, /禁止为此另行扫描新来源/);
-    assert.doesNotMatch(prompt, /sources_request_id=/);
-    assert.doesNotMatch(prompt, /官方产品与模型发布/);
-    assert.doesNotMatch(prompt, /共享渠道模块完成真实扫描/);
+    assert.match(prompt, /现在为什么值得写/);
+    assert.match(prompt, /10 到 20 个/);
+    assert.match(prompt, /不要把不同事件或不同观点合成一个题/);
+    assert.match(prompt, /只输出一个 JSON 代码块/);
+    assert.doesNotMatch(prompt, /硬门|第一关|propagation_v2|sourceDecisions|知识回执/);
+
     const withWatermark = { ...started.data, checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } };
     const scopedPrompt = buildDailyOpportunityPrompt(database, withWatermark, agentRequestId(withWatermark.id, 'plan'));
-    assert.match(scopedPrompt, /最终方案是该业务日期的完整当前方案/);
-    assert.match(scopedPrompt, /水印 2026-08-02T15:59:59.999Z 之后/, 'planner scope starts at the business-day boundary, not the incremental judge watermark');
+    assert.match(scopedPrompt, /水印 2026-08-02T15:59:59.999Z 之后/, 'planner reads the full business day');
 
     const fresh = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-04' });
     assert.equal(fresh.ok, true);
     reportAgentTaskProgress(database, withWatermark.id, { checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } });
     const inheritedPrompt = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
-    assert.match(inheritedPrompt, /水印 2026-08-03T15:59:59.999Z 之后/, 'fresh task plans across its full business day even when incremental judgment inherits a later watermark');
-
-    const withSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: true });
-    assert.match(withSearch, /模型自带的联网搜索补充证据/);
-    const withoutSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: false });
-    assert.match(withoutSearch, /未开启自带搜索/);
-    assert.doesNotMatch(withoutSearch, /模型自带的联网搜索补充证据/);
-
-    // 赛道门（Tier 1 判定）提示词沿用新身份与降权口径；旧「宏大综述/躺赚毒鸡汤」措辞不再出现
-    ensureOfficialWorkspaceProfile(database, 'official.ai');
-    const gated = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
-    assert.match(gated, /第一关：赛道相关性判定/);
-    assert.match(gated, /五维=时代认知\/个人方向\/AI 实践\/公开验证\/产品化/);
-    assert.match(gated, /纯模型公告若既不改变现实判断、又没有实际使用价值才算无关/);
-    assert.doesNotMatch(gated, /宏大行业综述/);
-    assert.doesNotMatch(gated, /躺赚毒鸡汤/);
+    assert.match(inheritedPrompt, /水印 2026-08-03T15:59:59.999Z 之后/);
 
     const requested = requestAgentTaskControl(database, started.data.id, 'cancel');
     assert.equal(requested.ok, true);
@@ -111,26 +68,6 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
   }
 });
 
-test('planner keeps a supported opportunity when one cited source falls outside the frozen boundary', () => {
-  const item = {
-    title: '重大变化仍有有效证据', priority: 0, whyNow: '今日发生', timeliness: '热点 2-3 天',
-    targetAudience: '需要重新判断模型路线的团队', angle: '从产业变化解释用户决策',
-    pointOfView: '有效来源仍足以支持中心主张', platforms: ['x'], formats: ['text'],
-    titleGuidance: '点明冲突', openingGuidance: '首段兑现', structureGuidance: '方向判断', effortEstimate: '40m',
-    sourceIds: ['allowed-source', 'stale-source'], editorialDecision: editorialDecision('有效来源仍足以支持中心主张'),
-    scoreReasons: {
-      ...scoredReasons(80),
-      truthGate: {
-        status: 'passed', reason: '事实有来源',
-        claims: [{ text: '核心变化', type: 'fact', status: 'supported', sourceIds: ['allowed-source', 'stale-source'] }]
-      }
-    }
-  };
-  const constrained = constrainPlanItemToAllowedSources(item, new Set(['allowed-source']));
-  assert.ok(constrained);
-  assert.deepEqual(constrained.sourceIds, ['allowed-source']);
-  assert.deepEqual(constrained.scoreReasons.truthGate.claims[0].sourceIds, ['allowed-source']);
-});
 
 test('planner sees every effective source from the business day after an incremental watermark', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-runner-day-scope-'));
@@ -190,30 +127,23 @@ test('planner sees every effective source from the business day after an increme
   }
 });
 
-test('writer prompts keep audience identity out of core and platform titles', () => {
+test('writer prompt goes directly from selected topic to saved article', () => {
   const task = { id: 'task-title-test' };
-  // core_draft 默认 researchReady=false 时为外部研究前置交接（不含标题约束）；真实写作需 researchReady=true
-  const core = draftPrompt(task, 'project-1', 'request-1', 'core_draft', '', true);
-  assert.match(core, /标题围绕该题材独有的对象、问题、动作或证据/);
-  assert.match(core, /不自动添加「普通人」等万能受众标签/);
-  assert.match(core, /不写来源未支持的数字、结果或因果/);
-
-  const xhs = draftPrompt(task, 'project-1', 'request-2', 'xiaohongshu_platform_version');
-  assert.match(xhs, /标题围绕该题材独有的对象、问题、动作或证据/);
-  assert.match(xhs, /不自动添加「普通人」等万能受众标签/);
+  const core = draftPrompt(task, 'project-1', 'request-1');
+  assert.match(core, /直接写一篇完整、自然、可编辑的中文文章/);
+  assert.match(core, /不要再派任务，不要启动其他流程/);
+  assert.match(core, /wmb_save_core_version/);
+  assert.doesNotMatch(core, /外部研究|硬门|回执|Owner 锁/);
 });
 
-test('daily IPC submits one typed owner intent and does not create legacy tasks or run caches', async () => {
+test('daily IPC runs collection and topic generation directly', async () => {
   const source = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const start = source.indexOf("ipcMain.handle('agent:start-daily-intelligence'");
   const end = source.indexOf("ipcMain.handle('agent:start-studio-draft'", start);
   assert.ok(start >= 0 && end > start);
   const handler = source.slice(start, end);
-  assert.match(handler, /submitWorkspaceOrchestratorIntent\(runtime/);
-  assert.match(handler, /producerId: 'today\.agent-start-daily-intelligence'/);
-  assert.match(handler, /action: 'full'/);
-  assert.match(handler, /rootMode: 'owner'/);
-  assert.doesNotMatch(handler, /startWorkspaceDailyIntelligence|startAgentTask|resolveAgentPiPrerequisite|dailyRuns/);
+  assert.match(handler, /startWorkspaceDailyIntelligence/);
+  assert.doesNotMatch(handler, /submitWorkspaceOrchestratorIntent|rootMode|producerId/);
 });
 
 test('Pi task authority prompt carries exact automatic task, grant and lease values', () => {

@@ -53,71 +53,21 @@ export type SavedCoreVersion = {
 };
 export type SavedPlatformVersion = { id: string; revision: number };
 
-type ThesisLock = { version: string; winnerThesis: string };
-type ThesisBoundaryFailure = {
-  reasonCode: 'THESIS_LOCK_REQUIRED' | 'THESIS_LOCK_VIOLATION';
-  message: string;
-};
 
-function parseObject(value: unknown): Record<string, unknown> | null {
-  let parsed = value;
-  if (typeof parsed === 'string') {
-    try { parsed = JSON.parse(parsed); } catch { return null; }
-  }
-  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-}
-
-function readThesisLock(value: unknown): ThesisLock | null {
-  const provenance = parseObject(value);
-  const lock = parseObject(provenance?.thesis_lock);
-  if (lock?.version !== 'thesis_lock_v1' || typeof lock.winnerThesis !== 'string' || !lock.winnerThesis.trim()) return null;
-  return { version: 'thesis_lock_v1', winnerThesis: lock.winnerThesis.trim() };
-}
-
-function compactThesisText(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase('zh-CN').replace(/[\s\p{P}\p{S}]+/gu, '');
-}
-
-/** Plan-bound content creation is only valid after the canonical approval chain froze a thesis lock. */
+/** Plan-bound content creation only requires explicit approval. */
 export function assertPlanItemContentCreateAllowed(database: DatabaseSync, planItemId?: string | null): void {
   const normalizedId = typeof planItemId === 'string' ? planItemId.trim() : '';
   if (!normalizedId) return;
   const row = database.prepare(`
-    SELECT planning_status AS planningStatus, planning_provenance_json AS planningProvenance
+    SELECT planning_status AS planningStatus
     FROM plan_items WHERE id=?
-  `).get(normalizedId) as { planningStatus: string; planningProvenance: string | null } | undefined;
+  `).get(normalizedId) as { planningStatus: string } | undefined;
   if (!row) throw Object.assign(new Error('选题不存在，不能创建绑定正文。'), { code: 'NOT_FOUND' });
   if (row.planningStatus !== 'approved') {
     throw Object.assign(new Error(`选题尚未批准（当前状态：${row.planningStatus}），不能直接创建绑定正文。`), { code: 'PLAN_ITEM_NOT_APPROVED' });
   }
-  if (!readThesisLock(row.planningProvenance)) {
-    throw Object.assign(new Error('选题缺少统一审批产生的中心主张锁，不能直接创建绑定正文。'), { code: 'THESIS_LOCK_REQUIRED' });
-  }
-}
 
-function coreThesisBoundaryFailure(database: DatabaseSync, projectId: string, body: string): ThesisBoundaryFailure | null {
-  const row = database.prepare(`
-    SELECT cp.plan_item_id AS planItemId, pi.planning_status AS planningStatus,
-      pi.planning_provenance_json AS planningProvenance
-    FROM content_projects cp
-    LEFT JOIN plan_items pi ON pi.id=cp.plan_item_id
-    WHERE cp.id=?
-  `).get(projectId) as { planItemId: string | null; planningStatus: string | null; planningProvenance: string | null } | undefined;
-  if (!row?.planItemId || row.planningStatus !== 'approved') return null;
-  const lock = readThesisLock(row.planningProvenance);
-  if (!lock) return { reasonCode: 'THESIS_LOCK_REQUIRED', message: '已批准选题缺少中心主张锁，不能保存或完成正文。' };
-  const needle = compactThesisText(lock.winnerThesis);
-  if (!needle || !compactThesisText(body).includes(needle)) {
-    return { reasonCode: 'THESIS_LOCK_VIOLATION', message: `正文必须保留已批准的中心主张：${lock.winnerThesis}` };
-  }
-  return null;
 }
-
-export function assertCoreVersionMatchesPlanThesis(database: DatabaseSync, projectId: string, body: string): void {
-  const failureResult = coreThesisBoundaryFailure(database, projectId, body);
-  if (failureResult) throw Object.assign(new Error(failureResult.message), { code: failureResult.reasonCode });
-}
-
 export type ContentProjectSummary = {
   id: string;
   title: string;
@@ -650,11 +600,6 @@ export function saveCoreVersion(
       if (transaction) database.exec('ROLLBACK');
       return failure('REVISION_CONFLICT', '内容项目已更新，请重新加载。', { current: latest });
     }
-    const thesisFailure = coreThesisBoundaryFailure(database, input.projectId, input.body);
-    if (thesisFailure) {
-      if (transaction) database.exec('ROLLBACK');
-      return failure(thesisFailure.reasonCode, thesisFailure.message);
-    }
     const latest = database.prepare('SELECT id, body FROM content_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1').get(input.projectId) as { id: string; body: string } | undefined;
     const version = insertCoreVersion(database, input.projectId, input.body, input.author ?? 'ai');
     // WMB-5237：核心版本与媒体绑定同事务；布局只改 draft，正文 token 保持 `![alt](wmb-asset://assetId)` 纯净。
@@ -718,14 +663,6 @@ export function updateContentProject(
     if (current.revision !== input.expectedRevision) {
       if (transaction) database.exec('ROLLBACK');
       return failure('REVISION_CONFLICT', '内容项目已更新，请重新加载。', { current });
-    }
-    if (input.status === 'completed') {
-      const latestVersion = database.prepare('SELECT body FROM content_versions WHERE project_id=? ORDER BY version_number DESC LIMIT 1').get(input.projectId) as { body: string } | undefined;
-      const thesisFailure = coreThesisBoundaryFailure(database, input.projectId, latestVersion?.body ?? '');
-      if (thesisFailure) {
-        if (transaction) database.exec('ROLLBACK');
-        return failure(thesisFailure.reasonCode, thesisFailure.message);
-      }
     }
     if(input.topicId!==undefined&&input.topicId!==null&&!database.prepare("SELECT id FROM topics WHERE id=? AND status!='archived'").get(input.topicId)){
       if(transaction)database.exec('ROLLBACK');

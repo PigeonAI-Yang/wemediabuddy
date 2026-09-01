@@ -45,10 +45,11 @@ import { cancelManagerDailyIntelligence, readManagerProjection } from './manager
 import { createDataRootSelection } from './data-root-selection';
 import { ActiveWorkspaceRuntime, assertWorkspaceSwitchable, installActiveWorkspaceIpcGate, RUNTIME_MANAGING_IPC_CHANNELS, type WorkspaceRuntimeLease } from './workspace-runtime';
 import { initializeWorkspaceOrchestratorRuntime, submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
+import { wakeWorkspaceOrchestratorExecutor } from './workspace-orchestrator-executor.ts';
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readProjectInvestigation } from './project-investigation.ts';
 import { controlAuditMessage, dailyControlAuditEnabled } from './daily-control-policy.ts';
-import { readWorkspaceIntelligenceProfile } from './workspace-intelligence';
+import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
 import { DailyScanScheduler } from './daily-scan-scheduler';
 import { DailyOrchestrationScheduler } from './daily-orchestration-scheduler.ts';
 import { shanghaiDate } from './ferment';
@@ -389,6 +390,7 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
     await dispatchSchedulePublishedPublicationMetricJobs(runtime);
     const mcp = await startMcp(dataRoot.path, runtime.gate, { listWorkspaces, proposals: workspaceProposals, channelProposals, runtimeEpoch: runtime.identity.runtimeEpoch }, runtime);
     runtime.setMcp(mcp);
+    wakeWorkspaceOrchestratorExecutor(runtime);
     stopTopicReproposalScheduler?.(); stopTopicReproposalScheduler = await startTopicReproposalScheduler(runtime, (input) => submitWorkspaceOrchestratorIntent(runtime, input));
     stopResearchSuccessorScheduler?.(); stopResearchSuccessorScheduler = await startResearchSuccessorScheduler(runtime, ensureJobsSpawner({ getActiveRuntime: () => activeRuntime }), (input) => submitWorkspaceOrchestratorIntent(runtime, input));
     // WMB-5247：媒体治理自动调度（启动立即一轮 + 每 6h 一轮：staging 清理 + 30 天无引用派生缓存 GC）。
@@ -860,21 +862,27 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
     if (!businessDate) throw new Error('请选择今日情报日期。');
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
+    const mcp = currentMcp();
     if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
-    const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'today.agent-start-daily-intelligence',
-      businessDate,
-      requestId: randomUUID(),
-      action: 'full',
-      logicalInput: { businessDate, modules: input.modules ?? null },
-      payload: { businessDate, modules: input.modules ?? null },
-      rootMode: 'owner'
-    });
-    return {
-      ok: receipt.ok,
-      data: receipt,
-      error: receipt.ok ? null : { code: receipt.code ?? 'CUTOVER_REQUIRED', message: receipt.message ?? '今日情报意图未被 Actor 接受。' }
-    };
+    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
+    broadcastPiEvent({ type: 'starting' });
+    try {
+      const result = await withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
+        dataRootPath: dataRoot.path,
+        businessDate,
+        modules: input.modules,
+        mcpUrl: mcp.url,
+        xhsMcpUrl: currentXhs()?.getUrl() || '',
+        activeRuntime: runtime,
+        ...hooks
+      }), { roleId: 'planner' });
+      broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
+      return { ok: true, data: result, error: null };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      broadcastPiEvent({ type: 'failed', error: messageText });
+      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message: messageText } };
+    }
   });
   ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string; brief?: string; researchMode?: string; research_mode?: string }) => {
     const dataRoot = await loadSelectedDataRoot();
@@ -883,30 +891,20 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
     const mcp = currentMcp();
     if (!mcp) throw new Error('WMB MCP 尚未就绪。');
     if (!input.projectId) throw new Error('请先选择内容项目。');
-    const investigation = readProjectInvestigation(runtime.database, input.projectId);
-    const researchReady = Boolean(
-      investigation?.package
-      && investigation.direction
-      && ['ready_to_write', 'writing', 'completed'].includes(investigation.status)
-    );
-    const rawMode = (input as unknown as { researchMode?: string; research_mode?: string }).researchMode ?? (input as unknown as { researchMode?: string; research_mode?: string }).research_mode;
-    const briefVal = (input as unknown as { brief?: string }).brief;
-    const researchMode = typeof rawMode === 'string' ? rawMode : undefined;
     broadcastPiEvent({ type: 'starting' });
     try {
       const result = await withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startStudioDraft({
         dataRootPath: dataRoot.path,
         businessDate: input.businessDate,
         projectId: input.projectId,
-        brief: briefVal,
+        brief: input.brief,
         mcpUrl: mcp.url,
         xhsMcpUrl: currentXhs()?.getUrl() || '',
-        researchReady,
-        // @ts-ignore researchMode passthrough for WMB-5347 writer research mode (type pending update)
-        researchMode: researchMode as 'auto' | 'required' | 'prohibited' | undefined,
+        researchReady: true,
+        researchMode: 'prohibited',
         activeRuntime: runtime,
         ...hooks
-      }));
+      }), { roleId: 'writer' });
       broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
       return { ok: true, data: result, error: null };
     } catch (error) {

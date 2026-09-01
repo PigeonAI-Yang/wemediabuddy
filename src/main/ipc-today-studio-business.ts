@@ -21,6 +21,7 @@ import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runt
 import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { executeOwnerProjectionDecision, readOwnerProjectionDecisionBinding } from './workspace-orchestrator-owner-decision.ts';
+import { approvePlanItemAndCreateProject } from './plan-item-approval.ts';
 
 import { listCapabilityOverlays, setCapabilityOverlay } from './capability-overlays.ts';
 import { AGENT_CAPABILITIES, ROLE_CATALOG, isRoleId, type RoleId } from '../shared/agent-capabilities.ts';
@@ -634,28 +635,25 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     } satisfies SubmitWorkspaceOrchestratorIntentInput);
   });
 
-  ipcMain.handle('plan-item:approve', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }) => {
+  ipcMain.handle('plan-item:approve', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string }) => {
     const runtime = await requireBusinessRuntime(dependencies);
-    const identity = readPlanItemIntentIdentity(runtime.database, input.planItemId);
-    const binding = readOwnerProjectionDecisionBinding(runtime.database, runtime.identity.workspaceId, input.planItemId);
-    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
-    const payload = Object.freeze({ ...binding, expectedRevision: input.expectedRevision, decision: 'approve', approvedPlanItemIds: [identity.planItemId], ...(input.reason === undefined ? {} : { reason: input.reason }) });
-    const actorReceipt = await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.candidate-decision', businessDate: identity.businessDate, requestId,
-      action: 'approve_candidates', logicalInput: payload, payload, rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput);
-    if (!actorReceipt.ok) return actorReceipt;
-    const receipt = await dispatchBusinessCommand(runtime, {
-      command: 'plan_item.approve', requestId: `${requestId}:execute`, actor: ownerUiActor,
-      input: { ...binding, decision: 'approve' as const, expectedRevision: input.expectedRevision, requestId, reason: input.reason },
-      boundIdentity: { entityType: 'plan_item', entityId: input.planItemId }, entityType: 'plan_item',
-      execute: (database, value) => {
-        const data = executeOwnerProjectionDecision(database, value);
-        return { data, entityId: input.planItemId, beforeRevision: input.expectedRevision, readback: data };
+    return runtime.runActorControlPlane(() => {
+      runtime.database.exec('BEGIN IMMEDIATE');
+      try {
+        const result = approvePlanItemAndCreateProject(runtime.database, {
+          planItemId: input.planItemId,
+          expectedRevision: input.expectedRevision,
+          by: 'owner',
+          reason: input.reason
+        });
+        runtime.database.exec('COMMIT');
+        broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'plan_item.approve' });
+        return result;
+      } catch (error) {
+        runtime.database.exec('ROLLBACK');
+        throw error;
       }
     });
-    if (receipt.ok) broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'plan_item.approve' });
-    return receiptAsCommandResult(receipt);
   });
 
   ipcMain.handle('plan-item:reject', async (_event, input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }) => {
