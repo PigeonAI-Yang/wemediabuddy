@@ -58,6 +58,8 @@ test('WMB-5340 TodayView no longer references relocated components and single ov
   assert.doesNotMatch(todayView, /X 未接入|本次判断未包含 X|pool-absent-banner/, '渠道提示只归顶部状态组件，不得插入首条选题上方');
   const workflowCss = fs.readFileSync('J:/PigeonYang/WeMediaBuddy/src/renderer/styles-workflow-today.css', 'utf8');
   assert.doesNotMatch(workflowCss, /pool-absent-banner/, '删除废弃提示卡样式，避免再次占用内容首屏');
+  const layoutCss = fs.readFileSync('J:/PigeonYang/WeMediaBuddy/src/renderer/styles-workflow.css', 'utf8');
+  assert.doesNotMatch(layoutCss, /\.today-opps \.opp-list\s*\{[^}]*min-height/s, '次要选题容器必须按实际条数收缩，不能预留两张卡高度');
 });
 
 test('WMB-5340 responsive and accessible contract', () => {

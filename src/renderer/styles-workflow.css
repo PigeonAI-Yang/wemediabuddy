@@ -634,10 +634,9 @@ button.page-command-stat { cursor: pointer; }
   flex: 0 0 auto;
 }
 .today-opps .opp-list {
-  /* 只保最小高度；每张卡完整展示，列表往下长，整页滚 */
+  /* 高度只由实际卡片数量决定，避免不足两条时留下带边框的空白区。 */
   margin-top: 0;
   flex: 0 0 auto;
-  min-height: calc(110px * 2);
   height: auto;
   max-height: none;
   overflow: visible;
@@ -922,7 +921,6 @@ dl { margin: 0; }
     max-height: none;
   }
   .today-opps .opp-list {
-    min-height: calc(110px * 2);
     overflow: visible;
   }
   .today-command[data-mode="running"] .today-command-detail {
@@ -948,7 +946,6 @@ dl { margin: 0; }
     max-height: none;
   }
   .today-opps .opp-list {
-    min-height: calc(110px * 2);
     overflow: visible;
   }
   .today-rail {
