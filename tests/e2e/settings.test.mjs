@@ -292,8 +292,8 @@ export default [
         assert(await page.locator('select option[value="anthropic-messages"]').count() === 1, '应支持 Anthropic Messages');
         assert(await page.locator('select option[value="environment"]').count() === 1, '应支持环境变量凭证');
         assert(await page.locator('select option[value="command"]').count() === 1, '应支持命令凭证');
-        await page.locator('button', { hasText: '发现本机 Provider' }).click();
-        await page.waitForFunction(() => /发现 \d+ 个本机 Provider|没有发现/.test(document.querySelector('.pi-config-note')?.textContent ?? ''), null, { timeout: 15_000 });
+        await page.locator('button', { hasText: '查找本机配置' }).click();
+        await page.waitForFunction(() => /从本机配置文件找到 \d+ 项|没有找到/.test(document.querySelector('.settings-discovery-note')?.textContent ?? ''), null, { timeout: 15_000 });
       });
       await step(evidence, '不可达 provider 获取模型显示错误', async () => {
         const baseUrlInput = page.locator('.settings-form label', { hasText: 'Base URL' }).locator('input');

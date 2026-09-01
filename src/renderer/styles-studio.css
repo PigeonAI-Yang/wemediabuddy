@@ -608,6 +608,7 @@
 .settings-profile em .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .settings-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
 .settings-inline-actions .text-button { display: inline-flex; align-items: center; gap: 5px; grid-column: auto; justify-self: auto; padding: 7px 0; }
+.settings-discovery-note { margin: -4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .settings-action-disclosure { position: relative; }
 .settings-action-disclosure > summary { list-style: none; cursor: pointer; }
 .settings-action-disclosure > summary::-webkit-details-marker { display: none; }
@@ -711,6 +712,8 @@
 .model-picker input, .model-picker select { flex: 1; min-width: 0; }
 .model-picker select { border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface-raised); color: var(--ink); padding: 10px; }
 .model-picker button { flex: none; white-space: nowrap; }
+.settings-field-note { color: var(--success); font-size: 12px; font-weight: 500; line-height: 1.45; }
+.settings-field-note.error { color: var(--danger); }
 .pi-config-note { margin: 0; }
 .settings-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .settings-profile em.configured { color: var(--success); }

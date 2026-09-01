@@ -185,6 +185,9 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [discoveredProviders, setDiscoveredProviders] = useState<Awaited<ReturnType<typeof window.wmb.discoverPiProviders>>>([]);
   const [discoveringProviders, setDiscoveringProviders] = useState(false);
   const [probingProvider, setProbingProvider] = useState(false);
+  const [providerDiscoveryNote, setProviderDiscoveryNote] = useState('');
+  const [modelFetchNote, setModelFetchNote] = useState('');
+  const [modelFetchFailed, setModelFetchFailed] = useState(false);
   const [roleModelCatalog, setRoleModelCatalog] = useState<Record<string, PiModelOption[]>>({});
   const [roleModelFetchErrors, setRoleModelFetchErrors] = useState<Record<string, string>>({});
   const roleModelFetchCache = useRef(new Map<string, RoleModelFetchRecord>());
@@ -316,7 +319,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   };
   const fetchModels = async () => {
     setLoadingPiModels(true);
-    setPiConfigNote('');
+    setModelFetchFailed(false);
+    setModelFetchNote('正在连接 Provider 并读取模型列表…');
     try {
       const models = await window.wmb.listPiModels({ id: piProfileId || undefined, baseUrl: piBaseUrl, api: piApi, authMode: piAuthMode, credentialSource: providerCredentialSource(), apiKey: piApiKey || undefined });
       setPiModels(models);
@@ -324,23 +328,31 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
       setPiModel(selected.id);
       setPiContextWindow(selected.contextWindow ? String(selected.contextWindow) : '');
       setPiMaxTokens(selected.maxTokens ? String(selected.maxTokens) : '');
-      setPiConfigNote(`已获取 ${models.length} 个模型`);
+      setModelFetchNote(`已从 Provider 获取 ${models.length} 个模型。`);
     } catch (error) {
       setPiModels([]);
-      setPiConfigNote(`${error instanceof Error ? error.message : '获取模型失败'} 仍可手动填写模型。`);
+      setModelFetchFailed(true);
+      setModelFetchNote(`${error instanceof Error ? error.message : '获取模型失败'} 仍可手动填写模型。`);
     } finally { setLoadingPiModels(false); }
   };
   const discoverProviders = async () => {
     setDiscoveringProviders(true);
-    try { const found = await window.wmb.discoverPiProviders(); setDiscoveredProviders(found); setPiConfigNote(found.length ? `发现 ${found.length} 个本机 Provider。` : '没有发现可自动接入的本机 Provider。'); }
-    catch (error) { setPiConfigNote(error instanceof Error ? error.message : '发现 Provider 失败'); }
+    setProviderDiscoveryNote('正在读取本机 Provider 配置…');
+    try {
+      const found = await window.wmb.discoverPiProviders();
+      setDiscoveredProviders(found);
+      setProviderDiscoveryNote(found.length ? `从本机配置文件找到 ${found.length} 项，尚未验证连接。` : '没有找到可自动载入的本机 Provider 配置。');
+    } catch (error) { setProviderDiscoveryNote(error instanceof Error ? error.message : '读取本机 Provider 配置失败'); }
     finally { setDiscoveringProviders(false); }
   };
   const applyDiscoveredProvider = (candidate: Awaited<ReturnType<typeof window.wmb.discoverPiProviders>>[number]) => {
     setPiProfileId(''); setPiName(candidate.name); setPiBaseUrl(candidate.baseUrl); setPiApi(candidate.api); setPiAuthMode(candidate.authMode);
     setPiCredentialKind(candidate.credentialSource.kind); setPiCredentialVariable(candidate.credentialSource.kind === 'environment' ? candidate.credentialSource.variable : '');
-    setPiCredentialCommand(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.executable : ''); setPiCredentialArgs(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.args.join(' ') : '');
+    setPiCredentialCommand(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.executable : ''); setPiCredentialArgs(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.args.join('\n') : '');
     setPiModel(candidate.suggestedModel ?? ''); setPiText(candidate.capabilities.text); setPiVision(candidate.capabilities.vision); setPiNativeSearch(candidate.capabilities.nativeSearch); setPiImageGeneration(candidate.capabilities.imageGeneration); setPiJsonOutput(candidate.capabilities.jsonOutput); setPiStreaming(candidate.capabilities.streaming); setPiModels([]); setPiApiKey('');
+    setProviderDiscoveryNote(`已载入 ${candidate.name} 的本机配置，尚未保存。`);
+    setModelFetchFailed(false);
+    setModelFetchNote('尚未验证连接；点击“获取模型”会实际请求 Provider。');
   };
   const probeProvider = async () => {
     setProbingProvider(true);
@@ -477,7 +489,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             </div>
             <div className="settings-inline-actions settings-preset-actions">
               <button type="button" className="text-button settings-icon-text-button" onClick={() => selectPiProfile('')}><SettingsIcon name="plus" />添加模型预设</button>
-              <button type="button" className="secondary-button" disabled={discoveringProviders} onClick={() => void discoverProviders()}>{discoveringProviders ? '发现中…' : '发现本机 Provider'}</button>
+              <button type="button" className="text-button settings-icon-text-button" disabled={discoveringProviders} onClick={() => void discoverProviders()}><SettingsIcon name="ai" />{discoveringProviders ? '查找中…' : '查找本机配置'}</button>
               <details className="settings-action-disclosure">
                 <summary className="text-button settings-icon-text-button"><SettingsIcon name="plus" />更多预设模板</summary>
                 <div className="settings-action-disclosure-menu">
@@ -489,7 +501,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                 </div>
               </details>
             </div>
-            {discoveredProviders.length > 0 && <div className="settings-profile-list" aria-label="发现的本机 Provider">{discoveredProviders.map((candidate) => <button type="button" key={`${candidate.source}-${candidate.baseUrl}`} className="settings-profile" onClick={() => applyDiscoveredProvider(candidate)}><span className="settings-provider-mark"><SettingsIcon name="ai" /></span><span><strong>{candidate.name}</strong><small>{candidate.baseUrl} · 点击载入，保存后才会启用</small></span><em>已发现</em></button>)}</div>}
+            {providerDiscoveryNote && <p className="settings-discovery-note" aria-live="polite">{providerDiscoveryNote}</p>}
+            {discoveredProviders.length > 0 && <div className="settings-profile-list" aria-label="找到的本机 Provider 配置">{discoveredProviders.map((candidate) => <button type="button" key={`${candidate.source}-${candidate.baseUrl}`} className="settings-profile" onClick={() => applyDiscoveredProvider(candidate)}><span className="settings-provider-mark"><SettingsIcon name="ai" /></span><span><strong>{candidate.name}</strong><small>{candidate.baseUrl} · 从本机配置读取，点击载入后再验证连接</small></span><em className="unconfigured">待验证</em></button>)}</div>}
             <div className="settings-profile-editor" aria-labelledby="profile-editor-title">
               <div className="settings-section-heading"><h3 id="profile-editor-title">{piName || '新模型预设'}</h3><p>先完成 Provider 预设，再在下方角色分配中引用它。这里仅修改接口、模型和密钥。</p></div>
             <div className="settings-form">
@@ -507,6 +520,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                   : <input value={piModel} onChange={(event) => { setPiModel(event.target.value); setPiContextWindow(''); setPiMaxTokens(''); }} placeholder="获取后选择，或手动填写" />}
                 <button type="button" className="secondary-button" disabled={loadingPiModels || !piBaseUrl.trim()} onClick={() => void fetchModels()}>{loadingPiModels ? '获取中…' : '获取模型'}</button>
               </div>
+              {modelFetchNote && <span className={`settings-field-note${modelFetchFailed ? ' error' : ''}`} role="status">{modelFetchNote}</span>}
             </label>
             <label><span>思考等级</span><select value={piThinking ?? 'off'} onChange={(event) => setPiThinking(event.target.value as WmbSettingsSnapshot['pi']['profiles'][number]['thinking'])}><option value="off">关闭思考</option><option value="minimal">最低</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option><option value="max">最大</option></select></label>
             <label><span>上下文长度（tokens）</span><input type="number" min="1" step="1" value={piContextWindow} onChange={(event) => setPiContextWindow(event.target.value)} placeholder="由模型元数据决定" /></label>
