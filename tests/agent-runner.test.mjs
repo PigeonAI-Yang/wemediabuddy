@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { buildDailyOpportunityPrompt, cancelDailyIntelligenceIfRequested, draftPrompt } from '../src/main/agent-runner.ts';
+import { buildDailyOpportunityPrompt, buildPlannerSourceBoundary, cancelDailyIntelligenceIfRequested, draftPrompt, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
 import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
 import { createTopic, saveCurrentPlan } from '../src/main/planning.ts';
+import { applyLaneGateBatch } from '../src/main/lane-gate.ts';
 import { piTaskAuthorityPrompt } from '../src/main/pi-operator-skill.ts';
 import { upsertSource } from '../src/main/sources.ts';
+import { getToday } from '../src/main/workbench.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 import { approvePlanItems, editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
@@ -62,16 +64,16 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.doesNotMatch(prompt, /sources_request_id=/);
     assert.doesNotMatch(prompt, /官方产品与模型发布/);
     assert.doesNotMatch(prompt, /共享渠道模块完成真实扫描/);
-
     const withWatermark = { ...started.data, checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } };
     const scopedPrompt = buildDailyOpportunityPrompt(database, withWatermark, agentRequestId(withWatermark.id, 'plan'));
-    assert.match(scopedPrompt, /水印 2026-08-05T02:00:00.000Z 之后/);
+    assert.match(scopedPrompt, /最终方案是该业务日期的完整当前方案/);
+    assert.match(scopedPrompt, /水印 2026-08-02T15:59:59.999Z 之后/, 'planner scope starts at the business-day boundary, not the incremental judge watermark');
 
     const fresh = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-04' });
     assert.equal(fresh.ok, true);
     reportAgentTaskProgress(database, withWatermark.id, { checkpoint: { judgeWatermark: '2026-08-05T02:00:00.000Z' } });
     const inheritedPrompt = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
-    assert.match(inheritedPrompt, /水印 2026-08-05T02:00:00.000Z 之后/, 'fresh task inherits the latest watermark across tasks');
+    assert.match(inheritedPrompt, /水印 2026-08-03T15:59:59.999Z 之后/, 'fresh task plans across its full business day even when incremental judgment inherits a later watermark');
 
     const withSearch = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'), { nativeSearch: true });
     assert.match(withSearch, /模型自带的联网搜索补充证据/);
@@ -95,6 +97,64 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.equal(cancelled?.errorCode, 'CANCELLED');
     assert.equal(getAgentTask(database, started.data.id)?.status, 'cancelled');
   } finally {
+    database.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('planner sees every effective source from the business day after an incremental watermark', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-agent-runner-day-scope-'));
+  const database = migrateDatabase(path.join(root, 'wmb.db'));
+  try {
+    ensureOfficialWorkspaceProfile(database, 'official.ai');
+    const earlier = upsertSource(database, { originalUrl: 'https://example.com/earlier', title: '今日较早但仍应参与最终策划' });
+    const latest = upsertSource(database, { originalUrl: 'https://example.com/latest', title: '水位线后的新增资料' });
+    database.prepare('UPDATE source_items SET collected_at=? WHERE id=?').run('2026-08-05T01:00:00.000Z', earlier.id);
+    database.prepare('UPDATE source_items SET collected_at=? WHERE id=?').run('2026-08-05T05:00:00.000Z', latest.id);
+    applyLaneGateBatch(database, {
+      workspaceLane: 'wemedia-intelligence-engine', judgedBy: 'agent', judgedAt: '2026-08-05T02:00:00.000Z',
+      judgments: [{ sourceId: earlier.id, decision: 'relevant', reasonCode: 'lane_relevant', reason: '属于今日有效资料', expectedRevision: earlier.revision }]
+    });
+    const started = startAgentTask(database, { intent: 'daily_judge', businessDate: '2026-08-05' });
+    assert.equal(started.ok, true);
+    const task = { ...started.data, checkpoint: { judgeWatermark: '2026-08-05T04:00:00.000Z' } };
+
+    const prompt = buildDailyOpportunityPrompt(database, task, agentRequestId(task.id, 'plan'));
+    assert.match(prompt, /今日较早但仍应参与最终策划/);
+    assert.match(prompt, /水位线后的新增资料/);
+
+    const boundary = buildPlannerSourceBoundary(database, task, new Set([latest.id]));
+    assert.deepEqual(boundary.candidateIds, new Set([earlier.id, latest.id]));
+    assert.deepEqual(boundary.allowedIds, new Set([earlier.id, latest.id]));
+    const makeItem = (sourceId, title, pointOfView, priority) => ({
+      title: `${title}：完整方案`, priority, whyNow: '今日发生且仍在有效窗口', timeliness: '热点 2-3 天',
+      targetAudience: '正在推进真实 AI 项目的创作者', angle: `从第 ${priority + 1} 个独立角度分析`, pointOfView,
+      platforms: ['x'], formats: ['text'], titleGuidance: '直接点出冲突', openingGuidance: '首段兑现冲突',
+      structureGuidance: '方向判断：为何现在→强观点→来源', effortEstimate: '约 40 分钟', sourceIds: [sourceId],
+      availableMaterials: [], missingMaterials: [], editorialDecision: editorialDecision(pointOfView), scoreReasons: scoredReasons(80 - priority)
+    });
+    const output = {
+      planDate: task.businessDate,
+      summary: '今日全部有效资料形成的完整方案',
+      items: [
+        makeItem(earlier.id, '今日较早但仍应参与最终策划', '较早资料仍然构成今日重要机会', 0),
+        makeItem(latest.id, '水位线后的新增资料', '新增资料构成另一个独立机会', 1)
+      ],
+      sourceDecisions: [
+        { sourceId: earlier.id, decision: 'selected', reasonCode: 'selected_full_day', reason: '较早资料仍在今日有效范围内' },
+        { sourceId: latest.id, decision: 'selected', reasonCode: 'selected_increment', reason: '新增资料达到选题标准' }
+      ]
+    };
+    const sessionFile = path.join(root, 'planner-session.jsonl');
+    await writeFile(sessionFile, `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${JSON.stringify(output)}\n\`\`\`` }] } })}\n`, 'utf8');
+    const saved = await savePlanFromSynthesisOutput(database, task, sessionFile, agentRequestId(task.id, 'plan'), undefined, undefined, 0, boundary.allowedIds, boundary.candidateIds);
+    assert.equal(saved.itemCount, 2);
+    assert.deepEqual(getToday(database, task.businessDate).plan.items.map((item) => item.title), [
+      '今日较早但仍应参与最终策划：完整方案',
+      '水位线后的新增资料：完整方案'
+    ]);
+  } finally {
+
     database.close();
     await rm(root, { recursive: true, force: true });
   }

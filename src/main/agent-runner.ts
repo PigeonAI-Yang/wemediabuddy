@@ -16,6 +16,7 @@ import { assembleEditorialBrief, renderEditorialBrief } from './editorial-brief.
 import { refreshWorkCarry } from './ferment.ts';
 import {
   applyLaneGateBatch,
+  getLatestLaneJudgment,
   isTier0AutoRelevantSource,
   LANE_REASON_CODES,
   LANE_TIER0_REASON_CODE,
@@ -283,6 +284,31 @@ function planDispatchRequestId(baseRequestId: string, input: unknown): string {
   const hash = createHash('sha256').update(stableJsonForPlan(input)).digest('hex').slice(0, 12);
   return `${baseRequestId}:${hash}`;
 }
+function readPersistedTaskPlanCount(
+  database: Parameters<typeof assembleEditorialBrief>[0],
+  taskId: string,
+  planDate: string
+): number | null {
+  const receipt = database.prepare(`SELECT result_json
+    FROM command_receipts
+    WHERE task_id=? AND command='plans.save' AND status='ok' AND result_json IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1`).get(taskId) as { result_json: string } | undefined;
+  if (!receipt) return null;
+  try {
+    const result = JSON.parse(receipt.result_json) as { id?: unknown };
+    if (typeof result.id !== 'string' || !result.id) return null;
+    const row = database.prepare(`SELECT COUNT(pi.id) AS itemCount
+      FROM plans p
+      LEFT JOIN plan_items pi ON pi.plan_id=p.id
+      WHERE p.id=? AND p.plan_date=?
+      GROUP BY p.id`).get(result.id, planDate) as { itemCount: number } | undefined;
+    return row ? Number(row.itemCount) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function savePlanFromSynthesisOutput(
   dependency: AgentTaskMutationDependency,
   task: AgentTask,
@@ -300,9 +326,14 @@ export async function savePlanFromSynthesisOutput(
   const items = allowedSourceIds
     ? plan.items.filter((item) => item.sourceIds.every((id) => allowedSourceIds.has(id)))
     : plan.items;
+  const database = 'database' in dependency ? dependency.database : dependency;
+  const persistedItemCount = readPersistedTaskPlanCount(database, task.id, task.businessDate);
+  if (persistedItemCount !== null) {
+    return { itemCount: persistedItemCount, filteredCount: plan.items.length - items.length };
+  }
   // 空方案不得覆盖同日已有非空 current plan（弱模型漏输出 / 全被赛道门过滤时保底）。
   if (items.length === 0) {
-    const db = 'database' in dependency ? dependency.database : dependency;
+    const db = database;
     const existing = getToday(db, task.businessDate).plan;
     if (existing && existing.items.length > 0) {
       return { itemCount: existing.items.length, filteredCount: plan.items.length };
@@ -312,7 +343,7 @@ export async function savePlanFromSynthesisOutput(
   let sourceDecisions = plan.sourceDecisions ?? [];
   if (candidateSourceIds) {
     const ids = [...candidateSourceIds].sort();
-    const db = 'database' in dependency ? dependency.database : dependency;
+    const db = database;
     const rows = ids.length ? db.prepare(`SELECT id,revision FROM source_items WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids) as Array<{ id: string; revision: number }> : [];
     const revisions = new Map(rows.map((row) => [row.id, row.revision]));
     candidateSources = ids.map((sourceId) => {
@@ -504,6 +535,7 @@ function dailyPrompt(task: AgentTask, planRequestId: string, briefText: string, 
     '',
     '判断要求：',
     '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。',
+    '1.1 最终方案是该业务日期的完整当前方案，不是最后一次增量的临时结果。必须复核简报中当天全部有效资料，并保留仍成立的较早机会；不得因为 judgeWatermark 推进而只提交最后一批新增资料。',
     '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。',
     '2.1 产品最高目标：在真实性边界内最大化传播价值。真实性仅作门槛，是准入硬门，不计入传播分；认知价值与实用价值都可入选，账号适配不得压过重大产业/社会意义。传播评分使用 propagation_v2（总分100）：reality_change_significance 25（现实发生了多大变化、旧认知是否失效）、tension_curiosity_gap 20（冲突/反差/认知缺口）、audience_stakes 20（对具体读者的利益、身份或判断影响）、why_now_window 15（窗口与错过成本）、one_sentence_relayability 15（一句话是否值得转述）、account_fit 5（账号适配）。每项必须给 criterion/weight/score/reason，总分严格等于六项和。',
     '2.2 中心主张竞争（硬门）：每个机会必须先生成 event（表面事件）、user（用户影响）、industry_or_society（产业/社会二阶意义）三个语义不同的候选主张，不得只换标题措辞；逐条记录 claimType=fact|inference|opinion、evidenceStatus=supported|research_required、可写证据边界、传播分与比较理由。winner 必须是传播分最高且 evidenceStatus=supported 的候选，pointOfView 必须与 winnerThesis 一致。若最高价值候选仍需研究，保留它并将本项保持未就绪/进入补料，不得退而选择安全小题。',
@@ -583,30 +615,45 @@ export function buildDailyGateRun(database: Parameters<typeof assembleEditorialB
   return { lane: profile.intelligencePackId, autoRelevant, pending };
 }
 
+function assembleDailyPlannerBrief(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask) {
+  const dayStartMs = Date.parse(`${task.businessDate}T00:00:00.000+08:00`);
+  const since = new Date(dayStartMs - 1).toISOString();
+  const until = new Date(Date.parse(`${task.businessDate}T23:59:59.999+08:00`)).toISOString();
+  const row = database.prepare(`SELECT COUNT(*) AS count FROM source_items
+    WHERE julianday(collected_at) > julianday(?) AND julianday(collected_at) <= julianday(?) AND management_status != 'archived'`).get(since, until) as { count: number };
+  return assembleEditorialBrief(database, {
+    now: new Date(),
+    businessDate: task.businessDate,
+    watermark: since,
+    until,
+    sourceLimit: Math.max(1, Number(row.count))
+  });
+}
+
+
 export function buildPlannerSourceBoundary(
   database: Parameters<typeof assembleEditorialBrief>[0],
   task: AgentTask,
   relevantIds?: ReadonlySet<string>
 ): Readonly<{ candidateIds: ReadonlySet<string>; allowedIds: ReadonlySet<string> }> {
-  const brief = assembleEditorialBrief(database, {
-    now: new Date(), businessDate: task.businessDate, watermark: resolveJudgeWatermark(database, task)
-  });
-  const incrementIds = brief.increment.sources.map((source) => source.id);
+  const brief = assembleDailyPlannerBrief(database, task);
+  const dailyIds = brief.increment.sources.map((source) => source.id);
   const reactivatedIds = brief.continuity.reactivated.flatMap((pack) => pack.sources.map((source) => source.id));
-  const candidateIds = new Set([...incrementIds, ...reactivatedIds]);
+  const candidateIds = new Set([...dailyIds, ...reactivatedIds]);
+  const previouslyRelevantIds = dailyIds.filter((sourceId) => {
+    const source = getSource(database, sourceId);
+    const judgment = getLatestLaneJudgment(database, sourceId);
+    return Boolean(source && judgment?.decision === 'relevant' && judgment.sourceRevision === source.revision);
+  });
+  const eligibleReactivatedIds = reactivatedIds.filter((sourceId) => getLatestLaneJudgment(database, sourceId)?.decision !== 'irrelevant');
   const allowedIds = relevantIds
-    ? new Set([...relevantIds, ...reactivatedIds])
+    ? new Set([...previouslyRelevantIds, ...relevantIds, ...eligibleReactivatedIds])
     : new Set(candidateIds);
   return Object.freeze({ candidateIds, allowedIds });
 }
 
 export function buildDailyOpportunityPrompt(database: Parameters<typeof assembleEditorialBrief>[0], task: AgentTask, planRequestId: string, options: { nativeSearch?: boolean; gateRun?: DailyGateRun } = {}): string {
-  const watermark = resolveJudgeWatermark(database, task);
-  const brief = assembleEditorialBrief(database, {
-    now: new Date(),
-    businessDate: task.businessDate,
-    watermark
-  });
+  const brief = assembleDailyPlannerBrief(database, task);
   const gateRun = options.gateRun ?? buildDailyGateRun(database, task);
   const gate = gateRun.lane
     ? {
@@ -638,14 +685,18 @@ function judgingFingerprint(source: { title?: unknown; canonicalUrl?: unknown; c
   return createHash('sha256').update(`${title}|${url}|${feed}|${summary}`).digest('hex').slice(0, 12);
 }
 
-function gateJudgmentInput(candidate: LaneGateCandidate, decision: 'relevant' | 'irrelevant', reasonCode: LaneReasonCode, reason?: string) {
-  return {
-    sourceId: candidate.sourceId,
-    decision,
-    reasonCode,
-    reason,
-    expectedRevision: candidate.revision
-  };
+function gateJudgmentInput(
+  database: Parameters<typeof assembleEditorialBrief>[0],
+  candidate: LaneGateCandidate,
+  decision: 'relevant' | 'irrelevant',
+  reasonCode: LaneReasonCode,
+  reason?: string
+) {
+  const current = getSource(database, candidate.sourceId);
+  const expectedRevision = current && judgingFingerprint(current) === judgingFingerprint(candidate)
+    ? current.revision
+    : candidate.revision;
+  return { sourceId: candidate.sourceId, decision, reasonCode, reason, expectedRevision };
 }
 async function writeLaneGateBatch(
   dependency: AgentTaskMutationDependency,
@@ -700,11 +751,12 @@ export async function applyDailyLaneGate(
   workerLeaseId?: string
 ): Promise<DailyLaneGateApplied> {
   if (gateRun.lane === null) return { relevantIds: new Set<string>(), archivedCount: 0, unresolved: false, unresolvedIds: new Set<string>() };
+  const database = 'database' in dependency ? dependency.database : dependency;
   const autoRelevantIds = gateRun.autoRelevant.map((candidate) => candidate.sourceId);
   if (gateRun.pending.length === 0) {
     const tier0 = await writeLaneGateBatch(dependency, task, {
       workspaceLane: gateRun.lane, judgedBy: 'system', judgedAt,
-      judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(candidate, 'relevant', LANE_TIER0_REASON_CODE))
+      judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(database, candidate, 'relevant', LANE_TIER0_REASON_CODE))
     }, `${planRequestId}:gate-tier0`, workerLeaseId);
     return { relevantIds: new Set(autoRelevantIds), archivedCount: 0, unresolved: tier0.unresolved, unresolvedIds: new Set(tier0.unresolvedIds) };
   }
@@ -730,11 +782,11 @@ export async function applyDailyLaneGate(
     const relevant = entry.relevant;
     if (relevant) relevantIds.add(entry.sourceId);
     else archivedCount += 1;
-    return gateJudgmentInput(candidate, relevant ? 'relevant' : 'irrelevant', (entry.reasonCode ?? 'lane_relevant') as LaneReasonCode, entry.reason);
+    return gateJudgmentInput(database, candidate, relevant ? 'relevant' : 'irrelevant', (entry.reasonCode ?? 'lane_relevant') as LaneReasonCode, entry.reason);
   });
   const tier0 = await writeLaneGateBatch(dependency, task, {
     workspaceLane: gateRun.lane, judgedBy: 'system', judgedAt,
-    judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(candidate, 'relevant', LANE_TIER0_REASON_CODE))
+    judgments: gateRun.autoRelevant.map((candidate) => gateJudgmentInput(database, candidate, 'relevant', LANE_TIER0_REASON_CODE))
   }, `${planRequestId}:gate-tier0`, workerLeaseId);
   const tier1 = await writeLaneGateBatch(dependency, task, {
     workspaceLane: gateRun.lane, judgedBy: 'agent', judgedAt,
