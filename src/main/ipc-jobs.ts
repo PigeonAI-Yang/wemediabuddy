@@ -9,8 +9,6 @@ import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 import { DEFAULT_MAX_WORKERS } from './job-pool.ts';
 import { createGenericEmployeeRunner } from './generic-employee-runner.ts';
 import { parseRoleJobRequest, type RoleJobReportV1 } from './role-job-registry.ts';
-import { shanghaiDate } from './ferment.ts';
-import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import { notifyDeskJobEvent } from './manager-job-notify.ts';
 import { broadcastDataChanged } from './data-changed.ts';
 import type { McpRuntime } from './mcp.ts';
@@ -19,28 +17,6 @@ import { handleResearchSuccessorJobEvent } from './research-successor.ts';
 import { buildInvestigationSupervisorReviewPrompt, handleInvestigationJobEvent } from './project-investigation.ts';
 import { runDockManagerPrompt } from './ipc-pi-dock.ts';
 
-type JobSpawnProducerId = 'ui.jobs-spawn';
-
-async function submitRoleJobIntent(runtime: ActiveWorkspaceRuntime, input: unknown, producerId: JobSpawnProducerId) {
-  const request = parseRoleJobRequest(input);
-  const requestedBusinessDate = 'businessDate' in request ? request.businessDate : null;
-  const businessDate = typeof requestedBusinessDate === 'string' && requestedBusinessDate.length > 0
-    ? requestedBusinessDate
-    : shanghaiDate();
-  const payloadSource = 'businessDate' in request
-    ? { ...request, businessDate }
-    : request;
-  const payload = Object.freeze(Object.fromEntries(Object.entries(payloadSource).filter(([, value]) => value !== undefined)));
-  return submitWorkspaceOrchestratorIntent(runtime, {
-    producerId,
-    businessDate,
-    requestId: randomUUID(),
-    action: 'stage_d',
-    logicalInput: payload,
-    payload,
-    rootMode: 'owner'
-  });
-}
 
 export type JobsIpcDependencies = {
   getActiveRuntime: () => ActiveWorkspaceRuntime | null;
@@ -141,10 +117,9 @@ export function ensureJobsSpawner(deps: JobsIpcDependencies) {
 }
 
 export function registerJobsIpc(deps: JobsIpcDependencies): void {
-  ipcMain.handle('jobs:spawn', async (_event, input: unknown) => {
-    const runtime = deps.getActiveRuntime();
-    if (!runtime) throw new Error('当前工作空间运行时不可用。');
-    return submitRoleJobIntent(runtime, input, 'ui.jobs-spawn');
+  ipcMain.handle('jobs:spawn', (_event, input: unknown) => {
+    const spawner = ensureJobsSpawner(deps);
+    return spawner.spawn(parseRoleJobRequest(input));
   });
 
   ipcMain.handle('jobs:list', () => {

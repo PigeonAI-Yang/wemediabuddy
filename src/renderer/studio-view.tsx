@@ -39,7 +39,6 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
   aiSourcePresentation: boolean;
 }): React.JSX.Element {
   const [projects, setProjects] = useState<ContentProjectSummary[]>([]); const [topics,setTopics]=useState<any[]>([]);
-  const [listFocusId, setListFocusId] = useState<string | null>(null);
   const [statusSummary, setStatusSummary] = useState<ContentProjectStatusSummary | null>(null);
   const [selected, setSelected] = useState<ContentProjectDetail | null>(null); const [queryDraft, setQueryDraft] = useState('');
   const [query, setQuery] = useState(''); const [status, setStatus] = useState<ContentProjectStatus | undefined>();
@@ -269,23 +268,8 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
       });
       return;
     }
-    if (listFocusId) {
-      const project = projects.find((item) => item.id === listFocusId);
-      if (project) {
-        onFocusChange({
-          type: 'project',
-          id: project.id,
-          title: project.title,
-          summary: `${project.archivedAt ? '已归档' : project.status} · ${project.versionCount} 版 · 列表焦点（未打开编辑器）`,
-          bodyStatus: 'none',
-          bodyExcerpt: null,
-          bodyChars: 0
-        });
-        return;
-      }
-    }
     onFocusChange(null);
-  }, [selected?.id, selected?.title, selected?.status, selected?.revisions[0]?.id, listFocusId, projects, onFocusChange, editorBody, editorTitle, dirty, annotationScopeKeyValue, openAnnotationRows]);
+  }, [selected?.id, selected?.title, selected?.status, selected?.revisions[0]?.id, onFocusChange, editorBody, editorTitle, dirty, annotationScopeKeyValue, openAnnotationRows]);
   useEffect(() => {
     setPlatformSelections({});
     setPlatformDrafts({});
@@ -915,7 +899,7 @@ export function LongTermStudioView({ openPublish, selectedId, onSelect, onContex
     <input ref={importInput} className="studio-import-input" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProject(file); }}/>
     <input ref={imageInput} className="studio-import-input" type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) void insertImageFile(file); }}/>
     <StudioLibraryHeader summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} creating={creating} onCreate={() => setCreating(true)}/>
-    <StudioLibraryView summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} creating={creating} setCreating={setCreating} newTitle={newTitle} setNewTitle={setNewTitle} createProject={createProject} busy={busy} queryDraft={queryDraft} setQueryDraft={setQueryDraft} order={order} setOrder={setOrder} platform={platform} setPlatform={setPlatform} enabledPlatforms={enabledPlatforms} listFocusId={listFocusId} setListFocusId={setListFocusId} onSelect={onSelect} archiveRow={archiveRow} deleteRow={deleteRow} loading={loading} offset={offset} setOffset={setOffset} />
+    <StudioLibraryView summary={statusSummary} projects={projects} hasMore={hasMore} status={status} archived={archived} setStatus={setStatus} setArchived={setArchived} creating={creating} setCreating={setCreating} newTitle={newTitle} setNewTitle={setNewTitle} createProject={createProject} busy={busy} queryDraft={queryDraft} setQueryDraft={setQueryDraft} order={order} setOrder={setOrder} platform={platform} setPlatform={setPlatform} enabledPlatforms={enabledPlatforms} onSelect={onSelect} archiveRow={archiveRow} deleteRow={deleteRow} loading={loading} offset={offset} setOffset={setOffset} />
   </section>;
   }
 
