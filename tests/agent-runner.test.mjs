@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { buildDailyOpportunityPrompt, buildPlannerSourceBoundary, cancelDailyIntelligenceIfRequested, draftPrompt, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
+import { buildDailyOpportunityPrompt, buildPlannerSourceBoundary, cancelDailyIntelligenceIfRequested, constrainPlanItemToAllowedSources, draftPrompt, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
 import { agentRequestId, getAgentTask, reportAgentTaskProgress, requestAgentTaskControl, startAgentTask } from '../src/main/agent-tasks.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { updateKnowledgeSource } from '../src/main/knowledge.ts';
@@ -49,6 +49,15 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     assert.match(prompt, /内部生成至少三个不同切口的候选/);
     assert.match(prompt, /不得使用「普通人」等万能受众标签/);
     for (const dimension of ['时代认知', '个人方向', 'AI 实践', '公开验证', '产品化']) assert.match(prompt, new RegExp(dimension), `missing dimension ${dimension}`);
+    assert.match(prompt, /可执行性、容易做实验、容易产出回执都不是 propagation_v2 的独立加分项/);
+    assert.match(prompt, /不得仅因个人测试更容易落地/);
+    assert.match(prompt, /个人实测可作为正文证据、行动建议或后续选题/);
+    assert.match(prompt, /wiki_page:<pageId>:<currentVersionId>/);
+    assert.match(prompt, /knowledge_note:<noteId>:<versionId>/);
+    assert.match(prompt, /严禁只复制 wver-\* \/ ver-\* 裸版本 ID/);
+    assert.match(prompt, /wmb_get_knowledge_context 返回的 sources\/evidence ID 只服务知识关联/);
+    assert.match(prompt, /JSON\.parse 直接解析/);
+    assert.match(prompt, /单行紧凑 JSON/);
     for (const column of ['迷茫诊断', '经典方法', 'AI 实战', '项目日志', '方向判断', '商业化实验']) assert.match(prompt, new RegExp(column), `missing column ${column}`);
     assert.doesNotMatch(prompt, /内容→信任→付费/);
     assert.doesNotMatch(prompt, /认知\/技能\/表达/);
@@ -86,7 +95,7 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     const gated = buildDailyOpportunityPrompt(database, fresh.data, agentRequestId(fresh.data.id, 'plan'));
     assert.match(gated, /第一关：赛道相关性判定/);
     assert.match(gated, /五维=时代认知\/个人方向\/AI 实践\/公开验证\/产品化/);
-    assert.match(gated, /纯模型公告、对目标读者没有可执行意义的参数\/价格新闻/);
+    assert.match(gated, /纯模型公告若既不改变现实判断、又没有实际使用价值才算无关/);
     assert.doesNotMatch(gated, /宏大行业综述/);
     assert.doesNotMatch(gated, /躺赚毒鸡汤/);
 
@@ -100,6 +109,27 @@ test('daily synthesis keeps watching and fermenting context while a cancel reque
     database.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('planner keeps a supported opportunity when one cited source falls outside the frozen boundary', () => {
+  const item = {
+    title: '重大变化仍有有效证据', priority: 0, whyNow: '今日发生', timeliness: '热点 2-3 天',
+    targetAudience: '需要重新判断模型路线的团队', angle: '从产业变化解释用户决策',
+    pointOfView: '有效来源仍足以支持中心主张', platforms: ['x'], formats: ['text'],
+    titleGuidance: '点明冲突', openingGuidance: '首段兑现', structureGuidance: '方向判断', effortEstimate: '40m',
+    sourceIds: ['allowed-source', 'stale-source'], editorialDecision: editorialDecision('有效来源仍足以支持中心主张'),
+    scoreReasons: {
+      ...scoredReasons(80),
+      truthGate: {
+        status: 'passed', reason: '事实有来源',
+        claims: [{ text: '核心变化', type: 'fact', status: 'supported', sourceIds: ['allowed-source', 'stale-source'] }]
+      }
+    }
+  };
+  const constrained = constrainPlanItemToAllowedSources(item, new Set(['allowed-source']));
+  assert.ok(constrained);
+  assert.deepEqual(constrained.sourceIds, ['allowed-source']);
+  assert.deepEqual(constrained.scoreReasons.truthGate.claims[0].sourceIds, ['allowed-source']);
 });
 
 test('planner sees every effective source from the business day after an incremental watermark', async () => {
@@ -141,7 +171,7 @@ test('planner sees every effective source from the business day after an increme
         makeItem(latest.id, '水位线后的新增资料', '新增资料构成另一个独立机会', 1)
       ],
       sourceDecisions: [
-        { sourceId: earlier.id, decision: 'selected', reasonCode: 'selected_full_day', reason: '较早资料仍在今日有效范围内' },
+        { sourceId: earlier.id, decision: 'selected' },
         { sourceId: latest.id, decision: 'selected', reasonCode: 'selected_increment', reason: '新增资料达到选题标准' }
       ]
     };
