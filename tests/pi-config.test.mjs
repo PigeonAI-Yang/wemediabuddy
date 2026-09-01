@@ -259,9 +259,11 @@ test('Cockpit discovery distinguishes the Codex proxy and exposes custom Gemini 
     const candidates = discoverPiProviders();
     const codex = candidates.find((candidate) => candidate.source === 'cockpit-codex');
     const custom = candidates.find((candidate) => candidate.source === 'cockpit-custom');
-    assert.equal(codex.name, 'Cockpit Codex 本机反代');
+    assert.equal(codex.name, 'Codex Local Access');
+    assert.equal(codex.origin, 'codex_local_access.json');
     assert.equal(codex.baseUrl, 'http://127.0.0.1:61946/v1');
-    assert.equal(custom.name, 'Cockpit 自定义 Provider · B.AI');
+    assert.equal(custom.name, 'B.AI');
+    assert.equal(custom.origin, 'codex_model_providers.json');
     assert.equal(custom.api, 'openai-completions');
     assert.equal(custom.capabilities.vision, true);
     assert.deepEqual(custom.models.map((model) => model.id), ['gemini-3.6-flash', 'gpt-5.6-sol']);

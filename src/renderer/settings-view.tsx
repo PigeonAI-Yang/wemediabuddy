@@ -502,7 +502,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
               </details>
             </div>
             {providerDiscoveryNote && <p className="settings-discovery-note" aria-live="polite">{providerDiscoveryNote}</p>}
-            {discoveredProviders.length > 0 && <div className="settings-profile-list" aria-label="找到的本机 Provider 配置">{discoveredProviders.map((candidate) => <button type="button" key={`${candidate.source}-${candidate.baseUrl}`} className="settings-profile" onClick={() => applyDiscoveredProvider(candidate)}><span className="settings-provider-mark"><SettingsIcon name="ai" /></span><span><strong>{candidate.name}</strong><small>{candidate.baseUrl} · 从本机配置读取，点击载入后再验证连接</small></span><em className="unconfigured">待验证</em></button>)}</div>}
+            {discoveredProviders.length > 0 && <div className="settings-profile-list" aria-label="找到的本机 Provider 配置">{discoveredProviders.map((candidate) => <button type="button" key={`${candidate.source}-${candidate.baseUrl}`} className="settings-profile" onClick={() => applyDiscoveredProvider(candidate)}><span className="settings-provider-mark"><SettingsIcon name="ai" /></span><span><strong>{candidate.name}</strong><small>{candidate.baseUrl} · 来源：{candidate.origin}</small></span><em className="unconfigured">待验证</em></button>)}</div>}
             <div className="settings-profile-editor" aria-labelledby="profile-editor-title">
               <div className="settings-section-heading"><h3 id="profile-editor-title">{piName || '新模型预设'}</h3><p>先完成 Provider 预设，再在下方角色分配中引用它。这里仅修改接口、模型和密钥。</p></div>
             <div className="settings-form">

@@ -442,6 +442,7 @@ export type ProviderDiscoveryCandidate = Readonly<{
   source: 'antigravity-manager' | 'cockpit-codex' | 'cockpit-custom' | 'environment';
   name: string;
   baseUrl: string;
+  origin: string;
   api: PiApiType;
   authMode: ProviderAuthMode;
   credentialSource: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>;
@@ -468,7 +469,7 @@ export function discoverPiProviders(): ProviderDiscoveryCandidate[] {
       if (record.enabled && Number.isSafeInteger(record.port) && Number(record.port) > 0) {
         const escapedPath = cockpitPath.replace(/'/g, "''");
         discovered.push(freezeValue({
-          source: 'cockpit-codex', name: 'Cockpit Codex 本机反代', baseUrl: `http://127.0.0.1:${record.port}/v1`, api: 'openai-responses', authMode: 'bearer',
+          source: 'cockpit-codex', name: 'Codex Local Access', origin: 'codex_local_access.json', baseUrl: `http://127.0.0.1:${record.port}/v1`, api: 'openai-responses', authMode: 'bearer',
           credentialSource: { kind: 'command', executable: 'powershell.exe', args: ['-NoProfile', '-Command', `(Get-Content -Raw '${escapedPath}' | ConvertFrom-Json).apiKey`] },
           capabilities: { ...defaultCapabilities('openai-responses'), imageGeneration: record.imageGenerationMode === 'enabled' }, suggestedModel: 'gpt-5.5'
         }));
@@ -492,7 +493,7 @@ export function discoverPiProviders(): ProviderDiscoveryCandidate[] {
         if (!id || !name || !baseUrl || !api || !keys.some((key) => typeof key.apiKey === 'string' && Boolean(key.apiKey.trim()))) continue;
         const escapedId = id.replace(/'/g, "''");
         discovered.push(freezeValue({
-          source: 'cockpit-custom', name: `Cockpit 自定义 Provider · ${name}`, baseUrl, api, authMode: defaultAuthMode(api),
+          source: 'cockpit-custom', name, origin: 'codex_model_providers.json', baseUrl, api, authMode: defaultAuthMode(api),
           credentialSource: { kind: 'command', executable: 'powershell.exe', args: ['-NoProfile', '-Command', `((Get-Content -Raw '${escapedPath}' | ConvertFrom-Json) | Where-Object { $_.id -eq '${escapedId}' }).apiKeys | Where-Object { $_.apiKey } | Select-Object -First 1 -ExpandProperty apiKey`] },
           capabilities: { ...defaultCapabilities(api), vision: record.supportsVision === true }, suggestedModel: models[0]?.id, models
         }));
@@ -502,13 +503,13 @@ export function discoverPiProviders(): ProviderDiscoveryCandidate[] {
   const managerBaseUrl = process.env.ANTIGRAVITY_MANAGER_BASE_URL?.trim();
   const managerTokenVariable = process.env.ANTIGRAVITY_MANAGER_TOKEN ? 'ANTIGRAVITY_MANAGER_TOKEN' : process.env.ANTIGRAVITY_API_KEY ? 'ANTIGRAVITY_API_KEY' : '';
   if (managerBaseUrl) {
-    discovered.push(freezeValue({ source: 'antigravity-manager', name: 'Antigravity Manager', baseUrl: managerBaseUrl.replace(/\/$/, ''), api: 'openai-responses', authMode: managerTokenVariable ? 'bearer' : 'none', credentialSource: managerTokenVariable ? { kind: 'environment', variable: managerTokenVariable } : { kind: 'none' }, capabilities: defaultCapabilities('openai-responses') }));
+    discovered.push(freezeValue({ source: 'antigravity-manager', name: 'Antigravity Manager', origin: 'ANTIGRAVITY_MANAGER_BASE_URL', baseUrl: managerBaseUrl.replace(/\/$/, ''), api: 'openai-responses', authMode: managerTokenVariable ? 'bearer' : 'none', credentialSource: managerTokenVariable ? { kind: 'environment', variable: managerTokenVariable } : { kind: 'none' }, capabilities: defaultCapabilities('openai-responses') }));
   }
   const genericBaseUrl = process.env.WMB_PROVIDER_BASE_URL?.trim();
   if (genericBaseUrl) {
     const api = requirePiApiType(process.env.WMB_PROVIDER_PROTOCOL?.trim() || 'openai-responses');
     const variable = process.env.WMB_PROVIDER_API_KEY ? 'WMB_PROVIDER_API_KEY' : '';
-    discovered.push(freezeValue({ source: 'environment', name: process.env.WMB_PROVIDER_NAME?.trim() || '环境 Provider', baseUrl: genericBaseUrl.replace(/\/$/, ''), api, authMode: variable ? defaultAuthMode(api) : 'none', credentialSource: variable ? { kind: 'environment', variable } : { kind: 'none' }, capabilities: defaultCapabilities(api), suggestedModel: process.env.WMB_PROVIDER_MODEL?.trim() || undefined }));
+    discovered.push(freezeValue({ source: 'environment', name: process.env.WMB_PROVIDER_NAME?.trim() || '环境 Provider', origin: 'WMB_PROVIDER_BASE_URL', baseUrl: genericBaseUrl.replace(/\/$/, ''), api, authMode: variable ? defaultAuthMode(api) : 'none', credentialSource: variable ? { kind: 'environment', variable } : { kind: 'none' }, capabilities: defaultCapabilities(api), suggestedModel: process.env.WMB_PROVIDER_MODEL?.trim() || undefined }));
   }
   return discovered;
 }
