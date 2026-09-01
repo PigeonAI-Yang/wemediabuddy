@@ -181,6 +181,21 @@ function sourceBindings(database: DatabaseSync, revisionKeys: readonly string[])
   for (const key of revisionKeys) rows.push(...listSourceMediaBindings(database, key).filter((row) => row.archivedAt == null && row.rightsStatus !== 'restricted' && row.kind !== 'video'));
   return rows.sort((a, b) => a.ordinal - b.ordinal || a.assetId.localeCompare(b.assetId));
 }
+function claimSupportsIllustration(claim: MediaClaimSegment): boolean {
+  const semantic = claim.text
+    .replace(/[`*_>#~|=\-—─]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [...semantic].filter((character) => /[\p{L}\p{N}]/u.test(character)).length >= 2;
+}
+
+function illustrationStateFingerprint(run: Record<string, unknown>, items: readonly IllustrationItem[]): string {
+  return createHash('sha256').update(JSON.stringify({
+    targetVersionId: run.target_version_id ?? null,
+    items: items.map((item) => ({ id: item.id, state: item.state, attempt: item.attempt, assetId: item.assetId, errorCode: item.errorCode }))
+  })).digest('hex').slice(0, 16);
+}
+
 function buildDeterministicPlan(database: DatabaseSync, run: Record<string, unknown>, recommendations: readonly MediaRecommendation[]): IllustrationPlan {
   const body = String(run.source_body);
   const claims = splitContentClaims(body);
@@ -195,6 +210,8 @@ function buildDeterministicPlan(database: DatabaseSync, run: Record<string, unkn
   const requestedMaxGenerated = Number(run.max_generated);
   const maxGenerated = Number.isInteger(requestedMaxGenerated) ? Math.min(MAX_GENERATED_ITEMS, Math.max(0, requestedMaxGenerated)) : MAX_GENERATED_ITEMS;
   for (const claim of claims) {
+    if (!claimSupportsIllustration(claim)) continue;
+
     const recommended = recommendationByClaim.get(claim.key);
     const candidate = recommended ? bindings.find((binding) => binding.id === recommended.bindingId && !usedAssets.has(binding.assetId)) : undefined;
     if (candidate) {
@@ -573,6 +590,29 @@ export class IllustrationWorkflow {
     });
     requireReceiptData(receipt);
   }
+  private async recoverInterruptedItems(runId: string): Promise<void> {
+    const runtime = await requireBusinessRuntime(this.dependencies);
+    const run = getRunRow(runtime.database, runId);
+    if (!run) return;
+    for (const item of readItems(runtime.database, runId).filter((candidate) => candidate.state === 'generating')) {
+      const receipt = await dispatchBusinessCommand(runtime, {
+        command: 'illustration.item.recover',
+        requestId: `${String(run.request_id)}:item:${item.id}:recover:${item.attempt}`,
+        actor: ownerUiActor,
+        input: { runId, itemId: item.id, interruptedAttempt: item.attempt },
+        boundIdentity: { runId, itemId: item.id },
+        entityType: 'illustration_item',
+        execute: (database) => {
+          const current = getItemRow(database, item.id);
+          if (!current || current.state !== 'generating') return { data: item.id, entityId: item.id };
+          updateItem(database, item.id, { state: 'pending', attempt: Number(current.attempt) + 1, errorCode: null, errorMessage: null });
+          return { data: item.id, entityId: item.id };
+        }
+      });
+      requireReceiptData(receipt);
+    }
+  }
+
 
   private async processItem(runId: string, item: IllustrationItem): Promise<void> {
     const runtime = await requireBusinessRuntime(this.dependencies);
@@ -613,7 +653,10 @@ export class IllustrationWorkflow {
 
   private async finalize(runId: string): Promise<IllustrationRun> {
     const runtime = await requireBusinessRuntime(this.dependencies);
-    const receipt = await dispatchBusinessCommand(runtime, { command: 'illustration.finalize', requestId: `${String(getRunRow(runtime.database, runId)?.request_id ?? runId)}:finalize:${String(getRunRow(runtime.database, runId)?.revision ?? 0)}`, actor: ownerUiActor, input: { runId }, boundIdentity: { runId }, entityType: 'illustration_run', execute: (database) => { const value = finalizeRun(database, runId); return { data: value?.id ?? runId, entityId: runId }; } });
+    const run = getRunRow(runtime.database, runId);
+    if (!run) throw new IllustrationError('NOT_FOUND', '配图运行不存在。');
+    const fingerprint = illustrationStateFingerprint(run, readItems(runtime.database, runId));
+    const receipt = await dispatchBusinessCommand(runtime, { command: 'illustration.finalize', requestId: `${String(run.request_id)}:finalize:${fingerprint}`, actor: ownerUiActor, input: { runId }, boundIdentity: { runId }, entityType: 'illustration_run', execute: (database) => { const value = finalizeRun(database, runId); return { data: value?.id ?? runId, entityId: runId }; } });
     requireReceiptData(receipt);
     const result = getRun(runtime.database, runId); if (!result) throw new IllustrationError('READBACK_FAILED', '配图运行读回失败。');
     broadcastDataChanged({ scopes: ['studio'], reason: 'illustration.finalize' });
@@ -621,27 +664,39 @@ export class IllustrationWorkflow {
   }
 
   async resume(runId: string): Promise<IllustrationRun | null> {
-    const existing = this.inflight.get(runId); if (existing) { await existing; return this.read(runId); }
+    const existing = this.inflight.get(runId);
+    if (existing) {
+      await existing;
+      const current = this.read(runId);
+      return current?.items.some((item) => item.state === 'pending' || item.state === 'generating') ? this.resume(runId) : current;
+    }
     const task = (async () => {
       await this.plan(runId);
-      const runtime = await requireBusinessRuntime(this.dependencies);
-      const run = getRun(runtime.database, runId); if (!run) return;
-      for (const item of run.items) if (item.state === 'pending') await this.processItem(runId, item);
+      await this.recoverInterruptedItems(runId);
+      while (true) {
+        const runtime = await requireBusinessRuntime(this.dependencies);
+        const run = getRun(runtime.database, runId);
+        if (!run) return;
+        const pending = run.items.filter((item) => item.state === 'pending');
+        if (!pending.length) break;
+        for (const item of pending) await this.processItem(runId, item);
+      }
       await this.finalize(runId);
-    })().catch((error) => {
+    })().catch(async (error) => {
       const failure = errorValue(error);
-      // Planning failures are persisted as truthful run failures; successful items are never removed.
-      void this.markRunFailed(runId, failure);
+      await this.markRunFailed(runId, failure);
     }).finally(() => this.inflight.delete(runId));
     this.inflight.set(runId, task);
     await task;
     return this.read(runId);
   }
 
+
   private async markRunFailed(runId: string, failure: IllustrationError): Promise<void> {
     try {
       const runtime = await requireBusinessRuntime(this.dependencies);
-      const receipt = await dispatchBusinessCommand(runtime, { command: 'illustration.run.failed', requestId: `${runId}:failed`, actor: ownerUiActor, input: { runId, code: failure.code, message: failure.message }, boundIdentity: { runId }, entityType: 'illustration_run', execute: (database) => { updateRun(database, runId, { status: 'failed', failureCode: failure.code, failureMessage: failure.message, completedAt: nowIso() }); return { data: runId, entityId: runId }; } });
+      const fingerprint = createHash('sha256').update(`${failure.code}\0${failure.message}`).digest('hex').slice(0, 16);
+      const receipt = await dispatchBusinessCommand(runtime, { command: 'illustration.run.failed', requestId: `${runId}:failed:${fingerprint}`, actor: ownerUiActor, input: { runId, code: failure.code, message: failure.message }, boundIdentity: { runId }, entityType: 'illustration_run', execute: (database) => { updateRun(database, runId, { status: 'failed', failureCode: failure.code, failureMessage: failure.message, completedAt: nowIso() }); return { data: runId, entityId: runId }; } });
       requireReceiptData(receipt);
     } catch { /* the original failure is retained by the caller's command result */ }
   }

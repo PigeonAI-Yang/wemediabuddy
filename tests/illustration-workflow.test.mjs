@@ -53,10 +53,14 @@ async function createFixture() {
   await openDataRoot(root);
   const database = migrateDatabase(path.join(root, 'wmb.db'));
   const dataRoot = { path: root, isNew: false };
+  const commands = [];
   const runtime = {
     database,
     identity: { workspaceId: 'illustration-test-workspace', rootPath: root, runtimeEpoch: `epoch-${Date.now()}-${Math.random()}` },
-    dispatchCommand: async (_envelope, execute) => ({ ok: true, data: execute(database).data, error: null })
+    dispatchCommand: async (envelope, execute) => {
+      commands.push(envelope);
+      return { ok: true, data: execute(database).data, error: null };
+    }
   };
   const dependencies = {
     loadSelectedDataRoot: async () => dataRoot,
@@ -64,7 +68,8 @@ async function createFixture() {
     getActiveRuntime: () => runtime,
     getImageConfigPath: () => path.join(root, 'illustration-image-config.json')
   };
-  return { root, database, runtime, dependencies };
+  return { root, database, runtime, dependencies, commands };
+
 }
 
 async function disposeFixture(fixture) {
@@ -212,6 +217,62 @@ test('provider ratios are structured, generation is capped, and partial failure 
     await disposeFixture(fixture);
   }
 });
+test('multiple failed items can be retried without reusing a finalize request identity', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  try {
+    await configureImageModel(fixture);
+    installProvider([{ bytes: pngBytes }, { status: 500 }, { status: 500 }, { bytes: Buffer.from([1, 2, 3]) }, { bytes: Buffer.from([4, 5, 6]) }], calls);
+    const project = await createProject(fixture, '# 标题\n\n第一段有效内容。\n\n第二段有效内容。');
+    const workflow = new IllustrationWorkflow(fixture.dependencies);
+    const started = await workflow.start({ projectId: project.id, requestId: 'multi-retry-run', expectedRevision: project.revision, maxGenerated: 3 });
+    await workflow.resume(started.id);
+    let run = workflow.read(started.id);
+    const failed = run.items.filter((item) => item.state === 'failed');
+    assert.equal(failed.length, 2, JSON.stringify(run));
+
+    await workflow.retry({ runId: run.id, itemId: failed[0].id });
+    await workflow.retry({ runId: run.id, itemId: failed[1].id });
+    await workflow.resume(run.id);
+    run = workflow.read(run.id);
+    assert.equal(run.status, 'completed', JSON.stringify(run));
+    assert.equal(run.items.every((item) => item.state === 'completed'), true);
+    const finalizeIds = fixture.commands.filter((command) => command.command === 'illustration.finalize').map((command) => command.requestId);
+    assert.equal(new Set(finalizeIds).size, finalizeIds.length, `finalize request IDs must be state-bound: ${JSON.stringify(finalizeIds)}`);
+  } finally {
+    await disposeFixture(fixture);
+  }
+});
+
+test('restart recovers generating items and meaningless markdown does not become an illustration', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  try {
+    await configureImageModel(fixture);
+    installProvider([{ bytes: pngBytes }, { bytes: Buffer.from([7, 8, 9]) }], calls);
+    const project = await createProject(fixture, '####\n\n## 有意义的配图主题\n\n────────────────────────────────');
+    const workflow = new IllustrationWorkflow(fixture.dependencies);
+    const started = await workflow.start({ projectId: project.id, requestId: 'recover-run', expectedRevision: project.revision, maxGenerated: 6 });
+    await workflow.resume(started.id);
+    let run = workflow.read(started.id);
+    assert.equal(run.items.length, 1, JSON.stringify(run.items));
+    const item = run.items[0];
+    fixture.database.prepare("UPDATE illustration_items SET state='generating', asset_id=NULL, content_version_id=NULL WHERE id=?").run(item.id);
+    fixture.database.prepare("UPDATE illustration_runs SET status='running', target_version_id=NULL, completed_at=NULL WHERE id=?").run(run.id);
+    fixture.database.prepare('DELETE FROM content_versions WHERE id=?').run(run.targetVersionId);
+
+    const restarted = new IllustrationWorkflow(fixture.dependencies);
+    await restarted.resume(run.id);
+    run = restarted.read(run.id);
+    assert.equal(run.status, 'completed', JSON.stringify(run));
+    assert.equal(run.items[0].state, 'completed');
+    assert.equal(run.items[0].attempt, 1);
+    assert.equal(fixture.commands.some((command) => command.command === 'illustration.item.recover'), true);
+  } finally {
+    await disposeFixture(fixture);
+  }
+});
+
 
 test('regeneration carries context, replaces in place, and undo restores without a provider call', async () => {
   const fixture = await createFixture();
