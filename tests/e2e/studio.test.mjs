@@ -2018,7 +2018,7 @@ export default [
   {
     id: 'WMB-5312-studio-illustration-workflow',
     journeyIds: [],
-    launch: { seedFixture: seedIllustrationProject },
+    launch: { seedFixture: seedIllustrationProject, seedPi: false },
     run: async ({ page, app, evidence, artifactsDir, helpers, assert, step, openDb }) => {
       const imageMock = await startIllustrationImageMock();
       const readRun = (runId) => page.evaluate((id) => window.wmb.getIllustrationRun(id), runId);
@@ -2046,28 +2046,28 @@ export default [
           await page.waitForSelector('.studio-project-row:not(.head)', { timeout: 20_000 });
           await openProjectByName(page, 'E2E 定稿配图项目');
           await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
-          const toolbar = page.locator('.studio-formatbar');
-          await toolbar.getByRole('group', { name: '定稿配图' }).waitFor({ state: 'visible', timeout: 15_000 });
+          const summaryBar = page.getByTestId('illustration-summary-bar');
+          await summaryBar.waitFor({ state: 'visible', timeout: 15_000 });
           assert(await page.getByLabel('模型').count() === 0, '创作编辑器不应显示配图模型字段。');
-          assert(await page.locator('.studio-illustration-panel').count() === 0, '没有运行记录时正文上方不应出现独立配图面板。');
-          const geometry = await toolbar.getByRole('group', { name: '定稿配图' }).evaluate((group) => {
-            const select = group.querySelector('select');
-            const input = group.querySelector('input');
-            const button = group.querySelector('button');
+          assert(await page.locator('.studio-illustration-detail').count() === 0, '没有运行记录时不应打开配图详情。');
+          const geometry = await summaryBar.evaluate((bar) => {
+            const select = bar.querySelector('select');
+            const input = bar.querySelector('input');
+            const button = bar.querySelector('button');
             if (!select || !input || !button) return null;
             const controls = [select, input, button].map((node) => {
               const rect = node.getBoundingClientRect();
               const style = getComputedStyle(node);
               return { top: rect.top, height: rect.height, textAlign: style.textAlign, paddingLeft: style.paddingLeft, paddingRight: style.paddingRight };
             });
-            const labels = [...group.querySelectorAll('label')].map((node) => getComputedStyle(node).gap);
-            return { controls, groupGap: getComputedStyle(group).gap, labels };
+            const labels = [...bar.querySelectorAll('label')].map((node) => getComputedStyle(node).gap);
+            return { controls, barGap: getComputedStyle(bar).gap, labels };
           });
-          assert(geometry, '定稿配图工具条控件缺失。');
-          assert(geometry.controls.every((control) => Math.abs(control.height - 32) <= 1), `控件高度不统一: ${JSON.stringify(geometry)}`);
+          assert(geometry, '配图摘要条控件缺失。');
+          assert(geometry.controls.every((control) => Math.abs(control.height - 28) <= 1), `控件高度不统一: ${JSON.stringify(geometry)}`);
           assert(Math.max(...geometry.controls.map((control) => control.top)) - Math.min(...geometry.controls.map((control) => control.top)) <= 1, `控件基线不统一: ${JSON.stringify(geometry)}`);
           assert(geometry.controls[0].textAlign === 'center' && geometry.controls[1].textAlign === 'center', `字段值未统一居中: ${JSON.stringify(geometry)}`);
-          assert(geometry.groupGap === '8px' && geometry.labels.every((gap) => gap === '8px'), `控件间距不统一: ${JSON.stringify(geometry)}`);
+          assert(geometry.barGap === '10px' && geometry.labels.every((gap) => gap === '6px'), `控件间距不统一: ${JSON.stringify(geometry)}`);
         });
 
         const { db: initialDb, close: closeInitial } = openDb();
@@ -2078,10 +2078,10 @@ export default [
 
         let started;
         await step('只有用户点击工具条定稿动作才创建混合来源/生成配图运行', async () => {
-          const toolbar = page.locator('.studio-formatbar');
-          await toolbar.getByLabel('比例').selectOption('21:9');
-          await toolbar.getByLabel('生成张数').fill('1');
-          await toolbar.getByRole('button', { name: '定稿配图' }).click();
+          const summaryBar = page.getByTestId('illustration-summary-bar');
+          await summaryBar.getByLabel('比例').selectOption('21:9');
+          await summaryBar.getByLabel('生成张数').fill('1');
+          await summaryBar.getByRole('button', { name: '定稿配图' }).click();
           for (let attempt = 0; attempt < 100; attempt += 1) {
             const runs = await page.evaluate((id) => window.wmb.listIllustrationRuns(id), projectId);
             if (runs[0]) { started = runs[0]; break; }
@@ -2109,7 +2109,8 @@ export default [
         } finally { closeFirst(); }
 
         await step('点击生成项后携带上下文原位重新生成并可撤销', async () => {
-          const itemRow = page.locator('.studio-illustration-item').filter({ hasText: '配图 · completed' }).first();
+          await page.getByTestId('illustration-summary-bar').getByRole('button', { name: '查看详情' }).click();
+          const itemRow = page.locator('.studio-illustration-detail-item').filter({ hasText: '配图' }).filter({ hasText: 'completed' }).first();
           await itemRow.getByLabel('重新生成比例').selectOption('9:21');
           await itemRow.getByLabel('重新生成要求').fill('改成竖向构图');
           await itemRow.getByRole('button', { name: '重新生成' }).click();
@@ -2117,9 +2118,9 @@ export default [
           const replacement = regenerated.items.find((item) => item.id === generated.id);
           assert(replacement.assetId !== oldAssetId && replacement.ratio === '9:21', `原位替换状态错误: ${JSON.stringify(replacement)}`);
           assert(imageMock.requests.length === 2 && imageMock.requests[1].prompt.includes('改成竖向构图'), `重新生成未携带修改要求: ${JSON.stringify(imageMock.requests[1])}`);
-          await page.waitForFunction(() => [...document.querySelectorAll('.studio-illustration-item button')].some((button) => button.textContent?.includes('撤销')), null, { timeout: 20_000 });
+          await page.waitForFunction(() => [...document.querySelectorAll('.studio-illustration-detail-item button')].some((button) => button.textContent?.includes('撤销')), null, { timeout: 20_000 });
           const providerCallsBeforeUndo = imageMock.requests.length;
-          const undoItem = page.locator('.studio-illustration-item').filter({ hasText: '配图 · completed' }).first();
+          const undoItem = page.locator('.studio-illustration-detail-item').filter({ hasText: '配图' }).filter({ hasText: 'completed' }).first();
           await undoItem.getByRole('button', { name: '撤销' }).click();
           const undone = await waitForRun(started.id, (candidate) => candidate.items.some((item) => item.id === generated.id && item.assetId === oldAssetId && !item.previousAssetId), '撤销旧图');
           assert(undone.items.find((item) => item.id === generated.id)?.assetId === oldAssetId, '撤销未恢复旧图。');
