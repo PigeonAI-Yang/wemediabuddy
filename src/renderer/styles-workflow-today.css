@@ -599,9 +599,6 @@
 .pill.pool-pending { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
 .pill.pool-written { background: var(--tag-bg); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* dismiss 已改为 icon-action-button.dismiss-action，与创作笔并列 */
-.pool-absent-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 12px; border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--border)); border-radius: 10px; background: var(--amber-soft); padding: 10px 14px; color: var(--amber); font-size: 13px; }
-.pool-absent-banner button { border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--border)); border-radius: 7px; background: transparent; color: var(--amber); padding: 6px 12px; cursor: pointer; font-size: 12.5px; }
-.pool-absent-banner button:hover { background: color-mix(in srgb, var(--amber) 14%, transparent); }
 
 .fermenting-row.selected{background:color-mix(in srgb,var(--surface-selected) 90%,transparent);box-shadow:inset 3px 0 0 var(--accent);}
 .fermenting-row{cursor:pointer;}

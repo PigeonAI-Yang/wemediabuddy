@@ -55,6 +55,9 @@ test('WMB-5340 TodayView no longer references relocated components and single ov
   assert.match(commandBar, /label: '今日新增来源'/);
   assert.match(commandBar, /新收集的来源记录，不是已选选题/);
   assert.match(todayView, /最多显示 500 条来源记录/);
+  assert.doesNotMatch(todayView, /X 未接入|本次判断未包含 X|pool-absent-banner/, '渠道提示只归顶部状态组件，不得插入首条选题上方');
+  const workflowCss = fs.readFileSync('J:/PigeonYang/WeMediaBuddy/src/renderer/styles-workflow-today.css', 'utf8');
+  assert.doesNotMatch(workflowCss, /pool-absent-banner/, '删除废弃提示卡样式，避免再次占用内容首屏');
 });
 
 test('WMB-5340 responsive and accessible contract', () => {

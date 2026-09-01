@@ -146,6 +146,11 @@ test('view DOM gates: instance-driven groups, cards, history, actions (EVAL-030)
   assert.match(instances, />\s*续派\s*</);
   assert.match(instances, />\s*关闭\s*</);
   assert.match(instances, />\s*取消\s*</);
+  // 非 JobPool 的真实 roster 任务也必须能直接取消；池内卡丢失时按 taskId 回落，不能静默“已处理”。
+  assert.match(instances, /onCancelTask\(row\.taskId!\)/);
+  assert.match(source, /window\.wmb\.cancelAgentTask\(taskId\)/);
+  assert.match(source, /else if \(instance\.taskId\)/);
+  assert.doesNotMatch(source, /`已处理 \$\{jobId\}`/);
 
   // 五角色分组始终可见，空角色「当前无任务」；历史每角色折叠区。
   assert.match(overview, /className="agents-role-empty">当前无任务</);

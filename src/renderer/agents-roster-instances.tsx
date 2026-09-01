@@ -18,7 +18,7 @@ export function InstanceCard({
   busy: boolean;
   onCopyJobId: (jobId: string) => void;
   onRedispatch: (instance: CrewInstance) => void;
-  onCancel: (jobId: string) => void;
+  onCancel: (instance: CrewInstance) => void;
 }): JSX.Element {
   const timing = instanceTiming(inst);
   const detail = instanceDetail(inst);
@@ -73,12 +73,12 @@ export function InstanceCard({
             <button type="button" className="agents-row-action strong" disabled={busy} onClick={() => void onRedispatch(inst)}>
               续派
             </button>
-            <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCancel(inst.jobId)}>
+            <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCancel(inst)}>
               关闭
             </button>
           </>
         ) : canCancel ? (
-          <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCancel(inst.jobId)}>
+          <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCancel(inst)}>
             取消
           </button>
         ) : null}
@@ -99,7 +99,7 @@ export function ActiveRoleInstances({
   busy: boolean;
   onCopyJobId: (jobId: string) => void;
   onRedispatch: (instance: CrewInstance) => void;
-  onCancel: (jobId: string) => void;
+  onCancel: (instance: CrewInstance) => void;
 }): JSX.Element {
   const { roleId } = section;
   const meta = ROLE_CATALOG[roleId];
@@ -120,18 +120,22 @@ export function ActiveRoleInstances({
 
 /**
  * 未进入 JobPool 的真实当前任务（daily/page Pi）与主管占用。
- * 角色卡既然显示活动，中央当前任务区必须呈现同一 roster 真值；此处不提供 JobPool 取消操作。
+ * 角色卡显示的是真实任务，因此直接提供 agent_task 取消动作，不伪装成 JobPool 工单。
  */
 export function ActiveRosterTask({
   roleId,
   row,
   status,
-  onOpenRole
+  onOpenRole,
+  onCancelTask,
+  busy
 }: {
   roleId: RoleId;
   row: RosterRow | null;
   status: 'running' | 'blocked';
   onOpenRole: (roleId: RoleId) => void;
+  onCancelTask: (taskId: string) => void;
+  busy: boolean;
 }): JSX.Element {
   const meta = ROLE_CATALOG[roleId];
   const displayStatus = status === 'blocked' ? 'needs_user' : 'running';
@@ -178,6 +182,11 @@ export function ActiveRosterTask({
             <button type="button" className="agents-row-action strong" data-role={roleId} onClick={() => onOpenRole(roleId)}>
               查看运行明细
             </button>
+            {row?.taskId ? (
+              <button type="button" className="agents-row-action" disabled={busy} onClick={() => void onCancelTask(row.taskId!)}>
+                取消
+              </button>
+            ) : null}
           </footer>
         </li>
       </ul>

@@ -164,12 +164,34 @@ export function AgentsRosterView({
     }
   };
 
-  const cancel = async (jobId: string) => {
+  const cancel = async (instance: CrewInstance) => {
     setBusy(true);
     setMessage('');
     try {
-      const job = await window.wmb.jobsCancel(jobId);
-      setMessage(job ? `已取消 ${job.id.slice(0, 8)}…（${statusWord(job.status)}）` : `已处理 ${jobId}`);
+      const job = await window.wmb.jobsCancel(instance.jobId);
+      if (job) {
+        setMessage(`已取消 ${job.id.slice(0, 8)}…（${statusWord(job.status)}）`);
+      } else if (instance.taskId) {
+        const task = await window.wmb.cancelAgentTask(instance.taskId);
+        if (!task.ok) throw new Error(task.error?.message ?? '取消任务失败');
+        setMessage(`已取消任务 ${instance.taskId.slice(0, 8)}…`);
+      } else {
+        throw new Error('工单已不在运行池，且没有可取消的任务引用。');
+      }
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const cancelTask = async (taskId: string) => {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await window.wmb.cancelAgentTask(taskId);
+      if (!result.ok) throw new Error(result.error?.message ?? '取消任务失败');
+      setMessage(`已取消任务 ${taskId.slice(0, 8)}…`);
       await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -260,6 +282,8 @@ export function AgentsRosterView({
                   row={item.row}
                   status={item.status}
                   onOpenRole={openRoleModal}
+                  onCancelTask={cancelTask}
+                  busy={busy}
                 />
               ))}
               {sections.map((s) => (

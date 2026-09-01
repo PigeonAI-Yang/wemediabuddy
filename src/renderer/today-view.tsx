@@ -393,7 +393,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
       onStatusChange?.({ text: error instanceof Error ? error.message : String(error), running: false });
     }
   };
-  const xChannelAbsent = Boolean(intelligenceChannels?.readiness?.some((entry) => entry.module === 'x_lists' && entry.status === 'needs_user'));
   const createFromCarry = async (item: { objectType: string; objectId: string; title?: string }) => {
     if (item.objectType === 'plan_item') {
       const visible = displayItems.find((candidate) => candidate.id === item.objectId);
@@ -651,7 +650,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
       <div className="today-grid">
         <div className="today-opps">
           {primary ? <>
-            {xChannelAbsent ? <div className="pool-absent-banner" role="status"><span>X 未接入：本次判断未包含 X 动态。</span><button type="button" onClick={() => openSettings?.('browser')}>重新验证浏览器</button></div> : null}
             <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
             {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(item.id)} onDismiss={() => void dismissOpportunity(item.id)}/>)}</div>}
           </> : <section className="empty-state">
