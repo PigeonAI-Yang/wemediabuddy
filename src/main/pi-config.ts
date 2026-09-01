@@ -439,7 +439,7 @@ function providerHeaders(authMode: ProviderAuthMode, apiKey: string, api: PiApiT
   return headers;
 }
 export type ProviderDiscoveryCandidate = Readonly<{
-  source: 'antigravity-manager' | 'cockpit' | 'environment';
+  source: 'antigravity-manager' | 'cockpit-codex' | 'cockpit-custom' | 'environment';
   name: string;
   baseUrl: string;
   api: PiApiType;
@@ -447,21 +447,54 @@ export type ProviderDiscoveryCandidate = Readonly<{
   credentialSource: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>;
   capabilities: ProviderCapabilities;
   suggestedModel?: string;
+  models?: readonly PiModelOption[];
 }>;
+
+function cockpitWireApi(value: unknown): PiApiType | null {
+  if (value === 'responses') return 'openai-responses';
+  if (value === 'chat_completions') return 'openai-completions';
+  if (value === 'anthropic_messages') return 'anthropic-messages';
+  return null;
+}
 
 export function discoverPiProviders(): ProviderDiscoveryCandidate[] {
   const discovered: ProviderDiscoveryCandidate[] = [];
   const home = process.env.USERPROFILE?.trim() || process.env.HOME?.trim() || os.homedir();
-  const cockpitPath = path.join(home, '.antigravity_cockpit', 'codex_local_access.json');
+  const cockpitRoot = path.join(home, '.antigravity_cockpit');
+  const cockpitPath = path.join(cockpitRoot, 'codex_local_access.json');
   if (existsSync(cockpitPath)) {
     try {
       const record = JSON.parse(readFileSync(cockpitPath, 'utf8')) as { enabled?: boolean; port?: number; imageGenerationMode?: string };
       if (record.enabled && Number.isSafeInteger(record.port) && Number(record.port) > 0) {
         const escapedPath = cockpitPath.replace(/'/g, "''");
         discovered.push(freezeValue({
-          source: 'cockpit', name: 'Antigravity Cockpit', baseUrl: `http://127.0.0.1:${record.port}/v1`, api: 'openai-responses', authMode: 'bearer',
+          source: 'cockpit-codex', name: 'Cockpit Codex 本机反代', baseUrl: `http://127.0.0.1:${record.port}/v1`, api: 'openai-responses', authMode: 'bearer',
           credentialSource: { kind: 'command', executable: 'powershell.exe', args: ['-NoProfile', '-Command', `(Get-Content -Raw '${escapedPath}' | ConvertFrom-Json).apiKey`] },
           capabilities: { ...defaultCapabilities('openai-responses'), imageGeneration: record.imageGenerationMode === 'enabled' }, suggestedModel: 'gpt-5.5'
+        }));
+      }
+    } catch { /* malformed external discovery metadata is ignored */ }
+  }
+  const customProvidersPath = path.join(cockpitRoot, 'codex_model_providers.json');
+  if (existsSync(customProvidersPath)) {
+    try {
+      const records = JSON.parse(readFileSync(customProvidersPath, 'utf8')) as Array<Record<string, unknown>>;
+      const escapedPath = customProvidersPath.replace(/'/g, "''");
+      for (const record of Array.isArray(records) ? records : []) {
+        const id = typeof record.id === 'string' ? record.id.trim() : '';
+        const name = typeof record.name === 'string' ? record.name.trim() : '';
+        const baseUrl = typeof record.baseUrl === 'string' ? record.baseUrl.trim().replace(/\/$/, '') : '';
+        const api = cockpitWireApi(record.wireApi);
+        const keys = Array.isArray(record.apiKeys) ? record.apiKeys as Array<Record<string, unknown>> : [];
+        const models = Array.isArray(record.modelCatalog)
+          ? [...new Set(record.modelCatalog.filter((model): model is string => typeof model === 'string' && Boolean(model.trim())).map((model) => model.trim()))].map((model) => ({ id: model, ...modelLimits(model) }))
+          : [];
+        if (!id || !name || !baseUrl || !api || !keys.some((key) => typeof key.apiKey === 'string' && Boolean(key.apiKey.trim()))) continue;
+        const escapedId = id.replace(/'/g, "''");
+        discovered.push(freezeValue({
+          source: 'cockpit-custom', name: `Cockpit 自定义 Provider · ${name}`, baseUrl, api, authMode: defaultAuthMode(api),
+          credentialSource: { kind: 'command', executable: 'powershell.exe', args: ['-NoProfile', '-Command', `((Get-Content -Raw '${escapedPath}' | ConvertFrom-Json) | Where-Object { $_.id -eq '${escapedId}' }).apiKeys | Where-Object { $_.apiKey } | Select-Object -First 1 -ExpandProperty apiKey`] },
+          capabilities: { ...defaultCapabilities(api), vision: record.supportsVision === true }, suggestedModel: models[0]?.id, models
         }));
       }
     } catch { /* malformed external discovery metadata is ignored */ }

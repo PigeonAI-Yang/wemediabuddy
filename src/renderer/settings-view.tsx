@@ -349,10 +349,10 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiProfileId(''); setPiName(candidate.name); setPiBaseUrl(candidate.baseUrl); setPiApi(candidate.api); setPiAuthMode(candidate.authMode);
     setPiCredentialKind(candidate.credentialSource.kind); setPiCredentialVariable(candidate.credentialSource.kind === 'environment' ? candidate.credentialSource.variable : '');
     setPiCredentialCommand(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.executable : ''); setPiCredentialArgs(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.args.join('\n') : '');
-    setPiModel(candidate.suggestedModel ?? ''); setPiText(candidate.capabilities.text); setPiVision(candidate.capabilities.vision); setPiNativeSearch(candidate.capabilities.nativeSearch); setPiImageGeneration(candidate.capabilities.imageGeneration); setPiJsonOutput(candidate.capabilities.jsonOutput); setPiStreaming(candidate.capabilities.streaming); setPiModels([]); setPiApiKey('');
+    setPiModel(candidate.suggestedModel ?? ''); setPiText(candidate.capabilities.text); setPiVision(candidate.capabilities.vision); setPiNativeSearch(candidate.capabilities.nativeSearch); setPiImageGeneration(candidate.capabilities.imageGeneration); setPiJsonOutput(candidate.capabilities.jsonOutput); setPiStreaming(candidate.capabilities.streaming); setPiModels([...(candidate.models ?? [])]); setPiApiKey('');
     setProviderDiscoveryNote(`已载入 ${candidate.name} 的本机配置，尚未保存。`);
     setModelFetchFailed(false);
-    setModelFetchNote('尚未验证连接；点击“获取模型”会实际请求 Provider。');
+    setModelFetchNote(candidate.models?.length ? `已从 Cockpit 配置读取 ${candidate.models.length} 个模型；点击“获取模型”可向 Provider 实际复核。` : '尚未验证连接；点击“获取模型”会实际请求 Provider。');
   };
   const probeProvider = async () => {
     setProbingProvider(true);

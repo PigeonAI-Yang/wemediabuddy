@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
@@ -239,6 +239,38 @@ test('provider probe applies x-api-key auth and discovery returns safe environme
     if (oldBase === undefined) delete process.env.WMB_PROVIDER_BASE_URL; else process.env.WMB_PROVIDER_BASE_URL = oldBase;
     if (oldKey === undefined) delete process.env.WMB_PROVIDER_API_KEY; else process.env.WMB_PROVIDER_API_KEY = oldKey;
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('Cockpit discovery distinguishes the Codex proxy and exposes custom Gemini catalogs without leaking keys', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-cockpit-discovery-'));
+  const cockpitRoot = path.join(rootPath, '.antigravity_cockpit');
+  const previousUserProfile = process.env.USERPROFILE;
+  try {
+    await mkdir(cockpitRoot, { recursive: true });
+    await writeFile(path.join(cockpitRoot, 'codex_local_access.json'), JSON.stringify({ enabled: true, port: 61946, apiKey: 'codex-secret', imageGenerationMode: 'enabled' }), 'utf8');
+    await writeFile(path.join(cockpitRoot, 'codex_model_providers.json'), JSON.stringify([
+      { id: 'provider-bai', name: 'B.AI', baseUrl: 'https://api.b.ai/v1/', wireApi: 'chat_completions', supportsVision: true, modelCatalog: ['gemini-3.6-flash', 'gpt-5.6-sol', 'gemini-3.6-flash'], apiKeys: [{ apiKey: 'custom-secret' }] },
+      { id: 'provider-empty', name: 'No key', baseUrl: 'https://empty.test/v1', wireApi: 'responses', modelCatalog: ['gemini-hidden'], apiKeys: [] }
+    ]), 'utf8');
+    process.env.USERPROFILE = rootPath;
+
+    const candidates = discoverPiProviders();
+    const codex = candidates.find((candidate) => candidate.source === 'cockpit-codex');
+    const custom = candidates.find((candidate) => candidate.source === 'cockpit-custom');
+    assert.equal(codex.name, 'Cockpit Codex 本机反代');
+    assert.equal(codex.baseUrl, 'http://127.0.0.1:61946/v1');
+    assert.equal(custom.name, 'Cockpit 自定义 Provider · B.AI');
+    assert.equal(custom.api, 'openai-completions');
+    assert.equal(custom.capabilities.vision, true);
+    assert.deepEqual(custom.models.map((model) => model.id), ['gemini-3.6-flash', 'gpt-5.6-sol']);
+    assert.equal(custom.suggestedModel, 'gemini-3.6-flash');
+    assert.equal(candidates.some((candidate) => candidate.name.includes('No key')), false);
+    assert.equal(JSON.stringify(candidates).includes('codex-secret'), false);
+    assert.equal(JSON.stringify(candidates).includes('custom-secret'), false);
+  } finally {
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = previousUserProfile;
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
 });
