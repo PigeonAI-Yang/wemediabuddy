@@ -74,6 +74,25 @@ test('runPiPromptWithFallback retries prompt after provider failure', async () =
   assert.equal(events.includes('fallback-try'), true);
 });
 
+test('prompt fallback reuses one immutable connection snapshot', async () => {
+  let resolutionCount = 0;
+  let rotatingSecret = 'secret-at-dispatch';
+  const resolveOnce = () => {
+    resolutionCount += 1;
+    return chain.map((config) => ({ ...config, apiKey: rotatingSecret }));
+  };
+  const observedSecrets = [];
+  const first = fakeRuntime('one', { failPrompt: true });
+  const result = await runPiPromptWithFallback({
+    roleId: 'reporter', policySnapshot: snapshot, initial: { runtime: first, config: { ...chain[0], apiKey: rotatingSecret } }, resolveChain: resolveOnce,
+    createRuntime: async (config) => { observedSecrets.push(config.apiKey); return fakeRuntime(config.id); },
+    run: async (runtime) => { rotatingSecret = 'secret-after-dispatch'; return runtime.promptUntilSettled('hi'); }
+  });
+  assert.equal(result.config.id, 'two');
+  assert.equal(resolutionCount, 1);
+  assert.deepEqual(observedSecrets, ['secret-at-dispatch']);
+});
+
 test('fallback does not switch profiles for authentication failures', async () => {
   const created = [];
   await assert.rejects(

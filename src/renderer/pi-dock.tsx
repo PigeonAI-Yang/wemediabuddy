@@ -79,7 +79,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
   const [modelChoice, setModelChoice] = useState('');
   const [thinkingChoice, setThinkingChoice] = useState<'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>('auto');
   const [activePiProfile, setActivePiProfile] = useState<{
-    id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions';
+    id: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages';
     thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; contextWindow?: number; maxTokens?: number; configured: boolean; active: boolean;
   } | null>(null);
   const [toast, setToast] = useState('');

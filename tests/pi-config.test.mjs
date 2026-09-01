@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createServer } from 'node:http';
 import { openDataRoot } from '../src/main/data-root.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { activatePiConfig, deletePiConfig, listPiModels, migratePiConfigToInstallation, readPiConfig, resolvePiConfig, resolveRoleModelPolicySnapshot, savePiConfig, saveRoleModelPolicies } from '../src/main/pi-config.ts';
+import { activatePiConfig, deletePiConfig, discoverPiProviders, listPiModels, migratePiConfigToInstallation, probePiProvider, readPiConfig, resolvePiConfig, resolveProviderCredential, resolveRoleModelPolicySnapshot, savePiConfig, saveRoleModelPolicies } from '../src/main/pi-config.ts';
 import { piModelsJson } from '../src/main/pi-model.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
 
@@ -56,7 +56,7 @@ test('v1 fallback chain migrates to v3 pair candidates and role policies save at
     } }), 'utf8');
 
     const migrated = readPiConfig(configPath);
-    assert.equal(migrated.version, 3);
+    assert.equal(migrated.version, 4);
     assert.equal(migrated.modelPolicyRevision, 1);
     for (const roleId of ['desk', 'reporter', 'planner', 'writer', 'librarian']) {
       assert.deepEqual(migrated.roleModelPolicies[roleId].candidates, [
@@ -123,7 +123,7 @@ test('v2 profile-id policies migrate using each profile current model', async ()
     const roleModelPolicies = Object.fromEntries(['desk', 'reporter', 'planner', 'writer', 'librarian'].map((roleId) => [roleId, { profileIds: roleId === 'writer' ? ['shared', 'other'] : ['shared'] }]));
     await writeFile(configPath, JSON.stringify({ version: 2, activeId: 'shared', profiles, modelPolicyRevision: 9, roleModelPolicies }), 'utf8');
     const migrated = readPiConfig(configPath);
-    assert.equal(migrated.version, 3);
+    assert.equal(migrated.version, 4);
     assert.equal(migrated.modelPolicyRevision, 9);
     assert.deepEqual(migrated.roleModelPolicies.writer.candidates, [
       { profileId: 'shared', model: 'current-shared' },
@@ -185,24 +185,60 @@ test('Pi models.json keeps the configured primary as the sole multimodal entry',
   ]);
 });
 
-test('unsupported Pi API protocol is rejected at every config boundary', async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-unsupported-pi-api-'));
+test('Anthropic Messages, environment credentials and command credentials are first-class provider inputs', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-universal-provider-'));
   const configPath = path.join(rootPath, 'pi-api-config.json');
+  const previous = process.env.WMB_TEST_PROVIDER_KEY;
+  process.env.WMB_TEST_PROVIDER_KEY = 'environment-secret';
   try {
-    await writeFile(configPath, JSON.stringify({ version: 1, state: {
-        activeId: 'invalid',
-        profiles: [{ id: 'invalid', name: '不支持', baseUrl: 'https://invalid.test/v1', model: 'invalid-model', api: 'anthropic-messages', encryptedApiKey: 'unused' }]
-      } }), 'utf8');
-
-    assert.throws(() => readPiConfig(configPath), /仅支持 OpenAI Responses 或 OpenAI Chat Completions/);
-    assert.throws(() => resolvePiConfig(configPath), /仅支持 OpenAI Responses 或 OpenAI Chat Completions/);
-    assert.throws(() => savePiConfig({
-      name: '不支持', baseUrl: 'https://invalid.test/v1', model: 'invalid-model', api: 'anthropic-messages', apiKey: 'unused'
-    }, configPath), /仅支持 OpenAI Responses 或 OpenAI Chat Completions/);
-    await assert.rejects(() => listPiModels({
-      baseUrl: 'https://invalid.test/v1', api: 'anthropic-messages', apiKey: 'unused'
-    }, configPath), /仅支持 OpenAI Responses 或 OpenAI Chat Completions/);
+    const saved = savePiConfig({
+      name: 'Anthropic 兼容接口', baseUrl: 'https://anthropic.test/v1', model: 'claude-test', api: 'anthropic-messages',
+      authMode: 'x-api-key', credentialSource: { kind: 'environment', variable: 'WMB_TEST_PROVIDER_KEY' }
+    }, configPath);
+    assert.equal(saved.version, 4);
+    assert.equal(saved.profiles[0].api, 'anthropic-messages');
+    assert.equal(saved.profiles[0].authMode, 'x-api-key');
+    assert.equal(saved.profiles[0].credentialSourceKind, 'environment');
+    assert.equal(saved.profiles[0].credentialSourceLabel, '环境变量 WMB_TEST_PROVIDER_KEY');
+    assert.equal(JSON.stringify(saved).includes('environment-secret'), false);
+    assert.equal(resolvePiConfig(configPath).apiKey, 'environment-secret');
+    assert.equal(resolveProviderCredential({ kind: 'command', executable: process.execPath, args: ['-e', "process.stdout.write('command-secret\\n')"] }), 'command-secret');
+    const modelsJson = piModelsJson({ baseUrl: 'https://anthropic.test/v1', api: 'anthropic-messages', authMode: 'x-api-key', apiKey: '$WMB_PI_API_KEY', model: 'claude-test' });
+    assert.equal(modelsJson.providers['wmb-api'].authHeader, false);
   } finally {
+    if (previous === undefined) delete process.env.WMB_TEST_PROVIDER_KEY; else process.env.WMB_TEST_PROVIDER_KEY = previous;
+    await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  }
+});
+
+test('provider probe applies x-api-key auth and discovery returns safe environment metadata', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-provider-probe-'));
+  const server = createServer((request, response) => {
+    assert.equal(request.url, '/v1/models');
+    assert.equal(request.headers['x-api-key'], 'probe-key');
+    assert.equal(request.headers['anthropic-version'], '2023-06-01');
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ data: [{ id: 'claude-probe' }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const oldBase = process.env.WMB_PROVIDER_BASE_URL;
+  const oldKey = process.env.WMB_PROVIDER_API_KEY;
+  try {
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${address.port}/v1`;
+    const health = await probePiProvider({ baseUrl, api: 'anthropic-messages', authMode: 'x-api-key', apiKey: 'probe-key' }, path.join(rootPath, 'pi-api-config.json'));
+    assert.equal(health.state, 'healthy');
+    assert.equal(health.modelCount, 1);
+    process.env.WMB_PROVIDER_BASE_URL = baseUrl;
+    process.env.WMB_PROVIDER_API_KEY = 'not-returned';
+    const candidate = discoverPiProviders().find((item) => item.source === 'environment');
+    assert.equal(candidate.credentialSource.kind, 'environment');
+    assert.equal(candidate.credentialSource.variable, 'WMB_PROVIDER_API_KEY');
+    assert.equal(JSON.stringify(candidate).includes('not-returned'), false);
+  } finally {
+    if (oldBase === undefined) delete process.env.WMB_PROVIDER_BASE_URL; else process.env.WMB_PROVIDER_BASE_URL = oldBase;
+    if (oldKey === undefined) delete process.env.WMB_PROVIDER_API_KEY; else process.env.WMB_PROVIDER_API_KEY = oldKey;
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
 });
@@ -233,7 +269,7 @@ test('official AI presets migrate once to the installation store shared by every
   } finally { await rm(parent, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
 });
 
-test('Pi config nativeSearch flag roundtrips and survives updates without the field', async () => {
+test('Pi provider capabilities roundtrip, survive omitted updates, and protect role chains', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'wmb-pi-nativesearch-'));
   const configPath = path.join(rootPath, 'pi-api-config.json');
   try {
@@ -244,13 +280,13 @@ test('Pi config nativeSearch flag roundtrips and survives updates without the fi
         ]
       } }), 'utf8');
 
-    const saved = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', nativeSearch: true }, configPath);
-    assert.equal(saved.profiles.find((profile) => profile.id === 'one').nativeSearch, true);
-    assert.equal(readPiConfig(configPath).profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+    const saved = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', nativeSearch: true, imageGeneration: true, jsonOutput: false, streaming: false, vision: false }, configPath);
+    const savedCapabilities = saved.profiles.find((profile) => profile.id === 'one').capabilities;
+    assert.deepEqual(savedCapabilities, { text: true, vision: false, imageGeneration: true, nativeSearch: true, jsonOutput: false, streaming: false, modelIdDiscovery: true });
 
     const updated = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses' }, configPath);
-    assert.equal(updated.profiles.find((profile) => profile.id === 'one').nativeSearch, true);
-    assert.equal(readPiConfig(configPath).profiles.find((profile) => profile.id === 'one').nativeSearch, true);
+    assert.deepEqual(updated.profiles.find((profile) => profile.id === 'one').capabilities, savedCapabilities);
+    assert.throws(() => savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', text: false }, configPath), /未声明文本生成能力/);
   } finally {
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }

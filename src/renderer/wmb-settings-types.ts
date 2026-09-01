@@ -12,9 +12,13 @@ export type WmbPiProfile = {
   name: string;
   baseUrl: string;
   model: string;
-  api: 'openai-responses' | 'openai-completions';
+  api: 'openai-responses' | 'openai-completions' | 'anthropic-messages';
+  authMode: 'bearer' | 'x-api-key' | 'none';
+  credentialSourceKind: 'encrypted' | 'environment' | 'command' | 'none';
+  credentialSourceLabel: string;
+  capabilities: { text: boolean; vision: boolean; imageGeneration: boolean; nativeSearch: boolean; jsonOutput: boolean; streaming: boolean; modelIdDiscovery: boolean };
+  health: { state: 'unknown' | 'healthy' | 'unhealthy'; lastProbeAt?: string; lastError?: string };
   thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  nativeSearch?: boolean;
   contextWindow?: number;
   maxTokens?: number;
   configured: boolean;
@@ -34,7 +38,7 @@ export type WmbSettingsSnapshot = {
   boundBrowserProfile: BrowserProfile | null;
   legacyBrowserSource: OwnerBrowserState['legacySource'];
   pi: {
-    version: 3;
+    version: 4;
     activeId: string | null;
     profiles: WmbPiProfile[];
     baseUrl: string;

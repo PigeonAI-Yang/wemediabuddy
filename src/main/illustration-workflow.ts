@@ -289,6 +289,7 @@ export function saveIllustrationImageConfig(dependencies: WorkflowDependencies, 
   if (!profileId || !model) throw new IllustrationError('VALIDATION_ERROR', '请选择已配置的图像模型预设并填写模型名。');
   const profile = readPiConfig().profiles.find((candidate) => candidate.id === profileId);
   if (!profile || !profile.configured) throw new IllustrationError('IMAGE_PROFILE_NOT_CONFIGURED', '图像模型预设尚未配置 API。');
+  if (!profile.capabilities.imageGeneration) throw new IllustrationError('IMAGE_PROFILE_NOT_CONFIGURED', '该 Provider 未声明图像生成能力。');
   const target = imageConfigPath(dependencies);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
@@ -305,6 +306,8 @@ function resolveImageConfig(dependencies: WorkflowDependencies, run: Record<stri
   const config = resolvePiConfigChain().find((candidate) => candidate.id === profileId);
   if (!config) throw new IllustrationError('IMAGE_PROFILE_NOT_FOUND', '图像模型预设不存在。');
   if (!config.apiKey) throw new IllustrationError('IMAGE_MODEL_NOT_CONFIGURED', '图像模型预设缺少 API 配置。');
+  if (config.api === 'anthropic-messages') throw new IllustrationError('IMAGE_MODEL_NOT_CONFIGURED', 'Anthropic Messages 预设不能用于图像生成。');
+  if (!config.capabilities.imageGeneration) throw new IllustrationError('IMAGE_MODEL_NOT_CONFIGURED', '该 Provider 未声明图像生成能力。');
   if (!model) throw new IllustrationError('IMAGE_MODEL_NOT_CONFIGURED', '图像模型名不能为空。');
   return { profileId, provider: config.name, baseUrl: config.baseUrl, api: config.api, model, apiKey: config.apiKey };
 }

@@ -45,6 +45,7 @@ export function piModelsJson(config: {
   api: string;
   apiKey: string;
   model: string;
+  authMode?: 'bearer' | 'x-api-key' | 'none';
   contextWindow?: number;
   maxTokens?: number;
 }): object {
@@ -57,14 +58,12 @@ export function piModelsJson(config: {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     ...limits
   };
-  return {
-    providers: {
-      'wmb-api': {
-        baseUrl: config.baseUrl,
-        api: config.api,
-        apiKey: config.apiKey,
-        models: [primary]
-      }
-    }
+  const provider = {
+    baseUrl: config.baseUrl,
+    api: config.api,
+    apiKey: config.apiKey,
+    ...(config.authMode === 'x-api-key' ? { authHeader: false } : {}),
+    models: [primary]
   };
+  return { providers: { 'wmb-api': provider } };
 }

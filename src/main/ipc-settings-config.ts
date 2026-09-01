@@ -9,7 +9,7 @@ import type { BrowserRuntime } from './browser';
 import type { BrowserProfileOwner, OwnerBrowserCommand, OwnerBrowserPlatform } from './browser-profile-owner.ts';
 import type { McpRuntime } from './mcp';
 import type { XhsMcpRuntime } from './xiaohongshu-mcp';
-import { activatePiConfig, deletePiConfig, listPiModels, readPiConfig, requirePiApiType, savePiConfig, saveRoleModelPolicies, type PiThinkingLevel, type RoleId } from './pi-config';
+import { activatePiConfig, deletePiConfig, discoverPiProviders, listPiModels, probePiProvider, readPiConfig, requirePiApiType, requireProviderAuthMode, savePiConfig, saveRoleModelPolicies, type PiThinkingLevel, type ProviderCredentialSource, type RoleId } from './pi-config';
 import type { RoleModelPolicies } from '../shared/pi-config.ts';
 import type { WorkspaceProposal, WorkspaceProposalBinding } from './workspace-proposals';
 import { readCurrentWorkspaceSnapshot } from './workspace-mcp';
@@ -165,10 +165,11 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const root = await confirmOwnerCommand(event, 'migrate-legacy', input);
     return browserProfileOwner.migrateLegacy(root.path, input);
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; thinking?: PiThinkingLevel; nativeSearch?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; authMode?: unknown; credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>; thinking?: PiThinkingLevel; text?: boolean; vision?: boolean; nativeSearch?: boolean; imageGeneration?: boolean; jsonOutput?: boolean; streaming?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
     const api = requirePiApiType(input.api);
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
-    const saved = savePiConfig({ ...input, api });
+    const authMode = input.authMode === undefined ? undefined : requireProviderAuthMode(input.authMode);
+    if (input.apiKey?.trim() && !safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
+    const saved = savePiConfig({ ...input, api, authMode });
     await stopPi();
     return saved;
   });
@@ -193,10 +194,16 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
       expectedRevision: input.expectedRevision
     });
   });
-  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: unknown; apiKey?: string }) => {
+  ipcMain.handle('pi-config:list-models', async (_event, input: { id?: string; baseUrl: string; api: unknown; authMode?: unknown; credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>; apiKey?: string }) => {
     const api = requirePiApiType(input.api);
-    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');
-    return listPiModels({ ...input, api });
+    const authMode = input.authMode === undefined ? undefined : requireProviderAuthMode(input.authMode);
+    return listPiModels({ ...input, api, authMode });
+  });
+  ipcMain.handle('pi-config:discover', async () => discoverPiProviders());
+  ipcMain.handle('pi-config:probe', async (_event, input: { id?: string; baseUrl: string; api: unknown; authMode?: unknown; credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>; apiKey?: string }) => {
+    const api = requirePiApiType(input.api);
+    const authMode = input.authMode === undefined ? undefined : requireProviderAuthMode(input.authMode);
+    return probePiProvider({ ...input, api, authMode });
   });
   const packagedSkillsPath = () => app.isPackaged ? path.join(process.resourcesPath, 'skills') : path.resolve('skills');
   ipcMain.handle('pi-skills:list', async () => {

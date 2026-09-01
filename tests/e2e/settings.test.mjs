@@ -271,10 +271,10 @@ export default [
         await navigateTo(page, 'settings');
         await page.locator('.settings-nav nav button[title="AI 与模型"]').click();
         await page.locator('.settings-profile-list .settings-profile.selected').waitFor({ state: 'visible' });
-        const nameInput = page.locator('.settings-form label', { hasText: '配置名称' }).locator('input');
+        const nameInput = page.locator('.settings-form label', { hasText: '预设名称' }).locator('input');
         await nameInput.fill('E2E 本地配置');
-        await page.locator('.settings-form-actions button.primary-button', { hasText: '保存修改' }).click();
-        await page.waitForFunction(() => document.querySelector('.pi-config-note')?.textContent?.includes('已保存并切换到此配置') === true, null, { timeout: 15_000 });
+        await page.locator('.settings-form-actions button.primary-button', { hasText: '保存预设修改' }).click();
+        await page.waitForFunction(() => document.querySelector('.pi-config-note')?.textContent?.includes('预设已保存') === true, null, { timeout: 15_000 });
         const settings = await page.evaluate(() => window.wmb.getSettings());
         const profile = settings?.pi?.profiles?.find((p) => p.name === 'E2E 本地配置');
         assert(Boolean(profile), '保存后 getSettings 应读回新配置名');
@@ -283,10 +283,17 @@ export default [
       await step(evidence, '非法配置保存显示可见错误不假成功', async () => {
         const baseUrlInput = page.locator('.settings-form label', { hasText: 'Base URL' }).locator('input');
         await baseUrlInput.fill('ftp://example.com/v1');
-        await page.locator('.settings-form-actions button.primary-button', { hasText: '保存修改' }).click();
+        await page.locator('.settings-form-actions button.primary-button', { hasText: '保存预设修改' }).click();
         await page.waitForFunction(() => /必须使用 HTTP|保存失败/.test(document.querySelector('.pi-config-note')?.textContent ?? ''), null, { timeout: 15_000 });
         const note = await page.locator('.pi-config-note').textContent();
         assert(!note.includes('已保存'), '非法配置不应显示成功');
+      });
+      await step(evidence, '通用 Provider 协议、凭证来源和本机发现入口可用', async () => {
+        assert(await page.locator('select option[value="anthropic-messages"]').count() === 1, '应支持 Anthropic Messages');
+        assert(await page.locator('select option[value="environment"]').count() === 1, '应支持环境变量凭证');
+        assert(await page.locator('select option[value="command"]').count() === 1, '应支持命令凭证');
+        await page.locator('button', { hasText: '发现本机 Provider' }).click();
+        await page.waitForFunction(() => /发现 \d+ 个本机 Provider|没有发现/.test(document.querySelector('.pi-config-note')?.textContent ?? ''), null, { timeout: 15_000 });
       });
       await step(evidence, '不可达 provider 获取模型显示错误', async () => {
         const baseUrlInput = page.locator('.settings-form label', { hasText: 'Base URL' }).locator('input');

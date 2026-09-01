@@ -82,7 +82,7 @@ async function createProject(fixture, body, sourceIds = []) {
 }
 
 async function configureImageModel(fixture, profileId = 'image-profile') {
-  savePiConfig({ id: profileId, name: 'Contract image provider', baseUrl: 'https://image.test/v1', model: 'image-default', api: 'openai-completions', apiKey: 'contract-secret' });
+  savePiConfig({ id: profileId, name: 'Contract image provider', baseUrl: 'https://image.test/v1', model: 'image-default', api: 'openai-completions', apiKey: 'contract-secret', imageGeneration: true });
   return saveIllustrationImageConfig(fixture.dependencies, { profileId, model: 'image-default' });
 }
 

@@ -173,6 +173,8 @@ export async function runPiPromptWithFallback<T>(input: {
 }): Promise<{ result: T; runtime: PiRpcSupervisor; config: ResolvedPiConfig }> {
   const snapshot = resolvePolicySnapshot(input);
   const triedCandidateKeys = new Set<string>([roleModelCandidateKey(input.initial.config.id, input.initial.config.model)]);
+  const resolve: ResolveChain = input.resolveChain ?? ((roleId, policy, configPath) => resolveRolePiConfigChain(roleId, policy, configPath));
+  const connectionSnapshot = Object.freeze(resolve(input.roleId, snapshot, input.piConfigPath).map((candidate) => Object.freeze({ ...candidate })));
   let runtime = input.initial.runtime;
   let config = input.initial.config;
 
@@ -212,7 +214,7 @@ export async function runPiPromptWithFallback<T>(input: {
         skipCandidateKeys: triedCandidateKeys,
         createRuntime: input.createRuntime,
         onEvent: input.onEvent,
-        resolveChain: input.resolveChain
+        resolveChain: () => [...connectionSnapshot]
       });
       triedCandidateKeys.add(roleModelCandidateKey(next.config.id, next.config.model));
       runtime = next.runtime;

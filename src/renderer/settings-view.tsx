@@ -170,19 +170,32 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   });
   const [piProfileId, setPiProfileId] = useState(settings?.pi.activeId ?? '');
   const [piName, setPiName] = useState(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.name ?? '');
-  const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
+  const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions' | 'anthropic-messages'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
   const [piThinking, setPiThinking] = useState<WmbSettingsSnapshot['pi']['profiles'][number]['thinking']>('off');
+  const [piAuthMode, setPiAuthMode] = useState<'bearer' | 'x-api-key' | 'none'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.authMode ?? 'bearer');
+  const [piCredentialKind, setPiCredentialKind] = useState<'encrypted' | 'environment' | 'command' | 'none'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.credentialSourceKind ?? 'encrypted');
+  const [piCredentialVariable, setPiCredentialVariable] = useState('');
+  const [piCredentialCommand, setPiCredentialCommand] = useState('');
+  const [piCredentialArgs, setPiCredentialArgs] = useState('');
   const [piApiKey, setPiApiKey] = useState('');
   const [piConfigNote, setPiConfigNote] = useState('');
   const [piModels, setPiModels] = useState<PiModelOption[]>([]);
+  const [discoveredProviders, setDiscoveredProviders] = useState<Awaited<ReturnType<typeof window.wmb.discoverPiProviders>>>([]);
+  const [discoveringProviders, setDiscoveringProviders] = useState(false);
+  const [probingProvider, setProbingProvider] = useState(false);
   const [roleModelCatalog, setRoleModelCatalog] = useState<Record<string, PiModelOption[]>>({});
   const [roleModelFetchErrors, setRoleModelFetchErrors] = useState<Record<string, string>>({});
   const roleModelFetchCache = useRef(new Map<string, RoleModelFetchRecord>());
   const [piContextWindow, setPiContextWindow] = useState('');
   const [piMaxTokens, setPiMaxTokens] = useState('');
+  const [piText, setPiText] = useState(true);
+  const [piVision, setPiVision] = useState(true);
   const [piNativeSearch, setPiNativeSearch] = useState(false);
+  const [piImageGeneration, setPiImageGeneration] = useState(false);
+  const [piJsonOutput, setPiJsonOutput] = useState(true);
+  const [piStreaming, setPiStreaming] = useState(true);
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [rolePolicyDraft, setRolePolicyDraft] = useState<RolePolicyDraft>(() => rolePolicyDraftFromSettings(settings));
   const [rolePolicyDirty, setRolePolicyDirty] = useState(false);
@@ -200,12 +213,22 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiProfileId(id);
     setPiName(profile?.name ?? '');
     setPiApi(profile?.api ?? 'openai-responses');
+    setPiAuthMode(profile?.authMode ?? 'bearer');
+    setPiCredentialKind(profile?.credentialSourceKind ?? 'encrypted');
+    setPiCredentialVariable('');
+    setPiCredentialCommand('');
+    setPiCredentialArgs('');
     setPiBaseUrl(profile?.baseUrl ?? '');
     setPiModel(profile?.model ?? '');
     setPiThinking(profile?.thinking ?? 'off');
     setPiContextWindow(profile?.contextWindow ? String(profile.contextWindow) : '');
     setPiMaxTokens(profile?.maxTokens ? String(profile.maxTokens) : '');
-    setPiNativeSearch(profile?.nativeSearch === true);
+    setPiText(profile?.capabilities.text !== false);
+    setPiVision(profile?.capabilities.vision !== false);
+    setPiNativeSearch(profile?.capabilities.nativeSearch === true);
+    setPiImageGeneration(profile?.capabilities.imageGeneration === true);
+    setPiJsonOutput(profile?.capabilities.jsonOutput !== false);
+    setPiStreaming(profile?.capabilities.streaming !== false);
     setPiApiKey('');
     setPiModels([]);
     if (!keepNote) setPiConfigNote('');
@@ -264,26 +287,25 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     }).catch(() => {});
   }, [section, settings?.pi.profiles]);
   useEffect(() => { if (section === 'data') void Promise.all([window.wmb.listWorkspaces(), window.wmb.listWorkspaceProposals()]).then(([listed, proposals]) => { setWorkspaces(listed); setWorkspaceProposals(proposals); }); }, [section, dataRoot]);
+  const providerCredentialSource = () => {
+    if (piCredentialKind === 'environment') return { kind: 'environment' as const, variable: piCredentialVariable.trim() };
+    if (piCredentialKind === 'command') return { kind: 'command' as const, executable: piCredentialCommand.trim(), args: piCredentialArgs.split(/\r?\n/).map((value) => value.trim()).filter(Boolean) };
+    if (piCredentialKind === 'none') return { kind: 'none' as const };
+    return undefined;
+  };
   const saveProfile = async () => {
     try {
       await window.wmb.savePiConfig({
-        id: piProfileId || undefined,
-        name: piName,
-        baseUrl: piBaseUrl,
-        model: piModel,
-        api: piApi,
-        thinking: piThinking,
-        nativeSearch: piNativeSearch,
+        id: piProfileId || undefined, name: piName, baseUrl: piBaseUrl, model: piModel, api: piApi,
+        authMode: piAuthMode, credentialSource: providerCredentialSource(), thinking: piThinking,
+        text: piText, vision: piVision, nativeSearch: piNativeSearch, imageGeneration: piImageGeneration, jsonOutput: piJsonOutput, streaming: piStreaming,
         contextWindow: piContextWindow ? Number(piContextWindow) : null,
-        maxTokens: piMaxTokens ? Number(piMaxTokens) : null,
-        apiKey: piApiKey || undefined
+        maxTokens: piMaxTokens ? Number(piMaxTokens) : null, apiKey: piApiKey || undefined
       });
       setPiApiKey('');
       setPiConfigNote('预设已保存并设为新任务的默认选择。');
       refresh();
-    } catch (error) {
-      setPiConfigNote(formatPiConfigError(error));
-    }
+    } catch (error) { setPiConfigNote(formatPiConfigError(error)); }
   };
   const saveIllustrationConfig = async () => {
     if (!illustrationProfileId || !illustrationModel.trim()) { setIllustrationConfigNote('请选择已配置的 Provider 预设并填写图像模型。'); return; }
@@ -296,12 +318,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setLoadingPiModels(true);
     setPiConfigNote('');
     try {
-      const models = await window.wmb.listPiModels({
-        id: piProfileId || undefined,
-        baseUrl: piBaseUrl,
-        api: piApi,
-        apiKey: piApiKey || undefined
-      });
+      const models = await window.wmb.listPiModels({ id: piProfileId || undefined, baseUrl: piBaseUrl, api: piApi, authMode: piAuthMode, credentialSource: providerCredentialSource(), apiKey: piApiKey || undefined });
       setPiModels(models);
       const selected = models.find((item) => item.id === piModel) ?? models[0];
       setPiModel(selected.id);
@@ -311,9 +328,25 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     } catch (error) {
       setPiModels([]);
       setPiConfigNote(`${error instanceof Error ? error.message : '获取模型失败'} 仍可手动填写模型。`);
-    } finally {
-      setLoadingPiModels(false);
-    }
+    } finally { setLoadingPiModels(false); }
+  };
+  const discoverProviders = async () => {
+    setDiscoveringProviders(true);
+    try { const found = await window.wmb.discoverPiProviders(); setDiscoveredProviders(found); setPiConfigNote(found.length ? `发现 ${found.length} 个本机 Provider。` : '没有发现可自动接入的本机 Provider。'); }
+    catch (error) { setPiConfigNote(error instanceof Error ? error.message : '发现 Provider 失败'); }
+    finally { setDiscoveringProviders(false); }
+  };
+  const applyDiscoveredProvider = (candidate: Awaited<ReturnType<typeof window.wmb.discoverPiProviders>>[number]) => {
+    setPiProfileId(''); setPiName(candidate.name); setPiBaseUrl(candidate.baseUrl); setPiApi(candidate.api); setPiAuthMode(candidate.authMode);
+    setPiCredentialKind(candidate.credentialSource.kind); setPiCredentialVariable(candidate.credentialSource.kind === 'environment' ? candidate.credentialSource.variable : '');
+    setPiCredentialCommand(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.executable : ''); setPiCredentialArgs(candidate.credentialSource.kind === 'command' ? candidate.credentialSource.args.join(' ') : '');
+    setPiModel(candidate.suggestedModel ?? ''); setPiText(candidate.capabilities.text); setPiVision(candidate.capabilities.vision); setPiNativeSearch(candidate.capabilities.nativeSearch); setPiImageGeneration(candidate.capabilities.imageGeneration); setPiJsonOutput(candidate.capabilities.jsonOutput); setPiStreaming(candidate.capabilities.streaming); setPiModels([]); setPiApiKey('');
+  };
+  const probeProvider = async () => {
+    setProbingProvider(true);
+    try { const result = await window.wmb.probePiProvider({ id: piProfileId || undefined, baseUrl: piBaseUrl, api: piApi, authMode: piAuthMode, credentialSource: providerCredentialSource(), apiKey: piApiKey || undefined }); setPiConfigNote(result.state === 'healthy' ? `连接正常${result.modelCount ? `，发现 ${result.modelCount} 个模型` : ''}。` : `连接失败：${result.lastError ?? '未知错误'}`); refresh(); }
+    catch (error) { setPiConfigNote(error instanceof Error ? error.message : '连接测试失败'); }
+    finally { setProbingProvider(false); }
   };
 
   const roleModelOptionsForProfile = (profile: WmbSettingsSnapshot['pi']['profiles'][number]): PiModelOption[] => {
@@ -438,30 +471,33 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
               {settings.pi.profiles.length === 0 && <div className="settings-fallback-empty">还没有模型预设，请先添加一个预设。</div>}
               {settings.pi.profiles.map((profile) => <button type="button" key={profile.id} className={`settings-profile${profile.id === piProfileId ? ' selected' : ''}`} onClick={() => selectPiProfile(profile.id)}>
                 <span className="settings-provider-mark"><SettingsIcon name="ai" /></span>
-                <span><strong>{profile.name}</strong><small>{profile.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : 'OpenAI Responses'} · {formatThinking(profile.thinking)}{profile.nativeSearch ? ' · 自带搜索' : ''}</small></span>
-                <em className={profile.configured ? 'configured' : 'unconfigured'}>{profile.configured ? '已配置' : '未完成配置'}{profile.active ? ' · 默认选择' : ''}</em>
+                <span><strong>{profile.name}</strong><small>{profile.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'OpenAI Chat Completions' : profile.api === 'anthropic-messages' ? 'Anthropic Messages' : 'OpenAI Responses'} · {profile.credentialSourceLabel} · {formatThinking(profile.thinking)}{profile.capabilities.text ? ' · 文本' : ''}{profile.capabilities.vision ? ' · 视觉' : ''}{profile.capabilities.nativeSearch ? ' · 搜索' : ''}{profile.capabilities.imageGeneration ? ' · 生图' : ''}{profile.capabilities.jsonOutput ? ' · JSON' : ''}{profile.capabilities.streaming ? ' · 流式' : ''}</small></span>
+                <em className={profile.health.state === 'unhealthy' ? 'unconfigured' : profile.configured ? 'configured' : 'unconfigured'}>{profile.health.state === 'healthy' ? '连接正常' : profile.health.state === 'unhealthy' ? '连接异常' : profile.configured ? '已配置' : '未完成配置'}{profile.active ? ' · 默认选择' : ''}</em>
               </button>)}
             </div>
             <div className="settings-inline-actions settings-preset-actions">
               <button type="button" className="text-button settings-icon-text-button" onClick={() => selectPiProfile('')}><SettingsIcon name="plus" />添加模型预设</button>
+              <button type="button" className="secondary-button" disabled={discoveringProviders} onClick={() => void discoverProviders()}>{discoveringProviders ? '发现中…' : '发现本机 Provider'}</button>
               <details className="settings-action-disclosure">
                 <summary className="text-button settings-icon-text-button"><SettingsIcon name="plus" />更多预设模板</summary>
                 <div className="settings-action-disclosure-menu">
                   <button type="button" className="text-button settings-icon-text-button" onClick={() => {
-                    setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1');
-                    setPiApi('openai-completions'); setPiModel(''); setPiThinking('off'); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiNativeSearch(false);
+                    setPiProfileId(''); setPiName('OpenCode Go'); setPiBaseUrl('https://opencode.ai/zen/go/v1'); setPiAuthMode('bearer'); setPiCredentialKind('encrypted');
+                    setPiApi('openai-completions'); setPiModel(''); setPiThinking('off'); setPiApiKey(''); setPiModels([]); setPiContextWindow(''); setPiMaxTokens(''); setPiText(true); setPiVision(true); setPiNativeSearch(false); setPiImageGeneration(false); setPiJsonOutput(true); setPiStreaming(true);
                     setPiConfigNote('填写 OpenCode Go API Key 后获取模型。');
                   }}><SettingsIcon name="plus" />使用 OpenCode Go 模板</button>
                 </div>
               </details>
             </div>
+            {discoveredProviders.length > 0 && <div className="settings-profile-list" aria-label="发现的本机 Provider">{discoveredProviders.map((candidate) => <button type="button" key={`${candidate.source}-${candidate.baseUrl}`} className="settings-profile" onClick={() => applyDiscoveredProvider(candidate)}><span className="settings-provider-mark"><SettingsIcon name="ai" /></span><span><strong>{candidate.name}</strong><small>{candidate.baseUrl} · 点击载入，保存后才会启用</small></span><em>已发现</em></button>)}</div>}
             <div className="settings-profile-editor" aria-labelledby="profile-editor-title">
               <div className="settings-section-heading"><h3 id="profile-editor-title">{piName || '新模型预设'}</h3><p>先完成 Provider 预设，再在下方角色分配中引用它。这里仅修改接口、模型和密钥。</p></div>
             <div className="settings-form">
             <label><span>预设名称</span><input value={piName} onChange={(event) => setPiName(event.target.value)} placeholder="例如：本地 CPA" /></label>
-            <label><span>接口类型</span><select value={piApi} onChange={(event) => { setPiApi(event.target.value as 'openai-responses' | 'openai-completions'); setPiModels([]); }}>
+            <label><span>接口协议</span><select value={piApi} onChange={(event) => { const api = event.target.value as 'openai-responses' | 'openai-completions' | 'anthropic-messages'; setPiApi(api); if (api === 'anthropic-messages' && piAuthMode === 'bearer') setPiAuthMode('x-api-key'); setPiModels([]); }}>
               <option value="openai-responses">OpenAI Responses</option>
               <option value="openai-completions">OpenAI Chat Completions</option>
+              <option value="anthropic-messages">Anthropic Messages</option>
             </select></label>
             <label className="wide">
               <span>模型</span>
@@ -475,12 +511,22 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             <label><span>思考等级</span><select value={piThinking ?? 'off'} onChange={(event) => setPiThinking(event.target.value as WmbSettingsSnapshot['pi']['profiles'][number]['thinking'])}><option value="off">关闭思考</option><option value="minimal">最低</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option><option value="max">最大</option></select></label>
             <label><span>上下文长度（tokens）</span><input type="number" min="1" step="1" value={piContextWindow} onChange={(event) => setPiContextWindow(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label><span>最大输出（tokens）</span><input type="number" min="1" step="1" value={piMaxTokens} onChange={(event) => setPiMaxTokens(event.target.value)} placeholder="由模型元数据决定" /></label>
+            <label className="settings-switch"><span>支持文本生成</span><input type="checkbox" checked={piText} onChange={(event) => setPiText(event.target.checked)} aria-label="支持文本生成" /></label>
+            <label className="settings-switch"><span>支持视觉输入</span><input type="checkbox" checked={piVision} onChange={(event) => setPiVision(event.target.checked)} aria-label="支持视觉输入" /></label>
+            <label className="settings-switch"><span>支持图像生成</span><input type="checkbox" checked={piImageGeneration} onChange={(event) => setPiImageGeneration(event.target.checked)} aria-label="支持图像生成" /></label>
             <label className="settings-switch"><span>模型自带联网搜索</span><input type="checkbox" checked={piNativeSearch} onChange={(event) => setPiNativeSearch(event.target.checked)} aria-label="模型自带联网搜索" /></label>
-            <p className="settings-help wide">不同模型分别保存；接口未提供元数据时可以手动填写，留空则使用 Pi 的运行时默认值。</p>
+            <label className="settings-switch"><span>支持 JSON 结构化输出</span><input type="checkbox" checked={piJsonOutput} onChange={(event) => setPiJsonOutput(event.target.checked)} aria-label="支持 JSON 结构化输出" /></label>
+            <label className="settings-switch"><span>支持流式输出</span><input type="checkbox" checked={piStreaming} onChange={(event) => setPiStreaming(event.target.checked)} aria-label="支持流式输出" /></label>
+            <p className="settings-help wide">能力声明用于限制运行时路由；接口未提供模型元数据时仍可手动填写。</p>
             <label className="wide"><span>Base URL</span><input value={piBaseUrl} onChange={(event) => setPiBaseUrl(event.target.value)} placeholder="http://localhost:61946/v1" /></label>
-            <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>
+            <label><span>鉴权方式</span><select value={piAuthMode} onChange={(event) => setPiAuthMode(event.target.value as typeof piAuthMode)}><option value="bearer">Authorization: Bearer</option><option value="x-api-key">x-api-key</option><option value="none">无需鉴权</option></select></label>
+            <label><span>凭证来源</span><select value={piCredentialKind} onChange={(event) => setPiCredentialKind(event.target.value as typeof piCredentialKind)}><option value="encrypted">本机加密密钥</option><option value="environment">环境变量</option><option value="command">外部命令</option><option value="none">无需凭证</option></select></label>
+            {piCredentialKind === 'encrypted' && <label className="wide"><span>API Key</span><input value={piApiKey} onChange={(event) => setPiApiKey(event.target.value)} placeholder={piProfileId ? '留空保持原密钥' : '填写 API Key'} type="password" /></label>}
+            {piCredentialKind === 'environment' && <label className="wide"><span>环境变量名</span><input value={piCredentialVariable} onChange={(event) => setPiCredentialVariable(event.target.value)} placeholder="ANTHROPIC_API_KEY" /></label>}
+            {piCredentialKind === 'command' && <><label className="wide"><span>凭证命令</span><input value={piCredentialCommand} onChange={(event) => setPiCredentialCommand(event.target.value)} placeholder="powershell.exe" /></label><label className="wide"><span>命令参数（每行一个）</span><textarea value={piCredentialArgs} onChange={(event) => setPiCredentialArgs(event.target.value)} rows={3} /></label></>}
             {piConfigNote && <p className="pi-config-note" aria-live="polite">{piConfigNote}</p>}
             <div className="settings-form-actions">
+              <button type="button" className="secondary-button" disabled={probingProvider || !piBaseUrl.trim()} onClick={() => void probeProvider()}>{probingProvider ? '测试中…' : '测试连接'}</button>
               {piProfileId && !settings.pi.profiles.find((profile) => profile.id === piProfileId)?.active && <button type="button" className="secondary-button" onClick={() => void window.wmb.activatePiConfig(piProfileId).then(refresh)}>设为默认选择</button>}
               {piProfileId && <button type="button" className="danger-button" onClick={() => {
                 void (async () => {
@@ -497,7 +543,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
               }}>删除预设</button>}
               <button type="button" className="primary-button" onClick={() => void saveProfile()}>{piProfileId ? '保存预设修改' : '保存模型预设'}</button>
             </div>
-          </div>
+            </div>
             </div>
           </section>
 
@@ -509,7 +555,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                 const candidates = rolePolicyDraft[role.id] ?? [];
                 const selectedIdentities = new Set(candidates.map(roleCandidateIdentity));
                 const availableIdentities = new Set<string>();
-                const availableCandidates = settings.pi.profiles.flatMap((profile) => roleModelOptionsForProfile(profile).map((model) => ({ profileId: profile.id, model: model.id }))).filter((candidate) => {
+                const availableCandidates = settings.pi.profiles.filter((profile) => profile.capabilities.text).flatMap((profile) => roleModelOptionsForProfile(profile).map((model) => ({ profileId: profile.id, model: model.id }))).filter((candidate) => {
                   const identity = roleCandidateIdentity(candidate);
                   if (selectedIdentities.has(identity) || availableIdentities.has(identity)) return false;
                   availableIdentities.add(identity);
@@ -525,7 +571,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                         <div className="role-policy-copy">
                           {profile ? <>
                             <div className="role-policy-provider-line"><strong>{profile.name}</strong><span className="role-policy-priority">{index === 0 ? '首选' : `备用 ${index}`}</span></div>
-                            <small data-role-model={candidate.model}>模型 · {candidate.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'Chat Completions' : 'Responses'} · {formatRoleCandidateThinking(candidate, profile.thinking)}</small>
+                            <small data-role-model={candidate.model}>模型 · {candidate.model || '未填写模型'} · {profile.api === 'openai-completions' ? 'Chat Completions' : profile.api === 'anthropic-messages' ? 'Anthropic Messages' : 'Responses'} · {formatRoleCandidateThinking(candidate, profile.thinking)}</small>
                             {!profile.configured && <span className="role-policy-warning">此预设尚未完成 API 配置</span>}
                           </> : <>
                             <div className="role-policy-provider-line"><strong className="role-policy-error">预设已不存在</strong><span className="role-policy-priority">不可用</span></div>
@@ -567,7 +613,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
           <section className="settings-section">
             <div className="settings-section-heading"><h3>独立配图模型</h3><p>沿用已配置 Provider 的 API，只为定稿后的配图调用；不会在正文阶段自动运行。</p></div>
             <div className="settings-form">
-              <label><span>Provider 预设</span><select value={illustrationProfileId} onChange={(event) => setIllustrationProfileId(event.target.value)}><option value="">请选择已配置预设</option>{settings.pi.profiles.filter((profile) => profile.configured).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+              <label><span>Provider 预设</span><select value={illustrationProfileId} onChange={(event) => setIllustrationProfileId(event.target.value)}><option value="">请选择支持图像生成的预设</option>{settings.pi.profiles.filter((profile) => profile.configured && profile.capabilities.imageGeneration).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
               <label><span>图像模型</span><input value={illustrationModel} onChange={(event) => setIllustrationModel(event.target.value)} placeholder="例如：gpt-image-1" /></label>
               <p className="settings-help wide">需要服务商支持图像生成接口；API Key 仍由上方模型预设管理。</p>
               {illustrationConfigNote && <p className="pi-config-note">{illustrationConfigNote}</p>}
