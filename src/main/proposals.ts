@@ -5,7 +5,6 @@ import {
   parseSourceIds,
   type OpportunityPoolItem
 } from './workbench.ts';
-import { buildTodayRecommendationProjection } from './today-recommendation.ts';
 import { readManagerAdapterProjection, type ManagerAdapterReadModel } from './workspace-orchestrator-manager-adapter.ts';
 import type { RecommendationReasonCode } from '../shared/propagation.ts';
 
@@ -285,47 +284,40 @@ function buildProposalLedger(
   const offset = Math.max(0, Math.floor(input.offset ?? 0));
   const rows = fetchAllLedgerRows(database);
   const rowById = new Map(rows.map((row) => [row.planItemId, row]));
-  const projection = buildTodayRecommendationProjection(database, input.planDate, { now });
   const orchestrator = readManagerAdapterProjection(database, { businessDate: input.planDate });
-  const hasOrchestratorRoots = orchestrator.roots.length > 0;
-  const orchestratorEligibleIds: string[] = [];
-  const orchestratorPendingIds: string[] = [];
-  const orchestratorInvalidIds: string[] = [];
-  for (const root of orchestrator.roots) {
-    if (root.projectionState !== 'frozen' || root.projectionError) continue;
-    for (const id of root.eligiblePlanItemIds) if (!orchestratorEligibleIds.includes(id)) orchestratorEligibleIds.push(id);
-    for (const id of root.pendingPlanItemIds) if (!orchestratorPendingIds.includes(id)) orchestratorPendingIds.push(id);
-    for (const id of root.invalidPlanItemIds) if (!orchestratorInvalidIds.includes(id)) orchestratorInvalidIds.push(id);
-  }
-  // A frozen root is authoritative even when its item belongs to an older
-  // non-empty plan. Do not recover it through latest-plan/date heuristics.
-  if (hasOrchestratorRoots) {
-    const authoritativeRows = fetchLedgerRowsByIds(database, [
-      ...orchestratorEligibleIds,
-      ...orchestratorPendingIds,
-      ...orchestratorInvalidIds
-    ]);
-    for (const row of authoritativeRows) rowById.set(row.planItemId, row);
-  }
-  const projectionItems = new Map(projection.eligible.map((item) => [item.planItemId, item]));
-  const openItems = hasOrchestratorRoots
-    ? orchestratorEligibleIds.map((id) => projectionItems.get(id) ?? (rowById.get(id) ? opportunityFromLedgerRow(database, rowById.get(id)!, now) : null)).filter((item): item is OpportunityPoolItem => Boolean(item))
-    : projection.eligible;
-  const repairable = hasOrchestratorRoots
-    ? [...orchestratorPendingIds.map((planItemId) => ({ planItemId, revision: rowById.get(planItemId)?.revision ?? 1, reasonCode: 'score_pending' as const, reason: '编排 Projection 仍在等待评分' })), ...orchestratorInvalidIds.map((planItemId) => ({ planItemId, revision: rowById.get(planItemId)?.revision ?? 1, reasonCode: 'score_invalid' as const, reason: '编排 Projection 标记为 invalid，需修复' }))]
-    : projection.repairable;
   const carryByFingerprint = loadCarryMap(database);
+  const openRows = rows.filter((row) => dispositionOfPlanItem(
+    database,
+    {
+      planItemId: row.planItemId,
+      title: row.title,
+      topicId: row.topicId,
+      sourceIds: parseSourceIds(row.sourceIds),
+      timeliness: row.timeliness,
+      createdAt: row.createdAt
+    },
+    now,
+    carryByFingerprint
+  ).state === 'open');
+  // The persisted plan is the user-facing truth. A ready_for_review row is
+  // immediately approvable; stale orchestration projections and optional
+  // guidance fields must not demote it back into a repair queue.
+  const openItems = openRows
+    .filter((row) => row.planningStatus === 'ready_for_review')
+    .map((row) => opportunityFromLedgerRow(database, row, now));
+  const repairable = openRows
+    .filter((row) => row.planningStatus === 'draft' || row.planningStatus === 'rejected')
+    .map((row) => ({
+      planItemId: row.planItemId,
+      revision: row.revision,
+      reasonCode: 'score_pending' as const,
+      reason: row.planningStatus === 'rejected' ? '已驳回，等待重新策划' : '方案尚未完成，等待继续策划'
+    }));
   const counts = emptyCounts();
   const terminalItems: ProposalLedgerItem[] = [];
-  if (hasOrchestratorRoots) {
-    counts.today = orchestratorEligibleIds.filter((id) => rowById.get(id)?.planDate === input.planDate).length;
-    counts.shelved = orchestratorEligibleIds.filter((id) => rowById.get(id)?.planDate !== input.planDate).length;
-    counts.scoring_pending = orchestratorPendingIds.length + orchestratorInvalidIds.length;
-  } else {
-    counts.today = projection.counts.todayReady;
-    counts.shelved = projection.counts.carriedReady;
-    counts.scoring_pending = projection.counts.scoringPending + projection.counts.invalid;
-  }
+  counts.today = openItems.filter((item) => item.planDate === input.planDate).length;
+  counts.shelved = openItems.filter((item) => item.planDate !== input.planDate).length;
+  counts.scoring_pending = repairable.length;
 
   for (const row of rows) {
     const sourceIds = parseSourceIds(row.sourceIds);

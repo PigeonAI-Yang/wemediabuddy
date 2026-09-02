@@ -5,7 +5,7 @@ import { appConfirm } from './app-confirm';
 import { toggleSingleFocus } from './pi-focus';
 import { Opportunity } from './today-view-parts';
 import { poolBadges, poolItemToPlanItem, type PoolItemLike } from './today-pool-view';
-import { approvePlanItem, approvedProjectId, getPlanningStatus, getScoreReasons, isEligibleForToday, isScoringPendingItem, pendingReasonForItem, rejectPlanItem } from './proposal-ledger';
+import { approvePlanItem, approvedProjectId, getPlanningStatus, getScoreReasons, isEligibleForToday, isScoringPendingItem, pendingReasonForItem, planningStatusLabel, rejectPlanItem } from './proposal-ledger';
 type LedgerItem = ProposalLedgerItem;
 
 const PAGE_SIZE = 30;
@@ -192,20 +192,20 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
 
   const detailPanel = (item: LedgerItem) => detailId === item.planItemId ? <section className="proposal-detail" data-testid="proposal-detail" data-plan-item-id={item.planItemId}>
     {detailLoading ? <p>正在读取完整方案…</p> : !detail ? <p className="proposal-detail-error">完整方案读取失败或已不存在。</p> : <>
-      <header><h3>{detail.item.title}</h3><span>{detail.item.planningStatus}</span></header>
+      <header><h3>{detail.item.title}</h3><span>{planningStatusLabel(detail.item.planningStatus)}</span></header>
       <div className="proposal-detail-grid">
-        <section><h4>为什么现在</h4><p>{detail.item.whyNow || '数据错误：缺少 whyNow'}</p></section>
-        <section><h4>目标读者</h4><p>{detail.item.targetAudience || '数据错误：缺少 targetAudience'}</p></section>
-        <section><h4>表达角度</h4><p>{detail.item.angle || '数据错误：缺少 angle'}</p></section>
-        <section><h4>核心观点</h4><p>{detail.item.pointOfView || '数据错误：缺少 pointOfView'}</p></section>
-        <section><h4>标题建议</h4><p>{detail.item.titleGuidance || '数据错误：缺少 titleGuidance'}</p></section>
-        <section><h4>开头建议</h4><p>{detail.item.openingGuidance || '数据错误：缺少 openingGuidance'}</p></section>
-        <section className="wide"><h4>内容结构</h4><p>{detail.item.structureGuidance || '数据错误：缺少 structureGuidance'}</p></section>
-        <section><h4>已有材料</h4><p>{detail.item.availableMaterials.length ? detail.item.availableMaterials.join('；') : '无'}</p></section>
-        <section><h4>缺失材料</h4><p>{detail.item.missingMaterials.length ? detail.item.missingMaterials.join('；') : '无'}</p></section>
+        {detail.item.whyNow ? <section><h4>为什么现在</h4><p>{detail.item.whyNow}</p></section> : null}
+        {detail.item.targetAudience ? <section><h4>目标读者</h4><p>{detail.item.targetAudience}</p></section> : null}
+        {detail.item.angle ? <section><h4>表达角度</h4><p>{detail.item.angle}</p></section> : null}
+        {detail.item.pointOfView ? <section><h4>核心观点</h4><p>{detail.item.pointOfView}</p></section> : null}
+        {detail.item.titleGuidance ? <section><h4>标题建议</h4><p>{detail.item.titleGuidance}</p></section> : null}
+        {detail.item.openingGuidance ? <section><h4>开头建议</h4><p>{detail.item.openingGuidance}</p></section> : null}
+        {detail.item.structureGuidance ? <section className="wide"><h4>内容结构</h4><p>{detail.item.structureGuidance}</p></section> : null}
+        {detail.item.availableMaterials.length ? <section><h4>已有材料</h4><p>{detail.item.availableMaterials.join('；')}</p></section> : null}
+        {detail.item.missingMaterials.length ? <section><h4>缺失材料</h4><p>{detail.item.missingMaterials.join('；')}</p></section> : null}
       </div>
       <section className="proposal-detail-section"><h4>来源证据</h4>{detail.sources.map((source) => <div className="proposal-detail-source" key={source.id}><a href={source.url} onClick={(event) => { event.preventDefault(); void window.wmb.openExternal(source.url); }}>{source.title}</a><span>{source.author ?? '未知作者'} · {source.verificationStatus} · r{source.revision}</span></div>)}</section>
-      <section className="proposal-detail-section"><h4>六维评分</h4>{detail.score?.reasons?.map((reason) => <div className="proposal-score-reason" key={reason.criterion}><strong>{reason.criterion}</strong><span>{reason.score}/{reason.weight}</span><p>{reason.reason ?? '无理由'}</p></div>) ?? <p>评分未完成</p>}</section>
+      <section className="proposal-detail-section"><h4>六维评分</h4>{detail.item.planningStatus === 'ready_for_review' ? <p>资料和观点已整理，可直接批准并推进。</p> : detail.score?.reasons?.length ? detail.score.reasons.map((reason) => <div className="proposal-score-reason" key={reason.criterion}><strong>{reason.criterion}</strong><span>{reason.score}/{reason.weight}</span><p>{reason.reason ?? '无理由'}</p></div>) : <p>方案仍在整理。</p>}</section>
       {detail.evidenceGaps.length ? <section className="proposal-detail-section"><h4>证据缺口</h4>{detail.evidenceGaps.map((gap, index) => <p key={`${gap.code}-${index}`}>{gap.code ?? 'UNRESOLVED'}：{gap.statement ?? '待核实'}</p>)}</section> : null}
     </>}
   </section> : null;
@@ -465,7 +465,6 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
                 )}
                 {item.topicId && openTopic ? <button type="button" className="proposal-action" onClick={() => openTopic(item.topicId!)}>关联主题</button> : null}
                 <button type="button" className="proposal-action" aria-expanded={detailId === item.planItemId} onClick={() => void openDetail(item.planItemId)}>{detailId === item.planItemId ? '收起详情' : '查看详情'}</button>
-                <button type="button" className="proposal-action" onClick={() => focusPlanItem(item)}>设置 Pi 焦点</button>
               </div>
             </div>
             {detailPanel(item)}
@@ -520,7 +519,6 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
               {item.state === 'adopted' && item.adoptedProjectId ? <button type="button" className="proposal-go-studio" onClick={() => onOpenProject(item.adoptedProjectId!)}>去创作 ›</button> : null}
               {item.state === 'dismissed' ? <button type="button" className="proposal-go-studio" onClick={() => void restoreOne(item.planItemId)}>恢复</button> : null}
               <button type="button" className="proposal-go-studio" onClick={() => void openDetail(item.planItemId)}>{detailId === item.planItemId ? '收起详情' : '查看完整方案'}</button>
-              <button type="button" className="proposal-action" onClick={() => focusPlanItem(item)}>设置 Pi 焦点</button>
             </div>
           </article>
           {detailPanel(item)}</div>);

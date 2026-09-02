@@ -180,6 +180,11 @@ export function priorityLabel(value: number | null | undefined): string {
 // Priority remains internal scheduling order only and is never used for display grade.
 export type PropagationDisplayGrade = string;
 export function resolveDisplayGrade(item: unknown): PropagationDisplayGrade {
+  if (item && typeof item === 'object') {
+    const status = (item as { planningStatus?: unknown }).planningStatus;
+    if (status === 'ready_for_review') return '待审批';
+    if (status === 'approved') return '已批准';
+  }
   return resolvePropagationGrade(item);
 }
 export function isPendingDisplay(item: unknown): boolean {

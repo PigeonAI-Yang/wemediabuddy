@@ -1,30 +1,37 @@
 {
-  "active_loop": "wmb-5322-ai-model-settings-hierarchy",
+  "active_loop": "2026-09-02-proposal-ledger-truthful-surface",
   "status": "done",
-  "symptom": "AI 与模型页面的角色候选行同时暴露候选摘要、推理下拉、上移、下移、移除和添加下拉，层级扁平且菜单逻辑混乱。",
+  "symptom": "选题台账显示零可批、原始校验字段和全部待评分，用户无法判断哪些选题可直接推进。",
   "observation_packet": {
-    "url": "WeMediaBuddy Electron > 设置 > AI 与模型",
-    "viewport": "1100x800",
-    "user_action": "浏览 Provider 预设并配置五个角色的模型候选、推理强度和顺序",
-    "expected": "先理解 Provider 与角色分配的层级，再在单一候选结构内完成配置和管理。",
-    "actual": "候选摘要、候选思考下拉和三个文字动作并列；添加备用模型又使用另一条全宽下拉，五个角色重复后视觉噪音很高。",
-    "screenshot": "tests/e2e/.artifacts/STG-009-settings-role-provider-models-75UzG5/settings-role-provider-models-1100-screenshot.png",
-    "console": "page error 0",
-    "network_ws": "无数据链路故障，当前问题属于信息架构与交互层级。",
-    "dom_selector": ".settings-role-policy-section .role-policy-row",
-    "computed_style_layout": "1100x800 无横向溢出，但每个候选行右侧同时出现 select + 三个文本动作，角色块纵向重复。",
-    "state_store": "Provider/model/thinking 候选合同与保存读回已通过 WMB-5321。"
+    "url": "installed WeMediaBuddy 0.3.0 proposals",
+    "viewport": "1568x941 Electron",
+    "user_action": "打开选题台账",
+    "expected": "显示真实已保存选题，并用用户可理解的审批状态呈现",
+    "actual_before": "今日可批为 0；卡片显示待评分；详情暴露 titleGuidance_required 等内部字段",
+    "actual_after": "今日可批为 18；卡片显示待审批；详情不再出现内部校验字段",
+    "dom_selector": "[data-opportunity-card], [data-testid=proposal-detail]",
+    "state_store": "真实用户数据目录 C:/Users/yangda01/AppData/Roaming/WeMediaBuddy"
   },
-  "hypotheses": [{
-    "hypothesis": "角色候选缺少清晰的主编辑区与次级管理动作分组，导致所有控件争夺同一视觉层级。",
-    "supports": "真实截图显示候选摘要、下拉和三个文字动作同权并列，添加入口与候选编辑采用不同结构。",
-    "would_disprove": "若设计审查认为问题主要来自页面级导航或 Provider 预设区，而不是候选结构，则应调整断点。",
-    "next_check": "由 designer 审查真实截图、DOM 与现有设计系统，并给出最小重组方案。",
-    "result": "confirmed：Provider 编辑归入预设阶段，候选主信息与推理常显，排序/移除收进单一管理 disclosure，五角色合并为分隔列表。"
-  }],
-  "breakpoint": "component information hierarchy and action grouping",
-  "owner_check": null,
+  "hypotheses": [
+    {
+      "hypothesis": "台账错误地把未建成冻结 orchestrator projection 当成已保存选题的展示前置条件",
+      "supports": "数据库已有 18 条 ready_for_review，旧页面仍显示 0",
+      "would_disprove": "直接按 plan_items/carry 读取后仍为 0",
+      "next_check": "让已保存 plan_items 成为台账真源并重启安装版",
+      "result": "确认；安装版立即显示 18 条今日可批"
+    }
+  ],
+  "breakpoint": "proposal ledger display truth",
+  "owner_check": {
+    "user-blocked-on": "可批选题被隐藏且界面暴露内部错误码",
+    "now-usable": "18 条选题可见、可否掉、可驳回、可批准并推进",
+    "real-data-or-state": "真实安装版与真实用户数据",
+    "loading-empty-error-states": "真实列表渲染；内部缺字段不再伪装为用户错误",
+    "v1-v2-baseline-preserved": "是",
+    "regression-risk-checked": "typecheck、台账分类测试、详情渲染合同、安装版真实界面通过",
+    "would-user_return_this": "no"
+  },
   "attempts": 1,
-  "last_gate": "AFTER: TypeScript 0 diagnostics, design-token drift 3/3 PASS, real Electron STG-009 1/1 PASS with management disclosure and 1100x800 visual inspection.",
+  "last_gate": "Installed Electron: today=18, 待审批 visible, raw validation errors absent",
   "clean_completion": "yes"
 }
