@@ -108,9 +108,9 @@ export function StudioOutline({ outline, tab, setTab, platformVersions, investig
   return <aside className="studio-outline">
     <section className="studio-outline-section studio-outline-section--work" aria-label="项目工作面">
       <p className="studio-panel-title">工作面</p>
-      <div className="studio-work-switch" role="group" aria-label="正文 / 调查 / 来源">
+      <div className="studio-work-switch" role="group" aria-label="正文 / 依据与进度 / 来源">
         <button type="button" className={`studio-surface-tab${tab === 'core' ? ' active' : ''}`} data-surface="core" onClick={() => setTab('core')}>正文</button>
-        <button type="button" className={`studio-surface-tab${tab === 'investigation' ? ' active' : ''}`} data-surface="investigation" title={investigationIndicator.label} aria-label={`调查，${investigationIndicator.label}`} onClick={() => setTab('investigation')}>调查<i className="st-dot" data-state={investigationIndicator.state} aria-hidden="true"/></button>
+        <button type="button" className={`studio-surface-tab${tab === 'investigation' ? ' active' : ''}`} data-surface="investigation" title={investigationIndicator.label} aria-label={`依据与进度，${investigationIndicator.label}`} onClick={() => setTab('investigation')}>依据与进度<i className="st-dot" data-state={investigationIndicator.state} aria-hidden="true"/></button>
         <button type="button" className={`studio-surface-tab${tab === 'sources' ? ' active' : ''}`} data-surface="sources" onClick={() => setTab('sources')}>来源</button>
       </div>
     </section>

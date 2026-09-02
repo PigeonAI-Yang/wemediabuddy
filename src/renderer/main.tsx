@@ -122,6 +122,7 @@ function App(): React.JSX.Element {
   >([]);
   const [proposalsSelectedItem, setProposalsSelectedItem] =
     useState<TodayPlanItem | null>(null);
+  const [proposalFocusId, setProposalFocusId] = useState<string | null>(null);
   const [fermentSelectedItem, setFermentSelectedItem] =
     useState<TodayFermentingSelection | null>(null);
   const [rankingContext, setRankingContext] = useState<RankingContext>({
@@ -801,7 +802,10 @@ function App(): React.JSX.Element {
             refresh={refreshToday}
             openStudio={openStudio}
             openTopic={openTopic}
-            openProposals={() => navigate("proposals")}
+            openProposals={(planItemId) => {
+              setProposalFocusId(planItemId ?? null);
+              navigate("proposals");
+            }}
             openResults={() => {
               sessionStorage.setItem("wmb.resultsRange", "7d");
               navigate("results");
@@ -868,6 +872,7 @@ function App(): React.JSX.Element {
             openToday={() => navigate("today")}
             selectedItem={proposalsSelectedItem}
             onSelectedItemChange={setProposalsSelectedItem}
+            focusPlanItemId={proposalFocusId}
           />
         )}
         {view === "topic" && (

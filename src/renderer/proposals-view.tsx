@@ -66,7 +66,7 @@ function toPlanItem(item: LedgerItem): TodayPlanItem {
 }
 
 /** 选题台账：全量决策记录 + P1 分页 / 恢复 / 批量 / Pi 焦点。 */
-export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, openToday, selectedItem = null, onSelectedItemChange }: {
+export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, openToday, selectedItem = null, onSelectedItemChange, focusPlanItemId = null }: {
   planDate: string;
   openStudio: (projectId?: string) => void;
   openTopic?: (topicId: string) => void;
@@ -74,6 +74,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
   openToday?: () => void;
   selectedItem?: TodayPlanItem | null;
   onSelectedItemChange?: (item: TodayPlanItem | null) => void;
+  focusPlanItemId?: string | null;
 }): React.JSX.Element {
   const [tab, setTab] = useState<ProposalTab>('today');
   const [data, setData] = useState<ProposalLedgerResult | null>(null);
@@ -143,6 +144,24 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
   }, [load]);
 
   useEffect(() => {
+    if (!focusPlanItemId) return;
+    let active = true;
+    void window.wmb.getProposalDetail(focusPlanItemId).then((next) => {
+      if (!active || !next) return;
+      setTab(next.item.state);
+      setDetailId(focusPlanItemId);
+      setDetail(next);
+      onSelectedItemChange?.(toPlanItem(next.item));
+      window.requestAnimationFrame(() => {
+        document.querySelector(`[data-plan-item-id="${CSS.escape(focusPlanItemId)}"]`)?.scrollIntoView({ block: 'center' });
+      });
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { active = false; };
+  }, [focusPlanItemId, onSelectedItemChange]);
+
+  useEffect(() => {
     if (!batchMode) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -205,7 +224,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
         {detail.item.missingMaterials.length ? <section><h4>缺失材料</h4><p>{detail.item.missingMaterials.join('；')}</p></section> : null}
       </div>
       <section className="proposal-detail-section"><h4>来源证据</h4>{detail.sources.map((source) => <div className="proposal-detail-source" key={source.id}><a href={source.url} onClick={(event) => { event.preventDefault(); void window.wmb.openExternal(source.url); }}>{source.title}</a><span>{source.author ?? '未知作者'} · {source.verificationStatus} · r{source.revision}</span></div>)}</section>
-      <section className="proposal-detail-section"><h4>六维评分</h4>{detail.item.planningStatus === 'ready_for_review' ? <p>资料和观点已整理，可直接批准并推进。</p> : detail.score?.reasons?.length ? detail.score.reasons.map((reason) => <div className="proposal-score-reason" key={reason.criterion}><strong>{reason.criterion}</strong><span>{reason.score}/{reason.weight}</span><p>{reason.reason ?? '无理由'}</p></div>) : <p>方案仍在整理。</p>}</section>
+      <section className="proposal-detail-section"><h4>六维评分</h4>{detail.item.planningStatus === 'ready_for_review' ? <p>资料和观点已整理，批准后系统将自动调查并进入写作。</p> : detail.score?.reasons?.length ? detail.score.reasons.map((reason) => <div className="proposal-score-reason" key={reason.criterion}><strong>{reason.criterion}</strong><span>{reason.score}/{reason.weight}</span><p>{reason.reason ?? '无理由'}</p></div>) : <p>方案仍在整理。</p>}</section>
       {detail.evidenceGaps.length ? <section className="proposal-detail-section"><h4>证据缺口</h4>{detail.evidenceGaps.map((gap, index) => <p key={`${gap.code}-${index}`}>{gap.code ?? 'UNRESOLVED'}：{gap.statement ?? '待核实'}</p>)}</section> : null}
     </>}
   </section> : null;
@@ -458,7 +477,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
                       <div className="proposal-planning-buttons">
                         {planningStatus === 'draft' ? <button type="button" className="proposal-action" disabled={busy} onClick={() => void requestPlanning(item)}>派策划</button> : null}
                         {planningStatus === 'rejected' ? <button type="button" className="proposal-action" disabled={busy} onClick={() => void requestPlanning(item, true)}>重新策划</button> : null}
-                        {planningStatus === 'ready_for_review' ? <><button type="button" className="proposal-action" disabled={busy} onClick={() => void reject(item)}>驳回</button><button type="button" className="proposal-action" disabled={busy} onClick={() => void approve(item)}>批准并推进</button></> : null}
+                        {planningStatus === 'ready_for_review' ? <><button type="button" className="proposal-action" disabled={busy} onClick={() => void reject(item)}>驳回</button><button type="button" className="proposal-action primary-button" disabled={busy} onClick={() => void approve(item)}>批准并开始创作</button></> : null}
                       </div>
                     ) : null}
                   </>

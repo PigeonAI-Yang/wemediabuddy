@@ -1989,6 +1989,15 @@
 .investigation-feedback.error { background: var(--danger-soft); color: var(--danger); }
 .investigation-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .investigation-body { display: grid; gap: 14px; align-content: start; }
+.investigation-evidence-details { min-width: 0; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--panel-bg); overflow: clip; }
+.investigation-evidence-details > summary { cursor: pointer; list-style: none; padding: 12px 16px; color: var(--ink-soft); font-size: 13px; font-weight: 650; user-select: none; }
+.investigation-evidence-details > summary::-webkit-details-marker { display: none; }
+.investigation-evidence-details > summary::after { content: '展开'; float: right; color: var(--ink-muted); font-weight: 500; }
+.investigation-evidence-details[open] > summary { border-bottom: 1px solid var(--border-soft); }
+.investigation-evidence-details[open] > summary::after { content: '收起'; }
+.investigation-evidence-details > .investigation-body { padding: 14px; }
+.investigation-legacy-actions { margin-top: 10px; }
+.investigation-legacy-actions > summary { cursor: pointer; color: var(--ink-muted); font-size: 12px; margin-bottom: 10px; }
 
 .investigation-section { min-width: 0; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--panel-bg); padding: 14px 16px; display: grid; gap: 10px; }
 .investigation-section-title { margin: 0; color: var(--ink-soft); font-size: 13px; font-weight: 650; }

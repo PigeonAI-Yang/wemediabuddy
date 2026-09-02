@@ -26,7 +26,7 @@
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { seedSource, writeLocalPiConfig } from './lib/seed.mjs';
 import { buildResearchEvidencePack } from '../../src/main/research-task-state.ts';
-import { initializeProjectInvestigation, readProjectInvestigation, reviewInvestigationResearch, saveInvestigationOutline, decideInvestigationOutline, recordInvestigationReporterTerminal } from '../../src/main/project-investigation.ts';
+import { initializeProjectInvestigation, readProjectInvestigation, reviewInvestigationResearch, saveInvestigationOutline, decideInvestigationOutline, recordInvestigationReporterTerminal, startInvestigationWriter, recordInvestigationWriterTerminal } from '../../src/main/project-investigation.ts';
 
 const OUTLINE_FIXTURE = Object.freeze({
   scope: 'E2E 调查：平台机制与创作者成本',
@@ -95,6 +95,39 @@ async function seedResearchReviewProject({ dataRoot, userDataDir, workspaceId })
     if (!result.ok || result.data.status !== 'research_review') {
       throw new Error(`seed 终态失败: ${JSON.stringify(result)}`);
     }
+  } finally {
+    db.close();
+  }
+}
+
+async function seedCompletedInvestigationProject(context) {
+  await seedResearchReviewProject(context);
+  const db = openWriteDb(context.dataRoot);
+  try {
+    const project = projectRow(db, 'E2E 调查项目（验收中）');
+    const accepted = reviewInvestigationResearch(db, {
+      projectId: project.id,
+      expectedRevision: readProjectInvestigation(db, project.id).revision,
+      decision: 'accept',
+      decidedBy: 'desk',
+      direction: {
+        keyFacts: ['E2E 已核实关键事实'], upheld: ['核心判断成立'], changed: [], discoveries: [], unknowns: [],
+        recommendation: 'continue', coreQuestion: 'E2E 核心问题', audienceValue: 'E2E 受众价值', scope: 'E2E 正文范围', constraints: []
+      }
+    });
+    if (!accepted.ok) throw new Error(`seed 验收失败: ${JSON.stringify(accepted)}`);
+    const started = startInvestigationWriter(db, {
+      projectId: project.id,
+      expectedRevision: accepted.data.revision,
+      writerJobId: 'job-e2e-completed-writer'
+    });
+    if (!started.ok) throw new Error(`seed 写手启动失败: ${JSON.stringify(started)}`);
+    const completed = recordInvestigationWriterTerminal(db, {
+      projectId: project.id,
+      jobId: 'job-e2e-completed-writer',
+      type: 'job.finished'
+    });
+    if (!completed.ok) throw new Error(`seed 写手完成失败: ${JSON.stringify(completed)}`);
   } finally {
     db.close();
   }
@@ -445,6 +478,34 @@ export default [
     }
   },
   {
+    id: 'WMB-5394-creation-evidence-progressive-detail',
+    journeyIds: [],
+    launch: { seedFixture: seedCompletedInvestigationProject },
+    run: async ({ app, page, helpers, assert, step, evidence, artifactsDir }) => {
+      await helpers.waitForAppReady(page);
+      await step('Studio 默认正文，依据与进度保持可展开详情且无内部生产按钮', async () => {
+        await helpers.navigateTo(page, 'studio');
+        await openProjectByName(page, 'E2E 调查项目（验收中）');
+        assert(await page.locator('.studio-surface-tab[data-surface="core"].active').count() === 1, '打开项目应默认停在正文');
+        await openInvestigationSurface(page);
+        assert((await page.locator('.studio-surface-tab[data-surface="investigation"]').textContent())?.includes('依据与进度'), '工作面应命名为依据与进度');
+        assert(await page.locator('.investigation-evidence-details:not([open])').count() === 1, '正常完成态完整记录应默认折叠');
+        assert(await page.locator('.investigation-primary-action').count() === 0, '正常完成态不应显示内部生产审批按钮');
+        await page.locator('.investigation-evidence-details > summary').click();
+        assert(await page.locator('.investigation-evidence-details[open] .investigation-history').count() === 1, '用户应可展开完整历史');
+      });
+      await step('1100×800 依据与进度无横向溢出且 page error 0', async () => {
+        await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+        await page.waitForTimeout(300);
+        const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        assert(overflowX === 0, `1100px 依据与进度不应横向溢出，实际 ${overflowX}`);
+        await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'creation-evidence-progressive-detail-1100' });
+        assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
+      });
+      return { defaultSurface: 'core', evidence: 'progressive-detail', overflowX: 0 };
+    }
+  },
+  {
     id: 'WMB-5290-deferred-owner-decision',
     journeyIds: [],
     launch: { seedFixture: seedDeferredReviewProject },
@@ -456,12 +517,12 @@ export default [
         await openInvestigationSurface(page);
         await waitForInvestigationState(page, ['needs_user']);
         const state = await readInvestigationState(page);
-        assert(state.primary === 'accept-research', `Owner 应可选择按观点稿继续（accept-research）: ${JSON.stringify(state)}`);
+        assert(state.primary === 'accept-research', `Owner 应可选择按当前证据收窄写作（accept-research）: ${JSON.stringify(state)}`);
         const primaryLabel = (await page.locator('.investigation-primary-action').textContent())?.replace(/\s+/g, ' ').trim() ?? '';
-        assert(primaryLabel === '按观点稿继续', `暂缓后主动作应显示「按观点稿继续」: ${primaryLabel}`);
+        assert(primaryLabel === '按当前证据收窄写作', `异常状态主动作应显示收窄写作: ${primaryLabel}`);
         const surface = await page.locator('.studio-investigation').textContent();
-        assert(surface.includes('暂缓，等待 Owner 决定'), `主管暂缓结论未显示: ${surface}`);
-        assert(surface.includes('按观点稿继续'), `Owner 决策说明未显示按观点稿继续: ${surface}`);
+        assert(surface.includes('系统已停止自动推进') || surface.includes('当前证据不足以安全进入自动写作'), `异常停止原因未显示: ${surface}`);
+        for (const label of ['按当前证据收窄写作', '补查关键事实', '调整核心方向', '停止项目']) assert(surface.includes(label), `缺少异常决策文案 ${label}`);
         assert(surface.includes('外部可验证事实') && surface.includes('证据'), `事实与证据边界说明未显示: ${surface}`);
         for (const action of ['supplement-research', 'expand-research', 'stop-research']) {
           assert(await page.locator(`[data-action="${action}"]`).count() === 1, `缺少 Owner 决策入口 ${action}`);

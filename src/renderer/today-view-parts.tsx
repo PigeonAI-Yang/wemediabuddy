@@ -208,12 +208,12 @@ export function Icon({ name }: { name: string }): React.JSX.Element {
   return <svg aria-hidden="true" viewBox="0 0 24 24">{paths[name]}</svg>;
 }
 
-export function CreateIconButton({ onClick }: { onClick: () => void }): React.JSX.Element {
+export function CreateIconButton({ onClick, label = '开始创作' }: { onClick: () => void; label?: string }): React.JSX.Element {
   return <button
     type="button"
     className="icon-action-button create-action"
-    aria-label="开始创作"
-    title="开始创作"
+    aria-label={label}
+    title={label}
     onClick={(event) => { event.stopPropagation(); onClick(); }}
   >
     <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
@@ -253,10 +253,10 @@ export function DismissIconButton({ onClick, dismissLabel }: { onClick: () => vo
   </button>;
 }
 
-export function Opportunity({ item, primary, selected, onToggle, onCreate, sources, badges, onDismiss, dismissLabel }: {
+export function Opportunity({ item, primary, selected, onToggle, onCreate, sources, badges, onDismiss, dismissLabel, actionLabel }: {
   item: TodayPlanItem; primary?: boolean; selected: boolean; onToggle: (item: TodayPlanItem) => void;
   onCreate?: (item: TodayPlanItem) => void; sources: TodaySource[];
-  badges?: PoolBadge[]; onDismiss?: () => void; dismissLabel?: string;
+  badges?: PoolBadge[]; onDismiss?: () => void; dismissLabel?: string; actionLabel?: string;
 }): React.JSX.Element {
   const trend = item.trendEvidence.find((value) => value.viewsPerHour.status === 'value'); const trendText = trend?.viewsPerHour.status === 'value' ? `浏览 +${Math.round(trend.viewsPerHour.value).toLocaleString('zh-CN')}/小时${trend.velocityChange.status === 'value' ? ` · 加速 ${Math.round(trend.velocityChange.value).toLocaleString('zh-CN')}` : ''}` : null;
   const trendTitle = trend?.viewsPerHour.status === 'value' ? `快照 ${(trend.velocityChange.status === 'value' ? trend.velocityChange.snapshotIds : trend.viewsPerHour.snapshotIds).join('、')} · 最近采集 ${trend.snapshots.at(-1)?.capturedAt ?? '未知'}` : undefined;
@@ -270,7 +270,7 @@ export function Opportunity({ item, primary, selected, onToggle, onCreate, sourc
   const actionCluster = () => (
     <div className="opp-actions" onClick={(event) => event.stopPropagation()}>
       {dismissButton}
-      {onCreate ? <CreateIconButton onClick={() => onCreate(item)}/> : null}
+      {onCreate ? <CreateIconButton label={actionLabel} onClick={() => onCreate(item)}/> : null}
     </div>
   );
   if (!primary) return <article data-opportunity-card className={`opp-row${selected ? ' selected' : ''}`} onClick={() => onToggle(item)} aria-selected={selected}>

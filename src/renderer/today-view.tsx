@@ -78,7 +78,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
   onFocusChange?: (focus: PiFocusObject | null) => void;
   aiSourcePresentation: boolean;
   intelligenceChannels: IntelligenceChannelsSummary | null; piConfigured: boolean;
-  openProposals?: () => void;
+  openProposals?: (planItemId?: string) => void;
 }): React.JSX.Element {
   const cachedRun = readTodayRunCache(planDate);
   const [running, setRunning] = useTodayRunningTransition(Boolean(cachedRun?.running));
@@ -324,19 +324,22 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
         try {
           await window.wmb.syncManagerTask?.({ businessDate: planDate });
           const projection = await window.wmb.getManagerTask?.({ businessDate: planDate });
-          const manager = projection?.managerTask;
-          const child = projection?.legacyChild;
-          if (manager && isManagerNonterminal(manager)) {
-            const managerProjection = projectManagerTaskForToday(manager, child);
-            const snapshot = managerProjection.task;
-            setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(snapshot) ? prev : snapshot);
+          const activeRoot = projection?.roots?.find((root) => root.status === 'created' || root.status === 'running' || root.status === 'waiting_owner');
+          if (activeRoot) {
+            const judge = await window.wmb.getAgentTask({ intent: 'daily_judge', businessDate: planDate });
+            const scan = await window.wmb.getAgentTask({ intent: 'daily_scan', businessDate: planDate });
+            const current = (judge && typeof judge === 'object' && (judge as DailyTaskSnapshot).status === 'running') ? judge : scan;
+            const snapshot = (current && typeof current === 'object') ? current as DailyTaskSnapshot : null;
+            if (snapshot) setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(snapshot) ? prev : snapshot);
             startingRef.current = false;
-            setRunning(managerProjection.running);
-            writeTodayRunCache({ planDate, task: snapshot, running: managerProjection.running });
+            setRunning(true);
+            writeTodayRunCache({ planDate, task: snapshot, running: true });
             return;
           }
         } catch { /* fall through */ }
-        const value = await window.wmb.getAgentTask({ intent: 'daily_intelligence', businessDate: planDate });
+        const value = await window.wmb.getAgentTask({ intent: 'daily_judge', businessDate: planDate })
+          ?? await window.wmb.getAgentTask({ intent: 'daily_scan', businessDate: planDate })
+          ?? await window.wmb.getAgentTask({ intent: 'daily_intelligence', businessDate: planDate });
         const typed = (value && typeof value === 'object') ? value as DailyTaskSnapshot : null;
         setTask((prev) => JSON.stringify(prev ?? null) === JSON.stringify(typed ?? null) ? prev : typed);
         if (!typed) {
@@ -373,12 +376,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
     return () => onStatusChange(null);
   }, [runView.statusLine, running, onStatusChange]);
 
-  const create = async (item: TodayPlanItem) => {
-    if (!Number.isInteger(item.revision) || Number(item.revision) < 1) throw new Error('选题版本缺失，请刷新后重试。');
-    const approval = await window.wmb.approvePlanItem({ planItemId: item.id, expectedRevision: Number(item.revision), reason: 'today_primary_approve' });
-    if (!approval?.projectId) throw new Error('批准未返回项目，请刷新后重试。');
-    refresh();
-    openStudio(approval.projectId);
+  const create = (item: TodayPlanItem) => {
+    openProposals?.(item.id);
   };
   const poolBadgeMap = useMemo(() => {
     const nowMs = Date.now();
@@ -395,14 +394,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
   };
   const createFromCarry = async (item: { objectType: string; objectId: string; title?: string }) => {
     if (item.objectType === 'plan_item') {
-      const visible = displayItems.find((candidate) => candidate.id === item.objectId);
-      const detail = visible ? null : await window.wmb.getProposalDetail(item.objectId);
-      const revision = visible?.revision ?? detail?.item?.revision ?? null;
-      if (!Number.isInteger(revision) || Number(revision) < 1) throw new Error('选题版本缺失，请刷新后重试。');
-      const approval = await window.wmb.approvePlanItem({ planItemId: item.objectId, expectedRevision: Number(revision), reason: 'carry_approve' });
-      if (!approval?.projectId) throw new Error('批准未返回项目，请刷新后重试。');
-      refresh();
-      openStudio(approval.projectId);
+      openProposals?.(item.objectId);
       return;
     }
     if (item.objectType === 'topic') {
@@ -505,8 +497,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
       }
       if (data?.task) {
         setTask(data.task);
-        startingRef.current = data.task.status === 'running' ? false : false;
-      } else {
         startingRef.current = false;
       }
       refresh();
@@ -642,7 +632,7 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
         }}
         onDailyAutomation={() => openSettings?.('daily-automation' as SettingsSectionId)}
       />
-      {openProposals && recommendation ? <button type="button" className="proposal-ledger-entry" onClick={openProposals} title="打开选题台账">
+      {openProposals && recommendation ? <button type="button" className="proposal-ledger-entry" onClick={() => openProposals()} title="打开选题台账">
         <span className="proposal-ledger-entry-title">选题台账 · {recommendation.counts.todayReady + recommendation.counts.carriedReady}</span>
         <span className="proposal-ledger-entry-counts">今日待批准 · {recommendation.counts.todayReady} ｜ 跨日待批准 · {recommendation.counts.carriedReady} ｜ 待评分/待修复 · {recommendation.counts.scoringPending + recommendation.counts.invalid}</span>
         <span className="proposal-ledger-entry-arrow" aria-hidden="true">›</span>
@@ -650,8 +640,8 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
       <div className="today-grid">
         <div className="today-opps">
           {primary ? <>
-            <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
-            {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} sources={sources} badges={poolBadgeMap.get(item.id)} onDismiss={() => void dismissOpportunity(item.id)}/>)}</div>}
+            <Opportunity item={primary} primary selected={selectedItems.some((item) => item.id === primary.id)} onToggle={toggleSelection} onCreate={create} actionLabel="查看完整方案" sources={sources} badges={poolBadgeMap.get(primary.id)} onDismiss={() => void dismissOpportunity(primary.id)}/>
+            {displayItems.length > 1 && <div className="opp-list">{displayItems.slice(1).map((item) => <Opportunity key={item.id} item={item} selected={selectedItems.some((selected) => selected.id === item.id)} onToggle={toggleSelection} onCreate={create} actionLabel="查看完整方案" sources={sources} badges={poolBadgeMap.get(item.id)} onDismiss={() => void dismissOpportunity(item.id)}/>)}</div>}
           </> : <section className="empty-state">
             <h2>{runView.opportunityEmptyTitle}</h2>
             <p>{runView.opportunityEmptyBody}</p>

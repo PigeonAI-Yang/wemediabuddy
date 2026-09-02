@@ -1,7 +1,5 @@
-// WMB-5290 项目专项调查工作面：项目内的 正文/调查/来源 三工作面之一。
-// 单一连贯表面：状态摘要 + 渐进披露（提纲编辑 → 记者进度 → 资料包验收 → 方向审批 → 写手）。
-// 每次状态只有一个 violet 主操作（.investigation-primary-action），其余分支为 secondary/danger。
-// 不暗示记者会自动启动写手：只有 ready_to_write 才出现「开始写作」。
+// 项目“依据与进度”详情：默认只展示生产状态，完整调查档案渐进披露。
+// 正常链路由生产授权自动推进；Owner 操作仅用于 needs_user / failed 等异常恢复。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContentProjectDetail } from '../main/content';
@@ -269,10 +267,10 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
   }
 
   if (!model) {
-    return <section className="studio-investigation" aria-label="项目调查"><div className="investigation-empty">
-      <h3>项目尚未开始专项调查</h3>
-      <p>主管将先拟定调查提纲并呈报 Owner 批准，再派记者围绕本项目全面调查；调查资料包经主管验收、写作方向经 Owner 确认后，才会进入写作。</p>
-      <button type="button" className="primary-button investigation-primary-action" data-action="initialize" disabled={actionBusy} onClick={() => void initialize()}>开始调查</button>
+    return <section className="studio-investigation" aria-label="依据与进度"><div className="investigation-empty">
+      <h3>暂无生产依据档案</h3>
+      <p>手动创建的项目可直接编辑正文；需要证据调查时再展开高级操作。</p>
+      <details className="investigation-legacy-actions"><summary>高级操作</summary><button type="button" className="secondary-button" data-action="initialize" disabled={actionBusy} onClick={() => void initialize()}>建立调查档案</button></details>
     </div></section>;
   }
 
@@ -478,7 +476,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
       case 'outline_rejected':
         return { label: '保存提纲（新版本）', dataAction: 'save-outline', onClick: saveOutline };
       case 'research_review':
-        return { label: '验收通过', dataAction: 'accept-research', onClick: acceptResearch };
+        return null;
       case 'needs_more_research': {
         const reporterActive = model.reporter?.status === 'queued' || model.reporter?.status === 'running';
         return reporterActive ? null : { label: '补派记者', dataAction: 'retry-reporter', onClick: retryReporter };
@@ -492,9 +490,9 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
             }
           : { label: '补派记者', dataAction: 'retry-reporter', onClick: retryReporter };
       case 'direction_pending_approval':
-        return { label: '批准写作方向', dataAction: 'approve-direction', onClick: approveDirection };
+        return { label: '确认旧方向并继续', dataAction: 'approve-direction', onClick: approveDirection };
       case 'ready_to_write':
-        return { label: '开始写作', dataAction: 'start-writer', onClick: startWriter };
+        return null;
       case 'failed':
         return { label: '重试记者', dataAction: 'retry-reporter', onClick: retryReporter };
       default:
@@ -609,7 +607,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
   );
 
   return (
-    <section className="studio-investigation" aria-label="项目调查">
+    <section className="studio-investigation" aria-label="依据与进度">
       <header className="investigation-header">
         <div className="investigation-status" data-status={status}>
           <span className={`investigation-status-pill investigation-status-data tone-${tone}`} data-status={status}><i className="investigation-dot" aria-hidden="true" />{status === 'outline_pending_approval' && !model.outline ? '调查提纲待生成' : investigationStatusLabel(status)}</span>
@@ -619,6 +617,8 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
         {feedback && <p className={`investigation-feedback ${feedback.kind}`} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.message}</p>}
         {renderActionRow()}
       </header>
+      <details className="investigation-evidence-details" open={status === 'needs_user' || status === 'failed'}>
+        <summary>查看完整依据与调查记录</summary>
       <div className="investigation-body">
         {status === 'outline_pending_approval' && renderOutlineEditor()}
         {status === 'outline_rejected' && (
@@ -718,6 +718,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
         )}
         {renderHistory()}
       </div>
+      </details>
     </section>
   );
 }

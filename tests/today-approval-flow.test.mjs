@@ -62,12 +62,11 @@ function insertPlan(database) {
   return database.prepare('SELECT id, revision, title FROM plan_items ORDER BY sort_order').all();
 }
 
-test('Today recommendation action uses approve bridge and never bypasses approval with direct project creation', async () => {
+test('Today recommendation action opens the corresponding complete proposal without approving it', async () => {
   const source = await readFile(new URL('../src/renderer/today-view.tsx', import.meta.url), 'utf8');
-  const createBody = source.match(/const create = async \(item: TodayPlanItem\) => \{([\s\S]*?)\n  \};/)?.[1] ?? '';
-  assert.match(createBody, /approvePlanItem/, 'main recommendation action must approve the visible item first');
-  assert.doesNotMatch(createBody, /createProjectFromPlanItem/, 'main recommendation action must not bypass approval');
-  assert.match(createBody, /openStudio/, 'successful approval must open the returned project');
+  const createBody = source.match(/const create = \(item: TodayPlanItem\) => \{([\s\S]*?)\n  \};/)?.[1] ?? '';
+  assert.match(createBody, /openProposals\?\.\(item\.id\)/, 'Today must deep-link the visible plan item into Proposals');
+  assert.doesNotMatch(createBody, /approvePlanItem|openStudio/, 'Today must not duplicate proposal approval or project routing');
 });
 
 test('approval directly creates the selected content project', async () => {
