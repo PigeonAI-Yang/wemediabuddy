@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { approvePlanItemAndCreateProject } from '../src/main/plan-item-approval.ts';
+import { prepareApprovedProjectInvestigation } from '../src/main/project-investigation-automation.ts';
 import { buildTodayRecommendationProjection } from '../src/main/today-recommendation.ts';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
@@ -75,6 +76,7 @@ test('approval directly creates the selected content project', async () => {
   assert.ok(handler, 'plan-item:approve handler must exist');
   assert.match(handler, /approvePlanItemAndCreateProject/);
   assert.doesNotMatch(handler, /submitWorkspaceOrchestratorIntent|executeOwnerProjectionDecision|Projection/);
+  assert.match(handler, /continueAutomaticInvestigation/, 'approval must continue the committed investigation without a second Owner action');
 });
 
 test('approval transaction creates one complete project, closes carry, and advances the projection', async () => {
@@ -84,6 +86,7 @@ test('approval transaction creates one complete project, closes carry, and advan
 
     database.exec('BEGIN IMMEDIATE');
     const resultA = approvePlanItemAndCreateProject(database, { planItemId: a.id, expectedRevision: a.revision, by: 'owner', now: NOW });
+    const preparedA = prepareApprovedProjectInvestigation(database, resultA.projectId, 'owner');
     database.exec('COMMIT');
     assert.equal(database.prepare('SELECT planning_status AS status FROM plan_items WHERE id=?').get(a.id).status, 'approved');
     assert.equal(database.prepare('SELECT count(*) AS count FROM content_projects WHERE plan_item_id=?').get(a.id).count, 1);
@@ -91,15 +94,30 @@ test('approval transaction creates one complete project, closes carry, and advan
     for (const fragment of ['为什么是现在', '目标读者', '内容角度', '核心观点', '内容结构', '来源']) assert.match(version.body, new RegExp(fragment));
     assert.equal(database.prepare("SELECT state FROM work_carry_items WHERE object_type='plan_item' AND object_id=?").get(a.id).state, 'done');
     assert.equal(buildTodayRecommendationProjection(database, BUSINESS_DATE, { now: NOW }).primary?.planItemId, b.id);
+    const investigation = database.prepare(`
+      SELECT status, outline_version AS outlineVersion, reporter_job_id AS reporterJobId,
+             reporter_status AS reporterStatus, revision
+        FROM project_investigations WHERE project_id=?
+    `).get(resultA.projectId);
+    assert.deepEqual(
+      { status: investigation.status, outlineVersion: investigation.outlineVersion, reporterStatus: investigation.reporterStatus },
+      { status: 'researching', outlineVersion: 1, reporterStatus: 'queued' }
+    );
+    assert.equal(investigation.reporterJobId, preparedA.reporter?.jobId);
+    assert.equal(investigation.revision, preparedA.revision);
+    assert.equal(database.prepare('SELECT status FROM investigation_outline_versions WHERE project_id=? AND version=1').get(resultA.projectId).status, 'approved');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM project_investigations WHERE project_id=?').get(resultA.projectId).count, 1);
 
     assert.throws(
       () => approvePlanItemAndCreateProject(database, { planItemId: a.id, expectedRevision: a.revision, by: 'owner', now: NOW }),
       (error) => error?.code === 'REVISION_CONFLICT'
     );
     assert.equal(database.prepare('SELECT count(*) AS count FROM content_projects WHERE plan_item_id=?').get(a.id).count, 1);
+    assert.equal(database.prepare('SELECT count(*) AS count FROM project_investigations WHERE project_id=?').get(resultA.projectId).count, 1);
 
     database.exec('BEGIN IMMEDIATE');
-    approvePlanItemAndCreateProject(database, { planItemId: b.id, expectedRevision: b.revision, by: 'owner', now: NOW });
+    const resultB = approvePlanItemAndCreateProject(database, { planItemId: b.id, expectedRevision: b.revision, by: 'owner', now: NOW });
+    prepareApprovedProjectInvestigation(database, resultB.projectId, 'owner');
     database.exec('COMMIT');
     assert.equal(buildTodayRecommendationProjection(database, BUSINESS_DATE, { now: NOW }).primary, null);
   });

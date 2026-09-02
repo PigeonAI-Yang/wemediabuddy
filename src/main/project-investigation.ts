@@ -441,6 +441,38 @@ export function buildInvestigationReporterRequest(
   });
 }
 
+/** 构建写手工单请求；只消费已冻结方向与资料包，不复制来源正文。 */
+export function buildInvestigationWriterRequest(investigation: ProjectInvestigation): RoleJobRequest | null {
+  const direction = investigation.direction;
+  if (!direction || investigation.directionStatus !== 'approved') return null;
+  const lines = [
+    '写手工单（生产授权后的自动续派）：',
+    `项目 ${investigation.projectId} 已完成专项调查（提纲版本 ${investigation.outlineVersion ?? '?'}），按冻结写作方向完成正文。`,
+    '【调查后写作方向】',
+    `核心问题：${direction.coreQuestion}`,
+    `受众价值：${direction.audienceValue}`,
+    `范围：${direction.scope}`,
+    direction.keyFacts.length ? `调查后最重要的事实：${direction.keyFacts.join('；')}` : '',
+    direction.upheld.length ? `成立判断：${direction.upheld.join('；')}` : '',
+    direction.changed.length ? `需收窄/修改/推翻：${direction.changed.join('；')}` : '',
+    direction.discoveries.length ? `新发现：${direction.discoveries.join('；')}` : '',
+    direction.unknowns.length ? `未知与表达边界：${direction.unknowns.join('；')}` : '',
+    `建议结果：${direction.recommendation}`,
+    direction.constraints.length ? `写作约束：${direction.constraints.join('；')}` : '',
+    investigation.package
+      ? `【调查资料包】第 ${investigation.package.pack.round} 轮；有效来源 ${investigation.package.pack.validSourceCount}；未解决声明 ${investigation.package.pack.unresolvedRequiredClaims.length} 项。`
+      : '',
+    '写作纪律：只依据冻结方向与调查资料包写作；未解决声明必须删除或自然收窄，不得写成事实，也不得把研究过程或免责声明塞入文章；',
+    '不得编造无出处数字；不得把调查前假设冒充已确认事实；发现新的核心事实缺口时停止保存并退回补查。'
+  ];
+  return Object.freeze({
+    roleId: 'writer' as const,
+    brief: lines.filter(Boolean).join('\n'),
+    projectId: investigation.projectId,
+    writerTask: 'core_draft' as const
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 领域变更（纯 DB；写守卫由调用方命令派发授权）
 // ---------------------------------------------------------------------------
@@ -580,7 +612,7 @@ export function revertInvestigationReporterDispatch(
 }
 
 /**
- * - accept：必须携带调查后写作方向 → 保存为方向草稿，进入 direction_pending_approval（第二次 Owner 审批）。
+ * - accept：必须携带调查后写作方向 → 主管验收并冻结方向，直接进入 ready_to_write。
  * - defer：资料不足或主管无法自行决定 → 持久化验收结论并进入 needs_user，等待 Owner 选择。
  * - supplement：按已确认范围补查 → needs_more_research + 记录下一轮记者工单引用（调用方随后 spawn）。
  * - expand：形成新提纲版本 → 回到 outline_pending_approval（主管保存扩展版提纲后重新呈报）。
@@ -633,12 +665,13 @@ export function reviewInvestigationResearch(
     ).get(input.projectId) as { version: number }).version);
     database.prepare(
       `INSERT INTO investigation_direction_versions (id, project_id, version, direction_json, status, decided_at, created_at)
-       VALUES (?, ?, ?, ?, 'draft', NULL, ?)`
-    ).run(randomUUID(), input.projectId, nextVersion, JSON.stringify(direction), now);
+       VALUES (?, ?, ?, ?, 'approved', ?, ?)`
+    ).run(randomUUID(), input.projectId, nextVersion, JSON.stringify(direction), now, now);
     setReview('accept', null);
-    updateRow(database, input.projectId, { status: 'direction_pending_approval', direction_version: nextVersion });
+    updateRow(database, input.projectId, { status: 'ready_to_write', direction_version: nextVersion });
     bumpRevision(database, input.projectId, row, now);
-    recordEvent(database, input.projectId, 'research_reviewed', `主管验收资料包（第 ${packageRow.round} 轮）通过，形成调查后写作方向（版本 ${nextVersion}），呈报 Owner 确认。`, nextVersion);
+    recordEvent(database, input.projectId, 'research_reviewed', `主管验收资料包（第 ${packageRow.round} 轮）通过并冻结写作方向（版本 ${nextVersion}），自动进入写作。`, nextVersion);
+    recordEvent(database, input.projectId, 'direction_approved', `生产授权覆盖正常调查链路；写作方向（版本 ${nextVersion}）由主管验收后冻结。`, nextVersion);
     return success(readProjectInvestigation(database, input.projectId)!);
   }
 
@@ -1037,10 +1070,9 @@ export function buildInvestigationSupervisorReviewPrompt(projectId: string): str
   return [
     `请立即验收创作项目 ${projectId} 的专项调查资料包。`,
     `先调用 wmb_get_investigation({ project_id: "${projectId}" }) 读取最新 revision、已确认提纲、资料包、来源引用和未解决声明。`,
-    '逐项核对来源是否支持关键事实，区分成立判断、需收窄或推翻的判断、新发现与仍未知边界；不得把来源标题、摘要或 reporter 自述当成已核实事实。',
-    '资料包足以形成可信写作方向时，必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="accept" 和完整 direction；成功后必须读回 direction_pending_approval，再向 Owner 汇报待第二次审批。',
-    '资料不足或存在无法由主管自行决定的关键未知时，不得伪造方向、不得自行验收通过或派写手；必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="defer" 和具体 summary，将结论持久化为 needs_user，再向 Owner 说明以下有效选择：按观点稿继续（强观点与未来判断可保留为作者判断，数字、引语、具体案例、归因等外部可验证事实仍须落在证据内）、需要补查、扩展范围或停止调查。',
-    '无论通过或暂缓，本回合都必须持久化一次验收结果；不得把项目留在 research_review。成功后读回最新调查状态。这是主管验收回合，不派写手、不代替 Owner 选择「按观点稿继续」、不修改 Owner 审批，不要 sleep 或轮询。'
+    '资料包足以形成可信写作方向时，必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="accept" 和完整 direction；该操作会冻结方向并自动派写手，无需再次请求 Owner 审批。',
+    '资料不足、核心主张发生实质变化、调查范围必须扩大或存在无法由主管自行决定的关键未知时，不得伪造方向、不得自行验收通过；必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="defer" 和具体 summary，将结论持久化为 needs_user，再向 Owner 说明以下有效选择：按当前证据收窄写作、补查关键事实、调整核心方向或停止项目。',
+    '无论通过或暂缓，本回合都必须持久化一次验收结果；不得把项目留在 research_review。成功后读回最新调查状态，不要 sleep 或轮询。'
   ].join('\n');
 }
 

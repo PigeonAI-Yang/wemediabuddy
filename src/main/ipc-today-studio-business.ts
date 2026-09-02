@@ -12,6 +12,8 @@ import {
 import { getToday, getTodayOverviewMetrics } from './workbench.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { getActiveJobSpawner } from './job-spawner.ts';
+import { ensureJobsSpawner } from './ipc-jobs.ts';
+import { continueAutomaticInvestigation, prepareApprovedProjectInvestigation } from './project-investigation-automation.ts';
 import { readCrewInstanceProjection } from './crew-instance-projection.ts';
 import { readTaskTranscriptForJob } from './pi-transcript-projection.ts';
 import { listResearchSuccessorNeedsUser } from './research-successor-projection.ts';
@@ -637,23 +639,27 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
 
   ipcMain.handle('plan-item:approve', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string }) => {
     const runtime = await requireBusinessRuntime(dependencies);
-    return runtime.runActorControlPlane(() => {
+    const result = await runtime.runActorControlPlane(() => {
       runtime.database.exec('BEGIN IMMEDIATE');
       try {
-        const result = approvePlanItemAndCreateProject(runtime.database, {
+        const approved = approvePlanItemAndCreateProject(runtime.database, {
           planItemId: input.planItemId,
           expectedRevision: input.expectedRevision,
           by: 'owner',
           reason: input.reason
         });
+        prepareApprovedProjectInvestigation(runtime.database, approved.projectId, 'owner');
         runtime.database.exec('COMMIT');
-        broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'plan_item.approve' });
-        return result;
+        return approved;
       } catch (error) {
         runtime.database.exec('ROLLBACK');
         throw error;
       }
     });
+    const spawner = getActiveJobSpawner() ?? ensureJobsSpawner({ getActiveRuntime: () => runtime });
+    await continueAutomaticInvestigation(runtime, spawner, result.projectId);
+    broadcastDataChanged({ scopes: ['today', 'studio', 'proposals'], reason: 'plan_item.approve' });
+    return result;
   });
 
   ipcMain.handle('plan-item:reject', async (_event, input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }) => {

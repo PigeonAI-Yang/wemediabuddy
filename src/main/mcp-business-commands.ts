@@ -11,6 +11,8 @@ import { isRoleId } from '../shared/agent-capabilities.ts';
 import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
 import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
 import { executeOwnerProjectionDecision, readOwnerProjectionDecisionBinding } from './workspace-orchestrator-owner-decision.ts';
+import { getActiveJobSpawner } from './job-spawner.ts';
+import { continueAutomaticInvestigation } from './project-investigation-automation.ts';
 function getTaskRole(database: DatabaseSync, taskId?: string): string | null {
   if (!taskId) return null;
   try {
@@ -918,7 +920,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
   });
 
   server.registerTool('investigation.review_research', {
-    description: '主管验收已交付的专项调查资料包；accept 形成调查后写作方向并进入 Owner 第二次审批，资料不足或无法自行决策时用 defer 转为 needs_user 并等待 Owner。返回 CommandReceiptV1。',
+    description: '主管验收已交付的专项调查资料包；accept 冻结调查后写作方向并自动进入写作，资料不足或无法自行决策时用 defer 转为 needs_user 并等待 Owner。返回 CommandReceiptV1。',
     inputSchema: {
       ...authoritySchema,
       project_id: z.string().min(1),
@@ -955,7 +957,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
           constraints: direction.constraints
         } : undefined
       };
-    return text(await dispatchBusinessCommand(runtime, {
+    const receipt = await dispatchBusinessCommand(runtime, {
       command: 'investigation.review_research', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: reviewInput,
       boundIdentity: { entityType: 'content_project', entityId: project_id }, entityType: 'project_investigation',
@@ -963,7 +965,10 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
         const data = requireCommandResultData(reviewInvestigationResearch(database, normalized));
         return { data, entityId: project_id, beforeRevision: expected_revision, afterRevision: data.revision, readback: data };
       }
-    }));
+    });
+    const spawner = decision === 'accept' && receipt.ok ? getActiveJobSpawner() : null;
+    if (spawner) await continueAutomaticInvestigation(runtime, spawner, project_id);
+    return text(receipt);
   });
 
   server.registerTool('investigation.direction_save', {

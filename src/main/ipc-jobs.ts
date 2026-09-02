@@ -16,6 +16,7 @@ import { handleTopicReproposalJobEvent } from './topic-maintenance-reproposal.ts
 import { handleResearchSuccessorJobEvent } from './research-successor.ts';
 import { buildInvestigationSupervisorReviewPrompt, handleInvestigationJobEvent } from './project-investigation.ts';
 import { runDockManagerPrompt } from './ipc-pi-dock.ts';
+import { resumeAutomaticInvestigations } from './project-investigation-automation.ts';
 
 
 export type JobsIpcDependencies = {
@@ -113,6 +114,7 @@ export function ensureJobsSpawner(deps: JobsIpcDependencies) {
     )
   });
   resumePendingInvestigationSupervisorReviews(runtime);
+  resumeAutomaticInvestigations(runtime, spawner);
   return spawner;
 }
 

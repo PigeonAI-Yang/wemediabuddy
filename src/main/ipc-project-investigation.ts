@@ -14,11 +14,13 @@ import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
 import { broadcastDataChanged } from './data-changed.ts';
 import { failure, success, type CommandResult } from './result.ts';
-import { readProjectInvestigation, type ProjectInvestigation } from './project-investigation.ts';
 import {
+  buildInvestigationReporterRequest,
+  buildInvestigationWriterRequest,
   decideInvestigationDirection,
   decideInvestigationOutline,
   initializeProjectInvestigation,
+  readProjectInvestigation,
   retryInvestigationReporter,
   reviewInvestigationResearch,
   revertInvestigationReporterDispatch,
@@ -26,12 +28,13 @@ import {
   saveInvestigationDirection,
   saveInvestigationOutline,
   startInvestigationWriter,
-  buildInvestigationReporterRequest
+  type ProjectInvestigation
 } from './project-investigation.ts';
 import { ensureJobsSpawner } from './ipc-jobs.ts';
 import { getActiveJobSpawner, type JobSpawner } from './job-spawner.ts';
 import { dispatchBusinessCommand, requireCommandResultData } from './business-command.ts';
 import { freshRequestId, ownerUiActor, readWorkspaceDatabase, requireBusinessRuntime, type BusinessIpcDependencies } from './ipc-business-context.ts';
+import { continueAutomaticInvestigation } from './project-investigation-automation.ts';
 import {
   INVESTIGATION_IPC,
   type InvestigationCommandResult,
@@ -54,38 +57,6 @@ function receiptResult(receipt: CommandReceiptV1<ProjectInvestigation>): Investi
     : { ok: false as const, data: null, error: { code: receipt.error?.code ?? 'COMMAND_FAILED', message: receipt.error?.message ?? '命令失败。', details: receipt.error?.details } };
 }
 
-/** 写手 brief：经确认方向 + 资料包摘要 + 写作纪律（不复制来源正文）。 */
-function buildWriterBrief(investigation: ProjectInvestigation): string {
-  const direction = investigation.direction;
-  const pkg = investigation.package;
-  const lines = [
-    '写手工单（主管派写手；调查后写作方向已获 Owner 确认）：',
-    `项目 ${investigation.projectId} 已完成专项调查（提纲版本 ${investigation.outlineVersion ?? '?'}），按经确认的写作方向完成正文。`
-  ];
-  if (direction) {
-    lines.push(
-      '【调查后写作方向】',
-      `核心问题：${direction.coreQuestion}`,
-      `受众价值：${direction.audienceValue}`,
-      `范围：${direction.scope}`
-    );
-    if (direction.keyFacts.length) lines.push(`调查后最重要的事实：${direction.keyFacts.join('；')}`);
-    if (direction.upheld.length) lines.push(`成立判断：${direction.upheld.join('；')}`);
-    if (direction.changed.length) lines.push(`需收窄/修改/推翻：${direction.changed.join('；')}`);
-    if (direction.discoveries.length) lines.push(`新发现：${direction.discoveries.join('；')}`);
-    if (direction.unknowns.length) lines.push(`未知与表达边界：${direction.unknowns.join('；')}`);
-    lines.push(`建议结果：${direction.recommendation}`);
-    if (direction.constraints.length) lines.push(`写作约束：${direction.constraints.join('；')}`);
-  }
-  if (pkg) {
-    lines.push(`【调查资料包】第 ${pkg.pack.round} 轮；有效来源 ${pkg.pack.validSourceCount}；未解决声明 ${pkg.pack.unresolvedRequiredClaims.length} 项。`);
-  }
-  lines.push(
-    '写作纪律：只依据已确认写作方向与调查资料包写作；未解决声明必须从正式正文删除或自然收窄，不得写成事实，也不得以待核实清单、研究过程或免责声明形式塞入文章；',
-    '不得编造无出处数字；不得把调查前假设冒充已确认事实；写作中发现新的核心事实缺口，应停止保存并退回补查。'
-  );
-  return lines.filter(Boolean).join('\n');
-}
 
 type ReporterSpawnAction = 'approve' | 'supplement' | 'retry';
 
@@ -226,13 +197,10 @@ async function spawnInvestigationWriter(
     return failure(receipt.error?.code as never, receipt.error?.message ?? '命令失败。', receipt.error?.details ?? {});
   }
   const recorded = receipt.data as ProjectInvestigation;
+  const request = buildInvestigationWriterRequest(recorded);
+  if (!request) return failure('INVALID_STATE', '写手工单请求构建失败（缺少已冻结方向）。', {});
   try {
-    spawner.spawn({
-      roleId: 'writer',
-      brief: buildWriterBrief(recorded),
-      projectId: input.projectId,
-      writerTask: 'core_draft'
-    }, jobId);
+    spawner.spawn(request, jobId);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
@@ -388,7 +356,12 @@ export function registerProjectInvestigationIpc(dependencies: BusinessIpcDepende
         return { data, entityId: value.projectId, afterRevision: data.revision, readback: data };
       }
     });
-    if (receipt.ok) broadcastDataChanged({ scopes: ['studio', 'agent'], reason: `investigation.decide_direction:${input.decision}` });
+    if (receipt.ok) {
+      broadcastDataChanged({ scopes: ['studio', 'agent'], reason: `investigation.decide_direction:${input.decision}` });
+      if (input.decision === 'approve') {
+        await continueAutomaticInvestigation(runtime, requireSpawner(runtime), input.projectId);
+      }
+    }
     return receiptResult(receipt);
   });
 

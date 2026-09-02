@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { buildInvestigationSupervisorReviewPrompt } from '../src/main/project-investigation.ts';
 
-test('WMB-5290 project investigation contract: two-approval gate, immutable versions, reporter binding, writer gate, persistence', async () => {
+test('WMB-5290 project investigation contract: single production authorization, immutable versions, reporter binding, writer gate, persistence', async () => {
   await promisify(execFile)(process.execPath, ['tests/wmb-5290-investigation-child.mjs'], { cwd: process.cwd() });
 });
 
@@ -25,13 +25,10 @@ test('WMB-5304 reporter completion dispatches a bounded supervisor review prompt
   assert.match(prompt, /decision="defer"/);
   assert.match(prompt, /needs_user/);
   assert.match(prompt, /不得把项目留在 research_review/);
-  assert.match(prompt, /direction_pending_approval/);
-  assert.match(prompt, /按观点稿继续/);
-  assert.match(prompt, /外部可验证事实/);
+  assert.match(prompt, /自动派写手/);
+  assert.match(prompt, /按当前证据收窄写作/);
+  assert.match(prompt, /核心主张发生实质变化/);
   assert.match(prompt, /不得自行验收通过/);
-  assert.match(prompt, /不派写手/);
-  assert.match(prompt, /不代替 Owner/);
-  assert.match(prompt, /Owner.*第二次审批/);
+  assert.match(prompt, /无需再次请求 Owner 审批/);
   assert.match(prompt, /资料不足.*不得伪造方向/);
-  assert.match(prompt, /不派写手/);
 });

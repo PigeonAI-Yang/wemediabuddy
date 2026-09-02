@@ -39,7 +39,6 @@ import {
   saveInvestigationOutline,
   decideInvestigationOutline,
   reviewInvestigationResearch,
-  saveInvestigationDirection,
   decideInvestigationDirection,
   startInvestigationWriter,
   retryInvestigationReporter,
@@ -120,11 +119,6 @@ const directionA = Object.freeze({
   constraints: ['不写历史沿革', '不承诺收益']
 });
 
-const directionB = Object.freeze({
-  ...directionA,
-  scope: '文章范围：机制现状 + 对创作者的影响',
-  constraints: ['不写历史沿革']
-});
 
 const buildPack = (jobId, round, sourceIds, terminalReason = 'claims_resolved') =>
   buildResearchEvidencePack({
@@ -270,34 +264,24 @@ try {
   expect(!packJson.includes('来源A专属摘要-5290') && !packJson.includes('来源B专属摘要-5290'), 'A 资料包不得复制来源正文');
   expect(countRows(db, "SELECT COUNT(*) AS c FROM jobs WHERE kind = 'research_successor'") === 0, 'A 记者终态不得产生 research_successor');
 
-  // 第二次审批门：research_review 未获方向批准前不可启动写手。
+  // 调查资料包验收前不可启动写手；验收通过后方向直接冻结并进入 ready_to_write。
   expectRejectedCode(startInvestigationWriter(db, {
     projectId: projectA, expectedRevision: nextRevision(projectA), writerJobId: 'job-w-early'
-  }), 'INVALID_STATE', 'A research_review 未获方向批准前不得启动写手');
-
-  // 第二次审批：accept 必须携带方向 → direction_pending_approval；方向版本化；approve → ready_to_write。
+  }), 'INVALID_STATE', 'A research_review 验收前不得启动写手');
   expectRejected(reviewInvestigationResearch(db, {
     projectId: projectA, expectedRevision: nextRevision(projectA), decision: 'accept'
   }), 'A accept 缺少方向');
   const acceptedA = expectOk(reviewInvestigationResearch(db, {
     projectId: projectA, expectedRevision: nextRevision(projectA), decision: 'accept', direction: directionA
-  }), 'A 验收通过');
-  expect(acceptedA.status === 'direction_pending_approval', `A 验收后状态: ${JSON.stringify(acceptedA)}`);
-  expect(acceptedA.directionVersion === 1 && JSON.stringify(acceptedA.direction) === JSON.stringify(directionA) && acceptedA.directionStatus === 'draft',
-    `A 方向 v1: ${JSON.stringify(acceptedA)}`);
+  }), 'A 验收并冻结方向');
+  expect(acceptedA.status === 'ready_to_write', `A 验收后状态: ${JSON.stringify(acceptedA)}`);
+  expect(acceptedA.directionVersion === 1 && JSON.stringify(acceptedA.direction) === JSON.stringify(directionA) && acceptedA.directionStatus === 'approved',
+    `A 冻结方向 v1: ${JSON.stringify(acceptedA)}`);
   expect(acceptedA.package?.review?.decision === 'accept' && acceptedA.package?.review?.decidedAt != null,
     `A 验收记录: ${JSON.stringify(acceptedA.package?.review)}`);
-  const savedDirA = expectOk(saveInvestigationDirection(db, {
-    projectId: projectA, expectedRevision: nextRevision(projectA), direction: directionB
-  }), 'A 保存方向 v2');
-  expect(savedDirA.directionVersion === 2 && JSON.stringify(savedDirA.direction) === JSON.stringify(directionB), `A 方向 v2: ${JSON.stringify(savedDirA)}`);
   const storedDirV1 = JSON.parse(db.prepare('SELECT direction_json AS d FROM investigation_direction_versions WHERE project_id = ? AND version = 1').get(projectA).d);
   expect(JSON.stringify(storedDirV1) === JSON.stringify(directionA), '方向 v1 行必须不可变保留');
-  expectRejectedCode(decideInvestigationDirection(db, { projectId: projectA, expectedRevision: 1, decision: 'approve' }), 'REVISION_CONFLICT', 'A 方向审批过期 revision');
-  const readyA = expectOk(decideInvestigationDirection(db, {
-    projectId: projectA, expectedRevision: nextRevision(projectA), decision: 'approve'
-  }), 'A 方向批准');
-  expect(readyA.status === 'ready_to_write' && readyA.directionStatus === 'approved', `A 就绪状态: ${JSON.stringify(readyA)}`);
+  expectRejectedCode(decideInvestigationDirection(db, { projectId: projectA, expectedRevision: nextRevision(projectA), decision: 'approve' }), 'INVALID_STATE', 'A 不再存在重复方向审批');
 
   // 显式写手启动：记录 writerJobId → writing；writing 中拒绝重复启动；终态 job.finished → completed。
   const writingA = expectOk(startInvestigationWriter(db, {
@@ -318,7 +302,7 @@ try {
 
   // 历史事件随每次成功变更递增，末条事件为写手终态。
   const historyA = read(projectA).history;
-  expect(Array.isArray(historyA) && historyA.length >= 13, `A 历史应随变更记录: ${historyA.length}`);
+  expect(Array.isArray(historyA) && historyA.length >= 12, `A 历史应随变更记录: ${historyA.length}`);
   expect(historyA[historyA.length - 1]?.kind === 'writer_terminal', `A 末条历史应为写手终态: ${JSON.stringify(historyA[historyA.length - 1])}`);
   const finalRevisionA = read(projectA).revision;
 
@@ -359,9 +343,7 @@ try {
   const acceptedB = expectOk(reviewInvestigationResearch(db, {
     projectId: projectB, expectedRevision: nextRevision(projectB), decision: 'accept', direction: directionA
   }), 'B 验收通过');
-  expect(acceptedB.status === 'direction_pending_approval', `B 验收后状态: ${acceptedB.status}`);
-  expectOk(decideInvestigationDirection(db, { projectId: projectB, expectedRevision: nextRevision(projectB), decision: 'approve' }), 'B 方向批准');
-  expect(read(projectB).status === 'ready_to_write', `B 就绪: ${read(projectB).status}`);
+  expect(acceptedB.status === 'ready_to_write' && acceptedB.directionStatus === 'approved', `B 验收后应直接就绪: ${acceptedB.status}`);
 
   // ---------- 项目 C：expand 分支 → 新提纲版本回 Owner 审批 ----------
   expectOk(initializeProjectInvestigation(db, projectC), 'C 初始化');
@@ -395,7 +377,7 @@ try {
   const stoppedD = expectOk(reviewInvestigationResearch(db, { projectId: projectD, expectedRevision: nextRevision(projectD), decision: 'stop' }), 'D 停止调查');
   expect(stoppedD.status === 'abandoned', `D 停止后状态: ${stoppedD.status}`);
 
-  // ---------- 项目 G：direction supplement 分支 → 需要补查 ----------
+  // ---------- 项目 G：正常验收后不再暴露第二次方向审批 ----------
   expectOk(initializeProjectInvestigation(db, projectG), 'G 初始化');
   expectOk(saveInvestigationOutline(db, { projectId: projectG, expectedRevision: nextRevision(projectG), outline: outlineA }), 'G 保存提纲');
   expectOk(decideInvestigationOutline(db, {
@@ -405,17 +387,13 @@ try {
   expectOk(recordInvestigationReporterTerminal(db, {
     projectId: projectG, jobId: 'job-g-rep-1', type: 'job.finished', pack: packG1
   }), 'G 记者终态');
-  expectOk(reviewInvestigationResearch(db, {
+  const acceptedG = expectOk(reviewInvestigationResearch(db, {
     projectId: projectG, expectedRevision: nextRevision(projectG), decision: 'accept', direction: directionA
   }), 'G 验收通过');
-  const supplementedG = expectOk(decideInvestigationDirection(db, {
+  expect(acceptedG.status === 'ready_to_write' && acceptedG.directionStatus === 'approved', `G 正常链路直接就绪: ${JSON.stringify(acceptedG)}`);
+  expectRejectedCode(decideInvestigationDirection(db, {
     projectId: projectG, expectedRevision: nextRevision(projectG), decision: 'supplement'
-  }), 'G 方向要求补查');
-  expect(supplementedG.status === 'direction_pending_approval' && supplementedG.directionStatus === 'supplemented',
-    `G 方向补查状态（保持待批等待修订）: ${JSON.stringify(supplementedG)}`);
-  expectRejectedCode(startInvestigationWriter(db, {
-    projectId: projectG, expectedRevision: nextRevision(projectG), writerJobId: 'job-w-g'
-  }), 'INVALID_STATE', 'G 未就绪启动写手');
+  }), 'INVALID_STATE', 'G 冻结方向后不再进入重复审批');
 
 
   // ---------- 项目 H：资料不足持久化 defer；同包不重派；新包仍可重新验收 ----------
@@ -555,7 +533,7 @@ try {
   expect(revivedA.outlineVersion === 3 && JSON.stringify(revivedA.outline) === JSON.stringify(outlineC), '重启后 A 提纲应为 v3');
   const revivedV1 = JSON.parse(reopened.prepare('SELECT outline_json AS o FROM investigation_outline_versions WHERE project_id = ? AND version = 1').get(projectA).o);
   expect(JSON.stringify(revivedV1) === JSON.stringify(outlineA), '重启后 A 提纲 v1 仍不可变');
-  expect(revivedA.directionVersion === 2 && JSON.stringify(revivedA.direction) === JSON.stringify(directionB), '重启后 A 方向应为 v2');
+  expect(revivedA.directionVersion === 1 && JSON.stringify(revivedA.direction) === JSON.stringify(directionA), '重启后 A 冻结方向应为 v1');
   expect(JSON.stringify(revivedA.package?.pack) === JSON.stringify(packA1), '重启后 A 资料包应精确保留');
   expect(JSON.stringify(revivedA.package?.sourceIds) === JSON.stringify([sourceB.id]), '重启后 A 包来源应保留');
   expect(revivedA.reporter?.jobId === 'job-a-rep-1' && revivedA.writer?.jobId === 'job-a-w-1', '重启后 A 工单引用应保留');
@@ -577,7 +555,7 @@ try {
     projectB: { status: revivedB.status, round: revivedB.reporter?.round },
     projectC: { status: 'outline_pending_approval', outlineVersion: 2 },
     projectD: { status: 'abandoned' },
-    projectG: { status: 'direction_pending_approval', directionStatus: 'supplemented' },
+    projectG: { status: 'ready_to_write', directionStatus: 'approved' },
     projectH: { status: revivedH.status, round: revivedH.package?.pack.round, review: revivedH.package?.review?.decision },
     writerGate: { rejected: ['outline_pending_approval', 'completed', 'expanded-outline-pending'], allowed: ['legacy', 'ready_to_write'] },
     successorSuppressed: deskResult.reason,
