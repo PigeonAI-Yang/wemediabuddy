@@ -1,0 +1,24 @@
+(node:87456) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:87456) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Today recommendation action uses approve bridge and never bypasses approval with direct project creation (10.5167ms)
+✔ approval directly creates the selected content project (2.1179ms)
+✔ approval transaction creates one complete project, closes carry, and advances the projection (1028.6198ms)
+✔ approval failure rolls back status, project, version, topic links, and carry as one unit (1354.369ms)
+(node:90600) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/project-investigation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:90600) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5290 project investigation contract: single production authorization, immutable versions, reporter binding, writer gate, persistence (4214.037ms)
+✔ WMB-5304 reporter completion dispatches a bounded supervisor review prompt (0.6024ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5086.6928

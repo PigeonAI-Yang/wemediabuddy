@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5392",
+  "implementationCommit": "2844dfa",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/ipc-jobs.ts",
+    "src/main/ipc-project-investigation.ts",
+    "src/main/ipc-today-studio-business.ts",
+    "src/main/mcp-business-commands.ts",
+    "src/main/project-investigation-automation.ts",
+    "src/main/project-investigation.ts",
+    "tests/today-approval-flow.test.mjs",
+    "tests/wmb-5290-investigation-child.mjs",
+    "tests/wmb-5290-investigation.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/today-approval-flow.test.mjs tests/wmb-5290-investigation.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5392.verify.log"
+  },
+  "closedAt": "2026-09-02T16:47:44.940Z"
+}
