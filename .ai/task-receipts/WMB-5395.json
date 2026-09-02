@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5395",
+  "implementationCommit": "1528402",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/project-investigation.ts",
+    "src/renderer/proposal-ledger.ts",
+    "src/renderer/studio-investigation.ts",
+    "tests/e2e/investigation.test.mjs",
+    "tests/proposal-approval-outcome.test.mjs",
+    "tests/wmb-5395-creation-flow-acceptance.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test --test-concurrency=1 tests/wmb-5395-creation-flow-acceptance.test.mjs tests/proposal-approval-outcome.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5395.verify.log"
+  },
+  "closedAt": "2026-09-02T17:27:09.667Z"
+}
