@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5393",
+  "implementationCommit": "f93f7b9",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/ipc-project-investigation.ts",
+    "src/main/project-investigation.ts",
+    "src/renderer/studio-investigation-panel.tsx",
+    "tests/wmb-5393-exception-decision-flow.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5393-exception-decision-flow.test.mjs tests/wmb-5290-investigation.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5393.verify.log"
+  },
+  "closedAt": "2026-09-02T16:51:58.343Z"
+}
