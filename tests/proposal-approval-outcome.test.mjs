@@ -5,10 +5,10 @@ import test from 'node:test';
 import { approvedProjectId } from '../src/renderer/proposal-ledger.ts';
 
 test('approval outcome resolves the created project from direct and command result shapes', () => {
-  assert.equal(approvedProjectId({ advance: { projectId: 'project-123' } }), 'project-123');
-  assert.equal(approvedProjectId({ ok: true, data: { advance: { projectId: 'project-456' } } }), 'project-456');
-  assert.equal(approvedProjectId({ advance: null }), null);
-  assert.equal(approvedProjectId({ advance: { projectId: '' } }), null);
+  assert.equal(approvedProjectId({ projectId: 'project-123' }), 'project-123');
+  assert.equal(approvedProjectId({ ok: true, data: { projectId: 'project-456' } }), 'project-456');
+  assert.equal(approvedProjectId({ projectId: null }), null);
+  assert.equal(approvedProjectId({ projectId: '' }), null);
   assert.equal(approvedProjectId(null), null);
 });
 

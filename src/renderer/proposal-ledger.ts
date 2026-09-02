@@ -390,12 +390,10 @@ export async function approvePlanItem(input: { planItemId: string; expectedRevis
 
 export function approvedProjectId(result: unknown): string | null {
   if (!result || typeof result !== 'object') return null;
-  const value = 'data' in result && (result as { data?: unknown }).data && typeof (result as { data: unknown }).data === 'object'
-    ? (result as { data: object }).data
-    : result;
-  const advance = (value as { advance?: unknown }).advance;
-  if (!advance || typeof advance !== 'object') return null;
-  const projectId = (advance as { projectId?: unknown }).projectId;
+  let value: unknown = result;
+  if ('data' in result && result.data && typeof result.data === 'object') value = result.data;
+  if (!value || typeof value !== 'object' || !('projectId' in value)) return null;
+  const projectId = value.projectId;
   return typeof projectId === 'string' && projectId.trim() ? projectId : null;
 }
 

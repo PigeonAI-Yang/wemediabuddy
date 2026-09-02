@@ -23,10 +23,14 @@
 // 方向编辑/保存 → 第二次 Owner 批准（approve-direction）→ 显式写手启动门
 // （ready_to_write 前无 start-writer；批准后唯一主动作）→ 重载持久化 → 1100×800 → page error 0。
 
+import { createServer } from 'node:http';
 import { seedWorkflowBase, openWriteDb, seedStudioProject } from './seed-workflow.mjs';
 import { seedSource, writeLocalPiConfig } from './lib/seed.mjs';
 import { buildResearchEvidencePack } from '../../src/main/research-task-state.ts';
 import { initializeProjectInvestigation, readProjectInvestigation, reviewInvestigationResearch, saveInvestigationOutline, decideInvestigationOutline, recordInvestigationReporterTerminal, startInvestigationWriter, recordInvestigationWriterTerminal } from '../../src/main/project-investigation.ts';
+import { saveCurrentPlan } from '../../src/main/planning.ts';
+import { saveCoreVersion } from '../../src/main/content.ts';
+import { editorialDecision, scoredReasons } from '../helpers/planning-fixture.mjs';
 
 const OUTLINE_FIXTURE = Object.freeze({
   scope: 'E2E 调查：平台机制与创作者成本',
@@ -100,7 +104,7 @@ async function seedResearchReviewProject({ dataRoot, userDataDir, workspaceId })
   }
 }
 
-async function seedCompletedInvestigationProject(context) {
+async function seedWritingInvestigationProject(context) {
   await seedResearchReviewProject(context);
   const db = openWriteDb(context.dataRoot);
   try {
@@ -122,15 +126,67 @@ async function seedCompletedInvestigationProject(context) {
       writerJobId: 'job-e2e-completed-writer'
     });
     if (!started.ok) throw new Error(`seed 写手启动失败: ${JSON.stringify(started)}`);
-    const completed = recordInvestigationWriterTerminal(db, {
-      projectId: project.id,
-      jobId: 'job-e2e-completed-writer',
-      type: 'job.finished'
-    });
-    if (!completed.ok) throw new Error(`seed 写手完成失败: ${JSON.stringify(completed)}`);
   } finally {
     db.close();
   }
+}
+
+function acceptancePlanItem(sourceId) {
+  const pointOfView = '一次生产授权应在证据充分时直接推进到可审正文。';
+  return {
+    title: 'E2E 单一授权到正文待审', priority: 1,
+    whyNow: '官方刚公布关键变化，当前两天是解释窗口，错过后读者关注会明显下降。', timeliness: '热点 2-3 天',
+    targetAudience: '需要可靠内容生产链的独立创作者', angle: '用真实状态链验证重复审批是否已删除。', pointOfView,
+    platforms: ['xiaohongshu'], formats: ['carousel'], titleGuidance: '突出一次授权与待审正文之间的关系。',
+    openingGuidance: '先展示真实链路结果，再解释质量门。', structureGuidance: '第一段说明方案授权；第二段展示证据调查与主管验收；第三段交付正文并说明待审状态。', effortEstimate: '90 分钟',
+    sourceIds: [sourceId], availableMaterials: ['官方材料'], missingMaterials: [],
+    scoreReasons: scoredReasons(88, new Date().toISOString()), editorialDecision: editorialDecision(pointOfView)
+  };
+}
+
+async function seedReadyCreationProposal({ dataRoot, userDataDir, workspaceId }) {
+  await seedBase({ dataRoot, userDataDir, workspaceId });
+  const db = openWriteDb(dataRoot);
+  try {
+    const source = seedSource(db, { id: 'wmb-5395-source', title: 'WMB-5395 官方材料', summary: '可核验摘要', author: 'official', originalUrl: 'https://example.com/wmb-5395' });
+    saveCurrentPlan(db, { planDate: '2026-09-03', timezone: 'Asia/Shanghai', summary: 'WMB-5395 E2E', items: [acceptancePlanItem(source)] });
+  } finally { db.close(); }
+}
+
+function startBlackholeProvider() {
+  return new Promise((resolve, reject) => {
+    const sockets = new Set();
+    const server = createServer(() => {});
+    server.on('connection', (socket) => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({
+        baseUrl: `http://127.0.0.1:${address.port}/v1`,
+        close: () => new Promise((done) => {
+          server.closeAllConnections?.();
+          for (const socket of sockets) socket.destroy();
+          server.close(() => done());
+        })
+      });
+    });
+  });
+}
+
+function seedAttributedWriterDelivery(db, projectId, jobId) {
+  const now = new Date().toISOString();
+  const taskId = `task-${jobId}`;
+  db.prepare(`INSERT INTO agent_tasks (id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
+    progress_json, checkpoint_json, events_json, error_code, error_message, created_at, updated_at, finished_at)
+    VALUES (?, 'studio_draft', '2026-09-03', 'succeeded', 'done', NULL, ?, '{}', '{}', '{}', '[]', NULL, NULL, ?, ?, ?)`)
+    .run(taskId, JSON.stringify({ jobId, projectId }), now, now, now);
+  const project = db.prepare('SELECT revision FROM content_projects WHERE id=?').get(projectId);
+  const saved = saveCoreVersion(db, { projectId, body: '# 待审正文\n\n一次生产授权已到达真实正文。', expectedRevision: Number(project.revision), author: 'ai' });
+  if (!saved.ok) throw saved.error;
+  db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+    VALUES (?, 'e2e-workspace', 'e2e-runtime', ?, 'content.save_version', 'wmb-5395', 'external_agent', 'writer', ?, '{}', ?, 'ok', ?, ?, 'committed', ?)`)
+    .run(`receipt-${jobId}`, `${jobId}:content`, taskId, JSON.stringify({ data: { id: saved.data.id } }), JSON.stringify({ id: saved.data.id }), JSON.stringify({ id: saved.data.id }), now);
+  return saved.data.id;
 }
 
 async function seedDeferredReviewProject(context) {
@@ -264,6 +320,84 @@ const investigationRow = (db, projectId) => db.prepare(
 ).get(projectId);
 
 export default [
+  {
+    id: 'WMB-5395-one-authorization-to-review',
+    journeyIds: [],
+    launch: { seedFixture: seedReadyCreationProposal },
+    run: async ({ app, page, workspace, helpers, assert, step, evidence, artifactsDir }) => {
+      const provider = await startBlackholeProvider();
+      try {
+        await helpers.waitForAppReady(page);
+        await page.evaluate((baseUrl) => window.wmb.savePiConfig({
+          id: 'e2e', name: 'WMB-5395 黑洞 Provider', baseUrl, model: 'gpt-5.4', api: 'openai-responses', thinking: 'off', apiKey: 'wmb-5395-e2e-key'
+        }), provider.baseUrl);
+        await step('方案台账一次批准即创建项目并进入正文工作面', async () => {
+          await helpers.navigateTo(page, 'proposals');
+          const card = page.locator('.proposal-open-item').filter({ hasText: 'E2E 单一授权到正文待审' });
+          await card.waitFor({ state: 'visible', timeout: 20_000 });
+          assert(await card.getByRole('button', { name: '批准并开始创作' }).count() === 1, '方案卡应只有一个生产授权按钮');
+          await card.getByRole('button', { name: '批准并开始创作' }).click();
+          await page.waitForSelector('.studio-surface-tab[data-surface="core"].active', { timeout: 20_000 });
+          assert(await page.getByRole('button', { name: /开始调查|批准调查提纲|开始写作/ }).count() === 0, '批准后正文主路径不应出现重复生产授权');
+        });
+
+        let projectId;
+        await step('同一工作空间完成资料包、主管验收、Writer正文及待审状态', async () => {
+          const db = openWriteDb(workspace.dataRoot);
+          try {
+            const project = db.prepare('SELECT id FROM content_projects WHERE title=?').get('E2E 单一授权到正文待审');
+            projectId = project.id;
+            const current = readProjectInvestigation(db, projectId);
+            assert(current.status === 'researching' && current.reporter?.jobId, `批准后应自动进入调查: ${JSON.stringify(current)}`);
+            const evidencePack = buildResearchEvidencePack({
+              jobId: current.reporter.jobId, round: 1,
+              claims: [{ id: 'claim-5395', key: 'q1', status: 'supported', verdictReason: null, evidenceSourceIds: ['wmb-5395-source'], needsTimeExcerpt: false }],
+              sourceIds: ['wmb-5395-source'], validSourceCount: 1, candidateCount: 1, timeSpentMinutes: 1,
+              terminalReason: 'claims_resolved', unresolvedRequiredClaims: []
+            });
+            const reported = recordInvestigationReporterTerminal(db, { projectId, jobId: current.reporter.jobId, type: 'job.finished', pack: evidencePack });
+            assert(reported.ok && reported.data.status === 'research_review', `记者资料包未进入主管验收: ${JSON.stringify(reported)}`);
+            const reviewed = reviewInvestigationResearch(db, {
+              projectId, expectedRevision: reported.data.revision, decision: 'accept', decidedBy: 'desk',
+              direction: { keyFacts: ['官方材料支持核心主张'], upheld: ['一次授权可继续推进'], changed: [], discoveries: ['重复中间审批已删除'], unknowns: [], recommendation: 'continue', coreQuestion: '一次授权能否到待审正文？', audienceValue: '减少 Owner 重复操作', scope: '只写批准主张', constraints: ['保持人工发布'] }
+            });
+            assert(reviewed.ok && reviewed.data.status === 'ready_to_write', `主管验收未冻结方向: ${JSON.stringify(reviewed)}`);
+            const writerJobId = 'job-e2e-wmb-5395-writer';
+            const started = startInvestigationWriter(db, { projectId, expectedRevision: reviewed.data.revision, writerJobId, decidedBy: 'creation-flow-automation' });
+            assert(started.ok && started.data.status === 'writing', `Writer 未进入写作: ${JSON.stringify(started)}`);
+            seedAttributedWriterDelivery(db, projectId, writerJobId);
+            const completed = recordInvestigationWriterTerminal(db, { projectId, jobId: writerJobId, type: 'job.finished' });
+            assert(completed.ok && completed.data.status === 'completed', `Writer 交付未完成调查链: ${JSON.stringify(completed)}`);
+            assert(db.prepare('SELECT status FROM content_projects WHERE id=?').get(projectId).status === 'review', '正文交付后项目必须进入待审');
+          } finally { db.close(); }
+        });
+
+        await step('重载后默认正文可见且异常决策入口仍未污染正常路径', async () => {
+          await page.reload();
+          await helpers.waitForAppReady(page);
+          await helpers.navigateTo(page, 'studio');
+          await openProjectByName(page, 'E2E 单一授权到正文待审');
+          const body = await page.inputValue('#studio-body-source');
+          assert(body.includes('一次生产授权已到达真实正文'), `待审正文未在 UI 读回: ${body}`);
+          const db = openWriteDb(workspace.dataRoot);
+          try {
+            const project = db.prepare('SELECT status FROM content_projects WHERE id=?').get(projectId);
+            const authorizationCount = db.prepare("SELECT COUNT(*) count FROM investigation_events WHERE project_id=? AND kind='outline_approved'").get(projectId).count;
+            assert(project.status === 'review' && Number(authorizationCount) === 1, `待审状态或授权次数错误: ${JSON.stringify({ project, authorizationCount })}`);
+          } finally { db.close(); }
+          await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1100, 800));
+          await page.waitForTimeout(300);
+          const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          assert(overflowX === 0, `1100px 完整创作链不应横向溢出，实际 ${overflowX}`);
+          await helpers.captureEvidence({ app, page, evidence, artifactsDir, name: 'one-authorization-to-review-1100' });
+          assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
+        });
+        return { projectId, status: 'review', productionAuthorizations: 1 };
+      } finally {
+        await provider.close();
+      }
+    }
+  },
   {
     id: 'INV-001-studio-investigation-init-approve',
     journeyIds: ['INV-001-studio-investigation-init-approve'],
@@ -480,7 +614,7 @@ export default [
   {
     id: 'WMB-5394-creation-evidence-progressive-detail',
     journeyIds: [],
-    launch: { seedFixture: seedCompletedInvestigationProject },
+    launch: { seedFixture: seedWritingInvestigationProject },
     run: async ({ app, page, helpers, assert, step, evidence, artifactsDir }) => {
       await helpers.waitForAppReady(page);
       await step('Studio 默认正文，依据与进度保持可展开详情且无内部生产按钮', async () => {

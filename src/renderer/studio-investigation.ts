@@ -139,7 +139,7 @@ export const TERMINAL_REASON_LABELS: Record<string, string> = {
 export const HISTORY_KIND_LABELS: Record<string, string> = {
   initialized: '开始项目调查',
   outline_saved: '保存调查提纲',
-  outline_approved: 'Owner 批准调查提纲',
+  outline_approved: '生产调查范围已确认',
   outline_rejected: 'Owner 驳回调查提纲',
   reporter_dispatched: '派记者专项调查',
   reporter_retried: '重新派记者补查',
@@ -151,10 +151,10 @@ export const HISTORY_KIND_LABELS: Record<string, string> = {
   review_stopped: '停止调查',
   needs_user_raised: '需要用户处理',
   direction_saved: '保存调查后写作方向',
-  direction_approved: 'Owner 批准写作方向',
+  direction_approved: '主管冻结写作方向',
   direction_supplemented: '要求补充调查',
   direction_stopped: '停止写作方向',
-  writer_started: '派写手开始写作',
+  writer_started: '写手开始写作',
   writer_finished: '写手完成正文',
   completed: '流程完成',
   abandoned: '项目已停止'

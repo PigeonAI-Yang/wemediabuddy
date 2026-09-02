@@ -16,7 +16,7 @@ import { failure, success, type CommandResult } from './result.ts';
 import { shanghaiDate } from './ferment.ts';
 import { RESEARCH_DEFAULT_BUDGET } from './research-job-runner.ts';
 import { parseResearchEvidencePack, type ResearchEvidencePack } from './research-task-state.ts';
-import type { ResearchRequiredClaim, RoleJobRequest } from './role-job-registry.ts';
+import { readbackContentVersion, type ResearchRequiredClaim, type RoleJobRequest } from './role-job-registry.ts';
 import {
   investigationGapId,
   investigationParentId,
@@ -1004,6 +1004,24 @@ export function recordInvestigationWriterTerminal(
   const now = new Date().toISOString();
   const errorMessage = typeof input.error === 'string' && input.error.trim() ? input.error.trim() : null;
   if (input.type === 'job.finished') {
+    const task = database.prepare(
+      `SELECT id FROM agent_tasks
+       WHERE intent = 'studio_draft' AND json_extract(context_refs_json, '$.jobId') = ?
+       ORDER BY updated_at DESC LIMIT 1`
+    ).get(input.jobId) as { id: string } | undefined;
+    const contentReadback = task ? readbackContentVersion(database, input.projectId, task.id) : null;
+    if (!contentReadback || contentReadback.kind !== 'content_version') {
+      updateRow(database, input.projectId, {
+        status: 'ready_to_write',
+        writer_status: 'failed',
+        writer_finished_at: now
+      });
+      bumpRevision(database, input.projectId, row, now);
+      recordEvent(database, input.projectId, 'writer_terminal', '写手声称完成但缺少可归因正文版本；项目回到可写状态，未伪装为完成。', null);
+      return success(readProjectInvestigation(database, input.projectId)!);
+    }
+    const projectUpdate = database.prepare("UPDATE content_projects SET status='review', updated_at=?, revision=revision+1 WHERE id=?").run(now, input.projectId);
+    if (Number(projectUpdate.changes) !== 1) return failure('NOT_FOUND', '创作项目不存在，无法进入正文待审。', {});
     updateRow(database, input.projectId, {
       status: 'completed',
       writer_status: 'succeeded',
@@ -1011,7 +1029,7 @@ export function recordInvestigationWriterTerminal(
       finished_at: now
     });
     bumpRevision(database, input.projectId, row, now);
-    recordEvent(database, input.projectId, 'writer_terminal', '写手交付正文，专项调查流程完成。', null);
+    recordEvent(database, input.projectId, 'writer_terminal', `写手交付正文版本 ${contentReadback.versionId}，项目已进入待审。`, null);
     return success(readProjectInvestigation(database, input.projectId)!);
   }
   if (input.type !== 'job.partial' && input.type !== 'job.failed' && input.type !== 'job.cancelled' && input.type !== 'job.needs_user') {
