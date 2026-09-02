@@ -16,8 +16,8 @@ Execution policy:
 - When a row becomes `done`, record the exact evidence and commit/push that row's files before starting the next row.
 
 Current state:
-- Completed critical path: WMB-5354 — exact packaged Planner → Owner → Reporter → Writer chain reached `completed@r16` and committed a new non-empty version 2.
-- Active critical path: WMB-5392 — implement single production authorization and automatic normal-path progression; WMB-5324 resumes after WMB-5395 closes.
+- Completed critical path: WMB-5395 — approved proposal reaches an attributed draft in review with one production authorization; normal middle stages automate and exceptions remain fail-closed.
+- Active critical path: WMB-5324 — finish system proxy production adoption; packaged acceptance remains separately blocked in WMB-5388.
 - External blocker: WMB-5388 package validation waits for Windows Security to permit the manifest-pinned Xiaohongshu MCP binary; it does not block the product critical path.
 - Product form lock + Role/Capability lock 2026-08-07: PRODUCT C8, PRD §2.3, SPEC CAP-026, spark role-permission-design.
 
