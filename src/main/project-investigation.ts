@@ -1071,7 +1071,7 @@ export function buildInvestigationSupervisorReviewPrompt(projectId: string): str
     `请立即验收创作项目 ${projectId} 的专项调查资料包。`,
     `先调用 wmb_get_investigation({ project_id: "${projectId}" }) 读取最新 revision、已确认提纲、资料包、来源引用和未解决声明。`,
     '资料包足以形成可信写作方向时，必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="accept" 和完整 direction；该操作会冻结方向并自动派写手，无需再次请求 Owner 审批。',
-    '资料不足、核心主张发生实质变化、调查范围必须扩大或存在无法由主管自行决定的关键未知时，不得伪造方向、不得自行验收通过；必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="defer" 和具体 summary，将结论持久化为 needs_user，再向 Owner 说明以下有效选择：按当前证据收窄写作、补查关键事实、调整核心方向或停止项目。',
+    '资料不足、核心主张发生实质变化、调查范围必须扩大、涉及外部权限或费用，或存在无法由主管自行决定的关键未知时，不得伪造方向、不得自行验收通过；必须调用 wmb_review_investigation_research，携带当前 expected_revision、decision="defer" 和具体 summary，将结论持久化为 needs_user，再向 Owner 说明以下有效选择：按当前证据收窄写作、补查关键事实、调整核心方向或停止项目。',
     '无论通过或暂缓，本回合都必须持久化一次验收结果；不得把项目留在 research_review。成功后读回最新调查状态，不要 sleep 或轮询。'
   ].join('\n');
 }

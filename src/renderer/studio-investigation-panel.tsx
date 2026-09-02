@@ -48,12 +48,12 @@ const STATUS_HINTS: Record<StudioInvestigationStatus, string> = {
   researching: '记者正在按已批准提纲开展专项调查；完成后进入主管验收。',
   research_review: '记者已交付调查资料包；主管验收并综合判断后，形成调查后写作方向。',
   needs_more_research: '主管验收认为覆盖不足：按已确认范围补派记者，无需 Owner 重批。',
-  needs_user: '调查出现需要 Owner 决策的情况：范围变化、访问阻塞或无法自行决策。',
-  direction_pending_approval: '调查后写作方向已呈报；Owner 确认后才可派写手。',
-  ready_to_write: '调查与方向均已确认；现在可以显式开始写作。',
+  needs_user: '现有证据无法安全支撑自动写作，或核心方向发生实质变化。请明确选择恢复路径。',
+  direction_pending_approval: '旧项目仍有待确认方向；确认后系统将自动进入写作。',
+  ready_to_write: '调查与方向均已冻结，系统正在自动派写手。',
   writing: '写手任务已派出；正文完成后在「正文」工作面查看。',
   completed: '调查流程已完成，项目进入写作与审稿阶段。',
-  abandoned: '调查已停止；写作方向未获确认或判断不值得继续。',
+  abandoned: '调查已停止；项目不会继续派写手。',
   failed: '记者执行失败且无可用交付；可重试或停止。'
 };
 
@@ -205,7 +205,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
   };
   const acceptResearch = () => {
     if (!model || !directionDraft) return;
-    void runMutation('已验收调查资料包，写作方向呈报审批', () => wmbInvestigation().investigationReviewResearch({
+    void runMutation('已按当前证据收窄方向并继续自动写作', () => wmbInvestigation().investigationReviewResearch({
       projectId,
       expectedRevision: model.revision,
       decision: 'accept',
@@ -486,7 +486,7 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
       case 'needs_user':
         return model.package
           ? {
-              label: model.package.review?.decision === 'defer' ? '按观点稿继续' : '验收通过',
+              label: model.package.review?.decision === 'defer' ? '按当前证据收窄写作' : '确认方向并继续',
               dataAction: 'accept-research',
               onClick: acceptResearch
             }
@@ -520,9 +520,9 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
       secondaryActions.push({ label: '停止调查', dataAction: 'stop-research', onClick: () => { void stopResearch(); }, danger: true });
     }
     if (status === 'needs_user' && model.package) {
-      secondaryActions.push({ label: '需要补查', dataAction: 'supplement-research', onClick: supplementResearch });
-      secondaryActions.push({ label: '扩展范围', dataAction: 'expand-research', onClick: expandResearch });
-      secondaryActions.push({ label: '停止调查', dataAction: 'stop-research', onClick: () => { void stopResearch(); }, danger: true });
+      secondaryActions.push({ label: '补查关键事实', dataAction: 'supplement-research', onClick: supplementResearch });
+      secondaryActions.push({ label: '调整核心方向', dataAction: 'expand-research', onClick: expandResearch });
+      secondaryActions.push({ label: '停止项目', dataAction: 'stop-research', onClick: () => { void stopResearch(); }, danger: true });
     }
     if (status === 'needs_user' && !model.package) {
       secondaryActions.push({ label: '停止调查', dataAction: 'stop-research', onClick: () => { void stopResearch(); }, danger: true });
@@ -649,8 +649,8 @@ export function StudioInvestigationPanel({ projectId, sources, onOpenSource, onO
         {status === 'needs_user' && (
           <>
             <div className="investigation-note amber" role="status">{model.package?.review?.decision === 'defer'
-              ? '主管暂缓验收：强观点与未来判断可作为作者判断继续，数字、引语、具体案例、归因等外部可验证事实必须落在证据内。请选择：按观点稿继续、需要补查、扩展范围或停止调查。'
-              : '调查需要 Owner 决策：范围变化、关键访问阻塞或主管无法自行决策时进入此状态。'}</div>
+              ? '当前证据不足以安全进入自动写作，或调查结果要求实质调整核心方向。请选择：按当前证据收窄写作、补查关键事实、调整核心方向或停止项目。数字、引语、具体案例和归因等外部可验证事实仍必须由证据支持。'
+              : '调查遇到范围变化、关键访问阻塞、外部权限或费用边界，系统已停止自动推进并等待你的明确决策。'}</div>
             {model.package && renderPackage()}
             {approvedOutline && renderApprovedOutline()}
             {model.package && renderDirectionEditor()}

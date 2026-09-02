@@ -310,12 +310,18 @@ export function registerProjectInvestigationIpc(dependencies: BusinessIpcDepende
           expectedRevision: value.expectedRevision,
           decision: value.decision,
           direction: value.decision === 'accept' ? value.direction : undefined,
-          decidedBy: 'desk'
+          summary: value.summary,
+          decidedBy: 'owner'
         }));
         return { data, entityId: value.projectId, afterRevision: data.revision, readback: data };
       }
     });
-    if (receipt.ok) broadcastDataChanged({ scopes: ['studio', 'agent'], reason: `investigation.review_research:${input.decision}` });
+    if (receipt.ok) {
+      broadcastDataChanged({ scopes: ['studio', 'agent'], reason: `investigation.review_research:${input.decision}` });
+      if (input.decision === 'accept') {
+        await continueAutomaticInvestigation(runtime, requireSpawner(runtime), input.projectId);
+      }
+    }
     return receiptResult(receipt);
   });
 
