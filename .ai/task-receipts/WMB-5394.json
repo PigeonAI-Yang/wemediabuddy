@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5394",
+  "implementationCommit": "638ac6a",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/renderer/main.tsx",
+    "src/renderer/proposals-view.tsx",
+    "src/renderer/studio-investigation-panel.tsx",
+    "src/renderer/studio-view-panels.tsx",
+    "src/renderer/styles-studio.css",
+    "src/renderer/today-view-parts.tsx",
+    "src/renderer/today-view.tsx",
+    "tests/e2e/investigation.test.mjs",
+    "tests/today-approval-flow.test.mjs",
+    "tests/wmb-5394-creation-ui-contract.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5394-creation-ui-contract.test.mjs tests/today-approval-flow.test.mjs tests/design-tokens-drift.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5394.verify.log"
+  },
+  "closedAt": "2026-09-02T17:06:02.822Z"
+}

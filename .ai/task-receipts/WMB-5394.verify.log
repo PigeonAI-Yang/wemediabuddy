@@ -1,0 +1,22 @@
+✔ foundation anchors: accent, Inter, topbar 56px (1.0049ms)
+✔ page CSS color literals stay within shrink-only allowlist (12.7041ms)
+✔ allowlist comment documents Phase 3 shrink policy (0.37ms)
+(node:94944) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:94944) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Today recommendation action opens the corresponding complete proposal without approving it (3.2418ms)
+✔ approval directly creates the selected content project (2.2508ms)
+✔ approval transaction creates one complete project, closes carry, and advances the projection (749.5863ms)
+✔ approval failure rolls back status, project, version, topic links, and carry as one unit (809.5329ms)
+✔ WMB-5394 Proposals owns the single production authorization and Today deep-links the exact item (5.0498ms)
+✔ WMB-5394 Studio defaults to writing and exposes production evidence as progressive detail (2.7573ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2114.9877
