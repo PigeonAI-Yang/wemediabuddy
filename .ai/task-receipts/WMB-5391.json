@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5391",
+  "implementationCommit": "d12162c",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "TASKS.md",
+    "docs/spark/2026-09-02-creation-flow-decision-simplification-plan.md"
+  ],
+  "verification": {
+    "command": "node scripts/check-task-ledger.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5391.verify.log"
+  },
+  "closedAt": "2026-09-02T14:35:38.986Z"
+}
