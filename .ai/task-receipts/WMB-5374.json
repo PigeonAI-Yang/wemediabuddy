@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5374",
+  "implementationCommit": "3304760",
+  "upstream": "origin/master",
+  "changedPaths": [
+    ".ai/verify-wmb-5374-installed.mjs",
+    "TASKS.md",
+    "forge.config.ts",
+    "scripts/write-packaged-build-manifest.mjs",
+    "src/main/workspace-orchestrator-executor.ts",
+    "src/main/workspace-orchestrator-runtime.ts",
+    "tests/wmb-5374-workspace-orchestrator-executor.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5374-workspace-orchestrator-executor.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5374.verify.log"
+  },
+  "closedAt": "2026-09-02T14:29:47.852Z"
+}
