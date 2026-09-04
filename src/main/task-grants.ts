@@ -62,7 +62,6 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'plan_item.advance',
   'plan_item.approve',
   'plan_item.reject',
-  'plan_item.request_planning',
   'plan_item.rework',
   'plan_item.submit',
   'plans.save',
@@ -259,7 +258,6 @@ export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
     'agent_tasks.report_progress',
     'knowledge.record_batch',
     'knowledge.suggestion_create',
-    'plan_item.request_planning',
     'plan_item.submit',
     'plans.save',
     'sources.upsert_batch',
@@ -273,7 +271,6 @@ export const AUTOMATIC_TASK_GRANT_SCOPES = Object.freeze({
     'agent_tasks.report_progress',
     'knowledge.record_batch',
     'knowledge.suggestion_create',
-    'plan_item.request_planning',
     'plan_item.submit',
     'plans.save',
     'sources.lane_gate'

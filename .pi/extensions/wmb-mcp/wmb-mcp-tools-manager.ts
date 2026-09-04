@@ -159,7 +159,7 @@ const listJobMessages: ToolDefinition = {
 const dailyReadiness: ToolDefinition = {
   name: 'wmb_daily_readiness',
   label: '今日编排就绪状态',
-  description: '只读。查看今日扫/判状态与建议下一阶段。是否续接由你决定：可调 wmb_continue_after_scan / wmb_run_daily_stage / wmb_spawn_job。',
+  description: '只读。查看今日采集与方案状态；需要推进时只使用 wmb_run_daily_stage（scan 或 full）。',
   parameters: {
     type: 'object',
     properties: { businessDate: { type: 'string' } },
@@ -172,30 +172,15 @@ const dailyReadiness: ToolDefinition = {
   }
 };
 
-const continueAfterScan: ToolDefinition = {
-  name: 'wmb_continue_after_scan',
-  label: '扫描后续接策划',
-  description: '主管选用的自动续接工具：扫描完成后调用它，系统按编排把策划接上。若你只要单项采集、不要策划，就不要调用。',
-  parameters: {
-    type: 'object',
-    properties: { businessDate: { type: 'string' } },
-    additionalProperties: false
-  },
-  async execute(_id, params) {
-    return textResult(await callTool('daily.continue_after_scan', {
-      business_date: params.businessDate ? String(params.businessDate) : undefined
-    }));
-  }
-};
 
 const runDailyStage: ToolDefinition = {
   name: 'wmb_run_daily_stage',
   label: '主管启动今日阶段',
-  description: '主管选用的阶段编排工具：scan=单项采集，judge=单项策划，full=一条龙。需要哪种编排就调哪种；不是禁用自动编排。',
+  description: '主管启动今日选题：scan 仅采集，full 完成采集与方案。',
   parameters: {
     type: 'object',
     properties: {
-      stage: { type: 'string', description: 'scan | judge | full' },
+      stage: { type: 'string', description: 'scan | full' },
       businessDate: { type: 'string' }
     },
     required: ['stage'],
@@ -218,6 +203,5 @@ export const managerTools = [
   messageJob,
   listJobMessages,
   dailyReadiness,
-  continueAfterScan,
   runDailyStage
 ];

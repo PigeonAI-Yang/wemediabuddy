@@ -343,8 +343,8 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
   Object.freeze({
     id: 'cap.planning_submit',
     displayName: '策划提交',
-    description: 'WMB-5351 策划草稿请求与提交；策划精确任务或主管',
-    commands: Object.freeze(['plan_item.request_planning', 'plan_item.submit'] as const),
+    description: 'WMB-5351 策划提交；策划精确任务或主管',
+    commands: Object.freeze(['plan_item.submit'] as const),
     readProfiles: Object.freeze(['plans', 'content', 'sources'] as const),
     defaultRoleBindings: Object.freeze({ planner: true, desk: true }),
     grantKinds: Object.freeze({ task: Object.freeze(['daily_judge', 'daily_intelligence'] as const), page: Object.freeze(['today', 'proposals'] as const) }),

@@ -196,7 +196,7 @@ async function ensurePi(dataRoot: DataRoot, options: { skipCandidateKeys?: Itera
         const config = chain[index]!;
         let worker: PiRpcSupervisor | null = null;
         try {
-          await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+          await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
           worker = new PiRpcSupervisor(process.execPath, [piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', runtime.getPiSessionFile() || layout.sessionFile, '-e', extensionPath, '-e', piVisionExtensionFromRuntimeRoot(runtimeRoot), '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []), '--append-system-prompt', PI_AUTHORITY_SYSTEM_PROMPT], {
             ...process.env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: layout.agentDir, WMB_PI_API_KEY: config.apiKey, PI_VISION_PROVIDER: 'wmb-api', PI_VISION_MODEL: config.model, PI_VISION_REASONING_EFFORT: 'off', WMB_MCP_URL: mcp.url, WMB_XHS_MCP_URL: currentXhs()?.getUrl() || '', ...proxyEnvForChildren()
           }, (event) => {
@@ -294,7 +294,7 @@ async function withKnowledgeCompilePi<T>(dataRootPath: string, run: (runtime: Pi
       const sessionFile = path.join(layout.agentDir, 'sessions', `knowledge-compile-${randomUUID()}.jsonl`);
       await mkdir(path.dirname(sessionFile), { recursive: true });
       const createRuntime = async (config: ResolvedPiConfig) => {
-        await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+        await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...config, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
         return new PiRpcSupervisor(process.execPath, [
           piCliFromRuntimeRoot(runtimeRoot), '--mode', 'rpc', '--session', sessionFile, '-e', extensionPath,
           '--provider', 'wmb-api', '--model', config.model, ...(config.thinking ? ['--thinking', config.thinking] : []),
@@ -449,20 +449,6 @@ async function refreshRuntime(dataRoot: DataRoot): Promise<void> {
           rootMode: 'scheduler'
         });
         return { savedCount: receipt.ok ? 1 : 0 };
-      },
-      onNewSources: async (modules) => {
-        const module = modules[0];
-        const businessDate = shanghaiDate();
-        const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
-          producerId: 'scheduler.rolling-auto-judge',
-          businessDate,
-          requestId: `scheduler.rolling-auto-judge:${runtime.identity.workspaceId}:${businessDate}:${module}`,
-          action: 'judge',
-          logicalInput: { businessDate, modules },
-          payload: { businessDate, modules },
-          rootMode: 'scheduler'
-        });
-        return receipt;
       },
       onError: (error) => console.error('[daily-scan-scheduler]', error)
     });

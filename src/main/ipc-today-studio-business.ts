@@ -616,26 +616,6 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     return receiptAsCommandResult(receipt);
   });
 
-  ipcMain.handle('plan-item:request-planning', async (_event, input: { planItemId: string; requestId?: string }) => {
-    const runtime = await requireBusinessRuntime(dependencies);
-    const identity = readPlanItemIntentIdentity(runtime.database, input.planItemId);
-    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
-    const payload = Object.freeze({
-      planItemId: identity.planItemId,
-      expectedRevision: identity.planItemRevision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision
-    });
-    return submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.plan-item-request-planning',
-      businessDate: identity.businessDate,
-      requestId,
-      action: 'judge',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput);
-  });
 
   ipcMain.handle('plan-item:approve', async (_event, input: { planItemId: string; expectedRevision: number; reason?: string }) => {
     const runtime = await requireBusinessRuntime(dependencies);
@@ -710,24 +690,4 @@ export function registerTodayStudioBusinessIpc(dependencies: BusinessIpcDependen
     return receiptAsCommandResult(receipt);
   });
 
-  ipcMain.handle('plan-item:advance', async (_event, input: { planItemId: string; requestId?: string }) => {
-    const runtime = await requireBusinessRuntime(dependencies);
-    const identity = readPlanItemIntentIdentity(runtime.database, input.planItemId);
-    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
-    const payload = Object.freeze({
-      planItemId: identity.planItemId,
-      expectedRevision: identity.planItemRevision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision
-    });
-    return submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.plan-item-advance',
-      businessDate: identity.businessDate,
-      requestId,
-      action: 'stage_d',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput);
-  });
 }

@@ -91,6 +91,105 @@ const plannerThesisCandidateSchema = z.object({
   reason: z.string().min(1),
 });
 
+const creationExperimentInputSchema = z.object({
+  version: z.literal('v1'),
+  projectId: z.string().min(1),
+  variants: z.array(z.object({
+    id: z.string().min(1),
+    semanticDirection: z.string().min(10),
+    evidenceFit: z.number().int().min(0).max(100),
+    insightNovelty: z.number().int().min(0).max(100),
+    audienceValue: z.number().int().min(0).max(100)
+  }).strict()).min(2).max(4),
+  selectedVariantId: z.string().min(1)
+}).strict();
+
+export type CreationExperiment = Readonly<{
+  version: 'v1';
+  projectId: string;
+  variants: readonly Readonly<{
+    id: string;
+    semanticDirection: string;
+    evidenceFit: number;
+    insightNovelty: number;
+    audienceValue: number;
+    weightedScore: number;
+  }>[];
+  selectedVariantId: string;
+  quantitativeConclusion: string;
+}>;
+
+export function normalizeCreationExperiment(value: unknown): CreationExperiment {
+  try {
+    const raw = value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : value;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      delete (raw as Record<string, unknown>).quantitativeConclusion;
+      const variants = (raw as Record<string, unknown>).variants;
+      if (Array.isArray(variants)) {
+        (raw as Record<string, unknown>).variants = variants.map((variant) => {
+          if (!variant || typeof variant !== 'object' || Array.isArray(variant)) return variant;
+          const clean = { ...(variant as Record<string, unknown>) };
+          delete clean.weightedScore;
+          return clean;
+        });
+      }
+    }
+    const parsed = creationExperimentInputSchema.parse(raw);
+    const seenIds = new Set<string>();
+    for (const variant of parsed.variants) {
+      if (seenIds.has(variant.id)) throw new Error('variant_id_duplicate');
+      seenIds.add(variant.id);
+    }
+    const variants = parsed.variants.map((variant) => Object.freeze({
+      ...variant,
+      weightedScore: Math.round((variant.evidenceFit * 0.45 + variant.insightNovelty * 0.30 + variant.audienceValue * 0.25) * 10) / 10
+    }));
+    const selected = variants.find((variant) => variant.id === parsed.selectedVariantId);
+    if (!selected) throw new Error('selected_variant_missing');
+    const bestScore = Math.max(...variants.map((variant) => variant.weightedScore));
+    if (selected.weightedScore !== bestScore) throw new Error('selected_variant_not_highest');
+    const runnerUpScore = Math.max(...variants.filter((variant) => variant.id !== selected.id).map((variant) => variant.weightedScore));
+    const margin = Math.round((selected.weightedScore - runnerUpScore) * 10) / 10;
+    return Object.freeze({
+      version: 'v1',
+      projectId: parsed.projectId,
+      variants: Object.freeze(variants),
+      selectedVariantId: selected.id,
+      quantitativeConclusion: `选择 ${selected.id}：加权分 ${selected.weightedScore}，领先次优 ${margin} 分（证据贴合 45% / 洞察新意 30% / 读者价值 25%）。`
+    });
+  } catch (error) {
+    throw Object.assign(new Error(`CREATION_EXPERIMENT_INVALID: ${error instanceof Error ? error.message : String(error)}`), { code: 'CREATION_EXPERIMENT_INVALID' });
+  }
+}
+
+export function normalizeCreationExperimentCheckpoint(database: DatabaseSync, taskId: string, checkpoint: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!checkpoint || !Object.prototype.hasOwnProperty.call(checkpoint, 'creationExperiment')) return checkpoint;
+  const task = getAgentTask(database, taskId);
+  if (!task || task.intent !== 'studio_draft' || task.contextRefs.writerTask !== 'core_draft' || task.contextRefs.creationExperiment !== true) {
+    throw Object.assign(new Error('CREATION_EXPERIMENT_SCOPE_MISMATCH'), { code: 'CREATION_EXPERIMENT_SCOPE_MISMATCH' });
+  }
+  const experiment = normalizeCreationExperiment(checkpoint.creationExperiment);
+  if (task.contextRefs.projectId !== experiment.projectId) {
+    throw Object.assign(new Error('CREATION_EXPERIMENT_PROJECT_MISMATCH'), { code: 'CREATION_EXPERIMENT_PROJECT_MISMATCH' });
+  }
+  return { ...checkpoint, creationExperiment: experiment };
+}
+
+export function requireCreationExperimentBeforeCoreSave(database: DatabaseSync, taskId: string, projectId: string): void {
+  const task = getAgentTask(database, taskId);
+  if (!task || task.intent !== 'studio_draft' || task.contextRefs.writerTask !== 'core_draft' || task.contextRefs.creationExperiment !== true) return;
+  if (task.contextRefs.projectId !== projectId) {
+    throw Object.assign(new Error('CREATION_EXPERIMENT_PROJECT_MISMATCH'), { code: 'CREATION_EXPERIMENT_PROJECT_MISMATCH' });
+  }
+  if (!task.checkpoint.creationExperiment) {
+    throw Object.assign(new Error('CREATION_EXPERIMENT_REQUIRED'), { code: 'CREATION_EXPERIMENT_REQUIRED' });
+  }
+  const experiment = normalizeCreationExperiment(task.checkpoint.creationExperiment);
+  if (experiment.projectId !== projectId) {
+    throw Object.assign(new Error('CREATION_EXPERIMENT_PROJECT_MISMATCH'), { code: 'CREATION_EXPERIMENT_PROJECT_MISMATCH' });
+  }
+}
+
 export const planItemSubmitInputSchema = {
   ...authoritySchema,
   plan_item_id: z.string().min(1),
@@ -376,6 +475,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
       command: 'agent_tasks.report_progress', requestId: request_id, ...authority({ request_id, task_id, grant_id, worker_lease_id }),
       input: commandInput, boundIdentity: { taskId: task_id }, entityType: 'agent_task',
       execute: (database, normalized) => {
+        const checkpoint = normalizeCreationExperimentCheckpoint(database, task_id, normalized.checkpoint);
         const reported = requireCommandResultData(reportAgentTaskProgress(database, task_id, {
           phase: normalized.phase,
           progress: {
@@ -383,7 +483,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
             failed: normalized.failed, verified: normalized.verified, saved: normalized.saved,
             opportunityCount: normalized.opportunity_count
           },
-          checkpoint: normalized.checkpoint,
+          checkpoint,
           message: normalized.message,
           level: normalized.level
         }));
@@ -568,29 +668,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     return text(receipt);
   });
 
-  // WMB-5351 plan_item.* commands
-  server.registerTool('plan_item.request_planning', {
-    description: '为草稿提交一项 Planner 规划意图；只返回 Actor receipt',
-    inputSchema: { ...authoritySchema, plan_item_id: z.string(), expected_revision: z.number().int().optional() }
-  }, async (input) => {
-    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id, expected_revision } = input;
-    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
-    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
-      planItemId: identity.planItemId,
-      expectedRevision: expected_revision ?? identity.planItemRevision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision
-    });
-    return text(await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.plan-item-request-planning',
-      businessDate: identity.businessDate,
-      requestId: request_id,
-      action: 'judge',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput));
-  });
+  // plan_item.* commands
 
   server.registerTool('plan_item.get', {
     description: '只读获取当前 Planner 任务精确绑定的冻结 plan_item；不需要写授权，不产生业务写入。',
@@ -802,6 +880,7 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
         if (typeof normalized.expectedRevision !== 'number') {
           requireCommandResultData({ ok: false, data: null, error: { code: 'VALIDATION_ERROR', message: '核心版本写入必须提供 expected_revision。' } });
         }
+        requireCreationExperimentBeforeCoreSave(database, task_id, normalized.projectId);
         const data = requireCommandResultData(saveCoreVersion(database, {
           projectId: normalized.projectId, title: normalized.title, body: normalized.body,
           expectedRevision: normalized.expectedRevision!, mediaBindings: normalized.mediaBindings

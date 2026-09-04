@@ -108,13 +108,6 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     writeTables: ['plan_items', 'plans', 'daily_content_targets'], processOrSession: null, legacyDirect: false
   },
   {
-    producerId: 'proposal.plan-item-request-planning', sourceLocation: "src/main/ipc-today-studio-business.ts:plan-item:request-planning; src/main/mcp-business-commands.ts:plan_item.request_planning",
-    trigger: 'Owner or MCP requests planning for a draft/rejected item', intendedSource: 'proposal_ui', intendedAction: 'judge',
-    currentDirectAction: 'Typed planning intent submission with frozen plan-item identity',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(proposal_ui or mcp, judge, frozen plan-item identity) → Actor mailbox',
-    writeTables: ['plan_items', 'jobs', 'agent_tasks', 'task_grants'], processOrSession: 'Actor-managed Planner PiRpcSupervisor child', legacyDirect: false
-  },
-  {
     producerId: 'proposal.plan-item-advance', sourceLocation: "src/main/ipc-today-studio-business.ts:plan-item:advance; src/main/mcp-business-commands.ts:plan_item.advance",
     trigger: 'Owner or MCP advances an approved proposal', intendedSource: 'proposal_ui', intendedAction: 'stage_d',
     currentDirectAction: 'Typed proposal stage_d intent submission with frozen candidate/project identity',
@@ -130,19 +123,12 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     processOrSession: 'Actor-managed role job with optional PiRpcSupervisor and BrowserProfile CDP', legacyDirect: false
   },
   {
-    producerId: 'mcp.daily-continue-after-scan', sourceLocation: "src/main/mcp.ts:server.registerTool('daily.continue_after_scan')",
-    trigger: 'MCP explicit Manager continuation', intendedSource: 'mcp', intendedAction: 'judge',
-    currentDirectAction: 'Typed judge intent submission with explicit predecessor and root identity',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(mcp, judge, frozen predecessor identity) → Actor mailbox',
-    writeTables: ['agent_tasks', 'manager_tasks', 'source_scan_receipts', 'plans', 'plan_items'], processOrSession: 'Actor-managed Planner PiRpcSupervisor child', legacyDirect: false
-  },
-  {
     producerId: 'mcp.daily-run-stage', sourceLocation: "src/main/mcp.ts:server.registerTool('daily.run_stage')",
-    trigger: 'MCP explicit scan, judge, or full command', intendedSource: 'mcp', intendedAction: 'full',
-    currentDirectAction: 'Typed scan, judge, or full intent submission through the workspace Actor gateway',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(mcp, requested typed scan, judge, or full action) → Actor mailbox',
+    trigger: 'MCP explicit scan or full command', intendedSource: 'mcp', intendedAction: 'full',
+    currentDirectAction: 'Typed scan or full intent submission through the workspace Actor gateway',
+    replacementRoute: 'submitWorkspaceOrchestratorIntent(mcp, requested typed scan or full action) → Actor mailbox',
     writeTables: ['agent_tasks', 'manager_tasks', 'source_scan_receipts', 'source_items', 'plans', 'plan_items'],
-    processOrSession: 'Actor-managed Reporter and/or Planner PiRpcSupervisor child', legacyDirect: false
+    processOrSession: 'Actor-managed Reporter and optional Planner PiRpcSupervisor child', legacyDirect: false
   },
   {
     producerId: 'mcp.daily-orchestrate', sourceLocation: "src/main/mcp.ts:server.registerTool('daily.orchestrate')",
@@ -168,12 +154,6 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     trigger: 'Rolling X Lists timer', intendedSource: 'rolling_scan', intendedAction: 'scan', currentDirectAction: 'Typed rolling scan intent submission for x_lists',
     replacementRoute: 'submitWorkspaceOrchestratorIntent(rolling_scan, scan, x_lists) → Actor mailbox',
     writeTables: ['agent_tasks', 'source_scan_receipts', 'source_items'], processOrSession: 'Actor-managed Reporter PiRpcSupervisor child and BrowserProfile CDP session', legacyDirect: false
-  },
-  {
-    producerId: 'scheduler.rolling-auto-judge', sourceLocation: 'src/main/index.ts:DailyScanScheduler.onNewSources',
-    trigger: 'Rolling scan saves at least one source', intendedSource: 'rolling_scan', intendedAction: 'judge',
-    currentDirectAction: 'Typed rolling judge intent submission under the same root identity', replacementRoute: 'Actor automatic F→J handoff within the same root',
-    writeTables: ['agent_tasks', 'plans', 'plan_items'], processOrSession: 'Actor-managed Planner PiRpcSupervisor child', legacyDirect: false
   },
   {
     producerId: 'startup.daily-resume', sourceLocation: 'src/main/index.ts:app.whenReady typed daily resume handoff',

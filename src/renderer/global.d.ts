@@ -18,7 +18,7 @@ import type { BrowserProfile } from '../main/browser-config';
 import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding';
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
 import type { PublicationBrowserOperationV1 as PublicationBrowserOperation, PublicationSnapshotV1 as PublicationSnapshot } from '../main/publication-operations';
-import type { WmbRoleId, WmbRoleModelPolicy, WmbSettingsSnapshot } from './wmb-settings-types';
+import type { WmbRoleId, WmbRoleModelPolicy, WmbRoleModelThinkingLevel, WmbSettingsSnapshot } from './wmb-settings-types';
 import type { CrewInstance, CrewProjection } from './agents-instance-logic';
 import type { OnboardingAiSaveInput, OnboardingAiTestRecord, OnboardingAiTestResult, OnboardingAiTestSettings, OnboardingStatus, OnboardingStep, OnboardingWorkspaceResult, PlatformCheckStatus } from '../main/onboarding';
 import type { UpdateState } from '../main/app-update';
@@ -294,11 +294,11 @@ declare global {
       rebindBrowserProfile(input: OwnerBrowserCommand & { profileId: string }): Promise<unknown>;
       verifyBrowserAccount(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }): Promise<unknown>;
       migrateLegacyBrowserProfile(input: OwnerBrowserCommand & { platform: 'x' | 'wechat' | 'zhihu' }): Promise<unknown>;
-      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode?: 'bearer' | 'x-api-key' | 'none'; credentialSource?: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; text?: boolean; vision?: boolean; nativeSearch?: boolean; imageGeneration?: boolean; jsonOutput?: boolean; streaming?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
+      savePiConfig(input: { id?: string; name: string; baseUrl: string; model: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode?: 'bearer' | 'x-api-key' | 'none'; credentialSource?: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; thinking?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null; text?: boolean; vision?: boolean; nativeSearch?: boolean; imageGeneration?: boolean; jsonOutput?: boolean; streaming?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }): Promise<unknown>;
       activatePiConfig(id: string): Promise<unknown>;
       deletePiConfig(id: string): Promise<unknown>;
       saveRoleModelPolicies(input: { roleModelPolicies: Record<WmbRoleId, WmbRoleModelPolicy>; expectedRevision?: number }): Promise<WmbSettingsSnapshot['pi']>;
-      listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode?: 'bearer' | 'x-api-key' | 'none'; credentialSource?: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>;
+      listPiModels(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode?: 'bearer' | 'x-api-key' | 'none'; credentialSource?: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; apiKey?: string }): Promise<Array<{ id: string; contextWindow?: number; maxTokens?: number; thinkingLevels?: WmbRoleModelThinkingLevel[] }>>;
       discoverPiProviders(): Promise<Array<{ source: 'antigravity-manager' | 'cockpit-codex' | 'cockpit-custom' | 'environment'; name: string; origin: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode: 'bearer' | 'x-api-key' | 'none'; credentialSource: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; capabilities: { text: boolean; vision: boolean; imageGeneration: boolean; nativeSearch: boolean; jsonOutput: boolean; streaming: boolean; modelIdDiscovery: boolean }; suggestedModel?: string; models?: Array<{ id: string; contextWindow?: number; maxTokens?: number }> }>>;
       probePiProvider(input: { id?: string; baseUrl: string; api: 'openai-responses' | 'openai-completions' | 'anthropic-messages'; authMode?: 'bearer' | 'x-api-key' | 'none'; credentialSource?: { kind: 'environment'; variable: string } | { kind: 'command'; executable: string; args: string[] } | { kind: 'none' }; apiKey?: string }): Promise<{ state: 'unknown' | 'healthy' | 'unhealthy'; lastProbeAt?: string; lastError?: string; modelCount?: number }>;
       listPiSkills(): Promise<PiSkillSummary[]>;
@@ -552,11 +552,9 @@ declare global {
       setCarryState(input: { id: string; expectedRevision: number; state: 'active' | 'watching' | 'done' | 'dismissed' | 'expired'; reason?: string }): Promise<any>;
       dismissPlanItem(input: { planItemId: string; reason?: string }): Promise<any>;
       restoreProposal(input: { planItemId: string; reason?: string }): Promise<any>;
-      requestPlanItem(input: { planItemId: string; requestId?: string }): Promise<{ planItemId: string; taskId: string; jobId: string; reused: boolean }>;
       approvePlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<{ id: string; revision: number; planningStatus: 'approved'; projectId: string; projectRevision: number; contentVersionId: string; carryState: 'done' | null }>;
       rejectPlanItem(input: { planItemId: string; expectedRevision: number; reason: string; requestId?: string }): Promise<unknown>;
       reworkPlanItem(input: { planItemId: string; expectedRevision: number; reason?: string; requestId?: string }): Promise<unknown>;
-      advancePlanItem(input: { planItemId: string; requestId?: string }): Promise<{ projectId: string; role: 'reporter' | 'writer'; jobId: string | null; taskId: string | null; reusedProject: boolean; reusedJob: boolean }>;
       getStudio(): Promise<Array<{
         id: string;
         title: string;

@@ -314,12 +314,10 @@ type BridgeGap = {
 };
 
 const FIXED_COMMANDS = [
-  'plan_item.request_planning',
   'plan_item.submit',
   'plan_item.approve',
   'plan_item.reject',
   'plan_item.rework',
-  'plan_item.advance',
 ] as const;
 
 type WindowWmb = Record<string, unknown> & {
@@ -432,29 +430,7 @@ export async function reworkPlanItem(input: { planItemId: string; expectedRevisi
   return result;
 }
 
-export async function requestPlanning(input: { planItemId: string; sourceIds?: string[]; requestId?: string }): Promise<unknown> {
-  const wmb = getWmb();
-  if (!wmb) throw bridgeMissingError('plan_item.request_planning', ['window.wmb missing']);
-  const w = wmb as Record<string, unknown>;
-  const fn = (w.planItemRequestPlanning ?? w.requestPlanning) as unknown;
-  if (typeof fn !== 'function') throw bridgeMissingError('plan_item.request_planning', ['window.wmb.planItemRequestPlanning']);
-  const payload = { planItemId: input.planItemId, ...(input.sourceIds ? { sourceIds: input.sourceIds } : {}), ...(input.requestId ? { requestId: input.requestId } : {}) };
-  const result = await (fn as (p: unknown) => Promise<unknown>).call(wmb, payload);
-  assertCommandResultOk(result);
-  return result;
-}
 
-export async function advancePlanItem(input: { planItemId: string; requestId?: string }): Promise<unknown> {
-  const wmb = getWmb();
-  if (!wmb) throw bridgeMissingError('plan_item.advance', ['window.wmb missing']);
-  const w = wmb as Record<string, unknown>;
-  const fn = (w.advancePlanItem ?? w.planItemAdvance) as unknown;
-  if (typeof fn !== 'function') throw bridgeMissingError('plan_item.advance', ['window.wmb.advancePlanItem']);
-  const payload = { planItemId: input.planItemId, ...(input.requestId ? { requestId: input.requestId } : {}) };
-  const result = await (fn as (p: unknown) => Promise<unknown>).call(wmb, payload);
-  assertCommandResultOk(result);
-  return result;
-}
 
 async function refreshApprovedReadback(_planItemId: string): Promise<void> {
   const wmb = getWmb();

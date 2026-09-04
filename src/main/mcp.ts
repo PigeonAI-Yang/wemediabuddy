@@ -31,7 +31,7 @@ import { registerExecutionGrantMcp } from './mcp-execution-grants.ts';
 import { registerBusinessMutationMcp } from './mcp-business-commands.ts';
 import { registerJobToolsMcp } from './mcp-job-tools.ts';
 import { registerWikiActionsMcp } from './mcp-wiki-actions.ts';
-import { continueAfterScan, describeDailyReadiness, runManagerDailyStage } from './manager-orchestration.ts';
+import { describeDailyReadiness, runManagerDailyStage } from './manager-orchestration.ts';
 import { buildRoleRoster } from './role-roster.ts';
 import { shanghaiDate } from './ferment.ts';
 import { roleReadTools } from '../shared/agent-capabilities.ts';
@@ -117,7 +117,6 @@ const WMB_TOOL_IDENTITY: Readonly<Record<string, string>> = Object.freeze({
   'jobs.messages': 'wmb_list_job_messages',
   'research.dispatch': 'wmb_dispatch_research',
   'daily.readiness': 'wmb_daily_readiness',
-  'daily.continue_after_scan': 'wmb_continue_after_scan',
   'daily.run_stage': 'wmb_run_daily_stage',
   'intelligence_channels.get': 'wmb_get_intelligence_channels',
   'intelligence_channels.receipts_list': 'wmb_list_intelligence_channel_receipts',
@@ -415,38 +414,11 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
     }, async ({ business_date }) => {
       return text(describeDailyReadiness(runtime, business_date || undefined));
     });
-    server.registerTool('daily.continue_after_scan', {
-      description: '提交带 predecessor intent/root identity 的 typed judge intent；缺少身份时由 Actor 网关拒绝。',
-      inputSchema: {
-        request_id: z.string().min(1),
-        business_date: z.string().optional(),
-        predecessor_intent_id: z.string().min(1),
-        root_request_id: z.string().min(1),
-        orchestration_id: z.string().optional(),
-        stage_request_id: z.string().optional(),
-        scope_hash: z.string().optional(),
-        projection_hash: z.string().optional(),
-        eligible_ids_hash: z.string().optional()
-      }
-    }, async ({ request_id, business_date, predecessor_intent_id, root_request_id, orchestration_id, stage_request_id, scope_hash, projection_hash, eligible_ids_hash }) => {
-      return text(await continueAfterScan({
-        runtime,
-        requestId: request_id,
-        businessDate: business_date,
-        predecessorIntentId: predecessor_intent_id,
-        rootRequestId: root_request_id,
-        orchestrationId: orchestration_id,
-        stageRequestId: stage_request_id,
-        scopeHash: scope_hash,
-        projectionHash: projection_hash,
-        eligibleIdsHash: eligible_ids_hash
-      }));
-    });
     server.registerTool('daily.run_stage', {
-      description: '提交 typed daily intent。stage=scan、judge 或 full。',
+      description: '主管启动今日情报：scan 只采集，full 完成采集与选题。',
       inputSchema: {
         request_id: z.string().min(1),
-        stage: z.enum(['scan', 'judge', 'full']),
+        stage: z.enum(['scan', 'full']),
         business_date: z.string().optional(),
         modules: z.array(z.enum(['official_web', 'x_lists'])).optional()
       }

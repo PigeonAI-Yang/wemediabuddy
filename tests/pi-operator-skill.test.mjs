@@ -142,15 +142,13 @@ test('WMB-5184 flip: model-facing tool/roster/dock copy presents desk as supervi
   assert.ok(managerTools.includes('主管取消员工工单'), 'cancel must be 主管-facing');
   assert.ok(managerTools.includes('主管向指定工单传话'), 'message must be 主管-facing');
   assert.ok(managerTools.includes('主管给某工单的留言列表'), 'list messages must be 主管-facing');
-  assert.ok(managerTools.includes('主管选用的自动续接工具'), 'continue must be 主管-facing');
   assert.ok(managerTools.includes('主管启动今日阶段'), 'run stage label must be 主管');
   assert.doesNotMatch(managerTools, /桌助|协调入口|读取班组席位/, 'no desk-assistant alias in Pi tools');
   // Raw MCP descriptions (mcp.ts + mcp-job-tools.ts)
   assert.ok(mcpSource.includes('读取固定角色班组投影状态（主管/记者/策划/写手/资料员）与摘要进度。只读。'), 'agents.roster description aligned');
-  assert.ok(mcpSource.includes('是否续接由主管决定'), 'daily.readiness description aligned');
-  assert.ok(mcpSource.includes('主管工具：在扫描完成后显式续接策划'), 'daily.continue_after_scan description aligned');
-  assert.ok(mcpSource.includes('主管启动今日情报阶段'), 'daily.run_stage description aligned');
-  assert.ok(mcpSource.includes('自动编排能力由主管选用，不是禁用'), 'run_stage autonomy stays 主管');
+  assert.ok(mcpSource.includes('Actor、startup gate 与 ManagerAdapter 权威投影'), 'daily.readiness description aligned');
+  assert.ok(mcpSource.includes('主管启动今日情报'), 'daily.run_stage description aligned');
+  assert.doesNotMatch(mcpSource + managerTools, /continue_after_scan|stage=judge|scan \| judge \| full/, 'standalone judge tool removed');
   assert.ok(jobTools.includes('主管读进度用'), 'jobs.list description aligned');
   assert.ok(jobTools.includes('主管向员工角色派有界工单'), 'jobs.spawn description aligned');
   assert.ok(jobTools.includes('不可派工给主管自己'), 'jobs.spawn desk guard aligned');
@@ -162,10 +160,9 @@ test('WMB-5184 flip: model-facing tool/roster/dock copy presents desk as supervi
   assert.doesNotMatch(roster, /DESK_ROSTER_FACE|桌助|协调入口/, 'roster must not define a desk-as-assistant display face');
   assert.match(roster, /ROLE_CATALOG\[roleId\]/, 'desk row must use the registry entry');
   // Dock manager prompt identity: 主管, not 桌助
-  assert.ok(dock.includes('你是主管。自动编排是你的工具'), 'dock contextRule must call the desk 主管');
-  assert.ok(dispatch.includes('你是主管，编排方式由你选'), 'manager dispatch prompt must call the desk 主管');
-  assert.ok(dispatch.includes('班组 · 主管'), 'manager dispatch page label must be 主管');
-  assert.ok(orchestration.includes('已按主管指令续接策划'), 'continue-after-scan output must be 主管-facing');
+  assert.ok(dock.includes('你是主管。每日动作必须使用带 typed action 的 MCP 工具'), 'dock contextRule must call the desk 主管');
+  assert.match(dispatch, /submitWorkspaceOrchestratorIntent/, 'manager dispatch must route through the workspace orchestrator');
+  assert.doesNotMatch(orchestration, /续接策划|continueAfterScan/, 'retired continue-after-scan output removed');
   assert.doesNotMatch(dock + dispatch, /你是桌助/, 'no desk-assistant identity in dock/manager prompts');
   assert.doesNotMatch(orchestration, /桌助/, 'no desk-assistant instruction copy in orchestration output');
 });

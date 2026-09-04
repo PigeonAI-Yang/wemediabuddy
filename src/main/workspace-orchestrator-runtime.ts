@@ -342,7 +342,6 @@ function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry)
     case 'scheduler.daily-0900':
     case 'scheduler.rolling-official-web':
     case 'scheduler.rolling-x-lists':
-    case 'scheduler.rolling-auto-judge':
     case 'startup.daily-resume':
     case 'startup.refresh-runtime-daily-handoff':
     case 'reconcile.daily-handoff-sweeper':
@@ -351,10 +350,8 @@ function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry)
     case 'content-cycle.successor':
     case 'maintenance.topic-reproposal':
       return [entry.intendedAction === 'reconcile' ? 'stage_d' : entry.intendedAction as SubmitWorkspaceOrchestratorIntentInput['action']];
-    case 'proposal.candidate-decision': return ['judge', 'approve_candidates', 'repair_invalid_candidate'];
-    case 'proposal.plan-item-request-planning': return ['judge'];
-    case 'mcp.daily-continue-after-scan': return ['judge'];
-    case 'mcp.daily-run-stage': return ['scan', 'judge', 'full'];
+    case 'proposal.candidate-decision': return ['approve_candidates', 'repair_invalid_candidate'];
+    case 'mcp.daily-run-stage': return ['scan', 'full'];
     default: return [];
   }
 }
@@ -644,18 +641,16 @@ export async function submitWorkspaceOrchestratorIntent(runtime: ActiveWorkspace
     const payloadRecord = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
     const predecessorIntentId = input.predecessorIntentId ?? (typeof identityRecord.predecessorIntentId === 'string' ? identityRecord.predecessorIntentId : null);
     const rootRequestId = typeof identityRecord.rootRequestId === 'string' ? identityRecord.rootRequestId : typeof payloadRecord.rootRequestId === 'string' ? payloadRecord.rootRequestId : null;
-    const predecessorIdentityComplete = producerId !== 'mcp.daily-continue-after-scan' || Boolean(predecessorIntentId && rootRequestId);
     const invalid = !entry
       || !entry.enabled
       || !requestedActions.includes(action)
       || rootMode !== expectedRootMode(entry?.intendedSource ?? 'mcp')
       || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)
       || !requestId
-      || (input.profileRevision !== undefined && Math.trunc(Number(input.profileRevision)) !== currentProfileRevision)
-      || !predecessorIdentityComplete;
+      || (input.profileRevision !== undefined && Math.trunc(Number(input.profileRevision)) !== currentProfileRevision);
     if (invalid) {
-      const code = !entry || !entry.enabled ? 'CUTOVER_REQUIRED' : !predecessorIdentityComplete ? 'ORCHESTRATOR_CONTRACT_ERROR' : 'ORCHESTRATOR_CONTRACT_ERROR';
-      const message = !entry || !entry.enabled ? `producer 未注册或已停用: ${producerId}` : !predecessorIdentityComplete ? 'daily continuation 需要 predecessorIntentId 与 rootRequestId。' : 'typed producer contract 不兼容当前请求。';
+      const code = !entry || !entry.enabled ? 'CUTOVER_REQUIRED' : 'ORCHESTRATOR_CONTRACT_ERROR';
+      const message = !entry || !entry.enabled ? `producer 未注册或已停用: ${producerId}` : 'typed producer contract 不兼容当前请求。';
       return fallbackReceipt(state!, input, code, message);
     }
     const attestation = attestationFor(state!, producerId);

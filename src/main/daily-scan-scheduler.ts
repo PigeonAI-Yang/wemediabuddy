@@ -3,7 +3,6 @@ import type { IntelligenceModule } from './intelligence-channels.ts';
 export type DailyScanSchedulerOptions = {
   isCurrent: () => boolean;
   run: (modules: IntelligenceModule[]) => Promise<{ savedCount?: number } | void>;
-  onNewSources?: (modules: IntelligenceModule[]) => Promise<unknown>;
   officialWebMs?: number;
   xListsMs?: number;
   firstDelayMs?: number;
@@ -23,8 +22,6 @@ export class DailyScanScheduler {
   private timers: NodeJS.Timeout[] = [];
   private inFlight = new Set<IntelligenceModule>();
   private stopped = false;
-  private judgeRunning = false;
-  private judgeQueued = false;
   private readonly options: DailyScanSchedulerOptions;
   private readonly officialWebMs: number;
   private readonly xListsMs: number;
@@ -58,9 +55,7 @@ export class DailyScanScheduler {
       if (this.inFlight.has(key)) return;
       this.inFlight.add(key);
       try {
-        const result = await this.options.run(modules);
-        const savedCount = result?.savedCount ?? 0;
-        if (savedCount > 0) await this.triggerJudge(modules);
+        await this.options.run(modules);
       } catch (error) {
         this.options.onError?.(error);
       } finally {
@@ -70,26 +65,4 @@ export class DailyScanScheduler {
     this.timers.push(setTimeout(() => void tick(), delay));
   }
 
-  /**
-   * 触发方式甲：采集有新入库即自动判断。判断全局单例；判断运行期间的新触发排队为一轮后续。
-   */
-  private async triggerJudge(modules: IntelligenceModule[]): Promise<void> {
-    if (!this.options.onNewSources || this.stopped) return;
-    if (this.judgeRunning) {
-      this.judgeQueued = true;
-      return;
-    }
-    this.judgeRunning = true;
-    try {
-      await this.options.onNewSources(modules);
-    } catch (error) {
-      this.options.onError?.(error);
-    } finally {
-      this.judgeRunning = false;
-      if (this.judgeQueued && !this.stopped) {
-        this.judgeQueued = false;
-        await this.triggerJudge(modules);
-      }
-    }
-  }
 }

@@ -66,9 +66,8 @@ function toPlanItem(item: LedgerItem): TodayPlanItem {
 }
 
 /** 选题台账：全量决策记录 + P1 分页 / 恢复 / 批量 / Pi 焦点。 */
-export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, openToday, selectedItem = null, onSelectedItemChange, focusPlanItemId = null }: {
+export function ProposalsView({ planDate, openTopic, onOpenProject, openToday, selectedItem = null, onSelectedItemChange, focusPlanItemId = null }: {
   planDate: string;
-  openStudio: (projectId?: string) => void;
   openTopic?: (topicId: string) => void;
   onOpenProject: (projectId: string) => void;
   openToday?: () => void;
@@ -234,34 +233,7 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
     if (!el) return;
     setIsScrolled(el.scrollTop > 12);
   }, [items.length, total, tab]);
-  const advance = async (item: LedgerItem) => {
-    setActionBusyId(item.planItemId);
-    setError('');
-    try {
-      const result = await window.wmb.advancePlanItem({ planItemId: item.planItemId });
-      if (result?.projectId) onOpenProject(result.projectId);
-      else openStudio();
-      await load(tabRef.current, 0, false);
-    } catch (advanceError) {
-      setError(advanceError instanceof Error ? advanceError.message : String(advanceError));
-    } finally {
-      setActionBusyId(null);
-    }
-  };
 
-  const requestPlanning = async (item: LedgerItem, rework = false) => {
-    setActionBusyId(item.planItemId);
-    setError('');
-    try {
-      if (rework) await window.wmb.reworkPlanItem({ planItemId: item.planItemId, expectedRevision: item.revision, reason: 'Yann 要求重新策划' });
-      await window.wmb.requestPlanItem({ planItemId: item.planItemId });
-      await load(tabRef.current, 0, false);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : String(requestError));
-    } finally {
-      setActionBusyId(null);
-    }
-  };
 
   const continueScoring = async (item: LedgerItem) => {
     setActionBusyId(item.planItemId);
@@ -459,7 +431,6 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
               item={planItem}
               selected={selectedItem?.id === planItem.id}
               onToggle={(next) => onSelectedItemChange?.(toggleSingleFocus(selectedItem, next))}
-              onCreate={planningStatus === 'approved' ? () => void advance(item) : undefined}
               sources={[]}
               badges={badges}
             />
@@ -473,13 +444,16 @@ export function ProposalsView({ planDate, openStudio, openTopic, onOpenProject, 
                 ) : (
                   <>
                     <button type="button" className="proposal-action proposal-action--dismiss" aria-label="否掉这个选题" title="否掉这个选题，不再出现" disabled={busy} onClick={() => void dismiss(item.planItemId)}>否掉</button>
-                    {planningStatus !== 'approved' ? (
+                    {planningStatus === 'ready_for_review' ? (
                       <div className="proposal-planning-buttons">
-                        {planningStatus === 'draft' ? <button type="button" className="proposal-action" disabled={busy} onClick={() => void requestPlanning(item)}>派策划</button> : null}
-                        {planningStatus === 'rejected' ? <button type="button" className="proposal-action" disabled={busy} onClick={() => void requestPlanning(item, true)}>重新策划</button> : null}
-                        {planningStatus === 'ready_for_review' ? <><button type="button" className="proposal-action" disabled={busy} onClick={() => void reject(item)}>驳回</button><button type="button" className="proposal-action primary-button" disabled={busy} onClick={() => void approve(item)}>批准并开始创作</button></> : null}
+                        <button type="button" className="proposal-action" disabled={busy} onClick={() => void reject(item)}>驳回</button>
+                        <button type="button" className="proposal-action primary-button" disabled={busy} onClick={() => void approve(item)}>批准并开始创作</button>
                       </div>
                     ) : null}
+                    {planningStatus === 'approved' && item.adoptedProjectId ? (
+                      <button type="button" className="proposal-action primary-button" onClick={() => onOpenProject(item.adoptedProjectId!)}>打开创作项目</button>
+                    ) : null}
+
                   </>
                 )}
                 {item.topicId && openTopic ? <button type="button" className="proposal-action" onClick={() => openTopic(item.topicId!)}>关联主题</button> : null}
