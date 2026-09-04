@@ -49,7 +49,7 @@ import { wakeWorkspaceOrchestratorExecutor } from './workspace-orchestrator-exec
 import { abortDailyIntelligence, startResultsReview, startStudioDraft } from './agent-runner';
 import { readProjectInvestigation } from './project-investigation.ts';
 import { controlAuditMessage, dailyControlAuditEnabled } from './daily-control-policy.ts';
-import { readWorkspaceIntelligenceProfile, startWorkspaceDailyIntelligence } from './workspace-intelligence';
+import { readWorkspaceIntelligenceProfile } from './workspace-intelligence';
 import { DailyScanScheduler } from './daily-scan-scheduler';
 import { DailyOrchestrationScheduler } from './daily-orchestration-scheduler.ts';
 import { shanghaiDate } from './ferment';
@@ -862,22 +862,23 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
     if (!businessDate) throw new Error('请选择今日情报日期。');
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;
-    const mcp = currentMcp();
     if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
-    if (!mcp) throw new Error('WMB MCP 尚未就绪。');
     broadcastPiEvent({ type: 'starting' });
     try {
-      const result = await withRuntimeWorker(null, broadcastPiRuntimeProgress, (hooks) => startWorkspaceDailyIntelligence({
-        dataRootPath: dataRoot.path,
+      const logicalInput = Object.freeze({ businessDate, modules: input.modules ?? [] });
+      const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
+        producerId: 'today.agent-start-daily-intelligence',
         businessDate,
-        modules: input.modules,
-        mcpUrl: mcp.url,
-        xhsMcpUrl: currentXhs()?.getUrl() || '',
-        activeRuntime: runtime,
-        ...hooks
-      }), { roleId: 'planner' });
-      broadcastPiEvent({ type: result.task.status === 'failed' ? 'failed' : 'idle', text: result.task.status });
-      return { ok: true, data: result, error: null };
+        requestId: `today.agent-start-daily-intelligence:${runtime.identity.workspaceId}:${businessDate}`,
+        action: 'full',
+        logicalInput,
+        payload: logicalInput,
+        rootMode: 'owner'
+      });
+      if (!receipt.ok) throw Object.assign(new Error(receipt.message || '今日情报请求未被接受。'), { code: receipt.code ?? 'DAILY_INTELLIGENCE_FAILED' });
+      wakeWorkspaceOrchestratorExecutor(runtime);
+      broadcastPiEvent({ type: 'idle', text: 'accepted' });
+      return { ok: true, data: { action: 'accepted', receipt }, error: null };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       broadcastPiEvent({ type: 'failed', error: messageText });

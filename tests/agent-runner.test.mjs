@@ -136,14 +136,17 @@ test('writer prompt goes directly from selected topic to saved article', () => {
   assert.doesNotMatch(core, /外部研究|硬门|回执|Owner 锁/);
 });
 
-test('daily IPC runs collection and topic generation directly', async () => {
+test('daily IPC submits one durable full intent instead of running collection directly', async () => {
   const source = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
   const start = source.indexOf("ipcMain.handle('agent:start-daily-intelligence'");
   const end = source.indexOf("ipcMain.handle('agent:start-studio-draft'", start);
   assert.ok(start >= 0 && end > start);
   const handler = source.slice(start, end);
-  assert.match(handler, /startWorkspaceDailyIntelligence/);
-  assert.doesNotMatch(handler, /submitWorkspaceOrchestratorIntent|rootMode|producerId/);
+  assert.doesNotMatch(handler, /startWorkspaceDailyIntelligence|withRuntimeWorker/);
+  assert.match(handler, /submitWorkspaceOrchestratorIntent/);
+  assert.match(handler, /producerId: 'today\.agent-start-daily-intelligence'/);
+  assert.match(handler, /action: 'full'/);
+  assert.match(handler, /requestId: `today\.agent-start-daily-intelligence:\$\{runtime\.identity\.workspaceId\}:\$\{businessDate\}`/);
 });
 
 test('Pi task authority prompt carries exact automatic task, grant and lease values', () => {
