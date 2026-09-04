@@ -110,11 +110,9 @@ test('repairable projection is actionable, ledger-aligned, read-only, and never 
       assert.ok(item.reasonCode);
       assert.ok(item.reason);
     }
-    assert.equal(ledger.total, projection.counts.scoringPending + projection.counts.invalid);
-    assert.deepEqual(
-      new Set(ledger.items.map((item) => item.planItemId)),
-      new Set(projection.repairable.map((item) => item.planItemId))
-    );
+    assert.equal(ledger.total, 1);
+    assert.deepEqual(ledger.items.map((item) => item.planItemId), [ids.get('仍在待评分项')]);
+    assert.equal(ledger.items.some((item) => item.planItemId === ids.get('遗留已批准空壳')), false);
     assert.ok(ledger.items.every((item) => item.repairReasonCode && item.repairReason));
     assert.deepEqual(after, before, 'projection and ledger reads must not rewrite legacy rows');
   });

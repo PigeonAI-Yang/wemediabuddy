@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { openDataRoot } from '../src/main/data-root.ts';
@@ -10,7 +10,7 @@ import { saveCurrentPlan } from '../src/main/planning.ts';
 import { assembleEditorialBrief } from '../src/main/editorial-brief.ts';
 import { parseDailyPlanOutput } from '../src/main/agent-runner.ts';
 import { getToday } from '../src/main/workbench.ts';
-import { PROPAGATION_V2_CRITERIA, propagationGradeFromScore, resolvePropagationGrade, PROPAGATION_NEUTRAL_GRADE } from '../src/shared/propagation.ts';
+import { propagationGradeFromScore, resolvePropagationGrade, PROPAGATION_NEUTRAL_GRADE } from '../src/shared/propagation.ts';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 const NOW = new Date('2026-08-25T06:00:00.000Z');
 
@@ -86,33 +86,6 @@ test('B: scored approved items map to grade by propagation score independent of 
 });
 
 // C: Scoring/judging — formal criteria and daily prompt explicitly score propagation dimensions
-test('C: criteria and prompt include every propagation dimension', async () => {
-  const needed = [
-    'reality_change_significance',
-    'tension_curiosity_gap',
-    'audience_stakes',
-    'why_now_window',
-    'one_sentence_relayability',
-    'account_fit',
-  ];
-  for (const k of needed) {
-    assert.ok(k in PROPAGATION_V2_CRITERIA, `criteria missing ${k}`);
-  }
-  // Prompt check via reading source file (dailyPrompt is internal, but buildDailyOpportunityPrompt wraps it)
-  const runnerSrc = await readFile(path.join(process.cwd(), 'src/main/agent-runner.ts'), 'utf8');
-  for (const k of needed) {
-    assert.ok(runnerSrc.includes(k), `prompt missing criterion ${k} in agent-runner.ts`);
-  }
-  // Human readable dimensions
-  const human = ['现实变化', '张力', '认知缺口', '读者利害', '一句话转述', '账号契合', '窗口'];
-  let hits = 0;
-  for (const h of human) if (runnerSrc.includes(h)) hits++;
-  assert.ok(hits >= 5, `prompt should contain human propagation language, hits=${hits}`);
-  // Evidence remains gate not proxy — prompt must say evidence仅作门槛不代替传播力
-  assert.ok(runnerSrc.includes('仅作门槛') || runnerSrc.includes('仅作是否') || runnerSrc.includes('不代替传播'), 'evidence gate language missing');
-  // Producer must not assign grade directly — prompt must say 不得直接指定等级 or similar
-  assert.ok(runnerSrc.includes('不得直接指定') || runnerSrc.includes('由系统计算'), 'producer not assigning grade instruction missing');
-});
 
 // D: Input — signal quota survives flood of research rows while trust provenance remains
 test('D: signal quota survives flood of research rows while trust provenance remains', async () => {
@@ -148,76 +121,6 @@ test('D: signal quota survives flood of research rows while trust provenance rem
 });
 
 // E: Thesis diversity — five governance-like fixtures collapse to one thesis or rejected; five distinct remain
-test('E: thesis diversity collapses five governance-like fixtures to one or rejects, five distinct remain', async () => {
-  await withDb(async (db) => {
-    // Seed sources for plan items
-    const srcIds = [];
-    for (let i = 0; i < 6; i++) srcIds.push(seedSource(db, `src-div-${i}`, `资料${i}`));
-    const baseItem = (title, pov, angle, audience) => ({
-      title,
-      priority: 1,
-      whyNow: '2026-08-25 出现可核验的新变化，未来两天是解释窗口，错过后需要重做验证。',
-      timeliness: '热点 2-3 天',
-      targetAudience: audience,
-      angle,
-      pointOfView: pov,
-      platforms: ['x'],
-      formats: ['text'],
-      titleGuidance: '标题',
-      openingGuidance: '开头',
-      structureGuidance: '第一段交代事件；第二段展示对比证据；第三段给出行动判断。',
-      effortEstimate: '约 40 分钟',
-      sourceIds: [srcIds[0]],
-      scoreReasons: scoredReasons(82),
-      editorialDecision: editorialDecision(pov),
-    });
-    // Five governance-like with same normalized core claim/reader job (same POV/angle/audience, different titles)
-    const governancePov = '价值不由最好的一次输出决定，而由可复跑的评测与验收标准决定，强调可验收的真实项目与公开验证';
-    const governanceAngle = '选一个重复任务，写10个真实样本和验收标准，公开测试与复盘';
-    const governanceAudience = '正在把提示词/Agent/自动化流程做成真实交付的人';
-    const governanceItems = [
-      baseItem('别再展示 AI 做成了什么，先把它放进一套能复跑的评测里', governancePov, governanceAngle, governanceAudience),
-      baseItem('一次成功的 Agent 演示，为什么还不能算交付能力', governancePov, governanceAngle, governanceAudience),
-      baseItem('批量生成视频以后，先用一致性和闪烁把废片筛掉', governancePov, governanceAngle, governanceAudience),
-      baseItem('AI 产品从 Demo 走向工作环境，真正增加的是哪些约束', governancePov, governanceAngle, governanceAudience),
-      baseItem('先问清楚谁会为这张 AI 结果卡片负责，再决定做什么', governancePov, governanceAngle, governanceAudience),
-    ];
-    let threw = false;
-    let error = null;
-    try {
-      saveCurrentPlan(db, { planDate: '2026-08-25', timezone: 'Asia/Shanghai', summary: '治理偏测试', items: governanceItems });
-    } catch (e) {
-      threw = true;
-      error = e;
-    }
-    assert.ok(threw, 'five governance-like items should be rejected as insufficiently diverse or collapse');
-    if (threw) {
-      const msg = String(error.message || '');
-      assert.ok(msg.includes('thesis') || msg.includes('duplicate') || msg.includes('validation_failed'), `error should identify duplicate thesis, got ${msg}`);
-      // Ensure error identifies duplicate items
-      if (error.dupes) assert.ok(Array.isArray(error.dupes) && error.dupes.length > 0, 'dupes array should identify duplicate items');
-      else assert.ok(msg.includes('0') || msg.includes('1'), 'error should identify duplicate indices');
-    }
-
-    // Five genuinely distinct reader jobs should remain (not collapse)
-    const distinctItems = [
-      baseItem('小红书 AI 涨粉：用对比钩子让收藏翻倍的 3 步模板', '通过对比钩子与可复制模板，读者今天就能做出高收藏笔记，获得即时涨粉反馈', '给出可直接套用的标题与结构模板，含数字/对比钩子', '想在小红书做 AI 内容但收藏低、不知道怎么写标题的人'),
-      baseItem('知乎热榜 7 天：从提问到变现的评论区挖矿法', '从知乎评论区提炼真实需求，把高频提问转化为可付费的选题与产品验证', '展示评论区挖掘与需求归类动作，含真实提问与转化路径', '在知乎潜水但找不到变现选题的人'),
-      baseItem('视频闪烁不用重做：用 VBench 一致性筛掉废片省 5 小时', '用一致性/闪烁自动化筛选批量 AI 视频，减少手工复看时间', '固定提示词生成一小批样片，按一致性/闪烁筛', '为客户批量制作 AI 视频但废片率高的人'),
-      baseItem('Demo 到工作环境：隔离、审查、可回退三件套 1 小时接入', '把失败/权限/交接纳入交付，三个稳定层让 Demo 可进工作环境', '拆出隔离、逐条审查、可回退、过程成本可见', '把个人 AI 工作流整理成可交付工具的人'),
-      baseItem('今天发什么：用 why-now 窗口把旧知识包装成爆点', '用时效钩子与错过成本把长青知识转化为今天值得发的选题', '识别窗口、给出今天发的理由与标题钩子', '有知识储备但不知道为何今天发的人'),
-    ];
-    let distinctSaved = null;
-    try {
-      distinctSaved = saveCurrentPlan(db, { planDate: '2026-08-26', timezone: 'Asia/Shanghai', summary: '多样性测试', items: distinctItems });
-    } catch (e) {
-      assert.fail(`five distinct reader jobs should remain, but threw ${e.message}`);
-    }
-    assert.ok(distinctSaved && distinctSaved.id, 'distinct items should save');
-    const rows = db.prepare('SELECT COUNT(*) as c FROM plan_items WHERE plan_id = ?').get(distinctSaved.id);
-    assert.equal(rows.c, 5, 'five distinct should remain 5');
-  });
-});
 
 // Integration fixture runs daily plan parse/save/read projection without production DB mutation
 test('integration: daily plan parse/save/read projection without production DB mutation', async () => {

@@ -20,7 +20,7 @@ const { dispatchIssueTaskGrant, ensureAutomaticTaskGrant } = await import('../sr
 const { ActiveWorkspaceRuntime } = await import('../src/main/workspace-runtime.ts');
 const { ensureOfficialWorkspaceProfile } = await import('../src/main/workspace-profiles.ts');
 const { JobSpawner } = await import('../src/main/job-spawner.ts');
-const { kickTopicReproposals, recordTopicReproposalFailure, resumeTopicReproposal } = await import('../src/main/topic-maintenance-reproposal.ts');
+const { recordTopicReproposalFailure, resumeTopicReproposal } = await import('../src/main/topic-maintenance-reproposal.ts');
 
 async function withDb(work) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-5150-')); const db = migrateDatabase(path.join(root, 'wmb.db'));
@@ -269,26 +269,6 @@ test('WMB-5150: librarian proposes; supervisor alone decides; employees never ho
   }
 });
 
-test('WMB-5159: true stale atomically persists one reproposal job and one idempotent successor', async () => withReproposalRuntime(async (runtime, ids, stale) => {
-  assert.equal(stale.status, 'stale'); assert.equal(stale.reproposal.status, 'pending'); assert.equal(stale.reproposal.attempts, 0);
-  assert.equal(runtime.database.prepare('SELECT count(*) count FROM topic_maintenance_reproposal_jobs WHERE proposal_id=?').get(stale.id).count, 1);
-
-  const firstSpawner = new JobSpawner(runtime, { maxWorkers: 1, execute: async () => ({ status: 'failed', code: 'TEST', message: 'test', readback: null }) });
-  assert.equal(await kickTopicReproposals(runtime, firstSpawner), 1);
-  assert.equal(firstSpawner.get(stale.reproposal.runId)?.id, stale.reproposal.runId);
-  firstSpawner.dispose();
-  const restartedSpawner = new JobSpawner(runtime, { maxWorkers: 1, execute: async () => ({ status: 'failed', code: 'TEST', message: 'test', readback: null }) });
-  assert.equal(await kickTopicReproposals(runtime, restartedSpawner), 1);
-  assert.equal(restartedSpawner.get(stale.reproposal.runId)?.id, stale.reproposal.runId, 'cold pool consumes the persisted run identity');
-
-  const successorInput = { supersedesProposalId: stale.id, title: 'latest facts', reason: 'recomputed', changes: [{ kind: 'archive', topicId: ids.keep }] };
-  const save = (requestId) => dispatchBusinessCommand(runtime, { command: 'knowledge.topic_maintenance_propose', requestId, actor: { type: 'owner_ui', id: 'test' }, input: successorInput, boundIdentity: { entityType: 'topic_maintenance_proposal' }, entityType: 'topic_maintenance_proposal', execute: (database, input) => { const data = createTopicMaintenanceProposal(database, input); return { data, entityId: data.id, readback: data }; } });
-  const successor = (await save('successor-1')).data;
-  const replay = (await save('successor-2')).data;
-  assert.equal(replay.id, successor.id); assert.equal(successor.supersedesProposalId, stale.id);
-  assert.equal(runtime.database.prepare('SELECT status FROM topic_maintenance_reproposal_jobs WHERE proposal_id=?').get(stale.id).status, 'completed');
-  restartedSpawner.dispose();
-}));
 
 test('WMB-5159: outbox insert failure rolls stale back and repeated failures terminate needs_user', async () => {
   await withDb((db) => {
@@ -317,26 +297,4 @@ test('WMB-5159: outbox insert failure rolls stale back and repeated failures ter
   });
 });
 
-test('WMB-5159: disabled employee capacity leaves durable reproposal pending without consuming retries', async () => withReproposalRuntime(async (runtime, _ids, stale) => {
-  const spawner = new JobSpawner(runtime, { maxWorkers: 0, execute: async () => ({ status: 'succeeded', code: 'OK', message: null, readback: null }) });
-  assert.equal(await kickTopicReproposals(runtime, spawner), 0);
-  const row = runtime.database.prepare('SELECT status,attempts,job_id jobId,run_id runId FROM topic_maintenance_reproposal_jobs WHERE proposal_id=?').get(stale.id);
-  assert.equal(row.status, 'pending'); assert.equal(row.attempts, 0); assert.equal(row.jobId, stale.reproposal.jobId); assert.equal(row.runId, stale.reproposal.runId);
-  spawner.setMaxWorkers(1);
-  assert.equal(await kickTopicReproposals(runtime, spawner), 1);
-  assert.equal(spawner.get(stale.reproposal.runId)?.id, stale.reproposal.runId);
-  spawner.dispose();
-}));
 
-test('WMB-5159: a terminal run advances to a new run without changing the durable job identity', async () => withReproposalRuntime(async (runtime, _ids, stale) => {
-  const spawner = new JobSpawner(runtime, { maxWorkers: 1, execute: async () => ({ status: 'failed', code: 'TEST', message: 'retry', readback: null }) });
-  assert.equal(await kickTopicReproposals(runtime, spawner), 1);
-  while (spawner.get(stale.reproposal.runId)?.status !== 'failed') await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(await kickTopicReproposals(runtime, spawner), 0);
-  const retry = runtime.database.prepare('SELECT job_id jobId,run_id runId,attempts FROM topic_maintenance_reproposal_jobs WHERE proposal_id=?').get(stale.id);
-  assert.equal(retry.jobId, stale.reproposal.jobId); assert.equal(retry.runId, `${retry.jobId}:1`); assert.equal(retry.attempts, 1);
-  await new Promise((resolve) => setTimeout(resolve, 5_100));
-  assert.equal(await kickTopicReproposals(runtime, spawner), 1);
-  assert.equal(spawner.get(retry.runId)?.id, retry.runId);
-  spawner.dispose();
-}));

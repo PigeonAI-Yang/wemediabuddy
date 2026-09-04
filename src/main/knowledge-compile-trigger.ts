@@ -162,6 +162,20 @@ export function scheduleSourceKnowledgeCompile(input: SourceKnowledgeCompileInpu
   return scheduleSourceKnowledgeCompileWith(deps, input);
 }
 
+/** Enqueue on the caller's transaction; kickSourceKnowledgeCompileQueue starts the post-commit drain. */
+export function enqueueSourceKnowledgeCompile(database: DatabaseSync, input: SourceKnowledgeCompileInput): boolean {
+  if (!state().deps) return false;
+  return enqueueKnowledgeRouteJob(database, input);
+}
+
+/** Start draining jobs already committed by a caller-owned transaction. */
+export function kickSourceKnowledgeCompileQueue(): boolean {
+  const deps = state().deps;
+  if (!deps) return false;
+  void startPersistentDrain(deps, false);
+  return true;
+}
+
 /** 显式 deps 调度（测试 / 绕过全局注册）。并发同键去重：已注册在飞 → false。 */
 export function scheduleSourceKnowledgeCompileWith(deps: SourceKnowledgeCompileDeps, input: SourceKnowledgeCompileInput): boolean {
   const open = deps.openDatabase ?? ((databasePath: string) => new DatabaseSync(databasePath));

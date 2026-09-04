@@ -284,7 +284,7 @@ function appendProvenance(existingJson: string | null | undefined, transition: {
   if (!base.fingerprints) base.fingerprints = { template_exact_9fields: false };
   return JSON.stringify(base);
 }
-function getPendingScoreReasons(): string {
+export function getPendingScoreReasons(): string {
   const reasons = [
     { criterion: 'reality_change_significance', weight: 25, score: 0, reason: 'no_source_body_or_claims' },
     { criterion: 'tension_curiosity_gap', weight: 20, score: 0, reason: 'today_but_no_source_evidence' },

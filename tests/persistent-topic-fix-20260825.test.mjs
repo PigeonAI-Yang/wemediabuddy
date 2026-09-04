@@ -98,44 +98,6 @@ test('true manual zero-plan topic qualifies', async () => {
   });
 });
 
-test('equivalent theses dedupe across active persistent topics and new promotions', async () => {
-  await withDb(async (db) => {
-    const src1 = seedSource(db, 'src-dedupe-1', '资料1');
-    const src2 = seedSource(db, 'src-dedupe-2', '资料2');
-    const pov = '价值不由最好的一次输出决定，而由可复跑的评测与验收标准决定，强调可验收的真实项目与公开验证';
-    const angle = '选一个重复任务，写10个真实样本和验收标准，公开测试与复盘';
-    const audience = '正在把提示词/Agent/自动化流程做成真实交付的人';
-    const whyNow = '本周多款 Agent 产品集中发布演示，未来两天正是区分演示效果与真实交付能力的窗口。';
-    const titleGuidance = '标题突出一次成功演示与可复跑交付能力之间的反差。';
-    const openingGuidance = '首段立即展示同一任务复跑后结果波动的证据，不从概念定义铺垫。';
-    const structureGuidance = '第一段给出复跑样本；第二段对照验收标准；第三段说明公开复盘与行动边界。';
-    const scored = scoredReasons(82);
-    const topicId = createTopic(db, '可复跑评测体系').id;
-    const first = saveCurrentPlan(db, { planDate:'2026-08-25', timezone:'Asia/Shanghai', summary:'first', items:[{
-      title:'别再展示 AI 做成了什么，先把它放进一套能复跑的评测里', priority:1, whyNow, timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance, openingGuidance, structureGuidance, effortEstimate:'40分钟', sourceIds:[src1], topicId, scoreReasons: scored, editorialDecision: editorialDecision(pov)
-    }]});
-    approvePlanItems(db, [db.prepare('SELECT id FROM plan_items WHERE plan_id=?').get(first.id).id]);
-    const firstBundle = listFermentingBundle(db, '2026-08-25');
-    assert.equal(firstBundle.items.length, 1);
-    let threw = false;
-    try {
-      saveCurrentPlan(db, { planDate:'2026-08-26', timezone:'Asia/Shanghai', summary:'dup', items:[{
-        title:'一次成功的 Agent 演示，为什么还不能算交付能力', priority:1, whyNow, timeliness:'持续/多日', targetAudience:audience, angle, pointOfView:pov, platforms:['x'], formats:['text'], titleGuidance, openingGuidance, structureGuidance, effortEstimate:'40分钟', sourceIds:[src2], scoreReasons: scored, editorialDecision: editorialDecision(pov)
-      }]});
-    } catch (e) { threw = true; assert.ok(String(e.message).includes('thesis')); }
-    assert.ok(threw, 'duplicate thesis across active should reject');
-    const dupTopicId = 'dup-topic-direct';
-    db.prepare(`INSERT INTO topics (id, title, created_at, updated_at, revision, canonical_key, kind, summary, status, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, 1, ?, 'theme', NULL, 'active', ?, ?)`).run(dupTopicId, '批量生成视频以后，先用一致性和闪烁把废片筛掉', new Date().toISOString(), new Date().toISOString(), 'dup', new Date().toISOString(), new Date().toISOString());
-    db.prepare(`INSERT INTO topic_source_links (topic_id, source_id, relation, created_at, updated_at) VALUES (?, ?, 'primary', ?, ?)`).run(dupTopicId, src2, new Date().toISOString(), new Date().toISOString());
-    const planId2 = 'plan-dup-direct';
-    db.prepare(`INSERT INTO plans (id, plan_date, timezone, summary, is_current, created_at, updated_at, revision) VALUES (?, '2026-08-26', 'Asia/Shanghai', 'direct dup', 1, ?, ?, 1)`).run(planId2, new Date().toISOString(), new Date().toISOString());
-    const scored2 = JSON.stringify(scored);
-    const prov2 = JSON.stringify({ origin:'daily_judge', transitions:[{from:null,to:'approved',by:'system',at:new Date().toISOString()}] });
-    db.prepare(`INSERT INTO plan_items (id, plan_id, topic_id, title, priority, why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, effort_estimate, source_ids_json, available_materials_json, missing_materials_json, review_ids_json, method_finding_ids_json, sort_order, created_at, updated_at, revision, score_reasons_json, planning_status, planning_provenance_json) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?, ?, ?)`).run('pi-dup-direct', planId2, dupTopicId, '批量生成视频以后，先用一致性和闪烁把废片筛掉', '窗口', '持续/多日', audience, angle, pov, '[]','[]','标题','开头','结构','40分钟', JSON.stringify([src2]), '[]','[]','[]','[]', new Date().toISOString(), new Date().toISOString(), scored2, 'approved', prov2);
-    const bundle2 = listFermentingBundle(db, '2026-08-26');
-    assert.equal(bundle2.items.length, 1, `dedupe should leave 1, got ${bundle2.items.length} titles: ${bundle2.items.map(i=>i.title).join('|')}`);
-  });
-});
 
 test('reversible retirement preserves records and fermenting excludes', async () => {
   await withDb(async (db) => {

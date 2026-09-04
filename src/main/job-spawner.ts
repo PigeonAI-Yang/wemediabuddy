@@ -315,7 +315,10 @@ export class JobSpawner {
   }
 
   private buildReport(job: JobRecord, outcome: JobExecutionOutcome, status: JobTerminalStatus, taskId: string | null, finishedAt: string): RoleJobReportV1 {
-    const phase = taskId ? getAgentTask(this.runtime.database, taskId)?.phase ?? null : null;
+    let phase: string | null = null;
+    if (taskId) {
+      try { phase = getAgentTask(this.runtime.database, taskId)?.phase ?? null; } catch { /* runtime may already be closed during shutdown */ }
+    }
     return buildRoleJobReport({
       jobId: job.id,
       roleId: job.roleId,
@@ -449,12 +452,16 @@ export class JobSpawner {
         ? error.code
         : 'JOB_FAILED';
       if (lease) { try { runtime.releaseWorker(lease); } catch { /* */ } lease = null; }
-      if (taskId && getAgentTask(runtime.database, taskId)?.status === 'running') {
-        try {
-          await dispatchFailAgentTask(runtime, taskId, code, message, {
-            actor: ownerJobsActor(), requestId: randomUUID(), workerLeaseId: undefined, taskId
-          });
-        } catch { /* already terminal */ }
+      if (taskId) {
+        let taskStillRunning = false;
+        try { taskStillRunning = getAgentTask(runtime.database, taskId)?.status === 'running'; } catch { /* runtime may already be closed during shutdown */ }
+        if (taskStillRunning) {
+          try {
+            await dispatchFailAgentTask(runtime, taskId, code, message, {
+              actor: ownerJobsActor(), requestId: randomUUID(), workerLeaseId: undefined, taskId
+            });
+          } catch { /* already terminal */ }
+        }
       }
       const aborted = abort.signal.aborted;
       const outcome = aborted ? cancelledOutcome() : failedOutcome(code, message);

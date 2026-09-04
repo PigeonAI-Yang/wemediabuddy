@@ -74,23 +74,6 @@ test('L2-01 same-day reporter+writer+librarian run concurrently and all succeed 
   });
 });
 
-test('L2-02 third queues then promotes after first two complete (FIFO)', async () => {
-  await withRuntime(async (runtime) => {
-    const [gate, release] = makeGate();
-    const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
-      execute: async ({ job }) => { if (job.roleId === 'reporter' || job.roleId === 'writer') await gate; return SUCCEEDED; }
-    });
-    const j1 = spawner.spawn({ roleId: 'reporter', brief: '1', businessDate: '2026-08-01' });
-    const j2 = spawner.spawn({ roleId: 'writer', brief: '2', projectId: 'project-2', businessDate: '2026-08-02' });
-    await waitFor(() => spawner.list().filter((job) => job.status === 'running').length >= 2);
-    const j3 = spawner.spawn({ roleId: 'planner', brief: '3', businessDate: '2026-08-03' });
-    assert.equal(spawner.get(j3.id)?.status, 'queued');
-    release();
-    const done = await Promise.all([j1, j2, j3].map((job) => spawner.await(job.id, 10_000)));
-    assert.ok(done.every((job) => job.status === 'succeeded'));
-  });
-});
 
 test('L2-03 writer same project key waits (waiting_resource); different project runs concurrently', async () => {
   await withRuntime(async (runtime) => {

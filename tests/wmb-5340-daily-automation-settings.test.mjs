@@ -18,10 +18,10 @@ test('Settings owns the complete daily automation surface', async () => {
   assert.match(settings, /去浏览器与账号/);
   assert.match(settings, /去情报渠道/);
 
-  assert.match(dailyCycle, /getDailyOrchestrationSchedule/);
-  assert.match(dailyCycle, /setDailyOrchestrationSchedule/);
-  assert.match(dailyCycle, /startDailyIntelligence/);
+  assert.match(dailyCycle, /完整链路入口已暂停/);
+  assert.match(dailyCycle, /已有结算记录仍可查看/);
   assert.match(dailyCycle, /最近结算/);
+  assert.doesNotMatch(dailyCycle, /getDailyOrchestrationSchedule|setDailyOrchestrationSchedule|startDailyIntelligence/);
 
   assert.doesNotMatch(today, /<TodayDailyCycle/);
 });

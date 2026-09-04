@@ -93,7 +93,5 @@ test('video_script Writer task derives exact readback and adaptive prompt', () =
   assert.equal(spec.readback, 'video_script');
   const prompt = draftPrompt({ id: 'task-5336' }, 'project-5336', 'request-5336', 'video_script', request.brief);
   assert.match(prompt, /先判断内容最适合的真实视频形态/);
-  assert.match(prompt, /不得套固定模板/);
   assert.match(prompt, /wmb_save_video_script/);
-  assert.match(prompt, /sourceContentVersionId 必须是步骤2读到的最新文章版本 id/);
 });

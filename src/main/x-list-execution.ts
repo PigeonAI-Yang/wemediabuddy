@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { failure, success, type CommandResult } from './result.ts';
-import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
+import { enqueueSourceKnowledgeCompile, kickSourceKnowledgeCompileQueue } from './knowledge-compile-trigger.ts';
 import { upsertSource } from './sources.ts';
 import { scheduleSourceBodyArchive } from './source-body-archive.ts';
 import { writeXListTimelineCacheIfImproved } from './x-list-timeline-cache.ts';
@@ -263,7 +263,14 @@ export function persistBoundXListTimeline(
       source: 'collect',
       fetchedAt: capturedAt
     });
-    for (const { source } of saved) scheduleSourceKnowledgeCompile({ sourceId: source.id, revision: source.revision });
+    let compileQueued = false;
+    for (const { source } of saved) {
+      compileQueued = enqueueSourceKnowledgeCompile(database, { sourceId: source.id, revision: source.revision }) || compileQueued;
+    }
+    if (compileQueued) {
+      const timer = setTimeout(() => { kickSourceKnowledgeCompileQueue(); }, 0);
+      timer.unref?.();
+    }
     return success({ binding: updated!, sourceIds, snapshotIds, candidateCount, capturedAt, contentCapture: read.contentCapture });
   } catch (error) {
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
@@ -285,6 +292,7 @@ export async function collectBoundXListTimeline(
       return persisted;
     }
     database.exec('COMMIT');
+    kickSourceKnowledgeCompileQueue();
     return persisted;
   } catch (error) {
     database.exec('ROLLBACK');

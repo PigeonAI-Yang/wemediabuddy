@@ -83,14 +83,6 @@ test('targetedPlannerPrompt embeds all required behaviors (runtime consumer)', a
   assert.ok(prompt.includes('不得保留模板或沿用旧课程大纲体'), 'planner must reject old course outline');
 });
 
-test('dailyPrompt embeds all required behaviors (runtime consumer)', async () => {
-  const runnerSrc = await readFile(path.join(process.cwd(), 'src/main/agent-runner.ts'), 'utf8');
-  assertBehaviors(runnerSrc, 'dailyPrompt in agent-runner.ts');
-  assert.ok(runnerSrc.includes('2.8 传播型写作契约'), 'dailyPrompt must have 2.8 contract section');
-  assert.ok(runnerSrc.includes('skills/evidence-grounded-writer/SKILL.md'), 'dailyPrompt must reference SSOT');
-  assert.ok(runnerSrc.includes('数字/对比/反转/代价四选一'), 'dailyPrompt must require hook');
-  assert.ok(runnerSrc.includes('仅作门槛'), 'dailyPrompt must keep evidence gate language');
-});
 
 test('regression: audited safe governance topic without concrete brief is rejected, concrete self-media brief passes', async () => {
   const { mkdtemp, rm } = await import('node:fs/promises');

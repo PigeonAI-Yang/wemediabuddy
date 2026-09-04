@@ -236,9 +236,9 @@ test('WMB-5349 composite index on (planning_status, plan_id, sort_order) and ver
     const posPlan = idxSql.indexOf('plan_id');
     const posSort = idxSql.indexOf('sort_order');
     assert.ok(posStatus < posPlan && posPlan < posSort, 'index columns must be planning_status, plan_id, sort_order in order');
-    // v82 is the unique highest schema version; the historical aggregate is not source-ordered.
+    // v83 is the unique highest schema version; the historical aggregate is not source-ordered.
     const vers = migrations.map((m) => m.version);
-    assert.equal(Math.max(...vers), 82);
+    assert.equal(Math.max(...vers), 83);
     assert.equal(new Set(vers).size, vers.length, 'migration versions must remain unique');
     // query by status uses index (EXPLAIN QUERY PLAN contains index)
     seedPlan(db, 'plan-idx');

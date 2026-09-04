@@ -3,14 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseDailyPlanOutput, readAssistantTexts, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
-import { agentRequestId } from '../src/main/agent-tasks.ts';
-import { dispatchCompleteAgentTask, dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
-import { openDataRoot } from '../src/main/data-root.ts';
-import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { upsertSource } from '../src/main/sources.ts';
-import { ensureAutomaticTaskGrant } from '../src/main/task-grants.ts';
-import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
+import { parseDailyPlanOutput, readAssistantTexts } from '../src/main/agent-runner.ts';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const scoredReasonsFixture = scoredReasons(82);
@@ -55,13 +48,6 @@ test('optional topicId accepts model null as an omitted topic binding', () => {
   assert.equal(plan.items[0].topicId, undefined);
 });
 
-test('winner thesis is canonicalized as the persisted point of view', () => {
-  const plan = parseDailyPlanOutput(validBlock.replace(
-    '"pointOfView": "可靠性比分数重要"',
-    '"pointOfView": "一段措辞不同但非空的中心观点"',
-  ));
-  assert.equal(plan.items[0].pointOfView, '可靠性比分数重要');
-});
 
 test('empty items is a valid empty plan', () => {
   const plan = parseDailyPlanOutput('```json\n{"summary":"今日无合格机会","items":[]}\n```');
@@ -83,13 +69,6 @@ test('incomplete item structure throws with field detail', () => {
   );
 });
 
-test('audience-label title is rejected before plan persistence', () => {
-  const templated = validBlock.replace('Agent 评测走向生产现场', '普通人做 AI 接单，先卖小结果');
-  assert.throws(
-    () => parseDailyPlanOutput(templated),
-    /标题不得把受众身份词「普通人」写进发布标题/
-  );
-});
 
 test('planDate is optional and ignored when absent', () => {
   const plan = parseDailyPlanOutput('```json\n{"summary":"x","items":[]}\n```');
@@ -129,68 +108,4 @@ test('baseline excludes fences from earlier rounds in a resumed session', () => 
   assert.throws(() => parseDailyPlanOutput(readAssistantTexts(raw, 2).join('\n')), /未输出有效的 ```json 方案块/, 'baseline past every content line means no fence is found');
   const onlyOld = `${oldLine}\n`;
   assert.throws(() => parseDailyPlanOutput(readAssistantTexts(onlyOld, 1).join('\n')), /未输出有效的 ```json 方案块/, 'resumed round without new output cannot reuse the stale fence');
-});
-
-test('real terra session plan parses and saves through the granted dispatcher path', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-plan-replay-'));
-  await openDataRoot(root);
-  const seedDb = migrateDatabase(path.join(root, 'wmb.db'));
-  const now = new Date().toISOString();
-  seedDb.prepare(`INSERT INTO app_meta (key, value, created_at, updated_at, revision) VALUES ('workspace_id', 'plan-replay-workspace', ?, ?, 1)`).run(now, now);
-  for (const [id, slug] of [
-    ['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'qwen-release'],
-    ['a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'aa-comparison'],
-    ['unused-candidate', 'unused-candidate'],
-  ]) {
-    const saved = upsertSource(seedDb, { title: slug, originalUrl: `https://example.com/${slug}`, summary: `${slug} 摘要` }, false);
-    seedDb.prepare('UPDATE source_items SET id=? WHERE id=?').run(id, saved.id);
-  }
-  seedDb.close();
-
-  let runtime;
-  try {
-    runtime = ActiveWorkspaceRuntime.open(root, { openDatabase: migrateDatabase, createEpoch: () => 'plan-replay-runtime' });
-    const started = await dispatchStartAgentTask(runtime, {
-      intent: 'daily_intelligence', businessDate: '2026-08-06', contextRefs: { workspaceId: runtime.identity.workspaceId }
-    }, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'plan-replay-task' });
-    const task = started.task;
-    const lease = runtime.acquireWorkerLease(task.id);
-    const grantId = await ensureAutomaticTaskGrant(runtime, task.id);
-
-    const fixtureText = await readFile('tests/fixtures/terra-plan-session.txt', 'utf8');
-    const sessionFile = path.join(root, 'replay-session.jsonl');
-    await writeFile(sessionFile, `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: fixtureText }] } })}\n`, 'utf8');
-
-    const saved = await savePlanFromSynthesisOutput(
-      runtime, task, sessionFile, agentRequestId(task.id, 'plan'), lease.leaseId, grantId, 0,
-      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5']),
-      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'unused-candidate']),
-    );
-    assert.equal(saved.itemCount, 1);
-
-    const plan = runtime.database.prepare(`SELECT summary FROM plans WHERE plan_date='2026-08-06' AND is_current=1`).get();
-    assert.ok(plan.summary.includes('Qwen3.8-Max'), 'real model plan persisted verbatim');
-    const item = runtime.database.prepare(`SELECT title, source_ids_json AS sourceIds FROM plan_items`).get();
-    assert.ok(item.title.includes('Agentic Index'));
-    assert.deepEqual(JSON.parse(item.sourceIds).sort(), ['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5'].sort());
-    const replayed = await savePlanFromSynthesisOutput(
-      runtime, task, sessionFile, `${agentRequestId(task.id, 'plan')}:runner-replay`, lease.leaseId, grantId, 0,
-      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5']),
-      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'unused-candidate']),
-    );
-    assert.equal(replayed.itemCount, 1);
-    assert.equal(runtime.database.prepare(`SELECT COUNT(*) AS count FROM plans WHERE plan_date='2026-08-06'`).get().count, 1, 'a successful plans.save receipt is reused instead of creating a duplicate plan');
-
-    const completed = await dispatchCompleteAgentTask(runtime, task.id, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'plan-replay-complete', taskId: task.id });
-    assert.equal(completed.status, 'partial', 'validation accepts the dispatcher-saved plan; empty aggregation annotates partial');
-  } finally {
-    await runtime?.stop({ drain: false });
-    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  }
-});
-
-test('writeFile helpers stay importable after parser extraction', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-parser-'));
-  await rm(root, { recursive: true, force: true });
-  assert.ok(true);
 });

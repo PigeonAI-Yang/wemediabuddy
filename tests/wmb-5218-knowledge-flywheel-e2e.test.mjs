@@ -24,7 +24,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -64,7 +64,6 @@ import { createCommandEnvelope } from '../src/main/command-dispatcher.ts';
 
 const WS = 'ws-a';
 const NOW = () => new Date().toISOString();
-const EVIDENCE_PATH = new URL('../.ai/wmb-5218-e2e-evidence.md', import.meta.url);
 
 function csMeta(requestId, reason = '测试', extra = {}) {
   return { workspaceId: WS, requestId, reason, triggerSource: 'ingest', resolutionMode: 'none', createdBy: 'background_agent', ...extra };
@@ -854,66 +853,7 @@ test('WMB-5218 knowledge flywheel E2E: A–F + boundaries (single real SQLite wo
     database?.close();
   }
 
-  // ---- 证据文件 + 紧凑摘要 ----
-  const md = buildEvidenceMarkdown(summary);
-  await writeFile(EVIDENCE_PATH, md, 'utf8');
   console.log('WMB-5218 E2E PASS', JSON.stringify(summary));
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
-function buildEvidenceMarkdown(summary) {
-  const s = summary.scenarios;
-  const lines = [
-    '# WMB-5218 知识飞轮最终集成验收证据',
-    '',
-    `- fixture：${summary.workspaceFixture}`,
-    '- 全部读写经真实 migrations / store / compiler / query-writeback / usage 链 / outcome-feedback / health lint API；断言只读回数据库真实行。',
-    '',
-    '## A. Ingest 编译',
-    `- 首次编译：ChangeSet=${s.A.compile1.changeSetId} Receipt=${s.A.compile1.receiptId}（trigger=ingest，affectedTopics 恰关联 Topic）`,
-    `  - Entity 1（agentforge）新建；Claim/Method Note 2；版本 2；locator 证据 2；Topic Wiki 版本 ${s.A.compile1.wikiVersionId}（采纳 2 版本）`,
-    `- 二次摄取（Source r2）：Entity 匹配 1 零重复；新 Claim 1 + 旧 Method qualified（appliesTo=xiaohongshu）+ 旧 Claim contradicted→disputed；版本 3；Wiki 版本 ${s.A.compile2.wikiVersionId}（采纳 5 版本，retainedDisputes=1）`,
-    `- 争议 Note=${s.A.disputedNoteId}；Method=${s.A.qualifiedMethodId}；新 Claim=${s.A.newClaimNoteId}`,
-    `- 选题上下文：冻结当前 Wiki 版本=${s.A.context.currentWikiVersionId}，Note 版本 ${s.A.context.noteVersionsInContext}，证据 ${s.A.context.evidenceInContext}，上下文包 ${s.A.context.topicContextPackage}`,
-    '',
-    '## B. Query 写回',
-    `- 冻结读取集：Wiki 版本 ${s.B.frozenRead.wikiVersionId} + ${s.B.frozenRead.noteVersionIds} Note 版本 + ${s.B.frozenRead.evidenceIds} 证据`,
-    `- 纯复述：decision=${s.B.restatement.decision}（零知识写），Artifact=${s.B.restatement.artifactId}，Receipt=${s.B.restatement.receiptId}`,
-    `- 同问重放：duplicate=${s.B.sameQuestionReplay.duplicate}，同一 Artifact=${s.B.sameQuestionReplay.artifactSame}（零写）`,
-    `- 新综合：Note=${s.B.synthesis.noteId}（insight/inference/mixed），Synthesis Wiki 页=${s.B.synthesis.pageId} 版本=${s.B.synthesis.pageVersionId}，derived_from 证据 ${s.B.synthesis.derivedEvidence} 只指向冻结集，Receipt=${s.B.synthesis.receiptId}`,
-    `- 知识更新后（Wiki=${s.B.freezeAfterUpdate.wikiNow}）：Synthesis 冻结 Wiki 仍 ${s.B.freezeAfterUpdate.synthesisBasedOnWikiStill}，Artifact 冻结 Wiki 仍 ${s.B.freezeAfterUpdate.artifactReadWikiStill}（不回读未来）`,
-    `- 用户经验 FreeNote=${s.B.experienceFreeNoteId}（原文不可变，零知识 Note）`,
-    '',
-    '## C. 创作 Usage 链',
-    `- 全程冻结同一 Wiki 版本 ${s.C.frozenWikiVersionId}：提案包=${s.C.proposalPkgId}、简报包=${s.C.briefPkgId}（used 1 consulting 采纳集）、核心 V1 包=${s.C.core1PkgId}、核心 V2 包=${s.C.core2PkgId}、平台包=${s.C.platformPkgId}（used=structure_pattern）`,
-    `- 平台换基（事实变化）：${s.C.rebaseRejected.code}，拒绝后平台仍指向 ${s.C.rebaseRejected.platformStillContentVersionId}，revision=${s.C.rebaseRejected.platformRevision}；同基修订 revision=${s.C.sameBaseUpdateRevision}`,
-    '',
-    '## D. Publication/Metric/final Review 回流',
-    `- 发布=${s.D.publicationId}，指标快照=${s.D.metricSnapshotId}，final Review=${s.D.reviewId}；outcome ChangeSet requestId=${s.D.outcomeChangeSetRequestId}`,
-    `- case 观察 Note=${s.D.caseNoteId} 版本=${s.D.caseVersionId}（unverified/outcome_observed，语句含“不证明因果”）；血缘=${s.D.lineageVersionIds} 条冻结版本；证据 review+publication+metric_snapshot`,
-    `- 回执=${s.D.receiptId}（trigger=review，affectedTopics 含 Topic）；零因果 Method=${s.D.zeroCausalMethod}，零 pattern=${s.D.zeroPattern}`,
-    `- Topic Wiki 同 ChangeSet 重编译：当前版本=${s.D.wikiCurrentVersionId}，recentOutcomes=${s.D.wikiRecentOutcomes}（Review 后立即可见）；重放零写=${s.D.replayZeroWrite}`,
-    '',
-    '## E. Health Lint',
-    `- 可信冲突 Issue=${s.E.conflictIssueId} 状态 ${s.E.conflictStatus}（不自动裁决）；重复扫描去重`,
-    `- broken 证据 Issue=${s.E.brokenEvidenceIssueId} 状态 ${s.E.brokenEvidenceStatus}（不可变不自动删）`,
-    `- broken 关系 ${s.E.repairedRelationId} 自动原子修复：Issue=${s.E.repairIssueId} resolved，lint 回执=${s.E.repairReceiptId}`,
-    `- stale Wiki Issue=${s.E.staleIssueId} 状态 ${s.E.staleStatus}`,
-    `- 周期 Lint：run=${s.E.periodic.runId} completed=${s.E.periodic.completed}，扫描 ${s.E.periodic.scannedObjects} 对象；崩溃重试零写=${s.E.periodic.crashRetryZeroWrite}，第二轮零新增=${s.E.periodic.secondRoundZeroNewIssues}，取消=${s.E.periodic.canceled}`,
-    '',
-    '## F. 并发 / 恢复 / 弱 Source',
-    `- 弱 Source=${s.F.weakSource.sourceId}：notesCreated=${s.F.weakSource.notesCreated}，skippedLowValue=${s.F.weakSource.skippedLowValue}（零 Note 落库，回执=${s.F.weakSource.receiptId}）`,
-    `- 并发同基：首成语句=${s.F.concurrency.firstSucceededStatement}，第二拒绝 ${s.F.concurrency.secondRejectedCode}（零新增版本）`,
-    `- restore：revision=${s.F.restore.revision} changeType=${s.F.restore.changeType}，restoredFromVersionId=${s.F.restore.restoredFromVersionId}，版本链 ${s.F.restore.versionsKept} 全保留`,
-    '',
-    '## G. 边界',
-    `- 链完整性：orphan adopted=${s.G.chainIntegrity.orphanWikiAdopted}，orphan evidence=${s.G.chainIntegrity.orphanEvidence}，orphan receipt=${s.G.chainIntegrity.orphanReceipts}，orphan note/page current=${s.G.chainIntegrity.orphanNoteCurrent}/${s.G.chainIntegrity.orphanPageCurrent}`,
-    `- 单 Topic 单 Wiki=${s.G.singleTopicSingleWiki}`,
-    `- data-root 隔离：跨 root 写拒绝=${s.G.dataRootIsolation.crossRootWriteRejected}，data-root B 计数=${JSON.stringify(s.G.dataRootIsolation.dataRootBCounts)}`,
-    `- Canvas 删除（canvas=${s.G.canvasDelete.canvasId}）：节点删除后正式 Topic/Review/case Note/Wiki 均保留=${s.G.canvasDelete.formalTopicStillExists && s.G.canvasDelete.formalReviewStillExists && s.G.canvasDelete.formalCaseNoteStillExists && s.G.canvasDelete.formalWikiStillExists}`,
-    `- 不可变版本=${s.G.immutableVersions}；FreeNote 原文不可变=${s.G.immutableFreeNoteBody}`,
-    `- 生产 dispatcher：command=${s.G.dispatcher.command}，command_receipts=${s.G.dispatcher.commandReceipts}，ChangeSet=${s.G.dispatcher.changeSets}，回执读回=${s.G.dispatcher.receiptReadBack}，直写被 guard 拒绝=${s.G.dispatcher.directSqlWriteBlocked}`,
-    ''
-  ];
-  return lines.join('\n');
-}

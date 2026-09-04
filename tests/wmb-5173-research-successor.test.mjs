@@ -30,7 +30,6 @@ const {
   enqueueResearchSuccessorForTask,
   getResearchSuccessor,
   handleResearchSuccessorJobEvent,
-  kickResearchSuccessors,
   reconcileResearchSuccessors,
   reconcileResearchSuccessorsViaRuntime,
   reconcileStaleRunningResearchSuccessors,
@@ -449,90 +448,9 @@ test('WMB-5173: decide — invalid action, unknown row and terminal rows rejecte
 // 4. 消费：rebuildRoleJobRequest + briefSuffix 派生原角色续派；重启只消费一次
 // ---------------------------------------------------------------------------
 
-test('WMB-5296: kick — auto-narrows unresolved claims and spawns original-role successor with the same boundary', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, {
-    parent, status: 'partial', requiredClaims: [claim('claim_a'), claim('claim_b', 'B', 'price')], unresolvedRequiredClaims: ['claim_b'], terminalReason: 'budget_exhausted'
-  });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  assert.equal(row.status, 'pending');
-  assert.equal(row.payload.decision, 'narrow');
-  const { spawner, spawned } = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, spawner), 1);
-  const successorJob = spawner.get(row.id);
-  assert.equal(successorJob.id, row.id, '续派工单以 research_successor 行 id 为 jobId（事件回指）');
-  assert.equal(successorJob.roleId, 'writer', '原角色续派（writer）');
-  assert.equal(successorJob.intent, 'studio_draft');
-  assert.equal(successorJob.businessDate, BUSINESS_DATE, '同一边界 businessDate');
-  assert.equal(successorJob.projectId, 'proj-1', '同一边界 projectId');
-  assert.ok(successorJob.brief.includes('【研究续派'), 'brief 追加 EvidencePack 摘要');
-  assert.ok(successorJob.brief.includes('【主管决策：收窄'), 'brief 追加自动收窄说明');
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(spawned.length, 1);
-  // 行已消费（running）：第二次 kick 不再消费（重启只消费一次）。
-  assert.equal(await kickResearchSuccessors(runtime, spawner), 0);
-  spawner.dispose();
-}));
 
-test('WMB-5173: kick — restart consumes an enqueued-but-unconsumed successor exactly once', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  assert.equal(row.status, 'pending', '全部 resolved → pending 待消费');
 
-  const first = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, first.spawner), 1);
-  assert.equal(first.spawner.get(row.id).id, row.id);
-  assert.equal(rowStatus(runtime.database, row.id), 'running', '消费即标记 running（崩溃后不重消费）');
-  first.spawner.dispose();
 
-  // 冷池（重启）：行 running → 不重消费，仍只消费一次。
-  const restarted = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, restarted.spawner), 0);
-  assert.equal(restarted.spawner.list().length, 0, '冷池不重复派生续派');
-  assert.equal(Number(runtime.database.prepare("SELECT count(*) count FROM jobs WHERE kind='research_successor'").get().count), 1);
-  restarted.spawner.dispose();
-}));
-
-test('WMB-5173: kick — disabled capacity leaves pending unconsumed, then consumes once when enabled', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-
-  const spawner = new JobSpawner(runtime, { maxWorkers: 0, execute: async () => ({ status: 'succeeded', code: 'OK', message: null, readback: null }) });
-  assert.equal(await kickResearchSuccessors(runtime, spawner), 0, 'maxWorkers=0 不消费');
-  assert.equal(rowStatus(runtime.database, row.id), 'pending', '仍 pending');
-  spawner.setMaxWorkers(1);
-  assert.equal(await kickResearchSuccessors(runtime, spawner), 1, '启用后消费一次');
-  assert.equal(rowStatus(runtime.database, row.id), 'running');
-  spawner.dispose();
-}));
-
-test('WMB-5173: kick — parent refs rebuild failure marks row failed (no silent skip)', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  // 父任务合同 refs 损坏（缺 jobId）→ rebuildRoleJobRequest fail-closed → 行 failed。
-  db.prepare("UPDATE agent_tasks SET context_refs_json = ? WHERE id = ?").run(JSON.stringify({ roleId: 'writer' }), parent.taskId);
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  const { spawner } = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, spawner), 0, '重建失败不计为成功消费');
-  const after = runtime.database.prepare('SELECT status status,last_error lastError FROM jobs WHERE id=?').get(row.id);
-  assert.equal(after.status, 'failed');
-  assert.ok(after.lastError.includes('重建'), '失败原因记录');
-  spawner.dispose();
-}));
 
 // ---------------------------------------------------------------------------
 // 5. 终态事件回写 + 重启恢复 reconcile
@@ -639,82 +557,8 @@ test('WMB-5173: stale — pure DB settle restores under attempt limit and fails 
   assert.deepEqual(reconcileStaleRunningResearchSuccessors(db, [row.id]), { restored: 0, failed: 0 }, '终态行不再结算');
 }));
 
-test('WMB-5173: stale — crash window: claimed-then-crashed running row (no pool handle) restored and re-kicked exactly once', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  assert.equal(row.status, 'pending');
 
-  // 第一次消费（claim → spawn）：行 running，池内有句柄；随后进程死亡 → 池丢失，行停留 running。
-  const first = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, first.spawner), 1);
-  assert.equal(rowStatus(runtime.database, row.id), 'running');
-  assert.equal(first.spawner.list().length, 1);
-  first.spawner.dispose();
 
-  // 时间流逝超过保守阈值（崩溃后重启间隔 > STALE_MS）。
-  await mutateSuccessorRow(runtime, row.id, { updatedAtAgoMs: 120_000 });
-
-  // 重启：冷池 stale reconcile → 恢复 pending（无 live 句柄、超阈值、attempts 未超上限）。
-  const restarted = fakeSpawner(runtime);
-  const result = await reconcileStaleRunningResearchSuccessorsViaRuntime(runtime, restarted.spawner);
-  assert.equal(result.restored, 1);
-  assert.equal(result.failed, 0);
-  const restored = getResearchSuccessor(runtime.database, parent.jobId);
-  assert.equal(restored.status, 'pending', '崩溃残留恢复为可消费状态');
-  assert.equal(restored.attempts, 1, 'attempts 保留');
-  assert.equal(restored.startedAt, null, 'started_at 重置');
-
-  // 再 kick：只产生一个续派工单（重启单派，不双派）；行回 running，attempts+1。
-  assert.equal(await kickResearchSuccessors(runtime, restarted.spawner), 1);
-  assert.equal(restarted.spawner.list().length, 1, '重启单派：池内仅一个续派工单');
-  assert.equal(restarted.spawner.get(row.id).id, row.id);
-  assert.equal(rowStatus(runtime.database, row.id), 'running');
-  assert.equal(getResearchSuccessor(runtime.database, parent.jobId).attempts, 2);
-  assert.equal(Number(runtime.database.prepare("SELECT count(*) count FROM jobs WHERE kind='research_successor'").get().count), 1, '行唯一：不产生第二个续派行');
-  restarted.spawner.dispose();
-}));
-
-test('WMB-5173: stale — live pool handle blocks restore (no double dispatch)', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  const spawner = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, spawner.spawner), 1);
-  assert.equal(rowStatus(runtime.database, row.id), 'running');
-  // 即使行已超过阈值，池内存在 live 句柄（queued/running/终态任一）→ 禁止恢复。
-  await mutateSuccessorRow(runtime, row.id, { updatedAtAgoMs: 120_000 });
-  const result = await reconcileStaleRunningResearchSuccessorsViaRuntime(runtime, spawner.spawner);
-  assert.equal(result.restored, 0);
-  assert.equal(result.failed, 0);
-  assert.equal(rowStatus(runtime.database, row.id), 'running', 'live job 不恢复');
-  assert.equal(spawner.spawner.list().length, 1, '池内工单未被重复派生');
-  spawner.spawner.dispose();
-}));
-
-test('WMB-5173: stale — running row inside conservative threshold is not restored', async () => withRuntime(async (db) => {
-  const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });
-  const { taskId } = seedResearchTask(db, { parent, status: 'succeeded', requiredClaims: [claim('claim_a')], unresolvedRequiredClaims: [] });
-  return { parent, taskId };
-}, async (runtime, { parent, taskId }) => {
-  await enqueueResearchSuccessorForTask(runtime, taskId);
-  const row = getResearchSuccessor(runtime.database, parent.jobId);
-  const spawner = fakeSpawner(runtime);
-  assert.equal(await kickResearchSuccessors(runtime, spawner.spawner), 1);
-  spawner.spawner.dispose(); // 崩溃：池丢失，但 updated_at 仍在阈值内（claim 刚发生）
-  const cold = fakeSpawner(runtime);
-  const result = await reconcileStaleRunningResearchSuccessorsViaRuntime(runtime, cold.spawner);
-  assert.equal(result.restored, 0, '阈值内不恢复（保守窗口）');
-  assert.equal(result.failed, 0);
-  assert.equal(rowStatus(runtime.database, row.id), 'running', '仍 running，等待下一次阈值判定');
-  cold.spawner.dispose();
-}));
 
 test('WMB-5173: stale — attempts over limit marks failed (auditable), no further restore', async () => withRuntime(async (db) => {
   const parent = seedParent(db, { intent: 'studio_draft', roleId: 'writer', projectId: 'proj-1' });

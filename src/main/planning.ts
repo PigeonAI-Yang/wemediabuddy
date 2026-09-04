@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { linkTopicSources } from './knowledge.ts';
 import { wakePersistentKnowledgeJobs } from './knowledge-compile-trigger.ts';
-import { validatePlanSourceReferences, validateTruthGateSourceReferences } from './planning-stage.ts';
+import { getPendingScoreReasons, isExactZhihuFallback, validatePlanItemForReview, validatePlanSourceReferences, validateTruthGateSourceReferences, type PlanItemReviewInput } from './planning-stage.ts';
 
 
 export type PlanItemInput = { title: string; priority: number; whyNow: string; timeliness: string; targetAudience: string; angle: string; pointOfView: string; platforms: string[]; formats: string[]; titleGuidance: string; openingGuidance: string; structureGuidance: string; effortEstimate: string; sourceIds: string[]; availableMaterials?: string[]; missingMaterials?: string[]; reviewIds?: string[]; methodFindingIds?: string[]; topicId?: string; scoreReasons?: unknown; editorialDecision?: EditorialDecision | unknown };
@@ -30,9 +30,10 @@ function rawScoreForItem(item: PlanItemInput): unknown {
   return (item as Record<string, unknown>).scoreReasons ?? (item as Record<string, unknown>).score_reasons ?? (item as Record<string, unknown>).score_reasons_json;
 }
 
-function scoredJsonForItem(item: PlanItemInput): { json: string; status: 'ready_for_review' } {
+function scoredJsonForItem(item: PlanItemInput): { json: string; status: 'draft' | 'ready_for_review' } {
   const raw = rawScoreForItem(item);
-  return { json: JSON.stringify(raw ?? {}), status: 'ready_for_review' };
+  if (raw === undefined || raw === null) return { json: getPendingScoreReasons(), status: 'draft' };
+  return { json: JSON.stringify(raw), status: 'ready_for_review' };
 }
 function sourceIdsForPlanItem(item: PlanItemInput): string[] {
   const record = item as unknown as Record<string, unknown>;
@@ -64,11 +65,6 @@ export function saveCurrentPlan(database: DatabaseSync, input: SavePlanInput, tr
     .sort((a, b) => a.item.priority - b.item.priority || a.index - b.index)
     .map(({ item }) => item);
   const normalizedItems = items.map((item) => ({ item, sourceIds: sourceIdsForPlanItem(item) }));
-  for (const { item, sourceIds } of normalizedItems) {
-    validatePlanSourceReferences(database, sourceIds);
-    validateTruthGateSourceReferences(database, rawScoreForItem(item), sourceIds);
-  }
-
   const candidates = input.candidateSources ?? [];
   const decisions = input.sourceDecisions ?? [];
   if (candidates.length || decisions.length) {
@@ -79,6 +75,22 @@ export function saveCurrentPlan(database: DatabaseSync, input: SavePlanInput, tr
     }));
     if (candidateKeys.size !== candidates.length || decisionKeys.size !== decisions.length || candidateKeys.size !== decisionKeys.size || [...candidateKeys].some((key) => !decisionKeys.has(key))) {
       throw new Error('PLAN_SOURCE_COVERAGE_INCOMPLETE');
+    }
+  }
+  for (const { item, sourceIds } of normalizedItems) {
+    validatePlanSourceReferences(database, sourceIds);
+    const rawScore = rawScoreForItem(item);
+    validateTruthGateSourceReferences(database, rawScore, sourceIds);
+    if (!Number.isInteger(item.priority) || item.priority < 0 || item.priority > 7) {
+      throw Object.assign(new Error('validation_failed: priority_invalid'), { code: 'validation_failed', errors: ['priority_invalid'] });
+    }
+    if (rawScore !== undefined && rawScore !== null) {
+      const reviewItem = item as unknown as PlanItemReviewInput;
+      const validation = validatePlanItemForReview(reviewItem);
+      const blockingErrors = validation.errors.filter((error) => error === 'exact_zhihu_fallback_template' || error.startsWith('score_') || error.startsWith('truth_gate_'));
+      if (blockingErrors.length) {
+        throw Object.assign(new Error(`validation_failed: ${blockingErrors.join('; ')}`), { code: 'validation_failed', errors: blockingErrors });
+      }
     }
   }
 

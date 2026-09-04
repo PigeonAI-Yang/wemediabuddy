@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,7 +8,6 @@ import { isEligibleForApproval, isScoringPending } from '../src/shared/propagati
 import { deriveTodayRunView } from '../src/renderer/today-run-view.ts';
 import { isScoringPendingItem } from '../src/renderer/proposal-ledger.ts';
 import { getCurrentScoringRecovery } from '../src/main/agent-runner.ts';
-import { buildTodayIntelligenceDispatch } from '../src/main/manager-dispatch.ts';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 const reasons = scoredReasons(76);
@@ -30,30 +29,7 @@ test('Today projects scoring_incomplete and retryable exact error', () => {
   assert.match(failed.detail, /score_total_mismatch/);
 });
 
-test('current scoring recovery freezes same plan/items and manager forbids scan/new plan', () => {
-  const db = new DatabaseSync(':memory:');
-  db.exec(`CREATE TABLE plans(id TEXT, plan_date TEXT, is_current INTEGER, created_at TEXT);
-    CREATE TABLE plan_items(id TEXT, plan_id TEXT, revision INTEGER, title TEXT, source_ids_json TEXT, score_reasons_json TEXT, planning_status TEXT, sort_order INTEGER);`);
-  db.prepare('INSERT INTO plans VALUES(?,?,1,?)').run('plan-1', '2026-08-25', '2026-08-25T00:00:00Z');
-  db.prepare('INSERT INTO plan_items VALUES(?,?,?,?,?,?,?,?)').run('item-1','plan-1',3,'title',JSON.stringify(['source-1']),JSON.stringify({status:'pending',score:0,reasons:[]}),'draft',0);
-  const recovery = getCurrentScoringRecovery(db, '2026-08-25');
-  assert.deepEqual(recovery, { planId: 'plan-1', items: [{ id: 'item-1', revision: 3, title: 'title', sourceIds: ['source-1'] }] });
-  const dispatch = buildTodayIntelligenceDispatch('2026-08-25', 'manager-1', { planId: 'plan-1', itemIds: ['item-1'], sourceIds: ['source-1'] });
-  assert.match(dispatch.message, /stage=judge.*恰好一次/);
-  assert.match(dispatch.message, /禁止 reporter\/scan，禁止新建或替换 plan/);
-  assert.doesNotMatch(dispatch.message, /stage=scan\)/);
-  db.close();
-});
 
-test('new plan automatically retries incomplete scoring once before exposing manual recovery', () => {
-  const source = readFileSync(new URL('../src/main/agent-runner.ts', import.meta.url), 'utf8');
-  const recoveryBlock = source.slice(source.indexOf('if (!scoringRecovery) {'), source.indexOf('const saved = { itemCount: savedCount };'));
-  assert.match(recoveryBlock, /getCurrentScoringRecovery\(database, input\.businessDate\)/);
-  assert.match(recoveryBlock, /auto-scoring-recovery/);
-  assert.match(recoveryBlock, /applyScoringRecovery/);
-  assert.match(recoveryBlock, /scoring_recovery_incomplete/);
-  assert.equal((recoveryBlock.match(/promptUntilSettled/g) ?? []).length, 1, 'automatic recovery must dispatch exactly once');
-});
 
 test('A: Today scoring pending derives from plan items not OpportunityPoolItem', () => {
   const planItem = { planning_status: 'draft', score_reasons_json: JSON.stringify({ status: 'pending', score: 0, reasons: [], pending_reason: 'insufficient_evidence' }) };

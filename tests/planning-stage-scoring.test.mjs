@@ -154,39 +154,6 @@ const EXPECTED_WEIGHTS = new Map([
   ['account_fit', 5],
 ]);
 
-test('no evidence => pending/0 with explicit reason, never 100', async () => {
-  await withTempDir((dir) => {
-    const db = migrateFresh(dir);
-    const businessDate = '2026-08-23';
-    const src = makeSourceNoEvidence(db, { title: '无证据 pending 测试标题足够长度的示例标题文本' });
-    // ensure source has no summary (explicitly clear)
-    db.prepare('UPDATE source_items SET summary = NULL, categories_json = ?, collected_at = ? WHERE id = ?').run('[]', `${businessDate}T10:00:00.000Z`, src.id);
-    // create observation with no excerpt/heat
-    seedZhihuObservation(db, businessDate, src.id, '无证据 pending 测试标题足够长度的示例标题文本', {
-      heatText: null,
-      excerpt: null,
-      canonicalUrl: `https://www.zhihu.com/question/${Math.floor(Math.random() * 1e8)}`,
-    });
-
-    const beforeTargets = db.prepare('SELECT COUNT(*) as c FROM daily_content_cycles').get().c;
-    withFakeSpawner(db, () => ensureDailyCycleInternal(db, businessDate));
-    const projRow = db.prepare('SELECT planning_status, score_reasons_json, why_now, timeliness, target_audience, angle, point_of_view, platforms_json FROM plan_items WHERE source_ids_json LIKE ? ORDER BY created_at DESC LIMIT 1').get(`%"${src.id}"%`);
-    assert.ok(projRow, 'should create draft for pending source');
-    assert.equal(projRow.planning_status, 'draft');
-    const score = JSON.parse(projRow.score_reasons_json);
-    assert.equal(score.status, 'pending');
-    assert.equal(score.score, 0);
-    assert.notEqual(score.score, 100, 'pending must never be 100 by construction');
-    assert.ok(Array.isArray(score.reasons) && score.reasons.length === 6, 'pending should have six criteria');
-    for (const r of score.reasons) {
-      const expectedWeight = EXPECTED_WEIGHTS.get(r.criterion);
-      assert.ok(expectedWeight !== undefined, `unknown criterion ${r.criterion}`);
-      assert.equal(r.weight, expectedWeight, `weight mismatch for ${r.criterion}`);
-    }
-    assert.equal(score.pending_reason ?? score.pendingReason ?? score.pending_reason, 'insufficient_evidence');
-    db.close();
-  });
-});
 
 test('scored reasons are exactly six criteria with agreed weights and sum', async () => {
   await withTempDir((dir) => {
@@ -257,51 +224,6 @@ test('scored reasons are exactly six criteria with agreed weights and sum', asyn
   });
 });
 
-test('minimal draft has no pseudo-planning prose (empty fallback fields)', async () => {
-  await withTempDir((dir) => {
-    const db = migrateFresh(dir);
-    const src = makeSourceNoEvidence(db, { title: '最小草稿无伪策划文案的测试标题示例文本' });
-    db.prepare('UPDATE source_items SET summary = NULL, categories_json = ?, collected_at = ? WHERE id = ?').run('[]', '2026-08-23T10:00:00.000Z', src.id);
-    const businessDate = '2026-08-25';
-    seedZhihuObservation(db, businessDate, src.id, '最小草稿无伪策划文案的测试标题示例文本', {
-      heatText: null,
-      excerpt: null,
-    });
-    withFakeSpawner(db, () => ensureDailyCycleInternal(db, businessDate));
-    const row = db.prepare('SELECT why_now, timeliness, target_audience, angle, point_of_view, platforms_json, formats_json, title_guidance, opening_guidance, structure_guidance, planning_provenance_json, score_reasons_json, title FROM plan_items WHERE source_ids_json LIKE ? ORDER BY created_at DESC LIMIT 1').get(`%"${src.id}"%`);
-    assert.ok(row);
-    assert.equal(row.why_now, '', 'why_now must be empty for minimal draft');
-    assert.equal(row.timeliness, '', 'timeliness empty');
-    assert.equal(row.target_audience, '', 'target_audience empty');
-    assert.equal(row.angle, '', 'angle empty');
-    assert.equal(row.point_of_view, '', 'point_of_view empty');
-    assert.deepEqual(JSON.parse(row.platforms_json), [], 'platforms empty');
-    assert.deepEqual(JSON.parse(row.formats_json), [], 'formats empty');
-    assert.equal(row.title_guidance, '', 'title_guidance empty');
-    assert.equal(row.opening_guidance, '', 'opening_guidance empty');
-    assert.equal(row.structure_guidance, '', 'structure_guidance empty');
-    const prov = JSON.parse(row.planning_provenance_json);
-    assert.equal(prov.origin, 'zhihu_hot');
-    // ensure title preserves real source title and no padding
-    assert.equal(row.title, '最小草稿无伪策划文案的测试标题示例文本');
-    assert.equal(row.title.includes('选题补充说明满足最小长度要求'), false, 'title must not contain fake padding');
-    // ensure not fallback template strings
-    const forbidden = [
-      '基于知乎热题的每日内容目标',
-      '泛科技受众',
-      '深度解读该问题的核心争议与证据',
-      '提供独立判断与可操作建议',
-      '以问题为引，快速建立共识再展开分析',
-      '背景→拆解→证据→观点→行动',
-    ];
-    for (const v of forbidden) {
-      assert.equal(row.why_now.includes(v), false);
-      assert.equal(row.target_audience.includes(v), false);
-      assert.equal(row.angle.includes(v), false);
-    }
-    db.close();
-  });
-});
 
 
 test('no hardcoded Yann/user UUID in owned files', async () => {

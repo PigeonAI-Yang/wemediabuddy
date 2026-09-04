@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('WMB-5400 Owner and scheduler share the executable full-intent entry', async () => {
+test('WMB-5400 Owner full entry is paused while the scheduler contract remains explicit', async () => {
   const [index, today, proposals, automation, scheduler, ipc, preload, mcp] = await Promise.all([
     read('src/main/index.ts'),
     read('src/renderer/today-view.tsx'),
@@ -15,8 +15,8 @@ test('WMB-5400 Owner and scheduler share the executable full-intent entry', asyn
     read('src/preload/preload.ts'),
     read('src/main/mcp.ts')
   ]);
-  assert.match(index, /producerId: 'today\.agent-start-daily-intelligence'[\s\S]*?action: 'full'/);
-  assert.match(today + proposals + automation, /startDailyIntelligence/);
+  assert.match(index, /code: 'DAILY_FULL_PIPELINE_PAUSED'/);
+  assert.doesNotMatch(today + proposals + automation, /startDailyIntelligence/);
   assert.match(scheduler, /producerId: "scheduler\.daily-0900"[\s\S]*?action: "full"/);
   assert.doesNotMatch([automation, ipc, preload, mcp].join('\n'), /orchestrateDailyContent|daily-orchestration:orchestrate|daily-cycle:ensure|daily\.orchestrate/);
 });

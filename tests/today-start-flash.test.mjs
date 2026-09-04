@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
 import {
   deriveTodayRunView,
   isManagerNonterminal,
@@ -127,24 +126,6 @@ test('isTodayTaskActive preserves queued/waiting/running/needs_user as active', 
   assert.equal(isTodayTaskActive(null), false);
 });
 
-test('no timer/debounce/reload or duplicate spawn introduced in today-view', async () => {
-  const source = await readFile(new URL('../src/renderer/today-view.tsx', import.meta.url), 'utf8');
-  // No minimum-duration timer, debounce, CSS transition hack, fake progress
-  assert.doesNotMatch(source, /setTimeout\s*\(\s*\(\s*\)\s*=>\s*syncStartLatch/);
-  assert.doesNotMatch(source, /debounce/i);
-  assert.doesNotMatch(source, /minimum.*duration/i);
-  assert.doesNotMatch(source, /fake.*progress/i);
-  assert.doesNotMatch(source, /transition.*delay/i);
-  // No duplicate spawn: guard exists
-  assert.match(source, /if\s*\(\s*running\s*\|\|\s*startingRef\.current\s*\)\s*return/);
-  // No reload
-  assert.doesNotMatch(source, /location\.reload/);
-  // Ensure the synchronous guard is raised before starting the async request.
-  assert.match(source, /startingRef\.current\s*=\s*true/);
-  // Count setTimeout occurrences: preserve the current explicit delayed refresh/control calls.
-  const timeouts = (source.match(/setTimeout/g) || []).length;
-  assert.equal(timeouts, 4, `expected exactly 4 setTimeout, got ${timeouts}`);
-});
 
 test('focus_existing projection does not duplicate task (single latch generation)', () => {
   // Two rapid focus_existing should not create new generation; latch is cleared not re-created

@@ -195,7 +195,7 @@ test('plan items citing sources without canonicalUrl are rejected', async () => 
     };
     assert.throws(
       () => saveCurrentPlan(database, { planDate: '2026-08-05', timezone: 'Asia/Shanghai', summary: '方案', items: [{ ...item, sourceIds: [noUrl.id] }] }),
-      /缺少可追溯链接/
+      /source_canonical_url_required/
     );
     const saved = saveCurrentPlan(database, { planDate: '2026-08-05', timezone: 'Asia/Shanghai', summary: '方案', items: [{ ...item, sourceIds: [withUrl.id] }] });
     assert.ok(saved.id, 'citable source passes the canonicalUrl constraint');

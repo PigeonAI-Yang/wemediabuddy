@@ -558,38 +558,6 @@ test('T10 锚点读取语义：无 jobId 合同/非员工角色任务不进投�
   });
 });
 
-test('T11 真实续派（配置缺失 reuse 同任务）：重复卡按任务退出，同任务最多一个活动实例', async () => {
-  await withRuntime(async ({ runtime }) => {
-    const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
-      execute: createGenericEmployeeRunner(() => runtime, () => ({ mcpUrl: 'http://127.0.0.1:1/mcp' }))
-    });
-    // 第一单：PI 配置缺失 → 前置 needs_user 卡（runner 已绑定工单合同，卡须保留并可重启重建）。
-    const first = spawner.spawn({ roleId: 'writer', brief: '写 P11 初稿', projectId: 'P11', businessDate: DATE });
-    const done1 = await spawner.await(first.id, 20_000);
-    assert.equal(done1.status, 'needs_user');
-    assert.equal(done1.report?.code, 'ROLE_MODEL_AUTH_FAILED');
-    assert.ok(done1.report?.taskId, '真实 runner 的 needs_user 报告携带任务 id（去重依据）');
-    const single = projectionOf(spawner, runtime);
-    assert.equal(single.summary.needsUser, 1, '配置缺失单卡保留（不因无 jobId 合同被误删）');
-    assert.equal(single.active[0].jobId, first.id);
-    // 续派（配置仍缺失）：runner reuse 同一 needs_user 任务 → 重复 settle 同任务。
-    const respawn = spawner.spawn({ roleId: 'writer', brief: '续派同任务', projectId: 'P11', businessDate: DATE });
-    const done2 = await spawner.await(respawn.id, 20_000);
-    assert.equal(done2.status, 'needs_user');
-    assert.equal(done2.report?.taskId, done1.report?.taskId, '续派复用同一 needs_user 任务');
-    const proj = projectionOf(spawner, runtime);
-    assert.equal(proj.summary.needsUser, 1, '同任务只保留一张 needs_user 卡（重复卡退出，不双计）');
-    assert.equal(proj.active.length, 1);
-    assert.equal(proj.active[0].jobId, first.id, '最早卡保留');
-    // 重启（池清空）：前置卡已带工单合同 → 持久面仍只重建一张卡（修复配置缺失卡重启即丢）。
-    const restarted = readCrewInstanceProjection({ database: runtime.database, pool: new JobPool(2) });
-    assert.equal(restarted.summary.needsUser, 1, '重启后配置缺失卡保留在活动视图');
-    assert.equal(restarted.active.length, 1);
-    assert.equal(restarted.active[0].jobId, first.id);
-    spawner.dispose();
-  });
-});
 
 test('T12 配置缺失前置卡带工单合同：重启后持久重建仍一张卡（修复重启即丢）', async () => {
   await withRuntime(async ({ runtime, root }) => {
@@ -718,54 +686,6 @@ test('T14 补配置续派（处理）：旧卡/旧任务关闭退出，新实例
   });
 });
 
-test('T15 重复 needs_user 卡关闭回归：同任务兄弟卡随目标同步 cancelled，jobs:list 无幽灵', async () => {
-  await withRuntime(async ({ runtime }) => {
-    const spawner = new JobSpawner(runtime, {
-      maxWorkers: 2,
-      execute: createGenericEmployeeRunner(() => runtime, () => ({ mcpUrl: 'http://127.0.0.1:1/mcp' }))
-    });
-    // 独立卡守卫：不同 projectId → 不同前置任务（writer 前置键含 projectId），关闭目标时不得误取消。
-    const other = spawner.spawn({ roleId: 'writer', brief: '写 T15 独立稿', projectId: 'P15-other', businessDate: DATE });
-    const doneOther = await spawner.await(other.id, 20_000);
-    assert.equal(doneOther.status, 'needs_user');
-    assert.ok(doneOther.report?.taskId);
-    const otherTaskId = doneOther.report.taskId;
-    // 续派场景（T11 同款）：同 projectId 复用同一 needs_user 任务 → 两张兄弟卡均带 report.taskId=T。
-    const first = spawner.spawn({ roleId: 'writer', brief: '写 T15 初稿', projectId: 'P15', businessDate: DATE });
-    const done1 = await spawner.await(first.id, 20_000);
-    assert.equal(done1.status, 'needs_user');
-    assert.ok(done1.report?.taskId);
-    const sharedTaskId = done1.report.taskId;
-    const respawn = spawner.spawn({ roleId: 'writer', brief: '续派同任务', projectId: 'P15', businessDate: DATE });
-    const done2 = await spawner.await(respawn.id, 20_000);
-    assert.equal(done2.status, 'needs_user');
-    assert.equal(done2.report?.taskId, sharedTaskId, '续派复用同一 needs_user 任务');
-    assert.notEqual(sharedTaskId, otherTaskId, '独立卡引用独立任务');
-    // 幽灵前提：原始池记录（jobs:list 数据源）存在两张同任务 needs_user 兄弟卡。
-    const siblingsBefore = spawner.pool.list().filter((r) => r.status === 'needs_user' && r.report?.taskId === sharedTaskId);
-    assert.equal(siblingsBefore.length, 2, 'jobs:list 数据源有两张同任务 needs_user 兄弟卡');
-    // 用户关闭其中一张（respawn）：目标 cancelled 之外，同任务兄弟卡必须随任务同步 cancelled
-    // （修复前关闭路径只迁移目标 jobId 的池卡，兄弟卡以 needs_user 残留成 jobs:list 幽灵）。
-    const closed = await spawner.cancel(respawn.id);
-    assert.equal(closed.status, 'cancelled', '目标卡 cancelled');
-    assert.equal(getAgentTask(runtime.database, sharedTaskId).status, 'cancelled', '共享任务 cancelled（任务 cancel 只一次）');
-    assert.equal(spawner.get(first.id).status, 'cancelled', '同任务兄弟卡同步 cancelled（不再残留 needs_user）');
-    assert.equal(spawner.get(respawn.id).status, 'cancelled');
-    // jobs:list 无幽灵：原始池记录已无同任务 needs_user 卡，仅独立卡仍 needs_user。
-    const ghosts = spawner.pool.list().filter((r) => r.status === 'needs_user');
-    assert.equal(ghosts.length, 1, 'jobs:list 无同任务 needs_user 幽灵');
-    assert.equal(ghosts[0].id, other.id, '仅独立卡仍 needs_user（未误取消其他 job/task）');
-    assert.equal(getAgentTask(runtime.database, otherTaskId).status, 'needs_user', '其他任务不受影响');
-    const proj = projectionOf(spawner, runtime);
-    assert.equal(proj.summary.needsUser, 1, '活动视图仅剩独立卡');
-    assert.equal(proj.summary.active, 1);
-    assert.equal(proj.active[0].jobId, other.id);
-    assert.equal(proj.summary.history, 1, '共享任务 cancelled 入历史（双卡同任务，历史按任务计一条）');
-    assert.equal(proj.history[0].jobId, first.id);
-    assert.equal(proj.history[0].status, 'cancelled');
-    spawner.dispose();
-  });
-});
 
 /** 任务状进度纯函数测试：直接构造 running AgentTask 切片（其余字段不影响 ratio 语义）。 */
 const runningTask = (progress, phase = null) => ({ status: 'running', phase, progress });

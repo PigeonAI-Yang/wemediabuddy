@@ -19,49 +19,6 @@ function footerVisibility({ itemsLength, total, hasMore, isScrolled }) {
   return { showBackToTop, showLoadMore, countText };
 }
 
-test('proposal ledger compact: row actions share one horizontal band via flex gap rhythm', () => {
-  // Actions merged into single .proposal-card-actions inside one .proposal-card-extra with unified proposal-action
-  assert.match(view, /proposal-card-actions/);
-  assert.match(view, /proposal-action/);
-  assert.match(view, /proposal-action--dismiss/);
-  // Three peer actions in one band: 否掉, 派策划, 关联主题 (no ×, no ›)
-  assert.match(view, />否掉</);
-  assert.match(view, />派策划</);
-  assert.match(view, />关联主题</);
-  assert.doesNotMatch(view, /proposal-topic-link/);
-  assert.doesNotMatch(view, /关联主题 ›/);
-  assert.doesNotMatch(view, /DismissIconButton/);
-  // Single horizontal group not stacked: proposal-action group contains planning and topic together
-  assert.match(view, /proposal-card-actions[\s\S]*?proposal-action[\s\S]*?派策划[\s\S]*?关联主题/);
-  // CSS guarantees flex horizontal band with 8px gap and 4/8/12/16/24 rhythm, no hex, unified 44px
-  assert.match(css, /\.proposal-card-actions\s*\{\s*display:\s*flex/);
-  assert.match(css, /\.proposal-card-actions\s*\{[^}]*gap:\s*8px/);
-  assert.match(css, /\.proposal-open-item\s*\{\s*display:\s*flex/);
-  assert.match(css, /flex:\s*1\s+1\s+420px/);
-  // Hit height 44px unified via .proposal-action
-  assert.match(css, /\.proposal-action\s*\{[^}]*min-height:\s*44px/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*height:\s*44px/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*border:\s*1px solid var\(--border-strong\)/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*border-radius:\s*7px/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*background:\s*var\(--surface-raised\)/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*color:\s*var\(--ink-soft\)/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*font-size:\s*13px/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*font-weight:\s*650/);
-  assert.match(css, /\.proposal-action\s*\{[^}]*padding:\s*0 14px/);
-  // Dismiss hover/focus uses danger token only on interaction, static neutral
-  assert.match(css, /\.proposal-action--dismiss:hover/);
-  assert.match(css, /var\(--danger\)/);
-  // Compact gaps use rhythm 4/8/12
-  assert.match(css, /\.proposal-list\s*\{\s*display:\s*grid;\s*gap:\s*8px/);
-  assert.match(css, /\.proposal-open-item\s*\{[^}]*gap:\s*8px/);
-  assert.match(css, /\.proposal-open-item\s+\.opp-row[^}]*padding:\s*10px\s+12px/);
-  assert.match(css, /\.proposal-row\s*\{\s*display:\s*flex[^}]*gap:\s*12px[^}]*padding:\s*10px\s+12px/);
-  // Verify no hardcoded hex colors and no divergent secondary/primary min-height overrides
-  assert.doesNotMatch(css, /#[0-9a-fA-F]{3,8}/);
-  assert.doesNotMatch(css, /\.proposal-card-actions\s+\.secondary-button/);
-  assert.doesNotMatch(css, /\.proposal-card-actions\s+\.primary-button/);
-  assert.doesNotMatch(css, /\.proposal-topic-link\s*\{[^}]*background:\s*transparent/);
-});
 
 test('footer count always concise 已显示 N / total 条', () => {
   const v = footerVisibility({ itemsLength: 2, total: 2, hasMore: false, isScrolled: false });

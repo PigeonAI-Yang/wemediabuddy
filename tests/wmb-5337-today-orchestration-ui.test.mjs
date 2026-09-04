@@ -8,22 +8,11 @@ const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.
 const settingsView = await readFile(new URL('../src/renderer/settings-view.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/renderer/styles-today-daily-cycle.css', import.meta.url), 'utf8');
 
-test('Daily automation uses the unified full-intent entry', () => {
-  assert.match(cycle, /getDailyOrchestrationSchedule/);
-  assert.match(cycle, /setDailyOrchestrationSchedule/);
-  assert.match(cycle, /startDailyIntelligence/);
-  assert.match(preload, /getDailyOrchestrationSchedule/);
-  assert.match(preload, /setDailyOrchestrationSchedule/);
+test('Daily automation exposes an honest paused readback without executable controls', () => {
+  assert.match(cycle, /完整链路入口已暂停/);
+  assert.match(cycle, /请从资料、选题台账和创作入口分步处理/);
+  assert.doesNotMatch(cycle, /getDailyOrchestrationSchedule|setDailyOrchestrationSchedule|startDailyIntelligence|立即生成|启用自动|停用自动|aria-busy/);
   assert.doesNotMatch(cycle + preload, /orchestrateDailyContent|daily-cycle:ensure/);
-});
-
-test('Today orchestration shows Asia/Shanghai schedule, enable/disable, Run Now, in-progress guard', () => {
-  assert.match(cycle, /Asia\/Shanghai/);
-  assert.match(cycle, /立即生成/);
-  assert.match(cycle, /启用自动|停用自动|autoEnabled/);
-  assert.match(cycle, /aria-busy/);
-  assert.match(cycle, /disabled.*running|running.*disabled/);
-  assert.match(cycle, /scheduleBusy/);
 });
 
 test('Persisted settlement with five stage rows A–E and explicit status messaging', () => {

@@ -13,18 +13,6 @@ function withTempDir(work) {
   try { return work(dir); } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} }
 }
 
-test('CTA: open_manager navigates to proposals not merely Pi dock', () => {
-  const viewSrc = fs.readFileSync('j:/PigeonYang/WeMediaBuddy/src/renderer/today-view.tsx', 'utf8');
-  // Must contain openProposals call in open_manager branch
-  assert.match(viewSrc, /open_manager[\s\S]{0,300}openProposals\?\.\(\)/, 'open_manager should call openProposals');
-  // Ensure the open_manager branch does NOT dispatch wmb:focus-manager-dialog (that is Pi dock only)
-  const openManagerSnippet = (viewSrc.match(/if\s*\(runView\.primaryCta\.kind\s*===\s*'open_manager'\)\s*\{[^}]*\}/) ?? [])[0] || '';
-  assert.ok(openManagerSnippet, 'found open_manager block');
-  assert.doesNotMatch(openManagerSnippet, /focus-manager-dialog/, 'open_manager must not dispatch focus-manager-dialog');
-  // Verify navigate contract exists in main.tsx
-  const mainSrc = fs.readFileSync('j:/PigeonYang/WeMediaBuddy/src/renderer/main.tsx', 'utf8');
-  assert.match(mainSrc, /openProposals.*navigate\(['"]proposals['"]\)/, 'main should provide openProposals via navigate');
-});
 
 test('CTA: deriveTodayRunView produces open_manager for waiting approval', async () => {
   const { deriveTodayRunView } = await import('../src/renderer/today-run-view.ts');

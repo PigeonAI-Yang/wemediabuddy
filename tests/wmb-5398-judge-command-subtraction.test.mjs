@@ -34,7 +34,8 @@ test('WMB-5398 product surfaces expose no standalone judge command', async () =>
     assert.equal(productSources.includes(removed), false, `${removed} must be removed from product surfaces`);
   }
 
-  assert.match(index, /producerId: 'today\.agent-start-daily-intelligence'[\s\S]*?action: 'full'/);
+  assert.match(index, /code: 'DAILY_FULL_PIPELINE_PAUSED'/);
+  assert.doesNotMatch(index, /producerId: 'today\.agent-start-daily-intelligence'[\s\S]*?action: 'full'/);
   assert.match(mcp, /stage: z\.enum\(\['scan', 'full'\]\)/);
   assert.doesNotMatch(scheduler, /onNewSources|triggerJudge|judgeRunning|judgeQueued/);
   assert.doesNotMatch(proposals, />派策划<|>重新策划</);

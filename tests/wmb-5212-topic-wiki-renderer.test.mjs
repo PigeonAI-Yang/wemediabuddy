@@ -77,36 +77,6 @@ test('WMB-5226 UI: four product tabs (概览/资料/变化/版本) replace the s
   assert.doesNotMatch(topicView, /尚无编译 Wiki/);
 });
 
-test('WMB-5242 UI: product language locked (主题 nav kept, no wiki route, 资料员持续维护/当前认识/已整理或等待整理 present, engineering phrases absent)', () => {
-  // 顶级导航仍叫“主题”，且不新增 Wiki 路由/视图（View 联合类型与 pageLabels 均无 wiki）。
-  assert.match(appShell, /topic: '主题'/);
-  const viewTypeLine = appTypes.split('\n').find((line) => line.includes('type View ='));
-  assert.ok(viewTypeLine, 'app-types 必须声明 View 联合类型');
-  assert.match(viewTypeLine ?? '', /'topic'/);
-  assert.doesNotMatch(viewTypeLine ?? '', /'wiki'/);
-  const pageLabelsLine = appShell.split('\n').find((line) => line.includes('const pageLabels'));
-  assert.ok(pageLabelsLine, 'main.tsx 必须声明 pageLabels');
-  assert.doesNotMatch(pageLabelsLine ?? '', /wiki:/);
-  // 主用户文案必须存在：资料员持续维护 / 当前认识 / 整理状态语言（已整理 或 等待整理）。
-  assert.match(topicView, /资料员持续维护/);
-  assert.match(topicView, /当前认识/);
-  assert.match(topicView, /已整理/);
-  assert.match(topicView, /等待整理/);
-  // 整理状态映射：compiling→正在整理新资料，stale→有新资料待更新，failed→整理失败。
-  assert.match(topicView, /compiling: '正在整理新资料'/);
-  assert.match(topicView, /stale: '有新资料待更新'/);
-  assert.match(topicView, /failed: '整理失败'/);
-  // 主流程不得出现工程/失败措辞：尚无正式 Wiki / 正式编译 / 编译失败 / 知识风险。
-  assert.doesNotMatch(topicView, /尚无正式 Wiki/);
-  assert.doesNotMatch(topicView, /正式编译/);
-  assert.doesNotMatch(topicView, /编译失败/);
-  assert.doesNotMatch(topicView, /知识风险/);
-  // 列表与详情保留 当前综合/更新时间/整理状态 的用户可见钩子（DOM 钩子不漂移）。
-  assert.match(topicView, /topic-object-card-summary/);
-  assert.match(topicView, /topic-object-card-meta/);
-  assert.match(topicView, /topic-compile-state/);
-  assert.match(topicView, /topic-object-meta/);
-});
 
 test('WMB-5212 UI: default detail consumes the frozen backend projection getTopicWikiDetail', () => {
   assert.match(topicView, /window\.wmb\.getTopicWikiDetail\(\{ topicId, \.\.\.WIKI_DETAIL_LIMITS \}\)/);

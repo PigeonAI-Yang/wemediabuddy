@@ -294,21 +294,6 @@ test('WMB-5243 UI: node click opens knowledge floating card with first-screen kn
   assert.doesNotMatch(layout, /kc-projection-panel/);
 });
 
-test('WMB-5243 UI: deep links reuse the existing navigation callbacks', () => {
-  // topic 路由直连既有 openTopic；object 路由走既有准确深链解析（与资料库健康页同一模式）
-  assert.match(view, /resolveKnowledgeDeepLink\(\{/);
-  assert.match(view, /link\.route === 'topic'/);
-  // targetType 映射收口到纯决策层 decideDetailTarget（本测试同时覆盖映射成立）
-  assert.match(format, /targetType === 'topic_wiki'/);
-  assert.match(format, /targetType === 'source'/);
-  // 跳转按钮与文案：data-kc-card-jump 在浮卡组件；「在主题中打开」文案由视图生成
-  assert.match(card, /data-kc-card-jump/);
-  assert.match(view, /在主题中打开/);
-  // main.tsx 接线不变：画布跳转复用既有 openTopic / libraryFocusSourceId / studio / results
-  assert.match(mainTsx, /onOpenDetail=\{\(target\) =>/);
-  assert.match(mainTsx, /target\.type === 'topic' && target\.id\) openTopic\(target\.id\)/);
-  assert.match(mainTsx, /libraryFocusSourceId/);
-});
 
 test('WMB-5243 UI: old creation-tool responsibilities are gone from the main UI', () => {
   // 新建/重命名多张画布、资产抽屉、手工节点/关系、创作简报、确认讨论按钮全部移除

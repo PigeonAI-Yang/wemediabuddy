@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { createCommandEnvelope } from '../src/main/command-dispatcher.ts';
-import { applyDailyLaneGate, buildDailyGateRun, buildDailyOpportunityPrompt, parseLaneGateOutput, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
+import { applyDailyLaneGate, buildDailyGateRun, parseLaneGateOutput, savePlanFromSynthesisOutput } from '../src/main/agent-runner.ts';
 import { agentRequestId, startAgentTask } from '../src/main/agent-tasks.ts';
 import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
@@ -85,13 +85,6 @@ test('Tier 0 official/lane-source pass classifies without model and writes syste
     assert.equal(row.sourceRevision, 1);
     assert.equal(getLatestLaneJudgment(database, ai).judgedBy, 'system');
 
-    const prompt = buildDailyOpportunityPrompt(database, started, agentRequestId(started.id, 'plan'), { gateRun });
-    assert.match(prompt, /第一关：赛道相关性判定/);
-    assert.match(prompt, /已由系统按官方信源规则判定为赛道相关/);
-    assert.ok(prompt.includes(official), 'Tier 0 id 出现在自动相关清单');
-    assert.ok(prompt.includes(ai), '赛道精选 id 出现在自动相关清单');
-    assert.match(prompt, /先输出赛道判定 JSON 块/);
-    assert.match(prompt, /再输出方案 ```json 块/);
   });
 });
 
@@ -254,30 +247,6 @@ test('7-day cooldown honored on re-run: judged sources drop out of the gate run,
   });
 });
 
-test('savePlanFromSynthesisOutput drops plan items referencing sources outside the effective lane set', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-lane-plan-'));
-  try {
-    const database = migrateDatabase(path.join(root, 'wmb.db'));
-    const kept = upsertSource(database, { title: '有效资料', originalUrl: 'https://example.com/kept' });
-    const removed = upsertSource(database, { title: '已移出资料', originalUrl: 'https://example.com/removed' });
-    const started = startAgentTask(database, { intent: 'daily_intelligence', businessDate: '2026-08-07' });
-    assert.equal(started.ok, true);
-    const sessionFile = path.join(root, 'session.jsonl');
-    const planText = '\`\`\`json\n{"planDate":"2026-08-07","summary":"两个候选","items":[\n' +
-      `  {"title":"引用有效资料","priority":1,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${kept.id}"],"scoreReasons":${scoreReasonsForTest},"editorialDecision":${editorialDecisionForTest}},\n` +
-      `  {"title":"引用已移出资料","priority":2,"whyNow":"a","timeliness":"热点 2-3 天","targetAudience":"t","angle":"a","pointOfView":"p","platforms":["x"],"formats":["text"],"titleGuidance":"t","openingGuidance":"o","structureGuidance":"s","effortEstimate":"30m","sourceIds":["${removed.id}"],"scoreReasons":${scoreReasonsForTest},"editorialDecision":${editorialDecisionForTest}}\n` +
-      ']}\n\`\`\`';
-    await import('node:fs/promises').then((fs) => fs.writeFile(sessionFile, `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: planText }] } })}\n`, 'utf8'));
-    const saved = await savePlanFromSynthesisOutput(database, started.data, sessionFile, agentRequestId(started.data.id, 'plan'), undefined, null, 0, new Set([kept.id]));
-    assert.equal(saved.itemCount, 1, '只有引用有效资料的机会被保存');
-    assert.equal(saved.filteredCount, 1);
-    const rows = database.prepare('SELECT title FROM plan_items').all();
-    assert.deepEqual(rows.map((row) => row.title), ['引用有效资料']);
-    database.close();
-  } finally {
-    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-  }
-});
 
 async function withRuntime(work) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wmb-lane-run-'));
