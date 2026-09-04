@@ -16,8 +16,8 @@ Execution policy:
 - When a row becomes `done`, record the exact evidence and commit/push that row's files before starting the next row.
 
 Current state:
-- Completed critical path: WMB-5400 — intelligent-topic subtraction now has one executable full-intent entry and no Judge or Stage D production successor.
-- Active critical path: WMB-5403 — final-audit the two-decision creation flow and isolated semantic experiment; WMB-5324 resumes next.
+- Completed critical path: WMB-5403 — normal creation now has one production authorization, automatic middle production, one draft review decision, and an isolated one-shot semantic experiment.
+- Next critical path: WMB-5324 — system proxy adoption remains queued; no creation-flow work remains active.
 - External blocker: WMB-5388 package validation waits for Windows Security to permit the manifest-pinned Xiaohongshu MCP binary; it does not block the product critical path.
 - Product form lock + Role/Capability lock 2026-08-07: PRODUCT C8, PRD §2.3, SPEC CAP-026, spark role-permission-design.
 
