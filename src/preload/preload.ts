@@ -577,7 +577,6 @@ contextBridge.exposeInMainWorld('wmb', {
   readBackWechatPublication: (publicationId: string, expectedRevision: number, articleUrl: string) => ipcRenderer.invoke('publish:readback-wechat', publicationId, expectedRevision, articleUrl),
   reconcileNotPublished: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:reconcile-not-published', publicationId, expectedRevision),
   returnPublicationToEdit: (publicationId: string, expectedRevision: number) => ipcRenderer.invoke('publish:return-to-edit', publicationId, expectedRevision),
-  ensureDailyCycle: (businessDate: string, requestId?: string) => ipcRenderer.invoke('daily-cycle:ensure', { businessDate, requestId }),
   pauseDailyCycle: (businessDate: string, expectedRevision: number, requestId?: string) => ipcRenderer.invoke('daily-cycle:pause', { businessDate, expectedRevision, requestId }),
   resumeDailyCycle: (businessDate: string, expectedRevision: number, requestId?: string) => ipcRenderer.invoke('daily-cycle:resume', { businessDate, expectedRevision, requestId }),
   getDailyCycle: (businessDate: string) => ipcRenderer.invoke('daily-cycle:get', businessDate),
@@ -600,5 +599,4 @@ contextBridge.exposeInMainWorld('wmb', {
   getStudioDerivative: (projectId: string) => ipcRenderer.invoke('studio:derivative-projection', projectId),
   getDailyOrchestrationSchedule: () => ipcRenderer.invoke('daily-orchestration:get-schedule'),
   setDailyOrchestrationSchedule: (input: { time?: string; autoEnabled?: boolean }) => ipcRenderer.invoke('daily-orchestration:set-schedule', input),
-  orchestrateDailyContent: (businessDate: string, source?: string) => ipcRenderer.invoke('daily-orchestration:orchestrate', { businessDate, source }),
 });

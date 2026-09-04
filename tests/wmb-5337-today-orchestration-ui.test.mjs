@@ -8,20 +8,18 @@ const preload = await readFile(new URL('../src/preload/preload.ts', import.meta.
 const settingsView = await readFile(new URL('../src/renderer/settings-view.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../src/renderer/styles-today-daily-cycle.css', import.meta.url), 'utf8');
 
-test('Today orchestration uses existing window.wmb daily orchestration APIs only', () => {
+test('Daily automation uses the unified full-intent entry', () => {
   assert.match(cycle, /getDailyOrchestrationSchedule/);
   assert.match(cycle, /setDailyOrchestrationSchedule/);
-  assert.match(cycle, /orchestrateDailyContent/);
+  assert.match(cycle, /startDailyIntelligence/);
   assert.match(preload, /getDailyOrchestrationSchedule/);
   assert.match(preload, /setDailyOrchestrationSchedule/);
-  assert.match(preload, /orchestrateDailyContent/);
-  // no second execution path introduced: must not call daily-cycle:ensure directly via ensureDailyCycle in this file
-  assert.ok(!cycle.includes('ensureDailyCycle'), 'must not introduce second execution path');
+  assert.doesNotMatch(cycle + preload, /orchestrateDailyContent|daily-cycle:ensure/);
 });
 
 test('Today orchestration shows Asia/Shanghai schedule, enable/disable, Run Now, in-progress guard', () => {
   assert.match(cycle, /Asia\/Shanghai/);
-  assert.match(cycle, /立即执行/);
+  assert.match(cycle, /立即生成/);
   assert.match(cycle, /启用自动|停用自动|autoEnabled/);
   assert.match(cycle, /aria-busy/);
   assert.match(cycle, /disabled.*running|running.*disabled/);

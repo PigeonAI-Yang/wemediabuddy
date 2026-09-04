@@ -78,16 +78,6 @@ export type ProductionOrchestrationOverrides = {
   runMutation?: OrchestrationMutationExecutor;
 };
 
-export type DailyOrchestrationActorIntent = Readonly<{
-  kind: 'submitWorkspaceOrchestratorIntent';
-  producerId: 'today.daily-orchestration' | 'mcp.daily-orchestrate' | 'scheduler.daily-0900';
-  action: 'stage_d';
-  businessDate: string;
-  requestId: string;
-  rootMode: 'owner' | 'scheduler';
-  logicalInput: Readonly<Record<string, unknown>>;
-  payload: Readonly<Record<string, unknown>>;
-}>;
 
 
 // schedule persisted in app_meta
@@ -143,32 +133,6 @@ export function deterministicOrchestrationId(workspaceId: string, businessDate: 
 
 export function deterministicJobId(workspaceId: string, businessDate: string, stage: StageKey): string {
   return `daily-${businessDate}-${stage}-${deterministicOrchestrationId(workspaceId, businessDate, stage)}`;
-}
-export function buildDailyOrchestrationActorIntent(input: { businessDate: string; workspaceId: string; source: DailyOrchestrationSource; requestId?: string }): DailyOrchestrationActorIntent {
-  const producerBySource: Record<DailyOrchestrationSource, DailyOrchestrationActorIntent['producerId']> = {
-    today: 'today.daily-orchestration',
-    mcp: 'mcp.daily-orchestrate',
-    scheduler: 'scheduler.daily-0900',
-  };
-  const rootMode = input.source === 'scheduler' ? 'scheduler' : 'owner';
-  const producerId = producerBySource[input.source];
-  const requestId = input.requestId?.trim() || `legacy:${producerId}:${input.workspaceId}:${input.businessDate}`;
-  const logicalInput = Object.freeze({
-    workspaceId: input.workspaceId,
-    businessDate: input.businessDate,
-    source: input.source,
-    stage: 'stage_d',
-  });
-  return Object.freeze({
-    kind: 'submitWorkspaceOrchestratorIntent',
-    producerId,
-    action: 'stage_d',
-    businessDate: input.businessDate,
-    requestId,
-    rootMode,
-    logicalInput,
-    payload: logicalInput,
-  });
 }
 
 function buildReadable(businessDate: string, status: string, stages: StageResult[], counts: DailySettlement['counts']): string {
@@ -365,21 +329,6 @@ function resolveWorkspaceId(database: DatabaseSync): string {
   return 'default';
 }
 
-export function orchestrateDailyContent(input: { database: DatabaseSync; businessDate: string; workspaceId?: string; source: DailyOrchestrationSource; requestId?: string }, _deps: DailyOrchestrationDeps = {}): Promise<DailySettlement> {
-  const businessDate = typeof input?.businessDate === 'string' ? input.businessDate.trim() : '';
-  const source: DailyOrchestrationSource = input?.source === 'scheduler' || input?.source === 'mcp' || input?.source === 'today' ? input.source : 'today';
-  const suppliedWorkspaceId = typeof input?.workspaceId === 'string' ? input.workspaceId.trim() : '';
-  const workspaceId = suppliedWorkspaceId || (input?.database ? resolveWorkspaceId(input.database) : 'default');
-  const nextAction = buildDailyOrchestrationActorIntent({ businessDate, workspaceId, source, requestId: input?.requestId });
-  return Promise.reject(Object.assign(
-    new Error('CUTOVER_REQUIRED: orchestrateDailyContent retired; submit the typed intent through the workspace Actor gateway.'),
-    {
-      code: 'CUTOVER_REQUIRED' as const,
-      nextAction,
-      details: Object.freeze({ replacement: 'submitWorkspaceOrchestratorIntent', nextAction }),
-    },
-  ));
-}
 function saveSettlement(database: DatabaseSync, settlement: DailySettlement): void {
   const key = `daily_orchestration.settlement:${settlement.workspaceId}:${settlement.businessDate}`;
   const existing = database.prepare('SELECT revision FROM app_meta WHERE key=?').get(key) as { revision: number } | undefined;

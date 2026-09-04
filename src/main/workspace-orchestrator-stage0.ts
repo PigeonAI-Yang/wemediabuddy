@@ -80,20 +80,6 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     processOrSession: 'Actor-managed Manager plus Reporter or Planner PiRpcSupervisor child', legacyDirect: false
   },
   {
-    producerId: 'today.daily-orchestration', sourceLocation: "src/main/ipc-daily-content-cycle.ts:ipcMain.handle('daily-orchestration:orchestrate')",
-    trigger: 'Owner runs daily content orchestration', intendedSource: 'today_ui', intendedAction: 'stage_d', currentDirectAction: 'Typed stage_d intent submission through the workspace Actor gateway',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(today_ui, stage_d) → Actor mailbox',
-    writeTables: ['daily_content_cycles', 'daily_content_targets', 'agent_tasks', 'jobs', 'content_versions', 'content_derivative_versions'],
-    processOrSession: 'Actor-managed Reporter/Planner/Writer jobs', legacyDirect: false
-  },
-  {
-    producerId: 'today.daily-cycle-ensure', sourceLocation: "src/main/ipc-daily-content-cycle.ts:ipcMain.handle('daily-cycle:ensure')",
-    trigger: 'Exposed preload daily-cycle ensure command', intendedSource: 'today_ui', intendedAction: 'stage_d', currentDirectAction: 'Typed cycle stage_d intent submission through the workspace Actor gateway',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(today_ui, stage_d, cycle identity) → Actor mailbox',
-    writeTables: ['daily_content_cycles', 'daily_content_targets', 'jobs', 'content_versions', 'content_derivative_versions'],
-    processOrSession: 'Actor-managed employee jobs', legacyDirect: false
-  },
-  {
     producerId: 'ui.jobs-spawn', sourceLocation: "src/main/ipc-jobs.ts:ipcMain.handle('jobs:spawn')",
     trigger: 'Renderer jobsSpawn command', intendedSource: 'today_ui', intendedAction: 'stage_d', currentDirectAction: 'Typed role/action intent submission through the workspace Actor gateway',
     replacementRoute: 'submitWorkspaceOrchestratorIntent(today_ui or proposal_ui, typed role/action) → Actor mailbox',
@@ -123,17 +109,11 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     processOrSession: 'Actor-managed Reporter and optional Planner PiRpcSupervisor child', legacyDirect: false
   },
   {
-    producerId: 'mcp.daily-orchestrate', sourceLocation: "src/main/mcp.ts:server.registerTool('daily.orchestrate')",
-    trigger: 'MCP explicit A-E orchestration command', intendedSource: 'mcp', intendedAction: 'stage_d', currentDirectAction: 'Typed stage_d intent submission through the workspace Actor gateway',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(mcp, stage_d) → Actor mailbox',
-    writeTables: ['daily_content_cycles', 'daily_content_targets', 'jobs', 'content_versions', 'content_derivative_versions'], processOrSession: 'Actor-managed employee jobs', legacyDirect: false
-  },
-  {
     producerId: 'scheduler.daily-0900', sourceLocation: 'src/main/daily-orchestration-scheduler.ts:DailyOrchestrationScheduler.tick',
-    trigger: 'Persisted Asia/Shanghai daily timer', intendedSource: 'scheduler_0900', intendedAction: 'stage_d', currentDirectAction: 'Typed scheduled stage_d intent submission through the workspace Actor gateway',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(scheduler_0900, stage_d) → Actor mailbox',
-    writeTables: ['daily_content_cycles', 'daily_content_targets', 'jobs', 'content_versions', 'content_derivative_versions'],
-    processOrSession: 'Node timeout producing a stable Actor intent identity', legacyDirect: false
+    trigger: 'Persisted Asia/Shanghai daily timer', intendedSource: 'scheduler_0900', intendedAction: 'full', currentDirectAction: 'Typed scheduled full intent submission through the workspace Actor gateway',
+    replacementRoute: 'submitWorkspaceOrchestratorIntent(scheduler_0900, full) → Actor mailbox',
+    writeTables: ['agent_tasks', 'manager_tasks', 'source_scan_receipts', 'source_items', 'plans', 'plan_items'],
+    processOrSession: 'Node timeout producing one stable Actor intent identity', legacyDirect: false
   },
   {
     producerId: 'scheduler.rolling-official-web', sourceLocation: 'src/main/index.ts:DailyScanScheduler.run(official_web)',

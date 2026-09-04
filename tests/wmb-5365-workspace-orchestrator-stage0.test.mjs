@@ -17,7 +17,6 @@ import {
 } from "../src/main/workspace-orchestrator-stage0.ts";
 const EXPECTED_PRODUCERS = [
   "maintenance.topic-reproposal",
-  "mcp.daily-orchestrate",
   "mcp.daily-run-stage",
   "mcp.jobs-spawn",
   "proposal.candidate-decision",
@@ -30,8 +29,6 @@ const EXPECTED_PRODUCERS = [
   "startup.daily-resume",
   "startup.refresh-runtime-daily-handoff",
   "today.agent-start-daily-intelligence",
-  "today.daily-cycle-ensure",
-  "today.daily-orchestration",
   "ui.jobs-spawn",
 ];
 

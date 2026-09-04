@@ -12,28 +12,10 @@ import {
   readDailyCycleForToday,
 } from './daily-content-cycle.ts';
 import { getDailyOrchestrationSchedule, setDailyOrchestrationSchedule } from './daily-orchestration.ts';
-import { submitWorkspaceOrchestratorIntent } from './workspace-orchestrator-runtime.ts';
-import type { SubmitWorkspaceOrchestratorIntentInput } from './workspace-orchestrator-runtime.ts';
 
 type DailyOrchestrationIpcDependencies = BusinessIpcDependencies;
 
 export function registerDailyContentCycleIpc(dependencies: DailyOrchestrationIpcDependencies): void {
-  ipcMain.handle('daily-cycle:ensure', async (_event, input: { businessDate: string; requestId?: string }) => {
-    const runtime = await requireBusinessRuntime(dependencies);
-    const requestId = typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId();
-    const businessDate = String(input.businessDate ?? '').trim();
-    const logicalInput = { businessDate, source: 'today' } as const;
-    return submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'today.daily-cycle-ensure',
-      businessDate,
-      requestId,
-      action: 'stage_d',
-      logicalInput,
-      payload: logicalInput,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput);
-  });
-
 
   ipcMain.handle('daily-cycle:pause', async (_event, input: { businessDate: string; expectedRevision: number; requestId?: string }) => {
     const runtime = await requireBusinessRuntime(dependencies);
@@ -98,21 +80,6 @@ export function registerDailyContentCycleIpc(dependencies: DailyOrchestrationIpc
       },
     });
     return receipt;
-  });
-  ipcMain.handle('daily-orchestration:orchestrate', async (_event, input: { businessDate: string; requestId?: string; source?: string }) => {
-    const runtime = await requireBusinessRuntime(dependencies);
-    const businessDate = String(input.businessDate ?? '').trim();
-    const source = input.source === 'mcp' || input.source === 'scheduler' || input.source === 'today' ? input.source : 'today';
-    const logicalInput = { businessDate, source } as const;
-    return submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'today.daily-orchestration',
-      businessDate,
-      requestId: typeof input?.requestId === 'string' && input.requestId.trim() ? input.requestId : freshRequestId(),
-      action: 'stage_d',
-      logicalInput,
-      payload: logicalInput,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput);
   });
 
   ipcMain.handle('daily-target:transition', async (_event, input: { targetId: string; expectedRevision: number; toStatus: string; blockedReasonCode?: string | null; requestId?: string }) => {

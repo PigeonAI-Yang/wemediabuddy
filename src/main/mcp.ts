@@ -431,20 +431,6 @@ function createServerFor(rootPath: string, application?: WorkspaceApplicationMcp
         modules
       }));
     });
-    server.registerTool('daily.orchestrate', {
-      description: '提交 typed Stage D daily intent。',
-      inputSchema: { request_id: z.string().min(1), business_date: z.string().optional() }
-    }, async ({ request_id, business_date }) => {
-      return text(await submitWorkspaceOrchestratorIntent(runtime, {
-        producerId: 'mcp.daily-orchestrate',
-        businessDate: business_date?.trim() || shanghaiDate(),
-        requestId: request_id,
-        action: 'stage_d',
-        logicalInput: { source: 'mcp', action: 'stage_d' },
-        payload: { source: 'mcp', action: 'stage_d' },
-        rootMode: 'owner'
-      }));
-    });
     server.registerTool('daily.orchestration_schedule_get', {
       description: '读取每日编排调度时间与自动开关（Asia/Shanghai）。只读。',
       inputSchema: {}

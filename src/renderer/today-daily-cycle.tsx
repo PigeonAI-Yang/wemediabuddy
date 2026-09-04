@@ -170,25 +170,12 @@ export function TodayDailyCycle({
     setRunning(true);
     setMessage('');
     try {
-      const raw = await (window.wmb as unknown as { orchestrateDailyContent: (d: string, s?: string) => Promise<unknown> }).orchestrateDailyContent(businessDate, 'today');
-      const maybe = raw as { ok?: boolean; data?: unknown; error?: { message?: string } | null };
-      if (maybe && typeof maybe.ok === 'boolean') {
-        if (!maybe.ok) {
-          setMessage(maybe.error?.message ?? '编排失败');
-          return;
-        }
-        const s = maybe.data as Settlement;
-        if (s && s.businessDate) {
-          setSettlement(s);
-          persist(businessDate, s);
-        }
-      } else {
-        const s = unwrapData<Settlement>(raw);
-        if (s && s.businessDate) {
-          setSettlement(s);
-          persist(businessDate, s);
-        }
+      const result = await window.wmb.startDailyIntelligence({ businessDate });
+      if (!result?.ok) {
+        setMessage(result?.error?.message ?? '今日选题启动失败');
+        return;
       }
+      setMessage('今日选题已提交，手动与定时任务共用同一执行入口。');
     } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setRunning(false); }
   };
 
@@ -247,15 +234,15 @@ export function TodayDailyCycle({
             onClick={() => void run()}
             disabled={running || scheduleBusy}
             aria-busy={running}
-            aria-label="立即执行每日编排"
+            aria-label="立即生成今日选题"
           >
-            {running ? '编排进行中…' : '立即执行'}
+            {running ? '选题生成中…' : '立即生成'}
           </button>
-          <span className="today-orchestration-run-hint">手动触发与定时共用同一编排入口</span>
+          <span className="today-orchestration-run-hint">手动触发与定时共用同一选题入口</span>
         </div>
       </div>
 
-      {running ? <p className="today-orchestration-running" role="status" aria-live="polite">正在执行 A–E 五段编排，请稍候…</p> : null}
+      {running ? <p className="today-orchestration-running" role="status" aria-live="polite">正在扫描来源并生成今日方案，请稍候…</p> : null}
       {message ? <p role="alert" className="today-daily-cycle-msg">{message}</p> : null}
 
       {s ? (

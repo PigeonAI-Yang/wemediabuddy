@@ -20,7 +20,7 @@ test('Settings owns the complete daily automation surface', async () => {
 
   assert.match(dailyCycle, /getDailyOrchestrationSchedule/);
   assert.match(dailyCycle, /setDailyOrchestrationSchedule/);
-  assert.match(dailyCycle, /orchestrateDailyContent/);
+  assert.match(dailyCycle, /startDailyIntelligence/);
   assert.match(dailyCycle, /最近结算/);
 
   assert.doesNotMatch(today, /<TodayDailyCycle/);

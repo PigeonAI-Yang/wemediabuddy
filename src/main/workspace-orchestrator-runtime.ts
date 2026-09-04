@@ -333,11 +333,8 @@ function actorFence(actor: WorkspaceOrchestratorActor): ActorFence {
 function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry): readonly SubmitWorkspaceOrchestratorIntentInput['action'][] {
   switch (producerId) {
     case 'today.agent-start-daily-intelligence': return ['full'];
-    case 'today.daily-orchestration':
-    case 'today.daily-cycle-ensure':
     case 'ui.jobs-spawn':
     case 'mcp.jobs-spawn':
-    case 'mcp.daily-orchestrate':
     case 'scheduler.daily-0900':
     case 'scheduler.rolling-official-web':
     case 'scheduler.rolling-x-lists':

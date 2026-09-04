@@ -149,7 +149,8 @@ async function seedReadyCreationProposal({ dataRoot, userDataDir, workspaceId })
   const db = openWriteDb(dataRoot);
   try {
     const source = seedSource(db, { id: 'wmb-5395-source', title: 'WMB-5395 官方材料', summary: '可核验摘要', author: 'official', originalUrl: 'https://example.com/wmb-5395' });
-    saveCurrentPlan(db, { planDate: '2026-09-03', timezone: 'Asia/Shanghai', summary: 'WMB-5395 E2E', items: [acceptancePlanItem(source)] });
+    const planDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    saveCurrentPlan(db, { planDate, timezone: 'Asia/Shanghai', summary: 'WMB-5395 E2E', items: [acceptancePlanItem(source)] });
   } finally { db.close(); }
 }
 
