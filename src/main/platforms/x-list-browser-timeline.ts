@@ -142,6 +142,28 @@ export function authorFromTweet(tweet: Record<string, unknown>): XListPostAuthor
     avatarUrl
   };
 }
+export function linksFromTweetLegacy(legacy: Record<string, unknown>): XListPost['links'] {
+  const entities = legacy.entities as Record<string, unknown> | undefined;
+  const urls = Array.isArray(entities?.urls) ? entities.urls : [];
+  const links: NonNullable<XListPost['links']> = [];
+  const seen = new Set<string>();
+  for (const item of urls) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const url = typeof record.url === 'string' ? record.url : '';
+    const expandedUrl = typeof record.expanded_url === 'string' ? record.expanded_url : null;
+    const key = expandedUrl || url;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    links.push({
+      url,
+      expandedUrl,
+      displayUrl: typeof record.display_url === 'string' ? record.display_url : null,
+      source: 'graphql'
+    });
+  }
+  return links;
+}
 
 export function listTimelineTweetToPost(tweet: Record<string, unknown>, options: { allowNestedQuote?: boolean } = {}): XListPost | null {
   const allowNestedQuote = options.allowNestedQuote !== false;
@@ -173,6 +195,7 @@ export function listTimelineTweetToPost(tweet: Record<string, unknown>, options:
   const screenName = author.handle.slice(1);
   const text = String(legacy.full_text ?? '').trim();
   const createdAt = typeof legacy.created_at === 'string' ? new Date(legacy.created_at).toISOString() : null;
+  const links = linksFromTweetLegacy(legacy);
   const media = extractTimelineMedia(legacy);
   const metricEvidence = xMetricEvidenceMap({
     replies: legacy.reply_count,
@@ -216,6 +239,10 @@ export function listTimelineTweetToPost(tweet: Record<string, unknown>, options:
     displayName: author.displayName,
     avatarUrl: author.avatarUrl,
     text: text || (media.hasVideo ? '[视频]' : media.images.length ? '[图片]' : quotedPost ? '' : ''),
+    statusId: restId,
+    parentStatusId: typeof legacy.in_reply_to_status_id_str === 'string' ? legacy.in_reply_to_status_id_str : null,
+    conversationId: typeof legacy.conversation_id_str === 'string' ? legacy.conversation_id_str : restId,
+    links,
     postedAt: createdAt,
     images: media.images,
     imageThumbs: media.imageThumbs,

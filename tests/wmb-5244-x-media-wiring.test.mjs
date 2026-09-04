@@ -373,6 +373,13 @@ test('WMB-5244: video+poster and quote/repost fixtures freeze deterministic pare
     assert.equal(quoteCandidates[0].parentCandidateId, null);
     assert.equal(quoteCandidates[1].parentCandidateId, null, '引用帖视频为组根（无图片时）');
     assert.equal(quoteCandidates[2].parentCandidateId, quoteCandidates[1].id, '引用帖 poster 指向引用帖视频');
+
+    const quoteBody = database.prepare('SELECT extracted_text AS extractedText FROM source_body_cache WHERE source_id = ?')
+      .get(result.data.sourceIds[2]);
+    assert.equal(quoteBody?.extractedText, [
+      'quoting',
+      '引用内容 · @b\nquoted with video\n引用原帖：https://x.com/b/status/99'
+    ].join('\n\n'), '引用帖正文必须与主帖转述一起进入资料正文');
   } finally {
     database?.close();
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
@@ -408,7 +415,7 @@ test('WMB-5244: metric snapshots and cache behavior preserved alongside candidat
   }
 });
 
-test('WMB-5244: replay bumps revision and preserves old revision candidates deterministically', async () => {
+test('WMB-5244: identical replay reuses the same Source revision and media candidates', async () => {
   const root = await makeRoot();
   let database;
   try {
@@ -427,13 +434,11 @@ test('WMB-5244: replay bumps revision and preserves old revision candidates dete
     assert.equal(second.data.sourceIds[0], first.data.sourceIds[0], '同一 URL 复用同一 Source');
     const r1 = candidatesOf(database, first.data.sourceIds[0], 1);
     const r2 = candidatesOf(database, first.data.sourceIds[0], 2);
-    assert.equal(r1.length, 1, '旧 revision 候选保持不变');
-    assert.equal(r2.length, 1, '新 revision 有自己的候选');
+    assert.equal(r1.length, 1, '原 revision 候选保持不变');
+    assert.equal(r2.length, 0, '相同正文与媒体不制造新 revision');
     assert.equal(r1[0].id, 'smc:source:' + first.data.sourceIds[0] + ':r1:0:image');
-    assert.equal(r2[0].id, 'smc:source:' + first.data.sourceIds[0] + ':r2:0:image');
-    assert.equal(r1[0].ordinal, r2[0].ordinal);
     assert.equal(jobsFor(database, first.data.sourceIds[0], 1).length, 1);
-    assert.equal(jobsFor(database, first.data.sourceIds[0], 2).length, 1);
+    assert.equal(jobsFor(database, first.data.sourceIds[0], 2).length, 0);
   } finally {
     database?.close();
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

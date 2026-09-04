@@ -14,6 +14,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { XListPost } from './platforms/x-list-browser-types.ts';
 import { normalizeMediaUrl } from './platforms/x-list-browser-dom.ts';
+import { articleText } from './x-post-enrichment.ts';
 import { sourceRevisionKey } from '../shared/media-candidates.ts';
 import {
   insertMediaCandidates,
@@ -45,6 +46,77 @@ function boundedText(value: string | null | undefined): string | null {
   const text = value.replace(/\s+/g, ' ').trim();
   if (!text) return null;
   return text.slice(0, SURROUNDING_TEXT_LIMIT);
+}
+function appendSupplementalMedia(
+  slots: XMediaSlot[],
+  input: {
+    post: Pick<XListPost, 'images' | 'imageThumbs' | 'videoUrl' | 'videoPoster' | 'text'>;
+    postKind: XMediaSlot['postKind'];
+    postOrdinal: number;
+    startOrdinal: number;
+    startInPost: number;
+    captionHint: string | null;
+  }
+): { nextOrdinal: number; nextInPost: number } {
+  let ordinal = input.startOrdinal;
+  let inPost = input.startInPost;
+  const groupRootOrdinal = ordinal;
+  const surroundingText = boundedText(input.post.text);
+  const imageCount = Math.max(input.post.images.length, input.post.imageThumbs.length);
+  let groupHasMedia = false;
+  for (let index = 0; index < imageCount; index += 1) {
+    const primary = input.post.images[index] ?? input.post.imageThumbs[index] ?? '';
+    if (!primary) continue;
+    const thumb = input.post.imageThumbs[index];
+    slots.push({
+      kind: 'image',
+      originalUrl: primary,
+      alternateUrls: thumb && thumb !== primary ? [thumb] : [],
+      postKind: input.postKind,
+      postOrdinal: input.postOrdinal,
+      ordinalInPost: inPost,
+      ordinal,
+      parentOrdinal: groupHasMedia ? groupRootOrdinal : null,
+      captionHint: input.captionHint,
+      surroundingText
+    });
+    groupHasMedia = true;
+    ordinal += 1;
+    inPost += 1;
+  }
+  if (input.post.videoUrl) {
+    const videoOrdinal = ordinal;
+    slots.push({
+      kind: 'video',
+      originalUrl: input.post.videoUrl,
+      alternateUrls: [],
+      postKind: input.postKind,
+      postOrdinal: input.postOrdinal,
+      ordinalInPost: inPost,
+      ordinal: videoOrdinal,
+      parentOrdinal: groupHasMedia ? groupRootOrdinal : null,
+      captionHint: input.captionHint,
+      surroundingText
+    });
+    if (input.post.videoPoster) {
+      const poster = highestQualityPoster(input.post.videoPoster);
+      slots.push({
+        kind: 'video_poster',
+        originalUrl: poster,
+        alternateUrls: poster === input.post.videoPoster ? [] : [input.post.videoPoster],
+        postKind: input.postKind,
+        postOrdinal: input.postOrdinal,
+        ordinalInPost: inPost,
+        ordinal: videoOrdinal,
+        parentOrdinal: videoOrdinal,
+        captionHint: input.captionHint,
+        surroundingText
+      });
+    }
+    ordinal += 1;
+    inPost += 1;
+  }
+  return { nextOrdinal: ordinal, nextInPost: inPost };
 }
 
 /**
@@ -177,6 +249,47 @@ export function xPostMediaSlots(
     // 引用帖视频 poster 必须指向同组 video；组根永远不被 poster 规则覆盖。
   }
 
+  for (const threadPost of post.authorThread ?? []) {
+    const appended = appendSupplementalMedia(slots, {
+      post: threadPost,
+      postKind: ownKind,
+      postOrdinal,
+      startOrdinal: ordinal,
+      startInPost: inPost,
+      captionHint: '作者 Thread'
+    });
+    ordinal = appended.nextOrdinal;
+    inPost = appended.nextInPost;
+  }
+  for (const threadPost of quoted?.authorThread ?? []) {
+    const appended = appendSupplementalMedia(slots, {
+      post: threadPost,
+      postKind: 'quote',
+      postOrdinal,
+      startOrdinal: ordinal,
+      startInPost: inPost,
+      captionHint: '引用作者 Thread'
+    });
+    ordinal = appended.nextOrdinal;
+    inPost = appended.nextInPost;
+  }
+  const articleGroups = [
+    ...(post.articles ?? []).map((article) => ({ article, postKind: ownKind })),
+    ...(quoted?.articles ?? []).map((article) => ({ article, postKind: 'quote' as const }))
+  ];
+  for (const { article, postKind } of articleGroups) {
+    const images = article.blocks.filter((block) => block.kind === 'image').map((block) => block.url);
+    const appended = appendSupplementalMedia(slots, {
+      post: { images, imageThumbs: [], videoUrl: null, videoPoster: null, text: articleText(article) },
+      postKind,
+      postOrdinal,
+      startOrdinal: ordinal,
+      startInPost: inPost,
+      captionHint: article.title ? `X Article · ${article.title}` : 'X Article'
+    });
+    ordinal = appended.nextOrdinal;
+    inPost = appended.nextInPost;
+  }
   return { slots, nextOrdinal: ordinal };
 }
 

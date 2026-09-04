@@ -4,14 +4,17 @@ import { scheduleSourceKnowledgeCompile } from './knowledge-compile-trigger.ts';
 import { upsertSource } from './sources.ts';
 import { scheduleSourceBodyArchive } from './source-body-archive.ts';
 import { writeXListTimelineCacheIfImproved } from './x-list-timeline-cache.ts';
+import { composeXListSourceBody } from './x-list-source-content.ts';
+import { getSourceBodyCache } from './source-body-cache.ts';
 import { freezeXTimelineMediaCandidates } from './x-media-wiring.ts';
 import { saveXPostMetricSnapshot } from './x-post-metrics.ts';
 import {
-  createXList, deleteXList, ensureXListMember, readXListDetail, readXListIndex, readXListMembers, readXListTimeline,
-  updateXList, XListStopRequestedError, XListUnknownError, type XListDetail, type XListPost
+  createXList, deleteXList, ensureXListMember, readXListDetail, readXListIndex, readXListMembers, readXListPostDetail, readXListTimeline,
+  updateXList, XListStopRequestedError, XListUnknownError, type XListDetail, type XListPost, type XListPostDetail
 } from './platforms/x-list-browser.ts';
 import { type XListBrowserConfig } from './platforms/x-list-primitives.ts';
 import { XListNeedsUserError, XListPlatformRejectedError } from './platforms/x-list-session.ts';
+import { findXArticleUrls, mergeXPostDetail } from './x-post-enrichment.ts';
 import {
   getXListBinding, type XListBinding, type XListOperation, type XListOperationItemState,
   type XListSnapshot, updateXListBindingObservation, xListSnapshotFingerprint
@@ -100,11 +103,14 @@ export type CollectBoundXListTimelineInput = {
   expectedObservationJobId?: string;
   isCurrent?: () => boolean;
   readTimeline?: typeof readXListTimeline;
+  readPostDetail?: typeof readXListPostDetail;
+  replyLimit?: number;
 };
 
 export type BoundXListTimelineRead = {
   binding: XListBinding;
   timeline: { accountKey: string; detail: XListDetail; posts: XListPost[]; hasMore: boolean };
+  contentCapture: { status: 'ready' | 'partial'; attempted: number; succeeded: number; failed: number };
 };
 
 export type BoundXListTimelineCollection = {
@@ -113,6 +119,7 @@ export type BoundXListTimelineCollection = {
   snapshotIds: string[];
   candidateCount: number;
   capturedAt: string;
+  contentCapture: BoundXListTimelineRead['contentCapture'];
 };
 
 export async function readBoundXListTimeline(
@@ -126,10 +133,30 @@ export async function readBoundXListTimeline(
     const timeline = await (input.readTimeline ?? readXListTimeline)(config, binding.data.listId, Math.min(Math.max(input.limit ?? 50, 1), 50));
     if (!sameHandle(timeline.accountKey, binding.data.accountKey)) return failure('ACCOUNT_MISMATCH', '当前浏览器账号与绑定 List 的账号不一致。');
     if (timeline.posts.some((post) => !post.metricEvidence)) return failure('VALIDATION_ERROR', 'X List 指标缺少原始解析证据，未写入资料或快照。');
-    return success({ binding: binding.data, timeline });
+    const shouldEnrich = !input.readTimeline || Boolean(input.readPostDetail);
+    const enriched = shouldEnrich
+      ? await enrichTimelinePosts(config, timeline.posts, input.readPostDetail ?? readXListPostDetail, input.replyLimit ?? 30)
+      : { posts: timeline.posts, capture: { status: 'ready' as const, attempted: 0, succeeded: 0, failed: 0 } };
+    return success({ binding: binding.data, timeline: { ...timeline, posts: enriched.posts }, contentCapture: enriched.capture });
   } catch (error) {
     return failure('BROWSER_NEEDS_USER', error instanceof Error ? error.message : String(error));
   }
+}
+
+function xPostSourceTitle(post: XListPost, fallback: string): string {
+  const postText = post.text.replace(/\s+/g, ' ').trim();
+  const articleTitle = post.articles?.find((article) => article.title)?.title?.replace(/\s+/g, ' ').trim() ?? '';
+  if (!postText || /^\[(?:图片|image)\]$/i.test(postText)) return articleTitle.slice(0, 180) || fallback;
+  return postText.slice(0, 180);
+}
+
+function xPostSourceSummary(post: XListPost): string {
+  const postText = post.text.trim();
+  if (postText && !/^\[(?:图片|image)\]$/i.test(postText)) return postText;
+  const article = post.articles?.[0];
+  const previewBlock = article?.blocks.find((block) => block.kind !== 'image' && block.text.trim());
+  const preview = previewBlock?.kind === 'image' ? '' : previewBlock?.text.trim();
+  return preview || article?.title || postText;
 }
 
 export function persistBoundXListTimeline(
@@ -155,27 +182,44 @@ export function persistBoundXListTimeline(
     const capturedAt = result.detail.observation.capturedAt;
     const observationKey = input.observationKey?.trim() || `${current.id}:${capturedAt}`;
     const saved = result.posts.map((post) => {
-      const source = upsertSource(database, {
+      const body = composeXListSourceBody(post);
+      const sourceInput = {
         feedId: current.sourceFeedId,
         originalUrl: post.url,
-        title: post.text.replace(/\s+/g, ' ').slice(0, 180) || `${current.name} 动态`,
+        title: xPostSourceTitle(post, `${current.name} 动态`),
         author: post.authorHandle ?? undefined,
         publishedAt: post.postedAt ?? undefined,
-        summary: post.text,
+        summary: xPostSourceSummary(post),
         evidence: JSON.stringify({
           listId: current.listId,
           listUrl: current.canonicalUrl,
           collectedAt: capturedAt,
           avatarUrl: post.avatarUrl ?? null,
-          displayName: post.displayName ?? null
+          displayName: post.displayName ?? null,
+          replyCapture: post.replyCapture ?? null,
+          commentCount: post.comments?.length ?? 0,
+          authorThreadCount: post.authorThread?.length ?? 0,
+          articleStatuses: (post.articles ?? []).map((article) => ({ id: article.id, status: article.status }))
         })
-      });
-      // WMB-5269：结构化 X 帖子完整文本 → 同事务立即固化正文（不请求 X 原页）。
+      };
+      const existing = database.prepare(`SELECT id, revision, title, author, published_at AS publishedAt, summary
+        FROM source_items WHERE canonical_url = ? OR original_url = ? LIMIT 1`).get(post.url, post.url) as {
+          id: string; revision: number; title: string; author: string | null; publishedAt: string | null; summary: string | null;
+        } | undefined;
+      const cachedBody = existing ? getSourceBodyCache(database, existing.id) : null;
+      const unchanged = existing
+        && existing.title === sourceInput.title
+        && existing.author === (sourceInput.author ?? null)
+        && existing.publishedAt === (sourceInput.publishedAt ?? null)
+        && existing.summary === sourceInput.summary
+        && cachedBody?.status === 'ready'
+        && cachedBody.extractedText === body;
+      const source = unchanged ? { id: existing.id, revision: existing.revision, created: false } : upsertSource(database, sourceInput);
       scheduleSourceBodyArchive(database, {
         sourceId: source.id,
         sourceRevision: source.revision,
         url: post.url,
-        structuredText: post.text,
+        structuredText: body,
         contentType: 'text/plain',
         origin: 'x_list_live',
         channel: 'x_lists'
@@ -219,9 +263,8 @@ export function persistBoundXListTimeline(
       source: 'collect',
       fetchedAt: capturedAt
     });
-    // WMB-5229：直写保存成功后异步有界编译（不阻断采集/快照）。
     for (const { source } of saved) scheduleSourceKnowledgeCompile({ sourceId: source.id, revision: source.revision });
-    return success({ binding: updated!, sourceIds, snapshotIds, candidateCount, capturedAt });
+    return success({ binding: updated!, sourceIds, snapshotIds, candidateCount, capturedAt, contentCapture: read.contentCapture });
   } catch (error) {
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
   }
@@ -247,6 +290,65 @@ export async function collectBoundXListTimeline(
     database.exec('ROLLBACK');
     return failure('VALIDATION_ERROR', error instanceof Error ? error.message : String(error));
   }
+}
+
+async function enrichTimelinePosts(
+  config: XListBrowserConfig,
+  posts: XListPost[],
+  readDetail: typeof readXListPostDetail,
+  replyLimit: number
+): Promise<{ posts: XListPost[]; capture: BoundXListTimelineRead['contentCapture'] }> {
+  const enriched: XListPost[] = [];
+  let attempted = 0;
+  let succeeded = 0;
+  let failed = 0;
+  for (const post of posts) {
+    const links = post.links ?? [];
+    const hasArticleCandidate = findXArticleUrls(post.text, links).length > 0
+      || links.some((link) => /^https?:\/\/t\.co\//i.test(link.expandedUrl ?? link.url));
+    const shouldReadDetail = (post.metrics.replies ?? 0) > 0 || hasArticleCandidate;
+    if (!shouldReadDetail) {
+      enriched.push(post);
+      continue;
+    }
+    attempted += 1;
+    try {
+      const detail = await readDetail(config, post.url, replyLimit);
+      let merged = mergeXPostDetail(post, detail.post);
+      const quoted = merged.quotedPost;
+      if (quoted) {
+        const quotedLinks = quoted.links ?? [];
+        const quoteNeedsDetail = (quoted.metrics.replies ?? 0) > 0
+          || findXArticleUrls(quoted.text, quotedLinks).length > 0
+          || quotedLinks.some((link) => /^https?:\/\/t\.co\//i.test(link.expandedUrl ?? link.url));
+        if (quoteNeedsDetail) {
+          try {
+            const quoteDetail = await readDetail(config, quoted.url, replyLimit);
+            merged = { ...merged, quotedPost: mergeXPostDetail(quoted, quoteDetail.post) };
+          } catch {
+            merged = { ...merged, quotedPost: quoted };
+          }
+        }
+      }
+      enriched.push(merged);
+      succeeded += 1;
+    } catch (error) {
+      failed += 1;
+      const now = new Date().toISOString();
+      enriched.push({
+        ...post,
+        replyCapture: {
+          status: error instanceof XListNeedsUserError ? 'needs_user' : 'unavailable',
+          replyLimit,
+          hasMoreReplies: (post.metrics.replies ?? 0) > 0,
+          fetchedAt: now,
+          source: 'dom',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
+  }
+  return { posts: enriched, capture: { status: failed > 0 ? 'partial' : 'ready', attempted, succeeded, failed } };
 }
 
 function validateBoundXListTimelineContext(

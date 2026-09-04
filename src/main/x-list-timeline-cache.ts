@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import type { XArticleContent, XListPost } from './platforms/x-list-browser-types.ts';
 
-export const X_LIST_TIMELINE_CACHE_SCHEMA_VERSION = 2;
+export const X_LIST_TIMELINE_CACHE_SCHEMA_VERSION = 3;
 export const X_LIST_TIMELINE_CACHE_LIMITS = {
   maxPosts: 50,
   maxTextChars: 12_000,
@@ -14,29 +15,7 @@ export const X_LIST_TIMELINE_CACHE_LIMITS = {
   futureSkewMs: 5 * 60 * 1_000
 } as const;
 
-export type XListTimelineCachePost = {
-  url: string;
-  authorHandle: string | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-  text: string;
-  postedAt: string | null;
-  images?: string[];
-  imageThumbs?: string[];
-  hasVideo?: boolean;
-  videoPoster?: string | null;
-  videoUrl?: string | null;
-  postKind?: 'tweet' | 'repost' | 'quote';
-  repostedBy?: { handle: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
-  quotedPost?: XListTimelineCachePost | null;
-  metrics?: {
-    replies?: number | null;
-    reposts?: number | null;
-    likes?: number | null;
-    bookmarks?: number | null;
-    views?: number | null;
-  };
-};
+export type XListTimelineCachePost = Omit<XListPost, 'metricEvidence'>;
 
 export type XListTimelineCachePayload = {
   accountKey: string;
@@ -291,7 +270,7 @@ function touchAccess(database: DatabaseSync, record: XListTimelineCacheRecord, n
 }
 
 function parseRow(row: CacheRow, now: Date): XListTimelineCacheRecord | null {
-  if (Number(row.schema_version) !== X_LIST_TIMELINE_CACHE_SCHEMA_VERSION) return null;
+  if (![2, X_LIST_TIMELINE_CACHE_SCHEMA_VERSION].includes(Number(row.schema_version))) return null;
   if (row.source !== 'live' && row.source !== 'collect') return null;
   const fetchedAtMs = Date.parse(row.fetched_at);
   if (!Number.isFinite(fetchedAtMs)) return null;
@@ -334,7 +313,6 @@ function normalizePayload(value: XListTimelineCachePayload): XListTimelineCacheP
     posts.push(post);
     if (posts.length >= X_LIST_TIMELINE_CACHE_LIMITS.maxPosts) break;
   }
-  // Ensure payload bytes stay under cap by dropping trailing posts if needed.
   let payload: XListTimelineCachePayload = {
     accountKey: String(value.accountKey ?? ''),
     listId: String(value.listId ?? ''),
@@ -347,7 +325,42 @@ function normalizePayload(value: XListTimelineCachePayload): XListTimelineCacheP
   return payload;
 }
 
-function normalizePost(item: XListTimelineCachePost, allowQuote = true): XListTimelineCachePost | null {
+function normalizeArticle(item: XArticleContent): XArticleContent | null {
+  const canonicalUrl = typeof item?.canonicalUrl === 'string' ? item.canonicalUrl.trim() : '';
+  const id = typeof item?.id === 'string' ? item.id.trim() : canonicalUrl.match(/\/i\/article\/(\d+)/)?.[1] ?? '';
+  if (!id || !canonicalUrl) return null;
+  const blocks: XArticleContent['blocks'] = [];
+  for (const block of Array.isArray(item.blocks) ? item.blocks : []) {
+    if (!block || typeof block !== 'object') continue;
+    if (block.kind === 'image') {
+      if (typeof block.url === 'string' && /^https?:\/\//i.test(block.url)) {
+        blocks.push({ kind: 'image', url: block.url, alt: typeof block.alt === 'string' ? block.alt.slice(0, 500) : null });
+      }
+      continue;
+    }
+    if (typeof block.text !== 'string') continue;
+    const text = block.text.trim().slice(0, X_LIST_TIMELINE_CACHE_LIMITS.maxTextChars);
+    if (!text) continue;
+    if (block.kind === 'heading') blocks.push({ kind: 'heading', text, level: Math.max(1, Math.min(Number(block.level) || 2, 6)) });
+    else if (block.kind === 'paragraph' || block.kind === 'list_item' || block.kind === 'quote') blocks.push({ kind: block.kind, text });
+    if (blocks.length >= 400) break;
+  }
+  return {
+    id,
+    canonicalUrl,
+    title: typeof item.title === 'string' && item.title.trim() ? item.title.trim().slice(0, 500) : null,
+    authorHandle: typeof item.authorHandle === 'string' && item.authorHandle.trim() ? item.authorHandle.trim() : null,
+    displayName: typeof item.displayName === 'string' && item.displayName.trim() ? item.displayName.trim().slice(0, 300) : null,
+    publishedAt: typeof item.publishedAt === 'string' && item.publishedAt ? item.publishedAt : null,
+    blocks,
+    status: item.status === 'ready' || item.status === 'partial' || item.status === 'needs_user' ? item.status : 'unavailable',
+    source: item.source === 'graphql' || item.source === 'mixed' ? item.source : 'dom',
+    capturedAt: typeof item.capturedAt === 'string' && item.capturedAt ? item.capturedAt : new Date(0).toISOString(),
+    errorMessage: typeof item.errorMessage === 'string' && item.errorMessage ? item.errorMessage.slice(0, 1000) : null
+  };
+}
+
+function normalizePost(item: XListTimelineCachePost, allowQuote = true, allowEnrichment = true): XListTimelineCachePost | null {
   const url = typeof item?.url === 'string' ? item.url.trim() : '';
   if (!url) return null;
   const images = Array.isArray(item.images)
@@ -356,20 +369,35 @@ function normalizePost(item: XListTimelineCachePost, allowQuote = true): XListTi
   const imageThumbs = Array.isArray(item.imageThumbs)
     ? item.imageThumbs.filter((src): src is string => typeof src === 'string' && /^https?:\/\//i.test(src)).slice(0, 4)
     : images;
-  const metrics = item && typeof item.metrics === 'object' && item.metrics
-    ? {
-      replies: Number.isFinite(Number(item.metrics.replies)) ? Number(item.metrics.replies) : null,
-      reposts: Number.isFinite(Number(item.metrics.reposts)) ? Number(item.metrics.reposts) : null,
-      likes: Number.isFinite(Number(item.metrics.likes)) ? Number(item.metrics.likes) : null,
-      bookmarks: Number.isFinite(Number(item.metrics.bookmarks)) ? Number(item.metrics.bookmarks) : null,
-      views: Number.isFinite(Number(item.metrics.views)) ? Number(item.metrics.views) : null
-    }
-    : undefined;
+  const metricValue = (value: unknown): number | null => Number.isFinite(Number(value)) ? Number(value) : null;
+  const metrics = {
+    replies: metricValue(item.metrics?.replies),
+    reposts: metricValue(item.metrics?.reposts),
+    likes: metricValue(item.metrics?.likes),
+    bookmarks: metricValue(item.metrics?.bookmarks),
+    views: metricValue(item.metrics?.views)
+  };
   const repostedBy = item.repostedBy && typeof item.repostedBy === 'object' ? {
     handle: typeof item.repostedBy.handle === 'string' && item.repostedBy.handle ? item.repostedBy.handle : null,
     displayName: typeof item.repostedBy.displayName === 'string' && item.repostedBy.displayName ? item.repostedBy.displayName : null,
     avatarUrl: typeof item.repostedBy.avatarUrl === 'string' && /^https?:\/\//i.test(item.repostedBy.avatarUrl) ? item.repostedBy.avatarUrl : null
   } : null;
+  const nested = (values: XListTimelineCachePost[] | undefined): XListTimelineCachePost[] => (Array.isArray(values) ? values : [])
+    .map((value) => normalizePost(value, false, false))
+    .filter((value): value is XListTimelineCachePost => Boolean(value))
+    .slice(0, 40);
+  const articles = (Array.isArray(item.articles) ? item.articles : [])
+    .map(normalizeArticle)
+    .filter((value): value is XArticleContent => Boolean(value));
+  const links = (Array.isArray(item.links) ? item.links : []).flatMap((link) => {
+    if (!link || typeof link.url !== 'string' || !/^https?:\/\//i.test(link.url)) return [];
+    return [{
+      url: link.url,
+      expandedUrl: typeof link.expandedUrl === 'string' && /^https?:\/\//i.test(link.expandedUrl) ? link.expandedUrl : null,
+      displayUrl: typeof link.displayUrl === 'string' ? link.displayUrl.slice(0, 500) : null,
+      source: link.source === 'graphql' || link.source === 'text' ? link.source : 'dom' as const
+    }];
+  }).slice(0, 30);
   return {
     url,
     authorHandle: typeof item.authorHandle === 'string' && item.authorHandle ? item.authorHandle : null,
@@ -384,7 +412,26 @@ function normalizePost(item: XListTimelineCachePost, allowQuote = true): XListTi
     videoUrl: typeof item.videoUrl === 'string' && /^https?:\/\//i.test(item.videoUrl) ? item.videoUrl : null,
     postKind: item.postKind === 'repost' || item.postKind === 'quote' ? item.postKind : 'tweet',
     repostedBy,
-    quotedPost: allowQuote && item.quotedPost ? normalizePost(item.quotedPost, false) : null,
+    quotedPost: allowQuote && item.quotedPost ? normalizePost(item.quotedPost, false, allowEnrichment) : null,
+    statusId: typeof item.statusId === 'string' && item.statusId ? item.statusId : null,
+    parentStatusId: typeof item.parentStatusId === 'string' && item.parentStatusId ? item.parentStatusId : null,
+    conversationId: typeof item.conversationId === 'string' && item.conversationId ? item.conversationId : null,
+    ...(Number.isInteger(item.captureOrdinal) ? { captureOrdinal: item.captureOrdinal } : {}),
+    ...(Number.isInteger(item.conversationOrdinal) ? { conversationOrdinal: item.conversationOrdinal } : {}),
+    ...(typeof item.isRootAuthor === 'boolean' ? { isRootAuthor: item.isRootAuthor } : {}),
+    ...(typeof item.isAuthorThread === 'boolean' ? { isAuthorThread: item.isAuthorThread } : {}),
+    links,
+    authorThread: allowEnrichment ? nested(item.authorThread) : [],
+    comments: allowEnrichment ? nested(item.comments) : [],
+    articles,
+    ...(item.replyCapture ? { replyCapture: {
+      status: item.replyCapture.status === 'ready' || item.replyCapture.status === 'partial' || item.replyCapture.status === 'needs_user' ? item.replyCapture.status : 'unavailable',
+      replyLimit: Math.max(0, Math.min(Number(item.replyCapture.replyLimit) || 0, 40)),
+      hasMoreReplies: Boolean(item.replyCapture.hasMoreReplies),
+      fetchedAt: typeof item.replyCapture.fetchedAt === 'string' ? item.replyCapture.fetchedAt : new Date(0).toISOString(),
+      source: item.replyCapture.source === 'graphql' || item.replyCapture.source === 'mixed' ? item.replyCapture.source : 'dom',
+      errorMessage: typeof item.replyCapture.errorMessage === 'string' ? item.replyCapture.errorMessage.slice(0, 1000) : null
+    } } : {}),
     metrics
   };
 }

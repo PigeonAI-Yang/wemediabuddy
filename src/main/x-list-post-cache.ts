@@ -2,8 +2,10 @@ import type { XListPostDetail } from './platforms/x-list-browser.ts';
 
 const POST_DETAIL_TTL_MS = 10 * 60_000;
 const POST_DETAIL_MAX = 80;
+export const X_LIST_POST_CACHE_SCHEMA_VERSION = 2;
 
 type CacheEntry = {
+  schemaVersion: number;
   value: { accountKey: string; post: XListPostDetail };
   fetchedAt: number;
   lastAccessedAt: number;
@@ -30,6 +32,10 @@ export function readXListPostCache(scope: XListPostCacheScope, statusUrl: string
   if (!key) return null;
   const entry = cache.get(key);
   if (!entry) return null;
+  if (entry.schemaVersion !== X_LIST_POST_CACHE_SCHEMA_VERSION) {
+    cache.delete(key);
+    return null;
+  }
   const age = Date.now() - entry.fetchedAt;
   if (age > POST_DETAIL_TTL_MS) {
     cache.delete(key);
@@ -48,7 +54,7 @@ export function writeXListPostCache(scope: XListPostCacheScope, statusUrl: strin
   const key = cacheKey(scope, statusUrl);
   if (!key) return;
   const now = Date.now();
-  cache.set(key, { value, fetchedAt: now, lastAccessedAt: now });
+  cache.set(key, { value, schemaVersion: X_LIST_POST_CACHE_SCHEMA_VERSION, fetchedAt: now, lastAccessedAt: now });
   if (cache.size <= POST_DETAIL_MAX) return;
   const ordered = [...cache.entries()].sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt);
   const overflow = ordered.slice(0, Math.max(0, cache.size - POST_DETAIL_MAX));

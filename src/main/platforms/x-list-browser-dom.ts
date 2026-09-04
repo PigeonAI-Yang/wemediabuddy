@@ -284,6 +284,12 @@ export async function readArticlePost(article: Locator, options: { preferFullTex
       || (root.querySelector('img[src*="ext_tw_video_thumb"], img[src*="amplify_video_thumb"], img[src*="tweet_video_thumb"]') as HTMLImageElement | null)?.src
       || null;
     const postedAt = root.querySelector('time')?.getAttribute('datetime') || null;
+    const links = Array.from(root.querySelectorAll('a[href]'))
+      .map((anchor) => ({
+        url: (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || '',
+        displayUrl: ((anchor as HTMLElement).innerText || anchor.textContent || '').trim() || null
+      }))
+      .filter((item) => /^https?:\/\//i.test(item.url) && !/\/(?:photo|video)\/\d+(?:$|[?#])/i.test(item.url));
 
     const labelFrom = (selectors: string[], patterns: RegExp[]): string | null => {
       for (const selector of selectors) {
@@ -345,6 +351,7 @@ export async function readArticlePost(article: Locator, options: { preferFullTex
       hasVideo,
       videoPoster,
       videoUrl,
+      links,
       metricLabels
     };
   }).catch(() => null);
@@ -362,6 +369,10 @@ export async function readArticlePost(article: Locator, options: { preferFullTex
     displayName: raw.displayName,
     avatarUrl: raw.avatarUrl,
     text: text || (raw.hasVideo ? '[视频]' : raw.images.length ? '[图片]' : ''),
+    statusId: raw.statusHref.match(/\/status\/(\d+)/)?.[1] ?? null,
+    parentStatusId: null,
+    conversationId: null,
+    links: raw.links.map((link) => ({ url: link.url, expandedUrl: link.url, displayUrl: link.displayUrl, source: 'dom' as const })),
     postedAt: raw.postedAt,
     images: fullImages,
     imageThumbs: thumbs,

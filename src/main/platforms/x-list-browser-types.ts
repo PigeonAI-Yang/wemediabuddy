@@ -8,6 +8,37 @@ export type XListPostAuthor = {
   displayName: string | null;
   avatarUrl: string | null;
 };
+export type XPostLink = {
+  url: string;
+  expandedUrl: string | null;
+  displayUrl: string | null;
+  source: 'graphql' | 'dom' | 'text';
+};
+export type XArticleBlock =
+  | { kind: 'paragraph' | 'list_item' | 'quote'; text: string }
+  | { kind: 'heading'; text: string; level: number }
+  | { kind: 'image'; url: string; alt: string | null };
+export type XArticleContent = {
+  id: string;
+  canonicalUrl: string;
+  title: string | null;
+  authorHandle: string | null;
+  displayName: string | null;
+  publishedAt: string | null;
+  blocks: XArticleBlock[];
+  status: 'ready' | 'partial' | 'unavailable' | 'needs_user';
+  source: 'graphql' | 'dom' | 'mixed';
+  capturedAt: string;
+  errorMessage: string | null;
+};
+export type XPostReplyCapture = {
+  status: 'ready' | 'partial' | 'unavailable' | 'needs_user';
+  replyLimit: number;
+  hasMoreReplies: boolean;
+  fetchedAt: string;
+  source: 'graphql' | 'dom' | 'mixed';
+  errorMessage: string | null;
+};
 export type XListPost = {
   url: string;
   authorHandle: string | null;
@@ -26,6 +57,18 @@ export type XListPost = {
   repostedBy?: XListPostAuthor | null;
   /** 被引用的原帖（quote；repost 一般为空） */
   quotedPost?: XListPost | null;
+  statusId?: string | null;
+  parentStatusId?: string | null;
+  conversationId?: string | null;
+  captureOrdinal?: number;
+  conversationOrdinal?: number;
+  isRootAuthor?: boolean;
+  isAuthorThread?: boolean;
+  links?: XPostLink[];
+  authorThread?: XListPost[];
+  comments?: XListPost[];
+  articles?: XArticleContent[];
+  replyCapture?: XPostReplyCapture;
   metrics: {
     replies: number | null;
     reposts: number | null;
@@ -37,7 +80,10 @@ export type XListPost = {
 };
 export type XListPostDetail = XListPost & {
   replies: XListPost[];
+  authorThread: XListPost[];
+  comments: XListPost[];
   hasMoreReplies: boolean;
+  replyCapture: XPostReplyCapture;
 };
 export type XListCreateInput = { name: string; description?: string; isPrivate: boolean };
 export type XListUpdateInput = { listId: string; name?: string; description?: string; isPrivate?: boolean };
