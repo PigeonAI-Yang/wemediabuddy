@@ -1,0 +1,60 @@
+✔ foundation anchors: accent, Inter, topbar 56px (2.2607ms)
+✔ page CSS color literals stay within shrink-only allowlist (16.1216ms)
+✔ allowlist comment documents Phase 3 shrink policy (0.6513ms)
+(node:44228) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/planning-stage.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44228) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ actor matrix: ordinary planner cannot approve, desk and Owner UI can (3300.4131ms)
+✔ stale revision conflict and reason required for reject (988.0698ms)
+✔ illegal jumps are rejected (998.0253ms)
+✔ not-found and validation mapping to envelope semantics (955.2996ms)
+✔ no direct agent_tasks/jobs INSERT in owned production code (3.0627ms)
+✔ bridge methods expose owner decisions without a second production-advance command (1.4478ms)
+✔ unapproved legacy link/create denied (1106.0574ms)
+(node:49304) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:49304) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Stage D reports production ownership without advancing approved plans (1320.9294ms)
+✔ WMB-5337 scheduler keeps Asia/Shanghai timing and persisted toggle (1151.912ms)
+✔ Daily automation uses the unified full-intent entry (1.3106ms)
+✔ Today orchestration shows Asia/Shanghai schedule, enable/disable, Run Now, in-progress guard (0.3637ms)
+✔ Persisted settlement with five stage rows A–E and explicit status messaging (0.36ms)
+✔ Recovery affordances use existing navigation, no final publish action (0.1734ms)
+✔ TodayDailyCycle is mounted in Settings and remains keyboard accessible (0.1275ms)
+✔ Styling uses foundation tokens only, no new brand colors or gradients (1.2807ms)
+✔ Settings owns the complete daily automation surface (15.1085ms)
+(node:35684) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35684) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5365 freezes the approved design identity and bounded defaults (1.6857ms)
+✔ WMB-5365 producer and runtime census is explicit, unique, and replacement-bound (0.5923ms)
+✔ WMB-5365 freezes a build-bound producer registry manifest (1.974ms)
+✔ WMB-5365 producer allowlist fails closed on unknown or drifted call sites (0.34ms)
+✔ WMB-5365 error matrix is exhaustive, unique, and fail-closed (0.2268ms)
+✔ WMB-5365 baseline collection is read-only and fingerprints the current workspace (1253.271ms)
+(node:51664) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:51664) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5395 one production authorization reaches attributed draft review in the same workspace (1612.5886ms)
+✔ WMB-5398 product surfaces expose no standalone judge command (17.4522ms)
+✔ WMB-5398 Planner keeps one submit command but no request capability (2.0883ms)
+✔ WMB-5399 daily content projections no longer submit Stage D production (10.7382ms)
+✔ WMB-5399 Executor rejects legacy Stage D instead of freezing empty success (3.0379ms)
+✔ WMB-5400 Owner and scheduler share the executable full-intent entry (11.5474ms)
+✔ WMB-5400 production has no Judge or Stage D proposal successor surface (3.2112ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7736.0528

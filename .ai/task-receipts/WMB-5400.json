@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5400",
+  "implementationCommit": "99d6bfa",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/daily-orchestration-scheduler.ts",
+    "src/main/daily-orchestration.ts",
+    "src/main/ipc-daily-content-cycle.ts",
+    "src/main/mcp.ts",
+    "src/main/workspace-orchestrator-runtime.ts",
+    "src/main/workspace-orchestrator-stage0.ts",
+    "src/preload/preload.ts",
+    "src/renderer/today-daily-cycle.tsx",
+    "tests/e2e/investigation.test.mjs",
+    "tests/wmb-5337-orchestration.test.mjs",
+    "tests/wmb-5337-today-orchestration-ui.test.mjs",
+    "tests/wmb-5340-daily-automation-settings.test.mjs",
+    "tests/wmb-5365-workspace-orchestrator-stage0.test.mjs",
+    "tests/wmb-5400-intelligent-topic-flow-acceptance.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5400-intelligent-topic-flow-acceptance.test.mjs tests/wmb-5398-judge-command-subtraction.test.mjs tests/wmb-5399-stage-d-production-subtraction.test.mjs tests/wmb-5395-creation-flow-acceptance.test.mjs tests/wmb-5337-orchestration.test.mjs tests/wmb-5337-today-orchestration-ui.test.mjs tests/wmb-5340-daily-automation-settings.test.mjs tests/wmb-5365-workspace-orchestrator-stage0.test.mjs tests/planning-stage-orchestration.test.mjs tests/design-tokens-drift.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5400.verify.log"
+  },
+  "closedAt": "2026-09-04T08:51:00.722Z"
+}
