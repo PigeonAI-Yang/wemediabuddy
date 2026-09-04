@@ -87,6 +87,7 @@ export type AssembleBriefOptions = {
   now?: Date;
   businessDate?: string;
   watermark?: string | null;
+  until?: string;
   fallbackHours?: number;
   publishedDays?: number;
   reviewLimit?: number;
@@ -112,6 +113,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   const reviewLimit = options.reviewLimit ?? 3;
   const findingLimit = options.findingLimit ?? 5;
   const sourceLimit = options.sourceLimit ?? 60;
+  const until = options.until ?? now.toISOString();
   const businessDate = options.businessDate ?? shanghaiDate(now);
 
   const profile = readWorkspaceProfile(database);
@@ -178,21 +180,21 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
       collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
       timeliness, priority
     FROM source_items
-    WHERE collected_at > ? AND management_status != 'archived'
+    WHERE julianday(collected_at) > julianday(?) AND julianday(collected_at) <= julianday(?) AND management_status != 'archived'
       AND (categories_json LIKE '%signal_only%' OR categories_json LIKE '%demand%' OR categories_json LIKE '%question%' OR categories_json LIKE '%controversy%')
     ORDER BY collected_at DESC
     LIMIT ?
-  `).all(since, SIGNAL_QUOTA) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
+  `).all(since, until, SIGNAL_QUOTA) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
   // Recent rows including potential overflow for deduplication
   const recentRows = database.prepare(`
     SELECT id, title, canonical_url AS canonicalUrl, author, published_at AS publishedAt,
       collected_at AS collectedAt, summary, categories_json AS categories, value_judgment AS valueJudgment,
       timeliness, priority
     FROM source_items
-    WHERE collected_at > ? AND management_status != 'archived'
+    WHERE julianday(collected_at) > julianday(?) AND julianday(collected_at) <= julianday(?) AND management_status != 'archived'
     ORDER BY collected_at DESC
     LIMIT ?
-  `).all(since, sourceLimit + 1) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
+  `).all(since, until, sourceLimit + 1) as Array<Omit<BriefIncrementSource, 'categories'> & { categories: string }>;
   // Merge: guaranteed signals first, then fill with recent not already included
   const signalIds = new Set(signalRows.map((r) => r.id));
   const filteredRecent = recentRows.filter((r) => !signalIds.has(r.id));
@@ -202,7 +204,7 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   // To preserve recency ordering: sort combined by collected_at DESC before slice, but signals should not be dropped if they are older
   // Instead, we keep signal guarantee: sort combined DESC, then slice to sourceLimit, ensuring at least min(signalRows.length, SIGNAL_QUOTA) signals survive
   combined.sort((a, b) => String(b.collectedAt).localeCompare(String(a.collectedAt)));
-  const truncated = recentRows.length > neededFromRecent;
+  const truncated = recentRows.length > sourceLimit;
   const orderedRows = combined.slice(0, sourceLimit).sort((a, b) => String(a.collectedAt).localeCompare(String(b.collectedAt)));
   const sources: BriefIncrementSource[] = orderedRows.map((row) => ({
     ...row,
@@ -214,16 +216,16 @@ export function assembleEditorialBrief(database: DatabaseSync, options: Assemble
   // 被判 irrelevant 的条数 + 原因码 Top3，供编辑自审（「本轮另判 N 条与本赛道无关」）。
   const laneFilteredCountRow = database.prepare(`
     SELECT count(*) AS count FROM source_lane_judgments
-    WHERE decision = 'irrelevant' AND judged_at >= ?
-  `).get(since) as { count: number };
+    WHERE decision = 'irrelevant' AND julianday(judged_at) >= julianday(?) AND julianday(judged_at) <= julianday(?)
+  `).get(since, until) as { count: number };
   const laneFilteredReasonRows = database.prepare(`
     SELECT reason_code AS code, count(*) AS count
     FROM source_lane_judgments
-    WHERE decision = 'irrelevant' AND judged_at >= ?
+    WHERE decision = 'irrelevant' AND julianday(judged_at) >= julianday(?) AND julianday(judged_at) <= julianday(?)
     GROUP BY reason_code
     ORDER BY count(*) DESC, reason_code ASC
     LIMIT 3
-  `).all(since) as Array<{ code: string; count: number }>;
+  `).all(since, until) as Array<{ code: string; count: number }>;
   const laneFiltered = {
     count: Number(laneFilteredCountRow?.count ?? 0),
     reasonCodes: laneFilteredReasonRows.map((row) => ({ code: row.code, count: Number(row.count) }))

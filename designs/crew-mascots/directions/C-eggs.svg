@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360">
+  <g fill="#211D29">
+    <!-- 桌助：标准蛋 + 短苗呆毛 -->
+    <ellipse cx="140" cy="212" rx="88" ry="108"/>
+    <path d="M140 108 Q138 88 152 80" stroke="#211D29" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <circle cx="156" cy="76" r="12"/>
+    <!-- 记者：高蛋 + 前倾长呆毛 -->
+    <ellipse cx="420" cy="180" rx="70" ry="140"/>
+    <path d="M420 44 Q448 40 460 60" stroke="#211D29" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <circle cx="462" cy="66" r="12"/>
+    <!-- 策划：圆蛋 + 卷卷呆毛 -->
+    <ellipse cx="700" cy="215" rx="100" ry="105"/>
+    <circle cx="700" cy="88" r="14" stroke="#211D29" stroke-width="10" fill="none"/>
+    <!-- 写手：瘦蛋 + 笔形呆毛 -->
+    <ellipse cx="980" cy="195" rx="58" ry="125"/>
+    <rect x="982" y="66" width="10" height="80" rx="5" transform="rotate(18 987 106)"/>
+    <!-- 资料员：扁蛋 + 平顶呆毛 -->
+    <ellipse cx="1260" cy="240" rx="122" ry="80"/>
+    <rect x="1220" y="146" width="80" height="14" rx="7"/>
+  </g>
+</svg>

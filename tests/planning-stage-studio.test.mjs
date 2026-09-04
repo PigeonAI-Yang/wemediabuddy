@@ -1,4 +1,4 @@
-// WMB-5353 Studio truth: planning status gates Writer, ready awaits approval, approved uses plan_item.advance, v0 shows 尚未生成正文, ledger 44px preserved
+// Studio truth: approval is the only production decision; approved projects reopen directly; v0 truth is preserved.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -16,36 +16,28 @@ const derivativeUrl = new URL('../src/main/content-derivative.ts', import.meta.u
 const studioContentUrl = new URL('../src/main/studio-content.ts', import.meta.url);
 const cssUrl = new URL('../src/renderer/styles-studio.css', import.meta.url);
 
-test('WMB-5353 draft and rejected expose no Writer/start-production entry', async () => {
+test('draft and rejected proposals expose no Writer or manual production entry', async () => {
   const proposals = await readFile(proposalsUrl, 'utf8');
   const ledger = await readFile(proposalLedgerUrl, 'utf8');
-  assert.match(proposals, /planningStatus\s*===\s*'draft'[\s\S]*?派策划/);
-  assert.match(proposals, /planningStatus\s*===\s*'rejected'[\s\S]*?重新策划/);
-  assert.match(proposals, /onCreate=\{planningStatus\s*===\s*'approved'/);
   assert.match(ledger, /export function isDraft/);
   assert.match(ledger, /export function isRejected/);
-  assert.doesNotMatch(proposals, /startStudioDraft|writeDraft/);
+  assert.doesNotMatch(proposals, /startStudioDraft|writeDraft|advancePlanItem|plan-item:advance/);
 });
-
 test('WMB-5353 ready_for_review clearly awaits approval', async () => {
   const proposals = await readFile(proposalsUrl, 'utf8');
   const ledger = await readFile(proposalLedgerUrl, 'utf8');
   assert.match(ledger, /export function isReadyForReview/);
-  assert.match(proposals, /planningStatus\s*===\s*'ready_for_review'[\s\S]*?驳回[\s\S]*?批准并推进/);
-  assert.match(proposals, /planningStatus\s*!==\s*'approved'[\s\S]*?proposal-planning-buttons/);
+  assert.match(proposals, /planningStatus\s*===\s*'ready_for_review'[\s\S]*?驳回[\s\S]*?批准并开始创作/);
   assert.doesNotMatch(proposals, /planningStatus\s*===\s*'ready_for_review'[^\n]*advance\(item\)/);
 });
 
-test('WMB-5353 approved invokes fixed plan_item.advance idempotently', async () => {
+test('approved proposal reopens its existing project without a second production command', async () => {
   const proposals = await readFile(proposalsUrl, 'utf8');
   const ledger = await readFile(proposalLedgerUrl, 'utf8');
-  assert.match(ledger, /'plan_item\.advance'/);
-  assert.match(ledger, /export async function advancePlanItem/);
-  assert.match(ledger, /w\.advancePlanItem\s*\?\?\s*w\.planItemAdvance/);
-  assert.match(ledger, /requestId\s*\?/);
-  assert.match(proposals, /onCreate=\{planningStatus\s*===\s*'approved'\s*\?\s*\(\)\s*=>\s*void advance\(item\)/);
-  assert.match(proposals, /window\.wmb\.advancePlanItem\(\{\s*planItemId:\s*item\.planItemId\s*\}\)/);
-  assert.match(proposals, /await\s+load\(tabRef\.current,\s*0,\s*false\)/);
+  assert.doesNotMatch(ledger, /plan_item\.advance|advancePlanItem/);
+  assert.doesNotMatch(proposals, /window\.wmb\.advancePlanItem|onCreate=\{planningStatus\s*===\s*'approved'/);
+  assert.match(proposals, /planningStatus === 'approved' && item\.adoptedProjectId/);
+  assert.match(proposals, /打开创作项目/);
 });
 
 test('WMB-5353 v0 renders 尚未生成正文 and never infers saved from dirty', async () => {

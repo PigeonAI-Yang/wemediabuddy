@@ -1,0 +1,179 @@
+{
+  "task": "WMB-5338-A12",
+  "capturedAt": "2026-08-22T21:40:15.000Z",
+  "package": {
+    "command": "npm exec electron-forge package -- --arch=x64 --platform=win32 --out-dir J:/wmb-out",
+    "exitCode": 0,
+    "executable": "J:/wmb-out/WeMediaBuddy-win32-x64/WeMediaBuddy.exe",
+    "sha256": "8a77d7a3877ad712e216bffd47091088cd627b729a4f1d404fd6bd04a98ab534"
+  },
+  "isolatedFirstRun": {
+    "userData": "C:/Users/yangda01/tmp/wmb5338-first-run-userdata",
+    "screenshot": "packaged-first-run.png",
+    "onboardingState": {
+      "currentStep": "workspace",
+      "workspace": null,
+      "ai": null,
+      "completedAt": null
+    },
+    "workspaceStepReadback": [
+      "选择内容与数据住在哪里",
+      "创建默认工作空间",
+      "使用自定义目录",
+      "选择目录"
+    ],
+    "processExit": 0
+  },
+  "relocatedWorkspace": {
+    "userData": "C:/Users/yangda01/tmp/wmb5338-packaged-userdata",
+    "dataRoot": "J:/PigeonYang/WeMediaBuddyData",
+    "dataRootJsonPath": "C:/Users/yangda01/tmp/wmb5338-packaged-userdata/data-root.json",
+    "workspaceRegistryPath": "C:/Users/yangda01/tmp/wmb5338-packaged-userdata/workspace-registry.json",
+    "activeWorkspaceId": "a755adf2-4e8d-4abd-b616-4d7934f730f1",
+    "workspaceCount": 1,
+    "processExit": 1
+  },
+  "authoritativeResearch": {
+    "taskId": "0dfca250-6284-402a-b0e0-122dd4ab30ec",
+    "claimId": "557ee8d0-efb2-432f-bd09-d59fc19cfbdc",
+    "claimKey": "k1",
+    "claimStatus": "supported",
+    "claimText": "事实声明：武大杨景媛论文涉AI疑点需核验学术规范",
+    "taskIntent": "research",
+    "taskStatus": "running",
+    "taskPhase": "resume_pending",
+    "taskContextProjectId": "d6dc2d38-8013-4e98-8320-6e3185586446",
+    "taskContextWorkspaceId": "a755adf2-4e8d-4abd-b616-4d7934f730f1",
+    "receiptId": "13162a3c-5522-457d-95be-a887ea65035c",
+    "receiptCommand": "research_claims.upsert_batch",
+    "receiptActorType": "scheduler",
+    "receiptActorId": "research-runner",
+    "receiptStatus": "ok",
+    "receiptSideEffect": "committed",
+    "receiptRequestId": "0dfca250-6284-402a-b0e0-122dd4ab30ec:claims:281f4749d92c0aa895623641",
+    "targetId": "dc5c85d1-e349-468e-a208-e73dd93f9722",
+    "targetProjectId": "d6dc2d38-8013-4e98-8320-6e3185586446",
+    "targetPlanItemId": "bc769110-431c-4984-a0e7-ba15b6e0f7bd",
+    "gateQuery": "SELECT COUNT(*) as c FROM research_claims rc JOIN agent_tasks at ON at.id = rc.task_id WHERE rc.status='supported' AND instr(at.context_refs_json, ?) > 0",
+    "gateParam": "d6dc2d38-8013-4e98-8320-6e3185586446",
+    "gateCount": 1,
+    "gateSatisfied": true,
+    "isResearchGateSatisfied": true,
+    "verifiedAt": "2026-08-22T12:38:28.215Z",
+    "receiptCreatedAt": "2026-08-22T12:38:28.216Z",
+    "obsoleteIdsAbsent": [
+      "bc85eecf-5e08-4da0-8893-20237a48888a",
+      "4fe7897f-b089-431d-81ac-829348632b9c",
+      "1316a23a-32ef-44f3-8183-a9c40c0697ff"
+    ],
+    "verifiedRows": {
+      "agentTasks": 1,
+      "researchClaims": 1
+    }
+  },
+  "uiSurfaces": {
+    "channelReadinessZhihuAiTopic": {
+      "observedAt": "2026-08-22T21:30:07",
+      "path": "设置 > 情报渠道",
+      "text": "知乎 AI 专题 1 个来源，0 个可运行 另有 1 个需要处理；详情：知乎 AI 专题 需要处理 https://www.zhihu.com/topic/19551275/hot 已检查 2026/8/22 20:07:45 · 发现 2，入库 2",
+      "screenshot": "packaged-channels.png",
+      "note": "UI 显示 0 可运行/需要处理，最新一次扫描已入库 2，渠道未标记为可运行"
+    },
+    "today": {
+      "observedAt": "2026-08-22T21:30:30",
+      "path": "今日",
+      "text": "今日新资料 130 今日内容机会 7 进行中项目 36；每日编排 计划 Asia/Shanghai 09:00 · 自动已启用；定时/停用自动/立即执行；暂无结算记录 · 点击“立即执行”触发 A–E 五段编排",
+      "screenshot": "packaged-today.png"
+    },
+    "yesterdayIteration": {
+      "observedAt": "2026-08-22T21:30:30",
+      "path": "今日 > 昨日迭代",
+      "text": "昨日迭代 未发布草稿 0 · 已发布内容 0；昨日暂无迭代队列 · 未发布草稿与已发布内容均为空；修订仅在工作室追加新版本，不直接发布",
+      "screenshot": "packaged-today.png"
+    },
+    "cycleSettlementStatus": {
+      "observedAt": "2026-08-22T21:30:30",
+      "text": "每日编排状态：自动已启用，暂无结算记录；cycle 2f88eba4 business_date 2026-08-22 target_count 2 status running",
+      "screenshot": "packaged-today.png"
+    },
+    "proposalBoundaryItem": {
+      "observedAt": "2026-08-22T21:40:05",
+      "path": "选题 > 选题台账 > 已采纳",
+      "text": "为什么Yann lecun（杨立昆）对chatGPT持否定态度？ 选题日 2026-08-22 写入 21:40 已采纳 评分 100 ｜ 受众25/25 观点20/20 证据20/20 时效15/15 转化15/15 成本5/5 路由:boundary；武大项同页显示 路由:automatic",
+      "targetId": "8aae5605-7d53-450a-a729-5205fc6de27a",
+      "sourceItemId": "f9bed93f-14fb-433f-a9de-233271883eef",
+      "route": "boundary",
+      "selectionMode": "owner_approved",
+      "status": "selected",
+      "planItemId": "8342f64f-916e-498a-82df-c8628917885b",
+      "projectId": "6ce12d8a-d12d-449d-baca-fcdc55b0f3c8",
+      "receiptId": "e91ad226-82e9-4f23-9415-be8d1ca7a9f0",
+      "receiptCommand": "daily_content_target.ensure_article",
+      "requestId": "wmb5338-boundary-1787406003062-f3fa81",
+      "actor": "owner_ui/renderer",
+      "sideEffect": "committed",
+      "screenshot": "packaged-proposals-boundary.png",
+      "note": "一次性绑定 via window.wmb.ensureTargetArticle，DB plan/project 已 linkage，UI直观路由:boundary"
+    },
+    "studioArticleVideo": {
+      "observedAt": "2026-08-22T21:30:54",
+      "path": "创作 > 创作库 / 如何看待武汉大学杨景媛毕业论文...",
+      "text": "主产物 文章主稿 状态 ready 版本 4 最新 d2bf4517-d5cc-4859-b99d-caa5f2ee996b；衍生产物 视频文案 就绪 视频文案已就绪 最新 v8 · ready 引用 d2bf4517 已对齐最新文章版本；教程型长视频讲解 问题-原理-分步演示-总结",
+      "screenshot": "packaged-studio-current.png",
+      "articleVersionId": "d2bf4517-d5cc-4859-b99d-caa5f2ee996b",
+      "articleVersionNumber": 4,
+      "derivativeId": "7d95de05-6092-4aef-ab4b-3747dfa3bc0e",
+      "scriptVersion": 8,
+      "scriptSourceVersionId": "d2bf4517-d5cc-4859-b99d-caa5f2ee996b",
+      "readiness": "script_ready",
+      "isStale": false,
+      "isAligned": true,
+      "uiText": "视频文案已就绪 已对齐最新文章版本"
+    },
+    "screenshots": [
+      "packaged-today.png",
+      "packaged-proposals.png",
+      "packaged-studio-current.png",
+      "packaged-channels.png",
+      "packaged-proposals-boundary.png"
+    ],
+    "gaps": []
+  },
+  "publishingReadback": {
+    "publicationsCount": 12,
+    "publicationAttemptsCount": 8,
+    "platformVersionsCount": 11,
+    "noPublishDuringWindow": true,
+    "window": "2026-08-22T12:38:28Z 至 2026-08-22T21:40Z",
+    "observedCommands": "command_receipts 中无 publish/update，窗口内仅 publication.recover_interrupted/metrics 及本次 ensure_article，无研究/写稿/发布启动",
+    "note": "不主张 before/after 基线，仅报告当前计数与窗口内零发布命令"
+  },
+  "stale": {
+    "articleVersionId": "d2bf4517-d5cc-4859-b99d-caa5f2ee996b",
+    "scriptSourceVersionId": "fecdb1bc-197b-489a-820f-2325b6bed85c",
+    "readiness": "stale",
+    "isStale": true,
+    "uiText": "视频文案已过期",
+    "articleSaveReceiptId": "48ebcc7f-22cc-4056-8c46-30643cafa2fd",
+    "articleFinalizeReceiptId": "bf7ce592-1f9a-4964-a2a4-edb76f59ae31",
+    "screenshot": "packaged-stale.png"
+  },
+  "ready": {
+    "articleVersionId": "d2bf4517-d5cc-4859-b99d-caa5f2ee996b",
+    "scriptSourceVersionId": "d2bf4517-d5cc-4859-b99d-caa5f2ee996b",
+    "scriptVersion": 8,
+    "readiness": "script_ready",
+    "isStale": false,
+    "uiText": "视频文案已就绪",
+    "scriptSaveReceiptId": "2a2ff90c-2184-4db1-9bcc-a8a284f47e07",
+    "scriptFinalizeReceiptId": "82cc2793-5b17-4904-977c-e0a63f0d9f2c",
+    "screenshot": "packaged-ready.png"
+  },
+  "cleanup": {
+    "testTabsClosed": true,
+    "managedProcesses": {
+      "wmb5338-packaged": "exited exit=1",
+      "wmb5338-first-run": "exited exit=0"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 96" role="img" width="640" height="96">
+<title>L3 · 软陶贴纸 · 64px 混排</title>
+<style>text{font-family:ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+<defs>
+      <radialGradient id="gB" cx="0.38" cy="0.3" r="0.85"><stop offset="0%" stop-color="#FFE8C2"/><stop offset="100%" stop-color="#F5C98A"/></radialGradient>
+      <radialGradient id="gR" cx="0.42" cy="0.32" r="0.85"><stop offset="0%" stop-color="#FFDED1"/><stop offset="100%" stop-color="#F7B7A8"/></radialGradient>
+      <radialGradient id="gO" cx="0.4" cy="0.28" r="0.9"><stop offset="0%" stop-color="#FFF4C8"/><stop offset="100%" stop-color="#E8D8A0"/></radialGradient>
+      <radialGradient id="gC" cx="0.38" cy="0.32" r="0.85"><stop offset="0%" stop-color="#FFF0E0"/><stop offset="100%" stop-color="#E6CFC0"/></radialGradient>
+      <radialGradient id="gH" cx="0.4" cy="0.3" r="0.9"><stop offset="0%" stop-color="#FFE7CC"/><stop offset="100%" stop-color="#D8B99E"/></radialGradient>
+    </defs>
+<rect width="640" height="96" fill="#FFFFFF" rx="12"/>
+<text x="12" y="18" font-size="9" fill="#888" font-weight="700">L3 · 软陶贴纸 · 64px 混排 · 真实 64px · 同锚点A</text>
+<g transform="translate(24,24)"><circle cx="32" cy="32" r="32" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/><g><circle cx="32" cy="32" r="32" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="url(#gB)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="20" cy="18" r="5.6" fill="url(#gB)" stroke="#3B2316" stroke-width="3.2"/><circle cx="44" cy="18" r="5.6" fill="url(#gB)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="32" cy="28" r="15" fill="url(#gB)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="26" cy="27" r="2.2" fill="#3B2316"/><circle cx="38" cy="27" r="2.2" fill="#3B2316"/><circle cx="26.7" cy="26" r="0.7" fill="#FFF"/><circle cx="38.7" cy="26" r="0.7" fill="#FFF"/><ellipse cx="32" cy="33" rx="3" ry="2" fill="#3B2316"/><ellipse cx="25" cy="20" rx="3.2" ry="1.6" fill="#FFF" opacity="0.5"/></g></g>
+<g transform="translate(144,24)"><circle cx="32" cy="32" r="32" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/><g><circle cx="32" cy="32" r="32" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="url(#gR)" stroke="#3B2316" stroke-width="3.2"/>
+        <ellipse cx="23" cy="14" rx="5.2" ry="13.5" fill="url(#gR)" stroke="#3B2316" stroke-width="3.2"/><ellipse cx="41" cy="14" rx="5.2" ry="13.5" fill="url(#gR)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="32" cy="28" r="12.5" fill="url(#gR)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="27" cy="27" r="2" fill="#3B2316"/><circle cx="37" cy="27" r="2" fill="#3B2316"/><ellipse cx="32" cy="32" rx="2.5" ry="1.8" fill="#3B2316"/><ellipse cx="23" cy="16" rx="2.5" ry="3" fill="#FFF" opacity="0.45"/></g></g>
+<g transform="translate(264,24)"><circle cx="32" cy="32" r="32" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/><g><circle cx="32" cy="32" r="32" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="url(#gO)" stroke="#3B2316" stroke-width="3.2"/>
+        <path d="M16 14 L18.5 6 L22 13 Z" fill="url(#gO)" stroke="#3B2316" stroke-width="3.2" stroke-linejoin="round"/><path d="M42 13 L45.5 6 L48 14 Z" fill="url(#gO)" stroke="#3B2316" stroke-width="3.2" stroke-linejoin="round"/>
+        <ellipse cx="32" cy="30" rx="17" ry="15" fill="url(#gO)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="26" cy="30" r="5.5" fill="#FFFDF2" stroke="#3B2316" stroke-width="0.8"/><circle cx="38" cy="30" r="5.5" fill="#FFFDF2" stroke="#3B2316" stroke-width="0.8"/><circle cx="26" cy="30.5" r="2" fill="#3B2316"/><circle cx="38" cy="30.5" r="2" fill="#3B2316"/><circle cx="26.7" cy="29" r="0.7" fill="#FFF"/><circle cx="38.7" cy="29" r="0.7" fill="#FFF"/><path d="M32 35 L30 38 L34 38 Z" fill="#E9A84A" stroke="#3B2316" stroke-width="0.7"/><ellipse cx="22" cy="20" rx="4" ry="2" fill="#FFF" opacity="0.38"/></g></g>
+<g transform="translate(384,24)"><circle cx="32" cy="32" r="32" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/><g><circle cx="32" cy="32" r="32" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="url(#gC)" stroke="#3B2316" stroke-width="3.2"/>
+        <path d="M16 16 L18 7 L22 15 Z" fill="url(#gC)" stroke="#3B2316" stroke-width="3.2" stroke-linejoin="round"/><path d="M42 15 L46 7 L48 16 Z" fill="url(#gC)" stroke="#3B2316" stroke-width="3.2" stroke-linejoin="round"/>
+        <circle cx="32" cy="26" r="12.8" fill="url(#gC)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="27" cy="25" r="2" fill="#3B2316"/><circle cx="37" cy="25" r="2" fill="#3B2316"/><circle cx="27.7" cy="24" r="0.7" fill="#FFF"/><circle cx="37.7" cy="24" r="0.7" fill="#FFF"/><ellipse cx="32" cy="30" rx="2.6" ry="1.8" fill="#3B2316"/><ellipse cx="24" cy="18" rx="3" ry="1.8" fill="#FFF" opacity="0.42"/></g></g>
+<g transform="translate(504,24)"><circle cx="32" cy="32" r="32" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/><g><circle cx="32" cy="32" r="32" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/><circle cx="32" cy="32" r="28" fill="url(#gH)" stroke="#3B2316" stroke-width="3.2"/>
+        <path d="M12 28 Q32 10 52 28 L52 31 Q32 35 12 31 Z" fill="url(#gH)" stroke="#3B2316" stroke-width="3.2" stroke-linejoin="round"/>
+        <ellipse cx="32" cy="28" rx="14" ry="12" fill="url(#gH)" stroke="#3B2316" stroke-width="3.2"/>
+        <circle cx="27" cy="28" r="2" fill="#3B2316"/><circle cx="37" cy="28" r="2" fill="#3B2316"/><circle cx="27.7" cy="27" r="0.7" fill="#FFF"/><circle cx="37.7" cy="27" r="0.7" fill="#FFF"/><ellipse cx="32" cy="33" rx="3.2" ry="2.2" fill="#3B2316"/><ellipse cx="24" cy="18" rx="3.5" ry="1.6" fill="#FFF" opacity="0.38"/></g></g>
+<text x="12" y="88" font-size="7.5" fill="#AAA">熊 / 兔 / 鸮 / 猫 / 刺猬 · 64px 家族混排验证 · 外轮廓占比与 A 一致</text>
+</svg>

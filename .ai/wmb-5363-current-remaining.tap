@@ -1,0 +1,954 @@
+(node:406484) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:406484) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery (2816.2245ms)
+✔ writer prompts keep audience identity out of core and platform titles (0.7795ms)
+✔ daily IPC leaves task creation to the shared channel coordinator and deduplicates by root/date (1.8874ms)
+✔ Pi task authority prompt carries exact automatic task, grant and lease values (0.4251ms)
+(node:518104) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:518104) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ agent tasks reuse one running intent/date and mint stable request ids (2643.1242ms)
+✖ agent task completion requires business object readback (2572.5115ms)
+✔ running agent tasks become interrupted on recovery and can be cancelled (2571.3521ms)
+✔ daily task persists bounded progress and resumes the same checkpoint (2694.5125ms)
+✔ control actions are idempotent after terminal states (2199.9678ms)
+✔ partialAgentTask is idempotent for daily intelligence (3327.8942ms)
+✖ 1001 projects page with fixed query counts and reject stale core-version writes (5919.1268ms)
+(node:509564) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:509564) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✖ EVAL-029 fixture survives two bounded cold processes without changing its complete parent (5414.9165ms)
+✔ fixture declaration repeats business values without inventing a BrowserProfile identity (3.3953ms)
+✔ fixture-declared paths reject traversal and reparse-point escapes before materialization (38.1537ms)
+✖ verify rejects a manifest outside the marked parent (4501.8979ms)
+✖ verify deep-checks the stable manifest envelope even when its strict hash is recomputed (6203.8174ms)
+✖ complete parent hash rejects an unexpected parent-level sibling (3142.7044ms)
+✖ failed staged materialization restores an empty retryable parent (4535.44ms)
+✔ fixture command rejects a non-temporary materialization parent (188.5623ms)
+✔ fixture command rejects readback without its marker (195.4949ms)
+(node:411972) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:411972) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ topic-null carry gets aftershock from new same-story source by title bigram (2555.0054ms)
+✖ topic-null carry gets aftershock from same-story plan item via source overlap (2630.7966ms)
+✔ topic-null carry without new evidence stays aftershock-empty and leaves the rail (2296.0599ms)
+✖ topic-bound carry keeps the topic-path aftershock (existing semantics preserved) (2433.3614ms)
+✖ migration v45 adds story_key/stage and refresh populates them (2823.9917ms)
+✖ refresh backfills story_key for rows that lost it (legacy/直写行) (3372.8947ms)
+(node:522836) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:522836) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ yesterday multi-day plan projects topic onto continuous-attention rail (2778.063ms)
+✔ bare high-value source alone does not appear on continuous-attention rail (2351.3805ms)
+✖ dismissing plan-item carry removes topic from rail when no other signal (2271.0252ms)
+✔ marking sources watching keeps them in library watching board (2214.356ms)
+✔ creating project marks matching carry done and topic may leave if no signal (2740.6865ms)
+(node:145000) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:145000) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ pool unions current plans across dates and excludes adopted, dismissed and timeliness-expired items (2758.0771ms)
+✔ dismissed fingerprint is never revived by reseeding (2467.133ms)
+✖ publish within 24h demotes same-topic opportunities to the tail with annotation (2266.4886ms)
+✔ plan items citing sources without canonicalUrl are rejected (2168.182ms)
+✖ story variants with overlapping sources merge into the newest carry row (2947.5678ms)
+✖ disjoint stories never merge (3421.0405ms)
+✖ similar titles without shared sources merge into one story at save time (1543.945ms)
+✖ listFermentingBundle only keeps cards with why-watching signal (1606.8112ms)
+✖ carry rows in expired state are excluded from the pool (1503.3163ms)
+✔ getToday exposes the pool alongside plan and sources (1458.6212ms)
+✔ same story different wording collapses to one chair card (keeper: lowest priority, then newest createdAt) (1535.0556ms)
+✔ empty current plan does not remove prior non-empty plan items from the pool (1017.1846ms)
+(node:521740) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:521740) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ unscored draft cannot promote to fermenting (2658.1393ms)
+✖ scored approved can promote to fermenting (2502.3352ms)
+✔ plan-linked legacy approved without score is excluded (2370.4259ms)
+✔ true manual zero-plan topic qualifies (2274.6083ms)
+✖ equivalent theses dedupe across active persistent topics and new promotions (2715.9188ms)
+✖ reversible retirement preserves records and fermenting excludes (3348.3852ms)
+✖ only one current plan per day and every item cites stored sources (6313.2341ms)
+(node:488092) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:488092) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ empty history returns zero counts (2620.7703ms)
+✖ classifies today shelved adopted dismissed expired and keeps empty current from blanking open items (2479.0549ms)
+✖ today tab matches opportunity pool subset for same day (2386.0724ms)
+✖ offset pagination returns hasMore and distinct pages (2261.6103ms)
+✖ restoreDismissedProposal returns item to open ledger (2785.7142ms)
+(node:517376) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:517376) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ WMB-5237 media: migration 62 creates binding tables, provenance table and is idempotent (2773.7574ms)
+✖ WMB-5237 media: migration 62 run hook backfills legacy core tokens and platform assetIds (X first image cover) (992.7075ms)
+✔ WMB-5237 media: core save appends version, writes bindings atomically and never alters the body token (2259.1481ms)
+✔ WMB-5237 media: core save without drafts reconciles default bindings from body refs (backfill on save) (2195.5464ms)
+✔ WMB-5237 media: core save revision conflict writes nothing (version, binding, revision all untouched) (2662.8145ms)
+✔ WMB-5237 media: core save rejects invalid binding drafts fail-closed with full rollback (2137.8047ms)
+✔ WMB-5237 media: platform save writes bindings and rebuilds asset_ids_json by ordinal (derivedAssetId || assetId) (3247.3302ms)
+✔ WMB-5237 media: platform save without mediaBindings rebuilds from assetIds and update never clears existing cover/crop (1598.9275ms)
+✔ WMB-5237 media: platform binding with derivedAssetId projects into asset_ids_json and read model (1592.7458ms)
+✔ WMB-5237 media: platform save with crop payloads atomically materializes derived asset, provenance, binding and projection (1468.2352ms)
+✔ WMB-5237 media: platform save revision conflict with crop payload writes nothing (1501.2951ms)
+✔ WMB-5237 media: platform save rejects two covers atomically and X cover must sit at ordinal 0 (1245.1048ms)
+✔ WMB-5237 media: isValidCropRegion enforces 0..1 bounds, positive size and x+width/y+height <= 1 (0.2796ms)
+✔ WMB-5237 media: shared normalizers validate drafts and rebuild asset ids by ordinal (0.5898ms)
+✔ WMB-5237 media: materializeCropAsset creates derived asset with provenance, preserves original and dedups by sha256 (988.9429ms)
+✔ WMB-5237 media: renderer helpers are the single shared parser (behavior-identical, no second implementation) (0.7054ms)
+✔ WMB-5237 media: updateContentMediaBinding upserts by (assetId, occurrence) immutably and never touches body tokens (0.2306ms)
+✔ WMB-5237 media: contentMediaLayoutMap keys figures by assetId:occurrence for projection (0.1034ms)
+✔ WMB-5237 media: caption edits still mutate the token via token helpers; layout never enters the token (0.235ms)
+✔ WMB-5237 media: toolbar exports width/align labels and drag-snap ratios (小中大通栏 · 左中右) (0.0896ms)
+✔ WMB-5237 media: StudioInlineImageOverlay renders readOnly status shell and hides all edit actions (5.1105ms)
+✔ WMB-5237 media: toolbar structure contract (toolbar/aria/actions/readOnly/drag-commit-once, esbuild harness for non-executable DOM) (1.5912ms)
+(node:415396) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:415396) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✖ WMB-5241 ingest/query chain on one real workspace (SQLite readback) (3749.8257ms)
+(node:520924) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:520924) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ three triggers converge to one in-flight execution (2760.3523ms)
+✖ production factory A/B/D/E invoked via shared orchestrator (real primitive spies) (2450.0113ms)
+✔ retry/restart reuses identities (cold retry idempotent) (2259.3018ms)
+✔ partial success isolation: one stage fails does not erase others (2656.2868ms)
+✔ needs_user priority and blocked exposed (2115.6776ms)
+✔ readable settlement counts/gaps/skipped/carried/blocked (3316.6066ms)
+✔ no publication path in orchestration (behavioral) (1511.6502ms)
+✔ scheduler Asia/Shanghai timing and persisted schedule toggle (1611.1676ms)
+✔ paused priority > needs_user > partial > completed (1456.1433ms)
+✔ production wiring does not use unregistered orchestrate command and shares single orchestrator (1468.8797ms)
+ℹ tests 88
+ℹ suites 0
+ℹ pass 54
+ℹ fail 34
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25640.6615
+
+✖ failing tests:
+
+test at tests\agent-runner.test.mjs:15:1
+✖ daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery (2816.2245ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /跨日发酵机会/. Input:
+  
+  '执行 WeMediaBuddy 今日情报判断任务。\n' +
+    'task_id=ef1ee033-42d2-4edd-ba2e-804220c3333e\n' +
+    'intent=daily_intelligence\n' +
+    'plan_date=2026-08-03\n' +
+    'skill=wemedia-intelligence-engine\n' +
+    'plan_request_id=ef1ee033-42d2-4edd-ba2e-804220c3333e:plan\n' +
+    'checkpoint={}\n' +
+    '\n' +
+    '【编辑简报 · 生成于 2026-08-28T05:10:46.405Z · 业务日期 2026-08-03】\n' +
+    '\n' +
+    '■ 身份（本工作空间立场，判断一切机会前必须先读）\n' +
+    '（未配置工作空间配方）\n' +
+    '\n' +
+    '■ 历史（你最近写过什么、复盘学到什么；判断必须避免撞题并吸收教训）\n' +
+    '近 30 天已发布：\n' +
+    '（无）\n' +
+    '最近复盘（final）：\n' +
+    '（无）\n' +
+    '方法库结论：\n' +
+    '（无）\n' +
+    '\n' +
+    '■ 存量（跨天连续性，只用于判断，禁止为此另行扫描新来源）\n' +
+    '观察中：[{"id":"a209ccb2-6480-41e2-9786-93cf71409adb","title":"长期观察资料","topics":"","priority":1}]\n' +
+    '持续关注：{"items":[],"topics":[]}\n' +
+    '趋势证据：[]\n' +
+    '\n' +
+    '■ 本轮重新激活的跨日证据（仅这些 Source 与本轮增量可供 Planner 引用）\n' +
+    '（无）\n' +
+    '\n' +
+    '■ 增量（本轮新入库资料，回看自 2026-08-27T05:10:46.405Z，共 1 条）\n' +
+    '[\n' +
+    ' {\n' +
+    '  "id": "a209ccb2-6480-41e2-9786-93cf71409adb",\n' +
+    '  "title": "长期观察资料",\n' +
+    '  "canonicalUrl": "https://example.com/watching",\n' +
+    '  "author": null,\n' +
+    '  "publishedAt": null,\n' +
+    '  "collectedAt": "2026-08-28T05:10:46.214Z",\n' +
+    '  "summary": null,\n' +
+    '  "categories": [],\n' +
+    '  "valueJudgment": null,\n' +
+    '  "timeliness": null,\n' +
+    '  "priority": 1\n' +
+    ' }\n' +
+    ']\n' +
+    '\n' +
+    '判断要求：\n' +
+    '1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。\n' +
+    '2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。\n' +
+    '2.1 传播评分六维（总分 100，必须覆盖全部维度，evidence 仅作门槛不代替传播力）：reader_immediacy_benefit 20（读者即时收益/今天就能用、可复制动作/可对比回执）、tension_curiosity_gap 20（张力或好奇缺口/反直觉/利益冲突/代价揭示）、why_now_window 20（为何现在窗口、时效紧迫感、今天做比明天值钱的错过成本）、save_share_comment_motive 20（收藏/分享/评论动机、是否值得转给同事/群/是否有谈资）、evidence_credibility 15（证据可追溯性与可信度、是否可验收、是否一手来源，仅作是否进入评分的门槛，高分证据不自动等于高传播）、account_fit 5（与本账号受众/定位契合度）。每项必须给出 criterion/weight/score/reason，weight 必须与上述权重一致，score 0..weight，总分与分项和必须一致；未达门槛的候选降权或不写入方案，禁止为凑数虚构分数。\n' +
+    '2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。\n' +
+    '2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；标题必须包含一个可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。张力/好奇缺口必须在标题或 openingGuidance 中显式兑现，禁止把“夸张反常识只放 titleGuidance”的旧禁令当作不写钩子的理由。\n' +
+    '2.8 传播型写作契约（SSOT：skills/evidence-grounded-writer/SKILL.md §5 — 与选题到成稿全链一致）：每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做的一句话动作）」与「一个中心主张」，并在 title/angle/pointOfView/openingGuidance 中体现；openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”；抽象主张必须在 angle/pointOfView 阶段即配人/场景/利害/后果；证据服务主张，不让证据罗列成为选题主体；保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；平台适配（小红书/视频等）是重写钩子/节奏/转藏评动机，不是缩短；标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议；每个候选自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口与错过成本是否写清/是否有明确的收藏/分享/评论动机）缺一不进方案。\n' +
+    '3. 机会 priority：0=最优先内部排程，1=次优先，…7=最低，仅作为内部排程顺序，不决定对外可见的传播等级；可见传播等级 SSS/S/A/B/C/D/E/F 仅由上述传播总分经共享阈值映射（90→SSS 80→S 70→A 60→B 50→C 40→D 30→E 其余 F）由系统计算，你不得直接指定或输出等级字段；priority 数值不得用于伪装传播推荐。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。\n' +
+    '3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。\n' +
+    '4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。\n' +
+    '5. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源。\n' +
+    '6. 收尾只输出一个 ```json 代码块，结构必须严格如下（sourceIds 只能从简报「增量」块选择真实 id；不要输出其它任何文字）：\n' +
+    '```json\n' +
+    '{\n' +
+    '  "planDate": "2026-08-03",\n' +
+    '  "summary": "一句话概括今日判断",\n' +
+    '  "items": [{\n' +
+    '    "title": "直白可发布的标题（必须含数字/对比/反转/代价钩子且可被正文兑现）",\n' +
+    '    "priority": 1,\n' +
+    '    "whyNow": "为什么是现在（具体事实+时效）",\n' +
+    '    "timeliness": "热点 2-3 天",\n' +
+    '    "targetAudience": "目标读者",\n' +
+    '    "angle": "表达角度",\n' +
+    '    "pointOfView": "核心观点",\n' +
+    '    "platforms": ["x"],\n' +
+    '    "formats": ["text"],\n' +
+    '    "titleGuidance": "标题建议",\n' +
+    '    "openingGuidance": "开头建议",\n' +
+    '    "structureGuidance": "点名六栏目之一并套对应骨架",\n' +
+    '    "effortEstimate": "约 40 分钟",\n' +
+    '    "topicId": "多日/持续/余波跟进项填简报「存量」中的真实主题 id，其余省略",\n' +
+    '    "sourceIds": ["简报「增量」块中的真实 id"],\n' +
+    '    "scoreReasons": {"status":"scored","score":82,"reasons":[{"criterion":"reader_immediacy_benefit","weight":20,"score":16,"reason":"读者今天可用的具体动作"},{"criterion":"tension_curiosity_gap","weight":20,"score":15,"reason":"反直觉冲突引发好奇"},{"criterion":"why_now_window","weight":20,"score":16,"reason":"窗口期内错过成本清晰"},{"criterion":"save_share_comment_motive","weight":20,"score":15,"reason":"值得收藏转发的谈资"},{"criterion":"evidence_credibility","weight":15,"score":12,"reason":"真实可追溯来源支撑"},{"criterion":"account_fit","weight":5,"score":4,"reason":"与账号定位契合"}]},\n' +
+    '    "availableMaterials": [],\n' +
+    '    "missingMaterials": []\n' +
+    '  }],\n' +
+    '  "sourceDecisions": [{"sourceId":"本轮增量或重新激活证据中的真实 id","decision":"selected|excluded|unresolved|blocked","reasonCode":"稳定原因码","reason":"具体原因"}]\n' +
+    '}\n' +
+    '```\n' +
+    'sourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过上述六维总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；evidence 高分仅作门槛，不直接等同高传播。'
+  
+      at TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/agent-runner.test.mjs:37:12)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '执行 WeMediaBuddy 今日情报判断任务。\ntask_id=ef1ee033-42d2-4edd-ba2e-804220c3333e\nintent=daily_intelligence\nplan_date=2026-08-03\nskill=wemedia-intelligence-engine\nplan_request_id=ef1ee033-42d2-4edd-ba2e-804220c3333e:plan\ncheckpoint={}\n\n【编辑简报 · 生成于 2026-08-28T05:10:46.405Z · 业务日期 2026-08-03】\n\n■ 身份（本工作空间立场，判断一切机会前必须先读）\n（未配置工作空间配方）\n\n■ 历史（你最近写过什么、复盘学到什么；判断必须避免撞题并吸收教训）\n近 30 天已发布：\n（无）\n最近复盘（final）：\n（无）\n方法库结论：\n（无）\n\n■ 存量（跨天连续性，只用于判断，禁止为此另行扫描新来源）\n观察中：[{"id":"a209ccb2-6480-41e2-9786-93cf71409adb","title":"长期观察资料","topics":"","priority":1}]\n持续关注：{"items":[],"topics":[]}\n趋势证据：[]\n\n■ 本轮重新激活的跨日证据（仅这些 Source 与本轮增量可供 Planner 引用）\n（无）\n\n■ 增量（本轮新入库资料，回看自 2026-08-27T05:10:46.405Z，共 1 条）\n[\n {\n  "id": "a209ccb2-6480-41e2-9786-93cf71409adb",\n  "title": "长期观察资料",\n  "canonicalUrl": "https://example.com/watching",\n  "author": null,\n  "publishedAt": null,\n  "collectedAt": "2026-08-28T05:10:46.214Z",\n  "summary": null,\n  "categories": [],\n  "valueJudgment": null,\n  "timeliness": null,\n  "priority": 1\n }\n]\n\n判断要求：\n1. 先读简报「身份」块对齐受众、内容目标与编辑简报；身份默认对齐「AI × 商业化成长」。目标读者=正在寻找 AI 商业化方向、愿意完成真实项目并获取反馈的人：内容帮他们从迷茫走向明确方向、完成第一个真实项目并拿到真实反馈，绝不承诺收入。受众描述只用于内部判断，不是标题素材。脱离身份的泛 AI 资讯、纯模型公告、对目标读者没有可执行意义的参数/价格新闻、泛泛的书籍摘抄、励志口号、无法验证的收入承诺直接丢弃。简报「历史」块已给出你的已发布与复盘结论，用它避免撞题、吸收教训。\n2. 每个机会必须回答四问：为什么是现在（具体事实+时效分类：爆点/热点/长青）、为什么是你（与身份/历史发布/库存资料的具体关系）、你的独特说法是什么、证据在哪（简报「增量」块的真实 id+具体事实点）。另须点明命中五维哪一环（时代认知/个人方向/AI 实践/公开验证/产品化）；说不出环节则降权或丢弃。值得尝试要有可动手动作（真实来源+本人实践/案例+具体动作）；无实验/无观点的公告搬运不进方案。需求信号仅当有重复问题信号时轻点一句，禁止硬造变现故事；区分流量与合格线索。答不出四问的线索不得写入方案。\n2.1 传播评分六维（总分 100，必须覆盖全部维度，evidence 仅作门槛不代替传播力）：reader_immediacy_benefit 20（读者即时收益/今天就能用、可复制动作/可对比回执）、tension_curiosity_gap 20（张力或好奇缺口/反直觉/利益冲突/代价揭示）、why_now_window 20（为何现在窗口、时效紧迫感、今天做比明天值钱的错过成本）、save_share_comment_motive 20（收藏/分享/评论动机、是否值得转给同事/群/是否有谈资）、evidence_credibility 15（证据可追溯性与可信度、是否可验收、是否一手来源，仅作是否进入评分的门槛，高分证据不自动等于高传播）、account_fit 5（与本账号受众/定位契合度）。每项必须给出 criterion/weight/score/reason，weight 必须与上述权重一致，score 0..weight，总分与分项和必须一致；未达门槛的候选降权或不写入方案，禁止为凑数虚构分数。\n2.5 structureGuidance 必须点名六栏目之一并套骨架：迷茫诊断（典型困境→原因拆解→判断→第一个动作）/ 经典方法（方法出处→原理解读→边界/反例→今天怎么用）/ AI 实战（目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步）/ 项目日志（今日一刀→回执→余味）/ 方向判断（为何现在→强观点→标题开头→来源）/ 商业化实验（仅真实成交或失败：场景→报价→过程→结果→教训）。\n2.7 写 title 前先在内部生成至少三个不同切口的候选：具体问题型、关键动作/方法型、对象/证据冲突型；再选择最能被 sourceIds 真实证据兑现的一条，只输出最终标题。title 必须直接点破该题材独有的问题、动作、对象或证据，能单独读懂并可直接发布；标题必须包含一个可被正文兑现的利益/冲突钩子（数字/对比/反转/代价四选一），不得复制简报「身份」块的受众描述，不得使用「普通人」等万能受众标签，不得把来源没有支持的数字、结果或因果写成钩子。对照简报「历史」块，避免复用近期标题的固定前缀与句式骨架。张力/好奇缺口必须在标题或 openingGuidance 中显式兑现，禁止把“夸张反常识只放 titleGuidance”的旧禁令当作不写钩子的理由。\n2.8 传播型写作契约（SSOT：skills/evidence-grounded-writer/SKILL.md §5 — 与选题到成稿全链一致）：每个机会必须冻结「一个处在具体情境中的读者（人+场景+卡住瞬间）+ 一个期望读者动作（今天就能做的一句话动作）」与「一个中心主张」，并在 title/angle/pointOfView/openingGuidance 中体现；openingGuidance 必须要求“首段立刻兑现标题钩子对应的冲突/利益点，不从背景/定义铺垫”；抽象主张必须在 angle/pointOfView 阶段即配人/场景/利害/后果；证据服务主张，不让证据罗列成为选题主体；保留可防守的张力，禁止软化为 `需要综合考虑/值得关注/未来可期` 等空话，有用细微差别须写明具体边界并与怯懦的各打五十大板区分开；平台适配（小红书/视频等）是重写钩子/节奏/转藏评动机，不是缩短；标题必兑现且标题主张必须可被正文兑现，禁止编造数字/个人经历/引语/结果/紧迫感/争议；每个候选自检四项（读者收益是否具体/是否有具体利害场景/为何现在窗口与错过成本是否写清/是否有明确的收藏/分享/评论动机）缺一不进方案。\n3. 机会 priority：0=最优先内部排程，1=次优先，…7=最低，仅作为内部排程顺序，不决定对外可见的传播等级；可见传播等级 SSS/S/A/B/C/D/E/F 仅由上述传播总分经共享阈值映射（90→SSS 80→S 70→A 60→B 50→C 40→D 30→E 其余 F）由系统计算，你不得直接指定或输出等级字段；priority 数值不得用于伪装传播推荐。未达到机会标准的线索不凑数。若候选与简报「存量」持续关注中的条目是同一故事的新进展，沿用同一故事主线表达并引用其来源，不要换措辞另起一个新机会。\n3.5 多日/持续/余波跟进项（timeliness 含 持续/多日/本周/一周/长期/余波/跟踪/跟进 等）必须绑定 topicId：只可从简报「存量」主题列表或 wmb_get_knowledge_context 输出中复制真实主题 id（同一故事跨日必须复用同一主题，禁止臆造 id）；无法确定既有主题时可省略 topicId，系统会为多日项自动建主题绑定。\n4. 不需要也不许调用任何工具（尤其禁止 wmb_get_workbench——它返回几十万字的全量工作台，会直接挤爆你的上下文；也禁止 bash）。如需查更早的同主题历史，仅可调用 wmb_get_knowledge_context。全部判断直接基于上方简报完成。\n5. 当前模型未开启自带搜索：证据不足的候选降权或丢弃，不得臆造来源。\n6. 收尾只输出一个 ```json 代码块，结构必须严格如下（sourceIds 只能从简报「增量」块选择真实 id；不要输出其它任何文字）：\n```json\n{\n  "planDate": "2026-08-03",\n  "summary": "一句话概括今日判断",\n  "items": [{\n    "title": "直白可发布的标题（必须含数字/对比/反转/代价钩子且可被正文兑现）",\n    "priority": 1,\n    "whyNow": "为什么是现在（具体事实+时效）",\n    "timeliness": "热点 2-3 天",\n    "targetAudience": "目标读者",\n    "angle": "表达角度",\n    "pointOfView": "核心观点",\n    "platforms": ["x"],\n    "formats": ["text"],\n    "titleGuidance": "标题建议",\n    "openingGuidance": "开头建议",\n    "structureGuidance": "点名六栏目之一并套对应骨架",\n    "effortEstimate": "约 40 分钟",\n    "topicId": "多日/持续/余波跟进项填简报「存量」中的真实主题 id，其余省略",\n    "sourceIds": ["简报「增量」块中的真实 id"],\n    "scoreReasons": {"status":"scored","score":82,"reasons":[{"criterion":"reader_immediacy_benefit","weight":20,"score":16,"reason":"读者今天可用的具体动作"},{"criterion":"tension_curiosity_gap","weight":20,"score":15,"reason":"反直觉冲突引发好奇"},{"criterion":"why_now_window","weight":20,"score":16,"reason":"窗口期内错过成本清晰"},{"criterion":"save_share_comment_motive","weight":20,"score":15,"reason":"值得收藏转发的谈资"},{"criterion":"evidence_credibility","weight":15,"score":12,"reason":"真实可追溯来源支撑"},{"criterion":"account_fit","weight":5,"score":4,"reason":"与账号定位契合"}]},\n    "availableMaterials": [],\n    "missingMaterials": []\n  }],\n  "sourceDecisions": [{"sourceId":"本轮增量或重新激活证据中的真实 id","decision":"selected|excluded|unresolved|blocked","reasonCode":"稳定原因码","reason":"具体原因"}]\n}\n```\nsourceDecisions 必须逐条覆盖简报「增量」与「本轮重新激活的跨日证据」里的每个 Source，且每条只能出现一次：进入任一 item 的为 selected；不入选必须明确 excluded/unresolved/blocked 与具体原因。没有答得出四问的机会时 items 输出 []，但 sourceDecisions 仍须完整。通过上述六维总分决定传播等级（90 SSS/80 S/70 A/60 B/50 C/40 D/30 E；其余 F），不得自定等级；evidence 高分仅作门槛，不直接等同高传播。',
+    expected: /跨日发酵机会/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests\agent-tasks.test.mjs:52:1
+✖ agent task completion requires business object readback (2572.5115ms)
+  Error: validation_failed: thesis_not_diverse: 28 duplicate thesis pair(s): [0↔1], [0↔2], [0↔3], [0↔4], [0↔5], [0↔6], [0↔7], [1↔2], [1↔3], [1↔4], [1↔5], [1↔6], [1↔7], [2↔3], [2↔4], [2↔5], [2↔6], [2↔7], [3↔4], [3↔5], [3↔6], [3↔7], [4↔5], [4↔6], [4↔7], [5↔6], [5↔7], [6↔7]. thesis_duplicate: item 0 "Opportunity 0" ↔ item 1 "Opportunity 1" share normalized POV/angle/audience
+      at saveCurrentPlan (file:///J:/PigeonYang/WeMediaBuddy/src/main/planning.ts:121:27)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/agent-tasks.test.mjs:83:5
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/agent-tasks.test.mjs:32:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/agent-tasks.test.mjs:53:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'validation_failed',
+    errors: [ 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 1 "Opportunity 1" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 2 "Opportunity 2" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 2 "Opportunity 2" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience', 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience', 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience', 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 5 "Opportunity 5" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience', 'thesis_duplicate: item 5 "Opportunity 5" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience', 'thesis_duplicate: item 6 "Opportunity 6" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' ],
+    dupes: [ { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 1 "Opportunity 1" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 2 "Opportunity 2" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "Opportunity 0" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 2 "Opportunity 2" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "Opportunity 1" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 3 "Opportunity 3" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "Opportunity 2" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 4 "Opportunity 4" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 3 "Opportunity 3" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 5 "Opportunity 5" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 4 "Opportunity 4" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 5 "Opportunity 5" ↔ item 6 "Opportunity 6" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 5 "Opportunity 5" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 6 "Opportunity 6" ↔ item 7 "Opportunity 7" share normalized POV/angle/audience' } ]
+  }
+
+test at tests\content-scale-concurrency.test.mjs:8:1
+✖ 1001 projects page with fixed query counts and reject stale core-version writes (5919.1268ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe tests/content-scale-concurrency-child.mjs
+  (node:522876) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:522876) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  file:///J:/PigeonYang/WeMediaBuddy/tests/content-scale-concurrency-child.mjs:80
+      throw new Error(`fixed detail query count mismatch ${JSON.stringify({found:Boolean(detail),revisions:detail?.revisions.length,body:detail?.revisions[0]?.body.length,queries:detailCounter.count()})}`);
+            ^
+  
+  Error: fixed detail query count mismatch {"found":true,"revisions":3,"body":1500,"queries":15}
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/content-scale-concurrency-child.mjs:80:11
+      at ModuleJob.run (node:internal/modules/esm/module_job:430:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+  
+  Node.js v24.13.1
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe tests/content-scale-concurrency-child.mjs',
+    stdout: '',
+    stderr: '(node:522876) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:522876) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfile:///J:/PigeonYang/WeMediaBuddy/tests/content-scale-concurrency-child.mjs:80\r\n    throw new Error(`fixed detail query count mismatch ${JSON.stringify({found:Boolean(detail),revisions:detail?.revisions.length,body:detail?.revisions[0]?.body.length,queries:detailCounter.count()})}`);\r\n          ^\r\n\r\nError: fixed detail query count mismatch {"found":true,"revisions":3,"body":1500,"queries":15}\r\n    at file:///J:/PigeonYang/WeMediaBuddy/tests/content-scale-concurrency-child.mjs:80:11\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)\r\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\r\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n\r\nNode.js v24.13.1\r\n'
+  }
+
+test at tests\eval-029-fixtures.test.mjs:16:1
+✖ EVAL-029 fixture survives two bounded cold processes without changing its complete parent (5414.9165ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe --permission --allow-fs-read=J:\PigeonYang\WeMediaBuddy --allow-fs-read=J:\Users\yangda01\Temp\wmb-eval-029-test-V49PT3\materialization --allow-fs-write=J:\Users\yangda01\Temp\wmb-eval-029-test-V49PT3\materialization J:\PigeonYang\WeMediaBuddy\scripts\eval-029-fixtures.mjs materialize --parent J:\Users\yangda01\Temp\wmb-eval-029-test-V49PT3\materialization
+  (node:513124) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:513124) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  fixture schema migrations must be exact and contiguous
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      1,
+      2,
+      3,
+      4,
+  ...
+      74,
+  +   75,
+  +   76,
+  +   77,
+  +   78
+    ]
+  
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe --permission --allow-fs-read=J:\\PigeonYang\\WeMediaBuddy --allow-fs-read=J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-V49PT3\\materialization --allow-fs-write=J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-V49PT3\\materialization J:\\PigeonYang\\WeMediaBuddy\\scripts\\eval-029-fixtures.mjs materialize --parent J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-V49PT3\\materialization',
+    stdout: '',
+    stderr: '(node:513124) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:513124) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfixture schema migrations must be exact and contiguous\n+ actual - expected\n... Skipped lines\n\n  [\n    1,\n    2,\n    3,\n    4,\n...\n    74,\n+   75,\n+   76,\n+   77,\n+   78\n  ]\n\n'
+  }
+
+test at tests\eval-029-fixtures.test.mjs:158:1
+✖ verify rejects a manifest outside the marked parent (4501.8979ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe J:\PigeonYang\WeMediaBuddy\scripts\eval-029-fixtures.mjs materialize --parent J:\Users\yangda01\Temp\wmb-eval-029-test-bCk5Ir\materialization
+  (node:369504) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:369504) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  fixture schema migrations must be exact and contiguous
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      1,
+      2,
+      3,
+      4,
+  ...
+      74,
+  +   75,
+  +   76,
+  +   77,
+  +   78
+    ]
+  
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe J:\\PigeonYang\\WeMediaBuddy\\scripts\\eval-029-fixtures.mjs materialize --parent J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-bCk5Ir\\materialization',
+    stdout: '',
+    stderr: '(node:369504) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:369504) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfixture schema migrations must be exact and contiguous\n+ actual - expected\n... Skipped lines\n\n  [\n    1,\n    2,\n    3,\n    4,\n...\n    74,\n+   75,\n+   76,\n+   77,\n+   78\n  ]\n\n'
+  }
+
+test at tests\eval-029-fixtures.test.mjs:173:1
+✖ verify deep-checks the stable manifest envelope even when its strict hash is recomputed (6203.8174ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe J:\PigeonYang\WeMediaBuddy\scripts\eval-029-fixtures.mjs materialize --parent J:\Users\yangda01\Temp\wmb-eval-029-test-idP1wU\materialization
+  (node:443212) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:443212) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  fixture schema migrations must be exact and contiguous
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      1,
+      2,
+      3,
+      4,
+  ...
+      74,
+  +   75,
+  +   76,
+  +   77,
+  +   78
+    ]
+  
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe J:\\PigeonYang\\WeMediaBuddy\\scripts\\eval-029-fixtures.mjs materialize --parent J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-idP1wU\\materialization',
+    stdout: '',
+    stderr: '(node:443212) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:443212) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfixture schema migrations must be exact and contiguous\n+ actual - expected\n... Skipped lines\n\n  [\n    1,\n    2,\n    3,\n    4,\n...\n    74,\n+   75,\n+   76,\n+   77,\n+   78\n  ]\n\n'
+  }
+
+test at tests\eval-029-fixtures.test.mjs:195:1
+✖ complete parent hash rejects an unexpected parent-level sibling (3142.7044ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe J:\PigeonYang\WeMediaBuddy\scripts\eval-029-fixtures.mjs materialize --parent J:\Users\yangda01\Temp\wmb-eval-029-test-iUTRu2\materialization
+  (node:327284) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:327284) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  fixture schema migrations must be exact and contiguous
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      1,
+      2,
+      3,
+      4,
+  ...
+      74,
+  +   75,
+  +   76,
+  +   77,
+  +   78
+    ]
+  
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe J:\\PigeonYang\\WeMediaBuddy\\scripts\\eval-029-fixtures.mjs materialize --parent J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-iUTRu2\\materialization',
+    stdout: '',
+    stderr: '(node:327284) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:327284) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfixture schema migrations must be exact and contiguous\n+ actual - expected\n... Skipped lines\n\n  [\n    1,\n    2,\n    3,\n    4,\n...\n    74,\n+   75,\n+   76,\n+   77,\n+   78\n  ]\n\n'
+  }
+
+test at tests\eval-029-fixtures.test.mjs:209:1
+✖ failed staged materialization restores an empty retryable parent (4535.44ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe J:\PigeonYang\WeMediaBuddy\scripts\eval-029-fixtures.mjs materialize --parent J:\Users\yangda01\Temp\wmb-eval-029-test-AfzlGt\materialization
+  (node:6816) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:6816) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  fixture schema migrations must be exact and contiguous
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      1,
+      2,
+      3,
+      4,
+  ...
+      74,
+  +   75,
+  +   76,
+  +   77,
+  +   78
+    ]
+  
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe J:\\PigeonYang\\WeMediaBuddy\\scripts\\eval-029-fixtures.mjs materialize --parent J:\\Users\\yangda01\\Temp\\wmb-eval-029-test-AfzlGt\\materialization',
+    stdout: '',
+    stderr: '(node:6816) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:6816) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nfixture schema migrations must be exact and contiguous\n+ actual - expected\n... Skipped lines\n\n  [\n    1,\n    2,\n    3,\n    4,\n...\n    74,\n+   75,\n+   76,\n+   77,\n+   78\n  ]\n\n'
+  }
+
+test at tests\ferment-aftershock-no-topic.test.mjs:74:1
+✖ topic-null carry gets aftershock from new same-story source by title bigram (2555.0054ms)
+  TypeError: Cannot read properties of undefined (reading 'topicId')
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:81:48
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:22:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:75:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+
+test at tests\ferment-aftershock-no-topic.test.mjs:98:1
+✖ topic-null carry gets aftershock from same-story plan item via source overlap (2630.7966ms)
+  AssertionError [ERR_ASSERTION]: 同故事新方案引用的新来源应成为余波
+  
+  0 !== 1
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:116:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:22:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:99:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\ferment-aftershock-no-topic.test.mjs:140:1
+✖ topic-bound carry keeps the topic-path aftershock (existing semantics preserved) (2433.3614ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:156:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:22:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:141:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\ferment-aftershock-no-topic.test.mjs:162:1
+✖ migration v45 adds story_key/stage and refresh populates them (2823.9917ms)
+  TypeError: Cannot read properties of undefined (reading 'storyKey')
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:184:27
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:22:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:163:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7)
+
+test at tests\ferment-aftershock-no-topic.test.mjs:194:1
+✖ refresh backfills story_key for rows that lost it (legacy/直写行) (3372.8947ms)
+  TypeError: Cannot read properties of undefined (reading 'storyKey')
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:202:48
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:22:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment-aftershock-no-topic.test.mjs:195:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7)
+
+test at tests\ferment.test.mjs:45:1
+✖ yesterday multi-day plan projects topic onto continuous-attention rail (2778.063ms)
+  AssertionError [ERR_ASSERTION]: expected topic progress row in continuous-attention rail
+      at TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment.test.mjs:57:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.start (node:internal/test_runner/test:1000:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\ferment.test.mjs:97:1
+✖ dismissing plan-item carry removes topic from rail when no other signal (2271.0252ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(topicRow)
+  
+      at TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/ferment.test.mjs:104:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1103:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:785:18)
+      at Test.postRun (node:internal/test_runner/test:1232:19)
+      at Test.run (node:internal/test_runner/test:1160:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\opportunity-pool.test.mjs:77:1
+✖ pool unions current plans across dates and excludes adopted, dismissed and timeliness-expired items (2758.0771ms)
+  Error: validation_failed: thesis_not_diverse: 1 duplicate thesis pair(s): [0↔1]. thesis_duplicate: item 0 "昨日热点仍在窗内" ↔ item 1 "已采纳机会" share normalized POV/angle/audience
+      at saveCurrentPlan (file:///J:/PigeonYang/WeMediaBuddy/src/main/planning.ts:121:27)
+      at seedPlanItems (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:37:3)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:85:18
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:78:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    code: 'validation_failed',
+    errors: [ 'thesis_duplicate: item 0 "昨日热点仍在窗内" ↔ item 1 "已采纳机会" share normalized POV/angle/audience' ],
+    dupes: [ { pair: [Array], reason: 'thesis_duplicate: item 0 "昨日热点仍在窗内" ↔ item 1 "已采纳机会" share normalized POV/angle/audience' } ]
+  }
+
+test at tests\opportunity-pool.test.mjs:126:1
+✖ publish within 24h demotes same-topic opportunities to the tail with annotation (2266.4886ms)
+  Error: validation_failed: thesis_not_diverse: 1 duplicate thesis pair(s): [0↔1]. thesis_duplicate: item 0 "同主题机会" ↔ item 1 "独立话题机会" share normalized POV/angle/audience
+      at saveCurrentPlan (file:///J:/PigeonYang/WeMediaBuddy/src/main/planning.ts:121:27)
+      at seedPlanItems (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:37:3)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:132:5
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:127:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'validation_failed',
+    errors: [ 'thesis_duplicate: item 0 "同主题机会" ↔ item 1 "独立话题机会" share normalized POV/angle/audience' ],
+    dupes: [ { pair: [Array], reason: 'thesis_duplicate: item 0 "同主题机会" ↔ item 1 "独立话题机会" share normalized POV/angle/audience' } ]
+  }
+
+test at tests\opportunity-pool.test.mjs:168:1
+✖ story variants with overlapping sources merge into the newest carry row (2947.5678ms)
+  TypeError: Provided value cannot be bound to SQLite parameter 2.
+      at setSources (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:179:123)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:180:5
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:169:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'ERR_INVALID_ARG_TYPE'
+  }
+
+test at tests\opportunity-pool.test.mjs:200:1
+✖ disjoint stories never merge (3421.0405ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 2
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:208:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:201:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\opportunity-pool.test.mjs:212:1
+✖ similar titles without shared sources merge into one story at save time (1543.945ms)
+  TypeError: Provided value cannot be bound to SQLite parameter 2.
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:226:79
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:213:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'ERR_INVALID_ARG_TYPE'
+  }
+
+test at tests\opportunity-pool.test.mjs:244:1
+✖ listFermentingBundle only keeps cards with why-watching signal (1606.8112ms)
+  AssertionError [ERR_ASSERTION]: 有为何关注信号应进持续关注
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:268:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:245:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\opportunity-pool.test.mjs:273:1
+✖ carry rows in expired state are excluded from the pool (1503.3163ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:278:99
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:25:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/opportunity-pool.test.mjs:274:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7)
+
+test at tests\persistent-topic-fix-20260825.test.mjs:47:1
+✖ scored approved can promote to fermenting (2502.3352ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'ready_for_review'
+  - 'approved'
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:55:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:18:15)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:48:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'ready_for_review',
+    expected: 'approved',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\persistent-topic-fix-20260825.test.mjs:104:1
+✖ equivalent theses dedupe across active persistent topics and new promotions (2715.9188ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:116:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:18:15)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:105:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\persistent-topic-fix-20260825.test.mjs:137:1
+✖ reversible retirement preserves records and fermenting excludes (3348.3852ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(topicId)
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:146:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:18:15)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/persistent-topic-fix-20260825.test.mjs:138:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\planning.test.mjs:5:1
+✖ only one current plan per day and every item cites stored sources (6313.2341ms)
+  Error: Command failed: C:\Program Files\nodejs\node.exe tests/planning-child.mjs
+  (node:144796) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+  Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+  To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+  (Use `node --trace-warnings ...` to show where the warning was created)
+  (node:144796) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+  node:internal/modules/run_main:107
+      triggerUncaughtException(
+      ^
+  
+  [Error: EBUSY: resource busy or locked, unlink 'J:\Users\yangda01\Temp\wmb-plans-u9pozS\wmb.db'] {
+    errno: -4082,
+    code: 'EBUSY',
+    syscall: 'unlink',
+    path: 'J:\\Users\\yangda01\\Temp\\wmb-plans-u9pozS\\wmb.db'
+  }
+  
+  Node.js v24.13.1
+  
+      at genericNodeError (node:internal/errors:985:15)
+      at wrappedFn (node:internal/errors:539:14)
+      at ChildProcess.exithandler (node:child_process:417:12)
+      at ChildProcess.emit (node:events:508:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:305:5) {
+    code: 1,
+    killed: false,
+    signal: null,
+    cmd: 'C:\\Program Files\\nodejs\\node.exe tests/planning-child.mjs',
+    stdout: '',
+    stderr: '(node:144796) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn\'t parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add "type": "module" to J:\\PigeonYang\\WeMediaBuddy\\package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:144796) ExperimentalWarning: SQLite is an experimental feature and might change at any time\nnode:internal/modules/run_main:107\r\n    triggerUncaughtException(\r\n    ^\r\n\r\n[Error: EBUSY: resource busy or locked, unlink \'J:\\Users\\yangda01\\Temp\\wmb-plans-u9pozS\\wmb.db\'] {\r\n  errno: -4082,\r\n  code: \'EBUSY\',\r\n  syscall: \'unlink\',\r\n  path: \'J:\\\\Users\\\\yangda01\\\\Temp\\\\wmb-plans-u9pozS\\\\wmb.db\'\r\n}\r\n\r\nNode.js v24.13.1\r\n'
+  }
+
+test at tests\proposals-ledger.test.mjs:74:1
+✖ empty history returns zero counts (2620.7703ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+      adopted: 0,
+      dismissed: 0,
+      expired: 0,
+  +   scoring_pending: 0,
+      shelved: 0,
+      today: 0
+    }
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:77:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:24:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:75:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0, scoring_pending: 0 },
+    expected: { today: 0, shelved: 0, adopted: 0, dismissed: 0, expired: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\proposals-ledger.test.mjs:83:1
+✖ classifies today shelved adopted dismissed expired and keeps empty current from blanking open items (2479.0549ms)
+  Error: validation_failed: thesis_not_diverse: 3 duplicate thesis pair(s): [0↔1], [0↔2], [1↔2]. thesis_duplicate: item 0 "今日可批选题" ↔ item 1 "已采纳选题" share normalized POV/angle/audience
+      at saveCurrentPlan (file:///J:/PigeonYang/WeMediaBuddy/src/main/planning.ts:121:27)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:92:5
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:24:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:84:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'validation_failed',
+    errors: [ 'thesis_duplicate: item 0 "今日可批选题" ↔ item 1 "已采纳选题" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "今日可批选题" ↔ item 2 "已否掉选题" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "已采纳选题" ↔ item 2 "已否掉选题" share normalized POV/angle/audience' ],
+    dupes: [ { pair: [Array], reason: 'thesis_duplicate: item 0 "今日可批选题" ↔ item 1 "已采纳选题" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "今日可批选题" ↔ item 2 "已否掉选题" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "已采纳选题" ↔ item 2 "已否掉选题" share normalized POV/angle/audience' } ]
+  }
+
+test at tests\proposals-ledger.test.mjs:165:1
+✖ today tab matches opportunity pool subset for same day (2386.0724ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   '74b2e7a9-940c-4f80-a895-04847aec8308'
+  - ]
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:179:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:24:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:166:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ '74b2e7a9-940c-4f80-a895-04847aec8308' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests\proposals-ledger.test.mjs:184:1
+✖ offset pagination returns hasMore and distinct pages (2261.6103ms)
+  Error: validation_failed: thesis_not_diverse: 10 duplicate thesis pair(s): [0↔1], [0↔2], [0↔3], [0↔4], [1↔2], [1↔3], [1↔4], [2↔3], [2↔4], [3↔4]. thesis_duplicate: item 0 "量子计算突破" ↔ item 1 "英国租房指南" share normalized POV/angle/audience
+      at saveCurrentPlan (file:///J:/PigeonYang/WeMediaBuddy/src/main/planning.ts:121:27)
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:207:5
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:24:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:185:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'validation_failed',
+    errors: [ 'thesis_duplicate: item 0 "量子计算突破" ↔ item 1 "英国租房指南" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "量子计算突破" ↔ item 2 "小红书封面公式" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "量子计算突破" ↔ item 3 "独立开发变现" share normalized POV/angle/audience', 'thesis_duplicate: item 0 "量子计算突破" ↔ item 4 "路径规划算法" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "英国租房指南" ↔ item 2 "小红书封面公式" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "英国租房指南" ↔ item 3 "独立开发变现" share normalized POV/angle/audience', 'thesis_duplicate: item 1 "英国租房指南" ↔ item 4 "路径规划算法" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "小红书封面公式" ↔ item 3 "独立开发变现" share normalized POV/angle/audience', 'thesis_duplicate: item 2 "小红书封面公式" ↔ item 4 "路径规划算法" share normalized POV/angle/audience', 'thesis_duplicate: item 3 "独立开发变现" ↔ item 4 "路径规划算法" share normalized POV/angle/audience' ],
+    dupes: [ { pair: [Array], reason: 'thesis_duplicate: item 0 "量子计算突破" ↔ item 1 "英国租房指南" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "量子计算突破" ↔ item 2 "小红书封面公式" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "量子计算突破" ↔ item 3 "独立开发变现" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 0 "量子计算突破" ↔ item 4 "路径规划算法" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "英国租房指南" ↔ item 2 "小红书封面公式" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "英国租房指南" ↔ item 3 "独立开发变现" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 1 "英国租房指南" ↔ item 4 "路径规划算法" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "小红书封面公式" ↔ item 3 "独立开发变现" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 2 "小红书封面公式" ↔ item 4 "路径规划算法" share normalized POV/angle/audience' }, { pair: [Array], reason: 'thesis_duplicate: item 3 "独立开发变现" ↔ item 4 "路径规划算法" share normalized POV/angle/audience' } ]
+  }
+
+test at tests\proposals-ledger.test.mjs:218:1
+✖ restoreDismissedProposal returns item to open ledger (2785.7142ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(today.items.some((item) => item.planItemId === planItemId) || today.counts.today >= 1)
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:230:12
+      at withDb (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:24:11)
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/proposals-ledger.test.mjs:220:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests\wmb-5237-media-bindings.test.mjs:258:1
+✖ WMB-5237 media: migration 62 run hook backfills legacy core tokens and platform assetIds (X first image cover) (992.7075ms)
+  Error: no such table: source_scan_receipts
+      at migrateDatabase (file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts:641:18)
+      at TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/wmb-5237-media-bindings.test.mjs:280:22)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1,
+    errstr: 'SQL logic error'
+  }
+
+test at tests\wmb-5241-ingest-query-chain.test.mjs:209:1
+✖ WMB-5241 ingest/query chain on one real workspace (SQLite readback) (3749.8257ms)
+  AssertionError [ERR_ASSERTION]: 第一步处理 4 条（A/B/D/E）；C/F/G 为排除项
+  
+  5 !== 4
+  
+      at TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/wmb-5241-ingest-query-chain.test.mjs:374:10)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 5,
+    expected: 4,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests\wmb-5337-orchestration.test.mjs:45:1
+✖ production factory A/B/D/E invoked via shared orchestrator (real primitive spies) (2450.0113ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   [
+  -     'reporter',
+  -     null
+  -   ],
+  -   [
+  -     'writer',
+  -     'core_draft'
+  -   ]
+  - ]
+  
+      at file:///J:/PigeonYang/WeMediaBuddy/tests/wmb-5337-orchestration.test.mjs:89:12
+      at async TestContext.<anonymous> (file:///J:/PigeonYang/WeMediaBuddy/tests/wmb-5337-orchestration.test.mjs:46:3)
+      at async Test.run (node:internal/test_runner/test:1110:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:785:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ [ 'reporter', null ], [ 'writer', 'core_draft' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

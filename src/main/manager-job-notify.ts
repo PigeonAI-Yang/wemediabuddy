@@ -78,7 +78,7 @@ function buildNotifyText(input: {
     '',
     status === 'succeeded'
       ? role === 'reporter'
-        ? '记者扫描已完成（scan_phase_reached 读回）。若要出方案，请调用 wmb_continue_after_scan 或 wmb_run_daily_stage(stage=judge) 或派 planner。不要再 sleep 轮询。'
+        ? '记者扫描已完成（scan_phase_reached 读回）。若要生成完整方案，请启动一次 full 今日情报；不要再 sleep 轮询。'
         : '员工工单已完成（读回已核验）。请立即向用户汇报结果；写手单用 wmb_get_content(projectId) 验收正文。不要再 sleep/轮询，也不要 bash 读 session。'
       : status === 'partial'
       ? '员工工单部分完成（partial，读回部分达成）。请向用户说明已达成部分，并决定续派补全。'

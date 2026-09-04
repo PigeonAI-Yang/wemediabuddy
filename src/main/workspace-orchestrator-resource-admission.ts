@@ -740,7 +740,7 @@ function sameReserveIdentity(row: Row, input: NormalizedReserve): boolean {
     && String(row.session_key) === input.sessionKey;
 }
 
-function validateContext(database: DatabaseSync, input: NormalizedReserve | ResourceDispatchMutationInput, actor: WorkspaceOrchestratorActor, row: Row, nowMono: number, allowTerminalParent = false): Context {
+function validateContext(database: DatabaseSync, input: NormalizedReserve | ResourceDispatchMutationInput, actor: WorkspaceOrchestratorActor, row: Row, nowMono: number, allowTerminalContext = false, allowConsumedParent = false): Context {
   const rootRequestId = String(row.root_request_id);
   const root = database.prepare('SELECT * FROM daily_orchestration_roots WHERE workspace_id=? AND root_request_id=?').get(actor.workspaceId, rootRequestId) as Row | undefined;
   if (!root) throw new ResourceAdmissionError('WORKSPACE_STALE', 'dispatch root does not exist.', { rootRequestId });
@@ -750,7 +750,7 @@ function validateContext(database: DatabaseSync, input: NormalizedReserve | Reso
     || String(root.manager_task_id) !== String(row.manager_task_id)) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch root identity does not match.', { rootRequestId });
   }
-  if (!allowTerminalParent && (String(root.status) === 'succeeded' || String(root.status) === 'partial' || String(root.status) === 'failed' || String(root.status) === 'needs_user' || String(root.status) === 'cancelled')) {
+  if (!allowTerminalContext && (String(root.status) === 'succeeded' || String(root.status) === 'partial' || String(root.status) === 'failed' || String(root.status) === 'needs_user' || String(root.status) === 'cancelled')) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch root is terminal.', { rootRequestId });
   }
   if (numberValue(root.owner_epoch) !== actor.ownerEpoch || String(root.lease_token) !== actor.leaseToken) {
@@ -762,7 +762,7 @@ function validateContext(database: DatabaseSync, input: NormalizedReserve | Reso
   if (String(stage.root_request_id) !== rootRequestId || numberValue(stage.root_generation) !== numberValue(row.root_generation)) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch stage identity does not match.', { stageRequestId });
   }
-  if (!allowTerminalParent && (numberValue(stage.is_active) !== 1 || (RESOURCE_TERMINAL_STATES as readonly string[]).includes(String(stage.status)))) {
+  if (!allowTerminalContext && (numberValue(stage.is_active) !== 1 || (RESOURCE_TERMINAL_STATES as readonly string[]).includes(String(stage.status)))) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch stage claim is no longer active.', { stageRequestId });
   }
   if (stage.lease_token !== null && String(stage.lease_token) !== actor.leaseToken) {
@@ -783,7 +783,7 @@ function validateContext(database: DatabaseSync, input: NormalizedReserve | Reso
   if (String(parent.root_request_id) !== rootRequestId || String(parent.manager_task_id ?? row.manager_task_id) !== String(row.manager_task_id)) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch parent claim identity does not match.', { parentStageRequestId });
   }
-  if (!allowTerminalParent && (numberValue(parent.is_active) !== 1 || (RESOURCE_TERMINAL_STATES as readonly string[]).includes(String(parent.status)))) {
+  if (!allowTerminalContext && !allowConsumedParent && (numberValue(parent.is_active) !== 1 || (RESOURCE_TERMINAL_STATES as readonly string[]).includes(String(parent.status)))) {
     throw new ResourceAdmissionError('STATE_CONFLICT', 'dispatch parent claim is no longer active.', { parentStageRequestId });
   }
   if (parent.lease_token !== null && String(parent.lease_token) !== actor.leaseToken) {
@@ -1024,7 +1024,7 @@ function reserveCore(database: DatabaseSync, input: ReserveManagedDispatchInput)
     stage_request_id: normalized.stageRequestId,
     parent_stage_request_id: normalized.parentStageRequestId,
     expected_parent_claim_revision: Number((input as ReserveManagedDispatchInput & { expectedParentClaimRevision?: number }).expectedParentClaimRevision ?? 0)
-  }, normalized.nowMono, allowConsumedParent);
+  }, normalized.nowMono, false, allowConsumedParent);
   if (allowConsumedParent) {
     const parentResult = parseObject(context.parent.result_json);
     if (String(context.parent.status) !== 'succeeded' || Number(context.parent.is_active) !== 0 || String(parentResult.reasonCode) !== 'HANDOFF_CONSUMED') {
@@ -1175,12 +1175,12 @@ function processColumns(item: ResourceProcessInventory, row: Row): {
   };
 }
 
-function mutationContext(database: DatabaseSync, input: ResourceDispatchMutationInput, row: Row, options: { nowUtc: () => string; nowMono: () => number }, allowTerminalParent = false): { actor: WorkspaceOrchestratorActor; context: Context; pair: { utc: string; mono: number } } {
+function mutationContext(database: DatabaseSync, input: ResourceDispatchMutationInput, row: Row, options: { nowUtc: () => string; nowMono: () => number }, allowTerminalContext = false, allowConsumedParent = false): { actor: WorkspaceOrchestratorActor; context: Context; pair: { utc: string; mono: number } } {
   const pair = nowFor(options, input);
   const identity = mutationIdentity(input, row);
   const actor = assertFence(database, identity.workspaceId, input, pair.mono);
   validateDispatchOwner(actor, row);
-  const context = validateContext(database, { ...input, ...identity } as ResourceDispatchMutationInput, actor, row, pair.mono, allowTerminalParent);
+  const context = validateContext(database, { ...input, ...identity } as ResourceDispatchMutationInput, actor, row, pair.mono, allowTerminalContext, allowConsumedParent);
   resolveAcceptance(input as unknown as Readonly<Record<string, unknown>>, [
     { name: 'dispatch', row },
     { name: 'root', row: context.root },
@@ -1247,7 +1247,7 @@ function settleCore(database: DatabaseSync, input: ResourceDispatchMutationInput
   const computedHash = input.resultHash === undefined || input.resultHash === null ? hashV1({ status: requestedStatus, result: resultValue ?? null }) : String(input.resultHash);
   const replay = activeOrReplay(row, requestedStatus, computedHash);
   if (replay) return replay;
-  const { pair } = mutationContext(database, input, row, options, requestedStatus === 'cancelled' || requestedStatus === 'orphaned');
+  const { pair } = mutationContext(database, input, row, options, requestedStatus === 'cancelled' || requestedStatus === 'orphaned', String(row.role_id) === 'judge');
   const resultJson = resultValue === undefined ? null : canonicalJsonV1(resultValue);
   const updated = updateDispatch(database, row, {
     state,

@@ -317,12 +317,17 @@ test('WMB-5244 source media: renders incomplete 3/5 summary, kind totals and all
   assert.match(html, /下载超时，请重试/, '失败错误信息可见');
 });
 
-test('WMB-5244 source media: preserved items render local wmb-asset thumbnails + 查看原件; no remote URL as image source', () => {
+test('WMB-5244 source media: preserved images and videos render inline from local assets', () => {
   const html = render({ overview: overviewFixture(), loading: false, busy: null, onRetry: noop, onTogglePause: noop, onOpenOriginal: noop });
-  assert.match(html, /<img[^>]*src="wmb-asset:\/\/asset1"/);
-  assert.match(html, /<img[^>]*src="wmb-asset:\/\/asset2"/);
-  assert.doesNotMatch(html, /<img[^>]*src="https?:\/\//, '任何 <img> 不得指向远程 URL —— 远程候选绝不呈现为已保存');
-  assert.equal((html.match(/查看原件/g) ?? []).length, 3, '已保存三项各有一个查看原件');
+  assert.match(html, /<div class="library-media-viewer count-3"/);
+  assert.match(html, /<img[^>]*class="library-media-image"[^>]*src="wmb-asset:\/\/asset1"/);
+  assert.match(html, /<img[^>]*class="library-media-image"[^>]*src="wmb-asset:\/\/asset2"/);
+  assert.match(html, /<video[^>]*class="library-media-video"[^>]*src="wmb-asset:\/\/asset3"/);
+  assert.match(html, /<video[^>]*controls=""/);
+  assert.match(html, /<video[^>]*playsInline=""|<video[^>]*playsinline=""/);
+  assert.doesNotMatch(html, /<(?:img|video)[^>]*src="https?:\/\//, '预览不得回退远程 URL');
+  assert.equal((html.match(/打开原件/g) ?? []).length, 3, '每个可预览原件保留打开动作');
+  assert.match(html, /<details class="library-media-management">/, '保存状态默认退到折叠区');
 });
 
 test('WMB-5244 source media: failed item gets 重试 action; non-preserved items never offer 查看原件', () => {
@@ -357,23 +362,23 @@ test('WMB-5244 source media: all six state groups render user-facing labels', ()
   assert.equal((html.match(/aria-label="重试/g) ?? []).length, 1, 'needs_user/unsupported/skipped 不提供重试（worker 仅接受 failed）');
 });
 
-test('WMB-5244 source media: global pause toggle is accessible (aria-pressed) and switches label', () => {
+test('WMB-5244 source media: global pause toggle is accessible inside media management', () => {
   const pausedHtml = render({ overview: { ...overviewFixture(), globalPaused: true }, loading: false, busy: null, onRetry: noop, onTogglePause: noop, onOpenOriginal: noop });
   assert.match(pausedHtml, /aria-pressed="true"/);
-  assert.match(pausedHtml, /恢复后台保存/);
-  assert.match(pausedHtml, /后台保存已暂停/);
+  assert.match(pausedHtml, /恢复自动保存/);
+  assert.match(pausedHtml, /媒体自动保存已暂停/);
   const runningHtml = render({ overview: overviewFixture(), loading: false, busy: null, onRetry: noop, onTogglePause: noop, onOpenOriginal: noop });
   assert.match(runningHtml, /aria-pressed="false"/);
-  assert.match(runningHtml, /暂停后台保存/);
-  assert.doesNotMatch(runningHtml, /后台保存已暂停/);
+  assert.match(runningHtml, /暂停自动保存/);
+  assert.doesNotMatch(runningHtml, /媒体自动保存已暂停/);
 });
 
-test('WMB-5244 source media: empty overview guides the user and keeps pause control; loading and error states render', () => {
+test('WMB-5244 source media: empty overview stays concise and keeps pause control', () => {
   const empty = { sourceId: 'src1', revision: 5, revisionKey: 'source:src1:r5', counts: { total: 0, preserved: 0, processing: 0, failed: 0, needsUser: 0, skippedLimit: 0, unsupported: 0 }, items: [], globalPaused: false };
   const emptyHtml = render({ overview: empty, loading: false, busy: null, onRetry: noop, onTogglePause: noop, onOpenOriginal: noop });
   assert.match(emptyHtml, /此资料暂无可保存的图片或视频/);
   assert.doesNotMatch(emptyHtml, /library-media-list/, '空态不渲染媒体列表');
-  assert.match(emptyHtml, /暂停后台保存/, '暂停控制始终可用');
+  assert.match(emptyHtml, /暂停媒体自动保存/, '暂停控制始终可用');
 
   const loadingHtml = render({ overview: null, loading: true, busy: null, onRetry: noop, onTogglePause: noop, onOpenOriginal: noop });
   assert.match(loadingHtml, /正在读取媒体/);

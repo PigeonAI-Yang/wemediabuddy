@@ -15,13 +15,12 @@ async function readFileRel(p) {
 }
 
 // --- helper to import TS modules (Node 22 strips types) ---
-let registry, policies, runner, intake;
+let registry, policies, runner;
 async function ensureModules() {
   if (!registry) {
     registry = await import('../src/main/role-job-registry.ts');
     policies = await import('../src/main/role-job-policies.ts');
     runner = await import('../src/main/generic-employee-runner.ts');
-    intake = await import('../src/main/planning-stage-intake.ts');
   }
 }
 
@@ -55,16 +54,6 @@ test('registry: deriveResourceLocks exact vs daily', async () => {
   assert.deepEqual(empty, ['plan:ws1:2026-08-24']);
 });
 
-test('intake: retired producer returns a bounded Actor intent and performs no direct spawn', async () => {
-  const content = await readFileRel('src/main/planning-stage-intake.ts');
-  assert.ok(content.includes("kind: 'submitWorkspaceOrchestratorIntent'"), 'intake must expose the typed Actor replacement');
-  assert.ok(content.includes("producerId: 'proposal.plan-item-request-planning'"), 'intent must retain the canonical producer identity');
-  assert.ok(content.includes("action: 'judge'"), 'intent must route to the judge action');
-  assert.ok(content.includes('planItemId'), 'logical input must carry the exact plan item');
-  assert.ok(content.includes('sourceIds'), 'logical input must preserve frozen source identities');
-  assert.ok(content.includes('CUTOVER_REQUIRED'), 'legacy direct caller must fail closed with replacement guidance');
-  assert.ok(!content.includes("spawn({ roleId: 'planner'"), 'retired intake must not directly spawn a Planner job');
-});
 
 test('policies: runJudgePolicy branches to targeted and preserves ordinary daily judge', async () => {
   const content = await readFileRel('src/main/role-job-policies.ts');
@@ -101,6 +90,12 @@ test('policies: targeted prompt is bounded and forbids filesystem/SQLite bypass 
     assert.ok(content.includes(criterion), `targeted prompt must name ${criterion}`);
   }
   assert.ok(content.includes('propagation_v2'), 'targeted prompt must require the V2 score before its single submit');
+  assert.ok(content.includes('可执行性、容易实验、容易拿到回执不是 propagation_v2 的独立加分项'), 'targeted prompt must not reward tactical experiments over a larger supported thesis');
+  assert.ok(content.includes('不得仅因个人测试更容易落地'), 'targeted prompt must forbid collapsing a major release into a small personal test');
+  assert.ok(content.includes('wiki_page:<pageId>:<currentVersionId>'), 'targeted prompt must compose canonical wiki page references');
+  assert.ok(content.includes('knowledge_note:<noteId>:<versionId>'), 'targeted prompt must compose canonical note references');
+  assert.ok(content.includes('严禁只提交 wver-* / ver-* 裸版本 ID'), 'targeted prompt must reject naked knowledge version IDs');
+  assert.ok(content.includes('wmb_get_knowledge_context 返回的 sources/evidence ID 不得混入 sourceIds'), 'targeted prompt must keep knowledge evidence IDs out of frozen sourceIds');
   const hasBranch = content.includes("typeof ctx.spec.planItemId") || content.includes('ctx.spec.planItemId');
   assert.ok(hasBranch, 'old path missing branch would be caught here');
   // inspect prompt function if exported

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 96" role="img" width="640" height="96">
+<title>L2 · 墨夜扁平 · 圆形裁切 · 圆形头像安全裁切验证</title>
+<style>text{font-family:ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+
+<rect width="640" height="96" fill="#FFFFFF" rx="12"/>
+<text x="12" y="18" font-size="9" fill="#888" font-weight="700">L2 · 墨夜扁平 · 圆形裁切 · 关键特征居中 · 不贴边</text>
+
+<g transform="translate(24,24)">
+  <defs><clipPath id="cpL20"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/>
+  <g clip-path="url(#cpL20)"><g><circle cx="32" cy="32" r="28" fill="#121820"/><circle cx="20" cy="18" r="5.2" fill="#121820"/><circle cx="44" cy="18" r="5.2" fill="#121820"/><circle cx="32" cy="28" r="15" fill="#121820"/><circle cx="26" cy="27" r="2.6" fill="#FFF8E8"/><circle cx="38" cy="27" r="2.6" fill="#FFF8E8"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#DDD6CF" stroke-width="1" opacity="0.9"/>
+</g>
+<g transform="translate(144,24)">
+  <defs><clipPath id="cpL21"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/>
+  <g clip-path="url(#cpL21)"><g><circle cx="32" cy="32" r="28" fill="#121820"/><ellipse cx="23" cy="14" rx="4.8" ry="13" fill="#121820"/><ellipse cx="41" cy="14" rx="4.8" ry="13" fill="#121820"/><circle cx="32" cy="28" r="12.5" fill="#121820"/><circle cx="27" cy="27" r="2.4" fill="#FFF8E8"/><circle cx="37" cy="27" r="2.4" fill="#FFF8E8"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#DDD6CF" stroke-width="1" opacity="0.9"/>
+</g>
+<g transform="translate(264,24)">
+  <defs><clipPath id="cpL22"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/>
+  <g clip-path="url(#cpL22)"><g><circle cx="32" cy="32" r="28" fill="#121820"/><path d="M16 14 L18.5 6 L22 13 Z" fill="#121820"/><path d="M42 13 L45.5 6 L48 14 Z" fill="#121820"/><ellipse cx="32" cy="30" rx="17" ry="15" fill="#121820"/><circle cx="26" cy="30" r="2" fill="#FFF8E8"/><circle cx="38" cy="30" r="2" fill="#FFF8E8"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#DDD6CF" stroke-width="1" opacity="0.9"/>
+</g>
+<g transform="translate(384,24)">
+  <defs><clipPath id="cpL23"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/>
+  <g clip-path="url(#cpL23)"><g><circle cx="32" cy="32" r="28" fill="#121820"/><path d="M16 16 L18 7 L22 15 Z" fill="#121820"/><path d="M42 15 L46 7 L48 16 Z" fill="#121820"/><circle cx="32" cy="26" r="12.8" fill="#121820"/><circle cx="27" cy="25" r="2.3" fill="#FFF8E8"/><circle cx="37" cy="25" r="2.3" fill="#FFF8E8"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#DDD6CF" stroke-width="1" opacity="0.9"/>
+</g>
+<g transform="translate(504,24)">
+  <defs><clipPath id="cpL24"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8" stroke-width="0.7"/>
+  <g clip-path="url(#cpL24)"><g><circle cx="32" cy="32" r="28" fill="#121820"/><path d="M12 28 Q32 10 52 28 L52 31 Q32 35 12 31 Z" fill="#121820"/><ellipse cx="32" cy="28" rx="14" ry="12" fill="#121820"/><circle cx="27" cy="28" r="2.2" fill="#FFF8E8"/><circle cx="37" cy="28" r="2.2" fill="#FFF8E8"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#DDD6CF" stroke-width="1" opacity="0.9"/>
+</g>
+<text x="12" y="88" font-size="7.5" fill="#AAA">五角色圆形裁切 · 顶部耳型/刺背不贴边 · 同锚点A安全区验证</text>
+</svg>

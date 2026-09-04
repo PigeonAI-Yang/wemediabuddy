@@ -14,6 +14,7 @@ import {
   type SourceMediaOverview,
   type SourceMediaStatusGroup
 } from '../shared/source-media';
+import { sourceContentEquivalent } from './source-content-equivalence';
 
 type Fermenting = NonNullable<NonNullable<Awaited<ReturnType<typeof window.wmb.getToday>>>['fermenting']>;
 type FermentingItem = Fermenting['items'][number];
@@ -218,20 +219,6 @@ function TodaySourceMedia({ overview, loading, error }: {
   </>;
 }
 
-function normalizeSourceContent(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/g, ' ').toLocaleLowerCase() ?? '';
-}
-
-function sourceContentEquivalent(left: string | null | undefined, right: string | null | undefined): boolean {
-  const normalizedLeft = normalizeSourceContent(left);
-  const normalizedRight = normalizeSourceContent(right);
-  if (!normalizedLeft || !normalizedRight) return false;
-  if (normalizedLeft === normalizedRight) return true;
-  const [shorter, longer] = normalizedLeft.length <= normalizedRight.length
-    ? [normalizedLeft, normalizedRight]
-    : [normalizedRight, normalizedLeft];
-  return shorter.length >= 80 && longer.startsWith(shorter) && shorter.length / longer.length >= 0.65;
-}
 
 function isSocialPostUrl(value: string | null | undefined): boolean {
   const host = domainOf(value ?? null)?.toLocaleLowerCase() ?? '';

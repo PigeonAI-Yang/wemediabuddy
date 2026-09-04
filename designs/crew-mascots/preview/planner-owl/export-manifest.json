@@ -1,0 +1,25 @@
+{
+  "name": "planner-owl",
+  "matrix": {
+    "avatar": [
+      {
+        "size": 640,
+        "variant": "full"
+      }
+    ],
+    "icon": [],
+    "favicon": [],
+    "ico": {}
+  },
+  "outputs": [
+    {
+      "file": "png/avatar/640.png",
+      "size": 640,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-640-full-z4qe.png"
+    }
+  ],
+  "generatedAt": "2026-08-20T11:37:12.120Z",
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}

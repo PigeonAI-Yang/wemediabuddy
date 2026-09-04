@@ -671,6 +671,20 @@ test("WMB-5368 Judge active cap is one and a second root remains durably waiting
       JSON.parse(waiting.result_json).reasonCode,
       "RESOURCE_JUDGE_CAPACITY",
     );
+    const judgeDispatch = control.resourceStore.listDispatches('ws-judge-cap', 'judge')[0];
+    const settledJudge = control.resourceStore.settleTerminal({
+      workspaceId: 'ws-judge-cap',
+      jobId: judgeDispatch.jobId,
+      parentStageRequestId: judgeDispatch.parentStageRequestId,
+      expectedParentClaimRevision: judgeDispatch.expectedParentClaimRevision,
+      terminalStatus: 'succeeded',
+      result: { taskStatus: 'succeeded' },
+      fence: fenceFrom(control.actorStore.readActor('ws-judge-cap')),
+      nowUtc: NOW,
+      nowMono: 180,
+    });
+    assert.equal(settledJudge.ok, true, JSON.stringify(settledJudge));
+    assert.equal(settledJudge.status, 'terminal', 'judge settlement accepts its consumed F parent while root and judge claim remain active');
   }));
 
 test("WMB-5368 task binding, launch attempt, spawn uncertainty, and running registration retain task/process identity", () =>

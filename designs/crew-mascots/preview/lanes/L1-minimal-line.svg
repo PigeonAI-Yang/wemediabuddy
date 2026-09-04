@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- L1 极简淡线：奶白 + 细棕描边 + 小五官，平涂零渐变 -->
+  <g id="accessories">
+    <circle cx="300" cy="250" r="72" fill="#FFF9F2" stroke="#6B5D4F" stroke-width="10"/>
+    <circle cx="724" cy="250" r="72" fill="#FFF9F2" stroke="#6B5D4F" stroke-width="10"/>
+  </g>
+  <g id="body">
+    <ellipse cx="512" cy="500" rx="305" ry="290" fill="#FFF9F2" stroke="#6B5D4F" stroke-width="10"/>
+  </g>
+  <g id="face">
+    <g id="eyes">
+      <circle cx="420" cy="480" r="20" fill="#3A3238"/>
+      <circle cx="426" cy="473" r="6" fill="#FFFFFF"/>
+      <circle cx="604" cy="480" r="20" fill="#3A3238"/>
+      <circle cx="610" cy="473" r="6" fill="#FFFFFF"/>
+    </g>
+    <g id="nose">
+      <ellipse cx="512" cy="556" rx="30" ry="22" fill="#3A3238"/>
+    </g>
+    <g id="mouth">
+      <path d="M512 578 Q512 604 490 610 M512 578 Q512 604 534 610" stroke="#3A3238" stroke-width="9" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g id="deco">
+    <ellipse cx="340" cy="600" rx="42" ry="24" fill="#FFB3C1" opacity="0.55"/>
+    <ellipse cx="684" cy="600" rx="42" ry="24" fill="#FFB3C1" opacity="0.55"/>
+  </g>
+</svg>

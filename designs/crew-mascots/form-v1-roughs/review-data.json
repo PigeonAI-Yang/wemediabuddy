@@ -1,0 +1,66 @@
+{
+  "project": "WeMediaBuddy 班组吉祥物",
+  "stage": "Form 3.1",
+  "gate": "F1 · 选择剪影大形",
+  "criteria": [
+    "五角色同族感是否一眼可感（统一母形/画法）",
+    "物种可辨度（熊/兔/鸮/猫/刺猬仅靠大形轮廓能否区分）",
+    "64px 混排与 32px 顶栏轮廓是否可辨、互分",
+    "圆形裁切安全（耳羽/刺背不贴边、居中稳定）",
+    "与 WeMediaBuddy 桌面端气质是否协调（克制、稳重、可信）"
+  ],
+  "candidates": [
+    {
+      "id": "A",
+      "name": "方案 A · 紧凑头像徽章",
+      "claim": "以紧凑徽章统一五角色，用顶部轮廓完成物种区分。",
+      "fit": "圆形徽章与桌面头像同构，64px 居中稳定，家族感强。",
+      "risk": "兔长耳在圆形裁切中占比偏高，需控安全边距。",
+      "hero": "./A-hero.svg",
+      "scenes": {
+        "grid64": "./A-grid64.svg",
+        "circle": "./A-circle.svg",
+        "bar32": "./A-bar32.svg"
+      }
+    },
+    {
+      "id": "B",
+      "name": "方案 B · 豆形全身",
+      "claim": "以低重心豆形统一身形，用顶部耳型拉开物种。",
+      "fit": "落地稳、亲和度高，32px 椭圆轮廓仍可辨，适合智能体页并排。",
+      "risk": "偏幼感，猫尾等横向件在 32px 易丢。",
+      "hero": "./B-hero.svg",
+      "scenes": {
+        "grid64": "./B-grid64.svg",
+        "circle": "./B-circle.svg",
+        "bar32": "./B-bar32.svg"
+      }
+    },
+    {
+      "id": "C",
+      "name": "方案 C · 直立胶囊班组",
+      "claim": "以竖向胶囊为家族母形，仅顶部耳羽做物种标记。",
+      "fit": "竖向与 WeMediaBuddy 桌面端卡片/列表气质一致，扩展性好。",
+      "risk": "母形过强可能压制鸮与刺猬特征，需靠顶饰强度补偿。",
+      "hero": "./C-hero.svg",
+      "scenes": {
+        "grid64": "./C-grid64.svg",
+        "circle": "./C-circle.svg",
+        "bar32": "./C-bar32.svg"
+      }
+    },
+    {
+      "id": "D",
+      "name": "方案 D · 宽底图腾",
+      "claim": "以宽底图腾统一重心，用上部收窄形成桌面稳定性。",
+      "fit": "底宽与桌面/任务栏稳重感呼应，多尺寸下底盘不易散。",
+      "risk": "底盘偏重，小尺寸下刺猬背刺与底宽叠加需验拥挤。",
+      "hero": "./D-hero.svg",
+      "scenes": {
+        "grid64": "./D-grid64.svg",
+        "circle": "./D-circle.svg",
+        "bar32": "./D-bar32.svg"
+      }
+    }
+  ]
+}

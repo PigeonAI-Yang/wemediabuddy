@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 640" role="img">
+<title>V4 · 数字机器人班组</title>
+<style>
+  text{font-family: ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+</style>
+<rect width="1024" height="640" fill="#FFFFFF" rx="16"/>
+<rect x="12" y="12" width="1000" height="52" rx="12" fill="#111"/>
+<text x="20" y="33" fill="#fff" font-size="15.5" font-weight="800">V4 · 数字机器人班组</text>
+<text x="20" y="50" fill="#BBBBBB" font-size="9.5">五个桌面 AI 机器人 · 以机体功能与状态模块区分</text>
+<text x="1004" y="34" fill="#E85D26" font-size="9" font-weight="700" text-anchor="end">同画布 1024×640 · 黑白+统一强调色 #E85D26 · 粗视觉</text>
+<rect x="12" y="74" width="1000" height="308" rx="14" fill="#FAFAF8" stroke="#E8E0D8" stroke-width="1"/>
+<text x="512" y="94" text-anchor="middle" font-size="8.5" fill="#9A9A9A" letter-spacing="0.3">五角色阵容主视图 — 左→右固定顺序：桌助 / 记者 / 策划 / 写手 / 资料员（同画布同粗糙度）</text>
+
+<g id="lineup">
+  <!-- 桌助 console bot -->
+  <g transform="translate(62,108)">
+    <rect x="20" y="106" width="80" height="18" rx="9" fill="#111"/>
+    <rect x="18" y="52" width="84" height="58" rx="16" fill="#111"/>
+    <rect x="30" y="62" width="60" height="28" rx="6" fill="#fff"/><rect x="36" y="68" width="18" height="4" rx="1" fill="#E85D26"/><rect x="36" y="74" width="28" height="3" rx="1" fill="#111" opacity="0.3"/>
+    <circle cx="50" cy="38" r="22" fill="#111" stroke="#E85D26" stroke-width="2"/><circle cx="50" cy="38" r="8" fill="#fff"/><circle cx="50" cy="38" r="3.5" fill="#111"/><circle cx="50" cy="38" r="1.2" fill="#E85D26"/>
+    <circle cx="34" cy="42" r="4" fill="#E85D26"/><circle cx="84" cy="42" r="4" fill="#E85D26"/>
+  </g>
+  <!-- 记者 drone -->
+  <g transform="translate(230,108)">
+    <ellipse cx="58" cy="124" rx="28" ry="8" fill="#111" opacity="0.15"/>
+    <rect x="30" y="56" width="56" height="42" rx="12" fill="#111"/>
+    <ellipse cx="58" cy="36" rx="28" ry="16" fill="#111"/><circle cx="58" cy="36" r="10" fill="#fff"/><circle cx="58" cy="36" r="5" fill="#111"/><circle cx="58" cy="36" r="1.6" fill="#E85D26"/>
+    <rect x="12" y="66" width="18" height="8" rx="4" fill="#111"/><rect x="86" y="66" width="18" height="8" rx="4" fill="#111"/>
+    <rect x="18" y="72" width="14" height="14" rx="7" fill="#E85D26"/><rect x="84" y="72" width="14" height="14" rx="7" fill="#E85D26"/>
+    <circle cx="46" cy="74" r="3.5" fill="#fff"/><circle cx="70" cy="74" r="3.5" fill="#fff"/>
+  </g>
+  <!-- 策划 analyst bot with halo / chart -->
+  <g transform="translate(398,108)">
+    <rect x="22" y="108" width="76" height="14" rx="7" fill="#111"/>
+    <rect x="24" y="58" width="72" height="52" rx="14" fill="#111"/>
+    <ellipse cx="60" cy="30" rx="26" ry="8" fill="none" stroke="#E85D26" stroke-width="2"/>
+    <rect x="36" y="34" width="48" height="34" rx="10" fill="#111" stroke="#fff" stroke-width="1.2"/>
+    <circle cx="50" cy="48" r="4" fill="#fff"/><circle cx="70" cy="48" r="4" fill="#fff"/><circle cx="50" cy="48" r="1.8" fill="#111"/><circle cx="70" cy="48" r="1.8" fill="#111"/>
+    <polyline points="38,64 48,56 56,60 68,50" fill="none" stroke="#E85D26" stroke-width="1.6" stroke-linecap="round"/>
+    <rect x="10" y="74" width="14" height="22" rx="7" fill="#111"/><rect x="96" y="74" width="14" height="22" rx="7" fill="#111"/>
+  </g>
+  <!-- 写手 arm bot -->
+  <g transform="translate(574,108)">
+    <rect x="24" y="112" width="72" height="14" rx="7" fill="#111"/>
+    <rect x="30" y="60" width="60" height="52" rx="14" fill="#111"/>
+    <circle cx="60" cy="38" r="18" fill="#111"/><circle cx="52" cy="38" r="4" fill="#fff"/><circle cx="68" cy="38" r="4" fill="#fff"/><circle cx="52" cy="38" r="1.8" fill="#111"/><circle cx="68" cy="38" r="1.8" fill="#111"/>
+    <path d="M82 72 Q98 84 88 102" stroke="#111" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <rect x="84" y="96" width="10" height="28" rx="5" fill="#E85D26" transform="rotate(-12 89 110)"/>
+    <path d="M90 126 L86 134 L94 132 Z" fill="#111"/>
+  </g>
+  <!-- 资料员 tank archive -->
+  <g transform="translate(748,108)">
+    <rect x="14" y="118" width="92" height="16" rx="6" fill="#111"/>
+    <rect x="18" y="60" width="84" height="58" rx="12" fill="#111"/>
+    <rect x="26" y="70" width="68" height="10" rx="3" fill="#fff"/><rect x="26" y="84" width="68" height="10" rx="3" fill="#fff"/><rect x="26" y="98" width="68" height="10" rx="3" fill="#fff"/>
+    <rect x="30" y="72" width="20" height="6" rx="1" fill="#E85D26"/><rect x="30" y="86" width="30" height="6" rx="1" fill="#E85D26"/><rect x="30" y="100" width="24" height="6" rx="1" fill="#E85D26"/>
+    <circle cx="60" cy="34" r="16" fill="#111"/><circle cx="52" cy="34" r="4" fill="#fff"/><circle cx="68" cy="34" r="4" fill="#fff"/>
+    <circle cx="30" cy="126" r="5" fill="#fff" stroke="#111" stroke-width="1"/><circle cx="90" cy="126" r="5" fill="#fff" stroke="#111" stroke-width="1"/>
+  </g>
+  <g font-size="10" font-weight="700" fill="#222" text-anchor="middle">
+    <text x="120" y="276">桌助 · 中枢</text><text x="286" y="276">记者 · 无人机</text><text x="460" y="276">策划 · 分析</text><text x="634" y="276">写手 · 臂写</text><text x="810" y="276">资料员 · 履带</text>
+  </g>
+  <g font-size="7.5" fill="#888" text-anchor="middle">
+    <text x="120" y="288">控制台/光环</text><text x="286" y="288">旋翼/大眼</text><text x="460" y="288">光环图表</text><text x="634" y="288">机械臂钢笔</text><text x="810" y="288">分层档案</text>
+  </g>
+</g>
+<rect x="12" y="390" width="1000" height="84" rx="12" fill="#FFFFFF" stroke="#E8E0D8" stroke-width="1"/>
+<text x="22" y="408" font-size="8.5" fill="#888" font-weight="700">64px 圆形头像混排预览（智能体页 5 并排 · 圆形裁切）</text>
+
+<g id="avatars">
+  <g transform="translate(84,418)"><circle cx="32" cy="32" r="28" fill="#111"/><rect x="18" y="28" width="28" height="10" rx="2" fill="#fff"/><rect x="22" y="30" width="8" height="2" fill="#E85D26"/></g>
+  <g transform="translate(212,418)"><circle cx="32" cy="32" r="28" fill="#111"/><circle cx="32" cy="24" r="8" fill="#fff"/><circle cx="32" cy="24" r="3" fill="#111"/></g>
+  <g transform="translate(340,418)"><circle cx="32" cy="32" r="28" fill="#111"/><ellipse cx="32" cy="16" rx="12" ry="4" fill="none" stroke="#E85D26" stroke-width="1.5"/></g>
+  <g transform="translate(468,418)"><circle cx="32" cy="32" r="28" fill="#111"/><rect x="36" y="22" width="4" height="16" rx="2" fill="#E85D26" transform="rotate(-18 38 30)"/></g>
+  <g transform="translate(596,418)"><circle cx="32" cy="32" r="28" fill="#111"/><rect x="18" y="26" width="28" height="4" rx="1" fill="#fff"/><rect x="18" y="34" width="28" height="4" rx="1" fill="#E85D26"/></g>
+  <text x="740" y="442" font-size="9" fill="#999">机器人同画法 · 圆角机身+白眼，机能模块作钩子</text>
+  <text x="740" y="456" font-size="8" fill="#B0A9A0">台 / 旋翼 / 光环 / 臂 / 履带</text>
+</g>
+<rect x="12" y="482" width="1000" height="62" rx="12" fill="#FAFAF8" stroke="#E8E0D8" stroke-width="1"/>
+<text x="22" y="500" font-size="8.5" fill="#888" font-weight="700">32px 顶栏缩略预览（今日页值班摘要 · 32px 圆头像 + 文字）</text>
+
+<g id="topbar">
+  <rect x="22" y="512" width="980" height="36" rx="10" fill="#fff" stroke="#DDD6CF"/>
+  <g font-size="8" fill="#999" text-anchor="middle">
+    <g transform="translate(44,518)"><circle cx="14" cy="14" r="14" fill="#111"/><rect x="8" y="14" width="12" height="6" rx="1" fill="#fff"/></g>
+    <text x="78" y="530" font-size="9" fill="#222" font-weight="700">今日值班</text>
+    <text x="134" y="530" font-size="8" fill="#888">机器人 32px</text>
+    <g transform="translate(214,520)"><circle cx="12" cy="12" r="12" fill="#111"/><rect x="8" y="10" width="8" height="4" rx="1" fill="#fff"/></g>
+    <g transform="translate(244,520)"><circle cx="12" cy="12" r="12" fill="#111"/><circle cx="12" cy="10" r="4" fill="#fff"/></g>
+    <g transform="translate(274,520)"><circle cx="12" cy="12" r="12" fill="#111"/><ellipse cx="12" cy="8" rx="6" ry="2" fill="none" stroke="#fff" stroke-width="1"/></g>
+    <g transform="translate(304,520)"><circle cx="12" cy="12" r="12" fill="#111"/><rect x="14" y="8" width="2" height="8" rx="1" fill="#E85D26"/></g>
+    <g transform="translate(334,520)"><circle cx="12" cy="12" r="12" fill="#111"/><rect x="7" y="10" width="10" height="2" fill="#fff"/></g>
+    <text x="384" y="530" font-size="8" fill="#666">中枢</text><text x="430" y="530" font-size="8" fill="#666">无人机</text><text x="476" y="530" font-size="8" fill="#666">分析</text><text x="524" y="530" font-size="8" fill="#666">臂写</text><text x="570" y="530" font-size="8" fill="#666">履带</text>
+    <rect x="650" y="520" width="68" height="18" rx="9" fill="#111"/><text x="684" y="531" text-anchor="middle" font-size="7.5" fill="#fff" font-weight="700">去批选题</text>
+  </g>
+</g>
+<rect x="12" y="552" width="1000" height="78" rx="12" fill="#FFF7F0" stroke="#E85D26" stroke-width="1.05"/>
+<text x="18" y="572" font-size="11" fill="#111"><tspan font-weight="800">一句话：</tspan><tspan fill="#222">五个小机器人各管一模块，用机能讲分工。</tspan></text>
+<text x="18" y="592" font-size="10.5" fill="#2B2B2B"><tspan font-weight="700" fill="#111">适配：</tspan>AI 终端感最纯，桌住持中枢、四兵各一能力，一眼懂是“干活的”。</text>
+<text x="18" y="612" font-size="10.5" fill="#6B6B6B"><tspan font-weight="700" fill="#111">风险：</tspan>易显硬/冷，需靠圆角与眼神补亲切，避免工具感过重。</text>
+</svg>

@@ -2,10 +2,11 @@ import type { BrowserProfile } from '../main/browser-config';
 import type { IntelligenceChannelsSummary } from '../main/intelligence-channels';
 import type { WorkspaceBrowserBinding } from '../main/workspace-browser-binding';
 import type { OwnerBrowserState } from '../main/browser-profile-owner';
-import type { RoleModelCandidate } from '../shared/pi-config';
+import type { RoleModelCandidate, RoleModelThinkingLevel } from '../shared/pi-config';
 
 export type WmbRoleId = 'desk' | 'reporter' | 'planner' | 'writer' | 'librarian';
 export type WmbRoleModelCandidate = RoleModelCandidate;
+export type WmbRoleModelThinkingLevel = RoleModelThinkingLevel;
 export type WmbRoleModelPolicy = { candidates: WmbRoleModelCandidate[] };
 export type WmbPiProfile = {
   id: string;

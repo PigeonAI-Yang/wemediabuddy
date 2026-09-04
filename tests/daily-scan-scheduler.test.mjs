@@ -56,48 +56,6 @@ test('x list lane has its own independent timer', async (t) => {
   assert.ok(xRuns.length >= 1, 'x list lane fires on its own schedule');
 });
 
-test('saved sources trigger a single-instance judge with one queued follow-up', async (t) => {
-  const judgeCalls = [];
-  let scans = 0;
-  let releaseJudge;
-  const judgeGate = new Promise((resolve) => { releaseJudge = resolve; });
-  const scheduler = new DailyScanScheduler({
-    isCurrent: () => true,
-    officialWebMs: 25,
-    xListsMs: 10_000,
-    firstDelayMs: 5,
-    run: async () => ({ savedCount: scans++ < 2 ? 2 : 0 }),
-    onNewSources: async (modules) => {
-      judgeCalls.push(modules);
-      if (judgeCalls.length === 1) await judgeGate;
-    }
-  });
-  t.after(() => { releaseJudge(); scheduler.stop(); });
-  scheduler.start();
-  await wait(100);
-  assert.equal(judgeCalls.length, 1, 'judge is single-instance while the first judgment is gated');
-  releaseJudge();
-  await wait(60);
-  scheduler.stop();
-  assert.equal(judgeCalls.length, 2, 'triggers during a running judge collapse into exactly one queued follow-up');
-});
-
-test('no new sources means no judgment', async (t) => {
-  let judgeCalls = 0;
-  const scheduler = new DailyScanScheduler({
-    isCurrent: () => true,
-    officialWebMs: 25,
-    xListsMs: 10_000,
-    firstDelayMs: 5,
-    run: async () => ({ savedCount: 0 }),
-    onNewSources: async () => { judgeCalls += 1; }
-  });
-  t.after(() => scheduler.stop());
-  scheduler.start();
-  await wait(80);
-  scheduler.stop();
-  assert.equal(judgeCalls, 0);
-});
 
 test('a throwing run surfaces through onError and does not kill future ticks', async (t) => {
   const errors = [];

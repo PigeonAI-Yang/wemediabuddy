@@ -27,7 +27,7 @@ const { bindXList } = await import('../src/main/x-lists.ts');
 const { writeXListTimelineCache } = await import('../src/main/x-list-timeline-cache.ts');
 const { runEnabledXListWire } = await import('../src/main/intelligence-wire.ts');
 const { xMetricEvidenceMap } = await import('../src/main/platforms/metric-value.ts');
-const { persistBoundXListTimeline } = await import('../src/main/x-list-execution.ts');
+const { collectBoundXListTimeline } = await import('../src/main/x-list-execution.ts');
 const { createWebsiteSource } = await import('../src/main/intelligence-channels.ts');
 const { persistWebsiteSourceScan } = await import('../src/main/website-channel.ts');
 
@@ -323,14 +323,20 @@ test('WMB-5229 direct-write entry: x-list timeline persist schedules compile', a
         hasMore: false
       }
     };
-    const collected = persistBoundXListTimeline(database, { id: 'fixture-browser', cdpUrl: 'http://127.0.0.1:9999', workspaceId }, {
-      accountKey, listId, limit: 50
-    }, read);
+    const topic = upsertKnowledgeTopic(database, { title: 'X List 情报' });
+    const seeded = upsertSource(database, {
+      feedId: binding.sourceFeedId,
+      originalUrl: post.url,
+      title: post.text,
+      summary: post.text
+    });
+    linkTopic(database, seeded.id, topic.id);
+    const collected = await collectBoundXListTimeline(database, { id: 'fixture-browser', cdpUrl: 'http://127.0.0.1:9999', workspaceId }, {
+      accountKey, listId, limit: 50, readTimeline: async () => read.timeline
+    });
     assert.equal(collected.ok, true, collected.error?.message ?? '');
     assert.equal(collected.data.sourceIds.length, 1, 'X List 采集保存 1 条 Source');
 
-    const topic = upsertKnowledgeTopic(database, { title: 'X List 情报' });
-    linkTopic(database, collected.data.sourceIds[0], topic.id);
 
     const events = await captureBroadcasts(() => drain());
     assert.equal(compileOperations(database).length, 1, '已关联 → 编译 1 个 Topic');

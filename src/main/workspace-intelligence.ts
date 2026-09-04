@@ -145,7 +145,7 @@ async function startLaneDailyIntelligence(input: IntelligenceInput, profile: Wor
     const workDir = await mkdtemp(path.join(os.tmpdir(), `wmb-${profile.intelligencePackId}-daily-`));
     const sessionFile = path.join(layout.agentDir, 'sessions', `${piSessionId}.jsonl`);
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
         piCliFromRuntimeRoot(await resolvePiRuntimeRoot(input.dataRootPath)), '--mode', 'rpc',
         '--session', sessionFile,

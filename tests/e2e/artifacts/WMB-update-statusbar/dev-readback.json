@@ -1,0 +1,28 @@
+{
+  "mode": "dev",
+  "topBannerCount": 0,
+  "topBannerCountIdle": 0,
+  "bannerVisible": false,
+  "statusWarnCount": 1,
+  "statusWarnText": "更新未完成",
+  "statusWarnTitle": "更新未完成 · Can not find Squirrel",
+  "statusWarnAria": "更新未完成 · Can not find Squirrel",
+  "statusWarnTag": "BUTTON",
+  "focusable": true,
+  "navigatedToSettings": true,
+  "observedUiText": {
+    "statusBar": "Pi 空闲\nE2E 工作空间 · profile.ai.official\nAI 接入已就绪\n浏览器未启动\n更新未完成\n☾\n黑夜紫罗兰\n2026年8月22日 23:03:37",
+    "statusWarnText": "更新未完成",
+    "statusWarnTitle": "更新未完成 · Can not find Squirrel"
+  },
+  "checks": {
+    "noTopBanner": true,
+    "hasStatusWarn": true,
+    "titleHasDetail": true,
+    "ariaHasDetail": true,
+    "isButton": true,
+    "activationOpensSettings": true,
+    "idleAbsent": true
+  },
+  "idleWarnCount": 0
+}

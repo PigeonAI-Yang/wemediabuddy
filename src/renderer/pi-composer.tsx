@@ -59,6 +59,9 @@ export type PiSendOutcome = Readonly<{
   retainAttachments?: boolean;
 }>;
 
+type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const THINKING_LABELS: Record<ThinkingLevel, string> = { off: '关闭', minimal: '极简', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' };
+
 export const PiComposer = memo(function PiComposer({
   configured,
   busy,
@@ -76,6 +79,7 @@ export const PiComposer = memo(function PiComposer({
   modelMenuBusy,
   modelChoice,
   modelOptions,
+  thinkingOptions,
   onModelChoice,
   onThinkingChoice,
   onOpenModelMenu,
@@ -94,13 +98,14 @@ export const PiComposer = memo(function PiComposer({
   onSend: (text: string, delivery?: 'steer' | 'followUp', attachments?: readonly PiImageAttachmentPayload[], batchRequestId?: string, draftImages?: readonly PiLocalQueueAttachment[]) => void | boolean | PiSendOutcome | Promise<void | boolean | PiSendOutcome>;
   onStop: () => void;
   modelLabel: string;
-  thinkingChoice: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  thinkingChoice: 'auto' | ThinkingLevel;
   modelMenuOpen: boolean;
   modelMenuBusy: boolean;
   modelChoice: string;
   modelOptions: string[];
+  thinkingOptions: ThinkingLevel[];
   onModelChoice: (value: string) => void;
-  onThinkingChoice: (value: 'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') => void;
+  onThinkingChoice: (value: 'auto' | ThinkingLevel) => void;
   onOpenModelMenu: () => void;
   onCloseModelMenu: () => void;
   onApplyModel: () => void;
@@ -322,8 +327,8 @@ export const PiComposer = memo(function PiComposer({
         {modelOptions.length ? modelOptions.map((model) => <option key={model} value={model}>{model}</option>) : <option value={modelChoice}>{modelMenuBusy ? '正在读取模型…' : modelChoice || '没有可用模型'}</option>}
       </select></label>
       <label><span>推理强度</span><select disabled={modelMenuBusy} value={thinkingChoice} onChange={(event) => onThinkingChoice(event.target.value as typeof thinkingChoice)}>
-        <option value="auto">自动</option><option value="off">关闭</option><option value="minimal">极简</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">很高</option><option value="max">最高</option>
-      </select></label>
+        <option value="auto">自动（按模型默认）</option>{thinkingOptions.map((level) => <option key={level} value={level}>{THINKING_LABELS[level]}</option>)}
+      </select><small>{thinkingOptions.length ? '仅显示该模型实际支持的等级。' : '该模型未提供可验证的手动等级。'}</small></label>
       <button type="button" className="primary-button" disabled={modelMenuBusy || !modelChoice} onClick={onApplyModel}>{modelMenuBusy ? '读取中…' : '应用到新回复'}</button>
     </div>}
     <div className={`pi-composer${dragOver ? ' drag-over' : ''}`} onDragOver={(event) => { event.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(event) => { event.preventDefault(); setDragOver(false); addFiles(Array.from(event.dataTransfer.files)); }} onPaste={(event) => { const images = Array.from(event.clipboardData.files).filter((file) => imageMimeType(file)); if (images.length) { event.preventDefault(); addFiles(images); } }}>

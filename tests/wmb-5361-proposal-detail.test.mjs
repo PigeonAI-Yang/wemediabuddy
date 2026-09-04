@@ -34,9 +34,11 @@ test('WMB-5361 getProposalDetail reads the complete approval snapshot', async ()
   } finally { database.close(); await rm(root,{recursive:true,force:true}); }
 });
 
-test('WMB-5361 renderer exposes detail and Pi focus as separate actions with real fields', async () => {
+test('WMB-5361 renderer exposes complete detail while card selection owns Pi focus', async () => {
   const text = await readFile(new URL('../src/renderer/proposals-view.tsx', import.meta.url),'utf8');
-  for (const label of ['查看详情','设置 Pi 焦点','为什么现在','目标读者','表达角度','核心观点','标题建议','开头建议','内容结构','已有材料','缺失材料','来源证据','六维评分','证据缺口']) assert.match(text,new RegExp(label));
+  for (const label of ['查看详情','为什么现在','目标读者','表达角度','核心观点','标题建议','开头建议','内容结构','已有材料','缺失材料','来源证据','六维评分','证据缺口']) assert.match(text,new RegExp(label));
+  assert.doesNotMatch(text,/设置 Pi 焦点/);
+  assert.match(text,/onToggle=\{\(next\) => onSelectedItemChange\?\.\(toggleSingleFocus\(selectedItem, next\)\)\}/);
   assert.match(text,/getProposalDetail/);
   assert.match(text,/data-testid="proposal-detail"/);
 });

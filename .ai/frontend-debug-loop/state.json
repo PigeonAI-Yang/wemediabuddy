@@ -1,37 +1,39 @@
 {
-  "active_loop": "2026-09-02-proposal-ledger-truthful-surface",
+  "active_loop": "2026-09-04-model-reasoning-picker-consistency",
   "status": "done",
-  "symptom": "选题台账显示零可批、原始校验字段和全部待评分，用户无法判断哪些选题可直接推进。",
+  "symptom": "同一个 muse-spark-1.3-contributor 在 Pi 对话框只显示自动，但设置页继续显示旧的 MAX。",
   "observation_packet": {
-    "url": "installed WeMediaBuddy 0.3.0 proposals",
-    "viewport": "1568x941 Electron",
-    "user_action": "打开选题台账",
-    "expected": "显示真实已保存选题，并用用户可理解的审批状态呈现",
-    "actual_before": "今日可批为 0；卡片显示待评分；详情暴露 titleGuidance_required 等内部字段",
-    "actual_after": "今日可批为 18；卡片显示待审批；详情不再出现内部校验字段",
-    "dom_selector": "[data-opportunity-card], [data-testid=proposal-detail]",
-    "state_store": "真实用户数据目录 C:/Users/yangda01/AppData/Roaming/WeMediaBuddy"
+    "url": "WeMediaBuddy settings > AI 与模型；今日 > Pi 模型与推理",
+    "viewport": "1600x960 Electron",
+    "user_action": "选择没有 reasoning/thinkingLevelMap 元数据的 Muse 模型并打开两处思考等级下拉",
+    "expected": "两处都只显示自动",
+    "actual_before": "Pi 对话框按未知能力回退自动；设置页把已保存 MAX 作为临时选项保留",
+    "actual_after": "能力目录加载前后设置页都不会展示未经验证的旧等级；设置页和 Pi 对话框均只显示自动",
+    "screenshot": "tests/e2e/.artifacts/STG-009-settings-role-provider-models-FuaWt2/pi-model-reasoning-unknown-1100-screenshot.png",
+    "network_ws": "E2E /v1/models includes muse-spark-1.3-contributor without reasoning metadata",
+    "dom_selector": ".settings-form 思考等级 select；.pi-model-menu 推理强度 select",
+    "state_store": "piThinking/thinkingChoice + PiModelOption.thinkingLevels"
   },
   "hypotheses": [
     {
-      "hypothesis": "台账错误地把未建成冻结 orchestrator projection 当成已保存选题的展示前置条件",
-      "supports": "数据库已有 18 条 ready_for_review，旧页面仍显示 0",
-      "would_disprove": "直接按 plan_items/carry 读取后仍为 0",
-      "next_check": "让已保存 plan_items 成为台账真源并重启安装版",
-      "result": "确认；安装版立即显示 18 条今日可批"
+      "hypothesis": "设置页 thinkingOptionsForModel 为未知模型保留 current saved thinking，而 Pi 对话框会直接回退 auto",
+      "supports": "settings-view.tsx unknown branch returned current option；pi-dock.tsx required selected.thinkingLevels membership",
+      "would_disprove": "Muse 出现在 Pi 内置 ModelRuntime 目录或 Provider 返回 reasoning metadata",
+      "next_check": "检查 ModelRuntime 并用同一无元数据模型驱动两处真实 UI",
+      "result": "确认；ModelRuntime 中无该模型，修复后两处 Electron DOM options 都只有 auto"
     }
   ],
-  "breakpoint": "proposal ledger display truth",
+  "breakpoint": "fallback divergence: settings preserved stale explicit thinking for unknown models",
   "owner_check": {
-    "user-blocked-on": "可批选题被隐藏且界面暴露内部错误码",
-    "now-usable": "18 条选题可见、可否掉、可驳回、可批准并推进",
-    "real-data-or-state": "真实安装版与真实用户数据",
-    "loading-empty-error-states": "真实列表渲染；内部缺字段不再伪装为用户错误",
-    "v1-v2-baseline-preserved": "是",
-    "regression-risk-checked": "typecheck、台账分类测试、详情渲染合同、安装版真实界面通过",
+    "user-blocked-on": "两处显示冲突，不知道 MAX 是否真的可用",
+    "now-usable": "没有可验证能力元数据时，两处统一只提供自动",
+    "real-data-or-state": "真实 Electron、真实 IPC、本地 HTTP Provider、真实模型保存与重载",
+    "loading-empty-error-states": "加载前显示自动；加载后未知模型仍只显示自动并解释原因",
+    "v1-v2-baseline-preserved": "是；未修改样式 token 或布局",
+    "regression-risk-checked": "STG-009、pi-config tests、typecheck",
     "would-user_return_this": "no"
   },
-  "attempts": 1,
-  "last_gate": "Installed Electron: today=18, 待审批 visible, raw validation errors absent",
+  "attempts": 2,
+  "last_gate": "STG-009 passed: Muse settings options=[auto], value=auto; Pi dialog options=[auto] after saved profile reload",
   "clean_completion": "yes"
 }

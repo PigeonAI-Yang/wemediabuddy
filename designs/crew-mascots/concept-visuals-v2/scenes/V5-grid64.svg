@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="12 390 1000 84" width="1000" height="84">
+<title>V5 · 桌面物件拟人</title>
+<style>
+  text{font-family: ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+</style>
+<rect width="1024" height="640" fill="#FFFFFF" rx="16"/>
+<rect x="12" y="12" width="1000" height="52" rx="12" fill="#111"/>
+<text x="20" y="33" fill="#fff" font-size="15.5" font-weight="800">V5 · 桌面物件拟人</text>
+<text x="20" y="50" fill="#BBBBBB" font-size="9.5">五件办公物件 · 以物件结构与姿态获得人格</text>
+<text x="1004" y="34" fill="#E85D26" font-size="9" font-weight="700" text-anchor="end">同画布 1024×640 · 黑白+统一强调色 #E85D26 · 粗视觉</text>
+<rect x="12" y="74" width="1000" height="308" rx="14" fill="#FAFAF8" stroke="#E8E0D8" stroke-width="1"/>
+<text x="512" y="94" text-anchor="middle" font-size="8.5" fill="#9A9A9A" letter-spacing="0.3">五角色阵容主视图 — 左→右固定顺序：桌助 / 记者 / 策划 / 写手 / 资料员（同画布同粗糙度）</text>
+
+<g id="lineup">
+  <!-- 台灯 桌助 -->
+  <g transform="translate(62,108)">
+    <rect x="18" y="128" width="84" height="14" rx="7" fill="#111"/>
+    <rect x="52" y="54" width="10" height="76" rx="5" fill="#111"/>
+    <path d="M22 56 L98 56 L88 18 L32 18 Z" fill="#111"/><ellipse cx="60" cy="18" rx="34" ry="14" fill="#111"/>
+    <circle cx="48" cy="36" r="5" fill="#fff"/><circle cx="72" cy="36" r="5" fill="#fff"/><circle cx="48" cy="36" r="2.3" fill="#111"/><circle cx="72" cy="36" r="2.3" fill="#111"/><circle cx="48" cy="37.5" r="1" fill="#E85D26"/><circle cx="72" cy="37.5" r="1" fill="#E85D26"/>
+    <path d="M54 46 Q60 50 66 46" stroke="#fff" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    <rect x="22" y="80" width="14" height="28" rx="7" fill="#111"/><rect x="84" y="80" width="14" height="28" rx="7" fill="#111"/>
+  </g>
+  <!-- 胶带座 记者 -->
+  <g transform="translate(230,108)">
+    <ellipse cx="58" cy="126" rx="42" ry="16" fill="#111"/>
+    <ellipse cx="58" cy="92" rx="38" ry="34" fill="#111"/>
+    <circle cx="58" cy="92" r="16" fill="#fff"/><circle cx="58" cy="92" r="7" fill="#111"/><circle cx="58" cy="92" r="2" fill="#E85D26"/>
+    <!-- tape -->
+    <path d="M86 78 Q108 68 106 42" stroke="#111" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="M100 36 L110 40 L108 48 L98 44 Z" fill="#E85D26"/>
+    <circle cx="44" cy="84" r="5" fill="#fff"/><circle cx="72" cy="84" r="5" fill="#fff"/><circle cx="44" cy="84" r="2.3" fill="#111"/><circle cx="72" cy="84" r="2.3" fill="#111"/>
+    <rect x="16" y="86" width="14" height="22" rx="7" fill="#111"/><rect x="88" y="86" width="14" height="22" rx="7" fill="#111"/>
+  </g>
+  <!-- 印章 策划 -->
+  <g transform="translate(400,108)">
+    <rect x="20" y="96" width="80" height="36" rx="6" fill="#111"/>
+    <rect x="28" y="108" width="64" height="6" rx="2" fill="#E85D26"/>
+    <rect x="32" y="62" width="56" height="36" rx="8" fill="#111"/>
+    <rect x="44" y="38" width="32" height="22" rx="4" fill="#111"/><circle cx="60" cy="26" r="16" fill="#111"/><circle cx="60" cy="26" r="6" fill="#E85D26"/>
+    <circle cx="48" cy="80" r="5" fill="#fff"/><circle cx="72" cy="80" r="5" fill="#fff"/><circle cx="48" cy="80" r="2.3" fill="#111"/><circle cx="72" cy="80" r="2.3" fill="#111"/>
+    <rect x="14" y="84" width="14" height="26" rx="7" fill="#111"/><rect x="92" y="84" width="14" height="26" rx="7" fill="#111"/>
+  </g>
+  <!-- 钢笔 写手 -->
+  <g transform="translate(576,108)">
+    <rect x="42" y="32" width="36" height="104" rx="14" fill="#111"/>
+    <rect x="48" y="22" width="24" height="16" rx="4" fill="#111"/><rect x="52" y="14" width="16" height="10" rx="3" fill="#E85D26"/>
+    <path d="M42 136 L78 136 L60 158 Z" fill="#111"/>
+    <circle cx="52" cy="78" r="5" fill="#fff"/><circle cx="68" cy="78" r="5" fill="#fff"/><circle cx="52" cy="78" r="2.3" fill="#111"/><circle cx="68" cy="78" r="2.3" fill="#111"/>
+    <rect x="18" y="78" width="14" height="28" rx="7" fill="#111"/><rect x="88" y="78" width="14" height="28" rx="7" fill="#111"/>
+    <path d="M54 92 Q60 96 66 92" stroke="#fff" stroke-width="1.2" fill="none"/>
+  </g>
+  <!-- 档案盒 资料员 -->
+  <g transform="translate(752,108)">
+    <rect x="14" y="54" width="92" height="84" rx="10" fill="#111"/>
+    <rect x="14" y="66" width="92" height="6" fill="#fff" opacity="0.95"/><rect x="14" y="84" width="92" height="6" fill="#fff" opacity="0.95"/><rect x="14" y="102" width="92" height="6" fill="#fff" opacity="0.6"/>
+    <rect x="32" y="46" width="28" height="14" rx="3" fill="#E85D26"/><rect x="68" y="46" width="28" height="10" rx="3" fill="#111" stroke="#E85D26" stroke-width="1"/>
+    <circle cx="44" cy="88" r="5" fill="#fff"/><circle cx="76" cy="88" r="5" fill="#fff"/><circle cx="44" cy="88" r="2.3" fill="#111"/><circle cx="76" cy="88" r="2.3" fill="#111"/>
+    <rect x="10" y="86" width="14" height="26" rx="7" fill="#111"/><rect x="96" y="86" width="14" height="26" rx="7" fill="#111"/>
+    <rect x="18" y="136" width="16" height="8" rx="4" fill="#111"/><rect x="86" y="136" width="16" height="8" rx="4" fill="#111"/>
+  </g>
+  <g font-size="10" font-weight="700" fill="#222" text-anchor="middle">
+    <text x="120" y="276">桌助 · 台灯</text><text x="286" y="276">记者 · 胶带座</text><text x="460" y="276">策划 · 印章</text><text x="634" y="276">写手 · 钢笔</text><text x="812" y="276">资料员 · 档案盒</text>
+  </g>
+  <g font-size="7.5" fill="#888" text-anchor="middle">
+    <text x="120" y="288">照亮调度</text><text x="286" y="288">拉带捕捉</text><text x="460" y="288">落印决断</text><text x="634" y="288">尖锋书写</text><text x="812" y="288">分层收纳</text>
+  </g>
+</g>
+<rect x="12" y="390" width="1000" height="84" rx="12" fill="#FFFFFF" stroke="#E8E0D8" stroke-width="1"/>
+<text x="22" y="408" font-size="8.5" fill="#888" font-weight="700">64px 圆形头像混排预览（智能体页 5 并排 · 圆形裁切）</text>
+
+<g id="avatars">
+  <g transform="translate(84,418)"><circle cx="32" cy="32" r="28" fill="#111"/><path d="M12 18 L52 18 L46 30 L18 30 Z" fill="#fff"/><circle cx="24" cy="36" r="2.2" fill="#fff"/><circle cx="40" cy="36" r="2.2" fill="#fff"/></g>
+  <g transform="translate(212,418)"><circle cx="32" cy="32" r="28" fill="#111"/><circle cx="32" cy="32" r="10" fill="#fff"/><circle cx="32" cy="32" r="4" fill="#111"/></g>
+  <g transform="translate(340,418)"><circle cx="32" cy="32" r="28" fill="#111"/><circle cx="32" cy="20" r="7" fill="#E85D26"/><rect x="18" y="32" width="28" height="12" rx="2" fill="#fff"/></g>
+  <g transform="translate(468,418)"><circle cx="32" cy="32" r="28" fill="#111"/><rect x="26" y="16" width="12" height="24" rx="6" fill="#fff"/><path d="M26 40 L38 40 L32 48 Z" fill="#E85D26"/></g>
+  <g transform="translate(596,418)"><circle cx="32" cy="32" r="28" fill="#111"/><rect x="18" y="28" width="28" height="3" fill="#fff"/><rect x="18" y="34" width="28" height="3" fill="#fff"/></g>
+  <text x="740" y="442" font-size="9" fill="#999">物件拟人 · 物件轮廓即头像轮廓，桌感最强</text>
+  <text x="740" y="456" font-size="8" fill="#B0A9A0">灯罩 / 胶带环 / 印钮 / 笔尖 / 盒脊</text>
+</g>
+<rect x="12" y="482" width="1000" height="62" rx="12" fill="#FAFAF8" stroke="#E8E0D8" stroke-width="1"/>
+<text x="22" y="500" font-size="8.5" fill="#888" font-weight="700">32px 顶栏缩略预览（今日页值班摘要 · 32px 圆头像 + 文字）</text>
+
+<g id="topbar">
+  <rect x="22" y="512" width="980" height="36" rx="10" fill="#fff" stroke="#DDD6CF"/>
+  <g font-size="8" fill="#999" text-anchor="middle">
+    <g transform="translate(44,518)"><circle cx="14" cy="14" r="14" fill="#111"/><path d="M8 10 L20 10 L18 14 L10 14 Z" fill="#fff"/></g>
+    <text x="78" y="530" font-size="9" fill="#222" font-weight="700">今日值班</text>
+    <text x="134" y="530" font-size="8" fill="#888">物件拟人 32px</text>
+    <g transform="translate(214,520)"><circle cx="12" cy="12" r="12" fill="#111"/><path d="M6 8 L18 8 L16 12 L8 12 Z" fill="#fff"/></g>
+    <g transform="translate(244,520)"><circle cx="12" cy="12" r="12" fill="#111"/><circle cx="12" cy="12" r="5" fill="#fff"/></g>
+    <g transform="translate(274,520)"><circle cx="12" cy="12" r="12" fill="#111"/><circle cx="12" cy="8" r="3" fill="#E85D26"/></g>
+    <g transform="translate(304,520)"><circle cx="12" cy="12" r="12" fill="#111"/><rect x="9" y="6" width="6" height="10" rx="3" fill="#fff"/></g>
+    <g transform="translate(334,520)"><circle cx="12" cy="12" r="12" fill="#111"/><rect x="7" y="12" width="10" height="2" fill="#fff"/></g>
+    <text x="384" y="530" font-size="8" fill="#666">台灯</text><text x="432" y="530" font-size="8" fill="#666">胶带</text><text x="480" y="530" font-size="8" fill="#666">印章</text><text x="528" y="530" font-size="8" fill="#666">钢笔</text><text x="576" y="530" font-size="8" fill="#666">档案盒</text>
+    <rect x="650" y="520" width="68" height="18" rx="9" fill="#111"/><text x="684" y="531" text-anchor="middle" font-size="7.5" fill="#fff" font-weight="700">去批选题</text>
+  </g>
+</g>
+<rect x="12" y="552" width="1000" height="78" rx="12" fill="#FFF7F0" stroke="#E85D26" stroke-width="1.05"/>
+<text x="18" y="572" font-size="11" fill="#111"><tspan font-weight="800">一句话：</tspan><tspan fill="#222">工具自己站起来干活，把“桌上现场”变成一家人。</tspan></text>
+<text x="18" y="592" font-size="10.5" fill="#2B2B2B"><tspan font-weight="700" fill="#111">适配：</tspan>与主标黑底 W 同台最协，物件即隐喻，桌感最浓。</text>
+<text x="18" y="612" font-size="10.5" fill="#6B6B6B"><tspan font-weight="700" fill="#111">风险：</tspan>物件拟人易过度可爱化，需控表情别滑向文具玩具。</text>
+</svg>

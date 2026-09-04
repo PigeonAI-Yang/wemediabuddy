@@ -1,0 +1,89 @@
+{
+  "init": {
+    "vals": "0|0|0|0"
+  },
+  "afterClick": {
+    "hasRunningBar": false,
+    "hasIntelligenceBar": false,
+    "headline": null,
+    "metricsVals": "0|0|0|0",
+    "metricsCalls": 0,
+    "todayCalls": 0,
+    "viewTransitions": 2,
+    "mutations": []
+  },
+  "late": {
+    "metricsCalls": [],
+    "todayCallsCount": 0,
+    "viewTransitions": 2,
+    "reloads": 0,
+    "mutations": [],
+    "dashFlashes": 0,
+    "overviewSame": true,
+    "hasRunningBar": false,
+    "vals": "0|0|0|0",
+    "computed": {
+      "display": "grid",
+      "opacity": "1",
+      "height": "196.75px",
+      "transition": "all",
+      "animation": "none"
+    },
+    "overviewRect": {
+      "w": 642,
+      "h": 196.75
+    },
+    "pagescroll": 0,
+    "harnessTodayCalls": 0
+  },
+  "harnessEvidence": {
+    "console": [
+      {
+        "type": "debug",
+        "text": "[vite] connecting...",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 732,
+          "column": 8,
+          "lineNumber": 732,
+          "columnNumber": 8
+        }
+      },
+      {
+        "type": "debug",
+        "text": "[vite] connected.",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 826,
+          "column": 11,
+          "lineNumber": 826,
+          "columnNumber": 11
+        }
+      },
+      {
+        "type": "info",
+        "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+        "location": {
+          "url": "http://127.0.0.1:27391/@fs/j:/PigeonYang/WeMediaBuddy/node_modules/.vite/deps/react-dom_client.js?v=6fca6c74",
+          "line": 20102,
+          "column": 53,
+          "lineNumber": 20102,
+          "columnNumber": 53
+        }
+      },
+      {
+        "type": "warning",
+        "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+        "location": {
+          "url": "node:electron/js2c/sandbox_bundle",
+          "line": 1,
+          "column": 102780,
+          "lineNumber": 1,
+          "columnNumber": 102780
+        }
+      }
+    ],
+    "errors": [],
+    "pageerrors": []
+  }
+}

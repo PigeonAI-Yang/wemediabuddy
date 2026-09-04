@@ -1,0 +1,275 @@
+{
+  "barRect": {
+    "left": 423,
+    "top": 128.5,
+    "width": 748,
+    "height": 87,
+    "right": 1171
+  },
+  "barStyle": {
+    "display": "flex",
+    "flexWrap": "wrap",
+    "gap": "6px 4px",
+    "padding": "8px 12px",
+    "width": "748px"
+  },
+  "groupRects": [
+    {
+      "label": "段落",
+      "left": 435,
+      "top": 136.5,
+      "right": 527,
+      "bottom": 168.5,
+      "width": 92,
+      "height": 32,
+      "display": "flex",
+      "marginLeft": "0px",
+      "flex": "0 0 auto"
+    },
+    {
+      "label": "行内格式",
+      "left": 531,
+      "top": 136.5,
+      "right": 675.78125,
+      "bottom": 168.5,
+      "width": 144.78125,
+      "height": 32,
+      "display": "flex",
+      "marginLeft": "0px",
+      "flex": "0 0 auto"
+    },
+    {
+      "label": "列表",
+      "left": 679.78125,
+      "top": 136.5,
+      "right": 797.8125,
+      "bottom": 168.5,
+      "width": 118.03125,
+      "height": 32,
+      "display": "flex",
+      "marginLeft": "0px",
+      "flex": "0 0 auto"
+    },
+    {
+      "label": "插入",
+      "left": 801.8125,
+      "top": 136.5,
+      "right": 1065.8125,
+      "bottom": 168.5,
+      "width": 264,
+      "height": 32,
+      "display": "flex",
+      "marginLeft": "0px",
+      "flex": "0 0 auto"
+    },
+    {
+      "label": "编辑",
+      "left": 435,
+      "top": 174.5,
+      "right": 675,
+      "bottom": 206.5,
+      "width": 240,
+      "height": 32,
+      "display": "flex",
+      "marginLeft": "0px",
+      "flex": "0 0 auto"
+    }
+  ],
+  "groupsTotalWidth": 874.8125,
+  "remainingIfSingleRow": -126.8125,
+  "controls": [
+    {
+      "text": "正文二级标题三级标题引用",
+      "tag": "SELECT",
+      "left": 435,
+      "top": 136.5,
+      "width": 92,
+      "height": 32
+    },
+    {
+      "text": "B",
+      "tag": "BUTTON",
+      "left": 531,
+      "top": 136.5,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "I",
+      "tag": "BUTTON",
+      "left": 567,
+      "top": 136.5,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "S",
+      "tag": "BUTTON",
+      "left": 603,
+      "top": 136.5,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "<>",
+      "tag": "BUTTON",
+      "left": 639,
+      "top": 136.5,
+      "width": 36.78125,
+      "height": 32
+    },
+    {
+      "text": "• 列表",
+      "tag": "BUTTON",
+      "left": 679.78125,
+      "top": 136.5,
+      "width": 54.296875,
+      "height": 32
+    },
+    {
+      "text": "1. 列表",
+      "tag": "BUTTON",
+      "left": 738.078125,
+      "top": 136.5,
+      "width": 59.734375,
+      "height": 32
+    },
+    {
+      "text": "链接",
+      "tag": "BUTTON",
+      "left": 801.8125,
+      "top": 136.5,
+      "width": 44,
+      "height": 32
+    },
+    {
+      "text": "代码块",
+      "tag": "BUTTON",
+      "left": 849.8125,
+      "top": 136.5,
+      "width": 58,
+      "height": 32
+    },
+    {
+      "text": "表格",
+      "tag": "BUTTON",
+      "left": 911.8125,
+      "top": 136.5,
+      "width": 44,
+      "height": 32
+    },
+    {
+      "text": "分割线",
+      "tag": "BUTTON",
+      "left": 959.8125,
+      "top": 136.5,
+      "width": 58,
+      "height": 32
+    },
+    {
+      "text": "图片",
+      "tag": "BUTTON",
+      "left": 1021.8125,
+      "top": 136.5,
+      "width": 44,
+      "height": 32
+    },
+    {
+      "text": "清除",
+      "tag": "BUTTON",
+      "left": 435,
+      "top": 174.5,
+      "width": 44,
+      "height": 32
+    },
+    {
+      "text": "↶",
+      "tag": "BUTTON",
+      "left": 483,
+      "top": 174.5,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "↷",
+      "tag": "BUTTON",
+      "left": 519,
+      "top": 174.5,
+      "width": 32,
+      "height": 32
+    },
+    {
+      "text": "查找替换",
+      "tag": "BUTTON",
+      "left": 555,
+      "top": 174.5,
+      "width": 72,
+      "height": 32
+    },
+    {
+      "text": "标记",
+      "tag": "BUTTON",
+      "left": 631,
+      "top": 174.5,
+      "width": 44,
+      "height": 32
+    }
+  ],
+  "tops": [
+    "136.5",
+    "174.5"
+  ],
+  "rows": [
+    [
+      "正文二级标题三级标题引用(435,w92)",
+      "B(531,w32)",
+      "I(567,w32)",
+      "S(603,w32)",
+      "<>(639,w37)",
+      "• 列表(680,w54)",
+      "1. 列表(738,w60)",
+      "链接(802,w44)",
+      "代码块(850,w58)",
+      "表格(912,w44)",
+      "分割线(960,w58)",
+      "图片(1022,w44)"
+    ],
+    [
+      "清除(435,w44)",
+      "↶(483,w32)",
+      "↷(519,w32)",
+      "查找替换(555,w72)",
+      "标记(631,w44)"
+    ]
+  ],
+  "firstRowControls": [
+    "正文二级标题三级标题引用",
+    "B",
+    "I",
+    "S",
+    "<>",
+    "• 列表",
+    "1. 列表",
+    "链接",
+    "代码块",
+    "表格",
+    "分割线",
+    "图片"
+  ],
+  "lastFirst": {
+    "text": "图片",
+    "tag": "BUTTON",
+    "left": 1021.8125,
+    "top": 136.5,
+    "width": 44,
+    "height": 32
+  },
+  "unused": 93.1875,
+  "barInnerWidth": 724,
+  "usedFirstRowWidth": 630.8125,
+  "unusedPrecise": 93.1875,
+  "viewport": {
+    "width": 1568,
+    "height": 941
+  }
+}

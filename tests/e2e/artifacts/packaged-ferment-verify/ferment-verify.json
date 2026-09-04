@@ -1,0 +1,33 @@
+{
+  "fermentInfo": {
+    "railText": "持续关注 · 主题 · 0\n\n没有需要持续关注的主题。",
+    "titles": [],
+    "allH3": [],
+    "bodySnippet": "WeMediaBuddy\nVerifyProd\n−\n□\n×\n工作流\n今日\n智能体\n发现\n选题\n创作\n发布\n结果\n知识资产\n主题\n资料库\n关系画布\n设置\n今日经营概况\n更新于 2026/8/25 15:02:50\n查看资料\n查看待确认选题\n今日新资料\n420\n较昨日 +175%\n内容机会\n0\n—\n进行中项目\n426\n待处理 395\n近 7 日发布\n1\n新增 1\n本轮选题等待确认\n\n先查看并确认本轮选题；确认完成后再开始下一轮更新。\n\n今日有 5 条草稿/待审批，不计入正式机会 · 仅已批准选题可进入生产\n\nCurrently working on find better and consistent dialog gen to apply it in MMH3, either verbatim or as a ref for voice gen So far, results are meh Index 2.5 TTS is ok, but on par wi\n@SlipperyGem\n·\n2026-08-25 14:28:30\nCharacter RePose and Fusion works quite well. This is Krea 2, made with my workflow and a simplified variant for the BG + Posed character fusion. These are first last frames for Mi\n@SlipperyGem\n·\n2026-08-25 14:33:25\nWan 3.0 is now live on @OpenRouter. Generate 2–30s videos from text, images, or references, with support for up to 1080p. A limited-time launch offer is also available across resol\n@alibaba_cloud\n·\n2026-08-25 14:28:46\nWan 3.0 is now on @TopviewAIhq! Longer generations, more creative flexibility, and accessible video creation—now available on Topview. A special offer is also available. 🔥 More AP\n@alibaba_cloud\n·\n2026-08-25 14:30:44\nUsing Grok Bot to cancel services is pretty magical. It just figures it all out, on its own. I literally had to ask it how it was able to cancel because I wanted to know. It couldn\n@morganlinton\n·\n2026-08-25 06:30:49\nWan 3.0 is now available on @ComfyUI! 30 seconds. One generation. More room for your story. Explore what’s possible with Wan3.0 on Comfy👇\n@Alibaba_Wan\n·\n2026-08-25 14:34:23\nhttps://t.co/Yl2KG97Eb1 🤝 @tencentcloud 欢迎大家来 https://t.co/Yl2KG97Eb1 免费体验腾讯 Hy3 的强大能力！ 🔗 https://t.co/rnavfEMvL4\n@BAI_AGI\n·\n2026-08-25 14:39:41\nhttps://t.co/Yl2KG97Eb1 🤝 @tencentcloud Come experience the powerful capabilities of Tencent Hy3 on https://t.co/Yl2KG97Eb1, now available for FREE! 🔗 https://t.co/rnavfEMvL4\n@BAI_AGI\n·\n2026-08-25 14:41:03\nWan 3.0 is now available on @ComfyUI! 30 seconds. One generation. More room for your story. Explore what’s possible with Wan3.0 on "
+  },
+  "foundForbidden": [],
+  "counts": {
+    "hasRail": true,
+    "summary": "持续关注 · 主题 · 0",
+    "rows": 0,
+    "watching": ""
+  },
+  "shellVisible": true,
+  "piVisible": true,
+  "forbidden": [
+    "把 bug 看板直接交给 AI，最先要防的不是犯错而是提示词注入",
+    "AI 代写得越完整，申请材料越容易失去你的贡献",
+    "企业愿意用 AI，前提可能不是更聪明，而是还能控制住数据和系统",
+    "产品想法先别急着开发，先找人把首页的价值说清楚",
+    "别只记录粉丝数：把公开表达换算成四种可复用资产",
+    "AI 做分析时，提示词和数据也应该像代码一样留下来",
+    "AI 服务的最小交付物不是聊天记录，而是一张当天能用的卡片",
+    "同一提示词和参考图，才看得出模型差异在哪里",
+    "Agent 不是越多越强，先做一个 3 个角色的工作流实验"
+  ],
+  "evidence": {
+    "errors": [],
+    "pageerrors": [],
+    "consoleTail": []
+  }
+}

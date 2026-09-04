@@ -1,0 +1,78 @@
+
+> wemedia-buddy@0.3.0 build
+> npm run verify:xhs-resources && node scripts/prepare-pi-runtime.mjs && node scripts/prepare-media-runtime.mjs && electron-forge make
+
+
+> wemedia-buddy@0.3.0 verify:xhs-resources
+> node scripts/verify-xiaohongshu-mcp-resources.mjs
+
+{"root":"j:\\PigeonYang\\WeMediaBuddy\\resources\\xiaohongshu-mcp","version":"v2.1.1","assets":[{"name":"xiaohongshu-mcp-windows-amd64.exe","sha256":"884396ec85fb304e97db7da689099c075c7b5366254d1e97a578242b70399623"},{"name":"xiaohongshu-login-windows-amd64.exe","sha256":"59ee1c3fe8d355a50c516a83d3cbfdfad91cd70290d3858bbf3c11720dc33e5a"}]}
+Adopted existing Pi runtime.
+[media-runtime] 采用既有运行时 j:\PigeonYang\WeMediaBuddy\.r\media-runtime（lock.sha256=908001e34d205bde99c322d272f843fb75f2d1b08f61ec669069404890a6bb0a）。
+❯ Checking your system
+❯ Checking package manager version
+✔ Found npm@10.8.3
+✔ Checking your system
+[?25h❯ Loading configuration
+✔ Loading configuration
+❯ Resolving make targets
+› Making for the following targets: 
+✔ Resolving make targets
+❯ Running package command
+❯ Preparing to package application
+✔ Preparing to package application
+❯ Running packaging hooks
+❯ Running generateAssets hook
+✔ Running generateAssets hook
+❯ Running prePackage hook
+❯ [plugin-vite] Building production Vite bundles
+❯ Building main and preload targets...
+❯ Building renderer targets...
+❯ Building src/main/index.ts target
+❯ Building src/preload/preload.ts target
+✔ Building src/preload/preload.ts target
+✔ Building src/main/index.ts target
+✔ Building main and preload targets...
+✔ Built target main_window
+✔ Building renderer targets...
+✔ [plugin-vite] Building production Vite bundles
+✔ Running prePackage hook
+✔ Running packaging hooks
+❯ Packaging application
+› Determining targets...
+❯ Packaging for x64 on win32
+❯ Copying files
+❯ Preparing native dependencies
+❯ Finalizing package
+✔ Copying files
+✔ Preparing native dependencies
+✔ Finalizing package
+✔ Packaging for x64 on win32
+✔ Packaging application
+❯ Running postPackage hook
+❯ Running postPackage hook from forgeConfig
+install-packaged-skills: deep-research → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\deep-research (revision bde76ce03224…)
+install-packaged-skills: evidence-grounded-writer → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\evidence-grounded-writer (revision 8c4db2f95d82…)
+install-packaged-skills: game-news-radar → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\game-news-radar (revision a0ae9eb895fa…)
+install-packaged-skills: selfmedia-commercialization-coach → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\selfmedia-commercialization-coach (revision cd30535fff11…)
+install-packaged-skills: uk-life-content-radar → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\uk-life-content-radar (revision 0355f52afe06…)
+install-packaged-skills: wemedia-buddy-operator → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\wemedia-buddy-operator (revision 0b33e71c6e1e…)
+install-packaged-skills: wemedia-intelligence-engine → j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\wemedia-intelligence-engine (revision e3f928631cc4…)
+check-skill-mirrors PASS: j:\wmb-out\WeMediaBuddy-win32-x64\resources\skills\wemedia-buddy-operator matches canonical (2 files, revision 0b33e71c6e1e…).
+[media-runtime-gate] ffprobe -version: ffprobe version 8.1.2-essentials_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers
+[media-runtime-gate] whisper-cli --help: load_backend: loaded CPU backend from j:\wmb-out\WeMediaBuddy-win32-x64\resources\.r\media-runtime\whisper\bin\ggml-cpu-alderlake.dll
+[media-runtime-gate] tesseract --version: tesseract v5.5.3.20260724
+[media-runtime-gate] 打包媒体运行时门禁通过 j:\wmb-out\WeMediaBuddy-win32-x64\resources\.r\media-runtime（lock.sha256=908001e34d205bde99c322d272f843fb75f2d1b08f61ec669069404890a6bb0a）。
+✔ Running postPackage hook from forgeConfig
+✔ Running postPackage hook
+✔ Running package command
+❯ Running preMake hook
+✔ Running preMake hook
+❯ Making distributables
+❯ Making a squirrel distributable for win32/x64
+✔ Making a squirrel distributable for win32/x64
+✔ Making distributables
+❯ Running postMake hook
+› Artifacts available at: j:\wmb-out\make
+✔ Running postMake hook
+[?25h

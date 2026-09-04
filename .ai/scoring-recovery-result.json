@@ -1,0 +1,13 @@
+{
+  "businessDate": "2026-08-25",
+  "expectedPlan": "cc34c3b8-33bb-4ed8-b021-1defa9ba9c0a",
+  "beforePending": 4,
+  "finalPending": 0,
+  "finalOutcome": "scored",
+  "newTaskId": "70660d31-46fd-40c6-9e73-a30e781470f8",
+  "planStillCurrent": true,
+  "screenshots": {
+    "before": "J:/PigeonYang/WeMediaBuddy/.ai/scoring-before.png",
+    "after": "J:/PigeonYang/WeMediaBuddy/.ai/scoring-after.png"
+  }
+}

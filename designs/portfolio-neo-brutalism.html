@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>杨鸽 · AI 应用开发者作品集 — WeMediaBuddy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#0A0A0A;          /* 极黑打底 */
+    --card:#0C130E;         /* 卡片 */
+    --green:#C7F23D;        /* 荧光绿 唯一高饱和点睛 */
+    --orange:#FF5A3D;       /* 撞色橙 */
+    --cream:#EDEDE3;        /* 米白 */
+    --gray:#8A8A82;         /* 次文灰 */
+    --line:#1F1F1F;         /* 边框 1 */
+    --line2:#3A3A34;        /* 边框 2 */
+    --font:'Space Grotesk', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--ink);
+    color:var(--cream);
+    font-family:var(--font);
+    font-weight:700;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+
+  /* —— 通用硬边框按钮 —— */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:18px 34px;
+    border:2px solid var(--ink);
+    border-radius:0;
+    font-family:var(--font); font-weight:700; font-size:18px;
+    text-decoration:none; cursor:pointer; line-height:1;
+    transition:transform .12s ease;
+  }
+  .btn:active{ transform:translate(2px,2px); }
+  .btn-green{ background:var(--green); color:var(--ink); }
+  .btn-outline{ background:transparent; border-color:var(--cream); color:var(--cream); }
+
+  .wrap{ max-width:1440px; margin:0 auto; padding:0 64px; }
+
+  /* ============ 1. HERO ============ */
+  .hero{ position:relative; min-height:100vh; display:flex; flex-direction:column; }
+  .nav{
+    display:flex; align-items:center; justify-content:space-between;
+    height:76px; padding:0 64px;
+    background:transparent;
+  }
+  .logo{ font-size:22px; font-weight:700; color:var(--green); letter-spacing:1px; }
+  .menu{ display:flex; gap:30px; }
+  .menu a{ font-size:16px; font-weight:700; color:var(--cream); text-decoration:none; }
+  .menu a:hover{ color:var(--green); }
+  .resume{ padding:12px 22px; background:var(--green); color:var(--ink); border:2px solid var(--ink); border-radius:0; font-size:15px; font-weight:700; text-decoration:none; }
+
+  .hero-main{
+    flex:1; display:flex; align-items:center; justify-content:space-between;
+    gap:56px; padding:60px 64px 84px 64px;
+  }
+  .hero-col{ display:flex; flex-direction:column; gap:22px; align-items:flex-start; max-width:760px; }
+  .kicker{ font-size:13px; font-weight:700; color:var(--gray); letter-spacing:5px; }
+  .hero-name{ font-size:clamp(72px,9vw,132px); font-weight:700; color:var(--cream); letter-spacing:-5px; line-height:.95; }
+  .hero-name-en{ font-size:22px; font-weight:700; color:var(--gray); letter-spacing:12px; }
+  .hero-role{ font-size:20px; font-weight:700; color:var(--cream); }
+  .hero-manifesto{ font-size:18px; font-weight:700; color:var(--gray); line-height:30px; max-width:560px; }
+  .cta-row{ display:flex; gap:16px; align-items:center; margin-top:6px; }
+
+  /* Hero 视觉：CSS 重绘 AI 抽象创意图（荧光绿+黑+米白，色块+几何+网格+颗粒，no text） */
+  .hero-visual{
+    position:relative; flex:0 0 440px; width:440px; height:440px;
+    background:var(--card); border:2px solid var(--green); border-radius:0;
+    overflow:hidden;
+  }
+  .hv-block-a{ position:absolute; left:0; top:0; width:58%; height:42%; background:var(--green); }
+  .hv-block-b{ position:absolute; right:0; bottom:0; width:46%; height:52%; background:var(--cream); }
+  .hv-block-c{ position:absolute; right:0; top:0; width:42%; height:100%; background:var(--ink); border-left:2px solid var(--line2); }
+  .hv-circle{ position:absolute; left:22%; top:46%; width:150px; height:150px; border-radius:0; background:var(--orange); transform:rotate(45deg); border:2px solid var(--ink); }
+  .hv-bar{ position:absolute; left:8%; top:78%; width:40%; height:18px; background:var(--green); }
+  .hv-grid{ position:absolute; inset:0; background-image:linear-gradient(var(--line2) 1px, transparent 1px), linear-gradient(90deg, var(--line2) 1px, transparent 1px); background-size:40px 40px; opacity:.5; }
+  .hv-grain{ position:absolute; inset:0; opacity:.18; mix-blend-mode:overlay; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* ============ 2. 精选作品 ============ */
+  .works{ padding:96px 64px; }
+  .section-head{ display:flex; align-items:center; justify-content:space-between; padding-bottom:44px; }
+  .section-title{ font-size:52px; font-weight:700; color:var(--cream); line-height:1; }
+  .section-sub{ font-size:14px; font-weight:700; color:var(--gray); letter-spacing:4px; margin-top:8px; }
+  .section-no{ font-size:72px; font-weight:700; color:var(--green); line-height:1; }
+
+  .masonry{ display:flex; gap:40px; align-items:flex-start; }
+  .col{ flex:1; display:flex; flex-direction:column; gap:40px; }
+  .col-b{ padding-top:72px; }
+
+  .work-card{ background:var(--card); border:2px solid var(--line); border-radius:0; overflow:hidden; }
+  .work-thumb{ width:100%; height:240px; border-radius:0; }
+  .work-body{ padding:24px 24px 28px 24px; display:flex; flex-direction:column; gap:12px; }
+  .work-num{ font-size:13px; font-weight:700; color:var(--gray); letter-spacing:3px; }
+  .work-title{ font-size:40px; font-weight:700; color:var(--cream); line-height:1; }
+  .work-desc{ font-size:16px; font-weight:700; color:var(--gray); }
+  .work-tags{ font-size:13px; font-weight:700; color:var(--green); }
+
+  /* ============ 3. 关于 / 能力 ============ */
+  .about{ display:flex; padding:96px 64px; gap:0; }
+  .about-left{ flex:1; background:var(--green); padding:56px; display:flex; flex-direction:column; gap:28px; }
+  .about-kicker{ font-size:14px; font-weight:700; color:var(--ink); letter-spacing:4px; }
+  .about-title{ font-size:48px; font-weight:700; color:var(--ink); line-height:1.05; }
+  .about-desc{ font-size:18px; font-weight:700; color:var(--ink); line-height:28px; }
+  .stats{ display:flex; flex-wrap:wrap; gap:0; }
+  .stat{ width:240px; padding:20px 16px; border:2px solid var(--ink); border-radius:0; display:flex; flex-direction:column; gap:4px; }
+  .stat:nth-child(odd){ border-right-width:1px; }
+  .stat-num{ font-size:44px; font-weight:700; color:var(--ink); line-height:1; }
+  .stat-label{ font-size:13px; font-weight:700; color:var(--ink); }
+
+  .about-right{ flex:1; background:var(--card); border:2px solid var(--line2); border-radius:0; padding:48px; }
+  .cap-title{ font-size:14px; font-weight:700; color:var(--gray); letter-spacing:4px; }
+  .cap-list{ margin-top:16px; }
+  .cap-item{ display:flex; align-items:center; gap:18px; padding:22px 4px; border-bottom:2px solid var(--line); }
+  .cap-item:last-child{ border-bottom:none; }
+  .cap-num{ font-size:18px; font-weight:700; color:var(--green); }
+  .cap-text{ font-size:22px; font-weight:700; color:var(--cream); }
+
+  /* ============ 4. 合作客户 ============ */
+  .clients{ padding:96px 64px; }
+  .marquee{ background:var(--green); border-radius:0; padding:30px 0; overflow:hidden; white-space:nowrap; }
+  .marquee-track{ display:inline-flex; gap:28px; align-items:center; padding-left:32px; animation:scroll 22s linear infinite; }
+  .marquee-track span{ font-size:28px; font-weight:700; color:var(--ink); }
+  @keyframes scroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+
+  /* ============ 5. 联系 CTA ============ */
+  .contact{ padding:120px 64px; display:flex; flex-direction:column; gap:18px; }
+  .contact-kicker{ font-size:14px; font-weight:700; color:var(--gray); letter-spacing:4px; }
+  .contact-title{ font-size:clamp(56px,9vw,96px); font-weight:700; line-height:1; letter-spacing:-3px; }
+  .contact-line1{ color:var(--cream); }
+  .contact-line2{ color:var(--green); display:block; }
+  .contact-sub{ font-size:20px; font-weight:700; color:var(--gray); line-height:30px; max-width:620px; }
+  .contact-btn-row{ display:flex; gap:16px; align-items:center; margin-top:8px; }
+
+  /* ============ 6. FOOTER ============ */
+  .footer{ border-top:2px solid var(--green); padding:48px 64px 40px 64px; display:flex; flex-direction:column; gap:32px; }
+  .footer-top{ display:flex; align-items:center; justify-content:space-between; }
+  .footer-logo{ font-size:28px; font-weight:700; color:var(--green); }
+  .footer-tag{ font-size:14px; font-weight:700; color:var(--gray); }
+  .footer-social{ display:flex; gap:24px; }
+  .footer-social a{ font-size:15px; font-weight:700; color:var(--cream); text-decoration:none; }
+  .footer-social a:hover{ color:var(--green); }
+  .footer-bottom{ display:flex; align-items:center; justify-content:space-between; }
+  .footer-copy{ font-size:13px; font-weight:700; color:var(--gray); }
+  .footer-big{ font-size:13px; font-weight:700; color:var(--line2); letter-spacing:4px; }
+
+  /* —— 响应式收敛（窄屏）—— */
+  @media (max-width:1024px){
+    .wrap,.nav,.hero-main,.works,.about,.clients,.contact,.footer{ padding-left:28px; padding-right:28px; }
+    .hero-main{ flex-direction:column; align-items:flex-start; }
+    .hero-visual{ flex:none; width:100%; max-width:440px; height:360px; }
+    .about{ flex-direction:column; }
+    .masonry{ flex-direction:column; }
+    .col-b{ padding-top:0; }
+    .stats{ gap:0; }
+    .stat{ width:50%; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============ 1. HERO ============ -->
+  <header class="hero">
+    <nav class="nav">
+      <div class="logo">WMB</div>
+      <div class="menu">
+        <a href="#works">作品</a>
+        <a href="#about">能力</a>
+        <a href="#clients">客户</a>
+        <a href="#contact">联系</a>
+      </div>
+      <a class="resume" href="#">下载简历</a>
+    </nav>
+
+    <div class="hero-main">
+      <div class="hero-col">
+        <div class="kicker">PORTFOLIO — 2026</div>
+        <div class="hero-name">杨鸽</div>
+        <div class="hero-name-en">PIGEON YANG</div>
+        <div class="hero-role">AI 应用开发者 — 把概念做成能跑起来的产品</div>
+        <div class="hero-manifesto">我相信工具该有态度。不堆功能、不抄模板，只做让人想打开第二次的东西。</div>
+        <div class="cta-row">
+          <a class="btn btn-green" href="#works">看作品</a>
+          <a class="btn btn-outline" href="#contact">聊聊合作</a>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="AI 抽象创意视觉">
+        <div class="hv-block-a"></div>
+        <div class="hv-block-c"></div>
+        <div class="hv-block-b"></div>
+        <div class="hv-circle"></div>
+        <div class="hv-bar"></div>
+        <div class="hv-grid"></div>
+        <div class="hv-grain"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ 2. 精选作品 ============ -->
+  <section class="works" id="works">
+    <div class="section-head">
+      <div>
+        <div class="section-title">精选作品</div>
+        <div class="section-sub">SELECTED WORKS · 04</div>
+      </div>
+      <div class="section-no">02</div>
+    </div>
+
+    <div class="masonry">
+      <div class="col col-a">
+        <article class="work-card">
+          <div class="work-thumb" style="background:var(--green)"></div>
+          <div class="work-body">
+            <div class="work-num">01 / 2025</div>
+            <div class="work-title">WeMediaBuddy</div>
+            <div class="work-desc">自媒体人的 AI 创作工作台</div>
+            <div class="work-tags">Electron · React · AI Agent</div>
+          </div>
+        </article>
+
+        <article class="work-card">
+          <div class="work-thumb" style="background:var(--orange)"></div>
+          <div class="work-body">
+            <div class="work-num">03 / 2024</div>
+            <div class="work-title">声场 SoundField</div>
+            <div class="work-desc">实时语音克隆与配音</div>
+            <div class="work-tags">Whisper · TTS · WebRTC</div>
+          </div>
+        </article>
+      </div>
+
+      <div class="col col-b">
+        <article class="work-card">
+          <div class="work-thumb" style="background:var(--cream)"></div>
+          <div class="work-body">
+            <div class="work-num">02 / 2024</div>
+            <div class="work-title">墨核 InkCore</div>
+            <div class="work-desc">AI 长文写作引擎</div>
+            <div class="work-tags">Next.js · LLM · RAG</div>
+          </div>
+        </article>
+
+        <article class="work-card">
+          <div class="work-thumb" style="background:var(--line)"></div>
+          <div class="work-body">
+            <div class="work-num">04 / 2023</div>
+            <div class="work-title">帧野 FrameYard</div>
+            <div class="work-desc">短视频批量生成工厂</div>
+            <div class="work-tags">FFmpeg · CUDA · Pipeline</div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3. 关于 / 能力 ============ -->
+  <section class="about" id="about">
+    <div class="about-left">
+      <div class="about-kicker">03 — 关于 / ABOUT</div>
+      <div class="about-title">我造工具，<br />也造态度。</div>
+      <div class="about-desc">八年里，我把十几个产品从第一行注释推到用户的桌面。不追风口，只做自己也想天天打开的东西。</div>
+      <div class="stats">
+        <div class="stat"><div class="stat-num">08</div><div class="stat-label">年产品经验</div></div>
+        <div class="stat"><div class="stat-num">12</div><div class="stat-label">上线产品</div></div>
+        <div class="stat"><div class="stat-num">40万+</div><div class="stat-label">服务用户</div></div>
+        <div class="stat"><div class="stat-num">03</div><div class="stat-label">行业奖项</div></div>
+      </div>
+    </div>
+
+    <div class="about-right">
+      <div class="cap-title">能力清单 / CAPABILITIES</div>
+      <div class="cap-list">
+        <div class="cap-item"><div class="cap-num">01</div><div class="cap-text">大模型应用架构</div></div>
+        <div class="cap-item"><div class="cap-num">02</div><div class="cap-text">React &amp; Electron 桌面端</div></div>
+        <div class="cap-item"><div class="cap-num">03</div><div class="cap-text">提示词工程 / Agent 编排</div></div>
+        <div class="cap-item"><div class="cap-num">04</div><div class="cap-text">设计系统与品牌</div></div>
+        <div class="cap-item"><div class="cap-num">05</div><div class="cap-text">全栈交付 (Node / Rust)</div></div>
+        <div class="cap-item"><div class="cap-num">06</div><div class="cap-text">增长与实验</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4. 合作客户 ============ -->
+  <section class="clients" id="clients">
+    <div class="section-head">
+      <div>
+        <div class="section-title">合作客户</div>
+        <div class="section-sub">CLIENTS · 他们敢把产品交给我</div>
+      </div>
+      <div class="section-no">04</div>
+    </div>
+
+    <div class="marquee">
+      <div class="marquee-track">
+        <span>噪点工作室 ·</span><span>NEON LAB ·</span><span>小红书 ·</span><span>得到 ·</span><span>极客时间 ·</span><span>少数派 ·</span><span>FRAMEFORGE ·</span><span>野声 ·</span><span>MINDSLAB ·</span>
+        <span>噪点工作室 ·</span><span>NEON LAB ·</span><span>小红书 ·</span><span>得到 ·</span><span>极客时间 ·</span><span>少数派 ·</span><span>FRAMEFORGE ·</span><span>野声 ·</span><span>MINDSLAB ·</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 联系 CTA ============ -->
+  <section class="contact" id="contact">
+    <div class="contact-kicker">05 — 联系 / GET IN TOUCH</div>
+    <div class="contact-title">
+      <span class="contact-line1">想做点</span>
+      <span class="contact-line2">不一样的东西？</span>
+    </div>
+    <div class="contact-sub">不管是正经产品、技术实验，还是一句胡思乱想 —— 都写给我。</div>
+    <div class="contact-btn-row">
+      <a class="btn btn-green" href="mailto:hello@pigeon.yang">HELLO@PIGEON.YANG</a>
+      <a class="btn btn-outline" href="#">微信 / GitHub</a>
+    </div>
+  </section>
+
+  <!-- ============ 6. FOOTER ============ -->
+  <footer class="footer">
+    <div class="footer-top">
+      <div class="footer-logo">WMB</div>
+      <div class="footer-tag">AI 应用开发者 · 作品集 2026</div>
+      <div class="footer-social">
+        <a href="#">GitHub</a>
+        <a href="#">X</a>
+        <a href="#">微信</a>
+        <a href="#">邮箱</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">2026 杨鸽 · 保留所有权利</div>
+      <div class="footer-big">THANKS FOR SCROLLING</div>
+    </div>
+  </footer>
+
+</body>
+</html>

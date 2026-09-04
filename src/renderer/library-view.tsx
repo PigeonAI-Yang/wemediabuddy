@@ -7,6 +7,7 @@ import type {
   KnowledgeHealthSeverity,
   KnowledgeUpdateReceiptRecord,
 } from '../shared/knowledge-flywheel';
+import { sourceContentEquivalent } from './source-content-equivalence';
 import { SourceMark, SourcePlatformMark } from './source-mark';
 import { domainOf, formatSourcePublishedAt } from './today-view-parts';
 import { issueTypeLabel, severityLabel } from './knowledge-canvas-projection';
@@ -822,7 +823,7 @@ export function LibraryView(props: {
       });
       if (result && 'blocked' in result && result.blocked === true) {
         // WMB-5247 删除门：素材仍被内容/平台版本、发布快照或知识证据引用 → 展示引用清单并等待显式确认。
-        setDeleteRefSummary((result as { summary?: Record<string, unknown> }).summary ?? null);
+        setDeleteRefSummary(result.summary);
         return;
       }
       setDeleteRefSummary(null);
@@ -904,6 +905,14 @@ export function LibraryView(props: {
       selectedKnowledge.author || null,
       domainOf(selectedKnowledge.originalUrl ?? null)
     ].filter(Boolean);
+    const titleText = selectedKnowledge.title.trim();
+    const summaryText = selectedKnowledge.summary?.trim() ?? '';
+    const archivedText = libraryBody?.status === 'ready' ? libraryBody.extractedText?.trim() ?? '' : '';
+    const showSummary = Boolean(summaryText) && !sourceContentEquivalent(summaryText, titleText);
+    const bodyDuplicatesVisibleCopy = Boolean(archivedText && (
+      sourceContentEquivalent(archivedText, titleText)
+      || (showSummary && sourceContentEquivalent(archivedText, summaryText))
+    ));
     // WMB-5269：正文自动归档后，仅失败/无正文/缺缓存（且有原文可抓）提供「重试抓取」恢复动作。
     const canRetrySourceBody = libraryBody?.status === 'failed' || libraryBody?.status === 'empty' || (!libraryBody && Boolean(selectedKnowledge.originalUrl));
     const detail = sourceDetail;
@@ -914,9 +923,13 @@ export function LibraryView(props: {
       openHealthIssues: (detail?.healthIssues.items ?? []).filter((issue) => issue.status === 'open' || issue.status === 'repairing').length
     });
     const openHealth = (detail?.healthIssues.items ?? []).filter((issue) => issue.status === 'open' || issue.status === 'repairing');
+    const deleteReferenceTotal = typeof deleteRefSummary?.totalReferences === 'number' ? deleteRefSummary.totalReferences : 0;
+    const deleteReferencesByClass = deleteRefSummary?.byClass && typeof deleteRefSummary.byClass === 'object'
+      ? Object.entries(deleteRefSummary.byClass).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
+      : [];
     return <section className="page library-page library-source-detail-page">
       <header className="library-source-detail-head">
-        <button className="text-button" onClick={closeSourceDetail}>← 返回资料库</button>
+        <button className="secondary-button library-source-detail-back" onClick={closeSourceDetail}>← 返回</button>
         <div className="library-source-detail-actions">
           {!editingSource ? <button className="secondary-button" disabled={sourceActionBusy} onClick={beginEditSource}>编辑</button> : null}
           {!editingSource ? (libraryBody?.status === 'ready'
@@ -933,9 +946,9 @@ export function LibraryView(props: {
           <div className="library-source-confirm" role="group" aria-label={pendingSourceAction === 'delete' ? '确认删除' : '确认归档'}>
             {pendingSourceAction === 'delete' && deleteRefSummary ? (
               <div className="library-source-delete-referenced">
-                <p>该资料的素材仍被引用（{String((deleteRefSummary as { totalReferences?: number }).totalReferences ?? 0)} 处）：删除资料不会删除素材文件，仍可确认删除。</p>
-                <ul>{(Object.entries((deleteRefSummary as { byClass?: Record<string, number> }).byClass ?? {})).filter(([, count]) => Number(count) > 0).map(([cls, count]) => (
-                  <li key={cls}>{SOURCE_DELETE_REFERENCE_LABELS[cls] ?? cls} · {String(count)}</li>
+                <p>该资料的素材仍被引用（{deleteReferenceTotal} 处）：删除资料不会删除素材文件，仍可确认删除。</p>
+                <ul>{deleteReferencesByClass.map(([cls, count]) => (
+                  <li key={cls}>{SOURCE_DELETE_REFERENCE_LABELS[cls] ?? cls} · {count}</li>
                 ))}</ul>
               </div>
             ) : null}
@@ -963,44 +976,28 @@ export function LibraryView(props: {
             </div>
           </div>
         ) : (
-          <>
-            <h1>{selectedKnowledge.title}</h1>
+          <header className="library-source-detail-intro">
+            <h1>{titleText}</h1>
             {metaBits.length ? <p className="library-source-detail-meta"><SourcePlatformMark canonicalUrl={selectedKnowledge.originalUrl ?? null} aiSourcePresentation={aiSourcePresentation}/><span>{metaBits.join(' · ')}</span></p> : null}
-          </>
+            {showSummary ? <section className="library-source-summary" aria-labelledby="library-source-summary-title">
+              <h2 id="library-source-summary-title">摘要</h2>
+              <p>{summaryText}</p>
+            </section> : null}
+          </header>
         )}
-        <div className="knowledge-status-controls">
-          <label>核验<select value={selectedKnowledge.verificationStatus ?? 'pending'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
-            if (selectedKnowledge.revision == null) return;
-            const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, verificationStatus: event.target.value });
-            setSelectedKnowledge({ ...selectedKnowledge, verificationStatus: event.target.value, revision: result.revision });
-            void loadKnowledge();
-          }}><option value="pending">待核验</option><option value="verified">已核验</option><option value="disputed">有争议</option><option value="rejected">已排除</option></select></label>
-          <label>管理<select value={selectedKnowledge.managementStatus ?? 'active'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
-            if (selectedKnowledge.revision == null) return;
-            const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, managementStatus: event.target.value });
-            setSelectedKnowledge({ ...selectedKnowledge, managementStatus: event.target.value, revision: result.revision });
-            void loadKnowledge();
-            void loadWatching();
-          }}><option value="active">活跃</option><option value="watching">观察中</option><option value="expired">已过期</option><option value="archived">已归档</option></select></label>
-        </div>
-        {!editingSource ? <section>
-          <h2>摘要</h2>
-          <p>{selectedKnowledge.summary || '暂无摘要'}</p>
+
+        {!bodyDuplicatesVisibleCopy ? <section className="library-source-primary-body" aria-labelledby="library-source-body-title">
+          <div className="source-detail-body-head">
+            <h2 id="library-source-body-title">正文</h2>
+            <span className="source-detail-body-status">{bodyRetryQueued ? '已重新排队，后台自动重试中…' : libraryBodyLoading ? '正文归档中…' : libraryBody?.status === 'ready' ? `已保存 · ${libraryBody.extractedChars} 字` : libraryBody?.status === 'failed' ? '归档失败' : libraryBody?.status === 'empty' ? '无正文' : selectedKnowledge.originalUrl ? '归档中' : '缺少正文来源'}</span>
+          </div>
+          {libraryBodyError ? <p className="source-detail-error">{libraryBodyError}</p> : null}
+          {libraryBody?.errorMessage ? <p className="source-detail-error">{libraryBody.errorMessage}</p> : null}
+          {libraryBody?.status === 'ready' && libraryBody.extractedText
+            ? <div className="library-source-detail-body">{libraryBody.extractedText}</div>
+            : <p className="empty-copy">暂无正文</p>}
         </section> : null}
-        {!editingSource ? <section className="library-source-quality">
-          <h2>来源质量</h2>
-          {sourceDetailLoading ? <p className="library-detail-loading">正在读取知识画像…</p> : (
-            <div className="library-quality-grid" role="list" aria-label="来源质量画像">
-              <span className="quality-cell"><b className={`pill-status ${quality.verification.cls}`}><span className="dot"/>{quality.verification.text}</b><small>核验</small></span>
-              <span className="quality-cell"><b className={`pill-status ${quality.management.cls}`}><span className="dot"/>{quality.management.text}</b><small>管理</small></span>
-              {quality.priority != null ? <span className="quality-cell"><b>{quality.priority}</b><small>优先级</small></span> : null}
-              <span className="quality-cell"><b>{bodyStatusLabel(quality.bodyStatus)}</b><small>正文</small></span>
-              <span className="quality-cell"><b>{quality.digested ? '已消化' : '未消化'}</b><small>知识消化</small></span>
-              <span className="quality-cell"><b>{quality.evidenceCount}</b><small>证据贡献</small></span>
-              <span className="quality-cell"><b className={openHealth.length ? 'health-count' : ''}>{quality.openHealthIssues}</b><small>未处理健康问题</small></span>
-            </div>
-          )}
-        </section> : null}
+
         {!editingSource ? (
           <SourceMediaSection
             overview={sourceMedia}
@@ -1012,106 +1009,136 @@ export function LibraryView(props: {
           />
         ) : null}
         {mediaActionError ? <p className="source-detail-error">{mediaActionError}</p> : null}
-        <section>
-          <div className="source-detail-body-head">
-            <h2>正文</h2>
-            <span className="source-detail-body-status">{bodyRetryQueued ? '已重新排队，后台自动重试中…' : libraryBodyLoading ? '正文归档中…' : libraryBody?.status === 'ready' ? `正文已保存 · ${libraryBody.extractedChars} 字` : libraryBody?.status === 'failed' ? '正文归档失败' : libraryBody?.status === 'empty' ? '无正文' : selectedKnowledge.originalUrl ? '正文归档中' : '缺少正文来源'}</span>
-          </div>
-          {libraryBodyError ? <p className="source-detail-error">{libraryBodyError}</p> : null}
-          {libraryBody?.errorMessage ? <p className="source-detail-error">{libraryBody.errorMessage}</p> : null}
-          {libraryBody?.status === 'ready' && libraryBody.extractedText
-            ? <div className="library-source-detail-body">{libraryBody.extractedText}</div>
-            : <p className="empty-copy">暂无正文</p>}
-        </section>
-        <section className="library-source-receipts">
-          <h2>摄取回执 · {(detail?.receipts.items ?? []).length}</h2>
-          <details open={sourceDetailLoading ? undefined : (detail?.receipts.items.length ?? 0) > 0}>
-            <summary>最近知识编译与摄取回执（可收起，持久可回看）</summary>
-            {(detail?.receipts.items ?? []).map((receipt) => (
-              <article className="library-receipt-item" key={receipt.id}>
-                <div className="library-receipt-head">
-                  <span className="tag receipt-trigger">{receiptTriggerLabel(receipt.triggerType)}</span>
-                  <span className="library-receipt-time">{formatDateTime(receipt.createdAt)}</span>
-                  {receipt.requestId ? <span className="library-receipt-request">#{receipt.requestId.slice(0, 12)}</span> : null}
+
+        {!editingSource ? <details className="library-source-diagnostics">
+          <summary>
+            <span>资料信息与诊断</span>
+            <small>核验、关联、知识回执与健康状态</small>
+          </summary>
+          <div className="library-source-diagnostics-content">
+            <section aria-labelledby="library-source-status-title">
+              <h2 id="library-source-status-title">资料状态</h2>
+              <div className="knowledge-status-controls">
+                <label>核验<select value={selectedKnowledge.verificationStatus ?? 'pending'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
+                  if (selectedKnowledge.revision == null) return;
+                  const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, verificationStatus: event.target.value });
+                  setSelectedKnowledge({ ...selectedKnowledge, verificationStatus: event.target.value, revision: result.revision });
+                  void loadKnowledge();
+                }}><option value="pending">待核验</option><option value="verified">已核验</option><option value="disputed">有争议</option><option value="rejected">已排除</option></select></label>
+                <label>管理<select value={selectedKnowledge.managementStatus ?? 'active'} disabled={sourceActionBusy || selectedKnowledge.revision == null} onChange={async (event) => {
+                  if (selectedKnowledge.revision == null) return;
+                  const result = await window.wmb.updateKnowledgeSource({ id: selectedKnowledge.id, expectedRevision: selectedKnowledge.revision, managementStatus: event.target.value });
+                  setSelectedKnowledge({ ...selectedKnowledge, managementStatus: event.target.value, revision: result.revision });
+                  void loadKnowledge();
+                  void loadWatching();
+                }}><option value="active">活跃</option><option value="watching">观察中</option><option value="expired">已过期</option><option value="archived">已归档</option></select></label>
+              </div>
+            </section>
+            <section className="library-source-quality">
+              <h2>来源质量</h2>
+              {sourceDetailLoading ? <p className="library-detail-loading">正在读取知识画像…</p> : (
+                <div className="library-quality-grid" role="list" aria-label="来源质量画像">
+                  <span className="quality-cell"><b className={`pill-status ${quality.verification.cls}`}><span className="dot"/>{quality.verification.text}</b><small>核验</small></span>
+                  <span className="quality-cell"><b className={`pill-status ${quality.management.cls}`}><span className="dot"/>{quality.management.text}</b><small>管理</small></span>
+                  {quality.priority != null ? <span className="quality-cell"><b>{quality.priority}</b><small>优先级</small></span> : null}
+                  <span className="quality-cell"><b>{bodyStatusLabel(quality.bodyStatus)}</b><small>正文</small></span>
+                  <span className="quality-cell"><b>{quality.digested ? '已消化' : '未消化'}</b><small>知识消化</small></span>
+                  <span className="quality-cell"><b>{quality.evidenceCount}</b><small>证据贡献</small></span>
+                  <span className="quality-cell"><b className={openHealth.length ? 'health-count' : ''}>{quality.openHealthIssues}</b><small>未处理健康问题</small></span>
                 </div>
-                <p className="library-receipt-summary">{receipt.summary}</p>
-                <p className="library-receipt-counts">{receiptCountsSummary(receipt.counts)}</p>
-                {(receipt.autoResolutions ?? []).length ? <p className="library-receipt-resolutions"><strong>自动处理</strong>{(receipt.autoResolutions ?? []).map(readableEntry).join('；')}</p> : null}
-                {(receipt.retainedDisputes ?? []).length ? <p className="library-receipt-disputes"><strong>保留争议</strong>{(receipt.retainedDisputes ?? []).map(readableEntry).join('；')}</p> : null}
-                {(receipt.failures ?? []).length ? <p className="library-receipt-failures"><strong>未处理</strong>{(receipt.failures ?? []).map(readableEntry).join('；')}</p> : null}
-                {(receipt.affectedTopics ?? []).length ? <div className="library-receipt-topics"><span>影响主题</span>{(receipt.affectedTopics ?? []).map((topic) => {
-                  const topicId = typeof topic === 'string' ? topic : topic && typeof topic === 'object' ? (topic as { id?: unknown }).id : undefined;
-                  if (typeof topicId !== 'string') return null;
-                  return <button key={topicId} className="secondary-button" onClick={() => onOpenTopic?.(topicId)}>打开主题 {topicId.slice(0, 8)}</button>;
-                })}</div> : null}
-              </article>
-            ))}
-            {!sourceDetailLoading && !(detail?.receipts.items ?? []).length ? <p className="empty-copy">尚无摄取回执。新资料保存并完成知识编译后会出现在这里。</p> : null}
-          </details>
-        </section>
-        <section>
-          <h2>证据贡献</h2>
-          {sourceDetailLoading ? <p className="library-detail-loading">正在读取证据…</p> : (detail?.evidence.items ?? []).length ? (
-            <div className="library-evidence-list">
-              {(detail?.evidence.items ?? []).map((entry) => (
-                <article className="library-evidence-item" key={entry.id}>
-                  <div className="library-evidence-head">
-                    <span className={`tag evidence-relation ${evidenceRelationLabel(entry.relation)}`}>{evidenceRelationLabel(entry.relation)}</span>
-                    <span className="tag evidence-nature">{evidenceNatureLabel(entry.sourceNature)}</span>
-                    <span className={`pill-status ${conclusionStatusCls(entry.noteConclusionStatus)}`}><span className="dot"/>{conclusionStatusLabel(entry.noteConclusionStatus)}</span>
-                  </div>
-                  <p className="library-evidence-statement">{entry.noteStatement}</p>
-                  {entry.excerpt ? <blockquote className="library-evidence-excerpt">{entry.excerpt}</blockquote> : null}
-                  {entry.locator ? <p className="library-evidence-locator">定位：{entry.locator}</p> : null}
-                </article>
-              ))}
-            </div>
-          ) : <p className="empty-copy">该资料尚未形成证据贡献。知识编译后，支持/反驳/限定的固定知识版本会出现在这里。</p>}
-        </section>
-        <section>
-          <h2>关联</h2>
-          <p className="library-source-detail-meta">主题 {sourceContext?.topics.length ?? 0} · 机会 {sourceContext?.opportunities.length ?? 0} · 项目 {sourceContext?.projects.length ?? 0} · 发布 {sourceContext?.publications.length ?? 0}</p>
-          <div className="library-source-detail-links">
-            {(detail?.topics.length ? detail.topics : (sourceContext?.topics ?? [])).map((item) => <button key={item.id} className="secondary-button" onClick={() => onOpenTopic?.(item.id)}>{item.title}</button>)}
+              )}
+            </section>
+            <section className="library-source-receipts">
+              <h2>摄取回执 · {(detail?.receipts.items ?? []).length}</h2>
+              <details open={sourceDetailLoading ? undefined : (detail?.receipts.items.length ?? 0) > 0}>
+                <summary>最近知识编译与摄取回执（可收起，持久可回看）</summary>
+                {(detail?.receipts.items ?? []).map((receipt) => (
+                  <article className="library-receipt-item" key={receipt.id}>
+                    <div className="library-receipt-head">
+                      <span className="tag receipt-trigger">{receiptTriggerLabel(receipt.triggerType)}</span>
+                      <span className="library-receipt-time">{formatDateTime(receipt.createdAt)}</span>
+                      {receipt.requestId ? <span className="library-receipt-request">#{receipt.requestId.slice(0, 12)}</span> : null}
+                    </div>
+                    <p className="library-receipt-summary">{receipt.summary}</p>
+                    <p className="library-receipt-counts">{receiptCountsSummary(receipt.counts)}</p>
+                    {(receipt.autoResolutions ?? []).length ? <p className="library-receipt-resolutions"><strong>自动处理</strong>{(receipt.autoResolutions ?? []).map(readableEntry).join('；')}</p> : null}
+                    {(receipt.retainedDisputes ?? []).length ? <p className="library-receipt-disputes"><strong>保留争议</strong>{(receipt.retainedDisputes ?? []).map(readableEntry).join('；')}</p> : null}
+                    {(receipt.failures ?? []).length ? <p className="library-receipt-failures"><strong>未处理</strong>{(receipt.failures ?? []).map(readableEntry).join('；')}</p> : null}
+                    {(receipt.affectedTopics ?? []).length ? <div className="library-receipt-topics"><span>影响主题</span>{(receipt.affectedTopics ?? []).map((topic) => {
+                      const topicId = topic;
+                      if (typeof topicId !== 'string') return null;
+                      return <button key={topicId} className="secondary-button" onClick={() => onOpenTopic?.(topicId)}>打开主题 {topicId.slice(0, 8)}</button>;
+                    })}</div> : null}
+                  </article>
+                ))}
+                {!sourceDetailLoading && !(detail?.receipts.items ?? []).length ? <p className="empty-copy">尚无摄取回执。新资料保存并完成知识编译后会出现在这里。</p> : null}
+              </details>
+            </section>
+            <section>
+              <h2>证据贡献</h2>
+              {sourceDetailLoading ? <p className="library-detail-loading">正在读取证据…</p> : (detail?.evidence.items ?? []).length ? (
+                <div className="library-evidence-list">
+                  {(detail?.evidence.items ?? []).map((entry) => (
+                    <article className="library-evidence-item" key={entry.id}>
+                      <div className="library-evidence-head">
+                        <span className={`tag evidence-relation ${evidenceRelationLabel(entry.relation)}`}>{evidenceRelationLabel(entry.relation)}</span>
+                        <span className="tag evidence-nature">{evidenceNatureLabel(entry.sourceNature)}</span>
+                        <span className={`pill-status ${conclusionStatusCls(entry.noteConclusionStatus)}`}><span className="dot"/>{conclusionStatusLabel(entry.noteConclusionStatus)}</span>
+                      </div>
+                      <p className="library-evidence-statement">{entry.noteStatement}</p>
+                      {entry.excerpt ? <blockquote className="library-evidence-excerpt">{entry.excerpt}</blockquote> : null}
+                      {entry.locator ? <p className="library-evidence-locator">定位：{entry.locator}</p> : null}
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="empty-copy">该资料尚未形成证据贡献。知识编译后，支持/反驳/限定的固定知识版本会出现在这里。</p>}
+            </section>
+            <section>
+              <h2>关联</h2>
+              <p className="library-source-detail-meta">主题 {sourceContext?.topics.length ?? 0} · 机会 {sourceContext?.opportunities.length ?? 0} · 项目 {sourceContext?.projects.length ?? 0} · 发布 {sourceContext?.publications.length ?? 0}</p>
+              <div className="library-source-detail-links">
+                {(detail?.topics.length ? detail.topics : (sourceContext?.topics ?? [])).map((item) => <button key={item.id} className="secondary-button" onClick={() => onOpenTopic?.(item.id)}>{item.title}</button>)}
+              </div>
+              {(sourceContext?.reviews ?? []).map((review) => <article className="library-source-detail-note" key={review.id}><strong>复盘</strong><p>{review.summary || '无摘要'}</p></article>)}
+              {(sourceContext?.findings ?? []).map((finding) => <article className="library-source-detail-note" key={finding.id}><strong>{finding.title}</strong><p>{finding.body}</p></article>)}
+            </section>
+            <section>
+              <h2>批注</h2>
+              {sourceDetailLoading ? <p className="library-detail-loading">正在读取批注…</p> : (detail?.annotations.items ?? []).length ? (
+                <div className="library-annotation-list">
+                  {(detail?.annotations.items ?? []).map((annotation) => (
+                    <article className="library-annotation-item" key={annotation.id}>
+                      <div className="library-annotation-head">
+                        <span className="tag annotation-intent">{annotationIntentLabel(annotation.intent)}</span>
+                        <span className="library-annotation-time">{formatDateTime(annotation.createdAt)}</span>
+                      </div>
+                      <p className="library-annotation-body">{annotation.body}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="empty-copy">暂无批注。对知识对象的纠正、限定与批注会随知识编译沉淀在这里。</p>}
+            </section>
+            <section>
+              <h2>健康问题</h2>
+              {sourceDetailLoading ? <p className="library-detail-loading">正在读取健康问题…</p> : openHealth.length ? (
+                <div className="library-issue-list">
+                  {openHealth.map((issue) => (
+                    <article className="library-issue-item" key={issue.id}>
+                      <div className="library-issue-head">
+                        <span className={`issue-severity ${healthSeverityCls(issue.severity)}`}>{severityLabel(issue.severity)}</span>
+                        <span className="tag issue-type">{issueTypeLabel(issue.issueType)}</span>
+                        <span className={`pill-status ${issueStatusCls(issue.status)}`}><span className="dot"/>{healthStatusLabel(issue.status)}</span>
+                      </div>
+                      <p className="library-issue-suggestion">{issue.suggestedAction}</p>
+                      {issue.resolutionNote ? <p className="library-issue-resolution">解决记录：{issue.resolutionNote}</p> : null}
+                      <p className="library-issue-time">检测于 {formatDateTime(issue.detectedAt)}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : <p className="empty-copy">该资料当前没有未处理健康问题。</p>}
+            </section>
           </div>
-          {(sourceContext?.reviews ?? []).map((review) => <article className="library-source-detail-note" key={review.id}><strong>复盘</strong><p>{review.summary || '无摘要'}</p></article>)}
-          {(sourceContext?.findings ?? []).map((finding) => <article className="library-source-detail-note" key={finding.id}><strong>{finding.title}</strong><p>{finding.body}</p></article>)}
-        </section>
-        <section>
-          <h2>批注</h2>
-          {sourceDetailLoading ? <p className="library-detail-loading">正在读取批注…</p> : (detail?.annotations.items ?? []).length ? (
-            <div className="library-annotation-list">
-              {(detail?.annotations.items ?? []).map((annotation) => (
-                <article className="library-annotation-item" key={annotation.id}>
-                  <div className="library-annotation-head">
-                    <span className="tag annotation-intent">{annotationIntentLabel(annotation.intent)}</span>
-                    <span className="library-annotation-time">{formatDateTime(annotation.createdAt)}</span>
-                  </div>
-                  <p className="library-annotation-body">{annotation.body}</p>
-                </article>
-              ))}
-            </div>
-          ) : <p className="empty-copy">暂无批注。对知识对象的纠正、限定与批注会随知识编译沉淀在这里。</p>}
-        </section>
-        <section>
-          <h2>健康问题</h2>
-          {sourceDetailLoading ? <p className="library-detail-loading">正在读取健康问题…</p> : openHealth.length ? (
-            <div className="library-issue-list">
-              {openHealth.map((issue) => (
-                <article className="library-issue-item" key={issue.id}>
-                  <div className="library-issue-head">
-                    <span className={`issue-severity ${healthSeverityCls(issue.severity)}`}>{severityLabel(issue.severity)}</span>
-                    <span className="tag issue-type">{issueTypeLabel(issue.issueType)}</span>
-                    <span className={`pill-status ${issueStatusCls(issue.status)}`}><span className="dot"/>{healthStatusLabel(issue.status)}</span>
-                  </div>
-                  <p className="library-issue-suggestion">{issue.suggestedAction}</p>
-                  {issue.resolutionNote ? <p className="library-issue-resolution">解决记录：{issue.resolutionNote}</p> : null}
-                  <p className="library-issue-time">检测于 {formatDateTime(issue.detectedAt)}</p>
-                </article>
-              ))}
-            </div>
-          ) : <p className="empty-copy">该资料当前没有未处理健康问题。</p>}
-        </section>
+        </details> : null}
       </article>
     </section>;
   }

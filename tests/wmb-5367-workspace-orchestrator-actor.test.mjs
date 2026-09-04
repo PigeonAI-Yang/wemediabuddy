@@ -310,3 +310,25 @@ test('WMB-5367 unknown producer and mailbox depth 256 fail closed without busine
   assert.equal(pressure.code, 'MAILBOX_BACKPRESSURE');
   assert.deepEqual({ intents: count(database, 'orchestrator_intents'), mailbox: count(database, 'orchestrator_mailbox') }, before);
 }));
+
+test('WMB-5367 actor heartbeat renews authority without rotating its fence', () => withDatabase((database) => {
+  const { store, actor } = completeGate(database, 'ws-heartbeat');
+  const renewed = store.renewActorLease({
+    workspaceId: actor.workspaceId,
+    fence: fenceFrom(actor),
+    nowUtc: NOW,
+    nowMono: 700,
+    leaseMs: 5_000
+  });
+  assert.equal(renewed.runtimeEpoch, actor.runtimeEpoch);
+  assert.equal(renewed.ownerEpoch, actor.ownerEpoch);
+  assert.equal(renewed.authorityRevision, actor.authorityRevision);
+  assert.equal(renewed.leaseToken, actor.leaseToken);
+  assert.equal(renewed.checkpointRevision, actor.checkpointRevision);
+  assert.equal(renewed.leaseExpiresAtMono, 5_700);
+  assert.equal(renewed.controlStallDeadlineMono, 5_700);
+  assert.equal(renewed.gateDeadlineMono, 5_700);
+  const gate = database.prepare('SELECT lease_expires_at_mono AS leaseMono, gate_deadline_mono AS gateMono FROM daily_reconcile_gates WHERE workspace_id=?').get(actor.workspaceId);
+  assert.equal(gate.leaseMono, 5_700);
+  assert.equal(gate.gateMono, 5_700);
+}));

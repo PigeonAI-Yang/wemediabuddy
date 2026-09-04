@@ -133,7 +133,6 @@ export function executeOwnerProjectionDecision(
   } else if (status !== 'rejected' && status !== 'draft') {
     fail('REPAIR_SCOPE_MISMATCH', `候选状态 ${status} 不可修复。`);
   }
-  const sourceIds = stringArray(JSON.parse(String(item.source_ids_json ?? '[]')));
   return Object.freeze({
     decision: 'repair',
     binding: input,
@@ -141,13 +140,7 @@ export function executeOwnerProjectionDecision(
       planItemId: input.planItemId,
       revision,
       planningStatus: status === 'ready_for_review' ? 'rejected' : status,
-      nextAction: Object.freeze({
-        kind: 'submitWorkspaceOrchestratorIntent',
-        producerId: 'proposal.plan-item-request-planning',
-        action: 'judge',
-        requestId: input.requestId,
-        logicalInput: Object.freeze({ planItemId: input.planItemId, sourceIds })
-      })
+      nextAction: { action: 'judge', planItemId: input.planItemId }
     }
   });
 }

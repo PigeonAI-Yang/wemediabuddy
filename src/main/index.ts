@@ -843,34 +843,14 @@ ipcMain.handle('agent:control-daily', async (_event, input: { id: string; action
       dailyControlInflight.delete(flightKey);
     }
   });
-  ipcMain.handle('agent:start-daily-intelligence', async (_event, input: { businessDate: string; modules?: Array<'official_web' | 'x_lists'> }) => {
-    const businessDate = input?.businessDate?.trim();
-    if (!businessDate) throw new Error('请选择今日情报日期。');
-    const dataRoot = await loadSelectedDataRoot();
-    const runtime = activeRuntime;
-    if (!dataRoot || !runtime || runtime.identity.rootPath !== path.resolve(dataRoot.path)) throw new Error('当前工作空间运行时不可用。');
-    broadcastPiEvent({ type: 'starting' });
-    try {
-      const logicalInput = Object.freeze({ businessDate, modules: input.modules ?? [] });
-      const receipt = await submitWorkspaceOrchestratorIntent(runtime, {
-        producerId: 'today.agent-start-daily-intelligence',
-        businessDate,
-        requestId: `today.agent-start-daily-intelligence:${runtime.identity.workspaceId}:${businessDate}`,
-        action: 'full',
-        logicalInput,
-        payload: logicalInput,
-        rootMode: 'owner'
-      });
-      if (!receipt.ok) throw Object.assign(new Error(receipt.message || '今日情报请求未被接受。'), { code: receipt.code ?? 'DAILY_INTELLIGENCE_FAILED' });
-      wakeWorkspaceOrchestratorExecutor(runtime);
-      broadcastPiEvent({ type: 'idle', text: 'accepted' });
-      return { ok: true, data: { action: 'accepted', receipt }, error: null };
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error);
-      broadcastPiEvent({ type: 'failed', error: messageText });
-      return { ok: false, data: null, error: { code: 'DAILY_INTELLIGENCE_FAILED', message: messageText } };
+  ipcMain.handle('agent:start-daily-intelligence', async () => ({
+    ok: false,
+    data: null,
+    error: {
+      code: 'DAILY_FULL_PIPELINE_PAUSED',
+      message: '一键完整链路已暂停。请从资料、选题或创作入口分步处理。'
     }
-  });
+  }));
   ipcMain.handle('agent:start-studio-draft', async (_event, input: { businessDate: string; projectId: string; brief?: string; researchMode?: string; research_mode?: string }) => {
     const dataRoot = await loadSelectedDataRoot();
     const runtime = activeRuntime;

@@ -1,0 +1,144 @@
+{
+  "init": {
+    "vals": "0|0|0|0",
+    "metricsCalls": 0,
+    "todayCalls": 0
+  },
+  "startResult": {
+    "ok": true,
+    "data": {
+      "task": null,
+      "managerTask": {
+        "id": "5a7dd883-52be-4a69-85f7-5b5ed8177b55",
+        "intent": "page_agents",
+        "businessDate": "2026-08-24",
+        "status": "running",
+        "phase": "dispatch_reporter",
+        "progress": {
+          "message": "主管已接单：今日情报 · 准备派记者扫描",
+          "lastActivityAt": "2026-08-24T13:56:53.055Z"
+        },
+        "checkpoint": {
+          "version": 1,
+          "kind": "manager_task",
+          "goal": "daily_intelligence",
+          "businessDate": "2026-08-24",
+          "status": "running",
+          "phase": "dispatch_reporter",
+          "acceptance": "可信渠道回执 + 当日可批方案",
+          "summary": "主管已接单：今日情报 · 准备派记者扫描",
+          "children": [
+            {
+              "roleId": "reporter",
+              "brief": "扫描今日情报渠道并回报",
+              "intent": "daily_scan",
+              "status": "queued"
+            }
+          ],
+          "legacyPipeline": true,
+          "updatedAt": "2026-08-24T13:56:53.055Z"
+        },
+        "errorCode": null,
+        "errorMessage": null,
+        "updatedAt": "2026-08-24T13:56:53.055Z",
+        "createdAt": "2026-08-24T13:56:53.044Z"
+      },
+      "focusDialog": true,
+      "reused": false,
+      "action": "created",
+      "managerOwned": true
+    },
+    "error": null,
+    "businessDate": "2026-08-24"
+  },
+  "afterStart": {
+    "metricsCalls": 0,
+    "todayCalls": 0,
+    "viewTransitions": 2,
+    "polls": [],
+    "lastVals": "0|0|0|0",
+    "mutations": [],
+    "hasRunningBar": false,
+    "hasIntelligenceBar": false,
+    "overviewSame": true
+  },
+  "runningObs": {
+    "metricsCalls": 0,
+    "todayCalls": 0,
+    "viewTransitions": 2,
+    "reloads": 0,
+    "polls": [],
+    "mutations": [],
+    "dashFlashes": 0,
+    "lastVals": "0|0|0|0",
+    "overviewSame": true,
+    "hasRunningBar": false,
+    "overviewRect": {
+      "w": 642,
+      "h": 196.75
+    },
+    "computed": {
+      "display": "grid",
+      "opacity": "1",
+      "height": "196.75px",
+      "transition": "all",
+      "animation": "none"
+    },
+    "appShellClass": "app-shell pi-open"
+  },
+  "snap": {
+    "vals": "0|0|0|0",
+    "trends": 4,
+    "overviewHtml": "<section class=\"today-overview\" aria-label=\"今日经营概况\"><div class=\"today-overview-head\"><div class=\"today-overview-title\"><h2>今日经营概况</h2><button type=\"button\" class=\"today-overview-updated\" title=\"前往 每日自动化\">更新于 2026/8/24 21:56:50</button></div><div class=\"today-overview-actions\"><button type=\"button\" class=\"secondary-button\" aria-label=\"重新侦察\">重新侦察</button><button type=\"button\" class=\"secondary-button\">查看资料</button><button type=\"button\" class=\"primary-button\">开始今日情报</button></div></div><div class=\"today-overview-metrics\" role=\"group\" aria-label=\"经营指标\"><button type=\"button\" class=\"today-metric\" aria-label=\"今日新资料 0 —\"><span class=\"today-metric-label\">今日新资料</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"内容机会 0 —\"><span class=\"today-metric-label\">内容机会</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"进行中项目 0 无待处理\"><span class=\"today-metric-label\">进行中项目</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\" data-tone=\"neutral\">无待处理</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"n"
+  },
+  "harnessEvidence": {
+    "console": [
+      {
+        "type": "debug",
+        "text": "[vite] connecting...",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 732,
+          "column": 8,
+          "lineNumber": 732,
+          "columnNumber": 8
+        }
+      },
+      {
+        "type": "debug",
+        "text": "[vite] connected.",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 826,
+          "column": 11,
+          "lineNumber": 826,
+          "columnNumber": 11
+        }
+      },
+      {
+        "type": "info",
+        "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+        "location": {
+          "url": "http://127.0.0.1:27391/@fs/j:/PigeonYang/WeMediaBuddy/node_modules/.vite/deps/react-dom_client.js?v=6fca6c74",
+          "line": 20102,
+          "column": 53,
+          "lineNumber": 20102,
+          "columnNumber": 53
+        }
+      },
+      {
+        "type": "warning",
+        "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+        "location": {
+          "url": "node:electron/js2c/sandbox_bundle",
+          "line": 1,
+          "column": 102780,
+          "lineNumber": 1,
+          "columnNumber": 102780
+        }
+      }
+    ],
+    "errors": [],
+    "pageerrors": []
+  }
+}

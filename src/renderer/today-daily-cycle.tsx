@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatScoreWithPending, getScoreReasons } from './proposal-ledger';
-type Schedule = { time: string; autoEnabled: boolean };
 type StageResult = {
   stage: string;
   name: string;
@@ -60,13 +59,6 @@ function resolveBusinessDate(explicit?: string): string {
   }
 }
 
-function unwrapData<T>(value: unknown): T {
-  if (value && typeof value === 'object' && 'data' in (value as Record<string, unknown>)) {
-    const d = (value as { data?: unknown }).data;
-    if (d != null) return d as T;
-  }
-  return value as T;
-}
 
 function storageKey(businessDate: string): string {
   return `wmb.daily-orchestration.settlement:${businessDate}`;
@@ -82,15 +74,11 @@ function loadPersisted(businessDate: string): Settlement | null {
   } catch { return null; }
 }
 
-function persist(businessDate: string, settlement: Settlement): void {
-  try { window.localStorage.setItem(storageKey(businessDate), JSON.stringify(settlement)); } catch { /* ignore */ }
-}
 
 export function TodayDailyCycle({
   businessDate: businessDateProp,
   openStudio,
   openSettings,
-  refreshTick,
 }: {
   businessDate?: string;
   openStudio?: (projectId?: string) => void;
@@ -98,86 +86,13 @@ export function TodayDailyCycle({
   refreshTick?: number;
 }) {
   const businessDate = useMemo(() => resolveBusinessDate(businessDateProp), [businessDateProp]);
-  const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [scheduleBusy, setScheduleBusy] = useState(false);
   const [settlement, setSettlement] = useState<Settlement | null>(() => loadPersisted(businessDate));
-  const [running, setRunning] = useState(false);
-  const [message, setMessage] = useState('');
-  const [timeDraft, setTimeDraft] = useState('');
 
-  const loadSchedule = useCallback(async () => {
-    try {
-      const raw = await (window.wmb as unknown as { getDailyOrchestrationSchedule: () => Promise<Schedule> }).getDailyOrchestrationSchedule();
-      const s = unwrapData<Schedule>(raw);
-      if (s && typeof s.time === 'string' && typeof s.autoEnabled === 'boolean') {
-        setSchedule(s);
-        setTimeDraft(s.time);
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => { void loadSchedule(); }, [loadSchedule, refreshTick]);
 
   useEffect(() => {
     setSettlement(loadPersisted(businessDate));
-    setMessage('');
   }, [businessDate]);
 
-  useEffect(() => {
-    const off = (window.wmb as unknown as { onDataChanged?: (cb: (e: { scopes: string[] }) => void) => () => void })?.onDataChanged?.((e) => {
-      if (e.scopes.includes('today') || e.scopes.includes('agent')) void loadSchedule();
-    });
-    return () => { off?.(); };
-  }, [loadSchedule]);
-
-  const toggleAuto = async () => {
-    if (!schedule || scheduleBusy) return;
-    setScheduleBusy(true);
-    setMessage('');
-    try {
-      const next = !schedule.autoEnabled;
-      const raw = await (window.wmb as unknown as { setDailyOrchestrationSchedule: (i: { autoEnabled: boolean }) => Promise<unknown> }).setDailyOrchestrationSchedule({ autoEnabled: next });
-      const data = unwrapData<Schedule>(raw);
-      if (data && typeof data.autoEnabled === 'boolean') {
-        setSchedule(data);
-        setTimeDraft(data.time);
-      } else {
-        setSchedule((prev) => (prev ? { ...prev, autoEnabled: next } : prev));
-      }
-    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setScheduleBusy(false); }
-  };
-
-  const saveTime = async () => {
-    if (!schedule || scheduleBusy) return;
-    if (!/^\d{2}:\d{2}$/.test(timeDraft)) { setMessage('时间格式应为 HH:MM'); return; }
-    if (timeDraft === schedule.time) return;
-    setScheduleBusy(true);
-    setMessage('');
-    try {
-      const raw = await (window.wmb as unknown as { setDailyOrchestrationSchedule: (i: { time: string }) => Promise<unknown> }).setDailyOrchestrationSchedule({ time: timeDraft });
-      const data = unwrapData<Schedule>(raw);
-      if (data && typeof data.time === 'string') {
-        setSchedule(data);
-        setTimeDraft(data.time);
-      } else {
-        setSchedule((prev) => (prev ? { ...prev, time: timeDraft } : prev));
-      }
-    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setScheduleBusy(false); }
-  };
-
-  const run = async () => {
-    if (running) return;
-    setRunning(true);
-    setMessage('');
-    try {
-      const result = await window.wmb.startDailyIntelligence({ businessDate });
-      if (!result?.ok) {
-        setMessage(result?.error?.message ?? '今日选题启动失败');
-        return;
-      }
-      setMessage('今日选题已提交，手动与定时任务共用同一执行入口。');
-    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); } finally { setRunning(false); }
-  };
 
   const s = settlement;
   const stageRows: StageResult[] = (() => {
@@ -197,53 +112,14 @@ export function TodayDailyCycle({
       <header className="today-daily-cycle-head today-orchestration-head">
         <h2 id="today-daily-cycle-title" className="today-daily-cycle-title">每日编排</h2>
         <span className="today-orchestration-schedule-label" aria-live="polite">
-          {schedule ? `计划 Asia/Shanghai ${schedule.time} · ${schedule.autoEnabled ? '自动已启用' : '自动已暂停'}` : '计划 Asia/Shanghai 09:00 · 加载中'}
+          完整链路入口已暂停
         </span>
       </header>
 
       <div className="today-orchestration-controls">
-        <div className="today-orchestration-schedule-row">
-          <label className="today-orchestration-time-label" htmlFor="today-orchestration-time">定时</label>
-          <input
-            id="today-orchestration-time"
-            type="time"
-            className="today-orchestration-time-input"
-            value={timeDraft}
-            onChange={(e) => setTimeDraft(e.target.value)}
-            onBlur={() => void saveTime()}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveTime(); } }}
-            disabled={scheduleBusy || !schedule}
-            aria-label="每日编排定时 Asia/Shanghai"
-          />
-          <button
-            type="button"
-            className="secondary-button today-orchestration-toggle"
-            onClick={() => void toggleAuto()}
-            disabled={scheduleBusy || !schedule}
-            aria-pressed={schedule?.autoEnabled}
-            aria-label={schedule?.autoEnabled ? '停用自动编排' : '启用自动编排'}
-          >
-            {schedule?.autoEnabled ? '停用自动' : '启用自动'}
-          </button>
-        </div>
-
-        <div className="today-orchestration-run-row">
-          <button
-            type="button"
-            className="primary-button today-orchestration-run"
-            onClick={() => void run()}
-            disabled={running || scheduleBusy}
-            aria-busy={running}
-            aria-label="立即生成今日选题"
-          >
-            {running ? '选题生成中…' : '立即生成'}
-          </button>
-          <span className="today-orchestration-run-hint">手动触发与定时共用同一选题入口</span>
-        </div>
+        <p className="today-orchestration-run-hint">请从资料、选题台账和创作入口分步处理；已有结算记录仍可查看。</p>
       </div>
 
-      {running ? <p className="today-orchestration-running" role="status" aria-live="polite">正在扫描来源并生成今日方案，请稍候…</p> : null}
-      {message ? <p role="alert" className="today-daily-cycle-msg">{message}</p> : null}
 
       {s ? (
         <div className="today-orchestration-settlement" aria-live="polite">
@@ -260,7 +136,6 @@ export function TodayDailyCycle({
               <span>需人工介入：{needsUserStages.length ? `${needsUserStages.map((x) => `${x.stage}${STAGE_LABELS[x.stage] ?? ''}`).join('、')} 需要处理` : '请检查浏览器登录或渠道配置'}</span>
               <div className="today-orchestration-banner-actions">
                 {openSettings ? <button type="button" className="secondary-button" onClick={() => openSettings('browser')}>去设置检查浏览器</button> : null}
-                <button type="button" className="text-button" onClick={() => void run()} disabled={running}>重试</button>
               </div>
             </div>
           ) : null}
@@ -269,23 +144,17 @@ export function TodayDailyCycle({
               <span>部分完成：{s.counts.gap > 0 ? `缺口 ${s.counts.gap} 条` : ''}{s.counts.blocked > 0 ? ` · 阻塞 ${s.counts.blocked}` : ''} · 可继续完善或顺延</span>
               <div className="today-orchestration-banner-actions">
                 <button type="button" className="secondary-button" onClick={() => openStudio?.()}>去选题</button>
-                <button type="button" className="text-button" onClick={() => void run()} disabled={running}>重试编排</button>
               </div>
             </div>
           ) : null}
           {s.status === 'paused' ? (
             <div className="today-orchestration-banner today-orchestration-banner--paused" role="status">
-              <span>已暂停：自动编排已停止，手动仍可立即执行</span>
-              <div className="today-orchestration-banner-actions">
-                <button type="button" className="secondary-button" onClick={() => void toggleAuto()} disabled={scheduleBusy}>恢复自动</button>
-                <button type="button" className="text-button" onClick={() => void run()} disabled={running}>立即执行</button>
-              </div>
+              <span>完整链路入口已暂停，请改用资料、选题台账和创作入口。</span>
             </div>
           ) : null}
           {s.status === 'failed' ? (
             <div className="today-orchestration-banner today-orchestration-banner--failed" role="status">
               <span>执行失败：请重试或检查日志</span>
-              <button type="button" className="secondary-button" onClick={() => void run()} disabled={running}>重试</button>
             </div>
           ) : null}
 

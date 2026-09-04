@@ -7,10 +7,34 @@
 import { helpers } from './harness.mjs';
 import { seedRichKnowledge, seedHealthIssue, openWorkspaceDb } from './fixture-knowledge.mjs';
 import { scheduleSourceBodyArchive } from '../../src/main/source-body-archive.ts';
+import { writeSourceBodyCache } from '../../src/main/source-body-cache.ts';
 
 const { assert, step, waitForAppReady, navigateTo, openReadOnlyDb, captureEvidence } = helpers;
 
-const RICH = { seedFixture: async (ws) => seedRichKnowledge(ws.dataRoot, ws.workspaceId) };
+const RICH = {
+  seedFixture: async (ws) => {
+    const seeded = seedRichKnowledge(ws.dataRoot, ws.workspaceId);
+    const db = openWorkspaceDb(ws.dataRoot);
+    try {
+      const body = 'AgentForge 官方发布 v2，引入多模型路由能力。';
+      const now = new Date().toISOString();
+      writeSourceBodyCache(db, {
+        sourceId: seeded.source1.id,
+        url: 'https://news.example/agentforge-v2',
+        status: 'ready',
+        contentType: 'text/html',
+        extractedText: body,
+        extractedChars: body.length,
+        errorMessage: null,
+        fetchedAt: now,
+        updatedAt: now,
+      });
+    } finally {
+      db.close();
+    }
+    return seeded;
+  },
+};
 
 export default [
   {
@@ -41,6 +65,16 @@ export default [
         await page.locator('.library-source-detail-page').waitFor({ state: 'visible', timeout: 20_000 });
         const title = await page.locator('.library-source-detail h1').textContent();
         assert(title.includes('AgentForge 发布 v2'), `详情标题错误：${title}`);
+        await page.waitForFunction(() => (
+          document.querySelectorAll('.library-source-summary').length === 1
+          && document.querySelectorAll('.library-source-primary-body').length === 0
+        ), null, { timeout: 20_000 });
+        const readingSections = await page.evaluate(() => ({
+          summaries: document.querySelectorAll('.library-source-summary').length,
+          bodies: document.querySelectorAll('.library-source-primary-body').length,
+        }));
+        assert(readingSections.summaries === 1 && readingSections.bodies === 0,
+          `与摘要相同的归档正文不应重复展示，实际 ${JSON.stringify(readingSections)}`);
         assert(await page.locator('.library-source-detail section h2', { hasText: '证据贡献' }).count() >= 1, '详情应有证据贡献区');
         const sourceIdentity = await page.evaluate(() => {
           const meta = document.querySelector('.library-source-detail-meta');

@@ -1,0 +1,435 @@
+(node:191360) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+=== SCORING RECOVERY VERIFICATION ===
+BUSINESS_DATE 2026-08-25
+EXPECTED_PLAN cc34c3b8-33bb-4ed8-b021-1defa9ba9c0a
+EXPECTED_ITEMS [
+  'cbb016e5-e050-4bcd-bc14-2047ee6271ac',
+  '293275c4-6f43-49db-844e-0e75f7c151c4',
+  '1274b166-6326-4358-a80d-8b157e1237b4',
+  '91fefb18-77cb-49cd-a03b-0be8d93e469a'
+]
+DB plan before [Object: null prototype] {
+  id: 'cc34c3b8-33bb-4ed8-b021-1defa9ba9c0a',
+  is_current: 1,
+  plan_date: '2026-08-25'
+}
+DB pending before [
+  { id: 'cbb016e5', rev: 1, status: 'draft' },
+  { id: '293275c4', rev: 1, status: 'draft' },
+  { id: '1274b166', rev: 1, status: 'draft' },
+  { id: '91fefb18', rev: 1, status: 'draft' }
+]
+DB all before [
+  { id: 'cbb016e5', status: 'draft', score: 'pending' },
+  { id: '293275c4', status: 'draft', score: 'pending' },
+  { id: '1274b166', status: 'draft', score: 'pending' },
+  { id: '91fefb18', status: 'draft', score: 'pending' }
+]
+488 status [Object: null prototype] {
+  id: '488730ce-ca0a-45c9-9d0b-3e406e0d55d7',
+  is_current: 0
+}
+BEFORE tasks [
+  [Object: null prototype] {
+    id: '7d3cc592-013a-443f-9cca-fad43efb6681',
+    intent: 'daily_judge',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T13:18:21.285Z'
+  },
+  [Object: null prototype] {
+    id: '79e3a3bf-cc8c-4a90-9fbe-e04794d24ec7',
+    intent: 'research',
+    status: 'running',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T13:12:14.792Z'
+  },
+  [Object: null prototype] {
+    id: '749461ac-1cd3-4262-8998-41ecb865f402',
+    intent: 'daily_judge',
+    status: 'needs_user',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T13:04:38.164Z'
+  },
+  [Object: null prototype] {
+    id: 'c77a654d-5857-43e2-8b33-f5582e11aae8',
+    intent: 'daily_judge',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T12:18:28.369Z'
+  },
+  [Object: null prototype] {
+    id: 'f36ac3dd-5123-4fa4-8e7d-2c63c614de65',
+    intent: 'page_agents',
+    status: 'interrupted',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T12:10:50.206Z'
+  },
+  [Object: null prototype] {
+    id: 'e205d297-aae1-426b-a567-14743db29001',
+    intent: 'daily_judge',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T11:42:13.847Z'
+  },
+  [Object: null prototype] {
+    id: '939e2860-40f0-4349-846c-e0112f1885f9',
+    intent: 'page_agents',
+    status: 'interrupted',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T11:26:45.459Z'
+  },
+  [Object: null prototype] {
+    id: '7760da85-1583-4804-9ff0-6647b179e1db',
+    intent: 'daily_judge',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T07:42:40.985Z'
+  },
+  [Object: null prototype] {
+    id: 'd089a0d9-1172-4334-9de1-a19bac7e8d8d',
+    intent: 'daily_judge',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T07:39:09.474Z'
+  },
+  [Object: null prototype] {
+    id: '8a8431b0-bd44-4a78-81ca-63713ff2a9f1',
+    intent: 'daily_judge',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T07:00:01.897Z'
+  },
+  [Object: null prototype] {
+    id: '0b74e241-3cec-4c63-b5af-5946c18201f9',
+    intent: 'daily_judge',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T06:27:00.847Z'
+  },
+  [Object: null prototype] {
+    id: '59459cb5-c146-4c54-8629-acd46dd28cc6',
+    intent: 'daily_judge',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T06:03:21.619Z'
+  },
+  [Object: null prototype] {
+    id: '67283b5e-9771-401b-82eb-2513c197bb90',
+    intent: 'research',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:34:37.168Z'
+  },
+  [Object: null prototype] {
+    id: '18ea8f9e-c6d3-49f3-8454-fa54a0ef59ed',
+    intent: 'research',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:32:50.970Z'
+  },
+  [Object: null prototype] {
+    id: '34fa237e-0dc6-4fbf-9c17-7b10306acb89',
+    intent: 'research',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:29:41.686Z'
+  },
+  [Object: null prototype] {
+    id: 'debbd1d1-84f6-4613-b4cb-37da11f936d5',
+    intent: 'research',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:27:35.683Z'
+  },
+  [Object: null prototype] {
+    id: '256d1d6d-8eeb-43ac-9854-5a8841232df1',
+    intent: 'research',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:23:50.080Z'
+  },
+  [Object: null prototype] {
+    id: '7e3906c8-69a6-4c6e-b085-85b6fb7ee2f7',
+    intent: 'research',
+    status: 'succeeded',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:20:41.685Z'
+  },
+  [Object: null prototype] {
+    id: '62c96eed-f8bb-4a3e-a0b5-1ea54441a28f',
+    intent: 'research',
+    status: 'partial',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:16:06.852Z'
+  },
+  [Object: null prototype] {
+    id: 'b94dd800-84d0-4c82-bba4-695fa95be2f0',
+    intent: 'research',
+    status: 'failed',
+    business_date: '2026-08-25',
+    updated_at: '2026-08-25T05:12:15.996Z'
+  }
+]
+Launching installed app with CDP 9335
+spawned 200772
+CDP connected attempt 0
+page url file:///C:/Users/yangda01/AppData/Local/WeMediaBuddy/app-0.3.0/resources/app.asar/.vite/renderer/main_window/index.html
+today active true
+BEFORE DOM {
+  "bodySnippet": "WeMediaBuddy\nAI\n−\n□\n×\n工作流\n今日\n智能体\n发现\n选题\n创作\n发布\n结果\n知识资产\n主题\n资料库\n关系画布\n设置\n今日经营概况\n查看资料\n继续今日情报\n今日新资料\n—\n—\n—\n内容机会\n—\n—\n—\n进行中项目\n—\n—\n—\n近 7 日发布\n—\n—\n—\n选题台账 · 0\n今日可批 · 0 ｜ 待处理 · 0\n›\n待评分\nX\n小红书\n公众号\n时效 长青方法，今日有新信号\n新\n长青\n写入 2026-08-25 21:18\n2026-08-25 20:47:00\n把产品名换成竞品，卖点还成立吗？一个替换测试就能拆穿伪差异化\n\n入选理由：今日新增资料给出了一个可立即执行的差异化测试：把产品名替换成竞品，若文案仍然成立，说明卖点过于泛化。AI 工具和服务快速同质化，这个测试具有即时窗口，也能长期复用。\n\n表达角度\n把差异化从抽象定位变成一句可被竞品替换检验的具体承诺。\n核心观点\n“AI 能力强”不是差异化，只有对象、场景、时限、交付边界或验收结果具体到竞品无法直接替换，才可能成为选择理由；今天就把自己的首页或服务介绍做一次替换测试。\n怎么讲\n标题\n标题直接呈现替换测试这个动作，并保留“卖点可能不成立”的冲突。\n开头\n首段立刻让读者执行测试：把产品名删掉换成竞品，再读一遍你的卖点。如果一句话仍然成立，它大概率不是卖点。\n结构\n方向判断：为何现在→强观点→标题开头→来源；补充三个从泛化表述改成具体承诺的例子。\n目标：正在为 AI 工具、服务或个人项目写介绍，却只能写“更智能、更高效”的人\n形式：观点短文、carousel\n引用资料 ×1\n\n待你处理 · 1\n\n✋\n先验证浏览器账号\nCannot read properties of undefined (reading 'getPath')\n点击处理\n不破甲如何让codex干被拒绝的事情？ 用codex的时候 部分请求时常被拒 我能想到的是开头让其他模型 比如本地模型去跑 其余的部分拉个板块清单交给codex去完成\n@LiFeng61532\n·\n2026-08-25 20:31:59\nI built a TUI design tool for my work at @opencode and I’ve been using it for the last 2 weeks → Design directly on the terminal grid → ASCII borders that join automatically → Flex\n@arvsrn\n·\n2026-08-25 17:25:39\nAI Spotlight returns with Wan3.0 Wan3.0 helps turn your existing material into videos you can shape, refine, and bring to life. Creating video no longer means starting from scratch\n@alibaba_cloud\n·\n2026-08-25 21:00:01\n【https://t.co/Yl2KG97Eb1 日吞吐量增长洞察】 单日算力吞吐突破 5,907.8 亿 Tokens，再创历史新高！ 从 8 月 18 日到 8 月 25 日，8 天内算力吞吐量实现近 8 倍爆发式增长！ 🔹 算力需求狂飙：工业级底座平稳承载海量高并发与重度负载 🔹 生态加速繁荣： 极低门槛与极致性价比，吸引全球开发者在 https:\n@BAI_AGI\n·\n2026-08-25 21:05:45\n📊 https://t.co/Yl2KG97Eb1 Daily Throughput Growth Daily compute throughput surpasses 590.8B Tokens, setting a new all-time high! From Aug 18 to Aug 25, daily throughput surged nea\n@BAI_AGI\n·\n2026-08-25 21:05:52\nRight now there is no rival. @Alibaba_Qwen lab is practically the open source North Pole. More great models that WE can run on attainable hardware. I’m so excited 😎\n@KyleHessling1\n·\n2026-08-25 21:09:32\nif you want a sense of how much fraud we deal with, stripe has blocked $300M worth of fraud for us in the past few days https://t.co/JUWqcHtRCQ\n@thdxr\n·\n2026-08-25 21:12:10\nSemantic Scholar (@SemanticScholar) is a rich source of information to find citation data of papers There's now an easy-to-use CLI and Skill so you can ask your agent things like \"\n@NielsRogge\n·\n2026-08-25 01:07:24\n该说不说这头像是真炫酷，而且还是动态的GIF，设计师一定花费了很多的心血在上面，感谢主创团队 I have to say, this avatar is seriously cool—and it's an animated GIF, too. The designer must have put a lot of heart and effort into\n@Mulight\n·\n2026-08-25 20:30:04\nTHAT'S impressive. Way more so than running faster than humans. White robot probably would've won if it weren't so hesitant. Just amazing though. I missed the opportunity to go to\n@SlipperyGem\n·\n2026-08-25 20:40:52\n准备多号铺一下42space的新手大礼包，说不定TGE的时候有福报 这几天有点忙，刚看到42space上线了迎新礼包，给新用户准备的新手任务。 完成任务就能解锁 Tickets，已解锁的会进可用余额。 一部分注册就能领，剩下的按任务逐步解锁就可以了。 主要有6个任务，都很简单： 1 关注 @42space 2 加入官方 https://t.co/rBW2JK\n@Mulight\n·\n2026-08-25 21:08:15\n怎么判断自己的产品有没有差异化？有个很狠的测试：把你的产品名换成竞品的，文案还成立吗？ 成立，说明你没差异化。你的卖点，竞品也能说，那客户凭啥选你？ 举例子：“我们 AI 能力很强”——换成任何一家都成立，废话。“我们出图不用排队，高峰期 3 分钟出图”——换成别家不成立，这才是卖点。\n@Leepriest1990\n·\n2026-08-25 20:47:00\nAvailable here if you're in \"seller mode\" + have connected X oauth &gt; https://t.co/e0yVGjUUWB https://t.co/OTnZcXj9Gr\n@marclou\n·\n2026-08-25 20:47:05\nI added a @WHOOP integration to TrustMRR. It shows this data on your /founder page: 😴 Sleep &amp; consistency 👌 Recovery, HRV, RHR 🏋️‍♀️ Strain &amp; kcal burnt The end goal is\n@marclou\n·\n2026-08-25 20:47:01\nRemoving Gemini 3.5 AI Watermarks from Images &amp; Veo Videos: A Deep Dive into Reverse Alpha Blending https://t.co/RwzkT0NKnv\n@gaoqian2580\n·\n2026-08-25 21:01:12\nAI 服务到底该收多少钱？这个问题我纠结了大半年。 一开始按工作量报，报完自己心里都没底，客户也懵：你调了仨小时接口，凭啥收这么贵？ 后来换了个算法：按客户省下的时间报。一个流程跑通，他每个月省 20 个小时，这 20 个小时值多少钱，客户比我会算。 按成本报价，你越能干越吃亏——你 3\n@Leepriest1990\n·\n2026-08-25 19:41:00\nHello，朋友，我是阿乐。 半年前，我还是个旅拍摄影师。 现在我在用 AI 出图，帮服装老板省模特费，也给自己搭了一套获客系统。 这半年在杭州，我折腾了一圈： 3月做宠物摄影 4月转型摄影IP 5月做公众号小号、闲鱼货源、小红书虚拟电商 6月切入AI赛道，推广AI出图软件 7月做AI出图服务\n@Leepriest1990\n·\n2026-08-25 19:55:42\n做产品死得最快的，不是做不出来，是做太多。 见过太多团队，第一版就想把未来三年的功能全塞进去：权限、埋点、报表、多租户……排期排到三个月后，上线那天发现市场早变了。 有个做产品的思路叫 Less Software：用 20% 的力气解决 80% 的问题，就是大胜。\n@Leepriest1990\n·\n2026-08-25 20:13:00\n我建一元社群有三个目的： 1. 凝势，建立正反馈：通过不断进来的 1 元，来建立我自己的一些正反馈 2. 触达，触达沉寂好友：直接触达我通讯录里所有沉寂的朋友（之前联系过但从来没聊过天的这些人），跟他们进行一次建联，为我们后续的一些动作做铺垫 3.\n@Leepriest1990\n·\n2026-08-25 20:13:03\n字节发布了“豆包工作”，非常豪横，上来就先送一个月的标准会员； 如果你已经买了会员，也会免费顺延一个月，可以说是雨露均沾。 豆包确实早就应该单独推出一个面向工作场景（或者说泛工作场景，包括一些 coding）的客户端。 因为大家对豆包 App https://t.co/Xga06H0akT\n@op7418\n·\n2026-08-25 19:38:37\n顺便说一下，这个组图也是用豆包工作和我的那个社交媒体 skill 做的。 我发现豆包在做这种东西的时候效果很好，尤其是它说人话，这个是非常大的优势。 Codex 每次就给我整点儿不是人话的语言上去 https://t.co/NJ4GKI7C8K\n@op7418\n·\n2026-08-25 19:54:37\nAmazing! Is this the first project that went from an idea to a working app in OJO? Excited to see more!\n@OJOaidesign\n·\n2026-08-25 20:12:29\nJoshua is really good at orchestrating - just look at how many OJO skills he put to work. That’s right: more skills, better design. The devil is in the details ",
+  "bodyTextLength": 178184,
+  "htmlLength": 2551807,
+  "hasScoringIncomplete": false,
+  "hasContinueScoring": false,
+  "hasAppShell": true,
+  "hasTodayLayout": true,
+  "hasTodayOverview": true,
+  "hasPiDock": true,
+  "allButtons": [
+    {
+      "text": "−",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "□",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "×",
+      "disabled": false,
+      "class": "window-close"
+    },
+    {
+      "text": "今日",
+      "disabled": false,
+      "class": "active"
+    },
+    {
+      "text": "智能体",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "发现",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "选题",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "创作",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "发布",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "结果",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "主题",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "资料库",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "关系画布",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "设置",
+      "disabled": false,
+      "class": ""
+    },
+    {
+      "text": "查看资料",
+      "disabled": false,
+      "class": "secondary-button"
+    },
+    {
+      "text": "继续今日情报",
+      "disabled": false,
+      "class": "primary-button"
+    },
+    {
+      "text": "今日新资料———",
+      "disabled": false,
+      "class": "today-metric"
+    },
+    {
+      "text": "内容机会———",
+      "disabled": false,
+      "class": "today-metric"
+    },
+    {
+      "text": "进行中项目———",
+      "disabled": false,
+      "class": "today-metric"
+    },
+    {
+      "text": "近 7 日发布———",
+      "disabled": false,
+      "class": "today-metric"
+    },
+    {
+      "text": "选题台账 · 0今日可批 · 0 ｜ 待处理 · 0›",
+      "disabled": false,
+      "class": "proposal-ledger-entry"
+    },
+    {
+      "text": "Pi[JOB_EVENT] job.failed jobId…▾",
+      "disabled": false,
+      "class": "pi-session-trigger"
+    },
+    {
+      "text": "ox-alpha-freemax▾",
+      "disabled": false,
+      "class": "pi-model-trigger"
+    },
+    {
+      "text": "☾ 黑夜紫罗兰",
+      "disabled": false,
+      "class": "status-theme"
+    }
+  ],
+  "todayPoolText": "WeMediaBuddy\nAI\n−\n□\n×\n工作流\n今日\n智能体\n发现\n选题\n创作\n发布\n结果\n知识资产\n主题\n资料库\n关系画布\n设置\n今日经营概况\n查看资料\n继续今日情报\n今日新资料\n—\n—\n—\n内容机会\n—\n—\n—\n进行中项目\n—\n—\n—\n近 7 日发布\n—\n—\n—\n选题台账 · 0\n今日可批 · 0 ｜ 待处理 · 0\n›\n待评分\nX\n小红书\n公众号\n时效 长青方法，今日有新信号\n新\n长青\n写入 2026-08-25 21:18\n2026-08-25 20:47:00\n把产品名换成竞品，卖点还成立吗？一个替换测试就能拆穿伪差异化\n\n入选理由：今日新增资料给出了一个可立即执行的差异化测试：把产品名替换成竞品，若文案仍然成立，说明卖点过于泛化。AI 工具和服务快速同质化，这个测试具有即时窗口，也能长期复用。\n\n表达角度\n把差异化从抽象定位变成一句可被竞品替换检验的具体承诺。\n核心观点\n“AI 能力强”不是差异化，只有对象、场景、时限、交付边界或验收结果具体到竞品无法直接替换，才可能成为选择理由；今天就把自己的首页或服务介绍做一次替换测试。\n怎么讲\n标题\n标题直接呈现替换测试这个动作，并保留“卖点可能不成立”的冲突。\n开头\n首段立刻让读者执行测试：把产品名删掉换成竞品，再读一遍你的卖点。如果一句话仍然成立，它大概率不是卖点。\n结构\n方向判断：为何现在→强观点→标题开头→来源；补充三个从泛化表述改成具体承诺的例子。\n目标：正在为 AI 工具、服务或个人项目写介绍，却只能写“更智能、更高效”的人\n形式：观点短文、carousel\n引用资料 ×1\n\n待你处理 · 1\n\n✋\n先验证浏览器账号\nCannot read properties of undefined (reading 'getPath')\n点击处理\n不破甲如何让codex干被拒绝的事情？ 用codex的时候 部分请求时常被拒 我能想到的是开头让其他模型 比如本地模型去跑 其余的部分拉个板块清单交给codex去完成\n@LiFeng61532\n·\n2026-08-25 20:31:59\nI built a TUI design tool for my work at @opencode and I’ve been using it for the last 2 weeks → Design directly on the terminal grid → ASCII borders that join automatically → Flex\n@arvsrn\n·\n2026-08-25 17:25:39\nAI Spotlight returns with Wan3.0 Wan3.0 helps turn your existing material into videos you can shape, refine, and bring to life. Creating video no longer means starting from scratch\n@alibaba_cloud\n·\n2026-08-25 21:00:01\n【https://t.co/Yl2KG97Eb1 日吞吐量增长洞察】 单日算力吞吐突破 5,907.8 亿 Tokens，再创历史新高！ 从 8 月 18 日到 8 月 25 日，8 天内算力吞吐量实现近 8 倍爆发式增长！ 🔹 算力需求狂飙：工业级底座平稳承载海量高并发与重度负载 🔹 生态加速繁荣： 极低门槛与极致性价比，吸引全球开发者在 https:\n@BAI_AGI\n·\n2026-08-25 21:05:45\n📊 https://t.co/Yl2KG97Eb1 Daily Throughput Growth Daily compute throughput surpasses 590.8B Tokens, setting a new all-time high! From Aug 18 to Aug 25, daily throughput surged nea\n@BAI_AGI\n·\n2026-08-25 21:05:52\nRight now there is no rival. @Alibaba_Qwen lab is practically the open source North Pole. More great models that WE can run on attainable hardware. I’m so excited 😎\n@KyleHessling1\n·\n2026-08-25 21:09:32\nif you want a sense of how much fraud we deal with, stripe h"
+}
+consoleErrors before []
+pageErrors before []
+BEFORE LEDGER {
+  "rowTexts": [],
+  "has0Approved": true,
+  "hasPending4": true,
+  "hasApprove": true,
+  "hasPlanAction": true,
+  "rowActions": [],
+  "hasPendingReason": false,
+  "bodySnippet": "WeMediaBuddy\nAI\n−\n□\n×\n工作流\n今日\n智能体\n发现\n选题\n创作\n发布\n结果\n知识资产\n主题\n资料库\n关系画布\n设置\n今日经营概况\n查看资料\n继续今日情报\n今日新资料\n—\n—\n—\n内容机会\n—\n—\n—\n进行中项目\n—\n—\n—\n近 7 日发布\n—\n—\n—\n选题台账 · 0\n今日可批 · 0 ｜ 待处理 · 0\n›\n待评分\nX\n小红书\n公众号\n时效 长青方法，今日有新信号\n新\n长青\n写入 2026-08-25 21:18\n2026-08-25 20:47:00\n把产品名换成竞品，卖点还成立吗？一个替换测试就能拆穿伪差异化\n\n入选理由：今日新增资料给出了一个可立即执行的差异化测试：把产品名替换成竞品，若文案仍然成立，说明卖点过于泛化。AI 工具和服务快速同质化，这个测试具有即时窗口，也能长期复用。\n\n表达角度\n把差异化从抽象定位变成一句可被竞品替换检验的具体承诺。\n核心观点\n“AI 能力强”不是差异化，只有对象、场景、时限、交付边界或验收结果具体到竞品无法直接替换，才可能成为选择理由；今天就把自己的首页或服务介绍做一次替换测试。\n怎么讲\n标题\n标题直接呈现替换测试这个动作，并保留“卖点可能不成立”的冲突。\n开头\n首段立刻让读者执行测试：把产品名删掉换成竞品，再读一遍你的卖点。如果一句话仍然成立，它大概率不是卖点。\n结构\n方向判断：为何现在→强观点→标题开头→来源；补充三个从泛化表述改成具体承诺的例子。\n目标：正在为 AI 工具、服务或个人项目写介绍，却只能写“更智能、更高效”的人\n形式：观点短文、carousel\n引用资料 ×1\n\n待你处理 · 1\n\n✋\n先验证浏览器账号\nCannot read properties of undefined (reading 'getPath')\n点击处理\n不破甲如何让codex干被拒绝的事情？ 用codex的时候 部分请求时常被拒 我能想到的是开头让其他模型 比如本地模型去跑 其余的部分拉个板块清单交给codex去完成\n@LiFeng61532\n·\n2026-08-25 20:31:59\nI built a TUI design tool for my work at @opencode and I’ve been using it for the last 2 weeks → Design directly on the terminal grid → ASCII borders that join automatically → Flex\n@arvsrn\n·\n2026-08-25 17:25:39\nAI Spotlight returns with Wan3.0 Wan3.0 helps turn your existing material into videos you can shape, refine, and bring to life. Creating video no longer means starting from scratch\n@alibaba_cloud\n·\n2026-08-25 21:00:01\n【https://t.co/Yl2KG97Eb1 日吞吐量增长洞察】 单日算力吞吐突破 5,907.8 亿 Tokens，再创历史新高！ 从 8 月 18 日到 8 月 25 日，8 天内算力吞吐量实现近 8 倍爆发式增长！ 🔹 算力需求狂飙：工业级底座平稳承载海量高并发与重度负载 🔹 生态加速繁荣： 极低门槛与极致性价比，吸引全球开发者在 https:\n@BAI_AGI\n·\n2026-08-25 21:05:45\n📊 https://t.co/Yl2KG97Eb1 Daily Throughput Growth Daily compute throughput surpasses 590.8B Tokens, setting a new all-time high! From Aug 18 to Aug 25, daily throughput surged nea\n@BAI_AGI\n·\n2026-08-25 21:05:52\nRight now there is no rival. @Alibaba_Qwen lab is practically the open source North Pole. More great models that WE can run on attainable hardware. I’m so excited 😎\n@KyleHessling1\n·\n2026-08-25 21:09:32\nif you want a sense of how much fraud we deal with, stripe has blocked $300M worth of fraud for us in the past few days https://t.co/JUWqcHtRCQ\n@thdxr\n·\n2026-08-25 21:12:10\nSemantic Scholar (@SemanticScholar) is a rich source of information to find citation data of papers There's now an easy-to-use CLI and Skill so you can ask your agent things like \"\n@NielsRogge\n·\n2026-08-25 01:07:24\n该说不说这头像是真炫酷，而且还是动态的GIF，设计师一定花费了很多的心血在上面，感谢主创团队 I have to say, this avatar is seriously cool—and it's an animated GIF, too. The designer must have put a lot of heart and effort into\n@Mulight\n·\n2026-08-25 20:30:04\nTHAT'S impressive. Way more so than running faster than humans. White robot probably would've won if it weren't so hesitant. Just amazing though. I missed the opportunity to go to\n@SlipperyGem\n·\n2026-08-25 20:40:52\n准备多号铺一下42space的新手大礼包，说不定TGE的时候有福报 这几天有点忙，刚看到42space上线了迎新礼包，给新用户准备的新手任务。 完成任务就能解锁 Tickets，已解锁的会进可用余额。 一部分注册就能领，剩下的按任务逐步解锁就可以了。 主要有6个任务，都很简单： 1 关注 @42space 2 加入官方 https://t.co/rBW2JK\n@Mulight\n·\n2026-08-25 21:08:15\n怎么判断自己的产品有没有差异化？有个很狠的测试：把你的产品名换成竞"
+}
+before screenshot J:/PigeonYang/WeMediaBuddy/.ai/scoring-before.png 263646
+BEFORE scoring_incomplete? false
+BEFORE DOM missing expected scoring incomplete / CTA
+WeMediaBuddy
+AI
+−
+□
+×
+工作流
+今日
+智能体
+发现
+选题
+创作
+发布
+结果
+知识资产
+主题
+资料库
+关系画布
+设置
+今日经营概况
+查看资料
+继续今日情报
+今日新资料
+—
+—
+—
+内容机会
+—
+—
+—
+进行中项目
+—
+—
+—
+近 7 日发布
+—
+—
+—
+选题台账 · 0
+今日可批 · 0 ｜ 待处理 · 0
+›
+待评分
+X
+小红书
+公众号
+时效 长青方法，今日有新信号
+新
+长青
+写入 2026-08-25 21:18
+2026-08-25 20:47:00
+把产品名换成竞品，卖点还成立吗？一个替换测试就能拆穿伪差异化
+
+入选理由：今日新增资料给出了一个可立即执行的差异化测试：把产品名替换成竞品，若文案仍然成立，说明卖点过于泛化。AI 工具和服务快速同质化，这个测试具有即时窗口，也能长期复用。
+
+表达角度
+把差异化从抽象定位变成一句可被竞品替换检验的具体承诺。
+核心观点
+“AI 能力强”不是差异化，只有对象、场景、时限、交付边界或验收结果具体到竞品无法直接替换，才可能成为选择理由；今天就把自己的首页或服务介绍做一次替换测试。
+怎么讲
+标题
+标题直接呈现替换测试这个动作，并保留“卖点可能不成立”的冲突。
+开头
+首段立刻让读者执行测试：把产品名删掉换成竞品，再读一遍你的卖点。如果一句话仍然成立，它大概率不是卖点。
+结构
+方向判断：为何现在→强观点→标题开头→来源；补充三个从泛化表述改成具体承诺的例子。
+目标：正在为 AI 工具、服务或个人项目写介绍，却只能写“更智能、更高效”的人
+形式：观点短文、carousel
+引用资料 ×1
+
+待你处理 · 1
+
+✋
+先验证浏览器账号
+Cannot read properties of undefined (reading 'getPath')
+点击处理
+不破甲如何让codex干被拒绝的事情？ 用codex的时候 部分请求时常被拒 我能想到的是开头让其他模型 比如本地模型去跑 其余的部分拉个板块清单交给codex去完成
+@LiFeng61532
+·
+2026-08-25 20:31:59
+I built a TUI design tool for my work at @opencode and I’ve been using it for the last 2 weeks → Design directly on the terminal grid → ASCII borders that join automatically → Flex
+@arvsrn
+·
+2026-08-25 17:25:39
+AI Spotlight returns with Wan3.0 Wan3.0 helps turn your existing material into videos you can shape, refine, and bring to life. Creating video no longer means starting from scratch
+@alibaba_cloud
+·
+2026-08-25 21:00:01
+【https://t.co/Yl2KG97Eb1 日吞吐量增长洞察】 单日算力吞吐突破 5,907.8 亿 Tokens，再创历史新高！ 从 8 月 18 日到 8 月 25 日，8 天内算力吞吐量实现近 8 倍爆发式增长！ 🔹 算力需求狂飙：工业级底座平稳承载海量高并发与重度负载 🔹 生态加速繁荣： 极低门槛与极致性价比，吸引全球开发者在 https:
+@BAI_AGI
+·
+2026-08-25 21:05:45
+📊 https://t.co/Yl2KG97Eb1 Daily Throughput Growth Daily compute throughput surpasses 590.8B Tokens, setting a new all-time high! From Aug 18 to Aug 25, daily throughput surged nea
+@BAI_AGI
+·
+2026-08-25 21:05:52
+Right now there is no rival. @Alibaba_Qwen lab is practically the open source North Pole. More great models that WE can run on attainable hardware. I’m so excited 😎
+@KyleHessling1
+·
+2026-08-25 21:09:32
+if you want a sense of how much fraud we deal with, stripe h
+file:///J:/PigeonYang/WeMediaBuddy/tmp-verify-scoring.mjs:198
+  throw new Error('Before UI does not show 本轮评分未完成 + 继续评分');
+        ^
+
+Error: Before UI does not show 本轮评分未完成 + 继续评分
+    at file:///J:/PigeonYang/WeMediaBuddy/tmp-verify-scoring.mjs:198:9
+
+Node.js v24.13.1

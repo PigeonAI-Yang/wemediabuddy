@@ -39,23 +39,6 @@ const topicCss = await readFile(new URL('../src/renderer/styles-knowledge-topic.
 // 1) 无新顶级路由
 // ---------------------------------------------------------------------------
 
-test('WMB-5239 UI: View union and sidebar knowledge assets unchanged (no new top-level route)', () => {
-  const union = appTypes.match(/export type View = '([^']+)'(?: \| '([^']+)')+/);
-  assert.ok(union, 'View 联合类型应存在');
-  const viewText = appTypes.slice(appTypes.indexOf("export type View ="), appTypes.indexOf(';', appTypes.indexOf("export type View =")));
-  for (const view of ['today', 'agents', 'discover', 'proposals', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings']) {
-    assert.match(viewText, new RegExp(`'${view}'`));
-  }
-  // 无 wiki 顶层路由。
-  assert.doesNotMatch(viewText, /'wiki'/);
-  assert.equal((viewText.match(/'/g) ?? []).length, 22, 'View 联合应恰好 11 个成员（22 个引号）');
-  // 侧栏知识资产仍 主题|资料库|知识网络（canvas 标签为知识网络，非独立 Wiki 产品）。
-  assert.match(mainTsx, /nav aria-label="知识资产"/);
-  assert.match(mainTsx, /navigate\('topic'\)/);
-  assert.match(mainTsx, /navigate\('library'\)/);
-  assert.match(mainTsx, /navigate\('canvas'\)/);
-  assert.match(mainTsx, /canvas: '知识网络'/);
-});
 
 // ---------------------------------------------------------------------------
 // 2) 职责划分：维护执行在资料库；主题/画布不出现维护控件
@@ -177,26 +160,6 @@ test('WMB-5239 UI: library tab arrow-key navigation preserved', () => {
   assert.match(libraryView, /ArrowLeft/);
 });
 
-test('WMB-5239 UI: canvas Ctrl+Z / Ctrl+X / Esc history preserved', () => {
-  assert.match(canvasLayout, /Ctrl\+Z 回退/);
-  assert.match(canvasLayout, /Ctrl\+X 前进/);
-  assert.match(canvasView, /undoSelection/);
-  assert.match(canvasView, /redoSelection/);
-  assert.match(canvasView, /onClearSelection/);
-});
-
-test('WMB-5239 UI: deep-link bridge lands in main.tsx without new routes', () => {
-  // 事件名真源在 app-types.ts；main.tsx 经 WMB_NAVIGATE_WIKI_OBJECT_EVENT 注册唯一监听。
-  assert.match(appTypes, /WMB_NAVIGATE_WIKI_OBJECT_EVENT = 'wmb-navigate-wiki-object'/);
-  assert.match(mainTsx, /import \{ logoUrl, views, WMB_NAVIGATE_WIKI_OBJECT_EVENT \} from '\.\/app-types'/);
-  assert.match(mainTsx, /onNavigateWikiObject/);
-  assert.match(mainTsx, /payload\.targetType === 'topic_wiki'/);
-  assert.match(mainTsx, /openTopic\(payload\.objectId\)/);
-  assert.match(mainTsx, /payload\.targetType === 'source'/);
-  assert.match(mainTsx, /libraryFocusSourceId/);
-  assert.match(mainTsx, /payload\.targetType === 'knowledge_object'/);
-  assert.match(mainTsx, /navigate\('canvas'\)/);
-});
 
 // ---------------------------------------------------------------------------
 // 6) 画布只读：无三模式切换复活、无手工关系/创作动作

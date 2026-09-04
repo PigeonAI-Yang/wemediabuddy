@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360">
+  <g fill="#211D29">
+    <!-- 桌助：圆角方块 + 悬浮球 -->
+    <rect x="50" y="130" width="180" height="180" rx="80"/>
+    <circle cx="140" cy="84" r="22"/>
+    <!-- 记者：高椭圆 + 环绕轨道圈 -->
+    <ellipse cx="420" cy="200" rx="78" ry="120"/>
+    <ellipse cx="420" cy="78" rx="55" ry="18" stroke="#211D29" stroke-width="12" fill="none" transform="rotate(-18 420 78)"/>
+    <!-- 策划：正圆 + 思想云 -->
+    <circle cx="700" cy="215" r="105"/>
+    <circle cx="740" cy="100" r="24"/>
+    <circle cx="768" cy="112" r="18"/>
+    <circle cx="712" cy="108" r="16"/>
+    <!-- 写手：细柱 + 悬浮菱形笔尖 -->
+    <rect x="925" y="70" width="110" height="250" rx="55"/>
+    <rect x="1004" y="66" width="44" height="44" rx="8" transform="rotate(45 1026 88)"/>
+    <!-- 资料员：扁块 + 悬浮叠片 -->
+    <rect x="1135" y="190" width="250" height="130" rx="55"/>
+    <rect x="1200" y="140" width="120" height="16" rx="8"/>
+    <rect x="1215" y="116" width="90" height="14" rx="7"/>
+  </g>
+</svg>

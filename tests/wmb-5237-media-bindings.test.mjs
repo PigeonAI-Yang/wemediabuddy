@@ -23,7 +23,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import esbuild from 'esbuild';
-import { migrateDatabase } from '../src/main/db/migrations.ts';
+import { migrateDatabase, migrations } from '../src/main/db/migrations.ts';
 import {
   createContentProjectWithVersion,
   getContentProject,
@@ -276,7 +276,9 @@ test('WMB-5237 media: migration 62 run hook backfills legacy core tokens and pla
     `);
     // 此用例只验证 migration 62 的 run hook；后续迁移依赖完整前置 schema，另有各自 migration 测试覆盖。
     const markLaterApplied = legacy.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)');
-    for (let version = 63; version <= 78; version += 1) markLaterApplied.run(version, now);
+    for (const migration of migrations) {
+      if (migration.version > 62) markLaterApplied.run(migration.version, now);
+    }
     legacy.close();
 
     // 升级：仅应用尚未应用的 migration 62，run hook 在迁移事务内回填。

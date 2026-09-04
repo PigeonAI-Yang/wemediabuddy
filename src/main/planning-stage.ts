@@ -431,11 +431,8 @@ export function transitionPlanItem(
   if (row.revision !== input.expectedRevision) { const err: any = new Error(`conflict: revision mismatch expected ${input.expectedRevision} got ${row.revision}`); err.code = 'conflict'; throw err; }
   if (row.planning_status !== input.expectedStatus) { const err: any = new Error(`conflict: status mismatch expected ${input.expectedStatus} got ${row.planning_status}`); err.code = 'conflict'; throw err; }
   if (input.toStatus === 'approved') {
-    const scoreErrors = validateScoredReasons(parseMaybeJson(row.score_reasons_json));
-    if (scoreErrors.length) {
-      throw Object.assign(new Error(`validation_failed: ${scoreErrors.join('; ')}`), { code: 'validation_failed', errors: scoreErrors });
-    }
     const sourceIds = getArrayField({ source_ids_json: row.source_ids_json }, 'source_ids_json') ?? [];
+    validatePlanSourceReferences(database, sourceIds);
     validateTruthGateSourceReferences(database, row.score_reasons_json, sourceIds);
   }
   const now = nowIso();

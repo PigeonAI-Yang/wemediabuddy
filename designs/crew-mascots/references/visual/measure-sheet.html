@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>
+html,body{margin:0;background:#17151A;font-family:"Microsoft YaHei UI",system-ui,sans-serif;color:#F4F1EE}
+.wrap{width:1420px;padding:28px 34px}
+h1{font-size:24px;margin:0 0 4px}
+.hint{font-size:13px;color:#B9B3C4;margin:0 0 20px;line-height:1.7}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.tile{background:#211D29;border-radius:14px;padding:12px}
+.imgbox{height:200px;background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.imgbox img{max-width:92%;max-height:92%}
+.tname{font-size:15px;font-weight:600;margin:10px 0 6px;text-align:center}
+table{width:100%;font-size:12px;border-collapse:collapse;color:#D8D3E0}
+td{padding:3px 4px;border-top:1px solid #332E3D;vertical-align:middle}
+td:first-child{color:#8A8090;white-space:nowrap;width:58px}
+.sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid #555;vertical-align:middle;margin-right:2px}
+.foot{font-size:11px;color:#8A8090;margin-top:14px;line-height:1.6}
+</style></head><body><div class="wrap">
+<h1>参考图实测数据板(无归纳版)</h1>
+<p class="hint">脚本测量,原始数值存 references/visual/measure/measurements.json。不设车道名,差异自己从数据里看。</p>
+<div class="grid">
+    <div class="tile">
+      <div class="imgbox"><img src="line-brown.png"></div>
+      <div class="tname">Brown</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#1D1210"></span> #1D1210 明度21</td></tr>
+        <tr><td>浓墨量</td><td>8.33%</td></tr>
+        <tr><td>墨线宽</td><td>9px ≈ 体宽2.27%*</td></tr>
+        <tr><td>有效色数</td><td>5</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#6C483B" title="#6C483B 67.3%"></span><span class="sw" style="background:#BE7459" title="#BE7459 17.2%"></span><span class="sw" style="background:#1D1210" title="#1D1210 8.3%"></span><span class="sw" style="background:#6B483B" title="#6B483B 4.0%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="line-cony.png"></div>
+      <div class="tname">Cony</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#000000"></span> #000000 明度0</td></tr>
+        <tr><td>浓墨量</td><td>8.77%</td></tr>
+        <tr><td>墨线宽</td><td>9px ≈ 体宽2.46%*</td></tr>
+        <tr><td>有效色数</td><td>5</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FFFFFF" title="#FFFFFF 51.7%"></span><span class="sw" style="background:#FF8AA2" title="#FF8AA2 30.6%"></span><span class="sw" style="background:#000000" title="#000000 8.7%"></span><span class="sw" style="background:#FE859C" title="#FE859C 3.6%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="kakao-ryan.png"></div>
+      <div class="tname">Ryan</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#584E23"></span> #584E23 明度76</td></tr>
+        <tr><td>浓墨量</td><td>10.84%</td></tr>
+        <tr><td>墨线宽</td><td>0px ≈ 体宽0.0%*</td></tr>
+        <tr><td>有效色数</td><td>7</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FBAB2D" title="#FBAB2D 35.9%"></span><span class="sw" style="background:#8BFF01" title="#8BFF01 25.8%"></span><span class="sw" style="background:#584E23" title="#584E23 14.6%"></span><span class="sw" style="background:#D4CA45" title="#D4CA45 8.7%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="sanrio-cinnamoroll.png"></div>
+      <div class="tname">Cinnamoroll</div>
+      <table>
+        <tr><td>墨色</td><td>无深色墨</td></tr>
+        <tr><td>浓墨量</td><td>0.0%</td></tr>
+        <tr><td>墨线宽</td><td>0px ≈ 体宽0.0%*</td></tr>
+        <tr><td>有效色数</td><td>3</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FFFFFF" title="#FFFFFF 85.8%"></span><span class="sw" style="background:#BD946A" title="#BD946A 7.3%"></span><span class="sw" style="background:#FFFFFE" title="#FFFFFE 2.5%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="sanrio-pompompurin.png"></div>
+      <div class="tname">Pompompurin</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#41200F"></span> #41200F 明度40</td></tr>
+        <tr><td>浓墨量</td><td>8.1%</td></tr>
+        <tr><td>墨线宽</td><td>7px ≈ 体宽2.24%*</td></tr>
+        <tr><td>有效色数</td><td>4</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FFF9B0" title="#FFF9B0 48.6%"></span><span class="sw" style="background:#FFFFFF" title="#FFFFFF 30.7%"></span><span class="sw" style="background:#41200F" title="#41200F 12.9%"></span><span class="sw" style="background:#FDF9B0" title="#FDF9B0 2.6%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="mofusand-samenyan.png"></div>
+      <div class="tname">Mofusand</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#576D74"></span> #576D74 明度103</td></tr>
+        <tr><td>浓墨量</td><td>0.13%</td></tr>
+        <tr><td>墨线宽</td><td>0px ≈ 体宽0.0%*</td></tr>
+        <tr><td>有效色数</td><td>5</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FFFFFF" title="#FFFFFF 31.5%"></span><span class="sw" style="background:#FDFDFD" title="#FDFDFD 23.3%"></span><span class="sw" style="background:#576D74" title="#576D74 19.0%"></span><span class="sw" style="background:#D9C7A8" title="#D9C7A8 14.2%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="p3-molang.png"></div>
+      <div class="tname">Molang</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#651F04"></span> #651F04 明度49</td></tr>
+        <tr><td>浓墨量</td><td>0.0%</td></tr>
+        <tr><td>墨线宽</td><td>0px ≈ 体宽0.0%*</td></tr>
+        <tr><td>有效色数</td><td>4</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FFFFFF" title="#FFFFFF 80.9%"></span><span class="sw" style="background:#651F04" title="#651F04 6.9%"></span><span class="sw" style="background:#F9DEE0" title="#F9DEE0 3.7%"></span><span class="sw" style="background:#FCFDFC" title="#FCFDFC 2.3%"></span></td></tr>
+      </table>
+    </div>
+    <div class="tile">
+      <div class="imgbox"><img src="measure/chiikawa-crop.png"></div>
+      <div class="tname">Chiikawa</div>
+      <table>
+        <tr><td>墨色</td><td><span class="sw" style="background:#0A0709"></span> #0A0709 明度8</td></tr>
+        <tr><td>浓墨量</td><td>6.0%</td></tr>
+        <tr><td>墨线宽</td><td>0px ≈ 体宽0.0%*</td></tr>
+        <tr><td>有效色数</td><td>5</td></tr>
+        <tr><td>主色</td><td><span class="sw" style="background:#FDE9EC" title="#FDE9EC 55.2%"></span><span class="sw" style="background:#FFFFFF" title="#FFFFFF 32.5%"></span><span class="sw" style="background:#0A0709" title="#0A0709 6.3%"></span><span class="sw" style="background:#EFD3D6" title="#EFD3D6 2.8%"></span></td></tr>
+      </table>
+    </div></div>
+<p class="foot">* 墨线宽测量法:轮廓采样行从边缘向内数连续近黑像素,抗锯齿边缘(Ryan/Chiikawa/Molang/Cinnamoroll)首像素不达标即记 0 —— 0 不代表无线,代表"无近黑线"。浓墨量阈值 max(R,G,B)&lt;70;色数为中位切 quantize 后占比&gt;2% 的色簇。数值是代理,不是真理。</p>
+</div></body></html>

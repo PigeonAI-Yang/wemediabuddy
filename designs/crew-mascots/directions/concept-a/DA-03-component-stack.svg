@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 380" role="img">
+<title>DA-03 功能构件拼装 — 阶梯堆叠</title>
+<g fill="#000">
+  <!-- 桌助：三阶台座（宽-中-窄）——调度台 -->
+  <g id="desk">
+    <rect x="36" y="278" width="184" height="26" rx="8"/>
+    <rect x="52" y="204" width="152" height="76" rx="14"/>
+    <rect x="72" y="128" width="112" height="78" rx="16"/>
+    <rect x="98" y="96" width="60" height="34" rx="8"/>
+  </g>
+  <!-- 记者：高柱+顶碟（细-高-宽）——前哨塔 -->
+  <g id="reporter">
+    <rect x="360" y="284" width="120" height="18" rx="6"/>
+    <rect x="376" y="96" width="88" height="190" rx="12"/>
+    <!-- 顶碟 -->
+    <ellipse cx="420" cy="88" rx="84" ry="20"/>
+    <rect x="404" y="56" width="32" height="36" rx="8"/>
+    <circle cx="420" cy="48" r="10"/>
+  </g>
+  <!-- 策划：方块+印钮（方-方-钮）——决策章 -->
+  <g id="planner">
+    <rect x="610" y="276" width="176" height="22" rx="6"/>
+    <rect x="618" y="144" width="160" height="134" rx="16"/>
+    <rect x="654" y="108" width="88" height="38" rx="8"/>
+    <rect x="676" y="72" width="44" height="38" rx="10"/>
+    <!-- 侧臂（连接） -->
+    <rect x="778" y="184" width="42" height="18" rx="8"/>
+  </g>
+  <!-- 写手：细柱+斜笔头（窄-细-尖）——笔塔 -->
+  <g id="writer">
+    <rect x="934" y="286" width="96" height="18" rx="6"/>
+    <rect x="948" y="118" width="68" height="170" rx="10"/>
+    <!-- 斜笔头 -->
+    <g transform="rotate(18 982 118)">
+      <rect x="962" y="48" width="40" height="92" rx="8"/>
+      <path d="M 962 48 L 1002 48 L 982 18 Z"/>
+    </g>
+  </g>
+  <!-- 资料员：宽箱分层（宽-扁-双层）——档案架 -->
+  <g id="archivist">
+    <rect x="1112" y="282" width="266" height="20" rx="6"/>
+    <rect x="1122" y="194" width="246" height="90" rx="12"/>
+    <!-- 上两层分隔 -->
+    <rect x="1136" y="150" width="110" height="46" rx="8"/>
+    <rect x="1254" y="150" width="100" height="46" rx="8"/>
+    <rect x="1136" y="120" width="110" height="22" rx="6"/>
+    <rect x="1254" y="120" width="100" height="22" rx="6"/>
+  </g>
+</g>
+<g font-family="sans-serif" font-size="16" fill="#000" text-anchor="middle" font-weight="600">
+  <text x="128" y="358">桌助</text>
+  <text x="420" y="358">记者</text>
+  <text x="698" y="358">策划</text>
+  <text x="982" y="358">写手</text>
+  <text x="1245" y="358">资料员</text>
+</g>
+<g font-family="sans-serif" font-size="11" fill="#888" text-anchor="middle">
+  <text x="700" y="18">DA-03 · 功能构件拼装 — 统一阶梯堆叠语法，靠层数/宽窄/顶件区分职能</text>
+</g>
+</svg>

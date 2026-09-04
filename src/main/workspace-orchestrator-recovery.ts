@@ -876,6 +876,13 @@ export function reconcileWorkspaceOrchestratorStartup(database: DatabaseSync, in
             actions.push(`cancelled:${root.root_request_id}:${cancellation}`);
             continue;
           }
+          const rootDeadlineMono = rowNumber(root, 'root_deadline_mono');
+          if (rootDeadlineMono > 0 && pair.mono >= rootDeadlineMono) {
+            touch();
+            cancelRootBundle(database, actor, root, pair, 'ROOT_DEADLINE_EXPIRED', input.crashBarrier);
+            actions.push(`cancelled:${root.root_request_id}:ROOT_DEADLINE_EXPIRED`);
+            continue;
+          }
           const dispatches = activeDispatches(database, input.workspaceId, rowString(root, 'root_request_id'));
           let adoptable = true;
           for (const dispatch of dispatches) {

@@ -1,0 +1,78 @@
+{
+  "project": "WeMediaBuddy 班组吉祥物",
+  "stage": "Concept",
+  "gate": "C1 · 选择角色载体",
+  "criteria": [
+    "载体/造型逻辑差异是否一眼可见",
+    "五角色剪影与头像是否可区分、家族内可辨",
+    "64px 混排与 32px 顶栏等小尺寸是否可读",
+    "与 WeMediaBuddy 品牌调性及桌面现场是否适配"
+  ],
+  "candidates": [
+    {
+      "id": "V1",
+      "name": "V1 · 多物种动物班组 — 熊/兔/鸮/猫/刺猬",
+      "claim": "五种动物各当一岗，用物种本能讲清分工。",
+      "fit": "动物直觉易记，亲切感天然，智能体页扫一眼对岗。",
+      "risk": "物种风格易散，需强统一画法兜住家族感。",
+      "hero": "scenes/V1-hero.svg",
+      "scenes": {
+        "grid64": "scenes/V1-grid64.svg",
+        "circle": "scenes/V1-circle.svg",
+        "bar32": "scenes/V1-bar32.svg"
+      }
+    },
+    {
+      "id": "V2",
+      "name": "V2 · 同族软体生物 — 同囊母形+体型/钩子",
+      "claim": "同一软囊家族，用体态与小钩子记住分工。",
+      "fit": "家族感最强，一看同家，强调“同一现场”。",
+      "risk": "体型差不足易糊，需靠钩子硬拉开区分度。",
+      "hero": "scenes/V2-hero.svg",
+      "scenes": {
+        "grid64": "scenes/V2-grid64.svg",
+        "circle": "scenes/V2-circle.svg",
+        "bar32": "scenes/V2-bar32.svg"
+      }
+    },
+    {
+      "id": "V3",
+      "name": "V3 · 人形小编辑部 — Q版小员工",
+      "claim": "真人小队演“编辑部”，用岗位动作讲分工。",
+      "fit": "人形共情最强，策划“判”、写手“磨”的职业感最直接。",
+      "risk": "五人同为人形，剪影重叠高，需靠道具姿态硬区分。",
+      "hero": "scenes/V3-hero.svg",
+      "scenes": {
+        "grid64": "scenes/V3-grid64.svg",
+        "circle": "scenes/V3-circle.svg",
+        "bar32": "scenes/V3-bar32.svg"
+      }
+    },
+    {
+      "id": "V4",
+      "name": "V4 · 数字机器人班组 — 桌面 AI 机器人",
+      "claim": "五个小机器人各管一模块，用机能讲分工。",
+      "fit": "AI 终端感最纯，一眼懂是“干活的”，与产品形态最贴。",
+      "risk": "易显硬/冷，需靠圆角与眼神补亲切。",
+      "hero": "scenes/V4-hero.svg",
+      "scenes": {
+        "grid64": "scenes/V4-grid64.svg",
+        "circle": "scenes/V4-circle.svg",
+        "bar32": "scenes/V4-bar32.svg"
+      }
+    },
+    {
+      "id": "V5",
+      "name": "V5 · 桌面物件拟人 — 台灯/胶带/印章/钢笔/档案盒",
+      "claim": "工具自己站起来干活，把“桌上现场”变成一家人。",
+      "fit": "与主标黑底 W 同台最协，物件即隐喻，桌感最浓。",
+      "risk": "拟人过度易滑向玩具文具，需控表情。",
+      "hero": "scenes/V5-hero.svg",
+      "scenes": {
+        "grid64": "scenes/V5-grid64.svg",
+        "circle": "scenes/V5-circle.svg",
+        "bar32": "scenes/V5-bar32.svg"
+      }
+    }
+  ]
+}

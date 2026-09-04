@@ -417,6 +417,13 @@ function sourceInput(fixture, rootBundle, preflight, options = {}) {
     rootBundle.claims.find(
       (claim) => String(claim.attempt_stage) !== "judge",
     ) ?? rootBundle.claims[0];
+  const defaultReceiptId = (channelId) => {
+    const base = `receipt-${fixture.scenarioId}-${channelId}`;
+    const prior = fixture.database.prepare('SELECT root_request_id FROM source_snapshots WHERE workspace_id=? AND receipt_ids_json LIKE ? LIMIT 1').get(fixture.workspaceId, `%${base}%`);
+    return prior && String(prior.root_request_id) !== String(root.root_request_id)
+      ? `${base}-${String(stage.stage_request_id).slice(0, 12)}`
+      : base;
+  };
   const selectedChannelIds =
     options.selectedChannelIds ??
     JSON.parse(String(preflight.selected_channels_json ?? "[]")).map((entry) =>
@@ -463,7 +470,7 @@ function sourceInput(fixture, rootBundle, preflight, options = {}) {
     selectedChannelIds.map((channelId) => ({
       channelId,
       requiredness: channelId === "official" ? "required" : "optional",
-      receiptId: `receipt-${fixture.scenarioId}-${channelId}`,
+      receiptId: defaultReceiptId(channelId),
       receiptRevision: 1,
       receiptPayloadHash: HEX_A,
       resultHash: HEX_B,
@@ -617,6 +624,8 @@ function projectionInput(fixture, bundle, source, options = {}) {
   const pending = options.pendingPlanItemIds ?? [];
   const invalid = options.invalidPlanItemIds ?? [];
   const all = [...eligible, ...pending, ...invalid];
+  const trustedReceiptIds = options.trustedReceiptIds
+    ?? (Array.isArray(source.receiptIds) ? source.receiptIds.map(String) : [`receipt-${fixture.scenarioId}-official`]);
   const entries =
     options.entries ??
     all.map((planItemId) => ({
@@ -626,9 +635,7 @@ function projectionInput(fixture, bundle, source, options = {}) {
         : pending.includes(planItemId)
           ? "pending"
           : "invalid",
-      sourceReceiptIds: options.trustedReceiptIds ?? [
-        `receipt-${fixture.scenarioId}-official`,
-      ],
+      sourceReceiptIds: trustedReceiptIds,
     }));
   return acceptanceInput(fixture.context, {
     workspaceId: fixture.workspaceId,
@@ -648,9 +655,7 @@ function projectionInput(fixture, bundle, source, options = {}) {
     allowedPlanIds: options.allowedPlanIds ?? ["plan-1"],
     allowedPlanItemIds: options.allowedPlanItemIds ?? all,
     carryPlanItemIds: options.carryPlanItemIds ?? [],
-    trustedReceiptIds: options.trustedReceiptIds ?? [
-      `receipt-${fixture.scenarioId}-official`,
-    ],
+    trustedReceiptIds,
     scope: options.scope ?? { purpose: "acceptance" },
     projection: {
       planIds: options.planIds ?? ["plan-1"],
@@ -1582,7 +1587,6 @@ test("WMB-5372 A11 seven projection classification combinations preserve priorit
             eligiblePlanItemIds: combo.eligiblePlanItemIds ?? [],
             pendingPlanItemIds: combo.pendingPlanItemIds ?? [],
             invalidPlanItemIds: combo.invalidPlanItemIds ?? [],
-            trustedReceiptIds: [`receipt-${fixture.scenarioId}-official`],
             entries: all.map((planItemId) => ({
               planItemId,
               classification: combo.eligiblePlanItemIds?.includes(planItemId)
@@ -1590,7 +1594,7 @@ test("WMB-5372 A11 seven projection classification combinations preserve priorit
                 : combo.pendingPlanItemIds?.includes(planItemId)
                   ? "pending"
                   : "invalid",
-              sourceReceiptIds: [`receipt-${fixture.scenarioId}-official`],
+              sourceReceiptIds: frozen.result.value.receiptIds,
             })),
           },
         ),

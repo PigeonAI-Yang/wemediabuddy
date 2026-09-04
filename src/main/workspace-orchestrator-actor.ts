@@ -143,6 +143,14 @@ export type ProducerAttestationInput = Readonly<{
   producerAttestationHash?: string;
 }>;
 
+export type RenewActorLeaseInput = Readonly<{
+  workspaceId: string;
+  fence: ActorFence;
+  nowUtc?: string;
+  nowMono?: number;
+  leaseMs?: number;
+}>;
+
 export type AcquireActorInput = Readonly<{
   workspaceId: string;
   currentBuildId?: string;
@@ -2199,6 +2207,87 @@ export class WorkspaceOrchestratorActorStore {
     return this.readActor(workspaceId);
   }
 
+  renewActorLease(input: RenewActorLeaseInput): WorkspaceOrchestratorActor {
+    const pair = nowPair(input.nowUtc, input.nowMono, {
+      nowUtc: this.nowUtc,
+      nowMono: this.nowMono,
+    });
+    return this.transaction(() => {
+      const actor = requireCurrentFence(
+        this.database,
+        input.workspaceId,
+        input.fence,
+        pair.mono,
+        true,
+      );
+      const leaseMs = Number.isFinite(input.leaseMs)
+        ? Math.max(5_000, Number(input.leaseMs))
+        : 30_000;
+      const leaseMono = pair.mono + leaseMs;
+      const leaseUtc = utcAtMono(pair.utc, pair.mono, leaseMono);
+      const updated = this.database
+        .prepare(
+          `UPDATE workspace_orchestrator_actors
+           SET lease_expires_at_utc=?, lease_expires_at_mono=?,
+               control_stall_deadline_utc=?, control_stall_deadline_mono=?,
+               gate_deadline_utc=?, gate_deadline_mono=?, updated_at=?
+           WHERE workspace_id=? AND actor_status IN ('active','stopping')
+             AND runtime_epoch=? AND owner_epoch=? AND authority_revision=?
+             AND lease_token=? AND checkpoint_revision=?`,
+        )
+        .run(
+          leaseUtc,
+          leaseMono,
+          leaseUtc,
+          leaseMono,
+          leaseUtc,
+          leaseMono,
+          pair.utc,
+          actor.workspaceId,
+          actor.runtimeEpoch,
+          actor.ownerEpoch,
+          actor.authorityRevision,
+          actor.leaseToken,
+          actor.checkpointRevision,
+        );
+      if (affectedRows(updated) !== 1)
+        throw new WorkspaceOrchestratorActorError(
+          "EXECUTION_AUTHORIZATION_INVALID",
+          "Actor heartbeat CAS 失败。",
+          { workspaceId: actor.workspaceId },
+        );
+      const gate = readGate(this.database, actor.workspaceId, actor.runtimeEpoch);
+      if (gate) {
+        const synced = this.database
+          .prepare(
+            `UPDATE daily_reconcile_gates
+             SET lease_expires_at_utc=?, lease_expires_at_mono=?,
+                 gate_deadline_utc=?, gate_deadline_mono=?
+             WHERE workspace_id=? AND runtime_epoch=? AND owner_epoch=?
+               AND lease_token=? AND checkpoint_revision=?`,
+          )
+          .run(
+            leaseUtc,
+            leaseMono,
+            leaseUtc,
+            leaseMono,
+            actor.workspaceId,
+            actor.runtimeEpoch,
+            actor.ownerEpoch,
+            actor.leaseToken,
+            actor.checkpointRevision,
+          );
+        if (affectedRows(synced) !== 1)
+          throw new WorkspaceOrchestratorActorError(
+            "EXECUTION_AUTHORIZATION_INVALID",
+            "Actor heartbeat gate CAS 失败。",
+            { workspaceId: actor.workspaceId },
+          );
+      }
+      return readActor(this.database, actor.workspaceId)!;
+    });
+  }
+
   acquireActor(input: AcquireActorInput): AcquireActorResult {
     try {
       const pair = nowPair(input.nowUtc, input.nowMono, {
@@ -4054,6 +4143,19 @@ export class WorkspaceOrchestratorActorStore {
             "STATE_CONFLICT",
             "intent preflight CAS 失败。",
           );
+        if (terminal) {
+          const mailboxUpdate = this.database
+            .prepare(
+              `UPDATE orchestrator_mailbox SET state=?, finished_at_utc=?, finished_at_mono=?
+              WHERE workspace_id=? AND intent_id=? AND state IN ('enqueued','claimed')`,
+            )
+            .run(status, pair.utc, pair.mono, input.workspaceId, intentId);
+          if (affectedRows(mailboxUpdate) !== 1)
+            throw new WorkspaceOrchestratorActorError(
+              "STATE_CONFLICT",
+              "terminal preflight mailbox CAS 失败。",
+            );
+        }
         this.invokeCrashBarrier("T2", "business_rows", {
           workspaceId: input.workspaceId,
           intentId,

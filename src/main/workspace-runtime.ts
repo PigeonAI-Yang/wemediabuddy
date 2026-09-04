@@ -100,6 +100,7 @@ export class ActiveWorkspaceRuntime {
   private scheduler: Stoppable | null = null;
   private mcp: Closable | null = null;
   private xhs: Stoppable | null = null;
+  private shutdownResources = new Set<Stoppable>();
   private unsafeBrowserClaims = 0;
   private stopPromise: Promise<void> | null = null;
   private piSessionFile: string | null = null;
@@ -373,6 +374,11 @@ export class ActiveWorkspaceRuntime {
   setScheduler(resource: Stoppable): void { this.assertActive(); this.scheduler = resource; }
   setMcp(resource: Closable): void { this.assertActive(); this.mcp = resource; }
   setXhs(resource: Stoppable | null): void { this.assertActive(); this.xhs = resource; }
+  registerShutdownResource(resource: Stoppable): () => void {
+    this.assertActive();
+    this.shutdownResources.add(resource);
+    return () => { this.shutdownResources.delete(resource); };
+  }
 
   stop(options: { drain?: boolean; timeoutMs?: number } = {}): Promise<void> {
     if (this.stopPromise) return this.stopPromise;
@@ -388,9 +394,10 @@ export class ActiveWorkspaceRuntime {
     if (drain && this.state === 'active') await this.closeClaimsAndDrain(timeoutMs);
     this.state = 'stopping';
     const scheduler = this.scheduler; const workers = [...this.workers.values()]; const browser = this.browser; const mcp = this.mcp; const xhs = this.xhs;
-    this.scheduler = null; this.workers.clear(); this.browser = null; this.mcp = null; this.xhs = null;
+    const shutdownResources = [...this.shutdownResources];
+    this.scheduler = null; this.workers.clear(); this.browser = null; this.mcp = null; this.xhs = null; this.shutdownResources.clear();
     const errors: unknown[] = [];
-    for (const resource of [scheduler, ...workers.map((entry) => entry.resource), browser?.closer, mcp, xhs]) {
+    for (const resource of [...shutdownResources, scheduler, ...workers.map((entry) => entry.resource), browser?.closer, mcp, xhs]) {
       if (!resource) continue;
       try {
         if ('stop' in resource) await resource.stop();

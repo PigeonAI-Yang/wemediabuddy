@@ -2298,6 +2298,7 @@ function updateRootAndIntent(
   nextAction: unknown,
   terminalReason: string | null,
   nowUtc: string,
+  nowMono: number,
 ): { root: Row; intent: Row | null } {
   const rootTerminal = [
     "succeeded",
@@ -2363,6 +2364,17 @@ function updateRootAndIntent(
             "STATE_CONFLICT",
             "intent settlement CAS 失败。",
           );
+        if (terminal) {
+          const mailboxUpdate = database
+            .prepare(`UPDATE orchestrator_mailbox SET state=?,finished_at_utc=?,finished_at_mono=?
+              WHERE workspace_id=? AND intent_id=? AND state IN ('enqueued','claimed')`)
+            .run(status, nowUtc, nowMono, actor.workspaceId, String(intent.intent_id));
+          if (affectedRows(mailboxUpdate) !== 1)
+            throw new WorkspaceOrchestratorActorError(
+              "STATE_CONFLICT",
+              "projection mailbox settlement CAS 失败。",
+            );
+        }
         return database
           .prepare(
             "SELECT * FROM orchestrator_intents WHERE workspace_id=? AND intent_id=?",
@@ -5234,6 +5246,7 @@ export class WorkspaceOrchestratorSnapshotStore {
           progressNextAction,
           plan.reasonCode,
           pair.utc,
+          pair.mono,
         );
         const index = updateIndex(
           this.database,
@@ -5528,6 +5541,7 @@ export class WorkspaceOrchestratorSnapshotStore {
             nextAction,
             "NO_CURRENT_TARGETS",
             pair.utc,
+            pair.mono,
           );
           this.invokeCrashBarrier("T6", "business_rows", {
             workspaceId: input.workspaceId,

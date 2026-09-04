@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360">
+  <g fill="#211D29">
+    <!-- 桌助：圆角方墩 + 信号球 -->
+    <rect x="45" y="135" width="190" height="180" rx="75"/>
+    <rect x="132" y="98" width="16" height="42" rx="8"/>
+    <circle cx="140" cy="82" r="20"/>
+    <rect x="92" y="302" width="42" height="24" rx="12"/>
+    <rect x="146" y="302" width="42" height="24" rx="12"/>
+    <!-- 记者：高胶囊 + 大碟 -->
+    <rect x="345" y="80" width="150" height="240" rx="75"/>
+    <rect x="362" y="300" width="52" height="26" rx="13"/>
+    <rect x="426" y="300" width="52" height="26" rx="13"/>
+    <g transform="rotate(-15 402 66)">
+      <path d="M350 66 A52 52 0 0 1 454 66 Z"/>
+      <circle cx="402" cy="44" r="8"/>
+    </g>
+    <!-- 策划：正圆球 + 大灯泡（俏皮斜顶） -->
+    <circle cx="700" cy="215" r="105"/>
+    <rect x="656" y="304" width="40" height="22" rx="11"/>
+    <rect x="704" y="304" width="40" height="22" rx="11"/>
+    <g transform="rotate(12 700 110)">
+      <rect x="693" y="74" width="14" height="40" rx="7"/>
+      <circle cx="700" cy="54" r="34"/>
+      <rect x="686" y="82" width="28" height="18" rx="6" fill="#F7F3EE" opacity="0"/>
+    </g>
+    <!-- 写手：窄柱 + 斜插笔 -->
+    <rect x="915" y="60" width="130" height="260" rx="65"/>
+    <rect x="932" y="304" width="40" height="22" rx="11"/>
+    <rect x="988" y="304" width="40" height="22" rx="11"/>
+    <g transform="rotate(26 1015 105)">
+      <rect x="998" y="28" width="32" height="150" rx="16"/>
+      <circle cx="1014" cy="26" r="12"/>
+    </g>
+    <!-- 资料员：扁宽箱 + 顶两本书 -->
+    <rect x="1135" y="170" width="250" height="150" rx="60"/>
+    <rect x="1180" y="128" width="120" height="42" rx="10"/>
+    <rect x="1200" y="92" width="110" height="38" rx="10"/>
+  </g>
+</svg>

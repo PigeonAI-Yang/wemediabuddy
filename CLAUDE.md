@@ -9,6 +9,7 @@ This file is the **primary** instruction surface for Oh My Pi on this repo.
 - The Owner's request authorizes implementation. `TASKS.md`, PLAN, and Goal record progress and ordering; they are not construction permission gates.
 - Fix required prerequisites and callers as part of the current task. Split work only for an independent product decision, irreversible migration, or genuinely unrelated deliverable.
 - Use the smallest loop: reproduce or locate the behavior, edit production code, run the closest behavioral test or real scenario, then stop when it passes.
+- If WeMediaBuddy was running when work began and the agent closes or stops it during implementation or verification, the agent MUST relaunch it before yielding and leave a usable application window open. Restore the same user-visible running state without waiting for the Owner to remind you.
 - Do not impose arbitrary one-wave, 15-minute, second-pass approval, mandatory reviewer, full-suite, package, or E2E rituals. Run a wider gate only when it proves a specific uncovered risk.
 - `blocked` is reserved for external credentials, permissions, unavailable services, destructive decisions, or Owner-locked product choices. Missing APIs, fields, tests, and build errors are engineering work to resolve directly.
 - Do not reopen completed tasks without current regression evidence. Do not create long evidence documents unless the task explicitly requires one.

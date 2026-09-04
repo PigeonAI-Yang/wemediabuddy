@@ -1,0 +1,6 @@
+{
+  "error": "TimeoutError: page.waitForSelector: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.app-shell') to be visible\u001b[22m\n",
+  "stack": "page.waitForSelector: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.app-shell') to be visible\u001b[22m\n\n    at waitForAppReady (J:\\PigeonYang\\WeMediaBuddy\\tests\\e2e\\harness.mjs:402:14)\n    at main (J:\\PigeonYang\\WeMediaBuddy\\scripts\\verify-wmb-5348.mjs:72:11)",
+  "consoleLogs": [],
+  "evidence": []
+}

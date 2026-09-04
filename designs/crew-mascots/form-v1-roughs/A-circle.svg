@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 96" role="img" width="640" height="96">
+<title>方案 A · 紧凑头像徽章 · 圆形裁切</title>
+<style>text{font-family:ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+<rect width="640" height="96" fill="#FFFFFF" rx="12"/>
+<text x="12" y="18" font-size="9" fill="#888" font-weight="700">圆形裁切 · A · 关键特征居中安全</text>
+<g transform="translate(24,24)">
+  <defs><clipPath id="cpA0"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8"/>
+  <g clip-path="url(#cpA0)"><g transform="translate(0,0)"><circle cx="32" cy="32" r="28" fill="#111"/><circle cx="18" cy="18" r="6" fill="#111"/><circle cx="46" cy="18" r="6" fill="#111"/><rect x="14" y="34" width="36" height="18" rx="8" fill="#111"/><circle cx="32" cy="28" r="16" fill="#111"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#111" stroke-width="1"/>
+</g>
+<g transform="translate(144,24)">
+  <defs><clipPath id="cpA1"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8"/>
+  <g clip-path="url(#cpA1)"><g transform="translate(0,0)"><circle cx="32" cy="32" r="28" fill="#111"/><ellipse cx="22" cy="14" rx="6" ry="14" fill="#111"/><ellipse cx="42" cy="14" rx="6" ry="14" fill="#111"/><circle cx="32" cy="28" r="13" fill="#111"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#111" stroke-width="1"/>
+</g>
+<g transform="translate(264,24)">
+  <defs><clipPath id="cpA2"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8"/>
+  <g clip-path="url(#cpA2)"><g transform="translate(0,0)"><circle cx="32" cy="32" r="28" fill="#111"/><path d="M14 14 L17 6 L22 13 Z" fill="#111"/><path d="M42 13 L47 6 L50 14 Z" fill="#111"/><ellipse cx="32" cy="30" rx="20" ry="18" fill="#111"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#111" stroke-width="1"/>
+</g>
+<g transform="translate(384,24)">
+  <defs><clipPath id="cpA3"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8"/>
+  <g clip-path="url(#cpA3)"><g transform="translate(0,0)"><circle cx="32" cy="32" r="28" fill="#111"/><path d="M14 16 L17 7 L23 14 Z" fill="#111"/><path d="M41 14 L47 7 L50 16 Z" fill="#111"/><circle cx="32" cy="26" r="13" fill="#111"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#111" stroke-width="1"/>
+</g>
+<g transform="translate(504,24)">
+  <defs><clipPath id="cpA4"><circle cx="32" cy="32" r="28"/></clipPath></defs>
+  <circle cx="32" cy="32" r="28" fill="#F5F5F3" stroke="#E8E0D8"/>
+  <g clip-path="url(#cpA4)"><g transform="translate(0,0)"><circle cx="32" cy="32" r="28" fill="#111"/><path d="M10 28 Q32 6 54 28 L54 32 Q32 36 10 32 Z" fill="#111"/><ellipse cx="32" cy="28" rx="16" ry="14" fill="#111"/></g></g>
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#111" stroke-width="1"/>
+</g>
+<text x="12" y="88" font-size="7.5" fill="#AAA">五角色圆形裁切 · 顶部耳型不贴边 · 自包含剪影</text>
+</svg>

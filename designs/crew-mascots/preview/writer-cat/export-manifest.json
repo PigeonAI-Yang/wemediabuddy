@@ -1,0 +1,25 @@
+{
+  "name": "writer-cat",
+  "matrix": {
+    "avatar": [
+      {
+        "size": 640,
+        "variant": "full"
+      }
+    ],
+    "icon": [],
+    "favicon": [],
+    "ico": {}
+  },
+  "outputs": [
+    {
+      "file": "png/avatar/640.png",
+      "size": 640,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-640-full-8pm7.png"
+    }
+  ],
+  "generatedAt": "2026-08-20T11:37:14.304Z",
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}

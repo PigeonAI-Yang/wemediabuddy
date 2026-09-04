@@ -1,0 +1,25 @@
+{
+  "name": "desk-bear",
+  "matrix": {
+    "avatar": [
+      {
+        "size": 640,
+        "variant": "full"
+      }
+    ],
+    "icon": [],
+    "favicon": [],
+    "ico": {}
+  },
+  "outputs": [
+    {
+      "file": "png/avatar/640.png",
+      "size": 640,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-640-full-5apn.png"
+    }
+  ],
+  "generatedAt": "2026-08-20T11:37:08.413Z",
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}

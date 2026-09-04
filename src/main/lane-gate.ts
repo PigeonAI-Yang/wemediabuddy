@@ -96,6 +96,9 @@ export type LaneGateCandidate = Readonly<{
   revision: number;
   feedId: string | null;
   collectedAt: string;
+  title: string;
+  canonicalUrl: string | null;
+  summary: string | null;
 }>;
 
 export type LaneGateBatchJudgment = Readonly<{
@@ -274,7 +277,8 @@ export function isTier0AutoRelevantSource(database: DatabaseSync, source: { feed
  */
 export function listLaneGateCandidates(database: DatabaseSync, input: { since: string; limit?: number }): LaneGateCandidate[] {
   const limit = Math.min(Math.max(input.limit ?? 60, 1), 200);
-  return database.prepare(`SELECT id AS sourceId, revision, feed_id AS feedId, collected_at AS collectedAt
+  return database.prepare(`SELECT id AS sourceId, revision, feed_id AS feedId, collected_at AS collectedAt,
+      title, canonical_url AS canonicalUrl, summary
     FROM source_items
     WHERE collected_at > ? AND management_status != 'archived'
     ORDER BY collected_at DESC

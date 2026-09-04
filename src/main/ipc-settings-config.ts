@@ -165,7 +165,7 @@ export function registerSettingsConfigIpc({ loadSelectedDataRoot, chooseDataRoot
     const root = await confirmOwnerCommand(event, 'migrate-legacy', input);
     return browserProfileOwner.migrateLegacy(root.path, input);
   });
-  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; authMode?: unknown; credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>; thinking?: PiThinkingLevel; text?: boolean; vision?: boolean; nativeSearch?: boolean; imageGeneration?: boolean; jsonOutput?: boolean; streaming?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
+  ipcMain.handle('pi-config:save', async (_event, input: { id?: string; name: string; baseUrl: string; model: string; api: unknown; authMode?: unknown; credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>; thinking?: PiThinkingLevel | null; text?: boolean; vision?: boolean; nativeSearch?: boolean; imageGeneration?: boolean; jsonOutput?: boolean; streaming?: boolean; contextWindow?: number | null; maxTokens?: number | null; apiKey?: string }) => {
     const api = requirePiApiType(input.api);
     const authMode = input.authMode === undefined ? undefined : requireProviderAuthMode(input.authMode);
     if (input.apiKey?.trim() && !safeStorage.isEncryptionAvailable()) throw new Error('系统凭证加密暂不可用。');

@@ -480,7 +480,11 @@ export default [
       const server = createServer((request, response) => {
         if (request.method === 'GET' && request.url?.endsWith('/models')) {
           response.writeHead(200, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ data: [{ id: 'role-model-alpha' }, { id: 'role-model-beta' }] }));
+          response.end(JSON.stringify({ data: [
+            { id: 'muse-spark-1.3-contributor' },
+            { id: 'role-model-alpha', reasoning: false },
+            { id: 'role-model-beta', reasoning: true, thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: null, high: 'high', xhigh: null, max: null } }
+          ] }));
           return;
         }
         response.writeHead(404, { 'content-type': 'application/json' });
@@ -502,10 +506,39 @@ export default [
         await waitForAppReady(page);
         await navigateTo(page, 'settings');
         await page.locator('.settings-nav nav button[title="AI 与模型"]').click();
+        const modelInput = page.locator('.model-picker input[list="pi-model-options"]');
+        await page.locator('.model-picker button', { hasText: '获取模型' }).click();
+        await page.locator('#pi-model-options option[value="role-model-beta"]').waitFor({ state: 'attached', timeout: 15_000 });
+        await modelInput.fill('role-model-beta');
+        await page.evaluate(() => window.wmb.saveDiscoveredSource({
+          requestId: `settings-model-picker-refresh-${Date.now()}`,
+          title: '设置页模型选择刷新回归',
+          originalUrl: `https://example.com/settings-model-picker-refresh-${Date.now()}`
+        }));
+        await page.waitForTimeout(500);
+        assert(await modelInput.inputValue() === 'role-model-beta', '资料变化触发 settings 刷新后，已选择模型不应被旧配置覆盖');
+        assert(await page.locator('#pi-model-options option').count() === 3, 'settings 刷新后，已获取的模型目录应继续可选');
+        await modelInput.fill('muse-spark-1.3-contributor');
+        await page.evaluate(() => window.wmb.saveDiscoveredSource({
+          requestId: `settings-model-picker-manual-${Date.now()}`,
+          title: '设置页手填模型刷新回归',
+          originalUrl: `https://example.com/settings-model-picker-manual-${Date.now()}`
+        }));
+        await page.waitForTimeout(500);
+        assert(await modelInput.inputValue() === 'muse-spark-1.3-contributor', '手动填写的模型名不应被后台 settings 刷新覆盖');
+        const unknownThinking = page.locator('.settings-form label', { hasText: '思考等级' }).locator('select');
+        assert(JSON.stringify(await unknownThinking.locator('option').evaluateAll((options) => options.map((option) => option.value))) === JSON.stringify(['auto']), '无能力元数据的模型在设置页应只显示自动');
+        assert(await unknownThinking.inputValue() === 'auto', '无能力元数据的模型不得继续显示旧的 MAX 设置');
+        await page.locator('.settings-form-actions button.primary-button', { hasText: '保存预设修改' }).click();
+        await page.waitForFunction(() => document.querySelector('.pi-config-note')?.textContent?.includes('预设已保存') === true, null, { timeout: 15_000 });
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'settings-model-picker-refresh-1100' });
+        await modelInput.fill('role-model-alpha');
+        const profileThinkingOptions = await page.locator('.settings-form label', { hasText: '思考等级' }).locator('select option').evaluateAll((options) => options.map((option) => option.value));
+        assert(JSON.stringify(profileThinkingOptions) === JSON.stringify(['auto', 'off']), `非推理模型只应显示自动和关闭，实际 ${JSON.stringify(profileThinkingOptions)}`);
         const deskSelect = page.locator('.role-policy-row').first().locator('.role-policy-add select');
         await deskSelect.locator('option[data-profile-id="role-multi"][data-model="role-model-beta"]').waitFor({ state: 'attached', timeout: 15_000 });
         const providerModels = await deskSelect.locator('option[data-profile-id="role-multi"]').evaluateAll((options) => options.map((option) => option.dataset.model));
-        assert(JSON.stringify(providerModels) === JSON.stringify(['role-model-alpha', 'role-model-beta']), `同一 Provider 应列出全部可用模型，实际 ${JSON.stringify(providerModels)}`);
+        assert(JSON.stringify(providerModels) === JSON.stringify(['muse-spark-1.3-contributor', 'role-model-alpha', 'role-model-beta']), `同一 Provider 应列出全部可用模型，实际 ${JSON.stringify(providerModels)}`);
         await deskSelect.selectOption({ label: '多模型 Provider · role-model-beta' });
         const candidateRows = page.locator('.role-policy-chain > li');
         const candidateThinkingSelects = page.locator('.role-policy-chain > li .role-policy-thinking select');
@@ -514,6 +547,8 @@ export default [
         const betaCandidate = page.locator('.role-policy-row').first().locator('li[data-profile-id="role-multi"][data-model="role-model-beta"]');
         await betaCandidate.waitFor({ state: 'visible', timeout: 15_000 });
         assert((await betaCandidate.locator('.role-policy-copy small').textContent()).includes('继承 Provider 默认'), '未设置候选覆盖时应明确显示继承 Provider 默认');
+        const betaThinkingOptions = await betaCandidate.locator('.role-policy-thinking select option').evaluateAll((options) => options.map((option) => option.value));
+        assert(JSON.stringify(betaThinkingOptions) === JSON.stringify(['', 'low', 'high']), `候选模型只应显示实际支持的思考等级，实际 ${JSON.stringify(betaThinkingOptions)}`);
         await betaCandidate.locator('.role-policy-thinking select').selectOption('high');
         assert((await betaCandidate.locator('.role-policy-copy small').textContent()).includes('候选覆盖：高'), '候选覆盖应在摘要中明确显示');
         const save = page.locator('.role-policy-save-actions .primary-button');
@@ -536,6 +571,14 @@ export default [
         assert(await management.locator('.role-policy-management-menu button').count() === 3, '候选排序与移除应收进单一管理菜单');
         await reloadedBeta.scrollIntoViewIfNeeded();
         await captureEvidence({ app, page, evidence, artifactsDir, name: 'settings-role-provider-models-1100' });
+        await navigateTo(page, 'today');
+        await page.locator('.pi-model-trigger').click();
+        await page.locator('.pi-model-menu').waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForFunction(() => document.querySelector('.pi-model-menu button.primary-button')?.textContent?.includes('应用到新回复') === true, null, { timeout: 15_000 });
+        assert(await page.locator('.pi-model-menu label').nth(0).locator('select').inputValue() === 'muse-spark-1.3-contributor', 'Pi 对话框应读取当前 Muse 模型');
+        const dockThinkingOptions = await page.locator('.pi-model-menu label').nth(1).locator('select option').evaluateAll((options) => options.map((option) => option.value));
+        assert(JSON.stringify(dockThinkingOptions) === JSON.stringify(['auto']), `Pi 对话框的未知模型也应只显示自动，实际 ${JSON.stringify(dockThinkingOptions)}`);
+        await captureEvidence({ app, page, evidence, artifactsDir, name: 'pi-model-reasoning-unknown-1100' });
         return { surface: 'settings', journey: 'STG-009', providerModels, savedModel: 'role-model-beta', savedThinking: 'high' };
       } finally {
         await new Promise((resolve) => server.close(() => resolve(undefined)));

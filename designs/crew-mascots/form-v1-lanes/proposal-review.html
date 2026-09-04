@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WeDesign 方案评审 · 固定工作台</title>
+<style>
+  :root{
+    --bg:#F2EFEA;
+    --surface:#FFFFFF;
+    --surface-2:#FAF8F6;
+    --border:#E7E0D8;
+    --border-strong:#D9CFC3;
+    --text:#161616;
+    --muted:#6E6862;
+    --muted-2:#8A8380;
+    --accent:#E65C2E;
+    --accent-hover:#CC4F26;
+    --accent-soft:#FFF1EB;
+    --radius:12px;
+    --radius-sm:8px;
+    --shadow:0 1px 2px rgba(22,22,22,.06),0 4px 12px rgba(22,22,22,.04);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    font-family:"Microsoft YaHei UI","PingFang SC","Hiragino Sans GB",system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  button{font:inherit}
+  /* 顶部仅保留 项目/阶段/Gate */
+  .topbar{
+    height:52px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    padding:0 18px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    position:sticky;
+    top:0;
+    z-index:10;
+  }
+  .topbar-left{display:flex;align-items:center;gap:14px;min-width:0}
+  .brand{
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:.06em;
+    color:var(--text);
+    white-space:nowrap;
+  }
+  .meta{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .meta b{color:var(--text);font-weight:600}
+  .meta .sep{width:1px;height:14px;background:var(--border)}
+  .meta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:22vw}
+  .topbar-right{display:flex;align-items:center;gap:8px;flex:none}
+  /* 视图切换：不能改变数据结构 */
+  .view-switch{
+    display:flex;
+    gap:4px;
+    padding:3px;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:999px;
+  }
+  .view-btn{
+    border:1px solid transparent;
+    background:transparent;
+    color:var(--muted);
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    transition:background .18s, color .18s, border-color .18s;
+  }
+  .view-btn[aria-pressed="true"]{
+    background:var(--text);
+    color:#fff;
+    border-color:var(--text);
+  }
+  .view-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .view-btn:hover{color:var(--text)}
+  /* 工作台 */
+  .workbench{
+    display:grid;
+    grid-template-columns:clamp(240px, 18vw, 320px) minmax(0,1fr) clamp(280px, 20vw, 360px);
+    height:calc(100vh - 52px);
+    min-height:0;
+    gap:0;
+    max-width:100%;
+  }
+  .candidate-nav,.canvas,.decision-panel{min-width:0}
+  .candidate-nav{
+    background:var(--surface);
+    border-right:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  .nav-head{
+    padding:14px 14px 10px;
+    border-bottom:1px solid var(--border);
+    flex:none;
+  }
+  .nav-head h2{margin:0;font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+  .nav-head p{margin:6px 0 0;font-size:12px;color:var(--muted-2);line-height:1.4}
+  .nav-list{
+    padding:10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    overflow:auto;
+    min-height:0;
+  }
+  .nav-item{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    width:100%;
+    text-align:left;
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:10px;
+    padding:10px 10px;
+    cursor:pointer;
+    transition:border-color .18s, background .18s;
+    min-width:0;
+  }
+  .nav-text{flex:1;width:0;min-width:0}
+  .nav-name{font-size:13px;font-weight:600;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-break:anywhere;line-height:1.5}
+  .nav-claim{font-size:11px;color:var(--muted);white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-break:anywhere;margin-top:2px;line-height:1.5}
+  .nav-hint{
+    padding:10px 14px;
+    border-top:1px solid var(--border);
+    font-size:11px;
+    color:var(--muted-2);
+    line-height:1.6;
+    flex:none;
+  }
+  .nav-hint kbd{
+    display:inline-block;
+    border:1px solid var(--border-strong);
+    border-bottom-width:2px;
+    background:#fff;
+    border-radius:4px;
+    padding:0 4px;
+    font-size:10px;
+    font-family:inherit;
+    line-height:16px;
+  }
+  /* 中央大画布 */
+  .canvas{
+    min-width:0;
+    min-height:0;
+    overflow:auto;
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    background:var(--bg);
+  }
+  .canvas-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex:none;
+  }
+  .canvas-title{font-size:13px;font-weight:700;color:var(--text)}
+  .canvas-note{font-size:12px;color:var(--muted)}
+  /* 并排比较 */
+  .compare-grid{
+    display:grid;
+    gap:14px;
+    align-items:stretch;
+  }
+  .compare-grid.cols-2{grid-template-columns:repeat(2,1fr)}
+  .compare-grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .compare-grid.cols-4{grid-template-columns:repeat(4,1fr)}
+  .compare-grid.cols-5{grid-template-columns:repeat(5,1fr)}
+  /* 方案卡只显示 编号/名称/一句话主张/适配/风险 */
+  .candidate-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    transition:border-color .18s, box-shadow .18s;
+    cursor:pointer;
+  }
+  .candidate-card.is-selected{
+    border-color:var(--accent);
+    box-shadow:0 0 0 2px rgba(230,92,46,.12);
+  }
+  .candidate-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .candidate-card:hover{border-color:var(--border-strong)}
+  .card-media{
+    aspect-ratio:1 / 1;
+    background:var(--surface-2);
+    border-bottom:1px solid var(--border);
+    position:relative;
+    overflow:hidden;
+    display:grid;
+    place-items:center;
+  }
+  .card-media img{
+    width:100%;height:100%;
+    object-fit:contain;
+    display:block;
+    background:var(--surface-2);
+  }
+  .card-media .placeholder{
+    width:100%;height:100%;
+    display:grid;place-items:center;
+    padding:18px;
+    text-align:center;
+    color:var(--muted-2);
+    font-size:12px;
+    line-height:1.6;
+  }
+  .placeholder-box{
+    border:1px dashed var(--border-strong);
+    border-radius:10px;
+    width:100%;height:100%;
+    display:grid;place-items:center;
+    background:var(--surface-2);
+  }
+  .placeholder-box span{display:block}
+  .placeholder-box .ph-id{font-weight:700;color:var(--text);font-size:14px}
+  .placeholder-box .ph-text{margin-top:4px;font-size:11px;color:var(--muted)}
+  .card-body{padding:12px 12px 14px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
+  .card-head{display:flex;align-items:center;gap:8px;min-width:0}
+  .card-id-badge{
+    width:22px;height:22px;border-radius:999px;
+    display:grid;place-items:center;
+    background:var(--text);color:#fff;font-size:11px;font-weight:700;flex:none;
+  }
+  .candidate-card.is-selected .card-id-badge{background:var(--accent)}
+  .candidate-card{min-width:0}
+  .card-name{font-size:13px;font-weight:700;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-break:anywhere;min-width:0}
+  .card-claim{
+    font-size:12px;color:var(--text);
+    line-height:1.5;
+    white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-break:anywhere;
+    min-width:0;
+  }
+  .card-divider{height:1px;background:var(--border);margin:2px 0}
+  .card-meta{font-size:11px;line-height:1.5;color:var(--muted);white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  /* 单项聚焦 */
+  .focus-view{
+    display:grid;
+    gap:14px;
+  }
+  .focus-hero{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+    display:grid;
+    grid-template-columns:1.35fr .85fr;
+    min-height:520px;
+  }
+  .focus-media{
+    background:var(--surface-2);
+    border-right:1px solid var(--border);
+    display:grid;place-items:center;
+    padding:18px;
+    min-height:520px;
+  }
+  .focus-media img{width:100%;height:100%;max-height:520px;object-fit:contain;display:block}
+  .focus-media .placeholder{width:100%;height:100%;min-height:420px}
+  .focus-info{padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .focus-name{font-size:18px;font-weight:800;letter-spacing:.01em;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .focus-claim{font-size:13px;color:var(--text);background:var(--accent-soft);border:1px solid #FADACB;border-radius:8px;padding:10px 12px;line-height:1.6;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .focus-row{font-size:12px;color:var(--muted);line-height:1.6;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .scenes-view{display:grid;gap:14px}
+  .scenes-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:14px;
+  }
+  .scene-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .scene-card h3{margin:0;padding:10px 12px;font-size:12px;font-weight:700;border-bottom:1px solid var(--border);color:var(--muted);letter-spacing:.04em}
+  .scene-media{
+    aspect-ratio:1/1;
+    background:var(--surface-2);
+    display:grid;place-items:center;
+    padding:16px;
+  }
+  .scene-media img{width:100%;height:100%;object-fit:contain;display:block}
+  .scene-media.small{aspect-ratio:auto;min-height:180px}
+  .scene-media.circle{padding:28px}
+  .scene-media.circle img{border-radius:50%;aspect-ratio:1/1;object-fit:cover;background:#fff;border:1px solid var(--border)}
+  .scene-desc{padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .decision-panel{
+    background:var(--surface);
+    border-left:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  .decision-head{
+    padding:14px 14px 12px;
+    border-bottom:1px solid var(--border);
+    flex:none;
+  }
+  .decision-head h2{margin:0;font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+  .decision-body{
+    padding:14px;
+    overflow:auto;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    min-height:0;
+  }
+  .criteria-list{margin:0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7}
+  .criteria-list li{margin:2px 0}
+  .criteria-list li::marker{color:var(--accent)}
+  .decision-card{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px;
+    background:var(--surface-2);
+    min-width:0;
+  }
+  .decision-card h3{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--text);white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+  .decision-card p{margin:0;font-size:12px;color:var(--muted);line-height:1.6;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .selection-box{
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:12px;
+    background:#fff;
+  }
+  .selection-box h3{margin:0 0 8px;font-size:12px;font-weight:700}
+  .selection-text{
+    font-size:11px;
+    line-height:1.7;
+    color:var(--text);
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 10px;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+    min-height:64px;
+    white-space:pre-wrap;
+    min-width:0;
+  }
+  .selection-empty{color:var(--muted-2);font-size:12px;line-height:1.6;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+  .btn{
+    appearance:none;
+    border:1px solid transparent;
+    border-radius:999px;
+    padding:8px 14px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    transition:background .18s, border-color .18s, color .18s, opacity .18s;
+  }
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .btn-primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn-ghost{background:#fff;border-color:var(--border);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--border-strong);background:var(--surface-2)}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+  .helper{font-size:11px;color:var(--muted-2);line-height:1.6;white-space:normal;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+  .status-dot{
+    width:8px;height:8px;border-radius:999px;background:#C8C2BB;display:inline-block;flex:none;
+  }
+  .status-dot.on{background:#1DB954}
+  .gate-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:11px;font-weight:700;letter-spacing:.04em;
+    border:1px solid var(--border);background:var(--surface-2);padding:4px 8px;border-radius:999px;color:var(--muted);
+  }
+  .view-hidden{display:none !important}
+  /* 窄屏 390×844 可纵向操作且控件不遮挡内容 */
+  @media (max-width: 860px){
+    .topbar{height:auto;min-height:52px;flex-wrap:wrap;padding:10px 12px;gap:10px}
+    .topbar-left{flex:1 1 100%;flex-wrap:wrap;min-width:0}
+    .meta{flex:1 1 240px;flex-wrap:wrap;min-width:0}
+    .meta span{max-width:100%;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+    .topbar-right{width:100%;justify-content:flex-start}
+    .workbench{
+      grid-template-columns:1fr;
+      height:auto;
+      min-height:auto;
+      max-width:100vw;
+      overflow-x:hidden;
+    }
+    .candidate-nav{
+      border-right:none;
+      border-bottom:1px solid var(--border);
+      order:1;
+      min-width:0;
+      max-width:100vw;
+      overflow:hidden;
+    }
+    .canvas{order:2;padding:12px}
+    .nav-list{
+      flex-direction:row;
+      overflow:auto;
+      padding:10px 10px 10px;
+      scrollbar-width:thin;
+      gap:8px;
+      max-width:100%;
+    }
+    .nav-item{flex:0 0 clamp(168px, 42vw, 240px);min-width:0;max-width:clamp(168px, 42vw, 240px)}
+    .decision-panel{order:3;border-left:none;border-top:1px solid var(--border);overflow:visible}
+    .decision-body{overflow:visible}
+    .compare-grid.cols-2,
+    .compare-grid.cols-3,
+    .compare-grid.cols-4,
+    .compare-grid.cols-5{grid-template-columns:1fr 1fr}
+    .focus-hero{grid-template-columns:1fr;min-height:auto}
+    .focus-media{min-height:360px;border-right:none;border-bottom:1px solid var(--border)}
+    .scenes-grid{grid-template-columns:1fr}
+  }
+  @media (max-width: 420px){
+    .nav-item{flex:0 0 clamp(148px, 44vw, 200px);max-width:clamp(148px, 44vw, 200px)}
+    .compare-grid.cols-2,
+    .compare-grid.cols-3,
+    .compare-grid.cols-4,
+    .compare-grid.cols-5{grid-template-columns:1fr}
+    .view-switch{gap:2px}
+    .view-btn{padding:6px 10px;font-size:12px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;animation:none !important;scroll-behavior:auto !important}
+  }
+</style>
+</head>
+<body>
+<header class="topbar" data-screen-label="顶部信息栏">
+  <div class="topbar-left">
+    <div class="brand">WeDesign 评审工作台</div>
+    <div class="meta" id="topMeta" aria-live="polite">
+      <b id="projectName">—</b>
+      <span class="sep" aria-hidden="true"></span>
+      <span id="stageName">—</span>
+      <span class="sep" aria-hidden="true"></span>
+      <span id="gateName" class="gate-badge"><span class="status-dot" aria-hidden="true"></span><span id="gateText">—</span></span>
+    </div>
+  </div>
+  <div class="topbar-right" data-screen-label="视图切换">
+    <div class="view-switch" role="group" aria-label="视图切换">
+      <button class="view-btn" type="button" data-view="compare" aria-pressed="true" aria-label="切换到并排比较视图">并排比较</button>
+      <button class="view-btn" type="button" data-view="focus" aria-pressed="false" aria-label="切换到单项聚焦视图">单项聚焦</button>
+      <button class="view-btn" type="button" data-view="scenes" aria-pressed="false" aria-label="切换到场景验证视图">场景验证</button>
+    </div>
+  </div>
+</header>
+
+<div class="workbench">
+  <nav class="candidate-nav" data-screen-label="候选切换栏" aria-label="候选切换">
+    <div class="nav-head">
+      <h2>候选</h2>
+      <p>点击卡片或使用键盘切换。图像优先，等高等宽。</p>
+    </div>
+    <div class="nav-list" id="navList" role="listbox" aria-label="候选列表"></div>
+    <div class="nav-hint" data-screen-label="键盘提示">
+      快捷键：<kbd>←</kbd> <kbd>→</kbd> 切换候选 · <kbd>1</kbd>–<kbd>5</kbd> 直达 · 点击图片进入聚焦
+    </div>
+  </nav>
+
+  <main class="canvas" data-screen-label="中央画布">
+    <div class="canvas-head">
+      <div class="canvas-title" id="canvasTitle">并排比较 · 同尺寸同条件</div>
+      <div class="canvas-note" id="canvasNote">2–5 个方案同尺寸同条件对比，主视图不依赖整页长截图</div>
+    </div>
+
+    <section id="compareView" data-screen-label="并排比较视图" aria-label="并排比较视图">
+      <div id="compareGrid" class="compare-grid cols-3" role="list"></div>
+    </section>
+
+    <section id="focusView" class="view-hidden" data-screen-label="单项聚焦视图" aria-label="单项聚焦视图">
+      <div id="focusContainer"></div>
+    </section>
+
+    <section id="scenesView" class="view-hidden" data-screen-label="场景验证视图" aria-label="场景验证视图">
+      <div id="scenesContainer"></div>
+    </section>
+  </main>
+
+  <aside class="decision-panel" data-screen-label="决策信息栏" aria-label="决策信息">
+    <div class="decision-head">
+      <h2>决策</h2>
+    </div>
+    <div class="decision-body">
+      <div class="decision-card" data-screen-label="评审标准">
+        <h3>评审标准</h3>
+        <ol class="criteria-list" id="criteriaList"></ol>
+      </div>
+
+      <div class="decision-card" data-screen-label="当前候选信息" id="currentInfo">
+        <h3 id="currentName">未选择候选</h3>
+        <p id="currentClaim">请在左侧或中央选择一个候选，进入聚焦与场景验证。</p>
+        <p id="currentFit" class="helper" style="margin-top:8px"></p>
+        <p id="currentRisk" class="helper"></p>
+      </div>
+
+      <div class="selection-box" data-screen-label="选择操作">
+        <h3>选择此方案</h3>
+        <div id="selectionEmpty" class="selection-empty">尚未选择。点击下方按钮将当前候选写入本地记录，并生成可复制文本。此操作不代表方案已获批。</div>
+        <div id="selectionText" class="selection-text view-hidden" aria-live="polite"></div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn btn-primary" type="button" id="selectBtn" aria-label="选择当前候选并生成可复制文本">选择此方案</button>
+          <button class="btn btn-ghost" type="button" id="copyBtn" aria-label="复制选择文本" disabled>复制文本</button>
+          <button class="btn btn-ghost" type="button" id="clearBtn" aria-label="清除本地选择">清除选择</button>
+        </div>
+        <p class="helper" style="margin:8px 0 0">本地持久化键：<code id="storageKeyLabel">wedesign-review-selection</code> · 刷新后仍保留 · 不自动宣称获批</p>
+      </div>
+
+      <div class="decision-card" data-screen-label="数据说明">
+        <h3>数据契约</h3>
+        <p>数据文件：<code>review-data.json</code> · 支持 <code>?data=相对JSON路径</code> 覆盖 · 缺失时显示内置演示数据而非空白。</p>
+        <p class="helper" style="margin-top:8px">替换方式：复制本模板 HTML 与 JSON，替换候选 <code>hero</code> 与 <code>scenes</code> 图片路径即可；视图与结构保持不变。</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'wedesign-review-selection';
+  const qs = new URLSearchParams(location.search);
+  const dataParam = qs.get('data');
+
+  const demoData = {
+    project: "PigeonYang · 品牌标志 Concept 评审示例",
+    stage: "Concept",
+    gate: "C1 · 概念选定",
+    criteria: [
+      "一句话主张是否清晰可复述",
+      "同条件剪影是否可辨、家族内可区分",
+      "小尺寸与圆形裁切是否可读"
+    ],
+    candidates: [
+      {
+        id: "A",
+        name: "方案 A · 圆角负形",
+        claim: "用圆角矩形负形做出可被一句话记住的容器感",
+        fit: "适配多尺寸与单色场景，容器易扩展为辅助图形",
+        risk: "负形过细时小尺寸易糊，需验证 16–32px 剪影",
+        hero: "",
+        scenes: { grid64: "", circle: "", bar32: "" }
+      },
+      {
+        id: "B",
+        name: "方案 B · 几何拼合",
+        claim: "用两个几何体错位拼合形成方向感与记忆钩子",
+        fit: "构成简洁，适合横向排版与动态延展",
+        risk: "倾斜角度需克制，避免与同类几何标志同质化",
+        hero: "",
+        scenes: { grid64: "", circle: "", bar32: "" }
+      },
+      {
+        id: "C",
+        name: "方案 C · 线框轮廓",
+        claim: "用单线轮廓保留负空间，让标志在小尺寸下仍可呼吸",
+        fit: "线条统一便于演化为图标系统与插画语言",
+        risk: "线宽需分级，32px 以下需切换为实心变体",
+        hero: "",
+        scenes: { grid64: "", circle: "", bar32: "" }
+      }
+    ]
+  };
+
+  let data = null;
+  let currentIndex = 0;
+  let currentView = 'compare';
+  let selectedId = null;
+
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.id) selectedId = parsed.id;
+    }
+  }catch(e){}
+
+  function $(id){ return document.getElementById(id); }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function placeholderHtml(id, label){
+    return '<div class="placeholder" aria-label="暂无图片占位"><div class="placeholder-box"><span><span class="ph-id">'+escapeHtml(id)+'</span><span class="ph-text">'+escapeHtml(label||'暂无图片')+'</span><span class="ph-text" style="margin-top:6px">替换 hero / scenes 路径后自动显示</span></span></div></div>';
+  }
+
+  function imageOrPlaceholder(src, id, label){
+    if(!src) return placeholderHtml(id, label);
+    const safeSrc = escapeHtml(src);
+    const safeAlt = escapeHtml(label || id);
+    return '<img src="'+safeSrc+'" alt="'+safeAlt+'" loading="lazy" data-fallback-id="'+escapeHtml(id)+'" data-fallback-label="'+safeAlt+'">';
+  }
+
+  function bindImageFallbacks(root){
+    root.querySelectorAll('img[data-fallback-id]').forEach(function(img){
+      function showFallback(){
+        const holder = document.createElement('div');
+        holder.innerHTML = placeholderHtml(img.dataset.fallbackId, img.dataset.fallbackLabel);
+        img.replaceWith(holder.firstElementChild);
+      }
+      if(img.complete && !img.naturalWidth) showFallback();
+      else img.addEventListener('error', showFallback, {once:true});
+    });
+  }
+
+  function normalizeScenes(s){
+    if(!s) return { grid64:"", circle:"", bar32:"" };
+    if(typeof s === 'object' && !Array.isArray(s)){
+      return { grid64: s.grid64||s.size64||s.grid||"", circle: s.circle||s.avatar||"", bar32: s.bar32||s.size32||s.bar||"" };
+    }
+    return { grid64:"", circle:"", bar32:"" };
+  }
+
+  function normalizeData(raw){
+    if(!raw || typeof raw !== 'object') return demoData;
+    const candidates = Array.isArray(raw.candidates) ? raw.candidates : demoData.candidates;
+    const normalized = candidates.slice(0,5).map(function(c, idx){
+      return {
+        id: c.id || String(idx+1),
+        name: c.name || ('方案 '+(c.id||idx+1)),
+        claim: c.claim || '—',
+        fit: c.fit || '—',
+        risk: c.risk || '—',
+        hero: c.hero || c.image || "",
+        scenes: normalizeScenes(c.scenes)
+      };
+    });
+    // ensure 2-5 display but allow 1 for robustness; pad not needed
+    return {
+      project: raw.project || demoData.project,
+      stage: raw.stage || demoData.stage,
+      gate: raw.gate || demoData.gate,
+      criteria: Array.isArray(raw.criteria) && raw.criteria.length ? raw.criteria : demoData.criteria,
+      candidates: normalized.length ? normalized : demoData.candidates
+    };
+  }
+
+  async function loadData(){
+    // 1) ?data= 覆盖
+    if(dataParam){
+      try{
+        const res = await fetch(dataParam, {cache:'no-store'});
+        if(res.ok){
+          const j = await res.json();
+          return normalizeData(j);
+        }
+      }catch(e){}
+    }
+    // 2) 同目录 review-data.json
+    try{
+      const res = await fetch('./review-data.json', {cache:'no-store'});
+      if(res.ok){
+        const j = await res.json();
+        return normalizeData(j);
+      }
+    }catch(e){}
+    // 3) 示例文件
+    try{
+      const res = await fetch('./review-data.example.json', {cache:'no-store'});
+      if(res.ok){
+        const j = await res.json();
+        return normalizeData(j);
+      }
+    }catch(e){}
+    // 4) 内置演示
+    return demoData;
+  }
+
+  function renderTop(){
+    $('projectName').textContent = data.project;
+    $('stageName').textContent = data.stage;
+    $('gateText').textContent = data.gate;
+    $('storageKeyLabel').textContent = STORAGE_KEY;
+  }
+
+  function renderNav(){
+    const list = $('navList');
+    list.innerHTML = '';
+    data.candidates.forEach(function(c, idx){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'nav-item';
+      btn.setAttribute('role','option');
+      btn.setAttribute('aria-selected', idx===currentIndex ? 'true' : 'false');
+      btn.setAttribute('aria-label', '切换到候选 '+c.id+' '+c.name);
+      btn.innerHTML = '<span class="nav-id">'+escapeHtml(c.id)+'</span><span class="nav-text"><span class="nav-name">'+escapeHtml(c.name)+'</span><span class="nav-claim">'+escapeHtml(c.claim)+'</span></span>';
+      btn.addEventListener('click', function(){ setCurrent(idx); });
+      list.appendChild(btn);
+    });
+  }
+
+  function cardHtml(c, idx){
+    const sel = c.id===selectedId ? ' is-selected' : '';
+    const cur = idx===currentIndex ? ' aria-current="true"' : '';
+    return '<div class="candidate-card'+sel+'" role="listitem" tabindex="0" data-index="'+idx+'"'+cur+' aria-label="候选 '+escapeHtml(c.id)+' '+escapeHtml(c.name)+'，点击聚焦" data-candidate-id="'+escapeHtml(c.id)+'">'
+      + '<div class="card-media">'+ imageOrPlaceholder(c.hero, c.id, c.name) +'</div>'
+      + '<div class="card-body">'
+        + '<div class="card-head"><span class="card-id-badge">'+escapeHtml(c.id)+'</span><span class="card-name">'+escapeHtml(c.name)+'</span></div>'
+        + '<div class="card-claim">'+escapeHtml(c.claim)+'</div>'
+        + '<div class="card-divider" aria-hidden="true"></div>'
+        + '<div class="card-meta"><b>适配：</b>'+escapeHtml(c.fit)+'</div>'
+        + '<div class="card-meta"><b>风险：</b>'+escapeHtml(c.risk)+'</div>'
+      + '</div>'
+    + '</div>';
+  }
+
+  function renderCompare(){
+    const grid = $('compareGrid');
+    const n = data.candidates.length;
+    grid.className = 'compare-grid cols-' + Math.min(Math.max(n,2),5);
+    grid.innerHTML = data.candidates.map(function(c,i){ return cardHtml(c,i); }).join('');
+    bindImageFallbacks(grid);
+    grid.querySelectorAll('.candidate-card').forEach(function(el){
+      el.addEventListener('click', function(){
+        const idx = parseInt(el.getAttribute('data-index'),10);
+        setCurrent(idx);
+        setView('focus');
+      });
+      el.addEventListener('keydown', function(e){
+        if(e.key==='Enter' || e.key===' '){
+          e.preventDefault();
+          const idx = parseInt(el.getAttribute('data-index'),10);
+          setCurrent(idx);
+          setView('focus');
+        }
+      });
+    });
+  }
+
+  function renderFocus(){
+    const c = data.candidates[currentIndex];
+    if(!c) return;
+    const container = $('focusContainer');
+    container.innerHTML = '<div class="focus-hero">'
+      + '<div class="focus-media" data-screen-label="聚焦主图">'+ imageOrPlaceholder(c.hero, c.id, c.name+' 主图') +'</div>'
+      + '<div class="focus-info" data-screen-label="聚焦信息">'
+        + '<div style="display:flex;align-items:center;gap:8px"><span class="card-id-badge" style="width:26px;height:26px;font-size:12px">'+escapeHtml(c.id)+'</span><span class="focus-name">'+escapeHtml(c.name)+'</span></div>'
+        + '<div class="focus-claim">'+escapeHtml(c.claim)+'</div>'
+        + '<div class="focus-row"><b>适配：</b>'+escapeHtml(c.fit)+'</div>'
+        + '<div class="focus-row"><b>风险：</b>'+escapeHtml(c.risk)+'</div>'
+        + '<div class="focus-actions"><button class="btn btn-primary" type="button" data-action="select-focus" aria-label="选择此方案 '+escapeHtml(c.name)+'">选择此方案</button><button class="btn btn-ghost" type="button" data-action="to-scenes" aria-label="查看场景验证">查看场景验证</button></div>'
+        + '<p class="helper">主视图为 object-fit contain 等比展示，点击候选卡可切换；场景验证在下一视图。</p>'
+      + '</div>'
+    + '</div>';
+    bindImageFallbacks(container);
+    container.querySelector('[data-action="select-focus"]').addEventListener('click', function(){ selectCurrent(); });
+    container.querySelector('[data-action="to-scenes"]').addEventListener('click', function(){ setView('scenes'); });
+  }
+
+  function renderScenes(){
+    const c = data.candidates[currentIndex];
+    if(!c) return;
+    const sc = c.scenes;
+    const container = $('scenesContainer');
+    container.innerHTML = '<div class="scenes-grid">'
+      + '<div class="scene-card" data-screen-label="场景-64px混排"><h3>64px 混排</h3><div class="scene-media small">'+ imageOrPlaceholder(sc.grid64 || c.hero, c.id, '64px 混排') +'</div><div class="scene-desc">用于应用图标网格等中等尺寸混排，检验轮廓与负形在 64px 下的可辨度。</div></div>'
+      + '<div class="scene-card" data-screen-label="场景-圆形裁切"><h3>圆形裁切</h3><div class="scene-media circle">'+ imageOrPlaceholder(sc.circle || c.hero, c.id, '圆形裁切') +'</div><div class="scene-desc">用于社媒头像等圆形遮罩，检验关键特征是否居中且不被裁切。</div></div>'
+      + '<div class="scene-card" data-screen-label="场景-32px顶栏"><h3>32px 顶栏</h3><div class="scene-media small">'+ imageOrPlaceholder(sc.bar32 || c.hero, c.id, '32px 顶栏') +'</div><div class="scene-desc">用于界面顶栏等小尺寸场景，检验 32px 下是否仍可读。</div></div>'
+    + '</div>'
+    + '<div class="decision-card" style="margin-top:2px"><h3>当前候选：'+escapeHtml(c.id)+' · '+escapeHtml(c.name)+'</h3><p>'+escapeHtml(c.claim)+' · 适配：'+escapeHtml(c.fit)+' · 风险：'+escapeHtml(c.risk)+'</p></div>';
+    bindImageFallbacks(container);
+  }
+
+  function renderCriteria(){
+    const ol = $('criteriaList');
+    ol.innerHTML = data.criteria.map(function(t){ return '<li>'+escapeHtml(t)+'</li>'; }).join('');
+  }
+
+  function renderCurrentInfo(){
+    const c = data.candidates[currentIndex];
+    if(!c) return;
+    $('currentName').textContent = c.id + ' · ' + c.name;
+    $('currentClaim').textContent = c.claim;
+    $('currentFit').innerHTML = '<b>适配：</b>'+escapeHtml(c.fit);
+    $('currentRisk').innerHTML = '<b>风险：</b>'+escapeHtml(c.risk);
+  }
+
+  function renderSelection(){
+    const empty = $('selectionEmpty');
+    const textEl = $('selectionText');
+    const copyBtn = $('copyBtn');
+    if(!selectedId){
+      empty.classList.remove('view-hidden');
+      textEl.classList.add('view-hidden');
+      textEl.textContent = '';
+      copyBtn.disabled = true;
+      return;
+    }
+    const sel = data.candidates.find(function(x){ return x.id===selectedId; });
+    if(!sel){
+      empty.classList.remove('view-hidden');
+      textEl.classList.add('view-hidden');
+      copyBtn.disabled = true;
+      return;
+    }
+    const now = new Date();
+    const stamp = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+    const txt = '【WeDesign 评审选择】项目：'+data.project+' | 阶段：'+data.stage+' | Gate：'+data.gate+' | 已选择：'+sel.id+' · '+sel.name+' | 主张：'+sel.claim+' | 时间：'+stamp+' | 备注：此选择为本地记录，未自动获批，需人工确认';
+    empty.classList.add('view-hidden');
+    textEl.classList.remove('view-hidden');
+    textEl.textContent = txt;
+    copyBtn.disabled = false;
+  }
+
+  function syncNavSelection(){
+    const items = $('navList').querySelectorAll('.nav-item');
+    items.forEach(function(el, idx){
+      el.setAttribute('aria-selected', idx===currentIndex ? 'true' : 'false');
+    });
+  }
+
+  function syncViewButtons(){
+    document.querySelectorAll('.view-btn').forEach(function(btn){
+      const v = btn.getAttribute('data-view');
+      btn.setAttribute('aria-pressed', v===currentView ? 'true' : 'false');
+    });
+    $('compareView').classList.toggle('view-hidden', currentView!=='compare');
+    $('focusView').classList.toggle('view-hidden', currentView!=='focus');
+    $('scenesView').classList.toggle('view-hidden', currentView!=='scenes');
+    const titles = {
+      compare: ['并排比较 · 同尺寸同条件','2–5 个方案同尺寸同条件对比，主视图不依赖整页长截图'],
+      focus: ['单项聚焦 · 大图审视','单候选大图，检验形体与细节'],
+      scenes: ['场景验证 · 真实尺寸','同一方案的 64px / 圆形裁切 / 32px 场景图']
+    };
+    const t = titles[currentView];
+    $('canvasTitle').textContent = t[0];
+    $('canvasNote').textContent = t[1];
+  }
+
+  function setCurrent(idx){
+    if(idx<0) idx = data.candidates.length-1;
+    if(idx>=data.candidates.length) idx = 0;
+    currentIndex = idx;
+    syncNavSelection();
+    renderCurrentInfo();
+    renderFocus();
+    renderScenes();
+    // 高亮 compare 卡
+    document.querySelectorAll('.candidate-card').forEach(function(el){
+      const i = parseInt(el.getAttribute('data-index'),10);
+      el.classList.toggle('is-selected', data.candidates[i] && data.candidates[i].id===data.candidates[currentIndex].id);
+    });
+  }
+
+  function setView(v){
+    currentView = v;
+    syncViewButtons();
+  }
+
+  function selectCurrent(){
+    const c = data.candidates[currentIndex];
+    if(!c) return;
+    selectedId = c.id;
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({id:c.id, name:c.name, claim:c.claim, at:Date.now()}));
+    }catch(e){}
+    renderSelection();
+    renderCompare();
+    // compare 高亮已选
+    syncNavSelection();
+  }
+
+  function clearSelection(){
+    selectedId = null;
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+    renderSelection();
+    renderCompare();
+  }
+
+  async function copySelection(){
+    const txt = $('selectionText').textContent.trim();
+    if(!txt) return;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(txt);
+      }else{
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.style.position='fixed';ta.style.opacity='0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      const btn = $('copyBtn');
+      const orig = btn.textContent;
+      btn.textContent = '已复制';
+      setTimeout(function(){ btn.textContent = orig; }, 1200);
+    }catch(e){
+      alert('复制失败，请手动选择文本复制');
+    }
+  }
+
+  function bindEvents(){
+    document.querySelectorAll('.view-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){ setView(btn.getAttribute('data-view')); });
+    });
+    $('selectBtn').addEventListener('click', selectCurrent);
+    $('copyBtn').addEventListener('click', copySelection);
+    $('clearBtn').addEventListener('click', clearSelection);
+    document.addEventListener('keydown', function(e){
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if(tag==='input' || tag==='textarea' || e.target.isContentEditable) return;
+      if(e.key==='ArrowLeft'){
+        e.preventDefault(); setCurrent(currentIndex-1);
+      }else if(e.key==='ArrowRight'){
+        e.preventDefault(); setCurrent(currentIndex+1);
+      }else if(/^[1-5]$/.test(e.key)){
+        const idx = parseInt(e.key,10)-1;
+        if(idx < data.candidates.length){ e.preventDefault(); setCurrent(idx); }
+      }
+    });
+  }
+
+  async function init(){
+    data = await loadData();
+    // 若本地已选 id 不存在，回退到 0
+    if(selectedId){
+      const found = data.candidates.findIndex(function(c){ return c.id===selectedId; });
+      if(found===-1) { /* keep selectedId for display but current stays 0 */ }
+    }
+    // currentIndex 优先匹配已选，否则 0
+    if(selectedId){
+      const idx = data.candidates.findIndex(function(c){ return c.id===selectedId; });
+      if(idx!==-1) currentIndex = idx;
+    }
+    renderTop();
+    renderNav();
+    renderCriteria();
+    renderCompare();
+    renderFocus();
+    renderScenes();
+    renderCurrentInfo();
+    renderSelection();
+    syncViewButtons();
+    syncNavSelection();
+    bindEvents();
+    // 无障碍：公告加载完成
+    // 如果数据来自 demo，提示
+    if(!dataParam){
+      try{
+        const r = await fetch('./review-data.json');
+        if(!r.ok) console.info('[WeDesign Review] 使用内置演示数据，可通过 ?data= 或 review-data.json 覆盖');
+      }catch(e){}
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

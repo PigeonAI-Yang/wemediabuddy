@@ -19,7 +19,6 @@ import {
   registerPiDockIpc,
   runDockManagerPrompt
 } from '../src/main/ipc-pi-dock.ts';
-import { buildTodayIntelligenceDispatch } from '../src/main/manager-dispatch.ts';
 import { draftPrompt, reviewPrompt } from '../src/main/agent-runner.ts';
 import { libraryOrganizePrompt } from '../src/main/role-job-policies.ts';
 import { buildJobEventEnvelope } from '../src/shared/job-event-envelope.ts';
@@ -53,38 +52,6 @@ async function withRoot(fn) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 1. 今日情报编排（Today）生产者：盖章 + 完整安全字段 + 前置失败语义
-// ---------------------------------------------------------------------------
-
-test('Today producer stamps canonical envelope with complete safe fields before dispatch', () => {
-  const dispatch = buildTodayIntelligenceDispatch('2026-08-11', 'manager-task-9');
-  assert.equal(typeof dispatch.dispatchId, 'string');
-  assert.ok(dispatch.dispatchId.length > 0);
-  assert.ok(dispatch.message.includes('2026-08-11'), 'prompt 携带业务日期');
-  assert.ok(dispatch.message.includes('managerTaskId=manager-task-9'), 'prompt 携带任务引用');
-  for (const field of ORCHESTRATION_SAFE_FIELDS) {
-    assert.ok(dispatch.orchestration.safe[field]?.trim(), `安全字段 ${field} 必须非空`);
-    assert.ok(!/managerTaskId|taskId|wmb_|\[WMB_CONTEXT\]/.test(dispatch.orchestration.safe[field]), `安全字段 ${field} 不得含内部措辞`);
-  }
-  const envelope = buildDockOrchestrationMessage({
-    dispatchId: dispatch.dispatchId,
-    delivery: 'direct',
-    safe: dispatch.orchestration.safe,
-    prompt: dispatch.message
-  });
-  const parsed = parseOrchestrationEnvelope(envelope);
-  assert.ok(parsed, '今日编排信封必须可解析');
-  assert.equal(parsed.dispatchId, dispatch.dispatchId);
-  assert.equal(parsed.target, 'dock');
-  assert.equal(parsed.delivery, 'direct');
-  assert.deepEqual(parsed.safe, dispatch.orchestration.safe);
-  const row = project(envelope, 'o-today');
-  assert.equal(row.kind, 'orchestration');
-  assert.equal(row.orchestration.state, 'accepted');
-  assert.equal(row.text, safe.title, '可见文本仅安全标题');
-  assert.ok(!row.text.includes('managerTaskId'), 'raw prompt 绝不泄漏进可见文本');
-});
 
 test('dock envelope rejects any missing safe field before dispatch (task not sent)', () => {
   for (const field of ORCHESTRATION_SAFE_FIELDS) {
@@ -264,19 +231,17 @@ test('pre-acceptance failure leaves no row (unknown dispatchId is a no-op)', asy
 // ---------------------------------------------------------------------------
 
 const employeeSafe = {
-  daily: { originLabel: '今日情报', title: '今日情报判读', goal: '判断当日增量资料，产出可批机会方案', acceptance: '渠道回执与当日可批方案' },
   studio: { originLabel: 'Studio 初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' },
   review: { originLabel: 'Results 复盘', title: '周期复盘', goal: '基于真实指标给出 Keep/Stop/Change 与方法结论', acceptance: 'final 复盘读回' },
   library: { originLabel: '资料库整理', title: '资料整理', goal: '判断与整理资料，产出待批提案', acceptance: '整理读回或 no-op 确认' }
 };
 
 test('employee producers stamp target=employee envelopes (dispatchId 稳定 per task)', () => {
-  const task = { id: 'task-1', businessDate: '2026-08-11', intent: 'daily_judge', status: 'running' };
-  for (const [kind, idPrefix] of [['daily', 'daily_judge'], ['studio', 'studio_draft'], ['review', 'results_review'], ['library', 'page_library']]) {
-    const prompt = kind === 'daily' ? '判断当日增量资料并产出方案。'
-      : kind === 'studio' ? draftPrompt(task, 'proj-1', 'req-1')
-        : kind === 'review' ? reviewPrompt(task, 'pub-1', 'req-1')
-          : libraryOrganizePrompt(task, { jobId: 'job-1', brief: '整理资料', businessDate: '2026-08-11', spec: {}, runtime: {}, mcpUrl: '', xhsMcpUrl: '', workerLeaseId: 'w', sessionFile: 's', signal: new AbortController().signal, onTaskReady: async () => null, onEvent: () => {}, registerStoppable: () => {} });
+  const task = { id: 'task-1', businessDate: '2026-08-11', intent: 'studio_draft', status: 'running' };
+  for (const [kind, idPrefix] of [['studio', 'studio_draft'], ['review', 'results_review'], ['library', 'page_library']]) {
+    const prompt = kind === 'studio' ? draftPrompt(task, 'proj-1', 'req-1')
+      : kind === 'review' ? reviewPrompt(task, 'pub-1', 'req-1')
+        : libraryOrganizePrompt(task, { jobId: 'job-1', brief: '整理资料', businessDate: '2026-08-11', spec: {}, runtime: {}, mcpUrl: '', xhsMcpUrl: '', workerLeaseId: 'w', sessionFile: 's', signal: new AbortController().signal, onTaskReady: async () => null, onEvent: () => {}, registerStoppable: () => {} });
     const envelope = buildOrchestrationEnvelope({ dispatchId: `${idPrefix}:${task.id}`, target: 'employee', delivery: 'direct', safe: employeeSafe[kind], prompt });
     const parsed = parseOrchestrationEnvelope(envelope);
     assert.ok(parsed, `${kind} 员工信封必须可解析`);
@@ -631,30 +596,3 @@ test('pi:chat direct orchestration callback awaits appendAcceptedDockRow before 
   assert.ok(append < close, '先 await appendAcceptedDockRow 持久化成功，再 closeTurnGate 释放新回合');
 });
 
-test('pi:chat direct orchestration starts Pi before authority is frozen into the envelope', async () => {
-  const source = await readFile(new URL('../src/main/ipc-pi-dock.ts', import.meta.url), 'utf8');
-  const chat = source.slice(source.indexOf("ipcMain.handle('pi:chat'"));
-  const directStart = chat.indexOf('// §10.3 direct');
-  const direct = chat.slice(directStart, chat.indexOf("const current = await readPiConversation(dataRoot.path);", directStart) + 1_500);
-  const ensure = direct.indexOf('runtime = await ensurePi(dataRoot);');
-  const authorize = direct.indexOf('const authorized = await authorize(raw);');
-  const envelope = direct.indexOf('const envelope = buildDockOrchestrationMessage');
-  assert.ok(ensure >= 0 && authorize >= 0 && envelope >= 0, 'direct 编排必须启动 Pi、生成 authority 并构建信封');
-  assert.ok(ensure < authorize && authorize < envelope, '必须先确认 Pi 可用，再冻结 authority；禁止把瞬时 pi_unavailable 带入已恢复的 Pi 回合');
-
-  const managerStart = source.indexOf('// §10.3：direct');
-  const manager = source.slice(managerStart, source.indexOf('const result = await runtime.promptUntilSettled', managerStart));
-  const managerEnsure = manager.indexOf('runtime = await deps.ensurePi(dataRoot);');
-  const managerAuthorize = manager.indexOf('const authorized = await authorize(wrapped);');
-  assert.ok(managerStart >= 0 && managerEnsure >= 0 && managerAuthorize >= 0, '主管实际 direct 路径必须包含 Pi 启动和 authority 冻结');
-  assert.ok(managerEnsure < managerAuthorize, '主管实际 direct 路径同样必须先启动 Pi 再冻结 authority');
-});
-
-test('Studio direct runs default to a deterministic per-task employee session beside the Dock session; explicit override wins', async () => {
-  const source = await readFile(new URL('../src/main/agent-runner.ts', import.meta.url), 'utf8');
-  const studio = source.slice(source.indexOf('export async function startStudioDraft'));
-  assert.match(studio, /'--session', \(input\.sessionFile \|\| path\.join\(path\.dirname\(layout\.sessionFile\), `studio-\$\{task\.id\}\.jsonl`\)\)/, '默认 session 必须是与 Dock 会话同目录的确定性 per-task 员工会话（绝不为 layout.sessionFile）');
-  assert.match(studio, /员工会话隔离：不传则用确定性 per-task 员工会话/, 'doc 注释同步：默认不再回退 dock session');
-  assert.match(studio, /input\.sessionFile \|\| /, '显式 sessionFile 覆盖仍然优先');
-  assert.match(source, /`results-\$\{task\.id\}\.jsonl`/, 'Results 同目录隔离先例保持');
-});

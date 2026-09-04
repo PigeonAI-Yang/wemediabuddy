@@ -1,0 +1,294 @@
+{
+  "initial": {
+    "vals": "0|0|0|0",
+    "height": 196.75,
+    "width": 642,
+    "overviewHtml": "<section class=\"today-overview\" aria-label=\"今日经营概况\"><div class=\"today-overview-head\"><div class=\"today-overview-title\"><h2>今日经营概况</h2><button type=\"button\" class=\"today-overview-updated\" title=\"前往 每日自动化\">更新于 2026/8/24 22:24:33</button></div><div class=\"today-overview-actions\"><button type=\"button\" class=\"secondary-button\" aria-label=\"重新侦察\">重新侦察</button><button type=\"button\" class=\"secondary-button\">查看资料</button><button type=\"button\" class=\"primary-button\">开始今日情报</button></div></div><div class=\"today-overview-metrics\" role=\"group\" aria-label=\"经营指标\"><button type=\"button\" class=\"today-metric\" aria-label=\"今日新资料 0 —\"><span class=\"today-metric-label\">今日新资料</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 6",
+    "computed": "196.75px"
+  },
+  "afterSameDate": {
+    "currentVals": "1|0|0|0",
+    "rect": {
+      "w": 642,
+      "h": 196.75
+    },
+    "sameNode": true,
+    "initialVals": "0|0|0|0",
+    "samplesCount": 177,
+    "distinctVals": [
+      "0|0|0|0",
+      "1|0|0|0"
+    ],
+    "firstChangeIdx": 28,
+    "firstChange": {
+      "t": 1787581476768,
+      "vals": "1|0|0|0",
+      "height": 196.75,
+      "same": true,
+      "delta": true
+    },
+    "dashFlashes": 0,
+    "transientDash": 0,
+    "hasTransientDash": false,
+    "dashSamples": [],
+    "remounts": 0,
+    "metricsCalls": 0,
+    "todayCalls": 0,
+    "heightDelta": 0,
+    "minH": 196.75,
+    "maxH": 196.75,
+    "beforeUnload": 0,
+    "reloads": 0,
+    "lastSamples": [
+      {
+        "t": 1787581479548,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479569,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479588,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479608,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479629,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479649,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479668,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479688,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479708,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581479729,
+        "vals": "1|0|0|0",
+        "height": 196.75,
+        "same": true
+      }
+    ],
+    "firstSamples": [
+      {
+        "t": 1787581476208,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476229,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476248,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476269,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476288,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476308,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476329,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476347,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476368,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      },
+      {
+        "t": 1787581476388,
+        "vals": "0|0|0|0",
+        "height": 196.75,
+        "same": true
+      }
+    ]
+  },
+  "planDateTest": {
+    "results": [
+      {
+        "event": "planDate change to 2026-08-20",
+        "committed": null
+      },
+      {
+        "event": "planDate change to 2026-08-21 during pending A",
+        "committed": null
+      },
+      {
+        "date": "2026-08-21",
+        "value": "value-B-newDate",
+        "seq": 2,
+        "committed": "value-B-newDate",
+        "discarded": false
+      },
+      {
+        "date": "2026-08-20",
+        "value": "value-A-oldDate",
+        "seq": 1,
+        "latestSeq": 2,
+        "discarded": true,
+        "reason": "seq stale"
+      },
+      {
+        "finalCommitted": "value-B-newDate",
+        "finalPlanDate": "2026-08-21"
+      }
+    ],
+    "stalePrevented": true,
+    "currentPlanDate": "2026-08-21"
+  },
+  "finalSnap": {
+    "overviewOuter": "<section class=\"today-overview\" aria-label=\"今日经营概况\"><div class=\"today-overview-head\"><div class=\"today-overview-title\"><h2>今日经营概况</h2><button type=\"button\" class=\"today-overview-updated\" title=\"前往 每日自动化\">更新于 2026/8/24 22:24:36</button></div><div class=\"today-overview-actions\"><button type=\"button\" class=\"secondary-button\" aria-label=\"重新侦察\">重新侦察</button><button type=\"button\" class=\"secondary-button\">查看资料</button><button type=\"button\" class=\"primary-button\">开始今日情报</button></div></div><div class=\"today-overview-metrics\" role=\"group\" aria-label=\"经营指标\"><button type=\"button\" class=\"today-metric\" aria-label=\"今日新资料 1 新增 1\"><span class=\"today-metric-label\">今日新资料</span><span class=\"today-metric-value\">1</span><span class=\"today-metric-change\" data-tone=\"up\">新增 1</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,1\"><polyline fill=\"none\" stroke=\"var(--success)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,2\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"内容机会 0 —\"><span class=\"today-metric-label\">内容机会</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"进行中项目 0 无待处理\"><span class=\"today-metric-label\">进行中项目</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\" data-tone=\"neutral\">无待处理</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"",
+    "overviewMetrics": [
+      {
+        "label": "今日新资料",
+        "val": "1",
+        "change": "新增 1"
+      },
+      {
+        "label": "内容机会",
+        "val": "0",
+        "change": "—"
+      },
+      {
+        "label": "进行中项目",
+        "val": "0",
+        "change": "无待处理"
+      },
+      {
+        "label": "近 7 日发布",
+        "val": "0",
+        "change": "—"
+      }
+    ],
+    "computedOverview": {
+      "display": "grid",
+      "opacity": "1",
+      "height": "196.75px",
+      "transition": "all",
+      "animation": "none"
+    },
+    "rect": {
+      "w": 642,
+      "h": 196.75
+    },
+    "sameNode": true,
+    "url": "http://127.0.0.1:27391/",
+    "viewport": {
+      "w": 1280,
+      "h": 800
+    }
+  },
+  "shotPath": "j:\\PigeonYang\\WeMediaBuddy\\.ai\\frontend-debug-loop\\reports\\verify-today-fix-final.png",
+  "evidence": {
+    "console": [
+      {
+        "type": "debug",
+        "text": "[vite] connecting...",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 732,
+          "column": 8,
+          "lineNumber": 732,
+          "columnNumber": 8
+        }
+      },
+      {
+        "type": "debug",
+        "text": "[vite] connected.",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 826,
+          "column": 11,
+          "lineNumber": 826,
+          "columnNumber": 11
+        }
+      },
+      {
+        "type": "info",
+        "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+        "location": {
+          "url": "http://127.0.0.1:27391/@fs/j:/PigeonYang/WeMediaBuddy/node_modules/.vite/deps/react-dom_client.js?v=6fca6c74",
+          "line": 20102,
+          "column": 53,
+          "lineNumber": 20102,
+          "columnNumber": 53
+        }
+      },
+      {
+        "type": "warning",
+        "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+        "location": {
+          "url": "node:electron/js2c/sandbox_bundle",
+          "line": 1,
+          "column": 102780,
+          "lineNumber": 1,
+          "columnNumber": 102780
+        }
+      }
+    ],
+    "errors": [],
+    "pageerrors": [],
+    "workspace": "j:\\PigeonYang\\WeMediaBuddy\\tests\\e2e\\.runtime\\run-pRV0Jd\\data-root"
+  }
+}

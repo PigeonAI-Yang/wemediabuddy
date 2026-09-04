@@ -230,7 +230,7 @@ function pageDispatchRule(page: string, objectType?: string | null, objectId?: s
   }
   if (page === 'today' || page === 'agents') {
     return `\nmanagerRole=desk`
-      + `\ncontextRule=你在${page === 'today' ? '今日' : '班组'}页。情报采集/方案用 wmb_run_daily_stage、wmb_continue_after_scan 或 wmb_spawn_job(reporter|planner)；写正文仍派 writer 并带 projectId。先 readiness/roster，再派工监工。`;
+      + `\ncontextRule=你在${page === 'today' ? '今日' : '班组'}页。今日选题只用 wmb_run_daily_stage：scan 仅采集，full 完成采集与方案；单项任务可派 reporter/planner，写正文派 writer 并带 projectId。先 readiness/roster，再派工监工。`;
   }
   if (page === 'library') {
     return `\nmanagerRole=desk`

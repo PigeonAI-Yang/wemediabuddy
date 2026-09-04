@@ -34,7 +34,7 @@ test('research projections grant scope is exact two commands and existing scopes
   // 既有 scope 字节不变（零回归）。
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.daily_scan], ['agent_tasks.report_progress', 'sources.upsert_batch']);
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.daily_judge], [
-    'agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plan_item.request_planning', 'plan_item.submit', 'plans.save', 'sources.lane_gate'
+    'agent_tasks.report_progress', 'knowledge.record_batch', 'knowledge.suggestion_create', 'plan_item.submit', 'plans.save', 'sources.lane_gate'
   ]);
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.studio_draft], ['agent_tasks.report_progress', 'content.save_version', 'content_derivative.ensure', 'content_derivative.save_version', 'content_derivative.finalize_version']);
   assert.deepEqual([...AUTOMATIC_TASK_GRANT_SCOPES.results_review], ['agent_tasks.report_progress', 'knowledge.record_batch', 'reviews.save']);

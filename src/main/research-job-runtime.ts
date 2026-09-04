@@ -343,7 +343,7 @@ export async function startResearchJob(input: {
     else input.signal?.addEventListener('abort', onAbort, { once: true });
 
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, researchPiRuntimeArgs({
         piCliPath: await piCliPath(input.dataRootPath),
         sessionFile,

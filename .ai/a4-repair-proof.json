@@ -1,0 +1,27 @@
+{
+  "workspaceId": "a755adf2-4e8d-4abd-b616-4d7934f730f1",
+  "runtimeEpoch": "70a42d37-e110-42ee-a60d-4cd41953f6b1",
+  "backupPath": "J:/PigeonYang/WeMediaBuddy/.ai/a4-backup-invalid.json",
+  "invalidTaskId": "research-d6dc2d38-a341",
+  "invalidClaimId": "bc85eecf-19bc-46b8-bb57-034a7f50c50a",
+  "newTaskId": "0dfca250-6284-402a-b0e0-122dd4ab30ec",
+  "newClaimId": "557ee8d0-efb2-432f-bd09-d59fc19cfbdc",
+  "taskReceiptId": "4fe7897f-792d-4d0f-81c6-99d260fc4834",
+  "taskCommand": "agent_tasks.start",
+  "taskActor": {
+    "type": "scheduler",
+    "id": "research-runner",
+    "label": "research-runner"
+  },
+  "claimReceiptId": "13162a3c-5522-457d-95be-a887ea65035c",
+  "claimCommand": "research_claims.upsert_batch",
+  "claimActor": {
+    "type": "scheduler",
+    "id": "research-runner",
+    "label": "research-runner"
+  },
+  "gateSatisfied": true,
+  "targetProjectUnchanged": true,
+  "publicationUnchanged": true,
+  "createdAt": "2026-08-22T12:38:28.224Z"
+}

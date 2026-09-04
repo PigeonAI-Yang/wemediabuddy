@@ -5,6 +5,13 @@ import './styles-today-overview.css';
 
 type OverviewMetric = { value: number | null; changeText: string; changeTone?: 'up' | 'down' | 'neutral'; series: Array<number | null> };
 type OverviewMetrics = { updatedAt: string; sources: OverviewMetric; opportunities: OverviewMetric; projects: OverviewMetric & { pending: number | null }; publications: OverviewMetric } | null;
+type ProposalLedgerSummary = {
+  total: number;
+  todayReady: number;
+  carriedReady: number;
+  needsAttention: number;
+  onOpen: () => void;
+};
 
 export function TodayCommandBar(props: {
   view: TodayRunView;
@@ -15,8 +22,9 @@ export function TodayCommandBar(props: {
   metrics?: OverviewMetrics;
   onMetricClick?: (id: 'sources' | 'opportunities' | 'projects' | 'publications') => void;
   onDailyAutomation?: () => void;
+  proposalLedger?: ProposalLedgerSummary;
 }): React.JSX.Element {
-  const { view, onPrimary, onSecondary, metrics, onMetricClick, onDailyAutomation } = props;
+  const { view, onPrimary, onSecondary, metrics, onMetricClick, onDailyAutomation, proposalLedger } = props;
   const running = view.step === 'starting' || view.step === 'scanning' || view.step === 'judging';
   const [detailsOpen, setDetailsOpen] = useState(false);
   const ratioPct = view.progress?.ratio != null ? Math.round(Math.max(0, Math.min(1, view.progress.ratio)) * 100) : 0;
@@ -83,6 +91,11 @@ export function TodayCommandBar(props: {
           );
         })}
       </div>
+      {proposalLedger ? <button type="button" className="proposal-ledger-entry" onClick={proposalLedger.onOpen} title="打开选题台账">
+        <span className="proposal-ledger-entry-title">选题台账 · {proposalLedger.total}</span>
+        <span className="proposal-ledger-entry-counts">今日待批准 · {proposalLedger.todayReady} ｜ 跨日待批准 · {proposalLedger.carriedReady} ｜ 待评分/待修复 · {proposalLedger.needsAttention}</span>
+        <span className="proposal-ledger-entry-arrow" aria-hidden="true">›</span>
+      </button> : null}
     </section>
   );
 }

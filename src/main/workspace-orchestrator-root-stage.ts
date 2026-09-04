@@ -1189,18 +1189,15 @@ function appendEvent(
 
 function deadlinePair(
   input: AnyRecord,
-  actor: WorkspaceOrchestratorActor,
+  _actor: WorkspaceOrchestratorActor,
   pair: { utc: string; mono: number },
   kind: "root" | "stage" | "spawn",
 ): { utc: string; mono: number } {
-  const actorLease =
-    actor.leaseExpiresAtMono ?? pair.mono + MAX_ROOT_WALL_CLOCK_MS;
-  const actorGate = actor.gateDeadlineMono ?? actorLease;
   const rootRequested =
     input.rootDeadlineMono === undefined
       ? pair.mono + MAX_ROOT_WALL_CLOCK_MS
       : Number(input.rootDeadlineMono);
-  const rootMono = Math.min(rootRequested, actorLease, actorGate);
+  const rootMono = Math.min(rootRequested, pair.mono + MAX_ROOT_WALL_CLOCK_MS);
   const stageRequested =
     input.stageDeadlineMono === undefined
       ? rootMono

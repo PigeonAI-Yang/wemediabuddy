@@ -1,0 +1,4 @@
+
+> wemedia-buddy@0.3.0 typecheck
+> tsc --noEmit
+

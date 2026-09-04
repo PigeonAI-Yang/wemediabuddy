@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#D9CFF5"/>
+      <stop offset="1" stop-color="#BBA9E8"/>
+    </linearGradient>
+  </defs>
+  <!-- 策划·猫头鹰：尖耳羽 + 半睁眼，慵懒的智者 -->
+  <g id="accessories">
+    <g id="ears">
+      <ellipse cx="330" cy="240" rx="34" ry="80" fill="#BBA9E8" transform="rotate(-18 330 240)"/>
+      <ellipse cx="694" cy="240" rx="34" ry="80" fill="#BBA9E8" transform="rotate(18 694 240)"/>
+    </g>
+  </g>
+  <g id="body">
+    <ellipse cx="512" cy="545" rx="340" ry="320" fill="url(#fur)"/>
+    <ellipse cx="512" cy="510" rx="260" ry="220" fill="#F2EDFB"/>
+  </g>
+  <g id="face">
+    <g id="eyes">
+      <circle cx="400" cy="490" r="36" fill="#3A3238"/>
+      <circle cx="411" cy="479" r="11" fill="#FFFFFF"/>
+      <circle cx="624" cy="490" r="36" fill="#3A3238"/>
+      <circle cx="635" cy="479" r="11" fill="#FFFFFF"/>
+      <!-- 半睁眼：面盘色眼皮盖住上 45% -->
+      <rect x="360" y="446" width="80" height="46" fill="#F2EDFB"/>
+      <rect x="584" y="446" width="80" height="46" fill="#F2EDFB"/>
+    </g>
+    <g id="nose">
+      <path d="M490 540 L534 540 L512 576 Z" fill="#F0B45A"/>
+    </g>
+    <g id="mouth">
+      <path d="M492 616 Q512 626 532 616" stroke="#3A3238" stroke-width="10" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g id="deco"/>
+</svg>

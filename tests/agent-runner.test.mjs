@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -127,27 +127,15 @@ test('planner sees every effective source from the business day after an increme
   }
 });
 
-test('writer prompt goes directly from selected topic to saved article', () => {
+test('ordinary writer prompt stays direct when the one-shot experiment is not assigned', () => {
   const task = { id: 'task-title-test' };
   const core = draftPrompt(task, 'project-1', 'request-1');
   assert.match(core, /直接写一篇完整、自然、可编辑的中文文章/);
+  assert.doesNotMatch(core, /creationExperiment|wmb_report_agent_progress/);
   assert.match(core, /不要再派任务，不要启动其他流程/);
-  assert.match(core, /wmb_save_core_version/);
   assert.doesNotMatch(core, /外部研究|硬门|回执|Owner 锁/);
 });
 
-test('daily IPC submits one durable full intent instead of running collection directly', async () => {
-  const source = await readFile(new URL('../src/main/index.ts', import.meta.url), 'utf8');
-  const start = source.indexOf("ipcMain.handle('agent:start-daily-intelligence'");
-  const end = source.indexOf("ipcMain.handle('agent:start-studio-draft'", start);
-  assert.ok(start >= 0 && end > start);
-  const handler = source.slice(start, end);
-  assert.doesNotMatch(handler, /startWorkspaceDailyIntelligence|withRuntimeWorker/);
-  assert.match(handler, /submitWorkspaceOrchestratorIntent/);
-  assert.match(handler, /producerId: 'today\.agent-start-daily-intelligence'/);
-  assert.match(handler, /action: 'full'/);
-  assert.match(handler, /requestId: `today\.agent-start-daily-intelligence:\$\{runtime\.identity\.workspaceId\}:\$\{businessDate\}`/);
-});
 
 test('Pi task authority prompt carries exact automatic task, grant and lease values', () => {
   const prompt = piTaskAuthorityPrompt({

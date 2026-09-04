@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 44" role="img" width="720" height="44">
+<title>方案 C · 直立胶囊班组 · 32px 顶栏</title>
+<style>text{font-family:ui-sans,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}</style>
+<rect width="720" height="44" fill="#FAFAF8" rx="10" stroke="#E8E0D8"/>
+<text x="12" y="14" font-size="7.5" fill="#888" font-weight="700">32px 顶栏 · C · 今日值班摘要</text>
+<rect x="12" y="18" width="696" height="20" rx="10" fill="#fff" stroke="#DDD6CF"/>
+<g transform="translate(20,20)"><circle cx="14" cy="14" r="12" fill="#111"/><rect x="7" y="6" width="14" height="16" rx="7" fill="#111"/></g>
+<g transform="translate(48,20)"><circle cx="14" cy="14" r="12" fill="#111"/><ellipse cx="10" cy="6" rx="2.2" ry="5" fill="#111"/><ellipse cx="18" cy="6" rx="2.2" ry="5" fill="#111"/></g>
+<g transform="translate(76,20)"><circle cx="14" cy="14" r="12" fill="#111"/><path d="M8 5 L9 2 L11 5 Z" fill="#111"/><path d="M17 5 L19 2 L21 5 Z" fill="#111"/></g>
+<g transform="translate(104,20)"><circle cx="14" cy="14" r="12" fill="#111"/><path d="M8 6 L9 2 L11 6 Z" fill="#111"/><path d="M17 6 L19 2 L21 6 Z" fill="#111"/></g>
+<g transform="translate(132,20)"><circle cx="14" cy="14" r="12" fill="#111"/><path d="M5 10 Q14 5 23 10" fill="#111"/></g>
+<text x="170" y="32" font-size="7.5" fill="#666">熊  兔  鸮  猫  刺猬 · 32px 轮廓互分</text>
+<rect x="340" y="22" width="48" height="12" rx="6" fill="#111"/><text x="364" y="30.5" text-anchor="middle" font-size="6" fill="#fff" font-weight="700">去批选题</text>
+</svg>

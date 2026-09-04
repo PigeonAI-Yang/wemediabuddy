@@ -293,37 +293,3 @@ test('WMB-5239 IPC no data-root: honest empty status; mutations reject fail-clos
   );
 });
 
-// ============================================================
-// 6. WMB-5239 渲染端导航接缝：事件常量 + main.tsx 深链监听；View/路由零新增
-// ============================================================
-
-test('WMB-5239 navigation seam: shared event constant + main.tsx deep-link listener; no View/route additions', async () => {
-  const appTypes = await readFile(APP_TYPES_PATH, 'utf8');
-  const mainTsx = await readFile(MAIN_TSX_PATH, 'utf8');
-
-  // 事件常量单一真源（app-types），main.tsx 经常量监听（不内联字符串）。
-  assert.ok(appTypes.includes(`export const WMB_NAVIGATE_WIKI_OBJECT_EVENT = 'wmb-navigate-wiki-object' as const;`), 'app-types 必须导出深链事件常量');
-  assert.ok(mainTsx.includes("WMB_NAVIGATE_WIKI_OBJECT_EVENT } from './app-types'"), 'main.tsx 必须从 app-types 导入事件常量');
-  assert.ok(mainTsx.includes('window.addEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT'), 'main.tsx 必须经常量注册监听');
-  assert.ok(mainTsx.includes("window.removeEventListener(WMB_NAVIGATE_WIKI_OBJECT_EVENT"), '监听必须可退订');
-  assert.ok(!mainTsx.includes("'wmb-navigate-wiki-object'"), 'main.tsx 不得内联事件字符串');
-
-  // 三分支深链：topic→openTopic(objectId)；source→libraryFocusSourceId+navigate(library)；object→navigate(canvas)。
-  // 事件契约 detail={payload}（wiki-discovery 派发端已按此实现；监听端必须解包）。
-  assert.ok(mainTsx.includes('CustomEvent<{ payload?: KnowledgeDeepLinkPayload }>'), '监听必须按 detail.payload 包装契约类型化');
-  assert.ok(mainTsx.includes('const payload = detail?.payload;'), '必须解包 detail.payload（缺 detail 时 fail-closed）');
-  assert.ok(mainTsx.includes("payload.targetType === 'topic_wiki' && payload.objectId"), 'topic_wiki 分支必须存在');
-  assert.ok(mainTsx.includes("openTopic(payload.objectId)"), 'topic 必须按稳定 objectId 定位');
-  assert.ok(mainTsx.includes("payload.targetType === 'source' && payload.objectId"), 'source 分支必须存在');
-  assert.ok(mainTsx.includes("libraryFocusSourceId"), 'source 必须写 libraryFocusSourceId');
-  assert.ok(mainTsx.includes("payload.targetType === 'knowledge_object'"), 'knowledge_object 分支必须存在');
-  assert.ok(mainTsx.includes("navigate('canvas')"), '知识对象降级到知识网络');
-  assert.ok(mainTsx.includes('navigate(\'library\')'), 'source 导航必须切到资料库');
-
-  // 顶层路由/View 联合零新增：11 个既有 View 值不变，无 wiki/knowledge 新值。
-  const viewDecl = "export type View = 'today' | 'agents' | 'discover' | 'proposals' | 'topic' | 'library' | 'canvas' | 'studio' | 'publish' | 'results' | 'settings';";
-  assert.ok(appTypes.includes(viewDecl), 'View 联合必须保持不变（零新增顶层路由）');
-  const viewsDecl = "export const views: View[] = ['today', 'agents', 'discover', 'proposals', 'topic', 'library', 'canvas', 'studio', 'publish', 'results', 'settings'];";
-  assert.ok(appTypes.includes(viewsDecl), 'views 清单必须保持不变');
-  assert.doesNotMatch(appTypes, /'wiki'|'knowledge'/, '不得新增 wiki/knowledge 顶层路由值');
-});

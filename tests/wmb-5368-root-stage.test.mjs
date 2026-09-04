@@ -359,6 +359,10 @@ test("WMB-5368 T3 root admission atomically creates root, F claim, reserved Repo
       "ws-root-admission",
     );
     assert.equal(admitted.status, "admitted");
+    assert.ok(
+      Number(admitted.root.root_deadline_mono) > Number(actor.leaseExpiresAtMono),
+      'root wall-clock deadline must not collapse to the renewable Actor lease',
+    );
     assert.equal(count(database, "daily_orchestration_roots"), 1);
     assert.equal(count(database, "daily_stage_claims"), 1);
     assert.equal(

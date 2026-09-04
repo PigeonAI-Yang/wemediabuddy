@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#FFC8D2"/>
+      <stop offset="1" stop-color="#F5A8BA"/>
+    </linearGradient>
+  </defs>
+  <!-- 写手·猫：尖耳 + 耳后铅笔，文静专注 -->
+  <g id="accessories">
+    <g id="pencil" transform="rotate(18 754 220)">
+      <rect x="738" y="140" width="32" height="170" rx="10" fill="#FFD166"/>
+      <path d="M738 140 L754 106 L770 140 Z" fill="#FFE8CF"/>
+      <path d="M750 124 L754 106 L758 124 Z" fill="#3A3238"/>
+    </g>
+    <g id="ears">
+      <path d="M255 360 Q270 190 395 250 Q360 345 255 360 Z" fill="#FFC8D2"/>
+      <path d="M769 360 Q754 190 629 250 Q664 345 769 360 Z" fill="#FFC8D2"/>
+      <path d="M296 338 Q306 246 366 276 Q344 332 296 338 Z" fill="#FFE8CF"/>
+      <path d="M728 338 Q718 246 658 276 Q680 332 728 338 Z" fill="#FFE8CF"/>
+    </g>
+  </g>
+  <g id="body">
+    <ellipse cx="512" cy="560" rx="340" ry="300" fill="url(#fur)"/>
+  </g>
+  <g id="face">
+    <g id="eyes">
+      <circle cx="400" cy="490" r="30" fill="#3A3238"/>
+      <circle cx="410" cy="479" r="10" fill="#FFFFFF"/>
+      <circle cx="624" cy="490" r="30" fill="#3A3238"/>
+      <circle cx="634" cy="479" r="10" fill="#FFFFFF"/>
+    </g>
+    <g id="nose">
+      <path d="M494 552 L530 552 L512 576 Z" fill="#E8809A"/>
+    </g>
+    <g id="mouth">
+      <path d="M484 606 Q512 618 540 606" stroke="#3A3238" stroke-width="12" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g id="deco"/>
+</svg>

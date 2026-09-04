@@ -1,0 +1,37 @@
+{
+  "invalidTask": {
+    "id": "research-d6dc2d38-a341",
+    "intent": "research",
+    "business_date": "2026-08-22",
+    "status": "succeeded",
+    "phase": "done",
+    "pi_session_id": null,
+    "context_refs_json": "{\"projectId\":\"d6dc2d38-8013-4e98-8320-6e3185586446\",\"research\":{\"gapId\":\"gap-d6dc2d38-8013-4e98-8320-6e3185586446\"}}",
+    "result_refs_json": "{}",
+    "progress_json": "{}",
+    "checkpoint_json": "{}",
+    "events_json": "[]",
+    "control_action": null,
+    "heartbeat_at": null,
+    "error_code": null,
+    "error_message": null,
+    "created_at": "2026-08-22T12:22:48.848Z",
+    "updated_at": "2026-08-22T12:22:48.848Z",
+    "finished_at": null
+  },
+  "invalidClaim": {
+    "id": "bc85eecf-19bc-46b8-bb57-034a7f50c50a",
+    "task_id": "research-d6dc2d38-a341",
+    "claim_key": "k1",
+    "claim_text": "事实声明：武大杨景媛论文涉AI疑点需核验学术规范",
+    "claim_type": "fact",
+    "status": "supported",
+    "verdict_reason": "证据充分",
+    "evidence_source_ids_json": "[]",
+    "needs_time_excerpt": 0,
+    "verified_at": "2026-08-22T12:22:48.848Z",
+    "created_at": "2026-08-22T12:22:48.848Z",
+    "updated_at": "2026-08-22T12:22:48.848Z"
+  },
+  "backedAt": "2026-08-22T12:38:28.147Z"
+}

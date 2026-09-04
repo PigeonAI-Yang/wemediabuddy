@@ -1,0 +1,42 @@
+{
+  "domAssertions": {
+    "startProductionAbsent": true,
+    "approvedStatusAbsent": true,
+    "emptyStripAbsent": true,
+    "toolbarVisible": true,
+    "bodyVisible": true,
+    "consoleErrors": 0
+  },
+  "screenshotPath": "J:\\PigeonYang\\WeMediaBuddy\\.ai\\frontend-debug-loop\\reports\\2026-08-24-studio-production-row-removal.png",
+  "dom": {
+    "hasStartProduction": false,
+    "hasApprovedStatus": false,
+    "hasBanner": false,
+    "hasAdvanceButton": false,
+    "toolbarVisible": true,
+    "bodyVisible": true,
+    "bannerRect": null,
+    "toolbarRect": {
+      "height": 87,
+      "top": 128.5
+    }
+  },
+  "evidence": {
+    "console": [],
+    "errors": [],
+    "pageerrors": [],
+    "steps": [],
+    "crashed": false,
+    "closed": false,
+    "electronStdout": "",
+    "electronStderr": "",
+    "launch": {
+      "mode": "packaged",
+      "rendererShape": "file",
+      "devServerRequired": false,
+      "devServerPort": null
+    }
+  },
+  "workspaceId": "f4fbaac2-5198-4328-ab1d-b761923c5504",
+  "runtimeDir": "J:\\PigeonYang\\WeMediaBuddy\\tests\\e2e\\.runtime\\run-PygfBE"
+}

@@ -863,7 +863,6 @@ function App(): React.JSX.Element {
         {view === "proposals" && (
           <ProposalsView
             planDate={planDate}
-            openStudio={openStudio}
             openTopic={openTopic}
             onOpenProject={(projectId) => {
               setStudioSelectedId(projectId);

@@ -123,23 +123,36 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
   const [overviewMetrics, setOverviewMetrics] = useState<OverviewMetrics>(null);
   const overviewSeqRef = useRef(0);
   const overviewPlanDateRef = useRef(planDate);
-  const runView = useMemo(() => deriveTodayRunView({
-    task,
-    localStarting: startingRef.current,
-    hasTodayPlan: Boolean(todayPlan),
-    hasRecentPlan: !todayPlan && displayItems.length > 0,
-    opportunityCount: displayItems.length,
-    scoringPendingCount,
-    scoringActive: scoringPendingCount > 0 && task?.status === 'running' && ['judging_opportunities', 'synthesizing', 'validating'].includes(task?.phase ?? ''),
-    scoringError: scoringPendingCount > 0 && task && ['failed', 'partial', 'interrupted'].includes(task.status ?? '') ? (task.errorMessage ?? null) : null,
-    sssCount,
-    sourcesTotal: todaySourcesTotal,
-    studioActive,
-    piConfigured,
-    channelsSummary: intelligenceChannels,
-    controlPending: controlPending != null,
-    controlPendingAction: controlPending
-  }), [task, todayPlan, latestPlan, displayItems.length, scoringPendingCount, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running, controlPending]);
+  const runView = useMemo(() => {
+    const view = deriveTodayRunView({
+      task,
+      localStarting: startingRef.current,
+      hasTodayPlan: Boolean(todayPlan),
+      hasRecentPlan: !todayPlan && displayItems.length > 0,
+      opportunityCount: displayItems.length,
+      scoringPendingCount,
+      scoringActive: scoringPendingCount > 0 && task?.status === 'running' && ['judging_opportunities', 'synthesizing', 'validating'].includes(task?.phase ?? ''),
+      scoringError: scoringPendingCount > 0 && task && ['failed', 'partial', 'interrupted'].includes(task.status ?? '') ? (task.errorMessage ?? null) : null,
+      sssCount,
+      sourcesTotal: todaySourcesTotal,
+      studioActive,
+      piConfigured,
+      channelsSummary: intelligenceChannels,
+      controlPending: controlPending != null,
+      controlPendingAction: controlPending
+    });
+    const runnable = view.primaryCta.kind === 'start' || view.primaryCta.kind === 'continue' || view.primaryCta.kind === 'retry';
+    return {
+      ...view,
+      ...(runnable ? {
+        headline: '完整链路已暂停，请分步处理',
+        detail: '先整理资料，再到选题台账确认方向，最后进入创作。',
+        primaryCta: { kind: 'none' as const, label: '' }
+      } : {}),
+      secondaryCtas: view.secondaryCtas.filter((entry) => entry.id !== 'restart' && entry.id !== 'continue'),
+      blockers: view.blockers.filter((entry) => entry.action !== 'retry')
+    };
+  }, [task, todayPlan, latestPlan, displayItems.length, scoringPendingCount, sssCount, todaySourcesTotal, studioActive, piConfigured, intelligenceChannels, running, controlPending]);
 
   useEffect(() => {
     const asOf = today?.recommendation?.context.asOf;
@@ -446,92 +459,16 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [detailSource?.id]);
 
-  const startIntelligence = async () => {
-    if (running || startingRef.current) return;
-    if (runView.primaryCta.confirm && !await appConfirm({ title: '开始今日情报', message: runView.primaryCta.confirm, confirmLabel: '继续' })) return;
-    startingRef.current = true;
-    setRunning(true);
-    setTask((prev) => {
-      const next = prev?.status === 'running' ? prev : { status: 'running', phase: 'starting', progress: {}, events: [] } as DailyTaskSnapshot;
-      writeTodayRunCache({ planDate, task: next, running: true });
-      return next;
-    });
-    try {
-      const businessDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-      const result = await window.wmb.startDailyIntelligence({ businessDate }) as {
-        ok: boolean;
-        data?: { task?: DailyTaskSnapshot; reused?: boolean };
-        error?: { message?: string } | null;
-      };
-      if (!result.ok) {
-        startingRef.current = false;
-        setRunning(false);
-        setTask({ status: 'failed', errorMessage: result.error?.message || '今日情报失败' });
-        return;
-      }
-      const data = result.data as {
-        task?: DailyTaskSnapshot;
-        managerTask?: { id: string; checkpoint?: { summary?: string; status?: string; phase?: string }; status?: string };
-        focusDialog?: boolean;
-        action?: string;
-        reused?: boolean;
-      } | undefined;
-      if (data?.focusDialog) {
-        window.dispatchEvent(new CustomEvent('wmb:focus-manager-dialog', {
-          detail: { managerTaskId: data.managerTask?.id, action: data.action }
-        }));
-      }
-      if (data?.action === 'focus_existing') {
-        // Serial lock: do not show a second run; surface manager summary on the command bar.
-        startingRef.current = false;
-        if (data.task) {
-          setRunning(data.task.status === 'running');
-          setTask(data.task);
-        } else if (data.managerTask) {
-          const managerProjection = projectManagerTaskForToday(data.managerTask, null);
-          setRunning(managerProjection.running);
-          setTask(managerProjection.task);
-        }
-        refresh();
-        return;
-      }
-      if (data?.task) {
-        setTask(data.task);
-        startingRef.current = false;
-      }
-      refresh();
-    } catch (error) {
-      startingRef.current = false;
-      setRunning(false);
-      setTask({ status: 'failed', errorMessage: error instanceof Error ? error.message : String(error) });
-    } finally {
-      window.setTimeout(() => refresh(), 300);
-    }
-  };
 
   const onPrimary = () => {
     if (runView.primaryCta.kind === 'open_manager') { openProposals?.(); return; }
-    if (runView.primaryCta.kind === 'open_studio') { openStudio(); return; }
-    if (runView.primaryCta.kind === 'none') return;
-    if (runView.primaryCta.label === '对话中 · 查看进度' || runView.headline === '主管编排中') {
-      window.dispatchEvent(new CustomEvent('wmb:focus-manager-dialog', { detail: { action: 'focus_existing' } }));
-      return;
-    }
-    void startIntelligence();
+    if (runView.primaryCta.kind === 'open_studio') openStudio();
   };
 
   const onSecondary = (id: TodaySecondaryId) => {
     if (id === 'view_sources') { openLibrary(); return; }
     if (id === 'refresh') { refresh(); return; }
     if (id === 'open_studio') { openStudio(); return; }
-    if (id === 'continue') { void startIntelligence(); return; }
-    if (id === 'restart') {
-      void (async () => {
-        if (!await appConfirm({ title: '重新侦察', message: '重新侦察会用新结果替换今日方案，继续？', confirmLabel: '继续侦察' })) return;
-        await startIntelligence();
-      })();
-      return;
-    }
     if (id === 'save_partial') {
       const taskId = task?.id;
       if (!taskId) {
@@ -592,7 +529,6 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
   };
 
   const onBlocker = (action: TodayBlockerAction) => {
-    if (action === 'retry') { void startIntelligence(); return; }
     if (action === 'open_settings_browser') { openSettings?.('browser'); return; }
     if (action === 'open_settings_channels') { openSettings?.('channels'); return; }
     if (action === 'open_settings_ai') { openSettings?.('ai'); }
@@ -631,12 +567,14 @@ export function TodayView({ today, refresh, openStudio, openLibrary, openResults
           else if (id === 'publications') openResults?.();
         }}
         onDailyAutomation={() => openSettings?.('daily-automation' as SettingsSectionId)}
+        proposalLedger={openProposals && recommendation ? {
+          total: recommendation.counts.todayReady + recommendation.counts.carriedReady,
+          todayReady: recommendation.counts.todayReady,
+          carriedReady: recommendation.counts.carriedReady,
+          needsAttention: recommendation.counts.scoringPending + recommendation.counts.invalid,
+          onOpen: openProposals
+        } : undefined}
       />
-      {openProposals && recommendation ? <button type="button" className="proposal-ledger-entry" onClick={() => openProposals()} title="打开选题台账">
-        <span className="proposal-ledger-entry-title">选题台账 · {recommendation.counts.todayReady + recommendation.counts.carriedReady}</span>
-        <span className="proposal-ledger-entry-counts">今日待批准 · {recommendation.counts.todayReady} ｜ 跨日待批准 · {recommendation.counts.carriedReady} ｜ 待评分/待修复 · {recommendation.counts.scoringPending + recommendation.counts.invalid}</span>
-        <span className="proposal-ledger-entry-arrow" aria-hidden="true">›</span>
-      </button> : null}
       <div className="today-grid">
         <div className="today-opps">
           {primary ? <>

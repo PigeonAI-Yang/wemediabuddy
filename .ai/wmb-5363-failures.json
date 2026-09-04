@@ -1,0 +1,410 @@
+[
+  {
+    "Location": "tests\\agent-runner.test.mjs:15:1",
+    "Name": "daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery (709.5035ms)"
+  },
+  {
+    "Location": "tests\\agent-tasks.test.mjs:52:1",
+    "Name": "agent task completion requires business object readback (725.1349ms)"
+  },
+  {
+    "Location": "tests\\content-scale-concurrency.test.mjs:8:1",
+    "Name": "1001 projects page with fixed query counts and reject stale core-version writes (2298.2958ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:95:1",
+    "Name": "one committed channel success and one channel failure finish as partial without rollback (687.7491ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:123:1",
+    "Name": "a later lane/runtime failure preserves trustworthy channel results as partial (667.5806ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:149:1",
+    "Name": "all blocked sources annotate absence but never block judgment (694.3621ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:227:1",
+    "Name": "a thrown orchestration scan records an accurate durable failure instead of claiming success (667.9667ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:250:1",
+    "Name": "late X results write neither cached nor source data after binding revision changes, while another source continues (668.902ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:289:1",
+    "Name": "identical channel fixtures keep receipts and source items inside their own data roots (1368.0097ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:316:1",
+    "Name": "a nonempty plan with a missing source remains rejected after a truthful scan (672.0947ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:427:1",
+    "Name": "a duplicate start observes a preflight task without scanning the same source twice (662.8033ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-channels.test.mjs:496:1",
+    "Name": "scanOnly finishes when nothing new lands, and judgeOnly routes straight to the judgment runner (689.5839ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-preflight.test.mjs:52:1",
+    "Name": "X preflight failure records per-source failed receipts and official_web still scans (partial) (705.0473ms)"
+  },
+  {
+    "Location": "tests\\daily-intelligence-preflight.test.mjs:88:1",
+    "Name": "all X sources preflight-failed aggregate failed and continue on inventory (needs_user/failed 聚合) (669.1687ms)"
+  },
+  {
+    "Location": "tests\\eval-029-fixtures.test.mjs:16:1",
+    "Name": "EVAL-029 fixture survives two bounded cold processes without changing its complete parent (1642.4006ms)"
+  },
+  {
+    "Location": "tests\\eval-029-fixtures.test.mjs:158:1",
+    "Name": "verify rejects a manifest outside the marked parent (1501.1746ms)"
+  },
+  {
+    "Location": "tests\\eval-029-fixtures.test.mjs:173:1",
+    "Name": "verify deep-checks the stable manifest envelope even when its strict hash is recomputed (1462.925ms)"
+  },
+  {
+    "Location": "tests\\eval-029-fixtures.test.mjs:195:1",
+    "Name": "complete parent hash rejects an unexpected parent-level sibling (1481.7009ms)"
+  },
+  {
+    "Location": "tests\\eval-029-fixtures.test.mjs:209:1",
+    "Name": "failed staged materialization restores an empty retryable parent (2337.0754ms)"
+  },
+  {
+    "Location": "tests\\ferment-aftershock-no-topic.test.mjs:74:1",
+    "Name": "topic-null carry gets aftershock from new same-story source by title bigram (627.0002ms)"
+  },
+  {
+    "Location": "tests\\ferment-aftershock-no-topic.test.mjs:98:1",
+    "Name": "topic-null carry gets aftershock from same-story plan item via source overlap (729.5292ms)"
+  },
+  {
+    "Location": "tests\\ferment-aftershock-no-topic.test.mjs:140:1",
+    "Name": "topic-bound carry keeps the topic-path aftershock (existing semantics preserved) (725.3378ms)"
+  },
+  {
+    "Location": "tests\\ferment-aftershock-no-topic.test.mjs:162:1",
+    "Name": "migration v45 adds story_key/stage and refresh populates them (700.5012ms)"
+  },
+  {
+    "Location": "tests\\ferment-aftershock-no-topic.test.mjs:194:1",
+    "Name": "refresh backfills story_key for rows that lost it (legacy/直写行) (643.9301ms)"
+  },
+  {
+    "Location": "tests\\ferment.test.mjs:45:1",
+    "Name": "yesterday multi-day plan projects topic onto continuous-attention rail (677.5449ms)"
+  },
+  {
+    "Location": "tests\\ferment.test.mjs:97:1",
+    "Name": "dismissing plan-item carry removes topic from rail when no other signal (682.5803ms)"
+  },
+  {
+    "Location": "tests\\intelligence-channel-ui.test.mjs:62:1",
+    "Name": "daily run lifecycle is click-current, task-scoped, and returns durable partial (2.7784ms)"
+  },
+  {
+    "Location": "tests\\intelligence-channel-ui.test.mjs:81:1",
+    "Name": "Today default run freezes all enabled sources before daily scanning (669.589ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:77:1",
+    "Name": "pool unions current plans across dates and excludes adopted, dismissed and timeliness-expired items (656.5251ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:126:1",
+    "Name": "publish within 24h demotes same-topic opportunities to the tail with annotation (645.7336ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:168:1",
+    "Name": "story variants with overlapping sources merge into the newest carry row (737.5971ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:200:1",
+    "Name": "disjoint stories never merge (675.1274ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:212:1",
+    "Name": "similar titles without shared sources merge into one story at save time (662.5453ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:244:1",
+    "Name": "listFermentingBundle only keeps cards with why-watching signal (690.1549ms)"
+  },
+  {
+    "Location": "tests\\opportunity-pool.test.mjs:273:1",
+    "Name": "carry rows in expired state are excluded from the pool (664.6833ms)"
+  },
+  {
+    "Location": "tests\\persistent-topic-fix-20260825.test.mjs:47:1",
+    "Name": "scored approved can promote to fermenting (638.359ms)"
+  },
+  {
+    "Location": "tests\\persistent-topic-fix-20260825.test.mjs:104:1",
+    "Name": "equivalent theses dedupe across active persistent topics and new promotions (657.0922ms)"
+  },
+  {
+    "Location": "tests\\persistent-topic-fix-20260825.test.mjs:137:1",
+    "Name": "reversible retirement preserves records and fermenting excludes (659.2055ms)"
+  },
+  {
+    "Location": "tests\\pi-operator-skill.test.mjs:11:1",
+    "Name": "Pi operator Skill documents exactly the registered WMB tools and hard boundaries (8.7438ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-foundation.test.mjs:264:1",
+    "Name": "saveCurrentPlan creates ready_for_review only, fallback batch rollback, no direct approved (629.7251ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-migration.test.mjs:230:1",
+    "Name": "WMB-5349 composite index on (planning_status, plan_id, sort_order) and version order (630.0994ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-studio.test.mjs:17:1",
+    "Name": "WMB-5353 draft and rejected expose no Writer/start-production entry (5.166ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-studio.test.mjs:33:1",
+    "Name": "WMB-5353 ready_for_review clearly awaits approval (3.8183ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-studio.test.mjs:44:1",
+    "Name": "WMB-5353 approved invokes fixed plan_item.advance idempotently (2.3333ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-studio.test.mjs:87:1",
+    "Name": "WMB-5353 real task/version states remain truthful (1.661ms)"
+  },
+  {
+    "Location": "tests\\planning-stage-studio.test.mjs:106:1",
+    "Name": "WMB-5353 preserves long-body scroll and 44px product ledger contract (3.7857ms)"
+  },
+  {
+    "Location": "tests\\planning.test.mjs:5:1",
+    "Name": "only one current plan per day and every item cites stored sources (3934.3039ms)"
+  },
+  {
+    "Location": "tests\\proposals-ledger.test.mjs:74:1",
+    "Name": "empty history returns zero counts (656.3392ms)"
+  },
+  {
+    "Location": "tests\\proposals-ledger.test.mjs:83:1",
+    "Name": "classifies today shelved adopted dismissed expired and keeps empty current from blanking open items (657.0337ms)"
+  },
+  {
+    "Location": "tests\\proposals-ledger.test.mjs:165:1",
+    "Name": "today tab matches opportunity pool subset for same day (702.0762ms)"
+  },
+  {
+    "Location": "tests\\proposals-ledger.test.mjs:184:1",
+    "Name": "offset pagination returns hasMore and distinct pages (663.4782ms)"
+  },
+  {
+    "Location": "tests\\proposals-ledger.test.mjs:218:1",
+    "Name": "restoreDismissedProposal returns item to open ledger (692.2183ms)"
+  },
+  {
+    "Location": "tests\\task-grants.test.mjs:17:1",
+    "Name": "task grants expose the canonical internal business command IDs (1.5458ms)"
+  },
+  {
+    "Location": "tests\\task-grants.test.mjs:317:1",
+    "Name": "ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers (665.9184ms)"
+  },
+  {
+    "Location": "tests\\today-start-flash.test.mjs:130:1",
+    "Name": "no timer/debounce/reload or duplicate spawn introduced in today-view (4.4554ms)"
+  },
+  {
+    "Location": "tests\\wan30-backend.test.mjs:76:1",
+    "Name": "missing score persists pending while malformed scored reasons are rejected (621.1511ms)"
+  },
+  {
+    "Location": "tests\\wmb-5141-job-boundary.test.mjs:539:1",
+    "Name": "T11 重启可重建：context_refs_json 跨重启完整指认并重建原请求 (677.4228ms)"
+  },
+  {
+    "Location": "tests\\wmb-5142-instance-projection.test.mjs:298:1",
+    "Name": "T5 重启历史可读 + 续派输入可建：jobId 指认、重建原 RoleJobRequest、再 spawn 成功 (785.1248ms)"
+  },
+  {
+    "Location": "tests\\wmb-5142-instance-projection.test.mjs:561:1",
+    "Name": "T11 真实续派（配置缺失 reuse 同任务）：重复卡按任务退出，同任务最多一个活动实例 (706.7671ms)"
+  },
+  {
+    "Location": "tests\\wmb-5142-instance-projection.test.mjs:594:1",
+    "Name": "T12 配置缺失前置卡带工单合同：重启后持久重建仍一张卡（修复重启即丢） (2368.7606ms)"
+  },
+  {
+    "Location": "tests\\wmb-5142-instance-projection.test.mjs:673:1",
+    "Name": "T14 补配置续派（处理）：旧卡/旧任务关闭退出，新实例唯一 (1200.4723ms)"
+  },
+  {
+    "Location": "tests\\wmb-5145-crew-multi-instance-acceptance.test.mjs:629:1",
+    "Name": "A13 历史可重建与一键续派：重启后从 context_refs_json 指认并重建原请求，一键续派可再次 spawn (720.0536ms)"
+  },
+  {
+    "Location": "tests\\wmb-5145-crew-multi-instance-acceptance.test.mjs:682:1",
+    "Name": "A14 兼容不变量：schema 零改动、五角色固定、核心能力零漂移、新增能力不扰动交集/红线 (658.1839ms)"
+  },
+  {
+    "Location": "tests\\wmb-5170-research-gate.test.mjs:32:1",
+    "Name": "research projections grant scope is exact two commands and existing scopes are untouched (1.7996ms)"
+  },
+  {
+    "Location": "tests\\wmb-5170-research-gate.test.mjs:45:1",
+    "Name": "research projections intent capability wiring maps research to cap.research only (0.2335ms)"
+  },
+  {
+    "Location": "tests\\wmb-5171-research-storage.test.mjs:337:1",
+    "Name": "WMB-5171: research context refs round-trip losslessly through agent_tasks and rebuild the exact RoleJobRequest (625.2192ms)"
+  },
+  {
+    "Location": "tests\\wmb-5237-media-bindings.test.mjs:258:1",
+    "Name": "WMB-5237 media: migration 62 run hook backfills legacy core tokens and platform assetIds (X first image cover) (243.8617ms)"
+  },
+  {
+    "Location": "tests\\wmb-5241-ingest-query-chain.test.mjs:209:1",
+    "Name": "WMB-5241 ingest/query chain on one real workspace (SQLite readback) (856.9475ms)"
+  },
+  {
+    "Location": "tests\\wmb-5331-zhihu-hot.test.mjs:267:1",
+    "Name": "Zhihu category collection stays background-only and refresh reuses the scan receipt path (1.8418ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:42:1",
+    "Name": "six dimensional caps and deterministic total (652.2154ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:61:1",
+    "Name": "fixed inputs stably hit all three routes (automatic/boundary/rejected) (706.0814ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:80:1",
+    "Name": "hard-risk codes reject-before-score preserves raw snapshot (625.5429ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:98:1",
+    "Name": "30-day duplicate detection edge (29d duplicate, 31d not duplicate, newValue boundary) (650.2213ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:139:1",
+    "Name": "quota selection: automatic first; boundary fills remaining; quota-full never over-allocates (665.5722ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:170:1",
+    "Name": "workspace-configurable thresholds and daily target count via Settings route (656.8674ms)"
+  },
+  {
+    "Location": "tests\\wmb-5332-scoring.test.mjs:191:1",
+    "Name": "Proposal Ledger exposes per-dimension evidence/reasons and hard risks (679.9681ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:53:1",
+    "Name": "idempotent ensure: repeated ensure creates no duplicate target (701.9381ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:69:1",
+    "Name": "default 2 / configured quota respected (shortage truthful, no fake) (682.2267ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:104:1",
+    "Name": "retry fills an existing shortage after sources arrive without duplicating targets (690.9001ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:124:1",
+    "Name": "illegal transition is rejected and revision conflict detected (707.5725ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:140:1",
+    "Name": "skip/replace semantics: quota respected and auditability preserved (710.4384ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:169:1",
+    "Name": "carry once: second carry fails (677.5915ms)"
+  },
+  {
+    "Location": "tests\\wmb-5333-daily-cycle.test.mjs:186:1",
+    "Name": "completion only with exact article+ready-script; article-only and script-only remain incomplete; stale script fails (692.0498ms)"
+  },
+  {
+    "Location": "tests\\wmb-5334-yesterday-today-ui.test.mjs:12:1",
+    "Name": "Yesterday iteration block loads getYesterdayIteration for current business date (1.6948ms)"
+  },
+  {
+    "Location": "tests\\wmb-5334-yesterday-today-ui.test.mjs:22:1",
+    "Name": "Exposes both iteration kinds with Chinese labels (0.4124ms)"
+  },
+  {
+    "Location": "tests\\wmb-5334-yesterday-today-ui.test.mjs:100:1",
+    "Name": "TodayYesterdayIteration remains keyboard accessible and Today-embedded (0.419ms)"
+  },
+  {
+    "Location": "tests\\wmb-5335-article.test.mjs:52:1",
+    "Name": "gate unmet yields no body and blocked state (725.5618ms)"
+  },
+  {
+    "Location": "tests\\wmb-5335-article.test.mjs:77:1",
+    "Name": "gate satisfied yields final article in same project and article_ready (677.1854ms)"
+  },
+  {
+    "Location": "tests\\wmb-5335-article.test.mjs:102:1",
+    "Name": "version history remains append-only (670.4331ms)"
+  },
+  {
+    "Location": "tests\\wmb-5335-article.test.mjs:129:1",
+    "Name": "target becomes article_ready only after finalize, not just drafting (672.1982ms)"
+  },
+  {
+    "Location": "tests\\wmb-5335-article.test.mjs:149:1",
+    "Name": "repeated ensure does not duplicate identity (idempotency) (680.1343ms)"
+  },
+  {
+    "Location": "tests\\wmb-5336-content-derivative.test.mjs:49:1",
+    "Name": "adaptive script versions are immutable, stale on article change, then realign and complete (653.535ms)"
+  },
+  {
+    "Location": "tests\\wmb-5336-content-derivative.test.mjs:92:1",
+    "Name": "video_script Writer task derives exact readback and adaptive prompt (11.3989ms)"
+  },
+  {
+    "Location": "tests\\wmb-5337-orchestration.test.mjs:45:1",
+    "Name": "production factory A/B/D/E invoked via shared orchestrator (real primitive spies) (695.8374ms)"
+  },
+  {
+    "Location": "tests\\wmb-5337-today-orchestration-ui.test.mjs:60:1",
+    "Name": "TodayDailyCycle is mounted on Today page and remains keyboard accessible (1.3939ms)"
+  },
+  {
+    "Location": "tests\\wmb-5347-writer-research-mode.test.mjs:75:1",
+    "Name": "WMB-5347: draftPrompt prohibited 为受限写作、无 must dispatch、含观点标注 (0.6318ms)"
+  },
+  {
+    "Location": "tests\\wmb-5347-writer-research-mode.test.mjs:85:1",
+    "Name": "WMB-5347: draftPrompt auto/required 未ready 仍为必须派研究 (0.1758ms)"
+  },
+  {
+    "Location": "tests\\wmb-5351-targeted-planner.test.mjs:94:1",
+    "Name": "policies: targeted prompt is bounded and forbids filesystem/SQLite bypass (would catch old daily-only runJudgePolicy) (0.9214ms)"
+  },
+  {
+    "Location": "tests\\workspace-confirmation.test.mjs:23:1",
+    "Name": "UI confirmation is exact, busy-safe, crash-recoverable and cold-readable (5497.3074ms)"
+  },
+  {
+    "Location": "tests\\workspace-profiles.test.mjs:24:1",
+    "Name": "official AI and UK profiles isolate one linked text chain without AI-only routes (1727.2809ms)"
+  },
+  {
+    "Location": "tests\\writer-contract-20260825.test.mjs:92:1",
+    "Name": "regression: audited safe governance topic without concrete brief is rejected, concrete self-media brief passes (738.4914ms)"
+  },
+  {
+    "Location": "tests\\x-trend-opportunity.test.mjs:18:1",
+    "Name": "one existing event opportunity carries exact X trend evidence into daily jobs, Today, and Pi context (739.0199ms)"
+  }
+]

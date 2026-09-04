@@ -3,6 +3,7 @@ import { ORCHESTRATION_SAFE_FIELDS, type OrchestrationSafeFields } from '../shar
 import type { PiImageAttachmentPayload } from '../shared/pi-image-batch';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PiContextRef } from './app-types';
+import type { WmbRoleModelThinkingLevel } from './wmb-settings-types';
 import { buildPiContextPayload, describePiContextChip, resolveStudioAnnotationBadge, type PiDirectCanvasContext } from './pi-context-payload';
 import { PiDockTranscript, type PiDockMessage, type PiNativeQueue } from './pi-dock-transcript';
 import { PiComposer, type PiSendOutcome } from './pi-composer';
@@ -74,7 +75,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
 
   const [modelLabel, setModelLabel] = useState('默认模型');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [modelOptions, setModelOptions] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number }>>([]);
+  const [modelOptions, setModelOptions] = useState<Array<{ id: string; contextWindow?: number; maxTokens?: number; thinkingLevels?: WmbRoleModelThinkingLevel[] }>>([]);
   const [modelMenuBusy, setModelMenuBusy] = useState(false);
   const [modelChoice, setModelChoice] = useState('');
   const [thinkingChoice, setThinkingChoice] = useState<'auto' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>('auto');
@@ -334,8 +335,10 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
       if (!profile) throw new Error('请先配置 Pi API。');
       setActivePiProfile(profile);
       setModelChoice(profile.model);
-      setThinkingChoice(profile.thinking ?? 'auto');
-      setModelOptions(await window.wmb.listPiModels({ id: profile.id, baseUrl: profile.baseUrl, api: profile.api }));
+      const options = await window.wmb.listPiModels({ id: profile.id, baseUrl: profile.baseUrl, api: profile.api });
+      setModelOptions(options);
+      const selected = options.find((model) => model.id === profile.model);
+      setThinkingChoice(profile.thinking && selected?.thinkingLevels?.includes(profile.thinking) ? profile.thinking : 'auto');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '获取模型失败');
     } finally {
@@ -354,7 +357,7 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         baseUrl: activePiProfile.baseUrl,
         model: modelChoice,
         api: activePiProfile.api,
-        thinking: thinkingChoice === 'auto' ? undefined : thinkingChoice,
+        thinking: thinkingChoice === 'auto' ? null : thinkingChoice,
         contextWindow: modelMetadata?.contextWindow ?? null,
         maxTokens: modelMetadata?.maxTokens ?? null
       });
@@ -718,7 +721,12 @@ export function PiDock({ collapsed, toggle, configured, context, resize, resetWi
         modelMenuBusy={modelMenuBusy}
         modelChoice={modelChoice}
         modelOptions={modelOptions.map((item) => item.id)}
-        onModelChoice={setModelChoice}
+        thinkingOptions={modelOptions.find((item) => item.id === modelChoice)?.thinkingLevels ?? []}
+        onModelChoice={(value) => {
+          setModelChoice(value);
+          const selected = modelOptions.find((item) => item.id === value);
+          if (thinkingChoice !== 'auto' && !selected?.thinkingLevels?.includes(thinkingChoice)) setThinkingChoice('auto');
+        }}
         onThinkingChoice={setThinkingChoice}
         onOpenModelMenu={() => { void openModelMenu(); }}
         onCloseModelMenu={() => setModelMenuOpen(false)}

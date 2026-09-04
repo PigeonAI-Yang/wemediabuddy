@@ -235,19 +235,6 @@ export function ProposalsView({ planDate, openTopic, onOpenProject, openToday, s
   }, [items.length, total, tab]);
 
 
-  const continueScoring = async (item: LedgerItem) => {
-    setActionBusyId(item.planItemId);
-    setError('');
-    try {
-      const result = await window.wmb.startDailyIntelligence({ businessDate: planDate });
-      if (!result?.ok) throw new Error(result?.error?.message || '继续评分失败');
-      openToday?.();
-    } catch (continueError) {
-      setError(continueError instanceof Error ? continueError.message : String(continueError));
-    } finally {
-      setActionBusyId(null);
-    }
-  };
 
   const approve = async (item: LedgerItem) => {
     setActionBusyId(item.planItemId);
@@ -437,10 +424,7 @@ export function ProposalsView({ planDate, openTopic, onOpenProject, openToday, s
             <div className="proposal-card-extra proposal-planning-actions" data-planning-status={planningStatus} data-pending-reason={pendingReason ?? undefined}>
               <div className="proposal-card-actions">
                 {isScoringPendingTab || isPendingScoring ? (
-                  <>
-                    <span className="pill pending-reason" title={pendingReason ?? '评分未完成'}>{pendingReason ?? '评分未完成'}</span>
-                    <button type="button" className="proposal-action primary-button" disabled={busy} onClick={() => void continueScoring(item)}>继续评分</button>
-                  </>
+                  <span className="pill pending-reason" title={pendingReason ?? '评分未完成'}>{pendingReason ?? '请分步补齐评分条件'}</span>
                 ) : (
                   <>
                     <button type="button" className="proposal-action proposal-action--dismiss" aria-label="否掉这个选题" title="否掉这个选题，不再出现" disabled={busy} onClick={() => void dismiss(item.planItemId)}>否掉</button>

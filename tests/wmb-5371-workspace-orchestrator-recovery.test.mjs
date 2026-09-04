@@ -214,6 +214,23 @@ test('WMB-5371 A06/A23/A27/A48 startup reconcile adopts exact inventory, restore
   assert.equal(count(database, 'orchestrator_events', "workspace_id=? AND event_type='stage.handoff_f_to_j'", ['ws-reconcile']), 1);
 }));
 
+test('WMB-5371 startup reconcile cancels an expired root instead of preserving a permanent serial lock', () => withDatabase((database) => {
+  const fixture = admitRoot(database, 'ws-expired-root');
+  const rootRequestId = fixture.admitted.root.root_request_id;
+  database.prepare('UPDATE daily_orchestration_roots SET root_deadline_mono=149, root_deadline_utc=? WHERE workspace_id=? AND root_request_id=?')
+    .run(NOW, 'ws-expired-root', rootRequestId);
+  const result = reconcileWorkspaceOrchestratorStartup(database, {
+    workspaceId: 'ws-expired-root',
+    fence: fenceFrom(fixture.actorStore.readActor('ws-expired-root')),
+    nowUtc: NOW,
+    nowMono: 170
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(database.prepare('SELECT status FROM daily_orchestration_roots WHERE workspace_id=? AND root_request_id=?').get('ws-expired-root', rootRequestId).status, 'cancelled');
+  assert.equal(database.prepare('SELECT status FROM daily_stage_claims WHERE workspace_id=? AND root_request_id=?').get('ws-expired-root', rootRequestId).status, 'orphaned');
+  assert.equal(count(database, 'workspace_active_root_index', 'workspace_id=? AND is_active=1', ['ws-expired-root']), 0);
+}));
+
 test('WMB-5371 A21/A22 cancellation ancestry terminalizes root, claim, dispatch and dependent consumption before adoption', () => withDatabase((database) => {
   const fixture = admitRoot(database, 'ws-cancel');
   const dispatch = database.prepare('SELECT * FROM managed_job_dispatches WHERE workspace_id=?').get('ws-cancel');

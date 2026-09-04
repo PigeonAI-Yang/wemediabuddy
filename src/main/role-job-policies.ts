@@ -128,7 +128,8 @@ export function targetedPlannerPrompt(task: AgentTask, ctx: EmployeePolicyContex
     '0. 禁止旁路：禁止调用 read、bash、grep、find、ls、cat、sqlite3、fs、node:fs、node:sqlite 等文件/命令/SQLite 工具；禁止直接读写文件系统、SQLite、data-root、会话文件或源码；禁止直接 UPDATE/INSERT plan_items。业务事实只通过 WMB MCP 工具获取与提交。',
     '1. 读：必须通过 WMB MCP 读取任务授权（wmb_get_agent_task / wmb_get_task_grant / wmb_list_task_grants），通过 wmb_get_plan_item 以 task_id + plan_item_id 两个精确键读取冻结项（经 assertPlannerScoped 校验），并至少两次调用 wmb_get_knowledge_context：一次查事件实体，一次查产业/社会关联。只接受工具实际返回的知识引用；无相关知识时如实记录 no_relevant_context，禁止伪造引用。',
     '2. 写：必须且只能调用 wmb_submit_plan_item（plan_item.submit）恰好一次，使用 exact planItemId 与读回的 expectedRevision；携带 taskId、grantId、workerLeaseId，requestId 使用 ' + ctx.jobId + ':plan_item:submit。遵循 SSOT `skills/evidence-grounded-writer/SKILL.md` §5。提交前先对同一事实组生成事件层、用户层、产业/社会层三个语义不同的中心主张候选，以“真实性为硬门、传播价值为主目标”比较：真实性不计传播分，但任何核心事实/推断/观点未被资料支持即不得成为 winner；最强候选缺关键证据时保留为 research_required 并走既有受控补料链，不得自动换成安全小题。editorialDecision 必须是 editorial_thesis_v1，包含三层 candidates（thesis/claimType/evidenceStatus/evidenceBoundary/score/reason）、最高分且 supported 的 winner、淘汰理由，以及 knowledgeContext（used+真实 contextRefs 或 no_relevant_context，queryDimensions 至少含实体和产业关联）。pointOfView 必须等于 winnerThesis，并作为全文唯一的一个中心主张。scoreReasons 必须是 propagation_v2：reality_change_significance(25)、tension_curiosity_gap(20)、audience_stakes(20)、why_now_window(15)、one_sentence_relayability(15)、account_fit(5)，并含 truthGate（supported；claims 明确 fact/inference/opinion 及证据边界），总分等于六项和。认知价值与实用价值是并行入口；重大产业/社会意义不因缺少“今天就能操作”的动作而降级，账号适配只有 5 分，不能压过现实变化。其余 title/whyNow/targetAudience/angle/openingGuidance/structureGuidance 仍须完整、具体、可被 sourceIds 兑现；一个处在具体情境中的读者和一个期望读者动作必须服务 winner，不能反过来改写 winner；标题必兑现，首段立刻兑现标题钩子，抽象主张配人/场景/利害/后果，证据服务主张；保留可防守的张力，禁止软化成“需要综合考虑”等空话，有用边界与怯懦的各打五十大板不同；平台适配重写钩子/节奏/收藏/分享/评论动机而不是缩短，禁止编造。自检四项：读者收益是否具体、是否有具体利害、为何现在、是否有收藏/分享/评论动机。不得保留模板或沿用旧课程大纲体，不得先用不合格 payload 试错。',
-    '2.1 提交字段必须严格使用公开工具 schema 的 canonical camelCase：editorialDecision.version=editorial_thesis_v1；candidates 每项只能使用 level/claimType/evidenceStatus/evidenceBoundary；winner 使用 winnerLevel/winnerThesis/winnerReason；knowledgeContext 使用 status/contextRefs/queryDimensions/reason。scoreReasons 必须使用 status=scored、version=propagation_v2、score、truthGate.status=passed、truthGate.reason、truthGate.claims[].status=supported/sourceIds，以及恰好六条 reasons。禁止旧别名 type/layer/industry_social/winner 对象/used/secondaryContext/boundary/total 或把六项分数平铺在 scoreReasons 根节点；工具 schema 校验失败不得改写字段重试。',
+    '2.0 反降级硬门：可执行性、容易实验、容易拿到回执不是 propagation_v2 的独立加分项。多来源已支持模型能力边界、长任务可靠性、成本结构、分发入口或竞争格局变化时，优先回答“这次发布改变了什么旧判断、谁会重新决策”；不得仅因个人测试更容易落地，就让“先测三个任务/别开最高档/先试一次”等战术小题击败传播价值更高的认知主张。个人实测只能作为正文证据、行动建议或后续选题。',
+    '2.1 提交字段必须严格使用公开工具 schema 的 canonical camelCase：editorialDecision.version=editorial_thesis_v1；candidates 每项只能使用 level/claimType/evidenceStatus/evidenceBoundary；winner 使用 winnerLevel/winnerThesis/winnerReason；knowledgeContext 使用 status/contextRefs/queryDimensions/reason。sourceIds 只能来自 wmb_get_plan_item 读回的冻结 sourceIds；wmb_get_knowledge_context 返回的 sources/evidence ID 不得混入 sourceIds。contextRefs 必须把 wmb_get_knowledge_context 返回的父级 ID 与版本 ID 组合成完整 canonical ref：wiki_page:<pageId>:<currentVersionId> 或 knowledge_note:<noteId>:<versionId>；严禁只提交 wver-* / ver-* 裸版本 ID。scoreReasons 必须使用 status=scored、version=propagation_v2、score、truthGate.status=passed、truthGate.reason、truthGate.claims[].status=supported/sourceIds，以及恰好六条 reasons。禁止旧别名 type/layer/industry_social/winner 对象/used/secondaryContext/boundary/total 或把六项分数平铺在 scoreReasons 根节点；工具 schema 校验失败不得改写字段重试。',
     '3. 校验：提交后必须通过 WMB MCP 读回（wmb_get_plan_item / plan_item.get）验证 planning_status=ready_for_review；未达到 ready_for_review 不得谎报成功。',
     '4. 禁止：不得调用 plans.save，不得直接操作数据库或文件，不得并发提交其他 plan_item，不得伪造读回。',
     '5. 完成后用简洁中文总结做了什么；若提交被模板或校验拒绝，必须说明 reason，不得伪造成功。'
@@ -191,7 +192,7 @@ export async function runTargetedPlannerPolicy(ctx: EmployeePolicyContext): Prom
     const extensionPath = await preparePiExtension(layout.agentDir);
     workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-planner-targeted-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       return new PiRpcSupervisor(process.execPath, [
         await piCliPath(runtime.identity.rootPath), '--mode', 'rpc', '--session', ctx.sessionFile, '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model,
@@ -422,7 +423,7 @@ export async function runOrganizePolicy(ctx: EmployeePolicyContext): Promise<Emp
     const extensionPath = await preparePiExtension(layout.agentDir);
     workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-library-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       return new PiRpcSupervisor(process.execPath, [
         await piCliPath(runtime.identity.rootPath), '--mode', 'rpc', '--session', ctx.sessionFile, '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model,

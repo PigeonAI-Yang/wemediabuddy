@@ -7,15 +7,12 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildOrchestrationEnvelope, parseOrchestrationEnvelope, ORCHESTRATION_SAFE_FIELDS } from '../src/shared/orchestration-envelope.ts';
+import { buildOrchestrationEnvelope, parseOrchestrationEnvelope } from '../src/shared/orchestration-envelope.ts';
 import { buildJobEventEnvelope } from '../src/shared/job-event-envelope.ts';
 import { messagesFromPiEntries } from '../src/main/pi-transcript-projection.ts';
 import { appendAcceptedOrchestration, reconcileOrchestrationRows, isOrchestrationMessage } from '../src/main/pi-orchestration-store.ts';
 import { readPiConversation, writePiConversation } from '../src/main/pi-conversation.ts';
 import { buildDockOrchestrationMessage, acceptedDockOrchestration, sanitizeHumanOrchestrationError, appendAcceptedDockRow, markDockOrchestrationFailed } from '../src/main/ipc-pi-dock.ts';
-import { buildTodayIntelligenceDispatch } from '../src/main/manager-dispatch.ts';
-import { draftPrompt, reviewPrompt } from '../src/main/agent-runner.ts';
-import { libraryOrganizePrompt } from '../src/main/role-job-policies.ts';
 import { isPiOrchestration, piRetryable } from '../src/renderer/pi-dock-utils.ts';
 
 const createdAt = '2026-08-11T10:00:00.000Z';
@@ -25,37 +22,6 @@ const safe = {
   goal: '采集并判读当日情报，产出可批方案',
   acceptance: '可信渠道回执 + 当日可批方案'
 };
-const agentRunnerUrl = new URL('../src/main/agent-runner.ts', import.meta.url);
-const rolePoliciesUrl = new URL('../src/main/role-job-policies.ts', import.meta.url);
-const libraryTopicsUrl = new URL('../src/renderer/library-topics-view.tsx', import.meta.url);
-const resultsViewUrl = new URL('../src/renderer/results-view.tsx', import.meta.url);
-
-// 非导出 view-local 生产者与员工派发内联 safe 的 bounded 源检查：兼容单行和多行条件 safe，
-// 断言 wmb-pi-generate detail / 员工信封精确结构 —— 生产者改值、掉字段、换目标即失败（无镜像可漂移）。
-async function dispatchSafe(file, marker) {
-  const source = await readFile(file, 'utf8');
-  const markerIndex = source.indexOf(`dispatchId: \`${marker}`);
-  assert.ok(markerIndex >= 0, `${marker} 员工派发行必须存在`);
-  const endIndex = source.indexOf('}), { timeoutMs', markerIndex);
-  assert.ok(endIndex > markerIndex, `${marker} 员工派发信封必须有确定边界`);
-  const block = source.slice(markerIndex, endIndex);
-  assert.match(block, /target:\s*'employee',[\s\S]*?delivery:\s*'direct',[\s\S]*?safe:\s*/, `${marker} 信封目标/派发/盖章结构必须完整`);
-  const safeLiterals = [...block.matchAll(/\{\s*originLabel:\s*'([^']*)',\s*title:\s*'([^']*)',\s*goal:\s*'([^']*)',\s*acceptance:\s*'([^']*)'\s*\}/g)];
-  assert.ok(safeLiterals.length >= 1, `${marker} safe 至少一个完整字面量分支`);
-  const safeVariants = safeLiterals.map((match) => Object.fromEntries(ORCHESTRATION_SAFE_FIELDS.map((field, index) => [field, match[index + 1]])));
-  return { safe: safeVariants[safeVariants.length - 1], safeVariants, line: block };
-}
-
-async function dockProducerSafe(file) {
-  const source = await readFile(file, 'utf8');
-  const event = source.match(/CustomEvent\('wmb-pi-generate'[\s\S]*?orchestration: \{([^}]*)\}/);
-  assert.ok(event, 'wmb-pi-generate detail 必须携带 orchestration 安全字段');
-  assert.match(event[0], /detail: \{ prompt, orchestration: \{/, 'detail 必须携带 prompt 与 orchestration 两键');
-  assert.doesNotMatch(event[0], /target:|dispatchId:|delivery:|state:/, 'view 只发安全字段，编号/目标由主进程决定');
-  const fields = [...event[1].matchAll(/(originLabel|title|goal|acceptance): '([^']*)'/g)];
-  assert.equal(fields.length, ORCHESTRATION_SAFE_FIELDS.length, 'wmb-pi-generate safe 四字段必须完整');
-  return Object.fromEntries(fields.map(([, k, v]) => [k, v]));
-}
 
 function rawEntry(text, id = 'e1', timestamp = createdAt) {
   return { type: 'message', id, timestamp, message: { role: 'user', content: text } };
@@ -82,46 +48,6 @@ async function orchestrationRowBlock() {
   };
 }
 
-// ---------------------------------------------------------------------------
-// §16-1 直接派发
-// ---------------------------------------------------------------------------
-test('§16-1 直接派发：Today 生产者盖章，accepted 行先于 Pi 输出，可见文本仅安全标题', async () => {
-  await withRoot(async (root) => {
-    const before = await readPiConversation(root);
-    await writePiConversation(root, { id: before.id, sessionFile: before.sessionFile, messages: [{ role: 'user', text: '你好', createdAt }] });
-    const dispatch = buildTodayIntelligenceDispatch('2026-08-11', 'manager-task-5180');
-    for (const field of ORCHESTRATION_SAFE_FIELDS) {
-      assert.ok(dispatch.orchestration.safe[field]?.trim(), `Today 生产者安全字段 ${field} 必须非空`);
-    }
-    const envelope = buildDockOrchestrationMessage({ dispatchId: dispatch.dispatchId, delivery: 'direct', safe: dispatch.orchestration.safe, prompt: dispatch.message });
-    const parsed = parseOrchestrationEnvelope(envelope);
-    assert.ok(parsed, '今日编排信封必须可解析');
-    assert.equal(parsed.dispatchId, dispatch.dispatchId);
-    assert.equal(parsed.target, 'dock');
-    assert.equal(parsed.delivery, 'direct');
-    const saved = await appendAcceptedDockRow(root, { dispatchId: dispatch.dispatchId, delivery: 'direct', safe: dispatch.orchestration.safe, createdAt: '2026-08-11T10:01:00.000Z' });
-    assert.ok(saved, '接受后必须写入 accepted 行');
-    // 接受后先写编排行，再释放 direct 新回合的 thinking/tool/delta（Pi 进程行）
-    await writePiConversation(root, { id: saved.id, sessionFile: saved.sessionFile, messages: [...saved.messages, { role: 'assistant', text: '已收到，开始执行。', status: 'stopped', createdAt: '2026-08-11T10:02:00.000Z' }] });
-    const after = await readPiConversation(root);
-    const rowIndex = after.messages.findIndex(isOrchestrationMessage);
-    const piIndex = after.messages.findIndex((message) => message.role === 'assistant');
-    assert.ok(rowIndex >= 0 && piIndex >= 0 && rowIndex < piIndex, '编排行必须出现在 Pi thinking/tool/delta 之前');
-    const row = after.messages[rowIndex];
-    assert.equal(row.orchestration.state, 'accepted');
-    assert.equal(row.orchestration.delivery, 'direct');
-    assert.equal(row.createdAt, '2026-08-11T10:01:00.000Z', '时间戳随行保留（渲染时间读回源）');
-    assert.equal(row.text, dispatch.orchestration.safe.title, '可见文本仅安全标题');
-    assert.ok(!row.text.includes('managerTaskId') && !row.text.includes('[WMB_CONTEXT]'), 'raw prompt 绝不进入可见文本');
-  });
-  // 状态文案三选一（渲染层 producer 分支，集成断言取最小面）
-  const { transcript } = await orchestrationRowBlock();
-  const helper = transcript.slice(transcript.indexOf('function orchestrationStatusLabel'), transcript.indexOf('function PiOrchestrationRow'));
-  assert.match(helper, /已安排主管/);
-  assert.match(helper, /已加入主管队列/);
-  assert.match(helper, /安排失败/);
-  assert.doesNotMatch(helper, /已完成|进行中|待处理/, '不存在第四种默认文案');
-});
 
 // ---------------------------------------------------------------------------
 // §16-2 steer/follow-up
@@ -342,55 +268,12 @@ test('§16-11 主题与宽度：两主题定义全部令牌，长内容可换行
   }
 });
 
-// ---------------------------------------------------------------------------
-// §16-12 代表性路径覆盖
-// ---------------------------------------------------------------------------
-test('§16-12 代表性路径：Today/资料库/Results/Studio 全部盖章且安全字段完整', async () => {
-  const task = { id: 'task-5180', businessDate: '2026-08-11', intent: 'daily_judge', status: 'running' };
-  const today = buildTodayIntelligenceDispatch('2026-08-11', 'manager-task-5180');
-  const judge = await dispatchSafe(agentRunnerUrl, 'daily_judge');
-  const library = await dispatchSafe(rolePoliciesUrl, 'page_library');
-  const studio = await dispatchSafe(agentRunnerUrl, 'studio_draft');
-  const review = await dispatchSafe(agentRunnerUrl, 'results_review');
-  assert.deepEqual(studio.safeVariants.map((variant) => variant.title), ['小红书平台版本', '外部研究前置', '内容核心初稿'], 'Studio 平台稿/研究前置/核心稿三个 writerTask 分支均须有完整 safe（WMB-5295 新增外部研究前置）');
-  const externalResearch = studio.safeVariants.find((variant) => variant.title === '外部研究前置');
-  assert.ok(externalResearch, '外部研究前置分支必须存在');
-  for (const field of ORCHESTRATION_SAFE_FIELDS) {
-    assert.ok(externalResearch[field]?.trim(), `外部研究前置 safe 字段 ${field} 必须非空`);
-    assert.ok(!/managerTaskId|taskId|wmb_|\[WMB_CONTEXT\]/.test(externalResearch[field]), `外部研究前置 safe 字段 ${field} 不得含内部措辞`);
-  }
-  const paths = [
-    { name: 'Today', dispatchId: today.dispatchId, target: 'dock', safe: today.orchestration.safe, prompt: today.message },
-    { name: '资料库整理', dispatchId: 'page_library:task-5180', target: 'employee', safe: library.safe, prompt: libraryOrganizePrompt(task, { jobId: 'job-1', brief: '整理资料', businessDate: '2026-08-11', spec: {}, runtime: {}, mcpUrl: '', xhsMcpUrl: '', workerLeaseId: 'w', sessionFile: 's', signal: new AbortController().signal, onTaskReady: async () => null, onEvent: () => {}, registerStoppable: () => {} }) },
-    { name: 'Studio', dispatchId: 'studio_draft:task-5180', target: 'employee', safe: studio.safe, prompt: draftPrompt(task, 'proj-1', 'req-1') },
-    { name: 'Results', dispatchId: 'results_review:task-5180', target: 'employee', safe: review.safe, prompt: reviewPrompt(task, 'pub-1', 'req-1') },
-    { name: '今日判读', dispatchId: 'daily_judge:task-5180', target: 'employee', safe: judge.safe, prompt: '判断当日增量资料并产出可批机会方案。' },
-    { name: '资料库 Dock', dispatchId: 'dock_library:task-5180', target: 'dock', safe: await dockProducerSafe(libraryTopicsUrl), prompt: '基于主题档案产出 1–3 条可执行选题方案。' },
-    { name: 'Results Dock', dispatchId: 'dock_results:task-5180', target: 'dock', safe: await dockProducerSafe(resultsViewUrl), prompt: '基于本周期指标快照与复盘记录讨论。' }
-  ];
-  for (const entry of paths) {
-    const envelope = entry.target === 'dock'
-      ? buildDockOrchestrationMessage({ dispatchId: entry.dispatchId, delivery: 'direct', safe: entry.safe, prompt: entry.prompt })
-      : buildOrchestrationEnvelope({ dispatchId: entry.dispatchId, target: entry.target, delivery: 'direct', safe: entry.safe, prompt: entry.prompt });
-    const parsed = parseOrchestrationEnvelope(envelope);
-    assert.ok(parsed, `${entry.name} 信封必须可解析`);
-    assert.equal(parsed.dispatchId, entry.dispatchId, `${entry.name} dispatchId 稳定`);
-    assert.equal(parsed.target, entry.target, `${entry.name} 接收会话目标正确`);
-    for (const field of ORCHESTRATION_SAFE_FIELDS) {
-      assert.ok(entry.safe[field]?.trim(), `${entry.name} 安全字段 ${field} 必须非空`);
-      assert.ok(!/managerTaskId|taskId|wmb_|\[WMB_CONTEXT\]/.test(entry.safe[field]), `${entry.name} 安全字段 ${field} 不得含内部措辞`);
-    }
-    const row = project(envelope, `p-${entry.name}`);
-    assert.equal(row.kind, 'orchestration', `${entry.name} 投影为 orchestration`);
-    assert.equal(row.text, entry.safe.title, `${entry.name} 仅安全标题可见`);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // §16-13 接收会话隔离
 // ---------------------------------------------------------------------------
 test('§16-13 接收会话隔离：员工行只进员工会话，Dock 永不镜像员工 transcript', async () => {
-  const studioSafe = (await dispatchSafe(agentRunnerUrl, 'studio_draft')).safe;
+  const studioSafe = { originLabel: 'Studio 初稿', title: '内容核心初稿', goal: '基于项目资料撰写完整核心初稿并保存', acceptance: '核心版本读回' };
   await withRoot(async (root) => {
     const before = await readPiConversation(root);
     const dockId = before.id;

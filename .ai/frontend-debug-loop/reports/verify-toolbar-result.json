@@ -1,0 +1,119 @@
+{
+  "dividerCount": 0,
+  "hasBorderDivider": false,
+  "borderLefts": [
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)"
+  ],
+  "visibleOrder": [
+    "正文二级标题三级标题引用",
+    "B",
+    "I",
+    "S",
+    "<>",
+    "• 列表",
+    "1. 列表",
+    "链接",
+    "代码块",
+    "表格",
+    "分割线",
+    "图片",
+    "清除",
+    "↶",
+    "↷",
+    "查找替换",
+    "标记"
+  ],
+  "groupGaps": [
+    4,
+    4,
+    4,
+    -630.8125
+  ],
+  "gapBeforeClear": -630.8125,
+  "gapBeforeClearEvidence": "prev=图片(1065.8) -> Clear left=435.0 gap=-630.8",
+  "controlGaps": [
+    {
+      "pair": "正文二级标题三级标题引用 -> B",
+      "gap": 4
+    },
+    {
+      "pair": "B -> I",
+      "gap": 4
+    },
+    {
+      "pair": "I -> S",
+      "gap": 4
+    },
+    {
+      "pair": "S -> <>",
+      "gap": 4
+    },
+    {
+      "pair": "<> -> • 列表",
+      "gap": 4
+    },
+    {
+      "pair": "• 列表 -> 1. 列表",
+      "gap": 4
+    },
+    {
+      "pair": "1. 列表 -> 链接",
+      "gap": 4
+    },
+    {
+      "pair": "链接 -> 代码块",
+      "gap": 4
+    },
+    {
+      "pair": "代码块 -> 表格",
+      "gap": 4
+    },
+    {
+      "pair": "表格 -> 分割线",
+      "gap": 4
+    },
+    {
+      "pair": "分割线 -> 图片",
+      "gap": 4
+    },
+    {
+      "pair": "图片 -> 清除",
+      "gap": -630.8125
+    },
+    {
+      "pair": "清除 -> ↶",
+      "gap": 4
+    },
+    {
+      "pair": "↶ -> ↷",
+      "gap": 4
+    },
+    {
+      "pair": "↷ -> 查找替换",
+      "gap": 4
+    },
+    {
+      "pair": "查找替换 -> 标记",
+      "gap": 4
+    }
+  ],
+  "toolbarVisible": true,
+  "bodyVisible": true,
+  "consoleErrors": 0,
+  "focusedCheck": "focused=true tag=SELECT text=正文二级标题三级标题引用",
+  "barRect": {
+    "top": 128.5,
+    "height": 87,
+    "width": 748
+  },
+  "projectId": "6ce12d8a-d12d-449d-baca-fcdc55b0f3c8",
+  "workspaceId": "a755adf2-4e8d-4abd-b616-4d7934f730f1",
+  "viewport": {
+    "width": 1568,
+    "height": 843
+  }
+}

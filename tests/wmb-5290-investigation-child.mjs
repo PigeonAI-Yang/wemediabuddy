@@ -31,7 +31,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
-import { createContentProjectWithVersion, getContentProject } from '../src/main/content.ts';
+import { createContentProjectWithVersion, getContentProject, saveCoreVersion } from '../src/main/content.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import {
   readProjectInvestigation,
@@ -283,7 +283,7 @@ try {
   expect(JSON.stringify(storedDirV1) === JSON.stringify(directionA), '方向 v1 行必须不可变保留');
   expectRejectedCode(decideInvestigationDirection(db, { projectId: projectA, expectedRevision: nextRevision(projectA), decision: 'approve' }), 'INVALID_STATE', 'A 不再存在重复方向审批');
 
-  // 显式写手启动：记录 writerJobId → writing；writing 中拒绝重复启动；终态 job.finished → completed。
+  // 写手完成必须带 exact task 的正文版本成功回执；缺失时 fail-closed 回可写，不伪装完成。
   const writingA = expectOk(startInvestigationWriter(db, {
     projectId: projectA, expectedRevision: nextRevision(projectA), writerJobId: 'job-a-w-1'
   }), 'A 启动写手');
@@ -291,10 +291,30 @@ try {
   expectRejectedCode(startInvestigationWriter(db, {
     projectId: projectA, expectedRevision: nextRevision(projectA), writerJobId: 'job-a-w-2'
   }), 'INVALID_STATE', 'A writing 中重复启动写手');
-  const completedA = expectOk(recordInvestigationWriterTerminal(db, {
+  const missingReadback = expectOk(recordInvestigationWriterTerminal(db, {
     projectId: projectA, jobId: 'job-a-w-1', type: 'job.finished'
+  }), 'A 缺回执写手终态');
+  expect(missingReadback.status === 'ready_to_write' && missingReadback.writer?.status === 'failed', `A 缺回执必须回可写: ${JSON.stringify(missingReadback)}`);
+
+  const writingRetry = expectOk(startInvestigationWriter(db, {
+    projectId: projectA, expectedRevision: nextRevision(projectA), writerJobId: 'job-a-w-2'
+  }), 'A 重派写手');
+  const writerTaskId = 'task-a-w-2';
+  const writerNow = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_tasks (id, intent, business_date, status, phase, pi_session_id, context_refs_json, result_refs_json,
+    progress_json, checkpoint_json, events_json, error_code, error_message, created_at, updated_at, finished_at)
+    VALUES (?, 'studio_draft', '2026-08-16', 'succeeded', 'done', NULL, ?, '{}', '{}', '{}', '[]', NULL, NULL, ?, ?, ?)`)
+    .run(writerTaskId, JSON.stringify({ jobId: writingRetry.writer.jobId, projectId: projectA }), writerNow, writerNow, writerNow);
+  const projectRevision = db.prepare('SELECT revision FROM content_projects WHERE id=?').get(projectA).revision;
+  const savedVersion = expectOk(saveCoreVersion(db, { projectId: projectA, body: 'A 写手真实交付正文', expectedRevision: projectRevision, author: 'ai' }), 'A 保存正文版本');
+  db.prepare(`INSERT INTO command_receipts (id, workspace_id, runtime_epoch, request_id, command, input_hash, actor_type, actor_id, task_id, envelope_json, receipt_json, status, result_json, readback_json, side_effect_state, created_at)
+    VALUES ('receipt-a-w-2', 'ws-5290', 'epoch-5290', 'job-a-w-2:content', 'content.save_version', 'hash-a-w-2', 'external_agent', 'writer', ?, '{}', ?, 'ok', ?, ?, 'committed', ?)`)
+    .run(writerTaskId, JSON.stringify({ data: { id: savedVersion.id } }), JSON.stringify({ id: savedVersion.id }), JSON.stringify({ id: savedVersion.id }), writerNow);
+  const completedA = expectOk(recordInvestigationWriterTerminal(db, {
+    projectId: projectA, jobId: 'job-a-w-2', type: 'job.finished'
   }), 'A 写手终态');
   expect(completedA.status === 'completed', `A 完成状态: ${JSON.stringify(completedA)}`);
+  expect(getContentProject(db, projectA)?.status === 'review', 'A 写手真实交付后项目必须进入待审');
 
   // 无调查项目不得经调查协议启动写手（遗留项目放行仅限通用 writer 派工，见 JobSpawner 门测试）。
   expectRejectedCode(startInvestigationWriter(db, { projectId: projectB, expectedRevision: 1, writerJobId: 'job-w-bad' }),
@@ -536,7 +556,7 @@ try {
   expect(revivedA.directionVersion === 1 && JSON.stringify(revivedA.direction) === JSON.stringify(directionA), '重启后 A 冻结方向应为 v1');
   expect(JSON.stringify(revivedA.package?.pack) === JSON.stringify(packA1), '重启后 A 资料包应精确保留');
   expect(JSON.stringify(revivedA.package?.sourceIds) === JSON.stringify([sourceB.id]), '重启后 A 包来源应保留');
-  expect(revivedA.reporter?.jobId === 'job-a-rep-1' && revivedA.writer?.jobId === 'job-a-w-1', '重启后 A 工单引用应保留');
+  expect(revivedA.reporter?.jobId === 'job-a-rep-1' && revivedA.writer?.jobId === 'job-a-w-2', '重启后 A 工单引用应保留最终成功轮次');
   const revivedB = readProjectInvestigation(reopened, projectB);
   expect(revivedB.status === 'ready_to_write' && revivedB.reporter?.round === 3,
     `重启后 B 应就绪且 round=3: ${revivedB.status}/${revivedB.reporter?.round}`);

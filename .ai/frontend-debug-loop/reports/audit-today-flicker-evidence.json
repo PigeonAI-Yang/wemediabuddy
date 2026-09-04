@@ -1,0 +1,461 @@
+{
+  "instrumentation": {
+    "url": "http://127.0.0.1:27391/",
+    "viewport": {
+      "w": 1280,
+      "h": 800,
+      "dpr": 1
+    },
+    "initialOverviewHtml": "<section class=\"today-overview\" aria-label=\"今日经营概况\"><div class=\"today-overview-head\"><div class=\"today-overview-title\"><h2>今日经营概况</h2><button type=\"button\" class=\"today-overview-updated\" title=\"前往 每日自动化\">更新于 2026/8/24 21:55:24</button></div><div class=\"today-overview-actions\"><button type=\"button\" class=\"secondary-button\" aria-label=\"重新侦察\">重新侦察</button><button type=\"button\" class=\"secondary-button\">查看资料</button><button type=\"button\" class=\"primary-button\">开始今日情报</button></div></div><div class=\"today-overview-metrics\" role=\"group\" aria-label=\"经营指标\"><button type=\"button\" class=\"today-metric\" aria-label=\"今日新资料 0 —\"><span class=\"today-metric-label\">今日新资料</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"内容机会 0 —\"><span class=\"today-metric-label\">内容机会</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"进行中项目 0 无待处理\"><span class=\"today-metric-label\">进行中项目</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\" data-tone=\"neutral\">无待处理</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"n",
+    "initialOverviewMetricsText": {
+      "vals": [
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "changes": [
+        "—",
+        "—",
+        "无待处理",
+        "—"
+      ]
+    },
+    "overviewExists": true,
+    "overviewRect": {
+      "w": 642,
+      "h": 196.75
+    },
+    "computedStyle": {
+      "display": "grid",
+      "opacity": "1",
+      "visibility": "visible",
+      "animation": "none",
+      "transition": "all",
+      "height": "196.75px",
+      "overflow": "visible"
+    },
+    "appShellExists": true,
+    "todayLayoutExists": true
+  },
+  "mid1": {
+    "vals": "0|0|0|0",
+    "sameNode": true,
+    "metricsCalls": 0,
+    "todayCalls": 0,
+    "mutations": [],
+    "viewTransitions": 0,
+    "remounts": 0,
+    "rerenders": 0,
+    "dashEvents": 0
+  },
+  "afterForce": {
+    "vals": "0|0|0|0",
+    "changes": "—|—|无待处理|—",
+    "trends": 4,
+    "metricsCalls": [],
+    "todayCalls": [],
+    "mutations": [],
+    "viewTransitions": 0,
+    "remounts": 0,
+    "rerenders": 0
+  },
+  "late": {
+    "totalMetricsCalls": 0,
+    "totalTodayCalls": 0,
+    "viewTransitions": 0,
+    "reloads": 0,
+    "beforeunload": 0,
+    "mutationsCount": 0,
+    "remounts": 0,
+    "rerenders": 0,
+    "metricsCalls": [],
+    "todayCalls": [],
+    "dataChanged": [],
+    "recentMutations": [],
+    "currentVals": "0|0|0|0",
+    "sameNode": true,
+    "computed": {
+      "display": "grid",
+      "opacity": "1",
+      "height": "196.75px",
+      "transition": "all",
+      "animation": "none"
+    },
+    "overviewRect": {
+      "w": 642,
+      "h": 196.75
+    }
+  },
+  "burst": {
+    "metricsCalls": [],
+    "rerenders": 0,
+    "remounts": 0,
+    "mutations": [],
+    "currentVals": "0|0|0|0"
+  },
+  "flashTest": {
+    "samples": [
+      {
+        "t": 67,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 116,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 166,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 208,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 257,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 308,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 358,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 408,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 467,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 508,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 558,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 601,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 666,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 717,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 765,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 817,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 865,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 917,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 966,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1001,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1066,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1117,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1167,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1217,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1267,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1317,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1367,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1417,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1467,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1517,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1565,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1601,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1658,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1708,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1757,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1808,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1858,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1908,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 1958,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2008,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2059,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2116,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2157,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2208,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2256,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2308,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2358,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2407,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2457,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2505,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2558,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2608,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2658,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2708,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2758,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2801,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2858,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2916,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 2958,
+        "vals": "0|0|0|0"
+      },
+      {
+        "t": 3008,
+        "vals": "0|0|0|0"
+      }
+    ],
+    "auditMetrics": []
+  },
+  "finalSnap": {
+    "url": "http://127.0.0.1:27391/",
+    "viewport": {
+      "w": 1280,
+      "h": 800
+    },
+    "overviewOuter": "<section class=\"today-overview\" aria-label=\"今日经营概况\" data-audit-id=\"overview-1\"><div class=\"today-overview-head\"><div class=\"today-overview-title\"><h2>今日经营概况</h2><button type=\"button\" class=\"today-overview-updated\" title=\"前往 每日自动化\">更新于 2026/8/24 21:55:24</button></div><div class=\"today-overview-actions\"><button type=\"button\" class=\"secondary-button\" aria-label=\"重新侦察\">重新侦察</button><button type=\"button\" class=\"secondary-button\">查看资料</button><button type=\"button\" class=\"primary-button\">开始今日情报</button></div></div><div class=\"today-overview-metrics\" role=\"group\" aria-label=\"经营指标\"><button type=\"button\" class=\"today-metric\" aria-label=\"今日新资料 0 —\"><span class=\"today-metric-label\">今日新资料</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"内容机会 0 —\"><span class=\"today-metric-label\">内容机会</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"进行中项目 0 无待处理\"><span class=\"today-metric-label\">进行中项目</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\" data-tone=\"neutral\">无待处理</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button><button type=\"button\" class=\"today-metric\" aria-label=\"近 7 日发布 0 —\"><span class=\"today-metric-label\">近 7 日发布</span><span class=\"today-metric-value\">0</span><span class=\"today-metric-change\">—</span><span class=\"today-metric-trend\"><svg viewBox=\"0 0 60 24\" role=\"img\" aria-label=\"7日趋势 0,0,0,0,0,0,0\"><polyline fill=\"none\" stroke=\"var(--muted-low)\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"2,22 11.333333333333334,22 20.666666666666668,22 30,22 39.333333333333336,22 48.66666666666667,22 58,22\"></polyline></svg></span></button></div></section>",
+    "overviewMetrics": [
+      {
+        "label": "今日新资料",
+        "val": "0",
+        "change": "—",
+        "unknown": null
+      },
+      {
+        "label": "内容机会",
+        "val": "0",
+        "change": "—",
+        "unknown": null
+      },
+      {
+        "label": "进行中项目",
+        "val": "0",
+        "change": "无待处理",
+        "unknown": null
+      },
+      {
+        "label": "近 7 日发布",
+        "val": "0",
+        "change": "—",
+        "unknown": null
+      }
+    ],
+    "computedOverview": {
+      "display": "grid",
+      "opacity": "1",
+      "height": "196.75px",
+      "transition": "all",
+      "animation": "none",
+      "gridTemplate": "608px"
+    },
+    "computedLayout": {
+      "display": "block",
+      "height": "710px"
+    },
+    "appShellClass": "app-shell pi-open",
+    "documentHidden": false,
+    "localStorageKeys": [
+      "wmb.theme",
+      "wmb.piDockCollapsed",
+      "wmb.view",
+      "wmb.piDockWidth"
+    ],
+    "audit": {
+      "metricsCalls": [],
+      "todayCalls": [],
+      "renderCount": 0,
+      "mutations": [],
+      "viewTransitions": 0,
+      "reloads": 0,
+      "beforeunload": 0,
+      "dataChanged": [],
+      "visibilityChanges": [],
+      "overviewRemounts": 0,
+      "overviewRerenders": 0,
+      "setNullEvents": 0
+    },
+    "consoleErrors": null
+  },
+  "evidence": {
+    "console": [
+      {
+        "type": "debug",
+        "text": "[vite] connecting...",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 732,
+          "column": 8,
+          "lineNumber": 732,
+          "columnNumber": 8
+        }
+      },
+      {
+        "type": "debug",
+        "text": "[vite] connected.",
+        "location": {
+          "url": "http://127.0.0.1:27391/@vite/client",
+          "line": 826,
+          "column": 11,
+          "lineNumber": 826,
+          "columnNumber": 11
+        }
+      },
+      {
+        "type": "info",
+        "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+        "location": {
+          "url": "http://127.0.0.1:27391/@fs/j:/PigeonYang/WeMediaBuddy/node_modules/.vite/deps/react-dom_client.js?v=6fca6c74",
+          "line": 20102,
+          "column": 53,
+          "lineNumber": 20102,
+          "columnNumber": 53
+        }
+      },
+      {
+        "type": "warning",
+        "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+        "location": {
+          "url": "node:electron/js2c/sandbox_bundle",
+          "line": 1,
+          "column": 102780,
+          "lineNumber": 1,
+          "columnNumber": 102780
+        }
+      }
+    ],
+    "errors": [],
+    "pageerrors": []
+  }
+}

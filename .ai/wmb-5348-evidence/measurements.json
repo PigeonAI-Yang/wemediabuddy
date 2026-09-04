@@ -1,0 +1,221 @@
+{
+  "console": [
+    {
+      "type": "warning",
+      "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+      "location": {
+        "url": "node:electron/js2c/sandbox_bundle",
+        "line": 1,
+        "column": 102780,
+        "lineNumber": 1,
+        "columnNumber": 102780
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_FILE_NOT_FOUND",
+      "location": {
+        "url": "file:///J:/assets/logo-DWO6M5AZ.png",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_FILE_NOT_FOUND",
+      "location": {
+        "url": "file:///J:/assets/x-D3W5rl6b.png",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "pageerrors": [],
+  "errors": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_FILE_NOT_FOUND",
+      "location": {
+        "url": "file:///J:/assets/logo-DWO6M5AZ.png",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_FILE_NOT_FOUND",
+      "location": {
+        "url": "file:///J:/assets/x-D3W5rl6b.png",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "consoleLogs": [
+    "error: Failed to load resource: net::ERR_FILE_NOT_FOUND"
+  ],
+  "measurements": [
+    {
+      "label": "1568x843",
+      "summary": {
+        "height": 44,
+        "top": 215.5,
+        "width": 748,
+        "text": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      },
+      "ledger": {
+        "height": 49.3125,
+        "width": 748,
+        "rows": 2
+      },
+      "ledgerRowHeights": [
+        44,
+        44
+      ],
+      "canvas": {
+        "height": 436.1875,
+        "top": 259.5
+      },
+      "paper": {
+        "height": 644
+      },
+      "overflowX": 0,
+      "overflowYBody": 0,
+      "hasTitle": true,
+      "titleHeight": 44,
+      "viewport": {
+        "w": 1568,
+        "h": 843,
+        "dpr": 1
+      },
+      "url": "file:///J:/PigeonYang/WeMediaBuddy/.vite/renderer/main_window/index.html",
+      "modalPresent": false
+    },
+    {
+      "label": "1366x768",
+      "summary": {
+        "height": 44,
+        "top": 215.5,
+        "width": 736,
+        "text": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      },
+      "ledger": {
+        "height": 2,
+        "width": 736,
+        "rows": 2
+      },
+      "ledgerRowHeights": [
+        44,
+        44
+      ],
+      "canvas": {
+        "height": 420,
+        "top": 259.5
+      },
+      "paper": {
+        "height": 644
+      },
+      "overflowX": 0,
+      "overflowYBody": 0,
+      "hasTitle": true,
+      "titleHeight": 44,
+      "viewport": {
+        "w": 1366,
+        "h": 768,
+        "dpr": 1
+      },
+      "url": "file:///J:/PigeonYang/WeMediaBuddy/.vite/renderer/main_window/index.html",
+      "modalPresent": false
+    },
+    {
+      "summaryDetailTest": {
+        "ok": true,
+        "height": 44,
+        "countText": "0/0",
+        "statusText": "暂无配图",
+        "hasRatio": true,
+        "hasCount": true,
+        "hasStart": true,
+        "startDisabled": false,
+        "hasDetail": false,
+        "summaryText": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      }
+    },
+    {
+      "ledgerTest": {
+        "ok": true,
+        "ledgerHeight": 2,
+        "rows": 2,
+        "rowHeights": [
+          44,
+          44
+        ],
+        "rowTexts": [
+          "主产物文章主稿draftingv2 · 95ddca48查看详情",
+          "衍生产物视频文案待生成视频文案— · —查看详情"
+        ],
+        "hasArticle": true,
+        "hasDerivative": true
+      }
+    },
+    {
+      "ledgerModalTest": {
+        "ok": false,
+        "error": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.studio-dual-ledger-row[data-kind=\"derivative\"] .studio-dual-ledger-action').first()\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\" aria-label=\"查看衍生产物详情\" class=\"studio-dual-ledger-action\">查看详情</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <section aria-label=\"产物概览\" data-stale=\"false\" class=\"studio-dual-ledger\" data-readiness=\"no_script\" data-testid=\"studio-dual-ledger\" data-project=\"0bdb299a-f848-4bc7-b661-faf28a8c4c33\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <div data-running=\"false\" class=\"studio-writing-status\">…</div> intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is visible, enabled and stable\u001b[22m\n\u001b[2m    - scrolling into view if needed\u001b[22m\n\u001b[2m    - done scrolling\u001b[22m\n\u001b[2m    - <section aria-label=\"产物概览\" data-stale=\"false\" class=\"studio-dual-ledger\" data-readiness=\"no_script\" data-testid=\"studio-dual-ledger\" data-project=\"0bdb299a-f848-4bc7-b661-faf28a8c4c33\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m  2 × retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m      - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <section class=\"studio-editor-view\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m  14 × retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m       - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <div data-running=\"false\" class=\"studio-writing-status\">…</div> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m       - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <section aria-label=\"产物概览\" data-stale=\"false\" class=\"studio-dual-ledger\" data-readiness=\"no_script\" data-testid=\"studio-dual-ledger\" data-project=\"0bdb299a-f848-4bc7-b661-faf28a8c4c33\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m       - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <section class=\"studio-editor-view\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\u001b[2m       - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is visible, enabled and stable\u001b[22m\n\u001b[2m       - scrolling into view if needed\u001b[22m\n\u001b[2m       - done scrolling\u001b[22m\n\u001b[2m       - <section class=\"studio-editor-view\">…</section> intercepts pointer events\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting 500ms\u001b[22m\n"
+      }
+    },
+    {
+      "illustrationModalTest": {
+        "ok": true,
+        "skipped": true,
+        "reason": "no illustration detail button (0 runs) — expected for empty state"
+      }
+    },
+    {
+      "label": "final",
+      "summary": {
+        "height": 44,
+        "top": 204.5,
+        "width": 736,
+        "text": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      },
+      "ledger": {
+        "height": 2,
+        "width": 736,
+        "rows": 2
+      },
+      "ledgerRowHeights": [
+        44,
+        44
+      ],
+      "canvas": {
+        "height": 420,
+        "top": 248.5
+      },
+      "paper": {
+        "height": 644
+      },
+      "overflowX": 0,
+      "overflowYBody": 0,
+      "hasTitle": true,
+      "titleHeight": 44,
+      "viewport": {
+        "w": 1366,
+        "h": 768,
+        "dpr": 1
+      },
+      "url": "file:///J:/PigeonYang/WeMediaBuddy/.vite/renderer/main_window/index.html",
+      "modalPresent": false
+    }
+  ],
+  "workspace": "da279c82-37ab-4acf-bceb-d11846dda7e7",
+  "runtimeDir": "J:\\PigeonYang\\WeMediaBuddy\\tests\\e2e\\.runtime\\run-FVOz6i"
+}

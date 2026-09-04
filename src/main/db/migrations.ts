@@ -15,6 +15,7 @@ import { illustrationMigrations } from './illustration-migrations.ts';
 import { zhihuHotContentLoopMigrations } from './zhihu-hot-content-loop-migrations.ts';
 import { planningStageMigrations } from './planning-stage-migrations.ts';
 import { workspaceOrchestratorMigrations } from './workspace-orchestrator-migrations.ts';
+import { xListContentMigrations } from './x-list-content-migrations.ts';
 import { registerSourceBodyRevisionPurgeGate } from '../source-body-cache.ts';
 
 export const migrations = [
@@ -625,7 +626,7 @@ export const migrations = [
     `
   },
   ...sourceBodyArchiveMigrations, ...piImageBatchMigrations, ...illustrationMigrations, ...zhihuHotContentLoopMigrations, ...planningStageMigrations,
-  ...workspaceOrchestratorMigrations
+  ...workspaceOrchestratorMigrations, ...xListContentMigrations
 ] as const;
 
 export function migrateDatabase(databasePath: string): DatabaseSync {

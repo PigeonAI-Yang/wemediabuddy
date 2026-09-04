@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Publish Matrix Verify 1568x941 Pi open</title>
+<link rel="stylesheet" href="./src/renderer/styles-foundation.css">
+<link rel="stylesheet" href="./src/renderer/styles-studio.css">
+<style>
+  /* Simulate app-shell at 1568x941 with sidebar 216 and Pi 376 open */
+  html, body { margin:0; height:100%; overflow:hidden; background: var(--app-bg); }
+  .verify-shell {
+    width: 1568px;
+    height: 941px;
+    display: grid;
+    grid-template-rows: 56px minmax(0, 1fr) 34px;
+    grid-template-columns: 216px minmax(0, 1fr) 376px;
+    background: var(--app-bg);
+  }
+  .verify-shell .topbar { grid-column: 1 / -1; grid-row: 1; display:flex; align-items:center; padding-left:16px; border-bottom:1px solid var(--line); background: var(--topbar-bg); color: var(--ink); font-size:13px; }
+  .verify-shell .sidebar { grid-row: 2; background: var(--sidebar-bg); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:12px; color: var(--muted); font-size:12px; }
+  .verify-shell .workspace { grid-row: 2; min-width:0; min-height:0; overflow:hidden; background: var(--workspace-bg); display:flex; flex-direction:column; }
+  .verify-shell .pi-dock { grid-row: 2; background: var(--panel-bg); border-left:1px solid var(--line); display:flex; flex-direction:column; padding:12px; color: var(--muted); font-size:12px; }
+  .verify-shell .status-bar { grid-column: 1 / -1; grid-row: 3; height: var(--status-height); display:flex; align-items:center; padding:0 12px; background: var(--topbar-bg); border-top:1px solid var(--line); color: var(--muted); font-size:11px; }
+  /* Override workspace > * height 100% to allow publish-page scroll */
+  .workspace > .publish-page { height:100%; }
+  /* Add some rows for scroll test */
+  .publish-matrix-row { min-height: 88px; }
+</style>
+</head>
+<body>
+<div class="verify-shell" id="shell">
+  <div class="topbar">WeMediaBuddy — 验证 1568x941</div>
+  <aside class="sidebar"><strong style="color:var(--ink)">侧栏</strong><span>nav 216px</span></aside>
+  <div class="workspace" id="workspace">
+    <section class="workflow-page publish-page" id="publishPage">
+      <section class="publish-room-head"><div class="publish-room-copy"><div class="publish-room-titleline"><h1>发布</h1></div><p>选择一篇内容，再选择要发布的平台。</p></div><div class="publish-room-actions"><button class="secondary-button">刷新</button><button class="primary-button">继续发布</button></div></section>
+      <nav class="proposal-tabs publish-tabs"><button class="proposal-tab active">全部</button><button class="proposal-tab">待我处理</button><button class="proposal-tab">已发布</button></nav>
+      <div class="publish-matrix-wrap" id="matrixWrap">
+        <div class="publish-matrix-scroller" id="matrixScroller">
+          <div class="publish-matrix" id="publishMatrix" role="table" style="grid-template-columns: var(--publish-col-content, minmax(220px, 1.45fr)) repeat(4, var(--publish-col-platform, minmax(0, 1fr)))">
+            <div class="publish-matrix-head" role="row">
+              <div class="publish-matrix-corner" role="columnheader"><strong>内容</strong></div>
+              <div class="publish-platform-head" role="columnheader"><span style="width:30px;height:30px;background:var(--pf-x);border-radius:8px;display:grid;place-items:center;font-size:10px">X</span><span class="publish-platform-copy"><strong>X</strong><small>@example · 已启用</small></span></div>
+              <div class="publish-platform-head" role="columnheader"><span style="width:30px;height:30px;background:var(--pf-xhs);border-radius:8px;display:grid;place-items:center;font-size:10px">红</span><span class="publish-platform-copy"><strong>小红书</strong><small>小红书账号-very-long-name-that-should-ellipsize</small></span></div>
+              <div class="publish-platform-head" role="columnheader"><span style="width:30px;height:30px;background:var(--pf-wx);border-radius:8px;display:grid;place-items:center;font-size:10px">微</span><span class="publish-platform-copy"><strong>公众号</strong><small>公众号账号_需要省略显示的超长文本</small></span></div>
+              <div class="publish-platform-head" role="columnheader"><span style="width:30px;height:30px;background:var(--surface-raised);border-radius:8px;display:grid;place-items:center;font-size:10px">知</span><span class="publish-platform-copy"><strong>知乎</strong><small>知乎账号_long_text_wrap_test</small></span></div>
+            </div>
+            <!-- 3 rows to test vertical overflow -->
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">这是一个非常长的内容标题，需要在有限的列宽内正确换行并限制为两行以内，避免撑开列宽导致横向溢出，这是一个非常长的内容标题，需要在有限的列宽内正确换行并限制为两行以内</button><div class="publish-project-meta"><small>有任务待处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell" data-status="awaiting"><span class="publish-cell-action">等待人工发布：已准备完毕，等待你在平台完成最终发布步骤</span><span class="publish-cell-meta">账号名_这是一个超长账号名需要省略号截断_1234567890</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell" data-status="published"><span class="publish-cell-action">已发布</span><span class="publish-cell-meta">小红书账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><div class="publish-cell-empty">—</div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell" data-status="needs_user"><span class="publish-cell-action">需要接管</span><span class="publish-cell-meta">知乎账号_超长需截断</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第二篇内容标题同样很长，用于测试换行和省略行为是否正确且不会导致列宽撑开</button><div class="publish-project-meta"><small>已全部处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已准备</span><span class="publish-cell-meta">X账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待核对</span><span class="publish-cell-meta">小红书账号_超长省略测试</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">待授权</span><span class="publish-cell-meta">公众号账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><div class="publish-cell-empty">—</div></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第三篇内容</button><div class="publish-project-meta"><small>有任务待处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><div class="publish-cell-empty">—</div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已发布：人工发布于 8/24 10:30</span><span class="publish-cell-meta">小红书账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">失败</span><span class="publish-cell-meta">公众号账号_超长需截断测试</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待人工发布</span><span class="publish-cell-meta">知乎账号</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第四篇内容标题用于测试多行后的垂直滚动是否由页面承载而非内部滚动容器</button><div class="publish-project-meta"><small>有任务待处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">需要接管</span><span class="publish-cell-meta">X账号_超长省略</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><div class="publish-cell-empty">—</div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已准备</span><span class="publish-cell-meta">公众号账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已发布</span><span class="publish-cell-meta">知乎账号</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第五篇内容标题测试</button><div class="publish-project-meta"><small>已全部处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已发布</span><span class="publish-cell-meta">X账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">待授权</span><span class="publish-cell-meta">小红书账号_超长</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待核对</span><span class="publish-cell-meta">公众号账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">失败</span><span class="publish-cell-meta">知乎账号_超长需截断</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第六篇内容标题用于增加高度，使页面需要垂直滚动，验证内部滚动容器不产生嵌套滚动</button><div class="publish-project-meta"><small>有任务待处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待人工发布</span><span class="publish-cell-meta">X账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已准备</span><span class="publish-cell-meta">小红书账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已发布</span><span class="publish-cell-meta">公众号账号_超长省略</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">需要接管</span><span class="publish-cell-meta">知乎账号</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第七篇内容标题测试滚动</button><div class="publish-project-meta"><small>已全部处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已发布</span><span class="publish-cell-meta">X账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><div class="publish-cell-empty">—</div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待核对</span><span class="publish-cell-meta">公众号账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">待授权</span><span class="publish-cell-meta">知乎账号</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+            <div class="publish-matrix-row" role="row">
+              <div class="publish-matrix-project" role="rowheader"><button class="publish-project-name">第八篇内容标题再次测试页面级垂直滚动</button><div class="publish-project-meta"><small>有任务待处理</small></div></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">失败</span><span class="publish-cell-meta">X账号_超长需截断测试文本</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">已准备</span><span class="publish-cell-meta">小红书账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">需要接管</span><span class="publish-cell-meta">公众号账号</span><span class="publish-cell-more">›</span></button></div>
+              <div class="publish-cell-slot" role="cell"><button class="publish-cell"><span class="publish-cell-action">等待人工发布</span><span class="publish-cell-meta">知乎账号_超长</span><span class="publish-cell-more">›</span></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="pi-dock"><strong style="color:var(--ink)">Pi 助手</strong><span>expanded 376px</span><div style="margin-top:12px; border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface);">对话占位</div></div>
+</div>
+
+<!-- Narrow container test: simulate container width 520 with 4 platforms -->
+<div id="narrowTest" style="width:520px; margin:24px auto; border:1px dashed var(--border); padding:0; container-type:inline-size; container-name: publish-matrix;">
+  <div style="padding:8px; color:var(--muted); font-size:12px;">窄容器 520px 测试（应出现横向滚动兜底）</div>
+  <div class="publish-matrix-wrap" style="padding:12px;">
+    <div class="publish-matrix-scroller">
+      <div class="publish-matrix" style="grid-template-columns: var(--publish-col-content, minmax(220px, 1.45fr)) repeat(4, var(--publish-col-platform, minmax(0, 1fr)))">
+        <div class="publish-matrix-head"><div class="publish-matrix-corner"><strong>内容</strong></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>X</strong><small>acc</small></span></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>小红书</strong><small>acc</small></span></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>公众号</strong><small>acc</small></span></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>知乎</strong><small>acc</small></span></div></div>
+        <div class="publish-matrix-row"><div class="publish-matrix-project"><button class="publish-project-name">窄容器行标题</button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3 and 2 platform narrow tests -->
+<div id="narrowTest3" style="width:520px; margin:24px auto; border:1px dashed var(--border); padding:0; container-type:inline-size; container-name: publish-matrix;">
+  <div style="padding:8px; color:var(--muted); font-size:12px;">窄容器 520px 3列 测试</div>
+  <div class="publish-matrix-wrap" style="padding:12px;">
+    <div class="publish-matrix-scroller">
+      <div class="publish-matrix" style="grid-template-columns: var(--publish-col-content, minmax(220px, 1.45fr)) repeat(3, var(--publish-col-platform, minmax(0, 1fr)))">
+        <div class="publish-matrix-head"><div class="publish-matrix-corner"><strong>内容</strong></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>X</strong><small>acc</small></span></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>小红书</strong><small>acc</small></span></div><div class="publish-platform-head"><span class="publish-platform-copy"><strong>公众号</strong><small>acc</small></span></div></div>
+        <div class="publish-matrix-row"><div class="publish-matrix-project"><button class="publish-project-name">3列行</button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div><div class="publish-cell-slot"><button class="publish-cell"><span class="publish-cell-action">动作</span><span class="publish-cell-meta">账号</span></button></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.__verifyReady = true;
+</script>
+</body>
+</html>

@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { saveCurrentPlan } from '../src/main/planning.ts';
 import { upsertSource } from '../src/main/sources.ts';
 import { buildPlannerSourceBoundary } from '../src/main/agent-runner.ts';
+import { applyLaneGateBatch } from '../src/main/lane-gate.ts';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
 async function fixture() {
@@ -83,7 +84,7 @@ test('WMB-5360 complete decisions persist selected and excluded exactly once', a
   }
 });
 
-test('WMB-5360 Planner boundary is increment union reactivated evidence, while allowed adds reactivated to lane-relevant', async () => {
+test('WMB-5360 Planner boundary excludes reactivated evidence rejected by the current lane gate', async () => {
   const state = await fixture();
   try {
     const now = new Date().toISOString();
@@ -102,11 +103,15 @@ test('WMB-5360 Planner boundary is increment union reactivated evidence, while a
       (id,kind,status,due_at,attempts,dedupe_key,payload_json,last_error,created_at,updated_at,started_at,finished_at)
       VALUES ('react-job','knowledge_reactivate_sources','succeeded',?,1,'react-dedupe',?,NULL,?,?,?,?)`)
       .run(now, JSON.stringify(payload), now, now, now, now);
+    applyLaneGateBatch(state.database, {
+      workspaceLane: 'wemedia-intelligence-engine', judgedBy: 'agent', judgedAt: '2026-08-28T09:00:00.000Z',
+      judgments: [{ sourceId: oldSource.id, decision: 'irrelevant', reasonCode: 'off_lane_content', reason: '不属于当前内容赛道', expectedRevision: oldSource.revision }]
+    });
     const boundary = buildPlannerSourceBoundary(state.database, {
       businessDate: '2026-08-28', checkpoint: { judgeWatermark: '2026-08-27T00:00:00.000Z' }
     }, new Set([recentSource.id]));
     assert.deepEqual(boundary.candidateIds, new Set([recentSource.id, oldSource.id]));
-    assert.deepEqual(boundary.allowedIds, new Set([recentSource.id, oldSource.id]));
+    assert.deepEqual(boundary.allowedIds, new Set([recentSource.id]));
   } finally {
     state.database.close();
     await rm(state.root, { recursive: true, force: true });

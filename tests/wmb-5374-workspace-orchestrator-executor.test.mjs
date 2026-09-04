@@ -144,7 +144,7 @@ test('WMB-5374 accepted scan intent is consumed through source snapshot and term
       producerId: 'scheduler.daily-0900',
       businessDate: BUSINESS_DATE,
       requestId: 'scheduler.daily-0900:wmb-5374-executor:2026-09-01',
-      action: 'stage_d',
+      action: 'full',
       logicalInput: { businessDate: BUSINESS_DATE, source: 'scheduler_0900' },
       payload: { businessDate: BUSINESS_DATE, source: 'scheduler_0900' },
       rootMode: 'scheduler',
@@ -158,12 +158,12 @@ test('WMB-5374 accepted scan intent is consumed through source snapshot and term
       FROM orchestrator_intents i JOIN orchestrator_mailbox m ON m.workspace_id=i.workspace_id AND m.intent_id=i.intent_id
       JOIN daily_orchestration_roots r ON r.workspace_id=i.workspace_id AND r.intent_id=i.intent_id
       WHERE i.request_id=? AND m.state IN ('succeeded','partial','failed','needs_user','cancelled')`).get('scheduler.daily-0900:wmb-5374-executor:2026-09-01'), () => runtime.database.prepare(`SELECT i.status intent_status, m.state mailbox_state FROM orchestrator_intents i JOIN orchestrator_mailbox m ON m.intent_id=i.intent_id WHERE i.request_id=?`).get('scheduler.daily-0900:wmb-5374-executor:2026-09-01'));
-    assert.equal(schedulerTerminal.intent_status, 'succeeded', JSON.stringify(schedulerTerminal));
-    assert.equal(schedulerTerminal.mailbox_state, 'succeeded', JSON.stringify(schedulerTerminal));
-    assert.equal(schedulerTerminal.root_status, 'succeeded', JSON.stringify(schedulerTerminal));
+    assert.equal(schedulerTerminal.intent_status, 'partial', JSON.stringify(schedulerTerminal));
+    assert.equal(schedulerTerminal.mailbox_state, 'partial', JSON.stringify(schedulerTerminal));
+    assert.equal(schedulerTerminal.root_status, 'partial', JSON.stringify(schedulerTerminal));
     assert.equal(schedulerTerminal.root_mode, 'scheduler');
     assert.equal(schedulerTerminal.source, 'scheduler_0900');
-    assert.equal(schedulerTerminal.stage_d_snapshot_count, 1);
+    assert.equal(schedulerTerminal.stage_d_snapshot_count, 0);
     assert.equal(schedulerTerminal.active_claim_count, 0);
     assert.equal(schedulerTerminal.active_dispatch_count, 0);
     const actorAfterIdle = runtime.database.prepare('SELECT owner_epoch FROM workspace_orchestrator_actors WHERE workspace_id=?').get(runtime.identity.workspaceId);

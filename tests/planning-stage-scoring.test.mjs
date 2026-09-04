@@ -10,7 +10,6 @@ import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs
 
 const { migrateDatabase } = await import('../src/main/db/migrations.ts');
 const planningStage = await import('../src/main/planning-stage.ts');
-const { ensurePlannerTask } = await import('../src/main/planning-stage-intake.ts');
 const { ensureDailyCycleInternal } = await import('../src/main/daily-content-cycle.ts');
 const { upsertSource } = await import('../src/main/sources.ts');
 const scoring = await import('../src/main/zhihu-hot-scoring.ts');
@@ -304,68 +303,9 @@ test('minimal draft has no pseudo-planning prose (empty fallback fields)', async
   });
 });
 
-test('repeated intake yields one active Planner task and stable planItem identity', async () => {
-  await withTempDir((dir) => {
-    const db = migrateFresh(dir);
-    const businessDate = '2026-08-26';
-    const src = makeSourceNoEvidence(db, { title: '重复 intake 去重的测试标题示例文本足够长度' });
-    db.prepare('UPDATE source_items SET summary = NULL, categories_json = ?, collected_at = ? WHERE id = ?').run('[]', `${businessDate}T10:00:00.000Z`, src.id);
-    seedZhihuObservation(db, businessDate, src.id, '重复 intake 去重的测试标题示例文本足够长度', {
-      heatText: null,
-      excerpt: null,
-    });
-    currentDbForSpawner = db;
-    fakeSpawnerState.spawnCount = 0;
-    fakeSpawnerState.map.clear();
-    setActiveJobSpawner(fakeSpawner);
-    try {
-      ensureDailyCycleInternal(db, businessDate);
-    } finally {
-      // keep spawner for second call to test dedupe
-    }
-    const firstPlanItem = db.prepare('SELECT id FROM plan_items WHERE source_ids_json LIKE ? ORDER BY created_at ASC LIMIT 1').get(`%"${src.id}"%`);
-    assert.ok(firstPlanItem);
-    const firstId = firstPlanItem.id;
-    const firstProvenance = JSON.parse(db.prepare('SELECT planning_provenance_json FROM plan_items WHERE id = ?').get(firstId).planning_provenance_json);
-    const firstTaskId = firstProvenance.planner_task_id;
-    assert.ok(firstTaskId, 'first intake should create planner_task_id in provenance');
-    const firstTaskRow = db.prepare('SELECT status FROM agent_tasks WHERE id = ?').get(firstTaskId);
-    assert.equal(firstTaskRow.status, 'running');
-    assert.equal(fakeSpawnerState.spawnCount, 1, 'first intake should spawn once');
-
-    // repeated Stage C
-    ensureDailyCycleInternal(db, businessDate);
-
-    const secondPlanItem = db.prepare('SELECT id FROM plan_items WHERE source_ids_json LIKE ? ORDER BY created_at ASC LIMIT 1').get(`%"${src.id}"%`);
-    assert.equal(secondPlanItem.id, firstId, 'planItem identity must be stable');
-
-    const countPlanItems = db.prepare('SELECT COUNT(*) as c FROM plan_items WHERE source_ids_json LIKE ?').get(`%"${src.id}"%`).c;
-    assert.equal(countPlanItems, 1, 'repeated intake must not create duplicate draft');
-
-    const secondProvenance = JSON.parse(db.prepare('SELECT planning_provenance_json FROM plan_items WHERE id = ?').get(firstId).planning_provenance_json);
-    const secondTaskId = secondProvenance.planner_task_id;
-    assert.equal(secondTaskId, firstTaskId, 'planner task must be deduped');
-    assert.equal(fakeSpawnerState.spawnCount, 1, 'repeated intake must not spawn again');
-
-    const activeCount = db.prepare("SELECT COUNT(*) as c FROM agent_tasks WHERE status = 'running' AND json_extract(context_refs_json, '$.planItemId') = ?").get(firstId).c;
-    assert.equal(activeCount, 1, 'only one active planner task');
-
-    // direct ensurePlannerTask dedupe
-    const r1 = ensurePlannerTask(db, { planItemId: firstId, sourceIds: [src.id], requestId: `req-${firstId}` });
-    const r2 = ensurePlannerTask(db, { planItemId: firstId, sourceIds: [src.id], requestId: `req-${firstId}` });
-    assert.equal(r1.taskId, r2.taskId);
-    assert.equal(r2.created, false);
-    assert.equal(fakeSpawnerState.spawnCount, 1, 'direct dedupe must not spawn again');
-    setActiveJobSpawner(null);
-    currentDbForSpawner = null;
-    fakeSpawnerState.map.clear();
-    db.close();
-  });
-});
 
 test('no hardcoded Yann/user UUID in owned files', async () => {
   const owned = [
-    'src/main/planning-stage-intake.ts',
     'src/main/daily-content-cycle.ts',
     'src/main/zhihu-hot-scoring.ts',
     'src/main/zhihu-hot-channel.ts',
@@ -389,7 +329,6 @@ test('no hardcoded Yann/user UUID in owned files', async () => {
 
 test('no direct INSERT into agent_tasks/jobs and no fake title padding in owned files', async () => {
   const owned = [
-    'src/main/planning-stage-intake.ts',
     'src/main/daily-content-cycle.ts',
   ];
   for (const rel of owned) {
@@ -404,7 +343,7 @@ test('no direct INSERT into agent_tasks/jobs and no fake title padding in owned 
     assert.equal(content.includes('INSERT INTO agent_tasks'), false, `${rel} must not contain direct INSERT INTO agent_tasks`);
     assert.equal(content.includes('INSERT INTO jobs'), false, `${rel} must not contain direct INSERT INTO jobs`);
   }
-  for (const rel of ['src/main/planning-stage-intake.ts', 'src/main/daily-content-cycle.ts', 'src/main/zhihu-hot-scoring.ts', 'src/main/zhihu-hot-channel.ts']) {
+  for (const rel of ['src/main/daily-content-cycle.ts', 'src/main/zhihu-hot-scoring.ts', 'src/main/zhihu-hot-channel.ts']) {
     const abs = path.join(process.cwd(), rel);
     let content = '';
     try {
@@ -417,51 +356,3 @@ test('no direct INSERT into agent_tasks/jobs and no fake title padding in owned 
   }
 });
 
-test('missing spawner fails closed with stable error', async () => {
-  await withTempDir((dir) => {
-    const db = migrateFresh(dir);
-    const src = makeSourceNoEvidence(db, { title: '缺失 spawner 时 fail closed 的标题文本示例足够长度' });
-    db.prepare('UPDATE source_items SET summary = NULL, categories_json = ?, collected_at = ? WHERE id = ?').run('[]', '2026-08-23T10:00:00.000Z', src.id);
-    const businessDate = '2026-08-27';
-    seedZhihuObservation(db, businessDate, src.id, '缺失 spawner 时 fail closed 的标题文本示例足够长度', { heatText: null, excerpt: null });
-    // create draft directly to test ensurePlannerTask without spawner
-    const draft = planningStage.createPlanningDraftFromTarget(db, {
-      title: '缺失 spawner 时 fail closed 的标题文本示例足够长度',
-      sourceIds: [src.id],
-      planDate: businessDate,
-      origin: 'zhihu_hot',
-    });
-    setActiveJobSpawner(null);
-    currentDbForSpawner = null;
-    let threw = false;
-    let code = null;
-    try {
-      ensurePlannerTask(db, { planItemId: draft.planItemId, sourceIds: [src.id], requestId: 'req-missing-spawner', businessDate });
-    } catch (e) {
-      threw = true;
-      code = (e && typeof e === 'object' && 'code' in e) ? e.code : null;
-    }
-    assert.equal(threw, true, 'ensurePlannerTask without spawner should throw');
-    assert.equal(code, 'PLANNER_SPAWNER_UNAVAILABLE', 'stable error code');
-    // Stage C should also surface failure, not silently pretend task exists
-    let stageThrew = false;
-    try {
-      ensureDailyCycleInternal(db, businessDate);
-    } catch (e) {
-      stageThrew = true;
-      const c = (e && typeof e === 'object' && 'code' in e) ? e.code : null;
-      assert.equal(c, 'PLANNER_SPAWNER_UNAVAILABLE');
-    }
-    // either throws or records provenance error
-    if (!stageThrew) {
-      const row = db.prepare('SELECT planning_provenance_json FROM plan_items WHERE id = ?').get(draft.planItemId);
-      if (row) {
-        const prov = JSON.parse(row.planning_provenance_json);
-        assert.ok(prov.planner_spawn_error || prov.planner_spawn_code, 'Stage C should record planner spawn failure');
-      } else {
-        assert.fail('Stage C without spawner should either throw or record error');
-      }
-    }
-    db.close();
-  });
-});

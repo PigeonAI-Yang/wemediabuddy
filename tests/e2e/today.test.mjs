@@ -53,7 +53,7 @@ export default [
         await waitForAppReady(page, { shell: '.app-shell', timeoutMs: 90_000 });
       });
       await step('今日页渲染空闲命令栏与计划项', async () => {
-        await page.locator('.today-command[data-mode="idle"]').waitFor({ state: 'visible', timeout: 20_000 });
+        await page.locator('.today-overview').waitFor({ state: 'visible', timeout: 20_000 });
         const hero = page.locator('.opportunity-primary.hero-card');
         await hero.waitFor({ state: 'visible', timeout: 20_000 });
         assert(((await hero.locator('h2').textContent()) ?? '').trim() === 'E2E 机会 1', '主计划项标题不符');
@@ -63,7 +63,7 @@ export default [
         const entry = page.locator('.proposal-ledger-entry');
         await entry.waitFor({ state: 'visible', timeout: 15_000 });
         const text = ((await entry.textContent()) ?? '').replace(/\s+/g, ' ');
-        assert(text.includes('选题台账') && text.includes('今日可批'), `选题台账入口文案异常: ${text}`);
+        assert(text.includes('选题台账') && text.includes('今日待批准'), `选题台账入口文案异常: ${text}`);
         await entry.click();
         await page.waitForFunction(
           (t) => document.querySelector(`nav button[title="${t}"]`)?.classList.contains('active'),
@@ -277,6 +277,34 @@ export default [
         assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
       });
       return { fermenting: true, pageerrors: evidence.pageerrors.length };
+    }
+  },
+  {
+    id: 'TD-007-today-overview-ledger-merged',
+    launch: { seedFixture: seedTodayWorkspace({ items: IDLE_ITEMS, sources: [] }) },
+    run: async ({ page, evidence, assert, step, artifactsDir }) => {
+      await step('启动进入主壳', async () => {
+        await waitForAppReady(page, { shell: '.app-shell', timeoutMs: 90_000 });
+      });
+      await step('经营概况与选题台账渲染为单一面板', async () => {
+        const overview = page.locator('.today-overview');
+        await overview.waitFor({ state: 'visible', timeout: 20_000 });
+        const ledger = overview.locator(':scope > .proposal-ledger-entry');
+        await ledger.waitFor({ state: 'visible', timeout: 20_000 });
+        const overviewBox = await overview.boundingBox();
+        const ledgerBox = await ledger.boundingBox();
+        const ledgerRuntime = await ledger.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { parentClass: element.parentElement?.className ?? '', position: style.position, margin: style.margin, transform: style.transform, display: style.display };
+        });
+        assert(Boolean(overviewBox && ledgerBox), '经营概况和选题台账入口都应可测量');
+        assert(ledgerRuntime.parentClass === 'today-overview' && ledgerBox.y >= overviewBox.y && ledgerBox.y + ledgerBox.height <= overviewBox.y + overviewBox.height + 1, `选题台账入口必须位于经营概况外框内部: overview=${JSON.stringify(overviewBox)} ledger=${JSON.stringify(ledgerBox)} runtime=${JSON.stringify(ledgerRuntime)}`);
+        assert(await page.locator('.today-main > .proposal-ledger-entry').count() === 0, '经营概况外部不得保留第二个独立台账组件');
+        await page.screenshot({ path: `${artifactsDir}/today-overview-ledger-merged-1600.png` });
+      });
+      assert(!evidence.crashed, '渲染进程崩溃');
+      assert(evidence.pageerrors.length === 0, `页面异常 ${evidence.pageerrors.length} 条: ${evidence.pageerrors[0]?.message ?? ''}`);
+      return { merged: true };
     }
   }
 ];

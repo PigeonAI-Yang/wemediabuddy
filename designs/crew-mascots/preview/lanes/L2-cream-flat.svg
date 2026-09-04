@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- L2 奶油平涂：自然熊棕 + 大奶白嘴套，无描边无渐变零腮红 -->
+  <g id="accessories">
+    <circle cx="298" cy="248" r="76" fill="#D9A468"/>
+    <circle cx="726" cy="248" r="76" fill="#D9A468"/>
+    <circle cx="298" cy="248" r="44" fill="#FFF1DC"/>
+    <circle cx="726" cy="248" r="44" fill="#FFF1DC"/>
+  </g>
+  <g id="body">
+    <ellipse cx="512" cy="505" rx="310" ry="290" fill="#D9A468"/>
+    <ellipse cx="512" cy="600" rx="165" ry="115" fill="#FFF1DC"/>
+  </g>
+  <g id="face">
+    <g id="eyes">
+      <circle cx="415" cy="482" r="24" fill="#3A3238"/>
+      <circle cx="424" cy="473" r="8" fill="#FFFFFF"/>
+      <circle cx="609" cy="482" r="24" fill="#3A3238"/>
+      <circle cx="618" cy="473" r="8" fill="#FFFFFF"/>
+    </g>
+    <g id="nose">
+      <ellipse cx="512" cy="562" rx="46" ry="32" fill="#3A3238"/>
+    </g>
+    <g id="mouth">
+      <path d="M512 594 Q512 622 488 630 M512 594 Q512 622 536 630" stroke="#3A3238" stroke-width="11" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g id="deco"/>
+</svg>

@@ -8,7 +8,7 @@ import { appConfirm } from './app-confirm';
 import { AppUpdateSettings } from './app-update-settings';
 import { SettingsIcon, type SettingsIconName } from './settings-icons';
 import { TodayDailyCycle } from './today-daily-cycle';
-import type { WmbRoleId, WmbRoleModelCandidate, WmbRoleModelPolicy, WmbSettingsSnapshot } from './wmb-settings-types';
+import type { WmbRoleId, WmbRoleModelCandidate, WmbRoleModelPolicy, WmbRoleModelThinkingLevel, WmbSettingsSnapshot } from './wmb-settings-types';
 
 const ROLE_DEFINITIONS: Array<{ id: WmbRoleId; label: string; description: string }> = [
   { id: 'desk', label: '主管 / Pi', description: '主编席对话与全站内部审批。' },
@@ -18,7 +18,7 @@ const ROLE_DEFINITIONS: Array<{ id: WmbRoleId; label: string; description: strin
   { id: 'librarian', label: '资料员', description: '整理资料库与主题家底。' }
 ];
 type RolePolicyDraft = Record<WmbRoleId, WmbRoleModelCandidate[]>;
-type PiModelOption = { id: string; contextWindow?: number; maxTokens?: number };
+type PiModelOption = { id: string; contextWindow?: number; maxTokens?: number; thinkingLevels?: WmbRoleModelThinkingLevel[] };
 type RoleModelFetchRecord = { requestKey: string; models: PiModelOption[]; error?: string };
 const ROLE_THINKING_OPTIONS = [
   { value: 'off', label: '关闭思考' },
@@ -33,6 +33,11 @@ type RoleThinkingLevel = typeof ROLE_THINKING_OPTIONS[number]['value'];
 
 function isRoleThinkingLevel(value: unknown): value is RoleThinkingLevel {
   return ROLE_THINKING_OPTIONS.some((option) => option.value === value);
+}
+
+function thinkingOptionsForModel(model: PiModelOption | undefined, current?: WmbRoleModelThinkingLevel): typeof ROLE_THINKING_OPTIONS[number][] {
+  if (model?.thinkingLevels) return ROLE_THINKING_OPTIONS.filter((option) => model.thinkingLevels!.includes(option.value));
+  return current ? ROLE_THINKING_OPTIONS.filter((option) => option.value === current) : [];
 }
 
 function roleCandidateIdentity(candidate: WmbRoleModelCandidate): string {
@@ -57,6 +62,7 @@ function parseRoleCandidateValue(value: string): WmbRoleModelCandidate | null {
 
 function isPiModelOption(value: unknown): value is PiModelOption {
   if (!value || typeof value !== 'object' || !('id' in value) || typeof value.id !== 'string') return false;
+  if ('thinkingLevels' in value && value.thinkingLevels !== undefined && (!Array.isArray(value.thinkingLevels) || value.thinkingLevels.some((level) => !isRoleThinkingLevel(level)))) return false;
   return value.id.length > 0;
 }
 
@@ -173,7 +179,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piApi, setPiApi] = useState<'openai-responses' | 'openai-completions' | 'anthropic-messages'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.api ?? 'openai-responses');
   const [piBaseUrl, setPiBaseUrl] = useState(settings?.pi.baseUrl ?? '');
   const [piModel, setPiModel] = useState(settings?.pi.model ?? '');
-  const [piThinking, setPiThinking] = useState<WmbSettingsSnapshot['pi']['profiles'][number]['thinking']>('off');
+  const [piThinking, setPiThinking] = useState<WmbRoleModelThinkingLevel | 'auto'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.thinking ?? 'auto');
   const [piAuthMode, setPiAuthMode] = useState<'bearer' | 'x-api-key' | 'none'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.authMode ?? 'bearer');
   const [piCredentialKind, setPiCredentialKind] = useState<'encrypted' | 'environment' | 'command' | 'none'>(settings?.pi.profiles.find((profile) => profile.id === settings.pi.activeId)?.credentialSourceKind ?? 'encrypted');
   const [piCredentialVariable, setPiCredentialVariable] = useState('');
@@ -201,6 +207,25 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
   const [piStreaming, setPiStreaming] = useState(true);
   const [loadingPiModels, setLoadingPiModels] = useState(false);
   const [rolePolicyDraft, setRolePolicyDraft] = useState<RolePolicyDraft>(() => rolePolicyDraftFromSettings(settings));
+  const currentModelCatalog = piModels.length ? piModels : roleModelCatalog[piProfileId] ?? [];
+  const selectedPiModelOption = currentModelCatalog.find((model) => model.id === piModel);
+  const modelCapabilityCatalogLoaded = piModels.length > 0 || Object.prototype.hasOwnProperty.call(roleModelCatalog, piProfileId);
+  const piProfileEditorSettingsKey = useMemo(() => JSON.stringify({
+    activeId: settings?.pi.activeId ?? '',
+    profiles: (settings?.pi.profiles ?? []).map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      api: profile.api,
+      authMode: profile.authMode,
+      credentialSourceKind: profile.credentialSourceKind,
+      thinking: profile.thinking,
+      contextWindow: profile.contextWindow,
+      maxTokens: profile.maxTokens,
+      capabilities: profile.capabilities
+    }))
+  }), [settings?.pi.activeId, settings?.pi.profiles]);
   const [rolePolicyDirty, setRolePolicyDirty] = useState(false);
   const [rolePolicySaving, setRolePolicySaving] = useState(false);
   const [rolePolicyNote, setRolePolicyNote] = useState('');
@@ -223,7 +248,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     setPiCredentialArgs('');
     setPiBaseUrl(profile?.baseUrl ?? '');
     setPiModel(profile?.model ?? '');
-    setPiThinking(profile?.thinking ?? 'off');
+    setPiThinking(profile?.thinking ?? 'auto');
     setPiContextWindow(profile?.contextWindow ? String(profile.contextWindow) : '');
     setPiMaxTokens(profile?.maxTokens ? String(profile.maxTokens) : '');
     setPiText(profile?.capabilities.text !== false);
@@ -237,10 +262,10 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     if (!keepNote) setPiConfigNote('');
   };
   useEffect(() => {
-    // 保存/激活后的 settings 刷新也会走这里：保留刚写入的配置反馈（如「已保存并切换到此配置」），
-    // 只在用户手动切换预设时由 selectPiProfile 清空提示。
+    // 后台资料变化会刷新整个 settings snapshot。只有 Provider 编辑字段真的变化时才重播种，
+    // 避免把刚获取的模型目录或用户正在输入的模型名立刻覆盖掉。
     selectPiProfile(settings?.pi.activeId ?? '', { keepNote: true });
-  }, [settings?.pi.activeId, settings?.pi.profiles]);
+  }, [piProfileEditorSettingsKey]);
   useEffect(() => {
     if (rolePolicyDirty) return;
     setRolePolicyDraft(rolePolicyDraftFromSettings(settings));
@@ -282,6 +307,10 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     return () => { cancelled = true; };
   }, [section, settings?.pi.profiles]);
   useEffect(() => {
+    if (piThinking === 'auto' || !modelCapabilityCatalogLoaded) return;
+    if (!selectedPiModelOption?.thinkingLevels?.includes(piThinking)) setPiThinking('auto');
+  }, [modelCapabilityCatalogLoaded, piThinking, selectedPiModelOption]);
+  useEffect(() => {
     if (section !== 'ai') return;
     void window.wmb.getIllustrationImageConfig().then((config) => {
       if (!config) return;
@@ -300,7 +329,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     try {
       await window.wmb.savePiConfig({
         id: piProfileId || undefined, name: piName, baseUrl: piBaseUrl, model: piModel, api: piApi,
-        authMode: piAuthMode, credentialSource: providerCredentialSource(), thinking: piThinking,
+        authMode: piAuthMode, credentialSource: providerCredentialSource(), thinking: piThinking === 'auto' ? null : piThinking,
         text: piText, vision: piVision, nativeSearch: piNativeSearch, imageGeneration: piImageGeneration, jsonOutput: piJsonOutput, streaming: piStreaming,
         contextWindow: piContextWindow ? Number(piContextWindow) : null,
         maxTokens: piMaxTokens ? Number(piMaxTokens) : null, apiKey: piApiKey || undefined
@@ -328,7 +357,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
       setPiModel(selected.id);
       setPiContextWindow(selected.contextWindow ? String(selected.contextWindow) : '');
       setPiMaxTokens(selected.maxTokens ? String(selected.maxTokens) : '');
-      setModelFetchNote(`已从 Provider 获取 ${models.length} 个模型。`);
+      if (piThinking !== 'auto' && !selected.thinkingLevels?.includes(piThinking)) setPiThinking('auto');
+      setModelFetchNote(`已从 Provider 获取 ${models.length} 个模型。思考等级已按所选模型能力更新。`);
     } catch (error) {
       setPiModels([]);
       setModelFetchFailed(true);
@@ -449,6 +479,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
     diagnostics: { title: '系统诊断', description: '' },
     about: { title: '关于 WMB', description: '' }
   };
+  const piThinkingOptions = thinkingOptionsForModel(selectedPiModelOption);
   return <section className="settings-workspace">
     <aside className="settings-nav">
       <button type="button" className="settings-back" onClick={back}><b><SettingsIcon name="back" /></b><span>返回工作台</span></button>
@@ -515,20 +546,24 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
             <label className="wide">
               <span>模型</span>
               <div className="model-picker">
-                {piModels.length
-                  ? <select value={piModel} onChange={(event) => { const model = piModels.find((item) => item.id === event.target.value)!; setPiModel(model.id); setPiContextWindow(model.contextWindow ? String(model.contextWindow) : ''); setPiMaxTokens(model.maxTokens ? String(model.maxTokens) : ''); }}>{piModels.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}</select>
-                  : <input value={piModel} onChange={(event) => { setPiModel(event.target.value); setPiContextWindow(''); setPiMaxTokens(''); }} placeholder="获取后选择，或手动填写" />}
+                <input list="pi-model-options" autoComplete="off" value={piModel} onChange={(event) => {
+                  const value = event.target.value;
+                  const model = piModels.find((item) => item.id === value);
+                  setPiModel(value);
+                  setPiContextWindow(model?.contextWindow ? String(model.contextWindow) : '');
+                  setPiMaxTokens(model?.maxTokens ? String(model.maxTokens) : '');
+                  if (piThinking !== 'auto' && modelCapabilityCatalogLoaded && !model?.thinkingLevels?.includes(piThinking)) setPiThinking('auto');
+                }} placeholder={piModels.length ? '选择模型，或手动填写' : '获取后选择，或手动填写'} />
+                {piModels.length > 0 && <datalist id="pi-model-options">{piModels.map((model) => <option key={model.id} value={model.id} />)}</datalist>}
                 <button type="button" className="secondary-button" disabled={loadingPiModels || !piBaseUrl.trim()} onClick={() => void fetchModels()}>{loadingPiModels ? '获取中…' : '获取模型'}</button>
               </div>
-              {modelFetchNote && <span className={`settings-field-note${modelFetchFailed ? ' error' : ''}`} role="status">{modelFetchNote}</span>}
             </label>
-            <label><span>思考等级</span><select value={piThinking ?? 'off'} onChange={(event) => setPiThinking(event.target.value as WmbSettingsSnapshot['pi']['profiles'][number]['thinking'])}><option value="off">关闭思考</option><option value="minimal">最低</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option><option value="max">最大</option></select></label>
+            <label><span>思考等级</span><select value={piThinking === 'auto' || piThinkingOptions.some((option) => option.value === piThinking) ? piThinking : 'auto'} onChange={(event) => setPiThinking(event.target.value as WmbRoleModelThinkingLevel | 'auto')}><option value="auto">自动（按模型默认）</option>{piThinkingOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>{selectedPiModelOption?.thinkingLevels ? '仅显示该模型实际支持的等级。' : modelCapabilityCatalogLoaded ? '该模型没有可验证的手动等级，仅使用自动模式。' : '正在按模型能力读取可选等级。'}</small></label>
             <label><span>上下文长度（tokens）</span><input type="number" min="1" step="1" value={piContextWindow} onChange={(event) => setPiContextWindow(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label><span>最大输出（tokens）</span><input type="number" min="1" step="1" value={piMaxTokens} onChange={(event) => setPiMaxTokens(event.target.value)} placeholder="由模型元数据决定" /></label>
             <label className="settings-switch"><span>支持文本生成</span><input type="checkbox" checked={piText} onChange={(event) => setPiText(event.target.checked)} aria-label="支持文本生成" /></label>
             <label className="settings-switch"><span>支持视觉输入</span><input type="checkbox" checked={piVision} onChange={(event) => setPiVision(event.target.checked)} aria-label="支持视觉输入" /></label>
             <label className="settings-switch"><span>支持图像生成</span><input type="checkbox" checked={piImageGeneration} onChange={(event) => setPiImageGeneration(event.target.checked)} aria-label="支持图像生成" /></label>
-            <label className="settings-switch"><span>模型自带联网搜索</span><input type="checkbox" checked={piNativeSearch} onChange={(event) => setPiNativeSearch(event.target.checked)} aria-label="模型自带联网搜索" /></label>
             <label className="settings-switch"><span>支持 JSON 结构化输出</span><input type="checkbox" checked={piJsonOutput} onChange={(event) => setPiJsonOutput(event.target.checked)} aria-label="支持 JSON 结构化输出" /></label>
             <label className="settings-switch"><span>支持流式输出</span><input type="checkbox" checked={piStreaming} onChange={(event) => setPiStreaming(event.target.checked)} aria-label="支持流式输出" /></label>
             <p className="settings-help wide">能力声明用于限制运行时路由；接口未提供模型元数据时仍可手动填写。</p>
@@ -580,6 +615,8 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                   <ol className="role-policy-chain" aria-label={`${role.label}模型候选顺序`}>
                     {candidates.map((candidate, index) => {
                       const profile = settings.pi.profiles.find((item) => item.id === candidate.profileId);
+                      const candidateModel = profile ? roleModelOptionsForProfile(profile).find((model) => model.id === candidate.model) : undefined;
+                      const candidateThinkingOptions = thinkingOptionsForModel(candidateModel, candidate.thinking);
                       return <li key={`${role.id}-${roleCandidateIdentity(candidate)}-${index}`} data-profile-id={candidate.profileId} data-model={candidate.model}>
                         <span className="role-policy-index" aria-hidden="true">{index + 1}</span>
                         <div className="role-policy-copy">
@@ -595,7 +632,7 @@ export function SettingsView({ dataRoot, settings, browserChoice, setBrowserChoi
                         <div className="role-policy-actions">
                           <label className="role-policy-thinking"><span>候选思考</span><select value={candidate.thinking ?? ''} aria-label={`${role.label}第 ${index + 1} 项候选思考等级`} onChange={(event) => updateRoleCandidateThinking(role.id, index, event.target.value === '' ? undefined : event.target.value as RoleThinkingLevel)}>
                             <option value="">继承 Provider 默认（{formatThinking(profile?.thinking)}）</option>
-                            {ROLE_THINKING_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            {candidateThinkingOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           </select></label>
                           <details className="role-policy-management">
                             <summary aria-label={`${role.label}第 ${index + 1} 项候选管理`}>管理</summary>

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1600" height="760" viewBox="0 0 1600 760" role="img">
+<title>Concept A DA-01 桌上文具拟人 · 情绪板评审图 — 物件如何获得人格</title>
+<rect width="1600" height="760" fill="#F6F4EF"/>
+<!-- header -->
+<rect x="24" y="18" rx="12" ry="12" width="360" height="22" fill="#111"/>
+<text x="36" y="33" font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" font-weight="700" fill="#fff">Concept A · DA-01 桌上文具拟人 · 情绪板 · 审美校准（不做风格分类）</text>
+<text x="24" y="64" font-family="system-ui, sans-serif" font-size="18" font-weight="800" fill="#111">物件如何获得人格 — 5 个真实案例并排观察</text>
+<text x="24" y="84" font-family="system-ui, sans-serif" font-size="11.5" fill="#666">只比较真实可见的“形/线/色/质/构成”与“人格化在哪里”。请直接指认：我想要案例 02 的人格化方式 + 案例 04 的视觉质感</text>
+<!-- instruction bar -->
+<rect x="24" y="96" width="1552" height="34" rx="10" fill="#fff" stroke="#E6E1D9"/>
+<rect x="24" y="96" width="4" height="34" rx="2" fill="#111"/>
+<text x="36" y="117" font-family="system-ui, sans-serif" font-size="11.5" fill="#333"><tspan font-weight="700" fill="#111">怎么用：</tspan> 例如 “要 01 的无脸姿态 + 03 的扁平色块” / “要 02 的加脸肢体 + 05 的金属/蜡质”。 每格已写清“看见了什么”与“人格化在哪里”</text>
+
+<!-- panel 01 -->
+<g>
+  <rect x="24" y="142" width="304" height="520" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <rect x="24" y="142" width="304" height="176" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <clipPath id="c1"><rect x="24" y="142" width="304" height="176" rx="14"/></clipPath>
+  <image href="./luxo-01.webp" x="24" y="142" width="304" height="176" preserveAspectRatio="xMidYMid meet" clip-path="url(#c1)"/>
+  <text x="36" y="342" font-family="system-ui, sans-serif" font-size="12.5" font-weight="800" fill="#111">01 · Pixar《Luxo Jr.》台灯</text>
+  <text x="36" y="358" font-family="system-ui, sans-serif" font-size="10.5" fill="#666">— 无脸靠姿态</text>
+  <text x="36" y="378" font-family="system-ui, sans-serif" font-size="10.5" fill="#333"><tspan x="36" dy="0">看见的：圆锥灯罩+圆柱臂+方底座；</tspan><tspan x="36" dy="13">硬边圆弧，无描边靠阴影收口；</tspan><tspan x="36" dy="13">哑光灰+暖黄光；金属磨砂+柔光；</tspan><tspan x="36" dy="13">斜向倾身对比水平底座。</tspan></text>
+  <text x="36" y="448" font-family="system-ui, sans-serif" font-size="10.5" fill="#111"><tspan x="36" dy="0" font-weight="700">人格化在哪里：</tspan><tspan x="36" dy="13" fill="#333">姿态与重心转移。无脸无肢体，</tspan><tspan x="36" dy="13" fill="#333">仅靠臂角度、灯罩点头与弹跳。</tspan></text>
+  <rect x="36" y="500" rx="9" ry="9" width="84" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="44" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">机制：姿态/倾角</text>
+  <rect x="126" y="500" rx="9" ry="9" width="42" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="134" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">无脸</text>
+  <text x="36" y="540" font-family="system-ui, sans-serif" font-size="9" fill="#888">来源：pixar.com/luxo-jr 官方</text>
+</g>
+<!-- panel 02 -->
+<g>
+  <rect x="340" y="142" width="304" height="520" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <rect x="340" y="142" width="304" height="176" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <clipPath id="c2"><rect x="340" y="142" width="304" height="176" rx="14"/></clipPath>
+  <!-- clippy single frame 124x93 region of 3348x3162 sheet, scale to fit -->
+  <g clip-path="url(#c2)">
+    <!-- place full sheet scaled down so first frame fills box -->
+    <image href="./clippy-map.png" x="340" y="142" width="3348" height="3162" preserveAspectRatio="xMinYMin meet" opacity="0.98" transform="translate(78,28) scale(0.62)"/>
+  </g>
+  <rect x="340" y="142" width="304" height="176" rx="14" fill="none" stroke="#E6E1D9"/>
+  <text x="352" y="342" font-family="system-ui, sans-serif" font-size="12.5" font-weight="800" fill="#111">02 · Microsoft Clippy</text>
+  <text x="352" y="358" font-family="system-ui, sans-serif" font-size="10.5" fill="#666">— 物件上加脸与肢体</text>
+  <text x="352" y="378" font-family="system-ui, sans-serif" font-size="10.5" fill="#333"><tspan x="352" dy="0">看见的：回形针弯折细长体；</tspan><tspan x="352" dy="13">等粗金属线框+粗黑圆眼+白底黑瞳；</tspan><tspan x="352" dy="13">银灰线体+白/黑眼；光滑金属+扁平眼；</tspan><tspan x="352" dy="13">立直体块居中，眼贴顶部弯折。</tspan></text>
+  <text x="352" y="448" font-family="system-ui, sans-serif" font-size="10.5" fill="#111"><tspan x="352" dy="0" font-weight="700">人格化在哪里：</tspan><tspan x="352" dy="13" fill="#333">物件上叠加脸与线形肢体。</tspan><tspan x="352" dy="13" fill="#333">回形针构造不变，眼与手臂长在轮廓上。</tspan></text>
+  <rect x="352" y="500" rx="9" ry="9" width="108" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="360" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">机制：物件+脸/肢体</text>
+  <rect x="466" y="500" rx="9" ry="9" width="52" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="474" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">UI 助手</text>
+  <text x="352" y="540" font-family="system-ui, sans-serif" font-size="9" fill="#888">来源：clippy.js 官方仓库雪碧表首帧</text>
+</g>
+<!-- panel 03 -->
+<g>
+  <rect x="656" y="142" width="304" height="520" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <rect x="656" y="142" width="304" height="176" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <clipPath id="c3"><rect x="656" y="142" width="304" height="176" rx="14"/></clipPath>
+  <image href="./noto-paperclip.png" x="656" y="142" width="304" height="176" preserveAspectRatio="xMidYMid meet" clip-path="url(#c3)"/>
+  <text x="668" y="342" font-family="system-ui, sans-serif" font-size="12.5" font-weight="800" fill="#111">03 · Google Noto 回形针</text>
+  <text x="668" y="358" font-family="system-ui, sans-serif" font-size="10.5" fill="#666">— 极简扁平对象</text>
+  <text x="668" y="378" font-family="system-ui, sans-serif" font-size="10.5" fill="#333"><tspan x="668" dy="0">看见的：极简 U 形厚条；无线条，色块</tspan><tspan x="668" dy="13">即轮廓；平涂橙黄与灰蓝；均匀哑光；</tspan><tspan x="668" dy="13">居中孤立，留白即舞台。</tspan></text>
+  <text x="668" y="428" font-family="system-ui, sans-serif" font-size="10.5" fill="#111"><tspan x="668" dy="0" font-weight="700">人格化在哪里：</tspan><tspan x="668" dy="13" fill="#333">极简对象即角色。无脸无肢体，</tspan><tspan x="668" dy="13" fill="#333">靠外形比例与色块让人当作角色观看。</tspan></text>
+  <rect x="668" y="500" rx="9" ry="9" width="116" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="676" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">机制：极简几何即角色</text>
+  <rect x="790" y="500" rx="9" ry="9" width="58" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="798" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">扁平色块</text>
+  <text x="668" y="540" font-family="system-ui, sans-serif" font-size="9" fill="#888">来源：github.com/googlefonts/noto-emoji</text>
+</g>
+<!-- panel 04 -->
+<g>
+  <rect x="972" y="142" width="304" height="520" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <rect x="972" y="142" width="304" height="176" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <clipPath id="c4"><rect x="972" y="142" width="304" height="176" rx="14"/></clipPath>
+  <image href="./pushpin-3d.png" x="972" y="142" width="304" height="176" preserveAspectRatio="xMidYMid meet" clip-path="url(#c4)"/>
+  <text x="984" y="342" font-family="system-ui, sans-serif" font-size="12.5" font-weight="800" fill="#111">04 · Fluent Emoji 图钉 3D</text>
+  <text x="984" y="358" font-family="system-ui, sans-serif" font-size="10.5" fill="#666">— 软体积对象</text>
+  <text x="984" y="378" font-family="system-ui, sans-serif" font-size="10.5" fill="#333"><tspan x="984" dy="0">看见的：短圆柱头+尖针；柔和圆角</tspan><tspan x="984" dy="13">无硬描边；珊瑚红头+金属针带渐变；</tspan><tspan x="984" dy="13">充气塑料感，柔和高光与软阴影；</tspan><tspan x="984" dy="13">居中单体，阴影托底。</tspan></text>
+  <text x="984" y="448" font-family="system-ui, sans-serif" font-size="10.5" fill="#111"><tspan x="984" dy="0" font-weight="700">人格化在哪里：</tspan><tspan x="984" dy="13" fill="#333">体积与材质即人格。无脸无肢体，</tspan><tspan x="984" dy="13" fill="#333">靠圆润膨胀的体量与柔光感到存在。</tspan></text>
+  <rect x="984" y="500" rx="9" ry="9" width="100" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="992" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">机制：软体积即角色</text>
+  <rect x="1090" y="500" rx="9" ry="9" width="58" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="1098" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">充气质感</text>
+  <text x="984" y="540" font-family="system-ui, sans-serif" font-size="9" fill="#888">来源：github.com/microsoft/fluentui-emoji</text>
+</g>
+<!-- panel 05 -->
+<g>
+  <rect x="1288" y="142" width="304" height="520" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <rect x="1288" y="142" width="304" height="176" rx="14" fill="#fff" stroke="#E6E1D9"/>
+  <clipPath id="c5"><rect x="1288" y="142" width="304" height="176" rx="14"/></clipPath>
+  <image href="./lumiere-d23.jpg" x="1288" y="142" width="304" height="176" preserveAspectRatio="xMidYMid meet" clip-path="url(#c5)"/>
+  <text x="1300" y="342" font-family="system-ui, sans-serif" font-size="12.5" font-weight="800" fill="#111">05 · Disney Lumière 烛台</text>
+  <text x="1300" y="358" font-family="system-ui, sans-serif" font-size="10.5" fill="#666">— 传统动画式拟人</text>
+  <text x="1300" y="378" font-family="system-ui, sans-serif" font-size="10.5" fill="#333"><tspan x="1300" dy="0">看见的：中柱+三分支臂+蜡泪；</tspan><tspan x="1300" dy="13">巴洛克曲线涡卷；抛光金+白蜡+焰橙；</tspan><tspan x="1300" dy="13">镜面金属+半透蜡+发光火焰；</tspan><tspan x="1300" dy="13">对称分枝，脸在中柱，蜡烛即手臂。</tspan></text>
+  <text x="1300" y="448" font-family="system-ui, sans-serif" font-size="10.5" fill="#111"><tspan x="1300" dy="0" font-weight="700">人格化在哪里：</tspan><tspan x="1300" dy="13" fill="#333">物件部件映射人体。蜡烛作手臂与头，</tspan><tspan x="1300" dy="13" fill="#333">火焰为指尖，关节与表情按人物骨骼演绎。</tspan></text>
+  <rect x="1300" y="500" rx="9" ry="9" width="116" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="1308" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">机制：部件→骨骼映射</text>
+  <rect x="1422" y="500" rx="9" ry="9" width="58" height="16" fill="#F8F6F1" stroke="#E6E1D9"/><text x="1430" y="511" font-family="system-ui, sans-serif" font-size="9" fill="#555">传统动画</text>
+  <text x="1300" y="540" font-family="system-ui, sans-serif" font-size="9" fill="#888">来源：d23.com/a-to-z/lumiere 官方</text>
+</g>
+
+<text x="24" y="688" font-family="system-ui, sans-serif" font-size="10" fill="#888">路径：references/visual/concept-a-desk-objects/board.html · 评审图 board.svg · 来源 sources.md · 冻结 concepts.md Form 3.2 / brief.md</text>
+<text x="24" y="704" font-family="system-ui, sans-serif" font-size="10" fill="#888">图像版权归原权利方，仅作 DA-01 审美校准内部对照；每格文字仅描述“看见的”与“人格化在哪里”，未作风格分类与评价。</text>
+<text x="24" y="730" font-family="system-ui, sans-serif" font-size="10" fill="#AAA">DA-01「桌上文具拟人」已冻结 2026-08-20 · 本板不做风格分类，可直接指认：我想要 02 的人格化方式 + 04 的视觉质感</text>
+</svg>

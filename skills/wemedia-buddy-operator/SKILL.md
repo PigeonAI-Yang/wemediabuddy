@@ -92,7 +92,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 - 状态语义必须准确：`queued`=排队等容量（池满等待）；`waiting_resource`=等资源（对象锁/lease/judge 占用，不占并发，释放后自动晋升）；`running`=工作中（进度见 monitor.task 的 N/M）；`needs_user`=等你批（终态：不占 worker、不持 lease/grant/锁，需用户处理或关闭后才闭环，不自动重试）；`succeeded`/`partial`/`failed`/`cancelled`=终态并退出活动视图。不要把 waiting_resource 说成失败，不要编造完成时间或猜测性进度。
 - 活动与历史不混淆：活动视图=池内 queued/waiting_resource/running + 终态 needs_user；历史只从持久面重建（`agent_tasks.context_refs_json` 为锚 + 任务行），应用重启（池清空）后历史仍在。续派=从 context_refs_json 重建原 RoleJobRequest（jobId/roleId/brief/边界参数）+ 结果摘要，用 `wmb_spawn_job` 派新单（新 jobId）；不得对已终态工单直接继续，也不得伪称新单与旧单同一身份。
 - 主管边界：主管是软件内主管/主编席（desk 行），持全站内部 standing 写权——全部可授权业务能力命令 ∪ 基建命令，含内部准备命令，不含三类红线执行命令（最终平台发布、硬删执行、外部平台变更执行）；红线动作只能准备，最终动作必须由用户在 UI 新鲜确认。班组投影（`wmb_list_agents_roster`）里 desk 行就是主管/主编席；若遇旧数据把 desk 标为「桌助/协调入口」，按历史文案处理，不改变主管身份与职权。主管不占员工执行容量、不进员工槽；`wmb_spawn_job` 的 roleId 只接受 reporter/planner/writer/librarian，不可派工给主管自己；留言（`wmb_message_job`）不等于内部审批，主题整理提案的批准/驳回是主管内部审批，不要求用户手工操作。`maxWorkers`（0..7）是全角色共享并发上限，不是每角色配额；0=派工停用（spawn 拒绝），调整它不改变任何角色或权限。
-- 先调 `wmb_daily_readiness` 查看今日扫/判状态与建议下一阶段；续接方式由你决定：扫描完成后要续接策划用 `wmb_continue_after_scan`（只要单项采集就不要调用），按阶段编排用 `wmb_run_daily_stage`（scan=单项采集，judge=单项策划，full=一条龙），派单项执行用 `wmb_spawn_job`。
+- 先调 `wmb_daily_readiness` 查看今日状态。今日选题只保留 `wmb_run_daily_stage`：`scan` 仅采集，`full` 完成采集与方案；不再提供独立 Judge 续接命令。单项工作使用 `wmb_spawn_job` 派 reporter/planner/writer/librarian。
 - `wmb_spawn_job` 只传角色与业务参数（不接受 intent）：写手必须带 `projectId`，并按目标明确传 `writerTask`——`core_draft` 写核心稿，`xiaohongshu_platform_version` 基于最新核心稿生成并保存小红书平台版本；资料员是真实执行任务，无可整理内容时回报 no-op 确认。
 - 派单后等系统 JOB_EVENT 终态推送（succeeded/failed/cancelled/partial/needs_user，含 code/message/readback）再汇报；不要 sleep+bash 轮询 session，必要时才用 `wmb_get_job` 看 monitor.task。成功必须业务读回；partial 表示部分达成，needs_user 表示需用户处理或补料；取消优先。
 - 监工与传话：`wmb_message_job`（参数 jobId、body）/ `wmb_list_job_messages`（参数 jobId）留言与回读（running 时写入 task 进度并带 [主管] 前缀），`wmb_cancel_job`（参数 jobId）取消工单。
@@ -205,7 +205,7 @@ description: 通过 WeMediaBuddy 内置业务工具操作当前自媒体工作�
 
 X Lists：`wmb_read_x_list_index`、`wmb_read_x_list_detail`、`wmb_read_x_list_members`、`wmb_read_x_list_timeline`、`wmb_list_x_list_bindings`、`wmb_get_x_list_operation`、`wmb_prepare_x_list_operation`、`wmb_create_x_list`、`wmb_add_x_list_members`、`wmb_remove_x_list_members`、`wmb_collect_x_list_timeline`、`wmb_list_x_post_metric_snapshots`、`wmb_get_x_post_trend`、`wmb_start_x_list_observation`、`wmb_get_x_list_observation`、`wmb_stop_x_list_observation`。
 
-主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_continue_after_scan`、`wmb_run_daily_stage`。
+主管派工与工单编排：`wmb_list_agents_roster`、`wmb_list_jobs`、`wmb_get_job`、`wmb_spawn_job`、`wmb_cancel_job`、`wmb_message_job`、`wmb_list_job_messages`、`wmb_daily_readiness`、`wmb_run_daily_stage`。
 
 
 

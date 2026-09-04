@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360">
+  <g fill="#211D29">
+    <!-- 桌助=熊：圆头圆耳 -->
+    <circle cx="75" cy="145" r="32"/>
+    <circle cx="205" cy="145" r="32"/>
+    <circle cx="140" cy="220" r="95"/>
+    <!-- 记者=兔：长双耳 -->
+    <ellipse cx="388" cy="122" rx="22" ry="85" transform="rotate(-8 388 122)"/>
+    <ellipse cx="452" cy="122" rx="22" ry="85" transform="rotate(8 452 122)"/>
+    <ellipse cx="420" cy="232" rx="82" ry="88"/>
+    <!-- 策划=猫头鹰：耳羽 -->
+    <ellipse cx="645" cy="132" rx="16" ry="42" transform="rotate(-18 645 132)"/>
+    <ellipse cx="755" cy="132" rx="16" ry="42" transform="rotate(18 755 132)"/>
+    <circle cx="700" cy="222" r="95"/>
+    <!-- 写手=猫：尖耳 -->
+    <path d="M905 185 Q912 100 970 148 Q945 190 905 185 Z"/>
+    <path d="M1055 185 Q1048 100 990 148 Q1015 190 1055 185 Z"/>
+    <ellipse cx="980" cy="238" rx="90" ry="82"/>
+    <!-- 资料员=刺猬：锯齿背 -->
+    <path d="M1165 205 L1190 130 L1215 188 L1240 122 L1265 182 L1290 128 L1312 188 L1335 142 L1355 208 Z"/>
+    <circle cx="1260" cy="228" r="98"/>
+  </g>
+</svg>

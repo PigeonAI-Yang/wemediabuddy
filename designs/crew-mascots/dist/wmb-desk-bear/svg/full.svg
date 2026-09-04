@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#FFCF9E"/>
+      <stop offset="1" stop-color="#F5B87E"/>
+    </linearGradient>
+  </defs>
+  <!-- 桌助·熊：主管的克制，无任何道具 -->
+  <g id="accessories">
+    <g id="ears">
+      <circle cx="310" cy="295" r="95" fill="#FFCF9E"/>
+      <circle cx="714" cy="295" r="95" fill="#FFCF9E"/>
+      <circle cx="310" cy="295" r="55" fill="#FFE8CF"/>
+      <circle cx="714" cy="295" r="55" fill="#FFE8CF"/>
+    </g>
+  </g>
+  <g id="body">
+    <ellipse cx="512" cy="540" rx="350" ry="320" fill="url(#fur)"/>
+    <ellipse cx="512" cy="580" rx="150" ry="105" fill="#FFE8CF"/>
+  </g>
+  <g id="face">
+    <g id="eyes">
+      <circle cx="390" cy="475" r="34" fill="#3A3238"/>
+      <circle cx="401" cy="463" r="11" fill="#FFFFFF"/>
+      <circle cx="634" cy="475" r="34" fill="#3A3238"/>
+      <circle cx="645" cy="463" r="11" fill="#FFFFFF"/>
+    </g>
+    <g id="nose">
+      <ellipse cx="512" cy="550" rx="46" ry="34" fill="#3A3238"/>
+    </g>
+    <g id="mouth">
+      <path d="M512 584 Q512 620 486 628 M512 584 Q512 620 538 628" stroke="#3A3238" stroke-width="14" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g id="deco">
+    <ellipse cx="300" cy="610" rx="55" ry="32" fill="#FFB3C1" opacity="0.6"/>
+    <ellipse cx="724" cy="610" rx="55" ry="32" fill="#FFB3C1" opacity="0.6"/>
+  </g>
+</svg>

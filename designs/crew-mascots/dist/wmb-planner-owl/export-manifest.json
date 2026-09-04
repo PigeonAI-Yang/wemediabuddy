@@ -1,0 +1,199 @@
+{
+  "name": "wmb-planner-owl",
+  "matrix": {
+    "avatar": [
+      {
+        "size": 1024,
+        "variant": "full"
+      },
+      {
+        "size": 640,
+        "variant": "full"
+      },
+      {
+        "size": 400,
+        "variant": "full"
+      }
+    ],
+    "icon": [
+      {
+        "size": 256,
+        "variant": "full"
+      },
+      {
+        "size": 128,
+        "variant": "full"
+      },
+      {
+        "size": 64,
+        "variant": "simple"
+      },
+      {
+        "size": 48,
+        "variant": "simple"
+      },
+      {
+        "size": 32,
+        "variant": "simple"
+      }
+    ],
+    "favicon": [
+      {
+        "size": 32,
+        "variant": "simple"
+      },
+      {
+        "size": 16,
+        "variant": "glyph"
+      }
+    ],
+    "ico": {
+      "app.ico": [
+        {
+          "size": 256,
+          "variant": "full"
+        },
+        {
+          "size": 48,
+          "variant": "simple"
+        },
+        {
+          "size": 32,
+          "variant": "simple"
+        },
+        {
+          "size": 16,
+          "variant": "glyph"
+        }
+      ],
+      "favicon.ico": [
+        {
+          "size": 48,
+          "variant": "simple"
+        },
+        {
+          "size": 32,
+          "variant": "simple"
+        },
+        {
+          "size": 16,
+          "variant": "glyph"
+        }
+      ]
+    }
+  },
+  "outputs": [
+    {
+      "file": "png/avatar/1024.png",
+      "size": 1024,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-1024-full-y60f.png"
+    },
+    {
+      "file": "png/avatar/640.png",
+      "size": 640,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-640-full-uucc.png"
+    },
+    {
+      "file": "png/avatar/400.png",
+      "size": 400,
+      "variant": "full",
+      "group": "avatar",
+      "source": "render-400-full-0dpu.png"
+    },
+    {
+      "file": "png/icon/256.png",
+      "size": 256,
+      "variant": "full",
+      "group": "icon",
+      "source": "render-256-full-zyc5.png"
+    },
+    {
+      "file": "png/icon/128.png",
+      "size": 128,
+      "variant": "full",
+      "group": "icon",
+      "source": "render-128-full-1e5q.png"
+    },
+    {
+      "file": "png/icon/64.png",
+      "size": 64,
+      "variant": "simple",
+      "group": "icon",
+      "source": "render-64-simple-xu66.png"
+    },
+    {
+      "file": "png/icon/48.png",
+      "size": 48,
+      "variant": "simple",
+      "group": "icon",
+      "source": "render-48-simple-f6v8.png"
+    },
+    {
+      "file": "png/icon/32.png",
+      "size": 32,
+      "variant": "simple",
+      "group": "icon",
+      "source": "render-32-simple-8mtr.png"
+    },
+    {
+      "file": "png/favicon/32.png",
+      "size": 32,
+      "variant": "simple",
+      "group": "favicon",
+      "source": "render-32-simple-8mtr.png"
+    },
+    {
+      "file": "png/favicon/16.png",
+      "size": 16,
+      "variant": "glyph",
+      "group": "favicon",
+      "source": "render-16-glyph-67my.png"
+    },
+    {
+      "file": "ico/app.ico",
+      "ico": true,
+      "entries": [
+        {
+          "size": 256,
+          "variant": "full"
+        },
+        {
+          "size": 48,
+          "variant": "simple"
+        },
+        {
+          "size": 32,
+          "variant": "simple"
+        },
+        {
+          "size": 16,
+          "variant": "glyph"
+        }
+      ]
+    },
+    {
+      "file": "ico/favicon.ico",
+      "ico": true,
+      "entries": [
+        {
+          "size": 48,
+          "variant": "simple"
+        },
+        {
+          "size": 32,
+          "variant": "simple"
+        },
+        {
+          "size": 16,
+          "variant": "glyph"
+        }
+      ]
+    }
+  ],
+  "generatedAt": "2026-08-20T12:15:36.990Z",
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+}

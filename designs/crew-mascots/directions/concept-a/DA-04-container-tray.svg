@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 380" role="img">
+<title>DA-04 容器收纳家族 — 开口容器</title>
+<g fill="#000">
+  <!-- 桌助：浅盘托盘（宽浅U） -->
+  <g id="desk">
+    <!-- 盘体：U形轮廓用路径 -->
+    <path d="M 32 156 L 32 286 A14 14 0 0 0 46 300 L 210 300 A14 14 0 0 0 224 286 L 224 156 L 208 156 L 208 272 L 48 272 L 48 156 Z"/>
+    <!-- 盘内横档（连体） -->
+    <rect x="72" y="188" width="112" height="18" rx="8"/>
+    <rect x="90" y="220" width="76" height="14" rx="6"/>
+  </g>
+  <!-- 记者：深筒杯（高U） -->
+  <g id="reporter">
+    <path d="M 352 68 L 352 288 A12 12 0 0 0 364 300 L 476 300 A12 12 0 0 0 488 288 L 488 68 L 472 68 L 472 274 L 368 274 L 368 68 Z"/>
+    <!-- 内置探针分隔 -->
+    <rect x="408" y="108" width="24" height="96" rx="8"/>
+    <circle cx="420" cy="96" r="16"/>
+  </g>
+  <!-- 策划：方槽印台（方U+中钮） -->
+  <g id="planner">
+    <path d="M 602 132 L 602 290 A12 12 0 0 0 614 302 L 782 302 A12 12 0 0 0 794 290 L 794 132 L 778 132 L 778 272 L 618 272 L 618 132 Z"/>
+    <!-- 中钮 -->
+    <rect x="664" y="96" width="68" height="42" rx="10"/>
+    <circle cx="698" cy="78" r="20"/>
+  </g>
+  <!-- 写手：笔筒（高U+双槽口） -->
+  <g id="writer">
+    <path d="M 926 92 L 926 292 A10 10 0 0 0 936 302 L 1028 302 A10 10 0 0 0 1038 292 L 1038 92 L 1022 92 L 1022 272 L 942 272 L 942 92 Z"/>
+    <!-- 筒内两支笔头凸起（连体） -->
+    <rect x="944" y="62" width="28" height="40" rx="8"/>
+    <path d="M 944 62 L 972 62 L 958 36 Z"/>
+    <rect x="992" y="62" width="28" height="40" rx="8"/>
+    <path d="M 992 62 L 1020 62 L 1006 36 Z"/>
+  </g>
+  <!-- 资料员：档案抽屉（宽扁U+拉手+分格） -->
+  <g id="archivist">
+    <path d="M 1108 156 L 1108 288 A12 12 0 0 0 1120 300 L 1370 300 A12 12 0 0 0 1382 288 L 1382 156 L 1366 156 L 1366 270 L 1124 270 L 1124 156 Z"/>
+    <!-- 分格隔板 -->
+    <rect x="1196" y="156" width="10" height="116" rx="4"/>
+    <rect x="1284" y="156" width="10" height="116" rx="4"/>
+    <!-- 拉手 -->
+    <rect x="1156" y="208" width="48" height="12" rx="6"/>
+    <rect x="1244" y="208" width="48" height="12" rx="6"/>
+    <rect x="1330" y="208" width="36" height="12" rx="6"/>
+  </g>
+</g>
+<g font-family="sans-serif" font-size="16" fill="#000" text-anchor="middle" font-weight="600">
+  <text x="128" y="358">桌助</text>
+  <text x="420" y="358">记者</text>
+  <text x="698" y="358">策划</text>
+  <text x="982" y="358">写手</text>
+  <text x="1245" y="358">资料员</text>
+</g>
+<g font-family="sans-serif" font-size="11" fill="#888" text-anchor="middle">
+  <text x="700" y="18">DA-04 · 容器收纳家族 — 统一U形开口容器语法，靠高/宽/格口区分“装什么”</text>
+</g>
+</svg>

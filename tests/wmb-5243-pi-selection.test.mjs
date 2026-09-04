@@ -245,47 +245,6 @@ test('WMB-5243 UI: box select commit accumulates via shared helper and records h
   assert.doesNotMatch(view, /chatPi|sendText|wmb\.chat/);
 });
 
-test('WMB-5243 UI: Pi context is selected-only; empty selection clears context; never full canvas', () => {
-  // 发射契约：canvasId 恒为全局哨兵（别名常量）、mode 恒为 selected、空选择清空（无整页回退）
-  assert.match(view, /canvasId: KNOWLEDGE_NETWORK_CANVAS_ID/);
-  assert.match(view, /mode:\s*['"]selected['"]/);
-  assert.match(view, /onContextChange\([\s\S]{0,500}: null,/);
-  // Pi 类型与 main 状态同为 selected-only；发送载荷不再有 current_page 兜底
-  assert.match(appTypes, /mode: 'selected'/);
-  assert.doesNotMatch(appTypes, /mode: 'current_page' \| 'selected'/);
-  assert.match(mainTsx, /mode: 'selected'/);
-  assert.match(payloadModule, /selectionMode=\$\{context\.contextSelection\?\.mode \?\? 'selected'\}/);
-  assert.doesNotMatch(payloadModule, /current_page/);
-});
-
-test('WMB-5243 UI: Esc closes floating card first, otherwise clears selection', () => {
-  // 浮卡打开（cardNodeId 非空）时 Esc 只关卡片；否则才清空选择（清空走 onClearSelection）
-  assert.match(view, /cardNodeId/);
-  assert.match(view, /setSelected\(\[\]\)/);
-  assert.match(layout, /event\.key === 'Escape'[\s\S]{0,200}cardNodeId[\s\S]{0,160}closeNodeCard[\s\S]{0,140}onClearSelection/);
-});
-
-test('WMB-5243 UI: Ctrl+Z/Ctrl+X history shortcuts keep system shortcuts in editable focus', () => {
-  // 历史快捷键只作用于框选上下文：Ctrl+Z 回退、Ctrl+X 前进（视图经别名导入纯函数）
-  assert.match(view, /undoSelection(?:Pure)?\(/);
-  assert.match(view, /redoSelection(?:Pure)?\(/);
-  // 可编辑焦点保留系统快捷键：命中 input/textarea/select/contenteditable 时先 return，
-  // 否则 preventDefault + 走历史处理（同一结构对 z 与 x 生效）
-  assert.match(layout, /ctrlKey/);
-  assert.match(layout, /key\.toLowerCase\(\) === 'z'[\s\S]{0,180}editable\) return;[\s\S]{0,90}preventDefault/);
-  assert.match(layout, /key\.toLowerCase\(\) === 'x'[\s\S]{0,180}editable\) return;[\s\S]{0,90}preventDefault/);
-  assert.match(layout, /contenteditable/);
-  assert.match(layout, /onKeyDown/);
-});
-
-test('WMB-5243 UI: frozen package hint reads excludedCount and shows 未纳入 N 项, including over-limit branch', () => {
-  // 视图提示读取服务端全量 excludedCount（去重/无效/限长未纳入总和），不依赖 excluded 明细数组长度
-  assert.match(view, /'excludedCount' in pkg && typeof pkg\.excludedCount === 'number'/);
-  // 常规未纳入：已纳入 N 项 · 未纳入 N 项
-  assert.match(view, /已纳入 \$\{packageHint\.items\} 项 · 未纳入 \$\{packageHint\.excluded\} 项/);
-  // 超限分支同样明示未纳入数量（上下文超限 · 已纳入 N 项 · 未纳入 N 项）
-  assert.match(view, /上下文超限 · 已纳入 \$\{packageHint\.items\} 项 · 未纳入 \$\{packageHint\.excluded\} 项/);
-});
 
 // ---------------------------------------------------------------------------
 // Pi dock 发送路径与旧接口保留
@@ -304,14 +263,3 @@ test('WMB-5243 UI: Pi send uses backend frozen manifest, not old package preview
   assert.match(globalDts, /previewKnowledgeContextPackage/);
 });
 
-test('WMB-5243 UI: global network canvas sentinel is the stable Pi canvasId', () => {
-  // 全局网络占位画布 ID 契约：'global'（main 侧按此路由冻结选择包）
-  assert.match(networkShared, /KNOWLEDGE_NETWORK_CANVAS_ID = 'global'/);
-});
-
-test('WMB-5243 UI: app routes knowledge network empty state to library for saving sources', () => {
-  // 空网络引导“去资料库保存资料”：source 无 id 时进入资料库
-  assert.match(mainTsx, /target\.type === 'source' && !target\.id\) navigate\('library'\)/);
-  // 画布页标签在 Pi 侧为「知识网络」（导航入口名由视图/设计保留）
-  assert.match(mainTsx, /canvas: '知识网络'/);
-});

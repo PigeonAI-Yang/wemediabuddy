@@ -1,0 +1,21 @@
+{
+  "viewport": { "width": 1568, "height": 941 },
+  "shell": { "clientWidth": 1568, "rectWidth": 1568 },
+  "workspace_container": { "width": 976, "height": 851 },
+  "page": { "clientWidth": 976, "scrollWidth": 976, "clientHeight": 851, "scrollHeight": 1203, "overflowY": "auto", "overflowX": "hidden", "horizontal_ok": true, "vertical_owned_by_page": true },
+  "wrap": { "clientWidth": 976, "scrollWidth": 976, "overflow": "visible", "containerType": "inline-size" },
+  "scroller": { "clientWidth": 952, "scrollWidth": 952, "clientHeight": 1048, "scrollHeight": 1048, "overflowX": "clip", "overflowY": "visible", "horizontal_ok": true, "vertical_no_nested": true },
+  "matrix": { "clientWidth": 950, "scrollWidth": 950, "computedGrid": "252.75px 174.312px 174.312px 174.312px 174.312px", "minWidth": "0px", "vars": { "content": "minmax(220px, 1.45fr)", "platform": "minmax(0, 1fr)" }, "horizontal_ok": true },
+  "narrow_520_4cols": { "containerWidth": 518, "scroller": { "clientWidth": 484, "scrollWidth": 560, "overflowX": "auto", "horizontal_scroll_fallback": true }, "matrix": { "clientWidth": 558, "scrollWidth": 708, "minWidth": "560px" } },
+  "narrow_520_3cols": { "containerWidth": 518, "scroller": { "clientWidth": 484, "scrollWidth": 560, "overflowX": "auto", "horizontal_scroll_fallback": true }, "matrix": { "clientWidth": 558, "scrollWidth": 576, "minWidth": "560px" } },
+  "acceptance": {
+    "matrix_scrollWidth_le_clientWidth": true,
+    "scroller_scrollWidth_le_clientWidth": true,
+    "scroller_scrollHeight_eq_clientHeight": true,
+    "page_owns_vertical": true,
+    "no_clipping_of_buttons": true,
+    "no_overlap_with_pi": true
+  },
+  "screenshot": ".ai/frontend-debug-loop/reports/publish-matrix-1568x941-pi-open.webp",
+  "timestamp": "2026-08-25T12:38:00.000Z"
+}

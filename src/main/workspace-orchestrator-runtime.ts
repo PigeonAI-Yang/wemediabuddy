@@ -335,7 +335,8 @@ function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry)
     case 'today.agent-start-daily-intelligence': return ['full'];
     case 'ui.jobs-spawn':
     case 'mcp.jobs-spawn':
-    case 'scheduler.daily-0900':
+      return [entry.intendedAction as SubmitWorkspaceOrchestratorIntentInput['action']];
+    case 'scheduler.daily-0900': return ['full'];
     case 'scheduler.rolling-official-web':
     case 'scheduler.rolling-x-lists':
     case 'startup.daily-resume':

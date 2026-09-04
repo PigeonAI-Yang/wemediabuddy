@@ -1,0 +1,486 @@
+WeMediaBuddy
+AI
+−
+□
+×
+工作流
+今日
+智能体
+发现
+选题
+创作
+发布
+结果
+知识资产
+主题
+资料库
+关系画布
+设置
+今日经营概况
+更新于 2026/8/23 01:53:41
+查看资料
+去创作
+今日新资料
+42
+-67%
+内容机会
+1
+新增 1
+进行中项目
+34
+无待处理
+近 7 日发布
+1
+新增 1
+S
+X
+小红书
+公众号
+时效 热点 2-3 天
+热点
+还剩 ~71h
+写入 2026-08-23 01:30
+2026-08-23 00:58:16
+让 AI 代填表之前，先把任务切成可检查的低风险步骤
+
+入选理由：新增观察称 Codex 与 Claude Code 已能处理低风险表单填写，并提醒浏览器控制需要信任模型、熟悉前检查结果；属于热点 2-3 天。
+
+表达角度
+把浏览器控制改写成低风险任务实验：输入邮件、字段核对、提交前人工检查、回执留档；命中 AI 实践与公开验证。
+核心观点
+浏览器控制的起点不是更多权限，而是低风险、可核对、带人工检查点的任务。
+怎么讲
+标题
+强调“能代填”不等于“能托管”，将信任边界放在正文展开。
+开头
+先给结论，再展示一张任务拆分表，明确提交前人工确认。
+结构
+AI 实战：目标→我做了什么→AI 插手点→卡点→回执→无效步骤→下一步。
+目标：想把 AI 用进真实工作、但担心自动化失控的项目实践者
+形式：观点短文、案例拆解
+引用资料 ×2
+浏览 +4,417/小时 · 加速 -1,370
+S
+AI 项目最容易烧钱的地方，不在模型价格，而在没人做成本复盘
+OpenRouter 新增按 agent、模型和请求查询使用成本、缓存命中率、延迟与混合成本的能力；其内部案例还发现某预览模型每月消耗约 6200 美元、成本约为混合费率的 25 倍，属于正在发生的热点 2-3 天。
+X
+小红书
+公众号
+·
+知乎
+引用资料 ×2
+热点
+待处理
+还剩 ~65h
+写入 2026-08-22 19:01
+浏览 +180/小时
+B
+公众号还能这么做：一篇 5 个小漫画讲清一个道理，AI 制作、难点只在选题和画面一致性
+今日 @qihang_zeng6688 推荐「洪朵拉的小日子」：公众号文章即漫画、一篇 5 个小漫画讲清一个道理、近期多篇爆火，AI 可制作，难点是选题与画面一致性。这是中文普通人可复制、可长期运营的 AI 内容产品化案例，属长青方法素材。
+公众号
+小红书
+引用资料 ×1
+长青
+待处理
+写入 2026-08-13 19:56
+B
+小红书 1000 粉就能接单，但赛道决定收入：家居/美妆/数码/母婴为何领先
+商单门槛与赛道差异是中文创作者反复问的高频问题，话题长青且贴近受众变现，适合在小红书/X 双发（长青）。
+小红书
+X
+引用资料 ×1
+长青
+待处理
+写入 2026-08-10 17:30
+高效使用Claude帮你省掉90%的token 用claude的时候一个字还没说，上下文已经被占掉一大截 MCP、历史文件、上个任务读过的东西，全都还在那儿趴着 官方给出了正确答案: 同样三个任务，一路聊到底，比中间 /clear 两次多花 1.9 倍 token 道理其实很朴素——每一轮请求都会把整段对话重发一遍你的第 40 https://t.co/ae
+@LiFeng61532
+·
+2026-08-22 21:02:12
+当前 DeepSeek-V4-Flash、Hy3 与 DeepSeek-V4-Flash-Vision-Exp 三大顶级模型均在 https://t.co/JerjymcZyf 免费开放中！更多免费及折扣福利将持续加码，敬请持续关注，助你 0 成本轻松构建高效 AI 工作流！ 0 成本使用教程可参考如下： https://t.co/uU2T3i8Os1
+@BAI_AGI
+·
+2026-08-22 19:20:05
+🎁 免费福利再加码！DeepSeek-V4-Flash-Vision-Exp 现已登陆 https://t.co/JerjymcZyf，全量免费开放！ 作为 @deepseek_ai 全新的多模态实验旗舰，它在延续 V4-Flash 顶尖纯文本与代码 Agent 实力的同时，正式解锁原生图像理解能力，能轻松驾驭多模态 PPT 生成、复杂 UI 重构及前端特
+@BAI_AGI
+·
+2026-08-22 19:20:04
+DeepSeek V4 Flash, Hy3, and DeepSeek V4 Flash Vision Exp are all now available FREE on https://t.co/JerjymcZyf! More FREE models and exclusive discounts are coming soon. Stay tuned
+@BAI_AGI
+·
+2026-08-22 19:20:22
+🎁 More FREE perks are here! DeepSeek V4 Flash Vision Exp is now live on https://t.co/JerjymcZyf, with full access completely FREE! As @deepseek_ai’s latest experimental multimodal
+@BAI_AGI
+·
+2026-08-22 19:20:21
+Minecraft and pi are a good match. My oldest has been burning GTP tokens the last two days self directed. Fun to watch. https://t.co/dED8AAoOYC
+@mitsuhiko
+·
+2026-08-22 20:01:54
+🔥 上线仅 5 天，https://t.co/JerjymcZyf 全平台吞吐量正式突破 1T！ 见证万亿级算力里程碑！https://t.co/JerjymcZyf 免费畅用活动累计 Token 吞吐量破 1T，热度持续刷新高！零成本模型阵容现已全面升级： 🐳 DeepSeek-V4-Flash：极速推理，高并发首选 👁️ https://t.co/
+@BAI_AGI
+·
+2026-08-22 21:31:44
+🔥 1T Tokens in Just 5 Days! The momentum is unstoppable! https://t.co/JerjymcZyf’s total Token throughput has officially surpassed 1T, marking a major milestone in real world AI u
+@BAI_AGI
+·
+2026-08-22 21:31:58
+Ox Alpha (stealth frontier model) is free in Command Code. 🆓 100T tokens per day free capacity, no 5hr usage limits. • 1M content • we benchmarked ~5B tokens • built a tool repair
+@CommandCodeAI
+·
+2026-08-21 16:25:11
+Introducing Firecrawl Developer Index, an index for supercharging coding agents. Search 70M+ primary sources including repos, docs, &amp; issues with the highest recall of any codi
+@firecrawl
+·
+2026-08-22 00:03:09
+I noticed some folks are discussing the harness design of Pi 2. If you have questions, let me know. Happy to share a bit of the why. The how is work in progress :)
+@mitsuhiko
+·
+2026-08-22 22:47:39
+we try not to have too many opinions in how agents should work every model is intensely trained to use certain tools and workflows so we try to match that environment perfectly you
+@thdxr
+·
+2026-08-22 22:51:36
+Three Grok bots took four reference photos, built a physics simulator from them, ran 47 fracture experiments, rejected their own hypothesis, picked the best designs, sliced them, a
+@tetsuoai
+·
+2026-08-22 19:12:18
+BREAKING: 10 schools along Guyana’s Linden–Soesdyke Highway will receive @Starlink internet. 🇬🇾 The service will give students and teachers better access to online learning platf
+@cb_doge
+·
+2026-08-22 20:00:57
+Mona, a member of the Federation of the Blind, gave amazing testimony yesterday about @Tesla’s Cybercab after sitting in it this week: "To have something like the Cybercab would be
+@SawyerMerritt
+·
+2026-08-22 10:52:48
+Chinese humanoid robot by smartphone maker Honor (“Lightning”) ran 100m in 9.32 seconds (Usain Bolt’s record is 9.58 seconds). Perhaps more impressively: it crashed into a safety w
+@TrungTPhan
+·
+2026-08-22 23:19:16
+Joe Rogan: "California doesn't allow ID to vote... Who knows how many people are voting that aren’t citizens? No one knows. Can’t know. Can’t find out... they voted to raise taxes"
+@DefiantLs
+·
+2026-08-23 01:02:00
+今天才发现，知乎居然也有 CLI 了。 这下我的信息源搜索，又多了一条路。 虽然现在很多人觉得知乎已经没有以前那个味儿了，但有一说一，真正值钱的东西其实还埋在它过去那些高赞回答、精华帖和老问题里。 尤其是一些专业经验、行业内幕、踩坑记录、冷门知识，放到现在依然很能打。 https://t.co/jIShtKjJlB
+@nanyuan0412
+·
+2026-08-22 22:20:26
+现阶段画图并且能自由编辑最佳方式应该是 HTML 或者类似于 HTML（比如 React）的方式，因为这个训练的最好的画出来效果最好的。 而且 HTML 可以方便的编辑，也可以转换成其他可编辑格式。
+@dotey
+·
+2026-08-22 22:53:15
+响马高见： &gt; 工程师永远不会消失，但是工作方式会变化。工具化永远会进化到 roi 低于人力的边界，然后需要更多的人力来补齐最后的缝隙。 类似于你开了一家餐厅，买了一台洗碗机，一下子替代了 3 个洗碗工，效率高、成本低。这就是工具化带来的 ROI（投入产出比）远高于人力的阶段。
+@dotey
+·
+2026-08-22 23:01:13
+Research shows that drawing connections to what you already know helps you remember and build context. And you aren’t five! You don’t need things dumbed down, you need things expla
+@emollick
+·
+2026-08-22 23:16:54
+I don’t like ELI5 as default for “make this easy to understand,” a great thing about LLMs is the ability to work as universal translators across topics Asking for generic dumbed-do
+@emollick
+·
+2026-08-22 23:13:58
+Letta is a framework for building stateful agents whose memory persists and improves over time. - Installable via npm with an interactive terminal UI - Self-hosted App Server or de
+@GithubProjects
+·
+2026-08-22 23:30:03
+我们最近都是90%的时间让人熟悉需求和架构，必须达到评审时给其他人讲清楚的程度。 开发、联调基本上都是1天搞定 团队协作里，要确保的是每个人都能对需求、架构非常了解，负责的需求，别人给他提个问题时，不需要问AI就可以直接回答 跟个人还是不一样，自己架构、自己理解其实还算比较容易
+@leo_xiaolei
+·
+2026-08-23 00:03:47
+这个视频的复刻就更加简单、容易了 直接文章丢给 CodeX，把对标视频链接粘贴进来 让 CodeX 按照文章制作对标视频 结果如下： https://t.co/D78SDfb6JH
+@leo_xiaolei
+·
+2026-08-23 00:43:43
+(To make this work you need to run the ChatGPT or Claude apps on your computer &amp; turn on browser control, which means you need to trust the models to do that. Definitely check
+@emollick
+·
+2026-08-23 00:58:16
+In terms of everyday usefulness and saving time, Codex &amp; Claude Code are very capable of doing the thing where you ask them to "fill out the forms that I got an email about" an
+@emollick
+·
+2026-08-23 00:53:13
+美容院项目说明页可以做成一项很轻的AI服务。 开始前索取顾客咨询和项目资料，先排除无关内容。 处理重点放在适用人群、恢复期和禁忌，别把AI当裁判。 交付咨询前说明卡时，附上需要人工确认的位置。 请一家皮肤管理店试用后，说出最想改的一项。 从顾客问完还犹豫这种损耗切入，收费会更稳。
+@better_christal
+·
+2026-08-22 20:25:10
+一个可卖的AI小服务，可以从养老机构家属周报开始。 客户只需给护理记录和家属关注点，减少来回追问。 你把睡眠、饮食和活动变化拆开，给AI明确范围。 交给客户的必须是家属沟通周报这种具体东西。 先在一家养老院的一个真实案例中验证。 把电话里说不清变化压下去，客户自然理解价格。
+@better_christal
+·
+2026-08-22 21:15:11
+飞书+豆包这个组合真的太牛逼了！自从豆包和飞书集成之后，结合抖音的字节生态，可以直接提取某个抖音博主的（don哥、李守洲等人）逐字稿了 如果你觉得一个博主的方法论特别有用，那你就可以和豆包说直接把它提取出来，并分门别类进行多维表格化的整理 你就会发现他变成一组数据进入到你的飞书了 https://t.co/sYv5ppo84T
+@Astronaut_1216
+·
+2026-08-12 22:30:19
+我会把球馆订场回访当成一个结果型服务。 从订场记录和取消原因里挑出和时间偏好、同行人数和复约机会有关的部分。 整理球馆订场回访时，保留原始依据方便核对。 交付物不要复杂，一张复订提醒名单就够。 请一家羽毛球馆按表执行，看看会卡在哪。 球馆订场回访能持续被打开，才说明它真的省事。
+@better_christal
+·
+2026-08-22 21:45:14
+Claude Academy 资源中心（https://t.co/xWxsQw9SCV）是 Anthropic 官方打造的一站式 AI 学习平台，汇集了 357 个高质量课程、教程与实战案例，内容覆盖从入门到进阶的全光谱。 无论你是学生、教师、非营利组织成员、小企业主，还是开发者，都能在这里找到专属路径。 核心课程围绕「4D AI https://t.co/
+@gaoqian2580
+·
+2026-08-22 23:39:28
+lol
+巡检打卡
+·
+2026-08-22 23:34:46
+Talarico wants to enable voting fraud in Texas by banning voter ID
+巡检打卡
+·
+2026-08-22 23:42:20
+Try Grok @Bot
+巡检打卡
+·
+2026-08-22 23:49:34
+Try Tesla self-driving Feels like magic
+巡检打卡
+·
+2026-08-22 23:56:28
+n = 5,081 startups from @trust_mrr https://t.co/aKoDkcLZV9
+巡检打卡
+·
+2026-08-22 20:48:01
+X广告原生AI智能体集成 X广告新增MCP功能，可将Grok、Claude Code等AI智能体直接连接到广告账户
+巡检打卡
+·
+2026-08-22 21:50:34
+刘思毅都戴录音豆，看来录音产品已经分出高下了 https://t.co/CVi9rnzbdt
+巡检打卡
+·
+2026-08-22 23:34:21
+发现很多人 next.js 和 node.js 傻傻分不清楚 https://t.co/7jLXqUbUgz
+巡检打卡
+·
+2026-08-22 23:45:13
+https://t.co/ufMxdwwpK5
+巡检打卡
+·
+2026-08-22 23:48:33
+191 .lol websites were created in the last 48 hours.
+巡检打卡
+·
+2026-08-23 00:32:37
+高效使用Claude帮你省掉90%的token 用claude的时候一个字还没说，上下文已经被占掉一大截 MCP、历史文件、上个任务读过的东西，全都还在那儿趴着 官方给出了正确答案: 同样三个任务，一路聊到底，比中间 /clear 两次多花 1.9 倍 token 道理其实很朴素——每一轮请求都会把整段对话重发一遍你的第 40 https://t.co/ae
+@LiFeng61532
+·
+2026-08-22 21:02:12
+当前 DeepSeek-V4-Flash、Hy3 与 DeepSeek-V4-Flash-Vision-Exp 三大顶级模型均在 https://t.co/JerjymcZyf 免费开放中！更多免费及折扣福利将持续加码，敬请持续关注，助你 0 成本轻松构建高效 AI 工作流！ 0 成本使用教程可参考如下： https://t.co/uU2T3i8Os1
+@BAI_AGI
+·
+2026-08-22 19:20:05
+🎁 免费福利再加码！DeepSeek-V4-Flash-Vision-Exp 现已登陆 https://t.co/JerjymcZyf，全量免费开放！ 作为 @deepseek_ai 全新的多模态实验旗舰，它在延续 V4-Flash 顶尖纯文本与代码 Agent 实力的同时，正式解锁原生图像理解能力，能轻松驾驭多模态 PPT 生成、复杂 UI 重构及前端特
+@BAI_AGI
+·
+2026-08-22 19:20:04
+DeepSeek V4 Flash, Hy3, and DeepSeek V4 Flash Vision Exp are all now available FREE on https://t.co/JerjymcZyf! More FREE models and exclusive discounts are coming soon. Stay tuned
+@BAI_AGI
+·
+2026-08-22 19:20:22
+🎁 More FREE perks are here! DeepSeek V4 Flash Vision Exp is now live on https://t.co/JerjymcZyf, with full access completely FREE! As @deepseek_ai’s latest experimental multimodal
+@BAI_AGI
+·
+2026-08-22 19:20:21
+Minecraft and pi are a good match. My oldest has been burning GTP tokens the last two days self directed. Fun to watch. https://t.co/dED8AAoOYC
+@mitsuhiko
+·
+2026-08-22 20:01:54
+🔥 上线仅 5 天，https://t.co/JerjymcZyf 全平台吞吐量正式突破 1T！ 见证万亿级算力里程碑！https://t.co/JerjymcZyf 免费畅用活动累计 Token 吞吐量破 1T，热度持续刷新高！零成本模型阵容现已全面升级： 🐳 DeepSeek-V4-Flash：极速推理，高并发首选 👁️ https://t.co/
+@BAI_AGI
+·
+2026-08-22 21:31:44
+🔥 1T Tokens in Just 5 Days! The momentum is unstoppable! https://t.co/JerjymcZyf’s total Token throughput has officially surpassed 1T, marking a major milestone in real world AI u
+@BAI_AGI
+·
+2026-08-22 21:31:58
+Ox Alpha (stealth frontier model) is free in Command Code. 🆓 100T tokens per day free capacity, no 5hr usage limits. • 1M content • we benchmarked ~5B tokens • built a tool repair
+@CommandCodeAI
+·
+2026-08-21 16:25:11
+Introducing Firecrawl Developer Index, an index for supercharging coding agents. Search 70M+ primary sources including repos, docs, &amp; issues with the highest recall of any codi
+@firecrawl
+·
+2026-08-22 00:03:09
+I noticed some folks are discussing the harness design of Pi 2. If you have questions, let me know. Happy to share a bit of the why. The how is work in progress :)
+@mitsuhiko
+·
+2026-08-22 22:47:39
+we try not to have too many opinions in how agents should work every model is intensely trained to use certain tools and workflows so we try to match that environment perfectly you
+@thdxr
+·
+2026-08-22 22:51:36
+Three Grok bots took four reference photos, built a physics simulator from them, ran 47 fracture experiments, rejected their own hypothesis, picked the best designs, sliced them, a
+@tetsuoai
+·
+2026-08-22 19:12:18
+BREAKING: 10 schools along Guyana’s Linden–Soesdyke Highway will receive @Starlink internet. 🇬🇾 The service will give students and teachers better access to online learning platf
+@cb_doge
+·
+2026-08-22 20:00:57
+Mona, a member of the Federation of the Blind, gave amazing testimony yesterday about @Tesla’s Cybercab after sitting in it this week: "To have something like the Cybercab would be
+@SawyerMerritt
+·
+2026-08-22 10:52:48
+Chinese humanoid robot by smartphone maker Honor (“Lightning”) ran 100m in 9.32 seconds (Usain Bolt’s record is 9.58 seconds). Perhaps more impressively: it crashed into a safety w
+@TrungTPhan
+·
+2026-08-22 23:19:16
+Joe Rogan: "California doesn't allow ID to vote... Who knows how many people are voting that aren’t citizens? No one knows. Can’t know. Can’t find out... they voted to raise taxes"
+@DefiantLs
+·
+2026-08-23 01:02:00
+今天才发现，知乎居然也有 CLI 了。 这下我的信息源搜索，又多了一条路。 虽然现在很多人觉得知乎已经没有以前那个味儿了，但有一说一，真正值钱的东西其实还埋在它过去那些高赞回答、精华帖和老问题里。 尤其是一些专业经验、行业内幕、踩坑记录、冷门知识，放到现在依然很能打。 https://t.co/jIShtKjJlB
+@nanyuan0412
+·
+2026-08-22 22:20:26
+现阶段画图并且能自由编辑最佳方式应该是 HTML 或者类似于 HTML（比如 React）的方式，因为这个训练的最好的画出来效果最好的。 而且 HTML 可以方便的编辑，也可以转换成其他可编辑格式。
+@dotey
+·
+2026-08-22 22:53:15
+响马高见： &gt; 工程师永远不会消失，但是工作方式会变化。工具化永远会进化到 roi 低于人力的边界，然后需要更多的人力来补齐最后的缝隙。 类似于你开了一家餐厅，买了一台洗碗机，一下子替代了 3 个洗碗工，效率高、成本低。这就是工具化带来的 ROI（投入产出比）远高于人力的阶段。
+@dotey
+·
+2026-08-22 23:01:13
+Research shows that drawing connections to what you already know helps you remember and build context. And you aren’t five! You don’t need things dumbed down, you need things expla
+@emollick
+·
+2026-08-22 23:16:54
+I don’t like ELI5 as default for “make this easy to understand,” a great thing about LLMs is the ability to work as universal translators across topics Asking for generic dumbed-do
+@emollick
+·
+2026-08-22 23:13:58
+Letta is a framework for building stateful agents whose memory persists and improves over time. - Installable via npm with an interactive terminal UI - Self-hosted App Server or de
+@GithubProjects
+·
+2026-08-22 23:30:03
+我们最近都是90%的时间让人熟悉需求和架构，必须达到评审时给其他人讲清楚的程度。 开发、联调基本上都是1天搞定 团队协作里，要确保的是每个人都能对需求、架构非常了解，负责的需求，别人给他提个问题时，不需要问AI就可以直接回答 跟个人还是不一样，自己架构、自己理解其实还算比较容易
+@leo_xiaolei
+·
+2026-08-23 00:03:47
+这个视频的复刻就更加简单、容易了 直接文章丢给 CodeX，把对标视频链接粘贴进来 让 CodeX 按照文章制作对标视频 结果如下： https://t.co/D78SDfb6JH
+@leo_xiaolei
+·
+2026-08-23 00:43:43
+(To make this work you need to run the ChatGPT or Claude apps on your computer &amp; turn on browser control, which means you need to trust the models to do that. Definitely check
+@emollick
+·
+2026-08-23 00:58:16
+In terms of everyday usefulness and saving time, Codex &amp; Claude Code are very capable of doing the thing where you ask them to "fill out the forms that I got an email about" an
+@emollick
+·
+2026-08-23 00:53:13
+美容院项目说明页可以做成一项很轻的AI服务。 开始前索取顾客咨询和项目资料，先排除无关内容。 处理重点放在适用人群、恢复期和禁忌，别把AI当裁判。 交付咨询前说明卡时，附上需要人工确认的位置。 请一家皮肤管理店试用后，说出最想改的一项。 从顾客问完还犹豫这种损耗切入，收费会更稳。
+@better_christal
+·
+2026-08-22 20:25:10
+一个可卖的AI小服务，可以从养老机构家属周报开始。 客户只需给护理记录和家属关注点，减少来回追问。 你把睡眠、饮食和活动变化拆开，给AI明确范围。 交给客户的必须是家属沟通周报这种具体东西。 先在一家养老院的一个真实案例中验证。 把电话里说不清变化压下去，客户自然理解价格。
+@better_christal
+·
+2026-08-22 21:15:11
+飞书+豆包这个组合真的太牛逼了！自从豆包和飞书集成之后，结合抖音的字节生态，可以直接提取某个抖音博主的（don哥、李守洲等人）逐字稿了 如果你觉得一个博主的方法论特别有用，那你就可以和豆包说直接把它提取出来，并分门别类进行多维表格化的整理 你就会发现他变成一组数据进入到你的飞书了 https://t.co/sYv5ppo84T
+@Astronaut_1216
+·
+2026-08-12 22:30:19
+我会把球馆订场回访当成一个结果型服务。 从订场记录和取消原因里挑出和时间偏好、同行人数和复约机会有关的部分。 整理球馆订场回访时，保留原始依据方便核对。 交付物不要复杂，一张复订提醒名单就够。 请一家羽毛球馆按表执行，看看会卡在哪。 球馆订场回访能持续被打开，才说明它真的省事。
+@better_christal
+·
+2026-08-22 21:45:14
+Claude Academy 资源中心（https://t.co/xWxsQw9SCV）是 Anthropic 官方打造的一站式 AI 学习平台，汇集了 357 个高质量课程、教程与实战案例，内容覆盖从入门到进阶的全光谱。 无论你是学生、教师、非营利组织成员、小企业主，还是开发者，都能在这里找到专属路径。 核心课程围绕「4D AI https://t.co/
+@gaoqian2580
+·
+2026-08-22 23:39:28
+lol
+巡检打卡
+·
+2026-08-22 23:34:46
+Talarico wants to enable voting fraud in Texas by banning voter ID
+巡检打卡
+·
+2026-08-22 23:42:20
+Try Grok @Bot
+巡检打卡
+·
+2026-08-22 23:49:34
+Try Tesla self-driving Feels like magic
+巡检打卡
+·
+2026-08-22 23:56:28
+n = 5,081 startups from @trust_mrr https://t.co/aKoDkcLZV9
+巡检打卡
+·
+2026-08-22 20:48:01
+X广告原生AI智能体集成 X广告新增MCP功能，可将Grok、Claude Code等AI智能体直接连接到广告账户
+巡检打卡
+·
+2026-08-22 21:50:34
+刘思毅都戴录音豆，看来录音产品已经分出高下了 https://t.co/CVi9rnzbdt
+巡检打卡
+·
+2026-08-22 23:34:21
+发现很多人 next.js 和 node.js 傻傻分不清楚 https://t.co/7jLXqUbUgz
+巡检打卡
+·
+2026-08-22 23:45:13
+https://t.co/ufMxdwwpK5
+巡检打卡
+·
+2026-08-22 23:48:33
+191 .lol websites were created in the last 48 hours.
+巡检打卡
+·
+2026-08-23 00:32:37
+持续关注 · 主题 · 5
+主题
+工具调用失败时，先查参数和停止条件，不要急着换模型
+为何关注：最新进展：Gorilla: Large Language Model Connected with Massive APIs
+已关注 6 天
+最新进展：Gorilla: Large Language Model Connected with Massive APIs
+主题
+服装店尺码问答库，先交付一份能直接回复顾客的建议包
+为何关注：最新进展：普通人接服装店尺码问答库，起步可以很小。 请对方给退换货原因和顾客提问，并说明版型、身高和搭配疑问。 AI只做服装店尺码问答库的归类初稿，人负责判断。 最后给一份尺码建议回复包，标明下一步。 先在一家女装店那里做小样，不急着打包卖。 先解决客服靠经验猜，再考虑把流程自动化。
+已关注 5 天
+最新进展：普通人接服装店尺码问答库，起步可以很小。 请对方给退换货原因和顾客提问，并说明版型、身高和搭配疑问。 AI只做服装店尺码问答库的归类初稿，人负责判断。 最后给一份尺码建议回复包，标明下一步。 先在一家女装店那里做小样，不急着打包卖。 先解决客服靠经验猜，再考虑把流程自动化。
+主题
+国家数字图书馆应该成为内容获取流程的第一步
+为何关注：最新进展：做内容获取这事，我发现大部分人第一步就想歪了，一上来就琢磨怎么爬微信、怎么花钱买数据源。国家数字图书馆这种免费公开的资源就摆在那，合规还不要钱，关键是没几个人真去用。
+已关注 5 天
+最新进展：做内容获取这事，我发现大部分人第一步就想歪了，一上来就琢磨怎么爬微信、怎么花钱买数据源。国家数字图书馆这种免费公开的资源就摆在那，合规还不要钱，关键是没几个人真去用。
+主题
+AI 做分析时，提示词和数据也应该像代码一样留下来
+为何关注：最新进展：This is smart for both reproducibility and as a way of using AI for science: “AI-generated analyses should be accompanied by multiverse-style reporting and full disclosure of the p
+已关注 5 天
+最新进展：This is smart for both reproducibility and as a way of using AI for science: “AI-generated analyses should be accompanied by multiverse-style reporting and full disclosure of the p
+主题
+先用“五要素”判断一项工作值不值得做成 AI Agent
+为何关注：最新进展：我应该把什么业务/工作流做成 AI Agent？ @gregisenberg 分享的「AI Agent 五要素测试」判断框架，咱们一起看看。 # 五个要素测试 1. 重复的触发器 同类任务会反复出现。这是经济可行性的前提：一次性任务不值得为它构建 Agent，只有高频重复的场景才能摊薄构建和维护成本。 2. 稳定的输入 https://t.co/xR6Xgu
+已关注 5 天
+最新进展：我应该把什么业务/工作流做成 AI Agent？ @gregisenberg 分享的「AI Agent 五要素测试」判断框架，咱们一起看看。 # 五个要素测试 1. 重复的触发器 同类任务会反复出现。这是经济可行性的前提：一次性任务不值得为它构建 Agent，只有高频重复的场景才能摊薄构建和维护成本。 2. 稳定的输入 https://t.co/xR6Xgu
+Pi
+你好
+▾
+当前:
+今日内容 · 持续关注 5
+
+你好
+
+8/23 01:26:33
+
+Task grant 只能包含已登记的内部业务命令。
+
+8/23 01:26:33
+
+你好
+
+8/23 01:55:16
+8/23 01:55:16
+ox-alpha-free
+max
+▾
+Pi 已停止
+AI · profile.ai.official
+AI 接入已就绪
+浏览器未启动
+当前有可批选题
+更新未完成
+☾
+黑夜紫罗兰
+2026年8月23日 01:55:36

@@ -1,0 +1,330 @@
+{
+  "barRect": {
+    "left": 423,
+    "top": 128.5,
+    "width": 748,
+    "height": 87,
+    "right": 1171,
+    "bottom": 215.5
+  },
+  "barInnerWidth": 724,
+  "usedFirstRowWidth": 714.8125,
+  "unusedFirstRowWidth": 9.1875,
+  "dividerCount": 0,
+  "hasBorderDivider": false,
+  "borderLefts": [
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)",
+    "0px none rgb(241, 241, 241)"
+  ],
+  "groupStyles": [
+    {
+      "label": "段落",
+      "display": "contents",
+      "marginLeft": "0px",
+      "borderLeftWidth": "0px",
+      "borderLeftStyle": "none",
+      "width": 0
+    },
+    {
+      "label": "行内格式",
+      "display": "contents",
+      "marginLeft": "0px",
+      "borderLeftWidth": "0px",
+      "borderLeftStyle": "none",
+      "width": 0
+    },
+    {
+      "label": "列表",
+      "display": "contents",
+      "marginLeft": "0px",
+      "borderLeftWidth": "0px",
+      "borderLeftStyle": "none",
+      "width": 0
+    },
+    {
+      "label": "插入",
+      "display": "contents",
+      "marginLeft": "0px",
+      "borderLeftWidth": "0px",
+      "borderLeftStyle": "none",
+      "width": 0
+    },
+    {
+      "label": "编辑",
+      "display": "contents",
+      "marginLeft": "0px",
+      "borderLeftWidth": "0px",
+      "borderLeftStyle": "none",
+      "width": 0
+    }
+  ],
+  "visibleOrder": [
+    "正文二级标题三级标题引用",
+    "B",
+    "I",
+    "S",
+    "<>",
+    "• 列表",
+    "1. 列表",
+    "链接",
+    "代码块",
+    "表格",
+    "分割线",
+    "图片",
+    "清除",
+    "↶",
+    "↷",
+    "查找替换",
+    "标记"
+  ],
+  "rowAssignments": [
+    {
+      "text": "正文二级标题三级标题引用",
+      "left": 435,
+      "top": 136.5,
+      "row": 1,
+      "width": 92
+    },
+    {
+      "text": "B",
+      "left": 531,
+      "top": 136.5,
+      "row": 1,
+      "width": 32
+    },
+    {
+      "text": "I",
+      "left": 567,
+      "top": 136.5,
+      "row": 1,
+      "width": 32
+    },
+    {
+      "text": "S",
+      "left": 603,
+      "top": 136.5,
+      "row": 1,
+      "width": 32
+    },
+    {
+      "text": "<>",
+      "left": 639,
+      "top": 136.5,
+      "row": 1,
+      "width": 36.78125
+    },
+    {
+      "text": "• 列表",
+      "left": 679.78125,
+      "top": 136.5,
+      "row": 1,
+      "width": 54.296875
+    },
+    {
+      "text": "1. 列表",
+      "left": 738.078125,
+      "top": 136.5,
+      "row": 1,
+      "width": 59.734375
+    },
+    {
+      "text": "链接",
+      "left": 801.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 44
+    },
+    {
+      "text": "代码块",
+      "left": 849.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 58
+    },
+    {
+      "text": "表格",
+      "left": 911.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 44
+    },
+    {
+      "text": "分割线",
+      "left": 959.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 58
+    },
+    {
+      "text": "图片",
+      "left": 1021.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 44
+    },
+    {
+      "text": "清除",
+      "left": 1069.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 44
+    },
+    {
+      "text": "↶",
+      "left": 1117.8125,
+      "top": 136.5,
+      "row": 1,
+      "width": 32
+    },
+    {
+      "text": "↷",
+      "left": 435,
+      "top": 174.5,
+      "row": 2,
+      "width": 32
+    },
+    {
+      "text": "查找替换",
+      "left": 471,
+      "top": 174.5,
+      "row": 2,
+      "width": 72
+    },
+    {
+      "text": "标记",
+      "left": 547,
+      "top": 174.5,
+      "row": 2,
+      "width": 44
+    }
+  ],
+  "rows": [
+    [
+      "正文二级标题三级标题引用(435,w92)",
+      "B(531,w32)",
+      "I(567,w32)",
+      "S(603,w32)",
+      "<>(639,w37)",
+      "• 列表(680,w54)",
+      "1. 列表(738,w60)",
+      "链接(802,w44)",
+      "代码块(850,w58)",
+      "表格(912,w44)",
+      "分割线(960,w58)",
+      "图片(1022,w44)",
+      "清除(1070,w44)",
+      "↶(1118,w32)"
+    ],
+    [
+      "↷(435,w32)",
+      "查找替换(471,w72)",
+      "标记(547,w44)"
+    ]
+  ],
+  "tops": [
+    "136.5",
+    "174.5"
+  ],
+  "firstRowControls": [
+    "正文二级标题三级标题引用",
+    "B",
+    "I",
+    "S",
+    "<>",
+    "• 列表",
+    "1. 列表",
+    "链接",
+    "代码块",
+    "表格",
+    "分割线",
+    "图片",
+    "清除",
+    "↶"
+  ],
+  "controlGaps": [
+    {
+      "pair": "正文二级标题三级标题引用 -> B",
+      "gap": 4
+    },
+    {
+      "pair": "B -> I",
+      "gap": 4
+    },
+    {
+      "pair": "I -> S",
+      "gap": 4
+    },
+    {
+      "pair": "S -> <>",
+      "gap": 4
+    },
+    {
+      "pair": "<> -> • 列表",
+      "gap": 4
+    },
+    {
+      "pair": "• 列表 -> 1. 列表",
+      "gap": 4
+    },
+    {
+      "pair": "1. 列表 -> 链接",
+      "gap": 4
+    },
+    {
+      "pair": "链接 -> 代码块",
+      "gap": 4
+    },
+    {
+      "pair": "代码块 -> 表格",
+      "gap": 4
+    },
+    {
+      "pair": "表格 -> 分割线",
+      "gap": 4
+    },
+    {
+      "pair": "分割线 -> 图片",
+      "gap": 4
+    },
+    {
+      "pair": "图片 -> 清除",
+      "gap": 4
+    },
+    {
+      "pair": "清除 -> ↶",
+      "gap": 4
+    },
+    {
+      "pair": "↶ -> ↷",
+      "gap": -714.8125
+    },
+    {
+      "pair": "↷ -> 查找替换",
+      "gap": 4
+    },
+    {
+      "pair": "查找替换 -> 标记",
+      "gap": 4
+    }
+  ],
+  "groupGaps": [
+    null,
+    null,
+    null,
+    null
+  ],
+  "autoMargin": false,
+  "toolbarVisible": true,
+  "bodyVisible": true,
+  "consoleErrors": 0,
+  "focusedCheck": "focused=true tag=SELECT text=正文二级标题三级标题引用",
+  "viewport": {
+    "width": 1568,
+    "height": 941
+  },
+  "projectId": "6ce12d8a-d12d-449d-baca-fcdc55b0f3c8",
+  "workspaceId": "a755adf2-4e8d-4abd-b616-4d7934f730f1"
+}

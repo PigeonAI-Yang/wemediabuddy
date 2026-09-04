@@ -33,10 +33,8 @@ const { buildJobContextRefs, buildJobObjectBoundary } = await import('../src/mai
 const { RESEARCH_DEFAULT_BUDGET } = await import('../src/main/research-job-runner.ts');
 const { dispatchResearchForEvidenceGap, deriveResearchParentRole, handoffParentAfterResearchDispatch } = await import('../src/main/research-dispatch.ts');
 const { researchSuccessorDedupeKey } = await import('../src/main/research-successor.ts');
-const { draftPrompt } = await import('../src/main/agent-runner.ts');
 const { getAgentTask } = await import('../src/main/agent-tasks.ts');
 const { assertStudioDraftResearchReady } = await import('../src/main/mcp-business-commands.ts');
-
 const BUSINESS_DATE = '2026-08-16';
 
 function nowIso() {
@@ -242,37 +240,7 @@ test('WMB-5292: evidence-grounded-writer 指引只指向 wmb_dispatch_research�
   assert.match(operator, /reporter\/daily_scan/);
 });
 
-test('WMB-5295: 普通核心初稿强制先派外部研究，只有研究就绪轮次可写作', () => {
-  const task = { id: 'writer-parent-task' };
-  const firstPass = draftPrompt(task, 'project-1', 'version-request');
-  assert.match(firstPass, /外部研究前置交接/);
-  assert.match(firstPass, /必须调用 wmb_dispatch_research/);
-  assert.match(firstPass, /即使项目已有少量关联资料，也必须派单做外部独立核查/);
-  assert.match(firstPass, /禁止生成图片，禁止保存任何正文/);
-  assert.match(firstPass, /派单成功后立即结束当前交付/);
 
-  const successor = draftPrompt(task, 'project-1', 'version-request', 'core_draft', 'EvidencePack', true);
-  assert.doesNotMatch(successor, /外部研究前置交接/);
-  assert.match(successor, /wmb_save_core_version/);
-  assert.match(successor, /研究续派任务禁止再次派研究/);
-
-  const platform = draftPrompt(task, 'project-1', 'platform-request', 'xiaohongshu_platform_version');
-  assert.match(platform, /wmb_save_platform_version/);
-  assert.doesNotMatch(platform, /外部研究前置交接/);
-});
-
-test('WMB-5295: first-pass writer is machine-blocked from content/image mutation until research is ready', async () => withRuntime(async (db) => {
-  insertAgentTask(db, { id: 'writer-required', intent: 'studio_draft', contextRefs: { projectId: 'p1', writerTask: 'core_draft', researchGate: 'required' } });
-  insertAgentTask(db, { id: 'writer-ready', intent: 'studio_draft', contextRefs: { projectId: 'p1', writerTask: 'core_draft', researchGate: 'satisfied' } });
-  insertAgentTask(db, { id: 'writer-legacy', intent: 'studio_draft', contextRefs: { projectId: 'p1', writerTask: 'core_draft' } });
-}, async (runtime) => {
-  assert.throws(
-    () => assertStudioDraftResearchReady(runtime, 'writer-required'),
-    (error) => error.code === 'RESEARCH_REQUIRED' && /禁止保存正文或导入配图/.test(error.message)
-  );
-  assert.doesNotThrow(() => assertStudioDraftResearchReady(runtime, 'writer-ready'));
-  assert.doesNotThrow(() => assertStudioDraftResearchReady(runtime, 'writer-legacy'), '遗留任务无显式 gate 时保持兼容');
-}));
 
 // ---------------------------------------------------------------------------
 // 4. 既有合同不变（经公开函数）：父角色白名单 + 三层止环 + 同父唯一

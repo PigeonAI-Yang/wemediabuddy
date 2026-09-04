@@ -11,7 +11,7 @@ import { dispatchStartAgentTask } from '../src/main/agent-task-commands.ts';
 import { migrateDatabase } from '../src/main/db/migrations.ts';
 import { AI_FRONTIER_LIST_ID } from '../src/main/intelligence-wire.ts';
 import { getLatestLaneJudgment, LANE_JUDGMENT_COOLDOWN_MS, readLaneJudgments } from '../src/main/lane-gate.ts';
-import { dispatchLaneGate } from '../src/main/source-commands.ts';
+import { dispatchLaneGate, dispatchSourceUpsertBatch } from '../src/main/source-commands.ts';
 import { createSourceFeed, ensureRegistrySourceFeed, getSource, upsertSource } from '../src/main/sources.ts';
 import { ActiveWorkspaceRuntime } from '../src/main/workspace-runtime.ts';
 import { ensureOfficialWorkspaceProfile } from '../src/main/workspace-profiles.ts';
@@ -196,6 +196,27 @@ test('orchestration: unknown ids ignored; missing pending default relevant', asy
     assert.equal(getSource(database, lifestyle).managementStatus, 'archived');
     assert.equal(getLatestLaneJudgment(database, lifestyle).reasonCode, 'lifestyle_noise');
     assert.equal(database.prepare('SELECT COUNT(*) count FROM source_lane_judgments').get().count, 4, '系统行 ×2 + 编辑行 ×2（lifestyle + generic）');
+  });
+});
+
+test('orchestration tolerates a non-material source revision bump after the gate snapshot', async () => {
+  await withRuntime(async ({ runtime, database }) => {
+    const { lifestyle } = await seedGateFixture(runtime);
+    const started = (await dispatchStartAgentTask(runtime, { intent: 'daily_intelligence', businessDate: '2026-08-07', contextRefs: { workspaceId: runtime.identity.workspaceId } }, { actor: owner, requestId: `task-${randomUUID()}` })).task;
+    const gateRun = buildDailyGateRun(database, started);
+    const candidate = gateRun.pending.find((item) => item.sourceId === lifestyle);
+    assert.ok(candidate);
+    const before = getSource(database, lifestyle);
+    const bumped = await dispatchSourceUpsertBatch(runtime, {
+      requestId: `bump-${randomUUID()}`, actor: owner,
+      items: [{ title: before.title, originalUrl: before.canonicalUrl, summary: before.summary, expectedRevision: before.revision }]
+    });
+    assert.equal(bumped.ok, true);
+    assert.equal(getSource(database, lifestyle).revision, before.revision + 1);
+    const sessionText = `\`\`\`json\n{"gate":[{"sourceId":"${lifestyle}","relevant":false,"reasonCode":"lifestyle_noise","reason":"个人生活动态，与 AI 赛道无关"}]}\n\`\`\``;
+    const applied = await applyDailyLaneGate(runtime, started, gateRun, sessionText, agentRequestId(started.id, 'plan'), '2026-08-07T09:00:00.000Z');
+    assert.equal(applied.unresolved, false);
+    assert.equal(getSource(database, lifestyle).managementStatus, 'archived');
   });
 });
 

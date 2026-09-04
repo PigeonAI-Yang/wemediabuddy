@@ -173,6 +173,13 @@ test('real terra session plan parses and saves through the granted dispatcher pa
     const item = runtime.database.prepare(`SELECT title, source_ids_json AS sourceIds FROM plan_items`).get();
     assert.ok(item.title.includes('Agentic Index'));
     assert.deepEqual(JSON.parse(item.sourceIds).sort(), ['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5'].sort());
+    const replayed = await savePlanFromSynthesisOutput(
+      runtime, task, sessionFile, `${agentRequestId(task.id, 'plan')}:runner-replay`, lease.leaseId, grantId, 0,
+      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5']),
+      new Set(['1fc56b68-6b26-45dc-9017-8e26ce89c520', 'a5d9b0e0-5b92-4f85-8a25-ebb3f5f20bf5', 'unused-candidate']),
+    );
+    assert.equal(replayed.itemCount, 1);
+    assert.equal(runtime.database.prepare(`SELECT COUNT(*) AS count FROM plans WHERE plan_date='2026-08-06'`).get().count, 1, 'a successful plans.save receipt is reused instead of creating a duplicate plan');
 
     const completed = await dispatchCompleteAgentTask(runtime, task.id, { actor: { type: 'owner_ui', id: 'renderer', label: 'Owner UI' }, requestId: 'plan-replay-complete', taskId: task.id });
     assert.equal(completed.status, 'partial', 'validation accepts the dispatcher-saved plan; empty aggregation annotates partial');

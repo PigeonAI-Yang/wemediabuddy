@@ -513,7 +513,11 @@ async function scanXList(dependency: AgentTaskMutationDependency, database: Data
       return { data: result.data, entityId: result.data.binding.id };
     }
   });
-  requireReceiptData(receipt);
+  const persisted = requireReceiptData(receipt);
+  for (const sourceId of persisted.sourceIds) {
+    const row = database.prepare('SELECT revision FROM source_items WHERE id=?').get(sourceId) as { revision: number } | undefined;
+    if (row) scheduleSourceKnowledgeCompile({ sourceId, revision: row.revision });
+  }
 }
 async function scanZhihuHot(dependency: AgentTaskMutationDependency, database: DatabaseSync, taskId: string, workerLeaseId: string | undefined, workspaceId: string, source: FrozenDailyChannelSource, _revision: number): Promise<void> {
   const businessDate = (() => {

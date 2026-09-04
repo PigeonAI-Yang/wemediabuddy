@@ -1,0 +1,196 @@
+{
+  "console": [
+    {
+      "type": "warning",
+      "text": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
+      "location": {
+        "url": "node:electron/js2c/sandbox_bundle",
+        "line": 1,
+        "column": 102780,
+        "lineNumber": 1,
+        "columnNumber": 102780
+      }
+    }
+  ],
+  "pageerrors": [],
+  "allPageErrors": [],
+  "errors": [],
+  "measurements": [
+    {
+      "label": "1568x843",
+      "ledger": {
+        "top": 748,
+        "bottom": 792,
+        "left": 423,
+        "right": 1171,
+        "width": 748,
+        "height": 44
+      },
+      "rowRects": [
+        {
+          "kind": "article",
+          "top": 749,
+          "bottom": 793,
+          "left": 424,
+          "right": 797.5,
+          "width": 373.5,
+          "height": 44,
+          "visible": true,
+          "text": "主产物文章主稿draftingv2 · 9a7a28dc查看详情"
+        },
+        {
+          "kind": "derivative",
+          "top": 749,
+          "bottom": 793,
+          "left": 797.5,
+          "right": 1170,
+          "width": 372.5,
+          "height": 44,
+          "visible": true,
+          "text": "衍生产物视频文案待生成视频文案— · —查看详情"
+        }
+      ],
+      "isSingleRow": true,
+      "ledgerStyle": {
+        "display": "flex",
+        "height": "44px",
+        "flex": "0 0 auto"
+      },
+      "canvas": {
+        "top": 259.5,
+        "bottom": 701,
+        "width": 748,
+        "height": 441.5
+      },
+      "canvasScroll": {
+        "scrollHeight": 20372,
+        "clientHeight": 442,
+        "scrollTop": 0,
+        "overflow": "auto",
+        "overflowY": "auto"
+      },
+      "canvasStyle": {
+        "minHeight": "0px",
+        "overflow": "auto",
+        "flex": "1 1 auto"
+      },
+      "statusBar": {
+        "top": 809,
+        "bottom": 843,
+        "height": 34
+      },
+      "docStyle": {
+        "minHeight": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "overflow": "hidden"
+      },
+      "summary": {
+        "height": 44,
+        "text": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      },
+      "paper": {
+        "height": 20282,
+        "scrollHeight": 20282
+      },
+      "overflowX": 0,
+      "overflowY": 0,
+      "viewport": {
+        "w": 1568,
+        "h": 843,
+        "dpr": 1
+      },
+      "docOverflowX": 0,
+      "bodyOverflowX": 0
+    },
+    {
+      "label": "1366x768",
+      "ledger": {
+        "top": 673,
+        "bottom": 717,
+        "left": 233,
+        "right": 969,
+        "width": 736,
+        "height": 44
+      },
+      "rowRects": [
+        {
+          "kind": "article",
+          "top": 674,
+          "bottom": 718,
+          "left": 234,
+          "right": 601.5,
+          "width": 367.5,
+          "height": 44,
+          "visible": true,
+          "text": "主产物文章主稿draftingv2 · 9a7a28dc查看详情"
+        },
+        {
+          "kind": "derivative",
+          "top": 674,
+          "bottom": 718,
+          "left": 601.5,
+          "right": 968,
+          "width": 366.5,
+          "height": 44,
+          "visible": true,
+          "text": "衍生产物视频文案待生成视频文案— · —查看详情"
+        }
+      ],
+      "isSingleRow": true,
+      "ledgerStyle": {
+        "display": "flex",
+        "height": "44px",
+        "flex": "0 0 auto"
+      },
+      "canvas": {
+        "top": 259.5,
+        "bottom": 626,
+        "width": 736,
+        "height": 366.5
+      },
+      "canvasScroll": {
+        "scrollHeight": 20372,
+        "clientHeight": 367,
+        "scrollTop": 0,
+        "overflow": "auto",
+        "overflowY": "auto"
+      },
+      "canvasStyle": {
+        "minHeight": "0px",
+        "overflow": "auto",
+        "flex": "1 1 auto"
+      },
+      "statusBar": {
+        "top": 734,
+        "bottom": 768,
+        "height": 34
+      },
+      "docStyle": {
+        "minHeight": "0px",
+        "display": "flex",
+        "flexDirection": "column",
+        "overflow": "hidden"
+      },
+      "summary": {
+        "height": 44,
+        "text": "暂无配图0/0·比例1:14:33:416:99:1621:99:21张数定稿配图详情在生成后可查看"
+      },
+      "paper": {
+        "height": 20282,
+        "scrollHeight": 20282
+      },
+      "overflowX": 0,
+      "overflowY": 0,
+      "viewport": {
+        "w": 1366,
+        "h": 768,
+        "dpr": 1
+      },
+      "docOverflowX": 0,
+      "bodyOverflowX": 0
+    }
+  ],
+  "workspace": "fc8e1e27-4e8f-4eb2-a7a4-0dca13e23c79",
+  "runtimeDir": "J:\\PigeonYang\\WeMediaBuddy\\tests\\e2e\\.runtime\\run-a3naKm"
+}

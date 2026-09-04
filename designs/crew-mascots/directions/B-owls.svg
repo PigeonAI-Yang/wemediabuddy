@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360">
+  <g fill="#211D29">
+    <!-- 桌助：标准圆鸮，对称短耳羽 -->
+    <ellipse cx="140" cy="215" rx="95" ry="105"/>
+    <circle cx="88" cy="128" r="28"/>
+    <circle cx="192" cy="128" r="28"/>
+    <rect x="104" y="304" width="32" height="20" rx="10"/>
+    <rect x="144" y="304" width="32" height="20" rx="10"/>
+    <!-- 记者：高瘦鸮，V 形长耳羽（警觉） -->
+    <ellipse cx="420" cy="190" rx="75" ry="130"/>
+    <ellipse cx="384" cy="66" rx="14" ry="45" transform="rotate(-20 384 66)"/>
+    <ellipse cx="456" cy="66" rx="14" ry="45" transform="rotate(20 456 66)"/>
+    <rect x="382" y="300" width="46" height="24" rx="12"/>
+    <rect x="436" y="300" width="46" height="24" rx="12"/>
+    <!-- 策划：圆球鸮 + 想法泡泡串 -->
+    <circle cx="700" cy="215" r="105"/>
+    <circle cx="724" cy="96" r="14"/>
+    <circle cx="748" cy="74" r="10"/>
+    <circle cx="766" cy="58" r="7"/>
+    <rect x="664" y="304" width="32" height="20" rx="10"/>
+    <rect x="704" y="304" width="32" height="20" rx="10"/>
+    <!-- 写手：窄高鸮 + 单根长翎 -->
+    <ellipse cx="980" cy="195" rx="62" ry="125"/>
+    <ellipse cx="1012" cy="86" rx="10" ry="52" transform="rotate(24 1012 86)"/>
+    <rect x="948" y="304" width="30" height="20" rx="10"/>
+    <rect x="986" y="304" width="30" height="20" rx="10"/>
+    <!-- 资料员：扁宽鸮 + 平顶 -->
+    <ellipse cx="1260" cy="242" rx="125" ry="78"/>
+    <rect x="1195" y="152" width="130" height="20" rx="10"/>
+    <rect x="1216" y="304" width="32" height="20" rx="10"/>
+    <rect x="1256" y="304" width="32" height="20" rx="10"/>
+  </g>
+</svg>

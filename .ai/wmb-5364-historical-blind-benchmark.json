@@ -1,0 +1,27 @@
+{
+  "version": "wmb-5364-blind-v1",
+  "method": "Evaluator received source summaries and old thesis text with title and planItemId hidden. It compared event, user, and industry_or_society candidates. IDs were restored only after decisions were frozen.",
+  "sourceDatabase": "J:/PigeonYang/WeMediaBuddyData/wmb.db",
+  "items": [
+    {"planItemId":"66e77c11-8252-47d8-86f5-2e5515c022cb","oldWinner":"低成本模型入口及免费额度是否可用","v2Winner":"国产算力承接大规模公共 AI 服务，意味着国产芯片正从实验验证进入商业服务","winnerLevel":"industry_or_society","evidenceStatus":"research_required","result":"improved","note":"现有两条关联来源不证明国产芯片承载；补到固定版本证据前不可批准该赢家"},
+    {"planItemId":"fbb6a8fd-e386-4092-85de-122d1af56f1f","oldWinner":"把不可丢规则、阶段状态和日志分层","v2Winner":"长流程 Agent 的安全竞争正在从上下文容量转向不可压缩规则基础设施","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"来源中的五次压缩遗忘现象支持机制层判断"},
+    {"planItemId":"2d915956-a6e4-4cc9-ba76-0e6473a0c2d9","oldWinner":"先用模拟器复现动作再决定是否购买","v2Winner":"低价开源硬件与模拟环境正在把 AI 从聊天框推向可规模实验的实体系统","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"保留购买建议作为用户层而非主线"},
+    {"planItemId":"e2d60cd8-92b1-49fe-a30f-92ccbc88a0e1","oldWinner":"给真实任务增加验收标准","v2Winner":"Agent 评测开始从像真的报告转向有答案、有惩罚、可程序验收的完整工作流","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"41 个可验证任务和错误惩罚直接支持"},
+    {"planItemId":"6e07efde-1e95-4714-89d1-3596af6253eb","oldWinner":"把分析结果转成拦截规则","v2Winner":"安全 Agent 的商业价值正在从生成分析迁移到生成可执行控制规则","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"120 万日志是现实规模信号"},
+    {"planItemId":"c5e08c46-e90a-4c92-89d9-10daefd94540","oldWinner":"路径规划决定手绘是否真实","v2Winner":"生成视频竞争正从最后一帧质量转向过程和运动路径的可控性","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"不把个人技术判断扩写为行业成熟事实"},
+    {"planItemId":"049be40c-8b5b-4489-82cf-eff68ca403b6","oldWinner":"按自己的多步任务比较成功率、速度和成本","v2Winner":"模型竞争正在从单榜单第一转向按任务组合优化成功率、速度与单位成功成本","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"旧主张已包含结构性变化"},
+    {"planItemId":"907a3e16-6156-499d-9710-26f5b7f9b5cd","oldWinner":"把说话接入内容生产流程","v2Winner":"实时转写正在把自然语言从记录对象变成内容流水线的实时输入层","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"价格仅作事件钩子"},
+    {"planItemId":"8f5f6336-7e85-475d-9500-c4d8b0565f82","oldWinner":"先锁设计约束再让 Agent 生成","v2Winner":"AI 设计生产正在从提示词优化转向稳定设计系统与可变表现层的分工","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"旧主张已接近机制层"},
+    {"planItemId":"350297c6-0503-46f9-a50f-e24cbcad368e","oldWinner":"用固定变量重复测试 AI 导购稳定性","v2Winner":"Agent 导购尚不是可预测渠道，推荐基础设施必须先解决路径依赖与偏好漂移","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"旧主张已明确渠道级意义"},
+    {"planItemId":"c99e5fe8-6d7e-44a2-bb1a-aca79ae66f44","oldWinner":"把失败写回下一轮规则","v2Winner":"Agent 可靠性不来自一次模型升级，而来自失败持续写回组织流程的学习闭环","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"行动保留为用户层"},
+    {"planItemId":"d4cf9aa2-6511-4ca4-8a38-62ec2eeba8b6","oldWinner":"先减少不必要启动再谈模型能力","v2Winner":"Agent 成本优化正在从模型价格转向事件驱动调度和失败升级机制","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"两个触发器是事实层"},
+    {"planItemId":"55a17dc2-8792-4812-b653-8412639c31ed","oldWinner":"先画最小权限表","v2Winner":"Agent 接入规模扩大后，权限、审计和失败边界正在成为商业交付基础设施","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"100+ 服务和 GA 支持现实变化"},
+    {"planItemId":"37e804e5-2412-4821-bc56-bd586e29441d","oldWinner":"按真实任务测吞吐、价格和稳定性","v2Winner":"同模型多服务等级正在把模型采购变成路由与服务质量选择，而不再只是 token 单价比较","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"不声称未验证的全局性能"},
+    {"planItemId":"72a9eb9f-a7ca-473f-bff5-9930d0340768","oldWinner":"录制前先设计可切片概念","v2Winner":"AI 内容生产的效率竞争正从后期自动剪辑前移到录制前的可传播结构设计","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"15 至 25 个片段和 4 至 6 小时提供规模锚点"},
+    {"planItemId":"ff64172d-1589-48eb-950f-c6fdcbd8b21a","oldWinner":"交付可复查的一手证据判断","v2Winner":"AI 搜索竞争正从答案覆盖率转向一手证据可追溯性，证据链本身成为产品能力","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"7000 万来源是事件层，证据链变化是赢家"},
+    {"planItemId":"96829073-3822-4c6d-8a3b-913e0be00bf9","oldWinner":"垂直业务模块能否跑完一次交付","v2Winner":"AI Coding 正从通用代码演示进入生产排程等垂直运营软件的真实使用阶段","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"单一用户案例只支持阶段信号，不证明普遍落地"},
+    {"planItemId":"b7e6fcf0-90be-4329-a226-00e34f226b7b","oldWinner":"用投稿截止逼迫完成并接受反馈","v2Winner":"生成式视频正从一次性片段进入连续竖屏短剧和外部评审的内容工业形态","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"奖金是事件钩子，完整剧集与赛事形态是现实变化"},
+    {"planItemId":"7e059a05-ef0b-4da4-bdcb-c7a2119744ec","oldWinner":"把字幕工具连成可交付服务","v2Winner":"AI Skill 的价值正在从命令行能力转向普通用户可操作的完整服务界面与交付链","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"improved","note":"GUI 和替换自制 Skill 支持产品化信号"},
+    {"planItemId":"155497fd-575c-4332-a118-832c36511159","oldWinner":"先固定 Token 和组件再让表现层试错","v2Winner":"Agent 前端开发正在从一次性生成转向由设计 Token 和组件系统约束的工程化生产","winnerLevel":"industry_or_society","evidenceStatus":"supported","result":"no_regression","note":"旧主张已具备结构层意义"}
+  ]
+}

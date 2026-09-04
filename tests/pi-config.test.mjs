@@ -140,7 +140,7 @@ test('Pi API model list uses the compatible models endpoint', async () => {
     assert.equal(request.url, '/v1/models');
     assert.equal(request.headers.authorization, 'Bearer test-key');
     response.setHeader('content-type', 'application/json');
-    response.end(JSON.stringify({ data: [{ id: 'model-b', context_window: 200000, max_tokens: 32000 }, { id: 'model-a' }, { id: 'model-a' }, { id: 'deepseek-v4-flash' }] }));
+    response.end(JSON.stringify({ data: [{ id: 'model-b', context_window: 200000, max_tokens: 32000, reasoning: true, thinkingLevelMap: { off: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: null, max: null } }, { id: 'model-a' }, { id: 'model-a' }, { id: 'deepseek-v4-flash' }] }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
@@ -153,7 +153,7 @@ test('Pi API model list uses the compatible models endpoint', async () => {
     assert.deepEqual(models, [
       { id: 'deepseek-v4-flash', contextWindow: 1000000, maxTokens: 384000 },
       { id: 'model-a', contextWindow: undefined, maxTokens: undefined },
-      { id: 'model-b', contextWindow: 200000, maxTokens: 32000 }
+      { id: 'model-b', contextWindow: 200000, maxTokens: 32000, thinkingLevels: ['low', 'medium', 'high'] }
     ]);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -161,14 +161,15 @@ test('Pi API model list uses the compatible models endpoint', async () => {
   }
 });
 
-test('Pi models.json uses per-model limits and registers only a multimodal primary', () => {
-  const known = piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: '$WMB_PI_API_KEY', model: 'deepseek-v4-flash' });
+test('Pi models.json uses per-model limits and reasoning capabilities for the multimodal primary', async () => {
+  const known = await piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: '$WMB_PI_API_KEY', model: 'deepseek-v4-flash' });
   const knownModels = known.providers['wmb-api'].models;
   assert.equal(knownModels.length, 1);
   assert.equal(knownModels[0].contextWindow, 1000000);
   assert.equal(knownModels[0].maxTokens, 384000);
   assert.deepEqual(knownModels[0].input, ['text', 'image']);
-  const unknown = piModelsJson({ baseUrl: 'https://example.test/v1', api: 'openai-responses', apiKey: 'key', model: 'unknown' });
+  assert.deepEqual(Object.entries(knownModels[0].thinkingLevelMap).filter(([, value]) => value !== null).map(([level]) => level), ['off', 'high', 'max']);
+  const unknown = await piModelsJson({ baseUrl: 'https://example.test/v1', api: 'openai-responses', apiKey: 'key', model: 'unknown' });
   const unknownModels = unknown.providers['wmb-api'].models;
   assert.equal(unknownModels.length, 1);
   assert.equal(unknownModels[0].id, 'unknown');
@@ -178,8 +179,8 @@ test('Pi models.json uses per-model limits and registers only a multimodal prima
   assert.equal(unknownJson.includes('maxTokens'), false);
 });
 
-test('Pi models.json keeps the configured primary as the sole multimodal entry', () => {
-  const config = piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: 'key', model: 'configured-primary' });
+test('Pi models.json keeps the configured primary as the sole multimodal entry', async () => {
+  const config = await piModelsJson({ baseUrl: 'https://opencode.ai/zen/go/v1', api: 'openai-completions', apiKey: 'key', model: 'configured-primary' });
   assert.deepEqual(config.providers['wmb-api'].models.map((model) => ({ id: model.id, input: model.input })), [
     { id: 'configured-primary', input: ['text', 'image'] }
   ]);
@@ -203,7 +204,7 @@ test('Anthropic Messages, environment credentials and command credentials are fi
     assert.equal(JSON.stringify(saved).includes('environment-secret'), false);
     assert.equal(resolvePiConfig(configPath).apiKey, 'environment-secret');
     assert.equal(resolveProviderCredential({ kind: 'command', executable: process.execPath, args: ['-e', "process.stdout.write('command-secret\\n')"] }), 'command-secret');
-    const modelsJson = piModelsJson({ baseUrl: 'https://anthropic.test/v1', api: 'anthropic-messages', authMode: 'x-api-key', apiKey: '$WMB_PI_API_KEY', model: 'claude-test' });
+    const modelsJson = await piModelsJson({ baseUrl: 'https://anthropic.test/v1', api: 'anthropic-messages', authMode: 'x-api-key', apiKey: '$WMB_PI_API_KEY', model: 'claude-test' });
     assert.equal(modelsJson.providers['wmb-api'].authHeader, false);
   } finally {
     if (previous === undefined) delete process.env.WMB_TEST_PROVIDER_KEY; else process.env.WMB_TEST_PROVIDER_KEY = previous;
@@ -314,12 +315,16 @@ test('Pi provider capabilities roundtrip, survive omitted updates, and protect r
         ]
       } }), 'utf8');
 
-    const saved = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', nativeSearch: true, imageGeneration: true, jsonOutput: false, streaming: false, vision: false }, configPath);
+    const saved = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', thinking: 'high', nativeSearch: true, imageGeneration: true, jsonOutput: false, streaming: false, vision: false }, configPath);
     const savedCapabilities = saved.profiles.find((profile) => profile.id === 'one').capabilities;
     assert.deepEqual(savedCapabilities, { text: true, vision: false, imageGeneration: true, nativeSearch: true, jsonOutput: false, streaming: false, modelIdDiscovery: true });
+    assert.equal(saved.profiles.find((profile) => profile.id === 'one').thinking, 'high');
 
     const updated = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses' }, configPath);
     assert.deepEqual(updated.profiles.find((profile) => profile.id === 'one').capabilities, savedCapabilities);
+    assert.equal(updated.profiles.find((profile) => profile.id === 'one').thinking, 'high');
+    const automatic = savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', thinking: null }, configPath);
+    assert.equal(automatic.profiles.find((profile) => profile.id === 'one').thinking, undefined);
     assert.throws(() => savePiConfig({ id: 'one', name: '主接口', baseUrl: 'https://one.test/v1', model: 'model-one', api: 'openai-responses', text: false }, configPath), /未声明文本生成能力/);
   } finally {
     await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });

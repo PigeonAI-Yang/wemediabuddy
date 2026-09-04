@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WeMediaBuddy — 一个终端，跑通自媒体从发现到复盘的完整闭环</title>
+<meta name="description" content="WeMediaBuddy 是 AI 驱动的自媒体人机协同终端。Agent 主路径生产，你定方向、批呈报、签发布。资料、选题、草稿、平台版本与结果，全部留在同一条可追溯的链上。" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --app-bg:#0b0b0b;
+    --topbar:#0f0f0f;
+    --panel:#131313;
+    --surface:#171717;
+    --surface-raised:#1c1c1c;
+    --surface-hover:#242424;
+    --surface-selected:#2a2a2a;
+    --tag-bg:#202020;
+    --ink:#f1f1f1;
+    --ink-soft:#d2d2d2;
+    --muted:#aaaaaa;
+    --muted-low:#767676;
+    --border:#363636;
+    --border-soft:#292929;
+    --accent:#8b7cff;
+    --accent-hover:#a495ff;
+    --success:#4cc38a;
+    --font:'Inter', 'PingFang SC', 'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif;
+    --radius-sm:6px;
+    --radius-md:8px;
+    --radius-lg:10px;
+    --radius-xl:12px;
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--app-bg);
+    color:var(--ink);
+    font-family:var(--font);
+    font-weight:500;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+
+  .wrap{ max-width:1312px; margin:0 auto; padding:0 64px; }
+
+  a{ color:var(--ink-soft); text-decoration:none; }
+  a:hover{ color:var(--accent); }
+
+  /* buttons */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:11px 20px;
+    border-radius:var(--radius-md);
+    font-family:var(--font); font-weight:700; font-size:15px;
+    text-decoration:none; cursor:pointer; line-height:1;
+    transition:background .12s ease, transform .08s ease;
+    border:none;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--accent); color:#0b0b0b; }
+  .btn-primary:hover{ background:var(--accent-hover); color:#0b0b0b; }
+  .btn-secondary{ background:var(--surface-raised); color:var(--ink-soft); border:1px solid var(--border); }
+  .btn-secondary:hover{ background:var(--surface-hover); color:var(--ink); border-color:var(--border); }
+  .btn-lg{ padding:16px 30px; font-size:17px; border-radius:var(--radius-md); }
+
+  .section-label{
+    font-size:13px; font-weight:700; color:var(--muted-low);
+    letter-spacing:3px; text-transform:uppercase;
+  }
+  .section-title{
+    font-size:clamp(34px,5vw,46px); font-weight:900; color:var(--ink);
+    letter-spacing:-1px; line-height:1.08; margin-top:10px;
+  }
+  .section-desc{
+    font-size:17px; font-weight:500; color:var(--muted); line-height:28px; margin-top:14px; max-width:720px;
+  }
+
+  /* ============ NAV ============ */
+  .nav{
+    position:sticky; top:0; z-index:100;
+    height:72px; background:rgba(15,15,15,.92); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border-soft);
+  }
+  .nav-inner{
+    height:100%; display:flex; align-items:center; justify-content:space-between;
+    padding:0 64px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{ font-size:22px; font-weight:900; color:var(--accent); letter-spacing:1px; }
+  .brand-word{ font-size:14px; font-weight:600; color:var(--ink-soft); }
+  .nav-menu{ display:flex; gap:28px; }
+  .nav-menu a{ font-size:15px; font-weight:600; color:var(--ink-soft); }
+  .nav-menu a:hover{ color:var(--accent); }
+
+  /* ============ HERO ============ */
+  .hero{ padding:80px 0 96px; }
+  .hero-inner{ display:flex; align-items:center; justify-content:space-between; gap:56px; }
+  .hero-col{ max-width:680px; display:flex; flex-direction:column; gap:24px; }
+  .hero-kicker{ display:flex; align-items:center; gap:10px; }
+  .hero-kicker span:first-child{ font-size:13px; font-weight:700; color:var(--accent); letter-spacing:2px; }
+  .hero-kicker span:last-child{ font-size:13px; font-weight:500; color:var(--muted-low); }
+  .hero-title{ font-size:clamp(40px,5.2vw,66px); font-weight:900; color:var(--ink); letter-spacing:-2px; line-height:1.08; }
+  .hero-title span{ color:var(--accent); display:block; }
+  .hero-sub{ font-size:17px; font-weight:500; color:var(--muted); line-height:28px; }
+  .hero-actions{ display:flex; gap:14px; margin-top:6px; }
+
+  .hero-visual{
+    flex:0 0 480px; width:480px; height:440px;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-xl);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .hv-top{
+    height:40px; background:var(--surface); border-bottom:1px solid var(--border-soft);
+    display:flex; align-items:center; gap:8px; padding:0 16px;
+  }
+  .hv-dot{ width:10px; height:10px; border-radius:50%; background:var(--border); }
+  .hv-dot.accent{ background:var(--accent); }
+  .hv-title{ margin-left:10px; font-size:13px; font-weight:700; color:var(--ink-soft); }
+  .hv-body{ flex:1; padding:18px; display:flex; flex-direction:column; gap:12px; }
+  .hv-row{
+    padding:14px; border-radius:var(--radius-md); background:var(--surface);
+    border:1px solid var(--border-soft); display:flex; flex-direction:column; gap:6px;
+  }
+  .hv-row.active{ border-color:var(--accent); background:rgba(139,124,255,.08); }
+  .hv-row strong{ font-size:15px; font-weight:700; color:var(--ink); }
+  .hv-row.active strong{ color:var(--accent); }
+  .hv-row small{ font-size:13px; font-weight:500; color:var(--muted); }
+  .hv-foot{
+    height:48px; border-top:1px solid var(--border-soft); display:flex;
+    align-items:center; justify-content:space-between; padding:0 18px;
+  }
+  .hv-foot span{ font-size:12px; font-weight:500; color:var(--muted-low); }
+  .hv-foot button{
+    padding:7px 14px; background:var(--accent); color:#0b0b0b;
+    border:none; border-radius:var(--radius-sm); font-size:12px; font-weight:700;
+  }
+
+  /* ============ PROBLEM ============ */
+  .problem{ padding:100px 0 60px; }
+  .problem-title{ font-size:clamp(32px,4.5vw,46px); font-weight:900; color:var(--ink); letter-spacing:-1px; line-height:1.1; margin-top:10px; }
+
+  /* ============ LOOP ============ */
+  .loop{ padding:60px 0; }
+  .loop-grid{ display:flex; gap:20px; margin-top:36px; }
+  .loop-col{ flex:1; display:flex; flex-direction:column; gap:20px; }
+  .step-card{
+    background:var(--panel); border:1px solid var(--border-soft); border-radius:var(--radius-lg); padding:22px;
+  }
+  .step-card .num{ font-size:30px; font-weight:900; color:var(--accent); line-height:1; }
+  .step-card h3{ font-size:22px; font-weight:700; color:var(--ink); margin-top:8px; }
+  .step-card p{ font-size:14px; font-weight:500; color:var(--muted); line-height:22px; margin-top:8px; }
+
+  /* ============ CREW ============ */
+  .crew{ padding:60px 0; }
+  .crew-row{ display:flex; gap:16px; margin-top:36px; }
+  .role-card{
+    flex:1; background:var(--panel); border:1px solid var(--border-soft); border-radius:var(--radius-lg); padding:20px;
+  }
+  .role-card h3{ font-size:22px; font-weight:900; color:var(--accent); }
+  .role-card p{ font-size:14px; font-weight:500; color:var(--muted); line-height:22px; margin-top:8px; }
+
+  /* ============ WHY ============ */
+  .why{ padding:60px 0; }
+  .why-grid{ display:flex; gap:20px; margin-top:36px; }
+  .why-col{ flex:1; display:flex; flex-direction:column; gap:20px; }
+  .feat-card{
+    background:var(--panel); border:1px solid var(--border-soft); border-radius:var(--radius-lg); padding:24px;
+  }
+  .feat-tag{
+    display:inline-flex; padding:6px 12px; background:var(--accent); color:#0b0b0b;
+    border-radius:var(--radius-sm); font-size:13px; font-weight:700; margin-bottom:12px;
+  }
+  .feat-card h3{ font-size:22px; font-weight:700; color:var(--ink); }
+  .feat-card p{ font-size:14px; font-weight:500; color:var(--muted); line-height:22px; margin-top:10px; }
+
+  /* ============ COMPARE ============ */
+  .compare{ padding:60px 0; }
+  .table-wrap{
+    margin-top:36px; border:1px solid var(--border-soft); border-radius:var(--radius-lg); overflow:hidden; background:var(--panel);
+  }
+  .table-head, .table-row{ display:grid; grid-template-columns:140px 1fr 1fr; gap:24px; padding:14px 20px; align-items:center; }
+  .table-head{ background:var(--surface); border-bottom:1px solid var(--border-soft); }
+  .table-head span{ font-size:13px; font-weight:600; color:var(--muted-low); }
+  .table-head span:last-child{ color:var(--accent); font-weight:700; }
+  .table-row{ border-bottom:1px solid var(--border-soft); }
+  .table-row:last-child{ border-bottom:none; }
+  .table-row .col-label{ font-size:15px; font-weight:700; color:var(--ink); }
+  .table-row .col-old{ font-size:14px; font-weight:500; color:var(--muted); line-height:22px; }
+  .table-row .col-wmb{ font-size:14px; font-weight:500; color:var(--ink-soft); line-height:22px; }
+
+  /* ============ DOWNLOAD ============ */
+  .download{ padding:60px 0 80px; }
+  .dl-card{
+    background:var(--panel); border:1px solid var(--accent); border-radius:var(--radius-xl); padding:56px;
+  }
+  .dl-card .section-label{ color:var(--accent); }
+  .dl-card h2{ font-size:clamp(30px,4vw,48px); font-weight:900; color:var(--ink); letter-spacing:-1px; line-height:1.08; margin-top:14px; }
+  .dl-card p{ font-size:16px; font-weight:500; color:var(--muted); line-height:26px; margin-top:14px; max-width:700px; }
+  .dl-actions{ display:flex; gap:14px; margin-top:24px; }
+  .dl-note{ font-size:13px; font-weight:500; color:var(--muted-low); margin-top:18px; }
+
+  /* ============ FOOTER ============ */
+  .footer{ border-top:2px solid var(--accent); padding:44px 0 36px; }
+  .footer-top{ display:flex; align-items:center; justify-content:space-between; }
+  .footer-brand{ display:flex; flex-direction:column; gap:6px; }
+  .footer-brand strong{ font-size:24px; font-weight:900; color:var(--accent); }
+  .footer-brand span{ font-size:13px; font-weight:500; color:var(--muted-low); }
+  .footer-links{ display:flex; gap:24px; }
+  .footer-links a{ font-size:14px; font-weight:600; color:var(--ink-soft); }
+  .footer-bottom{ display:flex; align-items:center; justify-content:space-between; margin-top:28px; }
+  .footer-bottom span{ font-size:13px; font-weight:500; color:var(--muted-low); }
+  .footer-bottom .end{ font-size:13px; font-weight:700; color:var(--border); letter-spacing:4px; text-transform:uppercase; }
+
+  /* responsive */
+  @media (max-width:1024px){
+    .wrap,.nav-inner{ padding-left:28px; padding-right:28px; }
+    .hero-inner{ flex-direction:column; align-items:flex-start; }
+    .hero-visual{ flex:none; width:100%; max-width:480px; }
+    .loop-grid,.why-grid,.crew-row{ flex-direction:column; }
+    .table-head,.table-row{ grid-template-columns:100px 1fr 1fr; gap:16px; }
+    .dl-card{ padding:32px; }
+    .footer-top,.footer-bottom{ flex-direction:column; align-items:flex-start; gap:18px; }
+  }
+  @media (max-width:640px){
+    .nav-menu{ display:none; }
+    .table-head,.table-row{ grid-template-columns:1fr; gap:8px; }
+    .table-head{ display:none; }
+    .table-row .col-label{ color:var(--accent); }
+  }
+</style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="brand">
+        <span class="brand-mark">WMB</span>
+        <span class="brand-word">WeMediaBuddy</span>
+      </div>
+      <nav class="nav-menu">
+        <a href="#problem">产品</a>
+        <a href="#loop">闭环</a>
+        <a href="#crew">班组</a>
+        <a href="#download">下载</a>
+      </nav>
+      <a class="btn btn-primary" href="https://github.com/PigeonAI-Yang/wemediabuddy/releases/latest">下载 Windows 版</a>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-col">
+        <div class="hero-kicker">
+          <span>AI 自媒体协同终端</span>
+          <span>v0.2.1 体验版</span>
+        </div>
+        <h1 class="hero-title">一个终端，跑通从发现<br />到复盘的完整闭环<span>Agent 主路径，人终审。</span></h1>
+        <p class="hero-sub">把资料、选题、草稿、平台版本和结果留在同一条可追溯的链上。你定方向、批呈报、签发布；Agent 负责采、判、写、整。</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="https://github.com/PigeonAI-Yang/wemediabuddy/releases/latest">下载体验版</a>
+          <a class="btn btn-secondary btn-lg" href="https://github.com/PigeonAI-Yang/wemediabuddy">在 GitHub 查看</a>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="今日主编办公桌示意">
+        <div class="hv-top">
+          <div class="hv-dot accent"></div>
+          <div class="hv-dot"></div>
+          <div class="hv-dot"></div>
+          <div class="hv-title">今日 · 主编办公桌</div>
+        </div>
+        <div class="hv-body">
+          <div class="hv-row active">
+            <strong>今天什么值得做？</strong>
+            <small>新模型发布 · 三个可批角度已就绪</small>
+          </div>
+          <div class="hv-row">
+            <strong>选题呈报 · AI 观点写作引擎</strong>
+            <small>等待批准后开始创作</small>
+          </div>
+          <div class="hv-row">
+            <strong>资料已入库</strong>
+            <small>7 条待你过目</small>
+          </div>
+        </div>
+        <div class="hv-foot">
+          <span>Agent 在干活</span>
+          <button type="button">批一下</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="problem" id="problem">
+    <div class="wrap">
+      <div class="section-label">01 — 问题 / The Gap</div>
+      <h2 class="problem-title">你缺的不是更多工具，<br />而是一条不断裂的工作链</h2>
+      <p class="section-desc">找资讯、管资料、用 AI、定选题、写内容、看结果，散落在一堆互不相通的工具里。最后真正当系统的，是你自己——不停复制、粘贴、解释、对版本。</p>
+    </div>
+  </section>
+
+  <!-- LOOP -->
+  <section class="loop" id="loop">
+    <div class="wrap">
+      <div class="section-label">02 — 闭环 / The Loop</div>
+      <h2 class="section-title">一条真正闭合的经营链</h2>
+      <p class="section-desc">普通 AI 工具从「生成文字」开始，也在那结束。WMB 从外部信号跟到发布结果，复盘再回到下一轮选题。</p>
+      <div class="loop-grid">
+        <div class="loop-col">
+          <div class="step-card">
+            <div class="num">01</div>
+            <h3>发现</h3>
+            <p>多源情报进入统一发现与资料现场，保留原始来源，不只是丢一条链接。</p>
+          </div>
+          <div class="step-card">
+            <div class="num">02</div>
+            <h3>沉淀</h3>
+            <p>Agent 整理资料、识别关联并归入长期主题，上下文不再重复搬运。</p>
+          </div>
+        </div>
+        <div class="loop-col">
+          <div class="step-card">
+            <div class="num">03</div>
+            <h3>判断</h3>
+            <p>把资讯组织成可批的选题呈报，先回答今天什么值得做、为什么、怎么讲。</p>
+          </div>
+          <div class="step-card">
+            <div class="num">04</div>
+            <h3>创作</h3>
+            <p>批准方向后，Agent 基于同一份证据起草，并准备 X、小红书、公众号版本。</p>
+          </div>
+        </div>
+        <div class="loop-col">
+          <div class="step-card">
+            <div class="num">05</div>
+            <h3>发布</h3>
+            <p>系统准备内容与素材，缩短路径；最终发布按钮始终由你手动确认。</p>
+          </div>
+          <div class="step-card">
+            <div class="num">06</div>
+            <h3>复盘</h3>
+            <p>回填链接、采集可见指标、形成 Keep/Stop/Change，直接反哺下一轮。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CREW -->
+  <section class="crew" id="crew">
+    <div class="wrap">
+      <div class="section-label">03 — 班组 / The Crew</div>
+      <h2 class="section-title">一支随时在线的员工班子</h2>
+      <p class="section-desc">固定编制，跨赛道稳定。Agent 不是悬浮在旁边的聊天框，而是围绕同一套业务对象持续干活；你从搬运工回到主编位置。</p>
+      <div class="crew-row">
+        <div class="role-card">
+          <h3>桌助</h3>
+          <p>承接你的要求，派工、盯梢、传话、呈报。</p>
+        </div>
+        <div class="role-card">
+          <h3>记者</h3>
+          <p>侦察情报、采集证据、缺料时补研究。</p>
+        </div>
+        <div class="role-card">
+          <h3>策划</h3>
+          <p>机会判断与选题呈报，兼做复盘。</p>
+        </div>
+        <div class="role-card">
+          <h3>写手</h3>
+          <p>围绕批准方向起草、改刀与适配平台。</p>
+        </div>
+        <div class="role-card">
+          <h3>资料员</h3>
+          <p>资料库与主题家底整理，不抢定题权。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section class="why" id="why">
+    <div class="wrap">
+      <div class="section-label">04 — 为什么 / Why WMB</div>
+      <h2 class="section-title">为敏捷而设计，不为管理而管理</h2>
+      <p class="section-desc">热点有窗口期。WMB 把「发现了什么、为什么值得做、怎么讲、做到哪一步」放进同一个现场，让你更快从信号抵达可发布内容。</p>
+      <div class="why-grid">
+        <div class="why-col">
+          <div class="feat-card">
+            <span class="feat-tag">本地优先</span>
+            <h3>数据留在你的设备</h3>
+            <p>业务数据、模型配置与平台登录态都保存在本机。效率可以给系统，方向与责任始终是你自己的。</p>
+          </div>
+          <div class="feat-card">
+            <span class="feat-tag">人工终审</span>
+            <h3>发布按钮归你</h3>
+            <p>最终发布点击与硬删只由你手动确认，对任何 Agent 与授权组合都不可达。不把账号交给全自动机器。</p>
+          </div>
+        </div>
+        <div class="why-col">
+          <div class="feat-card">
+            <span class="feat-tag">上下文不断线</span>
+            <h3>一份状态跟全程</h3>
+            <p>资料、选题、草稿、平台版本共享同一份本地业务状态。Agent 知道内容从哪来、为什么值得做，你不必反复重讲背景。</p>
+          </div>
+          <div class="feat-card">
+            <span class="feat-tag">多平台适配</span>
+            <h3>一稿多版不复制</h3>
+            <p>核心内容与 X、小红书、微信公众号版本关联管理，按平台调整表达，不机械复制三遍。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="compare" id="compare">
+    <div class="wrap">
+      <div class="section-label">05 — 对比 / Versus</div>
+      <h2 class="section-title">一套散装工具，和一个完整闭环</h2>
+      <p class="section-desc">WMB 不否定 Obsidian、Codex 或飞书。它解决的是另一件事：当目标是高效经营自媒体时，不必再用通用工具手工拼出一套内容操作系统。</p>
+      <div class="table-wrap">
+        <div class="table-head">
+          <span>工作环节</span>
+          <span>常见的散装工作流</span>
+          <span>WeMediaBuddy 的方式</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">找资讯</span>
+          <span class="col-old">在多个平台来回搜索，靠浏览器标签页维持记忆</span>
+          <span class="col-wmb">多源信号进入统一发现与资料现场</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">做笔记</span>
+          <span class="col-old">手动摘录到 Obsidian，再自行建立链接</span>
+          <span class="col-wmb">来源、资料、主题和选题按业务关系持续连接</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">用 AI</span>
+          <span class="col-old">打开 Codex 或聊天工具，反复粘贴背景</span>
+          <span class="col-wmb">内置 Pi 与授权外部 Agent 共享当前业务状态</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">管任务</span>
+          <span class="col-old">把选题和进度再搬到飞书或表格</span>
+          <span class="col-wmb">呈报、批准、派工、进度留在同一工作链</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">写内容</span>
+          <span class="col-old">资料、观点和草稿散落在不同文档</span>
+          <span class="col-wmb">从证据到核心内容保持可追溯</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">做多平台</span>
+          <span class="col-old">复制同一篇稿，再分别手工维护版本</span>
+          <span class="col-wmb">X、小红书、公众号版本关联管理，不机械复制</span>
+        </div>
+        <div class="table-row">
+          <span class="col-label">看结果</span>
+          <span class="col-old">发布后另存链接、另做数据表</span>
+          <span class="col-wmb">公开链接、可见指标和复盘回到原内容资产</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section class="download" id="download">
+    <div class="wrap">
+      <div class="dl-card">
+        <div class="section-label">06 — 下载 / Get Started</div>
+        <h2>把主编台装进你的 Windows</h2>
+        <p>Windows 10 / 11 · 64 位 · 一个你自带的 OpenAI-compatible 模型服务即可。普通用户无需安装 Node 或 Git。</p>
+        <div class="dl-actions">
+          <a class="btn btn-primary btn-lg" href="https://github.com/PigeonAI-Yang/wemediabuddy/releases/latest">下载 Windows 体验版</a>
+          <a class="btn btn-secondary btn-lg" href="https://github.com/PigeonAI-Yang/wemediabuddy">在 GitHub 查看</a>
+        </div>
+        <p class="dl-note">当前 v0.2.1 早期体验版 · 从官方 GitHub Release 下载 · 仅接受手动确认的发布</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <strong>WeMediaBuddy</strong>
+          <span>AI 自媒体协同终端 · Agent 干活，人担责</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/PigeonAI-Yang/wemediabuddy">GitHub</a>
+          <a href="https://github.com/PigeonAI-Yang/wemediabuddy/issues">Issues</a>
+          <a href="https://github.com/PigeonAI-Yang/wemediabuddy/blob/master/PRODUCT.md">产品文档</a>
+          <a href="https://github.com/PigeonAI-Yang/wemediabuddy/releases/latest">下载</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>2026 PigeonAI-Yang · WeMediaBuddy</span>
+        <span class="end">Thanks for scrolling</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

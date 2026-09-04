@@ -122,79 +122,123 @@ export function SourceMediaSection(props: SourceMediaSectionProps) {
   ].filter(Boolean).join(' · ');
   const chips = groupCounts(overview);
   const pauseBusy = busy?.action === 'pause';
+  const preservedItems = overview.items.filter(isPreservedMediaItem);
+  const preservedVideoOrdinals = new Set(preservedItems.filter((item) => item.kind === 'video').map((item) => item.ordinal));
+  const visiblePreservedItems = preservedItems.filter((item) => item.kind !== 'video_poster' || !preservedVideoOrdinals.has(item.ordinal));
+  const posterByOrdinal = new Map<number, string>();
+  for (const item of preservedItems) {
+    if (item.kind === 'video_poster' && item.asset) posterByOrdinal.set(item.ordinal, item.asset.id);
+  }
 
   return (
     <section className="library-source-media" aria-label="媒体">
       <div className="library-source-media-head">
         <h2>媒体</h2>
-        <button
-          type="button"
-          className="secondary-button"
-          aria-pressed={overview.globalPaused}
-          disabled={pauseBusy}
-          onClick={() => onTogglePause(!overview.globalPaused)}
-        >{overview.globalPaused ? '恢复后台保存' : '暂停后台保存'}</button>
+        {visiblePreservedItems.length ? <span>{visiblePreservedItems.length} 项可直接查看</span> : null}
       </div>
       {!hasMedia ? (
-        <p className="empty-copy">此资料暂无可保存的图片或视频。保存含媒体内容的资料后，原始文件会自动保存到本地，失效链接也能回看原件。</p>
+        <>
+          <p className="empty-copy">此资料暂无可保存的图片或视频。</p>
+          <button
+            type="button"
+            className="text-button library-media-pause"
+            aria-pressed={overview.globalPaused}
+            disabled={pauseBusy}
+            onClick={() => onTogglePause(!overview.globalPaused)}
+          >{overview.globalPaused ? '恢复媒体自动保存' : '暂停媒体自动保存'}</button>
+        </>
       ) : (
         <>
-          <p className="library-source-media-summary">
-            <strong>{completeText}</strong>
-            {kindText ? <span>{kindText}</span> : null}
-            {overview.globalPaused ? <em>后台保存已暂停，新发现的媒体不会自动保存</em> : null}
-          </p>
-          {chips.length ? (
-            <div className="library-media-chips" role="list" aria-label="媒体状态分布">
-              {chips.map((entry) => (
-                <span className={`tag lib-inline ${entry.group === 'preserved' ? 'green' : entry.group === 'processing' ? 'blue' : entry.group === 'failed' ? 'red' : entry.group === 'needs_user' ? 'amber' : 'gray'}`} role="listitem" key={entry.group}>
-                  {sourceMediaGroupLabel(entry.group)} {entry.count}
-                </span>
-              ))}
+          {visiblePreservedItems.length ? (
+            <div className={`library-media-viewer count-${Math.min(visiblePreservedItems.length, 4)}`} role="list" aria-label="已保存媒体">
+              {visiblePreservedItems.map((item) => {
+                const label = item.captionHint || `${sourceMediaKindLabel(item.kind)} ${item.ordinal + 1}`;
+                const openBusy = busy?.action === 'open' && busy.candidateId === item.id;
+                const meta = item.asset ? [formatBytes(item.asset.byteCount), item.kind === 'video' ? formatDuration(item.asset.durationMs) : '', originDomain(item.originalUrl)].filter(Boolean).join(' · ') : originDomain(item.originalUrl);
+                const posterAssetId = posterByOrdinal.get(item.ordinal);
+                return <figure className={`library-media-figure kind-${item.kind}`} role="listitem" key={item.id}>
+                  <div className="library-media-content">
+                    {item.kind === 'video' && item.asset ? (
+                      <video
+                        className="library-media-video"
+                        src={`wmb-asset://${encodeURIComponent(item.asset.id)}`}
+                        poster={posterAssetId ? `wmb-asset://${encodeURIComponent(posterAssetId)}` : undefined}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        aria-label={label}
+                      />
+                    ) : item.asset ? (
+                      <img className="library-media-image" src={`wmb-asset://${encodeURIComponent(item.asset.id)}`} alt={label} loading="lazy" />
+                    ) : null}
+                  </div>
+                  <figcaption>
+                    <span><strong>{label}</strong><small>{meta}</small></span>
+                    <button type="button" className="text-button" disabled={openBusy} onClick={() => onOpenOriginal(item.id)}>打开原件</button>
+                  </figcaption>
+                </figure>;
+              })}
             </div>
-          ) : null}
-          <div className="library-media-list" role="list" aria-label={`媒体列表，${completeText}`}>
-            {overview.items.map((item) => {
-              const preserved = isPreservedMediaItem(item);
-              const group = sourceMediaStatusGroup(item.status);
-              const orderText = `${sourceMediaKindLabel(item.kind)} ${item.ordinal + 1}`;
-              const sizeText = preserved && item.asset ? formatBytes(item.asset.byteCount) : '';
-              const durationText = item.kind === 'video' ? formatDuration(item.asset?.durationMs) : '';
-              const retryBusy = busy?.action === 'retry' && busy.candidateId === item.id;
-              const openBusy = busy?.action === 'open' && busy.candidateId === item.id;
-              return (
-                <article className="library-media-item" role="listitem" key={item.id}>
-                  <div className={`library-media-thumb${item.kind === 'video' ? ' is-video' : ''}${preserved ? ' is-saved' : ''}`} aria-hidden="true">
-                    {preserved && item.kind !== 'video' && item.asset ? (
-                      <img className="library-media-img" src={`wmb-asset://${encodeURIComponent(item.asset.id)}`} alt="" loading="lazy" />
-                    ) : item.kind === 'video' ? (
-                      <span className="library-media-play" />
-                    ) : null}
-                  </div>
-                  <div className="library-media-main">
-                    <div className="library-media-item-head">
-                      <span className="library-media-order">{orderText}</span>
-                      <span className={`pill-status ${statusClass(item)}`}><span className="dot" />{sourceMediaStatusLabel(item.status)}</span>
-                    </div>
-                    <p className="library-media-origin" title={item.originalUrl}>{originDomain(item.originalUrl)}</p>
-                    {item.captionHint ? <p className="library-media-caption">{item.captionHint}</p> : null}
-                    {sizeText || durationText ? <p className="library-media-size">{[sizeText, durationText].filter(Boolean).join(' · ')}</p> : null}
-                    {item.errorMessage && (group === 'failed' || group === 'needs_user' || group === 'unsupported') ? (
-                      <p className="library-media-error">{item.errorMessage}</p>
-                    ) : null}
-                  </div>
-                  <div className="library-media-actions">
-                    {preserved ? (
-                      <button type="button" className="secondary-button" disabled={openBusy} onClick={() => onOpenOriginal(item.id)}>查看原件</button>
-                    ) : null}
-                    {canRetry(item) ? (
-                      <button type="button" className="secondary-button" disabled={retryBusy} aria-label={`重试${orderText}`} onClick={() => onRetry(item.id)}>重试</button>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          ) : <p className="library-media-preview-empty">媒体正在保存或需要处理，完成后会直接显示在这里。</p>}
+
+          <details className="library-media-management" open={visiblePreservedItems.length === 0}>
+            <summary><span>媒体保存状态</span><small>{completeText}{kindText ? ` · ${kindText}` : ''}</small></summary>
+            <div className="library-media-management-content">
+              <div className="library-media-management-head">
+                <p className="library-source-media-summary">
+                  <strong>{completeText}</strong>
+                  {overview.globalPaused ? <em>媒体自动保存已暂停</em> : null}
+                </p>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  aria-pressed={overview.globalPaused}
+                  disabled={pauseBusy}
+                  onClick={() => onTogglePause(!overview.globalPaused)}
+                >{overview.globalPaused ? '恢复自动保存' : '暂停自动保存'}</button>
+              </div>
+              {chips.length ? (
+                <div className="library-media-chips" role="list" aria-label="媒体状态分布">
+                  {chips.map((entry) => (
+                    <span className={`tag lib-inline ${entry.group === 'preserved' ? 'green' : entry.group === 'processing' ? 'blue' : entry.group === 'failed' ? 'red' : entry.group === 'needs_user' ? 'amber' : 'gray'}`} role="listitem" key={entry.group}>
+                      {sourceMediaGroupLabel(entry.group)} {entry.count}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="library-media-list" role="list" aria-label={`媒体列表，${completeText}`}>
+                {overview.items.map((item) => {
+                  const preserved = isPreservedMediaItem(item);
+                  const group = sourceMediaStatusGroup(item.status);
+                  const orderText = `${sourceMediaKindLabel(item.kind)} ${item.ordinal + 1}`;
+                  const sizeText = preserved && item.asset ? formatBytes(item.asset.byteCount) : '';
+                  const durationText = item.kind === 'video' ? formatDuration(item.asset?.durationMs) : '';
+                  const retryBusy = busy?.action === 'retry' && busy.candidateId === item.id;
+                  return (
+                    <article className="library-media-item" role="listitem" key={item.id}>
+                      <div className="library-media-main">
+                        <div className="library-media-item-head">
+                          <span className="library-media-order">{orderText}</span>
+                          <span className={`pill-status ${statusClass(item)}`}><span className="dot" />{sourceMediaStatusLabel(item.status)}</span>
+                        </div>
+                        <p className="library-media-origin" title={item.originalUrl}>{originDomain(item.originalUrl)}</p>
+                        {item.captionHint ? <p className="library-media-caption">{item.captionHint}</p> : null}
+                        {sizeText || durationText ? <p className="library-media-size">{[sizeText, durationText].filter(Boolean).join(' · ')}</p> : null}
+                        {item.errorMessage && (group === 'failed' || group === 'needs_user' || group === 'unsupported') ? (
+                          <p className="library-media-error">{item.errorMessage}</p>
+                        ) : null}
+                      </div>
+                      <div className="library-media-actions">
+                        {canRetry(item) ? (
+                          <button type="button" className="secondary-button" disabled={retryBusy} aria-label={`重试${orderText}`} onClick={() => onRetry(item.id)}>重试</button>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </details>
         </>
       )}
     </section>

@@ -1,0 +1,306 @@
+[
+ {
+  "name": "Brown",
+  "file": "line-brown.png",
+  "cover": 72.1,
+  "inkpct": 8.33,
+  "outline_px": 9,
+  "outline_pct": 2.27,
+  "inkcolor": [
+   "#1D1210",
+   8.3,
+   21
+  ],
+  "ncolors": 5,
+  "colors": [
+   [
+    "#6C483B",
+    67.3,
+    81
+   ],
+   [
+    "#BE7459",
+    17.2,
+    135
+   ],
+   [
+    "#1D1210",
+    8.3,
+    21
+   ],
+   [
+    "#6B483B",
+    4.0,
+    81
+   ],
+   [
+    "#E1C7B9",
+    2.8,
+    205
+   ]
+  ]
+ },
+ {
+  "name": "Cony",
+  "file": "line-cony.png",
+  "cover": 71.7,
+  "inkpct": 8.77,
+  "outline_px": 9,
+  "outline_pct": 2.46,
+  "inkcolor": [
+   "#000000",
+   8.7,
+   0
+  ],
+  "ncolors": 5,
+  "colors": [
+   [
+    "#FFFFFF",
+    51.7,
+    255
+   ],
+   [
+    "#FF8AA2",
+    30.6,
+    176
+   ],
+   [
+    "#000000",
+    8.7,
+    0
+   ],
+   [
+    "#FE859C",
+    3.6,
+    172
+   ],
+   [
+    "#E4C3C3",
+    2.5,
+    205
+   ]
+  ]
+ },
+ {
+  "name": "Ryan",
+  "file": "kakao-ryan.png",
+  "cover": 26.7,
+  "inkpct": 10.84,
+  "outline_px": 0,
+  "outline_pct": 0.0,
+  "inkcolor": [
+   "#584E23",
+   14.6,
+   76
+  ],
+  "ncolors": 7,
+  "colors": [
+   [
+    "#FBAB2D",
+    35.9,
+    181
+   ],
+   [
+    "#8BFF01",
+    25.8,
+    191
+   ],
+   [
+    "#584E23",
+    14.6,
+    76
+   ],
+   [
+    "#D4CA45",
+    8.7,
+    190
+   ],
+   [
+    "#F6AB33",
+    6.0,
+    180
+   ]
+  ]
+ },
+ {
+  "name": "Cinnamoroll",
+  "file": "sanrio-cinnamoroll.png",
+  "cover": 65.9,
+  "inkpct": 0.0,
+  "outline_px": 0,
+  "outline_pct": 0.0,
+  "inkcolor": null,
+  "ncolors": 3,
+  "colors": [
+   [
+    "#FFFFFF",
+    85.8,
+    255
+   ],
+   [
+    "#BD946A",
+    7.3,
+    155
+   ],
+   [
+    "#FFFFFE",
+    2.5,
+    255
+   ]
+  ]
+ },
+ {
+  "name": "Pompompurin",
+  "file": "sanrio-pompompurin.png",
+  "cover": 82.3,
+  "inkpct": 8.1,
+  "outline_px": 7,
+  "outline_pct": 2.24,
+  "inkcolor": [
+   "#41200F",
+   12.9,
+   40
+  ],
+  "ncolors": 4,
+  "colors": [
+   [
+    "#FFF9B0",
+    48.6,
+    242
+   ],
+   [
+    "#FFFFFF",
+    30.7,
+    255
+   ],
+   [
+    "#41200F",
+    12.9,
+    40
+   ],
+   [
+    "#FDF9B0",
+    2.6,
+    242
+   ]
+  ]
+ },
+ {
+  "name": "Mofusand",
+  "file": "mofusand-samenyan.png",
+  "cover": 95.3,
+  "inkpct": 0.13,
+  "outline_px": 0,
+  "outline_pct": 0.0,
+  "inkcolor": [
+   "#576D74",
+   19.0,
+   103
+  ],
+  "ncolors": 5,
+  "colors": [
+   [
+    "#FFFFFF",
+    31.5,
+    255
+   ],
+   [
+    "#FDFDFD",
+    23.3,
+    253
+   ],
+   [
+    "#576D74",
+    19.0,
+    103
+   ],
+   [
+    "#D9C7A8",
+    14.2,
+    201
+   ],
+   [
+    "#F0EEEC",
+    9.4,
+    238
+   ]
+  ]
+ },
+ {
+  "name": "Molang",
+  "file": "p3-molang.png",
+  "cover": 92.5,
+  "inkpct": 0.0,
+  "outline_px": 0,
+  "outline_pct": 0.0,
+  "inkcolor": [
+   "#651F04",
+   6.9,
+   49
+  ],
+  "ncolors": 4,
+  "colors": [
+   [
+    "#FFFFFF",
+    80.9,
+    255
+   ],
+   [
+    "#651F04",
+    6.9,
+    49
+   ],
+   [
+    "#F9DEE0",
+    3.7,
+    230
+   ],
+   [
+    "#FCFDFC",
+    2.3,
+    253
+   ]
+  ]
+ },
+ {
+  "name": "Chiikawa",
+  "file": "chiikawa-official.png",
+  "cover": 93.2,
+  "inkpct": 6.0,
+  "outline_px": 0,
+  "outline_pct": 0.0,
+  "inkcolor": [
+   "#0A0709",
+   6.3,
+   8
+  ],
+  "ncolors": 5,
+  "colors": [
+   [
+    "#FDE9EC",
+    55.2,
+    239
+   ],
+   [
+    "#FFFFFF",
+    32.5,
+    255
+   ],
+   [
+    "#0A0709",
+    6.3,
+    8
+   ],
+   [
+    "#EFD3D6",
+    2.8,
+    220
+   ],
+   [
+    "#81797B",
+    2.1,
+    124
+   ]
+  ]
+ }
+]

@@ -948,6 +948,8 @@ export function claimCreationExperiment(database: DatabaseSync, taskId: string):
   }
 }
 
+const WRITER_QUALITY_CONTRACT = '严格遵守 skills/evidence-grounded-writer/SKILL.md §5：冻结一个处在具体情境中的读者与一个期望读者动作，只服务一个中心主张；标题必兑现，首段立刻兑现；抽象主张落到人/场景/利害/后果；证据服务主张，保留可防守的张力，禁止用“需要综合考虑”或“各打五十大板”软化，禁止编造。保存前自检：读者收益是否具体、是否有具体利害、为何现在、收藏/分享/评论动机。';
+
 export function draftPrompt(
   task: AgentTask,
   projectId: string,
@@ -965,6 +967,7 @@ export function draftPrompt(
       `project_id=${projectId}`,
       `request_id=${requestId}`,
       `brief=${brief}`,
+      '保留一个中心主张；重写开头钩子、信息节奏与收藏/分享/评论动机，不是缩短。标题必须包含可由正文兑现的具体利益、冲突、反转或代价。',
       `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取最新正文，再调用 wmb_save_platform_version 保存小红书版本。不要发布。`
     ].join('\n');
   }
@@ -975,6 +978,7 @@ export function draftPrompt(
       `project_id=${projectId}`,
       `request_id=${requestId}`,
       `brief=${brief}`,
+      '先判断内容最适合的真实视频形态，再组织口播结构、镜头节奏与听觉信息密度。',
       `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取最新正文，再调用 wmb_save_video_script 保存口播稿。不要发布。`
     ].join('\n');
   }
@@ -985,6 +989,7 @@ export function draftPrompt(
       `project_id=${projectId}`,
       `request_id=${requestId}`,
       `brief=${brief}`,
+      WRITER_QUALITY_CONTRACT,
       `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题、调查结论和关联资讯。`,
       '围绕选题的核心观点完成标题和正文；不要再派任务，不要启动其他流程。',
       `完成后调用 wmb_save_core_version，requestId 使用 ${requestId}，projectId 使用 ${projectId}，expectedRevision 使用读取到的项目 revision。`,
@@ -997,6 +1002,7 @@ export function draftPrompt(
     `project_id=${projectId}`,
     `request_id=${requestId}`,
     `brief=${brief}`,
+    WRITER_QUALITY_CONTRACT,
     `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题、调查结论和关联资讯。`,
     '基于同一份证据提出 2-4 个有实质差异的语义方向；每个方向给出 id、至少 10 字的 semanticDirection，以及 0-100 整数分 evidenceFit、insightNovelty、audienceValue。',
     '按证据贴合 45%、洞察新意 30%、读者价值 25% 选择加权分最高的方向；不要选择较低分方向。',

@@ -1,0 +1,31 @@
+{
+  "projectId": "338e221c-24a2-4fa2-81ed-3bd5492c351a",
+  "planItemId": "none-direct-studio-project",
+  "initialWriter": {
+    "jobId": "17cb07fb-184b-4664-ac6f-1af076d71fcb",
+    "status": "partial",
+    "phase": "unknown"
+  },
+  "reporter": {
+    "jobId": "e2f857df-0128-47e6-b6db-d1861de15e68",
+    "status": "partial",
+    "phase": "unknown"
+  },
+  "resumedWriter": {
+    "jobId": "9c3a0535-0745-41bf-994e-23cd0d2fc50f",
+    "status": "succeeded",
+    "reportStatus": "succeeded",
+    "code": null,
+    "error": null
+  },
+  "version": {
+    "countBefore": 1,
+    "countAfter": 1,
+    "id": "ad873a1a-1301-47ad-a4be-b86f9c07e345",
+    "title": "Yann LeCun Acceptance 2026-08-24-04-02-21 ffav"
+  },
+  "automaticContinuationEvidence": "writer 17cb07fb-184b-4664-ac6f-1af076d71fcb(partial/unknown) -> reporter e2f857df-0128-47e6-b6db-d1861de15e68(partial) -> resumed 9c3a0535-0745-41bf-994e-23cd0d2fc50f(succeeded); successor: []; conflict: absent",
+  "cleanupEvidence": "closeApp returned true; pid 863060 exited; app.process exitCode 0; page closed true; mock closed http://127.0.0.1:59699/v1",
+  "blocker": "resumed status succeeded code null error null countBefore 1 countAfter 1 init partial/unknown reporter partial",
+  "status": "partial"
+}

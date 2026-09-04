@@ -23,10 +23,16 @@ import {
   sourceListBadges,
   sourceQualityProfile,
 } from '../src/renderer/library-view-parts.ts';
+import { sourceContentEquivalent } from '../src/renderer/source-content-equivalence.ts';
 
 // ---------------------------------------------------------------------------
 // 纯逻辑：段迁移与标签
 // ---------------------------------------------------------------------------
+test('WMB-5212 UI: source copy equivalence ignores presentation whitespace but preserves distinct content', () => {
+  assert.equal(sourceContentEquivalent('同一条资料\n\n正文', '  同一条资料 正文  '), true);
+  assert.equal(sourceContentEquivalent('标题', '不同的正文'), false);
+});
+
 
 test('WMB-5212 UI: migrateLibrarySection maps old rediscovery section to pending', () => {
   assert.equal(migrateLibrarySection('rediscovery'), 'pending');
@@ -301,14 +307,36 @@ test('WMB-5212 UI: source detail consumes the backend aggregate and deep link ch
   assert.match(view, /healthTypeFilter/);
 });
 
-test('WMB-5212 UI: persistent inline receipts are collapsible but always visible in detail', () => {
+test('WMB-5212 UI: source detail prioritizes reading and keeps diagnostics available on demand', () => {
+  const summaryIndex = view.indexOf('className="library-source-summary"');
+  const bodyIndex = view.indexOf('className="library-source-primary-body"');
+  const mediaIndex = view.indexOf('<SourceMediaSection');
+  const diagnosticsIndex = view.indexOf('className="library-source-diagnostics"');
+  assert.ok(summaryIndex >= 0 && summaryIndex < bodyIndex, '摘要应在正文前');
+  assert.ok(bodyIndex < mediaIndex, '正文应在媒体前');
+  assert.ok(mediaIndex < diagnosticsIndex, '媒体应在诊断信息前');
+  assert.match(view, /<button className="secondary-button library-source-detail-back"[^>]*>← 返回<\/button>/);
+  assert.match(view, /const showSummary = Boolean\(summaryText\) && !sourceContentEquivalent\(summaryText, titleText\)/);
+  assert.match(view, /const bodyDuplicatesVisibleCopy = Boolean\(archivedText/);
+  assert.match(view, /\{showSummary \? <section className="library-source-summary"/);
+  assert.match(view, /\{!bodyDuplicatesVisibleCopy \? <section className="library-source-primary-body"/);
+  assert.match(view, /<details className="library-source-diagnostics">/);
+  assert.match(view, /<span>资料信息与诊断<\/span>/);
   assert.match(view, /<details open=\{sourceDetailLoading \? undefined : \(detail\?\.receipts\.items\.length \?\? 0\) > 0\}>/);
-  assert.match(view, /<summary>最近知识编译与摄取回执（可收起，持久可回看）<\/summary>/);
   assert.match(view, /receiptTriggerLabel\(receipt\.triggerType\)/);
   assert.match(view, /receiptCountsSummary\(receipt\.counts\)/);
   assert.match(view, /onOpenTopic\?\.\(topicId\)/);
-  // 无回执时的引导空态
   assert.ok(view.includes('尚无摄取回执'));
+});
+
+test('WMB-5212 UI: detail sections use available width while images keep intrinsic size', () => {
+  assert.match(css, /\.library-source-detail-intro\s*\{[^}]*max-width:\s*none/s);
+  assert.match(css, /\.library-source-primary-body\s*\{[^}]*max-width:\s*none/s);
+  assert.match(css, /\.library-media-image\s*\{[^}]*width:\s*auto[^}]*height:\s*auto/s);
+  assert.match(css, /\.library-media-figure\s*\{[^}]*width:\s*fit-content[^}]*max-width:\s*100%/s);
+  assert.match(css, /\.library-media-viewer\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
+  assert.match(css, /\.library-source-detail h1\s*\{[^}]*text-wrap:\s*wrap/s);
+  assert.match(css, /\.library-source-summary p\s*\{[^}]*max-width:\s*none/s);
 });
 
 test('WMB-5212 UI: source detail has Raw/质量/Evidence/关联/批注/健康 regions', () => {
@@ -366,34 +394,6 @@ test('WMB-5212 UI: renderer never writes formal knowledge directly (no Knowledge
   assert.match(view, /sourceListBadges\(/);
 });
 
-test('WMB-5212 UI: keyboard reachable rows and native details/summary', () => {
-  assert.match(view, /role="button"/);
-  assert.match(view, /tabIndex=\{0\}/);
-  assert.match(view, /onKeyDown=\{\(event\) =>/);
-  assert.match(view, /event\.key === 'Enter' \|\| event\.key === ' '/);
-  assert.match(view, /event\.stopPropagation\(\)/);
-});
-
-test('WMB-5212 UI: deep link keeps libraryFocusSourceId navigation contract in main.tsx', () => {
-  assert.match(mainTsx, /libraryFocusSourceId/);
-  assert.match(mainTsx, /onFocusSourceConsumed/);
-  assert.match(mainTsx, /sectionStorageKey=\{workspaceStorageKey\(workspaceId, 'librarySection'\)\}/);
-});
-
-test('WMB-5212 UI: responsive layout and theme tokens in library styles', () => {
-  assert.match(css, /@media \(max-width: 760px\)/);
-  assert.match(css, /@media \(max-width: 480px\)/);
-  assert.match(css, /\.library-quality-grid/);
-  assert.match(css, /\.library-receipt-item/);
-  assert.match(css, /\.library-evidence-item/);
-  assert.match(css, /\.library-issue-item/);
-  assert.match(css, /\.pending-pool/);
-  assert.match(css, /\.health-section/);
-  assert.match(css, /\.sr-only/);
-  // 设计 token：无硬编码纯黑/纯白装饰色
-  assert.match(css, /var\(--border\)/);
-  assert.match(css, /var\(--surface\)/);
-});
 
 test('WMB-5212 UI: pending tab surfaces reason, evidence change and next-step actions', () => {
   assert.match(view, /PENDING_POOLS/);

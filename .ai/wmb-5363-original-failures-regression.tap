@@ -1,0 +1,505 @@
+(node:503256) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:503256) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery (1044.2534ms)
+✔ writer prompts keep audience identity out of core and platform titles (0.4512ms)
+✔ daily IPC leaves task creation to the shared channel coordinator and deduplicates by root/date (2.256ms)
+✔ Pi task authority prompt carries exact automatic task, grant and lease values (0.814ms)
+(node:518540) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:518540) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ agent tasks reuse one running intent/date and mint stable request ids (991.3913ms)
+✔ agent task completion requires business object readback (1109.6658ms)
+✔ running agent tasks become interrupted on recovery and can be cancelled (1069.7645ms)
+✔ daily task persists bounded progress and resumes the same checkpoint (882.1826ms)
+✔ control actions are idempotent after terminal states (931.9677ms)
+✔ partialAgentTask is idempotent for daily intelligence (994.9269ms)
+✔ 1001 projects page with fixed query counts and reject stale core-version writes (5740.7641ms)
+(node:454436) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-tasks.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:454436) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ zero-item website receipt plus an empty saved plan completes daily intelligence truthfully (1154.4863ms)
+✔ one committed channel success and one channel failure finish as partial without rollback (1097.0923ms)
+✔ a later lane/runtime failure preserves trustworthy channel results as partial (1057.6055ms)
+✔ all blocked sources annotate absence but never block judgment (980.9624ms)
+✔ a stale-context channel start fails truthfully without a task grant (980.4363ms)
+✔ a thrown orchestration scan records an accurate durable failure instead of claiming success (1057.042ms)
+✔ late X results write neither cached nor source data after binding revision changes, while another source continues (1078.244ms)
+✔ identical channel fixtures keep receipts and source items inside their own data roots (2237.8045ms)
+✔ a nonempty plan with a missing source remains rejected after a truthful scan (1102.8305ms)
+✔ a receipt for an unselected source cannot satisfy a frozen daily task (1020.3598ms)
+✔ a resumed task with one completed source and one newly blocked source runs judgment as partial (1282.4465ms)
+✔ a duplicate start observes a preflight task without scanning the same source twice (1092.9893ms)
+✔ plan saved through command_receipts (real plans.save path) also satisfies ownership validation (1034.7683ms)
+✔ scanOnly finishes when nothing new lands, and judgeOnly routes straight to the judgment runner (1660.7499ms)
+✔ hasEnabledDailySources gates scheduler ticks per module (1571.7141ms)
+✔ plans.save MCP accepts an empty current plan and persists its readback (1883.1641ms)
+(node:508464) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/daily-intelligence-channels.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:508464) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ X preflight failure records per-source failed receipts and official_web still scans (partial) (1437.6388ms)
+✔ all X sources preflight-failed aggregate failed and continue on inventory (needs_user/failed 聚合) (1705.3132ms)
+(node:240068) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:240068) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ EVAL-029 fixture survives two bounded cold processes without changing its complete parent (3991.1453ms)
+✔ fixture declaration repeats business values without inventing a BrowserProfile identity (2.0258ms)
+✔ fixture-declared paths reject traversal and reparse-point escapes before materialization (44.1213ms)
+✔ verify rejects a manifest outside the marked parent (3816.3135ms)
+✔ verify deep-checks the stable manifest envelope even when its strict hash is recomputed (3723.5256ms)
+✔ complete parent hash rejects an unexpected parent-level sibling (3702.6589ms)
+✔ failed staged materialization restores an empty retryable parent (4579.3994ms)
+✔ fixture command rejects a non-temporary materialization parent (333.57ms)
+✔ fixture command rejects readback without its marker (366.8042ms)
+(node:522184) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:522184) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ topic-null carry gets aftershock from new same-story source by title bigram (1228.2104ms)
+✔ topic-null carry gets aftershock from same-story plan item via source overlap (1196.627ms)
+✔ topic-null carry without new evidence stays aftershock-empty and leaves the rail (1665.728ms)
+✔ topic-bound carry keeps the topic-path aftershock (existing semantics preserved) (2029.0893ms)
+✔ migration v45 adds story_key/stage and refresh populates them (1847.1678ms)
+✔ refresh backfills story_key for rows that lost it (legacy/直写行) (1679.6892ms)
+(node:509992) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:509992) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ yesterday multi-day plan projects topic onto continuous-attention rail (1564.07ms)
+✔ bare high-value source alone does not appear on continuous-attention rail (1417.7928ms)
+✔ dismissing plan-item carry removes topic from rail when no other signal (1985.9888ms)
+✔ marking sources watching keeps them in library watching board (1482.614ms)
+✔ creating project marks matching carry done and topic may leave if no signal (1442.7554ms)
+(node:508816) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/daily-intelligence-channels.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:508816) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Today uses authoritative readiness and always starts all enabled Settings channels (12.0715ms)
+✔ daily run lifecycle is click-current, task-scoped, and returns durable partial (3.1675ms)
+✔ Today default run freezes all enabled sources before daily scanning (3076.6787ms)
+(node:515312) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:515312) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ pool unions current plans across dates and excludes adopted, dismissed and timeliness-expired items (1527.6486ms)
+✔ dismissed fingerprint is never revived by reseeding (1483.0955ms)
+✔ publish within 24h demotes same-topic opportunities to the tail with annotation (1727.6316ms)
+✔ plan items citing sources without canonicalUrl are rejected (1461.2058ms)
+✔ story variants with overlapping sources merge into the newest carry row (1191.2729ms)
+✔ disjoint stories never merge (2099.0972ms)
+✔ similar titles without shared sources merge into one story at save time (1562.2412ms)
+✔ listFermentingBundle only keeps cards with why-watching signal (1520.1302ms)
+✔ carry rows in expired state are excluded from the pool (1549.344ms)
+✔ getToday exposes the pool alongside plan and sources (1519.2996ms)
+✔ same story different wording collapses to one chair card (keeper: lowest priority, then newest createdAt) (1851.719ms)
+✔ empty current plan does not remove prior non-empty plan items from the pool (1404.6506ms)
+(node:329664) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:329664) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ unscored draft cannot promote to fermenting (1454.5353ms)
+✔ scored approved can promote to fermenting (1441.6105ms)
+✔ plan-linked legacy approved without score is excluded (1476.7916ms)
+✔ true manual zero-plan topic qualifies (1454.2817ms)
+✔ equivalent theses dedupe across active persistent topics and new promotions (1354.557ms)
+✔ reversible retirement preserves records and fermenting excludes (2079.9081ms)
+(node:7504) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/pi-operator-skill.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7504) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Pi operator Skill documents exactly the registered WMB tools and hard boundaries (7.8983ms)
+✔ WMB-5293: operator documents the registered project-image import contract (1.095ms)
+✔ UK lane routes X work through current-root WMB tools, not the retired external provider (1.3127ms)
+✔ WMB-5144: operator Skill registers multi-instance semantics without slot metaphors (EVAL-CAP-027 skill 面) (0.9373ms)
+✔ WMB-5144: desk/employee system prompt registers multi-instance awareness and desk boundary (0.1482ms)
+✔ WMB-5184 flip: model-facing tool/roster/dock copy presents desk as supervisor (主管/主编席), no 桌助/协调入口 alias (1.4691ms)
+(node:519964) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:519964) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ isExactZhihuFallback exact nine fields deep equal (1958.0868ms)
+✔ validatePlanItemForReview rejects fallback and pending, accepts complete (1202.4874ms)
+✔ createPlanningDraftFromTarget minimal draft only title/sourceIds pending provenance no pseudo template (1348.3905ms)
+✔ submitPlanItemForReview draft->ready_for_review success, validation failure no mutate, stale revision conflict (1470.7529ms)
+✔ transitionPlanItem legal and illegal paths and stale revision (1461.4254ms)
+✔ saveCurrentPlan creates ready_for_review only, fallback batch rollback, no direct approved (1435.4747ms)
+(node:508100) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:508100) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ WMB-5349 fresh DB aggregates v77 with two columns, CHECK, default and composite index (1238.0755ms)
+✔ WMB-5349 legacy upgrade exact 9-field match is draft/legacy_zhihu_fallback, remainder is approved/legacy_approved (1201.3729ms)
+✔ WMB-5349 near-miss single field diff does NOT match fallback and becomes approved (1388.0066ms)
+✔ WMB-5349 legacy IS NULL guard prevents second flip on re-execution (1318.2076ms)
+✔ WMB-5349 CHECK rejects illegal status after upgrade; empty legacy upgrades cleanly (2782.8971ms)
+✔ WMB-5349 composite index on (planning_status, plan_id, sort_order) and version order (1264.4615ms)
+✔ WMB-5353 draft and rejected expose no Writer/start-production entry (5.3188ms)
+✔ WMB-5353 ready_for_review clearly awaits approval (2.1868ms)
+✔ WMB-5353 approved invokes fixed plan_item.advance idempotently (1.0897ms)
+✔ WMB-5353 v0 renders 尚未生成正文 and never infers saved from dirty (3.588ms)
+✔ WMB-5353 real task/version states remain truthful (1.11ms)
+✔ WMB-5353 preserves long-body scroll and 44px product ledger contract (2.8057ms)
+✔ only one current plan per day and every item cites stored sources (1463.0178ms)
+(node:521312) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:521312) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ empty history returns zero counts (1095.8643ms)
+✔ classifies today shelved adopted dismissed expired and keeps empty current from blanking open items (1269.7998ms)
+✔ today tab matches opportunity pool subset for same day (1084.6156ms)
+✔ offset pagination returns hasMore and distinct pages (964.8163ms)
+✔ restoreDismissedProposal returns item to open ledger (998.7357ms)
+(node:364308) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:364308) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ task grants expose the canonical internal business command IDs (1.3697ms)
+✔ ordinary Pi chat grants (page_today/page_studio) are legally issued and unregistered commands are still rejected (1122.9409ms)
+✔ Pi and an external Agent continue one task under a durable grant while stale authority writes zero (1572.0159ms)
+✔ missing, expired, broadened and stale-worker grants reject with zero domain write while Owner UI needs no task grant (1806.0601ms)
+✔ a grant from another root authorizes zero writes (2952.0408ms)
+✔ ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers (1567.3941ms)
+✔ ensureAutomaticTaskGrant reuses an active exact-scope grant and rejects inactive tasks (1567.6374ms)
+✔ ensureAutomaticTaskGrant revokes and replaces an active mismatched grant (1330.354ms)
+(node:502044) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/renderer/today-run-view.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ idle click synchronously latches busy (localStarting true wins) (1.3297ms)
+✔ stale terminal child while latch pending keeps busy (no clear) (0.3807ms)
+✔ nonterminal manager arrival while latch pending hands over to busy (0.2053ms)
+✔ matching terminal manager arrival clears latch to idle once (0.1628ms)
+✔ stale terminal child does not clear latch, matching terminal task clears idle once (0.1291ms)
+✔ start error clears latch to idle once (0.4436ms)
+✔ focus_existing with active manager + terminal child prioritizes manager busy (0.2947ms)
+✔ isTodayTaskActive preserves queued/waiting/running/needs_user as active (0.096ms)
+✔ no timer/debounce/reload or duplicate spawn introduced in today-view (4.8784ms)
+✔ focus_existing projection does not duplicate task (single latch generation) (0.2776ms)
+(node:518316) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:518316) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ watermark advances only after lane+plan succeed; empty with failure does not advance (1343.3119ms)
+✔ missing score persists pending while malformed scored reasons are rejected (1248.4251ms)
+✔ changed payload uses distinct requestId while identical remains idempotent (1522.2079ms)
+✔ persistence errors cannot complete empty while missing scores persist pending (1331.3032ms)
+✔ Wan remains in next window after simulated revision conflict with changed content and qualified empty is marked (1439.3162ms)
+(node:502264) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:502264) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ T1 续派合同：四角色 context_refs 字段 + 一键续派重建 (2.5468ms)
+✔ T1b research 变体：research 块 + projectId 持久化并重建 research 工单（reporter 老路径不变） (0.573ms)
+✔ T2 对象边界标准化：sourceIds 去重排序、scope 语义、校验器 fail closed (0.9266ms)
+✔ T3 真实 spawn 链路：reporter 任务 context_refs 含续派合同且 grant 携带 jobBoundary (1576.0258ms)
+✔ T4 签发硬门：携带 jobId 但边界缺失的任务 → 自动授权 fail closed（不签发 grant） (1236.1168ms)
+✔ T5 签发硬门：grant 边界主张越界 → 拒签 + 审计 + 零 grant 写；同界主张可签发 (1630.0009ms)
+✔ T6 执行硬门：writer 跨 projectId 拒绝（BLOCKED + 审计 + 零业务写），同界成功 (1864.2984ms)
+✔ T7 执行硬门：planner 跨 date、librarian 跨 sourceIds 拒绝，同界成功 (1415.9325ms)
+✔ T8 红线不变：红线命令即使携带有效 grant + 匹配边界仍被 execution grant 门拦死 (1631.3236ms)
+✔ T9 同项目第二张 writer 单 → waiting_resource(RESOURCE_LOCK_CONFLICT)，释放后晋升 (1502.6567ms)
+✔ T13 waiting_resource 泊车保留原始请求：晋升后 execute 收到原 reporter 请求 (1406.4364ms)
+✔ T10 三表 schema 零改动（无迁移、无新表/列） (1570.8379ms)
+✔ T12 执行硬门：reporter upsert_batch 跨 feed 拦截；content.create 越界 sourceIds 拦截 (1957.0335ms)
+✔ T11 重启可重建：context_refs_json 跨重启完整指认并重建原请求 (1233.4991ms)
+(node:504536) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:504536) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ T1 同角色多实例独立投影：running + waiting_resource 并排可见，活动期编号 1..N (1235.9208ms)
+✔ T2 空投影：无实例时 summary 全 0，active/history 空 (1139.4707ms)
+✔ T3 活动期编号纯显示：重启后历史编号为 0，新活动期从 1 重新计数；编号不落库 (1544.7724ms)
+✔ T4 scan→judge 共享同一 agent_task：reporter 终态退出、judge 接管进度/等你批，活动视图不双计 (1377.4043ms)
+✔ T5 重启历史可读 + 续派输入可建：jobId 指认、重建原 RoleJobRequest、再 spawn 成功 (1282.695ms)
+✔ T6 终态顺序（四角色）+ needs_user 零 slot/lease/grant/锁、不自动重试、JOB_EVENT 最后 (1416.2511ms)
+✔ T7 maxWorkers 0..7 域：0 拒绝派工（池与 spawner 双保险），超界拒绝 (990.05ms)
+✔ T8 desk 不可 spawn、不出现在投影；roster 从投影驱动（同角色多实例行 + 空角色当前无任务） (1016.0122ms)
+✔ T9 needs_user 续派（reuse 同任务）旧卡唯一：同任务最多一个活动实例，重复卡退出 (2861.2097ms)
+✔ T10 锚点读取语义：无 jobId 合同/非员工角色任务不进投影（单次读重建语义保留） (1240.0814ms)
+✔ T11 真实续派（配置缺失 reuse 同任务）：重复卡按任务退出，同任务最多一个活动实例 (1662.2516ms)
+✔ T12 配置缺失前置卡带工单合同：重启后持久重建仍一张卡（修复重启即丢） (1230.7642ms)
+✔ T13 用户关闭 needs_user 卡：pool/任务双 cancelled、active=0、history 可追、重启不复发 (1592.4904ms)
+✔ T14 补配置续派（处理）：旧卡/旧任务关闭退出，新实例唯一 (1257.019ms)
+✔ T15 重复 needs_user 卡关闭回归：同任务兄弟卡随目标同步 cancelled，jobs:list 无幽灵 (1894.13ms)
+✔ T16 真实进度比例：仅 planned>0 时返回 clamp(processed/planned) (0.301ms)
+✔ T17 不凭阶段/状态猜比例：phase 启发式与终态一律 null (0.1214ms)
+(node:323340) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:323340) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ A1 同角色多实例显式可见：两记者并行 running，进度独立，roster/UI 双面可见 (1212.7626ms)
+✔ A2 实例按任务创建：空态零实例卡 + 五角色分组；spawn 后实例卡出现 (1283.0811ms)
+✔ A3 终态退出活动视图：三终态退出 + 历史可指认；needs_user 停留至关闭 (1931.5643ms)
+✔ A4 不预设空槽：全空态无待命/占位坐席文案，摘要 0，无虚构待命态 (1268.0213ms)
+✔ A5 并发 = 系统容量：3 张跨角色单 → 2 running + 1 queued，释放后晋升；maxWorkers=0 拒收 (1380.8102ms)
+✔ A6 并发 ≠ 角色配额：两记者占满容量；调 maxWorkers=4 第三记者单直接运行 (1158.0878ms)
+✔ A7 主管非员工工位：spawn 拒绝、不进员工投影；standing 全量内部写权、红线不可达；desk 行 = 主管/主编席 (1013.2906ms)
+✔ A8 实例权限交集：写手只读借阅无组织命令；资料员无 plans.save/content.*/reviews.save；越界拦截 (1276.3505ms)
+✔ A9 资源边界（对象级硬隔离）：跨项目写 BLOCKED + 审计 + 零业务写；同项目第二单等待后晋升 (1201.5895ms)
+✔ A10 红线不变：红线命令冻结且只属 agentGrantable:false；有效 grant + 匹配边界仍被 fail-closed 红线门拦死 (1532.8117ms)
+✔ A11 needs_user 数据流：code + 部分读回呈报；零资源；不自动重试；关闭退出活动视图 (1346.7777ms)
+✔ A12 取消 ≤5s：running 取消总门 ≤5s，任务/池双 cancelled，lease 归零；重复取消幂等 (1536.7105ms)
+✔ A13 历史可重建与一键续派：重启后从 context_refs_json 指认并重建原请求，一键续派可再次 spawn (1275.476ms)
+✔ A14 兼容不变量：schema 零改动、五角色固定、核心能力零漂移、新增能力不扰动交集/红线 (1064.9664ms)
+(node:401844) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/task-grants.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:401844) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ research projections grant scope is exact two commands and existing scopes are untouched (1.1826ms)
+✔ research projections intent capability wiring maps research to cap.research only (0.1504ms)
+✔ research projections role derivation maps reporter+research to intent research (0.6884ms)
+✔ research projections role derivation uses registry maps for research policy/readback/failure (0.2637ms)
+✔ research projections reject research block on non-reporter roles (0.4489ms)
+✔ research projections reject malformed research gaps fail-closed (0.7063ms)
+✔ research projections zero regression: existing role requests derive unchanged specs (13.2998ms)
+✔ research MCP read gate blocks off-whitelist tools in a research session (973.4029ms)
+✔ research MCP read gate allows whitelist tools through to existing handlers with a valid lease (875.9495ms)
+✔ research MCP read gate writes role_authority_blocked audit row with role/command/taskId/reason/time (784.3596ms)
+✔ research MCP read gate blocks research task with missing worker lease (fail closed) (753.8921ms)
+✔ research MCP read gate blocks stale/forged lease: handler not called and audited (846.2827ms)
+✔ research MCP read gate: real extension client injects env-derived taskId+workerLeaseId into tools/call (913.7514ms)
+✔ research MCP read gate blocks channel resolve/trial and manager spawn in research sessions (1068.6293ms)
+✔ research MCP read gate leaves non-research sessions on the old path (756.0676ms)
+✔ research MCP read gate leaves taskless requests on the old path (2441.6482ms)
+(node:351796) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:351796) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ WMB-5171: v54 applies on a fresh database with exact research_claims DDL and research intent (694.38ms)
+✔ WMB-5171: v54 applies on an upgraded database preserving every old agent_tasks row, value and index (711.0638ms)
+✔ WMB-5171: migration v54 is idempotent on reopen (675.7664ms)
+✔ WMB-5171: research_claims CHECK enums reject out-of-enum values at the database boundary (708.6452ms)
+✔ WMB-5171: UNIQUE (task_id, claim_key) rejects duplicates; same key across tasks is allowed (3120.9663ms)
+✔ WMB-5171: store upsert is idempotent by (task_id, claim_key), freezes spawn fields and updates verdict fields (724.5164ms)
+✔ WMB-5171: store rejects invalid shapes at the boundary with VALIDATION_ERROR (706.1599ms)
+✔ WMB-5171: store list is task-scoped and deterministically ordered; snapshot is immutable; projection passes statuses through (758.7787ms)
+✔ WMB-5171: research context refs round-trip losslessly through agent_tasks and rebuild the exact RoleJobRequest (1149.7952ms)
+✔ WMB-5171: research progress and checkpoint round-trip losslessly through progress_json/checkpoint_json (768.8679ms)
+✔ WMB-5171: research EvidencePack round-trips losslessly through result_refs_json (739.6357ms)
+✔ WMB-5171: corrupted research refs/progress/checkpoint/evidence fail closed (718.9119ms)
+✔ WMB-5171: recoverInterruptedAgentTasks puts running research into resume_pending while old intents keep existing semantics (804.109ms)
+✔ WMB-5171: cancelling a research task uses the existing state machine and retains committed research_claims rows (739.4674ms)
+(node:501384) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:501384) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ WMB-5237 media: migration 62 creates binding tables, provenance table and is idempotent (807.7938ms)
+✔ WMB-5237 media: migration 62 run hook backfills legacy core tokens and platform assetIds (X first image cover) (264.9888ms)
+✔ WMB-5237 media: core save appends version, writes bindings atomically and never alters the body token (717.1821ms)
+✔ WMB-5237 media: core save without drafts reconciles default bindings from body refs (backfill on save) (691.1892ms)
+✔ WMB-5237 media: core save revision conflict writes nothing (version, binding, revision all untouched) (775.3746ms)
+✔ WMB-5237 media: core save rejects invalid binding drafts fail-closed with full rollback (748.9567ms)
+✔ WMB-5237 media: platform save writes bindings and rebuilds asset_ids_json by ordinal (derivedAssetId || assetId) (765.3025ms)
+✔ WMB-5237 media: platform save without mediaBindings rebuilds from assetIds and update never clears existing cover/crop (812.7334ms)
+✔ WMB-5237 media: platform binding with derivedAssetId projects into asset_ids_json and read model (766.8597ms)
+✔ WMB-5237 media: platform save with crop payloads atomically materializes derived asset, provenance, binding and projection (788.0331ms)
+✔ WMB-5237 media: platform save revision conflict with crop payload writes nothing (745.3999ms)
+✔ WMB-5237 media: platform save rejects two covers atomically and X cover must sit at ordinal 0 (740.9839ms)
+✔ WMB-5237 media: isValidCropRegion enforces 0..1 bounds, positive size and x+width/y+height <= 1 (0.2553ms)
+✔ WMB-5237 media: shared normalizers validate drafts and rebuild asset ids by ordinal (0.4137ms)
+✔ WMB-5237 media: materializeCropAsset creates derived asset with provenance, preserves original and dedups by sha256 (754.359ms)
+✔ WMB-5237 media: renderer helpers are the single shared parser (behavior-identical, no second implementation) (0.688ms)
+✔ WMB-5237 media: updateContentMediaBinding upserts by (assetId, occurrence) immutably and never touches body tokens (0.2661ms)
+✔ WMB-5237 media: contentMediaLayoutMap keys figures by assetId:occurrence for projection (0.1477ms)
+✔ WMB-5237 media: caption edits still mutate the token via token helpers; layout never enters the token (0.3027ms)
+✔ WMB-5237 media: toolbar exports width/align labels and drag-snap ratios (小中大通栏 · 左中右) (0.1083ms)
+✔ WMB-5237 media: StudioInlineImageOverlay renders readOnly status shell and hides all edit actions (6.395ms)
+✔ WMB-5237 media: toolbar structure contract (toolbar/aria/actions/readOnly/drag-commit-once, esbuild harness for non-executable DOM) (2.1799ms)
+(node:523032) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:523032) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5241 ingest/query chain on one real workspace (SQLite readback) (1081.5771ms)
+(node:516208) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:516208) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ canonicalizeZhihuQuestionUrl normalizes only official question URLs (0.8406ms)
+✔ ZHIHU_HOT_URL is official AI topic page, not generic /hot (0.1603ms)
+✔ Zhihu AI topic exposes one fixed mapping for all five categories (0.5347ms)
+✔ ZHIHU_HOT_SELECTORS match the live AI topic ContentItem contract (0.4445ms)
+✔ parseZhihuHotHtml extracts AI-topic AnswerItems and dedupes canonical URL (1.3345ms)
+✔ parseZhihuHotHtml rejects non-AnswerItem and off-topic-surface cards structurally (0.3607ms)
+✔ challenge and signin detection yield stable codes (0.4872ms)
+✔ persistZhihuHotScan idempotent: rescanning does not duplicate Source; observations dedupe by fingerprint (AI topic) (807.6976ms)
+✔ unrelated cards never reach persistence; repeat mixed scan remains idempotent (742.3711ms)
+✔ failure of zhihu_hot does not erase successful unrelated channels (isolated receipts) (724.6072ms)
+✔ intelligence channel summary reflects AI topic URL and name (775.8486ms)
+✔ discovery projection returns latest official AI-topic observation per Source only (794.3601ms)
+✔ category projections filter observations by exact evidence URL (736.1283ms)
+✔ Zhihu category collection stays background-only and refresh reuses the scan receipt path (2.7397ms)
+✔ verified BrowserProfile reaches live Zhihu even without a stale zhihu account snapshot (741.7151ms)
+(node:519420) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:519420) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ six dimensional caps and deterministic total (741.4176ms)
+✔ fixed inputs stably hit all three routes (automatic/boundary/rejected) (738.4931ms)
+✔ hard-risk codes reject-before-score preserves raw snapshot (677.9992ms)
+✔ 30-day duplicate detection edge (29d duplicate, 31d not duplicate, newValue boundary) (748.6227ms)
+✔ deterministic ties ordered by canonicalUrl then id (779.9871ms)
+✔ quota selection: automatic first; boundary fills remaining; quota-full never over-allocates (926.0119ms)
+✔ workspace-configurable thresholds and daily target count via Settings route (775.6779ms)
+✔ Proposal Ledger exposes per-dimension evidence/reasons and hard risks (821.0891ms)
+(node:408696) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:408696) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ idempotent ensure: repeated ensure creates no duplicate target (893.8617ms)
+✔ default 2 / configured quota respected (shortage truthful, no fake) (779.6369ms)
+✔ shortage is truthful: zero candidates -> partial with gap, no targets (669.1021ms)
+✔ retry fills an existing shortage after sources arrive without duplicating targets (809.2373ms)
+✔ illegal transition is rejected and revision conflict detected (770.4137ms)
+✔ skip/replace semantics: quota respected and auditability preserved (828.3333ms)
+✔ carry once: second carry fails (749.4364ms)
+✔ completion only with exact article+ready-script; article-only and script-only remain incomplete; stale script fails (1162.1911ms)
+✔ Yesterday iteration block loads getYesterdayIteration for current business date (0.7366ms)
+✔ Exposes both iteration kinds with Chinese labels (0.7294ms)
+✔ Presents suggestion/context evidence via score_snapshot_json (0.2441ms)
+✔ Shows revise/carry/skip state with accessible status chips (0.2327ms)
+✔ Existing open-Studio affordance reused, no external publication action or second workbench (0.1696ms)
+✔ Honest empty/loading/error states (0.1713ms)
+✔ Styling uses foundation tokens only, no new brand hex or gradients (0.3685ms)
+✔ TodayYesterdayIteration remains keyboard accessible and Results-embedded (0.1722ms)
+✔ Reports exact Today-owned file set (5.512ms)
+(node:508676) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:508676) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ gate unmet yields no body and blocked state (790.5329ms)
+✔ gate satisfied yields final article in same project and article_ready (809.2866ms)
+✔ version history remains append-only (837.2398ms)
+✔ target becomes article_ready only after finalize, not just drafting (885.342ms)
+✔ repeated ensure does not duplicate identity (idempotency) (818.5246ms)
+(node:473180) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:473180) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ adaptive script versions are immutable, stale on article change, then realign and complete (850.0232ms)
+✔ video_script Writer task derives exact readback and adaptive prompt (12.7424ms)
+(node:469360) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:469360) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ three triggers converge to one in-flight execution (802.2677ms)
+✔ production factory A/B/D/E invoked via shared orchestrator (real primitive spies) (698.0168ms)
+✔ retry/restart reuses identities (cold retry idempotent) (690.0259ms)
+✔ partial success isolation: one stage fails does not erase others (685.4238ms)
+✔ needs_user priority and blocked exposed (702.195ms)
+✔ readable settlement counts/gaps/skipped/carried/blocked (763.1649ms)
+✔ no publication path in orchestration (behavioral) (750.3557ms)
+✔ scheduler Asia/Shanghai timing and persisted schedule toggle (740.4763ms)
+✔ paused priority > needs_user > partial > completed (720.9041ms)
+✔ production wiring does not use unregistered orchestrate command and shares single orchestrator (729.3828ms)
+✔ Today orchestration uses existing window.wmb daily orchestration APIs only (0.9888ms)
+✔ Today orchestration shows Asia/Shanghai schedule, enable/disable, Run Now, in-progress guard (0.2838ms)
+✔ Persisted settlement with five stage rows A–E and explicit status messaging (0.1924ms)
+✔ Recovery affordances use existing navigation, no final publish action (0.1116ms)
+✔ TodayDailyCycle is mounted in Settings and remains keyboard accessible (0.0765ms)
+✔ Styling uses foundation tokens only, no new brand colors or gradients (0.1626ms)
+(node:473732) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ WMB-5347: researchMode 显式优先、required覆盖brief禁研、缺字段brief兼容 (1.0027ms)
+✔ WMB-5347: 未知 researchMode 值在外部输入拒绝 (0.3441ms)
+✔ WMB-5347: 持久化与回读 - buildJobContextRefs 持久化 mode，rebuild 恢复，旧 refs fallback (13.062ms)
+✔ WMB-5347: draftPrompt prohibited 为受限写作、无 must dispatch、含观点标注 (0.3188ms)
+✔ WMB-5347: draftPrompt auto/required 未ready 仍为必须派研究 (0.1276ms)
+✔ WMB-5347: 显式 required 覆盖 brief 禁研仍派研究 (0.0749ms)
+(node:473732) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ WMB-5347: prohibited exempt 允许保存，revision 1->2 且无 research handoff (3292.1597ms)
+✔ WMB-5347: auto/required 未ready 仍 blocked (721.9656ms)
+✔ WMB-5347: 伪造 exempt、错项目、非 writer 全部拒绝 (749.8895ms)
+✔ WMB-5347: research successor 仍视为 evidenceReady，不因 prohibited 逻辑退化 (716.1677ms)
+(node:519304) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:519304) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/role-job-registry.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ registry: carries optional planItemId through RoleJobSpec and derives exact lock + plan_item_ready readback (487.6052ms)
+✔ registry: deriveResourceLocks exact vs daily (0.631ms)
+✔ intake: brief is bounded contract not weak status text (4.0602ms)
+✔ policies: runJudgePolicy branches to targeted and preserves ordinary daily judge (0.7714ms)
+✔ policies: targeted prompt is bounded and forbids filesystem/SQLite bypass (would catch old daily-only runJudgePolicy) (0.6999ms)
+✔ runner: readback kind proves exact plan item is ready_for_review and terminal remains honest (1.9868ms)
+✔ no direct SQLite business mutation in Planner prompt path and daily preserved (0.8422ms)
+✔ mcp: plan_item.get is scoped read-only requiring task_id + plan_item_id and returns required fields (0.603ms)
+✔ mcp: WMB_TOOL_IDENTITY aliases plan_item.get/submit to public wmb names (0.5197ms)
+✔ policies: targeted prompt names public aliases wmb_get_plan_item / wmb_submit_plan_item (0.7531ms)
+✔ Pi extension exposes exact Planner read and submit tools (0.5856ms)
+✔ plan_item.get reads only the Planner-bound item without a write grant (76.0809ms)
+(node:505312) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:505312) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-tasks.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+✔ UI confirmation is exact, busy-safe, crash-recoverable and cold-readable (7652.4836ms)
+✔ candidate root with real knowledge rows cannot become a new workspace (815.1096ms)
+(node:510112) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:510112) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ official AI and UK profiles isolate one linked text chain without AI-only routes (2135.893ms)
+(node:521088) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:521088) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ SSOT writer skill contains all required behaviors (4.5455ms)
+✔ draftPrompt core_draft embeds all required behaviors (runtime consumer) (0.7427ms)
+✔ draftPrompt xiaohongshu platform version adapts hook/pace/share motive rather than merely shorten (0.1988ms)
+✔ targetedPlannerPrompt embeds all required behaviors (runtime consumer) (0.3894ms)
+✔ dailyPrompt embeds all required behaviors (runtime consumer) (5.104ms)
+✔ regression: audited safe governance topic without concrete brief is rejected, concrete self-media brief passes (771.4929ms)
+(node:402832) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///J:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to J:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:402832) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ one existing event opportunity carries exact X trend evidence into daily jobs, Today, and Pi context (978.4968ms)
+ℹ tests 316
+ℹ suites 0
+ℹ pass 316
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 307811.0099

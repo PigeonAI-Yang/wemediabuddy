@@ -164,30 +164,6 @@
 .proposal-go-studio:hover { background: var(--surface-hover); color: var(--ink); }
 .proposal-empty { min-height: 340px; margin-top: 4px; }
 
-/* 今日页入口条：今日主席与台账之间（无抽屉，仅入口） */
-.proposal-ledger-entry {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  margin: 0 0 var(--page-space);
-  padding: 10px 16px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 12px;
-  background: var(--surface-raised);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-.proposal-ledger-entry:hover {
-  background: var(--surface-hover);
-}
-.proposal-ledger-entry-title { font-size: 13.5px; font-weight: 700; white-space: nowrap; }
-.proposal-ledger-entry-counts { flex: 1; min-width: 0; color: var(--muted); font-size: 12.5px; }
-.proposal-ledger-entry-arrow { color: var(--muted-low); font-size: 16px; }
 
 .proposal-batch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);font-size:13px}
 .proposal-batch-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}

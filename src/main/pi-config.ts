@@ -257,7 +257,7 @@ export function savePiConfig(input: {
   api: PiApiType;
   authMode?: ProviderAuthMode;
   credentialSource?: Exclude<ProviderCredentialSource, { kind: 'encrypted' }>;
-  thinking?: PiThinkingLevel;
+  thinking?: PiThinkingLevel | null;
   text?: boolean;
   vision?: boolean;
   nativeSearch?: boolean;
@@ -309,7 +309,7 @@ export function savePiConfig(input: {
       streaming: input.streaming ?? current?.capabilities?.streaming ?? true
     }),
     health: current?.health ?? freezeValue({ state: 'unknown' }),
-    thinking: input.thinking ?? current?.thinking,
+    thinking: input.thinking === null ? undefined : input.thinking ?? current?.thinking,
     ...limits
   };
   const profiles = [profile, ...state.profiles.filter((item) => item.id !== id)];
@@ -426,7 +426,8 @@ export async function listPiModels(input: {
   const response = await fetch(`${baseUrl.toString().replace(/\/$/, '')}/models`, { headers, signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`获取模型失败（HTTP ${response.status}）。`);
   const body = await response.json() as { data?: Array<Record<string, unknown>>; models?: Array<Record<string, unknown>> };
-  const models = [...new Map((body.data ?? body.models ?? []).map(modelOption).filter((item): item is PiModelOption => Boolean(item)).map((item) => [item.id, item])).values()].sort((a, b) => a.id.localeCompare(b.id));
+  const resolved = await Promise.all((body.data ?? body.models ?? []).map((item) => modelOption(item, api, baseUrl.toString())));
+  const models = [...new Map(resolved.filter((item): item is PiModelOption => Boolean(item)).map((item) => [item.id, item])).values()].sort((a, b) => a.id.localeCompare(b.id));
   if (!models.length) throw new Error('接口没有返回可用模型。');
   return models;
 }
