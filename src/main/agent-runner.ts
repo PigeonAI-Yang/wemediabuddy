@@ -740,7 +740,7 @@ export async function startDailyIntelligence(input: {
     const dailySessionFile = path.join(layout.agentDir, 'sessions', `${piSessionId}.jsonl`);
     await mkdir(path.dirname(dailySessionFile), { recursive: true });
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
         await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', dailySessionFile,
         '--skill', path.join(layout.agentDir, 'skills', 'wemedia-intelligence-engine'), '-e', extensionPath,
@@ -922,6 +922,32 @@ export async function startDailyIntelligence(input: {
   } finally { close(); }
 }
 
+export function shouldRunCreationExperiment(database: DatabaseSync): boolean {
+  const existing = database.prepare(`SELECT 1 FROM agent_tasks
+    WHERE intent = 'studio_draft' AND json_extract(context_refs_json, '$.creationExperiment') = 1 LIMIT 1`).get();
+  return !existing;
+}
+
+export function claimCreationExperiment(database: DatabaseSync, taskId: string): boolean {
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const existing = database.prepare(`SELECT 1 FROM agent_tasks
+      WHERE intent = 'studio_draft' AND id != ? AND json_extract(context_refs_json, '$.creationExperiment') = 1 LIMIT 1`).get(taskId);
+    if (existing) {
+      database.exec('COMMIT');
+      return false;
+    }
+    const updated = database.prepare(`UPDATE agent_tasks
+      SET context_refs_json = json_set(context_refs_json, '$.creationExperiment', json('true'))
+      WHERE id = ? AND intent = 'studio_draft' AND json_extract(context_refs_json, '$.writerTask') = 'core_draft'`).run(taskId);
+    database.exec('COMMIT');
+    return Number(updated.changes) === 1;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function draftPrompt(
   task: AgentTask,
   projectId: string,
@@ -929,7 +955,8 @@ export function draftPrompt(
   writerTask: WriterTask = 'core_draft',
   brief = '',
   _researchReady = false,
-  _researchMode: 'auto' | 'required' | 'prohibited' = 'auto'
+  _researchMode: 'auto' | 'required' | 'prohibited' = 'auto',
+  creationExperiment = false
 ): string {
   if (writerTask === 'xiaohongshu_platform_version') {
     return [
@@ -951,14 +978,30 @@ export function draftPrompt(
       `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取最新正文，再调用 wmb_save_video_script 保存口播稿。不要发布。`
     ].join('\n');
   }
+  if (!creationExperiment) {
+    return [
+      '根据这个选题直接写一篇完整、自然、可编辑的中文文章。',
+      `task_id=${task.id}`,
+      `project_id=${projectId}`,
+      `request_id=${requestId}`,
+      `brief=${brief}`,
+      `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题、调查结论和关联资讯。`,
+      '围绕选题的核心观点完成标题和正文；不要再派任务，不要启动其他流程。',
+      `完成后调用 wmb_save_core_version，requestId 使用 ${requestId}，projectId 使用 ${projectId}，expectedRevision 使用读取到的项目 revision。`,
+      '保存后结束。不要发布。'
+    ].join('\n');
+  }
   return [
-    '根据这个选题直接写一篇完整、自然、可编辑的中文文章。',
+    '根据这个选题写一篇完整、自然、可编辑的中文文章。正文前必须先完成一次语义方向实验。',
     `task_id=${task.id}`,
     `project_id=${projectId}`,
     `request_id=${requestId}`,
     `brief=${brief}`,
-    `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题和关联资讯。`,
-    '围绕选题的核心观点完成标题和正文；不要再派任务，不要启动其他流程。',
+    `先调用 wmb_get_content({ projectId: "${projectId}" }) 读取选题、调查结论和关联资讯。`,
+    '基于同一份证据提出 2-4 个有实质差异的语义方向；每个方向给出 id、至少 10 字的 semanticDirection，以及 0-100 整数分 evidenceFit、insightNovelty、audienceValue。',
+    '按证据贴合 45%、洞察新意 30%、读者价值 25% 选择加权分最高的方向；不要选择较低分方向。',
+    `写正文前先调用 wmb_report_agent_progress，requestId 使用 ${requestId}:experiment，phase 使用 experiment_complete，checkpoint 只需包含 {"creationExperiment":{"version":"v1","projectId":"${projectId}","variants":[...],"selectedVariantId":"..."}}。系统会计算加权分、领先分和定量结论并持久化。`,
+    '只有实验写入成功后，才围绕胜出方向完成标题和正文；不要再派任务，不要启动其他流程。',
     `完成后调用 wmb_save_core_version，requestId 使用 ${requestId}，projectId 使用 ${projectId}，expectedRevision 使用读取到的项目 revision。`,
     '保存后结束。不要发布。'
   ].join('\n');
@@ -989,7 +1032,8 @@ export async function startStudioDraft(input: {
       roleId: 'writer' as const,
       projectId: input.projectId,
       writerTask,
-      researchMode: 'prohibited' as const
+      researchMode: 'prohibited' as const,
+      creationExperiment: false
     };
     const prerequisite = await resolveAgentPiPrerequisite(dependency, {
       intent: 'studio_draft', roleId: 'writer', businessDate: input.businessDate, contextRefs, piConfigPath: input.piConfigPath
@@ -1000,6 +1044,7 @@ export async function startStudioDraft(input: {
     const started = await dispatchStartAgentTask(dependency, { intent: 'studio_draft', businessDate: input.businessDate, contextRefs: taskContextRefs }, taskCommandContext(lane, startRequestId, undefined, input.workerLeaseId));
     if (started.reused) return { task: started.task, reused: true };
     const task = started.task;
+    const creationExperiment = writerTask === 'core_draft' && claimCreationExperiment(database, task.id);
     const taskPolicySnapshot = readTaskModelPolicySnapshot(task, 'writer') ?? policySnapshot;
     const grantId = await input.onTaskReady?.(task.id) ?? null;
     const layout = await ensurePiConversationLayout(input.dataRootPath);
@@ -1009,7 +1054,7 @@ export async function startStudioDraft(input: {
     await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-draft-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
         await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || path.join(path.dirname(layout.sessionFile), `${piSessionId}.jsonl`)), '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
@@ -1050,7 +1095,7 @@ export async function startStudioDraft(input: {
         },
         run: async (activeRuntime) => {
           await activeRuntime.promptUntilSettled(
-            draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', true, 'prohibited'),
+            draftPrompt(task, input.projectId, requestId, writerTask, input.brief ?? '', true, 'prohibited', creationExperiment),
             { timeoutMs: piPromptTimeoutMs() }
           );
         }
@@ -1128,7 +1173,7 @@ export async function startResultsReview(input: {
     await dispatchUpdateAgentTaskPhase(dependency, task.id, 'running_pi', { piSessionId: conversation.sessionId }, taskCommandContext(lane, `${task.id}:phase:running-pi`, task.id, input.workerLeaseId, { requestId: startRequestId }));
     const workDir = await mkdtemp(path.join(os.tmpdir(), 'wmb-review-'));
     const createRuntime = async (nextConfig: ResolvedPiConfig) => {
-      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
+      await writeFile(path.join(layout.agentDir, 'models.json'), JSON.stringify(await piModelsJson({ ...nextConfig, apiKey: '$WMB_PI_API_KEY' })), 'utf8');
       const runtime = new PiRpcSupervisor(process.execPath, [
         await piCliPath(input.dataRootPath), '--mode', 'rpc', '--session', (input.sessionFile || path.join(path.dirname(layout.sessionFile), `results-${task.id}.jsonl`)), '-e', extensionPath,
         '--provider', 'wmb-api', '--model', nextConfig.model, '--append-system-prompt', piTaskAuthorityPrompt({ taskId: task.id, grantId, workerLeaseId: input.workerLeaseId })
