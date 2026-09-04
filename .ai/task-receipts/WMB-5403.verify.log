@@ -1,0 +1,46 @@
+✔ foundation anchors: accent, Inter, topbar 56px (2.0821ms)
+✔ page CSS color literals stay within shrink-only allowlist (16.2033ms)
+✔ allowlist comment documents Phase 3 shrink policy (0.5335ms)
+(node:40972) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40972) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5395 one production authorization reaches attributed draft review in the same workspace (1208.9372ms)
+✔ WMB-5398 product surfaces expose no standalone judge command (12.3927ms)
+✔ WMB-5398 Planner keeps one submit command but no request capability (1.7166ms)
+✔ WMB-5399 daily content projections no longer submit Stage D production (9.6645ms)
+✔ WMB-5399 Executor rejects legacy Stage D instead of freezing empty success (1.5307ms)
+✔ WMB-5400 Owner and scheduler share the executable full-intent entry (7.7273ms)
+✔ WMB-5400 production has no Judge or Stage D proposal successor surface (3.9207ms)
+(node:54152) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:54152) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5401 computes a quantitative winner and rejects a lower-scoring selection (4.0771ms)
+✔ WMB-5401 atomically assigns the semantic experiment to one core draft only (987.4935ms)
+✔ WMB-5401 persists the experiment checkpoint before the core-save gate opens (986.8596ms)
+✔ WMB-5401 writer prompt orders experiment persistence before article persistence (0.5491ms)
+(node:54908) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/creation-experiment-observation.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ WMB-5402 keeps one-shot evidence in observation instead of promoting early (1.327ms)
+✔ WMB-5402 only marks stable benefit as eligible for a later product-design decision (1.1342ms)
+✔ WMB-5402 rejects unstable benefit when misuse or latency cost crosses the gate (0.45ms)
+(node:36428) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:36428) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5403 keeps approval as the only standard-path production decision (6.4656ms)
+✔ WMB-5403 keeps the semantic comparison isolated from ordinary creation (0.9833ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4555.5959
