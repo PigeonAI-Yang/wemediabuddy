@@ -1,0 +1,29 @@
+(node:30736) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/agent-runner.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:30736) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ daily synthesis keeps watching and fermenting context while a cancel request wins over partial recovery (1283.3167ms)
+✔ planner sees every effective source from the business day after an incremental watermark (1195.5815ms)
+✔ writer prompt goes directly from selected topic to saved article (0.5429ms)
+✔ daily IPC submits one durable full intent instead of running collection directly (2.038ms)
+✔ Pi task authority prompt carries exact automatic task, grant and lease values (0.8072ms)
+(node:38836) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38836) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5367 sole authority is busy while live and takeover rotates every epoch after monotonic stall (1031.6532ms)
+✔ WMB-5367 startup gate blocks T1, then accepted intent replays canonically and conflicting payload is zero-write (1226.4414ms)
+✔ WMB-5367 required preflight failure is needs_user with durable snapshot and explicitly zero root/claim/job (1081.7565ms)
+✔ WMB-5367 optional failure is excluded with coverage gap while all required ready only admits pre-root (1045.5029ms)
+✔ WMB-5367 unknown producer and mailbox depth 256 fail closed without business writes (5116.5536ms)
+✔ WMB-5367 actor heartbeat renews authority without rotating its fence (954.7088ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10781.3975
