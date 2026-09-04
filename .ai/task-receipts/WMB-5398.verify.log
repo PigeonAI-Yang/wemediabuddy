@@ -1,0 +1,33 @@
+(node:31796) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/pi-operator-skill.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31796) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Pi operator Skill documents exactly the registered WMB tools and hard boundaries (10.2656ms)
+✔ WMB-5293: operator documents the registered project-image import contract (1.7722ms)
+✔ UK lane routes X work through current-root WMB tools, not the retired external provider (1.1609ms)
+✔ WMB-5144: operator Skill registers multi-instance semantics without slot metaphors (EVAL-CAP-027 skill 面) (1.423ms)
+✔ WMB-5144: desk/employee system prompt registers multi-instance awareness and desk boundary (0.3304ms)
+✔ WMB-5184 flip: model-facing tool/roster/dock copy presents desk as supervisor (主管/主编席), no 桌助/协调入口 alias (2.2273ms)
+(node:31948) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/planning-stage.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31948) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ actor matrix: ordinary planner cannot approve, desk and Owner UI can (3156.3909ms)
+✔ stale revision conflict and reason required for reject (1102.7189ms)
+✔ illegal jumps are rejected (1053.1837ms)
+✔ not-found and validation mapping to envelope semantics (849.4326ms)
+✔ no direct agent_tasks/jobs INSERT in owned production code (3.4525ms)
+✔ bridge methods expose owner decisions without a second production-advance command (1.8067ms)
+✔ unapproved legacy link/create denied (954.6834ms)
+✔ WMB-5398 product surfaces expose no standalone judge command (13.7338ms)
+✔ WMB-5398 Planner keeps one submit command but no request capability (2.6307ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7470.3028

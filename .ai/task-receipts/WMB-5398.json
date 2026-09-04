@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5398",
+  "implementationCommit": "74d0cca",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "tests/wmb-5398-judge-command-subtraction.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5398-judge-command-subtraction.test.mjs tests/pi-operator-skill.test.mjs tests/planning-stage-orchestration.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5398.verify.log"
+  },
+  "closedAt": "2026-09-04T08:33:26.035Z"
+}
