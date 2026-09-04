@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5402",
+  "implementationCommit": "b2650d7",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/creation-experiment-observation.ts",
+    "tests/wmb-5402-creation-experiment-observation.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5402-creation-experiment-observation.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5402.verify.log"
+  },
+  "closedAt": "2026-09-04T08:55:42.672Z"
+}
