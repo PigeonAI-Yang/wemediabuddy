@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+// Clean cutover: executable full roots remain; standalone Judge control surfaces do not.
+
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('WMB-5398 product surfaces expose no standalone judge command', async () => {
