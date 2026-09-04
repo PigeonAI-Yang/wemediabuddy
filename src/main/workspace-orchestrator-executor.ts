@@ -171,6 +171,42 @@ function planRows(database: DatabaseSync, businessDate: string): PlanCandidateRo
   return { planIds, eligible, pending, invalid };
 }
 
+async function withActorHeartbeat<T>(runtime: ActiveWorkspaceRuntime, work: () => Promise<T>): Promise<T> {
+  let stopped = false;
+  let heartbeatError: unknown = null;
+  let inflight: Promise<void> | null = null;
+  const beat = (): Promise<void> => {
+    if (stopped) return Promise.resolve();
+    if (inflight) return inflight;
+    inflight = runtime.runActorControlPlane(() => {
+      const store = createWorkspaceOrchestratorActorStore(runtime.database);
+      store.renewActorLease({
+        workspaceId: runtime.identity.workspaceId,
+        fence: currentFence(runtime.database, runtime.identity.workspaceId),
+      });
+    }).catch((error) => {
+      heartbeatError ??= error;
+    }).finally(() => {
+      inflight = null;
+    });
+    return inflight;
+  };
+  await beat();
+  if (heartbeatError) throw heartbeatError;
+  const timer = setInterval(() => void beat(), 10_000);
+  timer.unref?.();
+  try {
+    const result = await work();
+    await beat();
+    if (heartbeatError) throw heartbeatError;
+    return result;
+  } finally {
+    stopped = true;
+    clearInterval(timer);
+    if (inflight) await inflight;
+  }
+}
+
 async function processIntent(runtime: ActiveWorkspaceRuntime, intent: Row): Promise<void> {
   const database = runtime.database;
   const workspaceId = runtime.identity.workspaceId;
@@ -203,24 +239,7 @@ async function processIntent(runtime: ActiveWorkspaceRuntime, intent: Row): Prom
   const initialClaim = initialBundle.claims.find((claim) => String(claim.attempt_stage) !== 'judge');
   if (!initialClaim) throw new Error('initial claim missing');
   if (String(intent.requested_action) === 'stage_d') {
-    await runtime.runActorControlPlane(() => settleDispatch(runtime, String(initialClaim.stage_request_id), {
-      id: `stage-d:${String(intent.intent_id)}`,
-      status: 'succeeded',
-      phase: 'completed',
-    }, 'reporter'));
-    const stageD = await runtime.runActorControlPlane(() => snapshotStore.freezeStageDTargetEffect({
-      workspaceId,
-      rootRequestId,
-      rootGeneration: Number(admitted.root!.root_generation),
-      rootInputHash: String(admitted.root!.root_input_hash),
-      stageRequestId: String(initialClaim.stage_request_id),
-      targets: [],
-      effects: [],
-      coverage: { source: String(intent.source), candidateCount: 0 },
-      fence: currentFence(database, workspaceId),
-    }));
-    if (!stageD.ok) throw Object.assign(new Error(stageD.message), { code: stageD.code });
-    return;
+    throw Object.assign(new Error('stage_d no longer owns content production'), { code: 'UNSUPPORTED_ACTION' });
   }
   const scanClaim = initialClaim;
   const selectedChannels = jsonArray(intent.channel_policy_json).map((entry) => String(entry.channelId ?? entry.channel_id ?? entry.module));
@@ -360,7 +379,7 @@ async function drain(runtime: ActiveWorkspaceRuntime, state: ExecutorState): Pro
       const intent = nextIntent(runtime.database, runtime.identity.workspaceId);
       if (!intent) break;
       try {
-        await processIntent(runtime, intent);
+        await withActorHeartbeat(runtime, () => processIntent(runtime, intent));
       } catch (error) {
         const code = executionErrorCode(error);
         const reason = error instanceof Error ? error.message : String(error);

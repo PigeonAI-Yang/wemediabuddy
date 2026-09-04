@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { getScoringSettings, scoreCandidates, scoreSnapshotJsonFor, selectWithQuota } from './zhihu-hot-scoring.ts';
-import { createPlanningDraftFromTarget } from './planning-stage.ts';
-import type { ContentCycleNextAction } from './daily-content-article.ts';
 
 export type DailyCycleStatus = 'pending' | 'running' | 'needs_user' | 'completed' | 'partial' | 'paused' | 'failed';
 export type DailyTargetStatus =
@@ -111,99 +109,6 @@ function isExactCompletion(database: DatabaseSync, projectId: string | null): bo
   return hasExactReadyScript(database, projectId, a.latestVersionId);
 }
 
-function findExistingDraftForSource(database: DatabaseSync, sourceId: string): { id: string } | null {
-  try {
-    const row = database
-      .prepare(
-        "SELECT id FROM plan_items WHERE EXISTS (SELECT 1 FROM json_each(source_ids_json) WHERE value = ?) ORDER BY created_at DESC LIMIT 1"
-      )
-      .get(sourceId) as { id: string } | undefined;
-    if (row) return row;
-  } catch {}
-  try {
-    const row = database
-      .prepare('SELECT id FROM plan_items WHERE source_ids_json LIKE ? ORDER BY created_at DESC LIMIT 1')
-      .get(`%"${sourceId}"%`) as { id: string } | undefined;
-    if (row) return row;
-  } catch {}
-  return null;
-}
-
-function makePlannerNextAction(input: {
-  businessDate: string;
-  planItemId: string;
-  sourceItemId: string;
-}): ContentCycleNextAction {
-  const logicalInput = Object.freeze({
-    source: 'content_cycle',
-    businessDate: input.businessDate,
-    planItemId: input.planItemId,
-    sourceItemId: input.sourceItemId,
-    role: 'planner',
-  });
-  const requestId = `stage_c:${input.businessDate}:${input.sourceItemId}`;
-  return Object.freeze({
-    kind: 'submitWorkspaceOrchestratorIntent',
-    producerId: 'content-cycle.successor',
-    action: 'stage_d',
-    businessDate: input.businessDate,
-    requestId,
-    rootMode: 'scheduler',
-    role: 'planner',
-    logicalInput,
-    payload: logicalInput,
-  });
-}
-
-function persistPlannerNextAction(database: DatabaseSync, planItemId: string, nextAction: ContentCycleNextAction): void {
-  const row = database
-    .prepare('SELECT planning_provenance_json FROM plan_items WHERE id=?')
-    .get(planItemId) as { planning_provenance_json: string | null } | undefined;
-  if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-  let provenance: Record<string, unknown> = {};
-  try {
-    const parsed = row.planning_provenance_json ? JSON.parse(row.planning_provenance_json) : {};
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) provenance = { ...(parsed as Record<string, unknown>) };
-  } catch {}
-  provenance.planner_next_action = nextAction;
-  provenance.content_cycle_next_action = nextAction;
-  provenance.next_action = nextAction;
-  database
-    .prepare('UPDATE plan_items SET planning_provenance_json=?, updated_at=? WHERE id=?')
-    .run(JSON.stringify(provenance), nowIso(), planItemId);
-}
-
-function ensureMinimalDraftAndPlanner(
-  database: DatabaseSync,
-  businessDate: string,
-  sourceItemId: string,
-  titleSnapshot: string
-): ContentCycleNextAction | null {
-  const existing = findExistingDraftForSource(database, sourceItemId);
-  let planItemId: string;
-  if (existing) {
-    planItemId = existing.id;
-  } else {
-    const title = String(titleSnapshot ?? '').trim().slice(0, 80);
-    if (!title) return null;
-    try {
-      const draft = createPlanningDraftFromTarget(database, {
-        title,
-        sourceIds: [sourceItemId],
-        planDate: businessDate,
-        origin: 'zhihu_hot',
-        availableMaterials: [],
-        missingMaterials: ['补齐来源正文与可核验证据'],
-      });
-      planItemId = draft.planItemId;
-    } catch {
-      return null;
-    }
-  }
-  const nextAction = makePlannerNextAction({ businessDate, planItemId, sourceItemId });
-  persistPlannerNextAction(database, planItemId, nextAction);
-  return nextAction;
-}
 
 export function ensureDailyCycleInternal(database: DatabaseSync, businessDate: string): Record<string, unknown> {
   if (!isValidDate(businessDate)) throw Object.assign(new Error('businessDate 格式必须为 YYYY-MM-DD'), { code: 'VALIDATION_ERROR' });
@@ -255,14 +160,6 @@ export function ensureDailyCycleInternal(database: DatabaseSync, businessDate: s
     }));
     if (!inputs.length) return before as unknown as Record<string, unknown>;
     const scored = scoreCandidates(database, inputs, nowIso());
-    for (const cand of scored) {
-      const row = filteredRows.find((r) => r.source_item_id === cand.id);
-      if (!row) continue;
-      const isPending = cand.total === 0 || cand.dims.evidenceAvailability === 0;
-      if (isPending) {
-        ensureMinimalDraftAndPlanner(database, businessDate, cand.id, row.question_title_snapshot);
-      }
-    }
     const selection = selectWithQuota(scored as never, remainingGap) as unknown as { selected: Array<{ id: string; route: string }> };
     if (!selection.selected.length) return before as unknown as Record<string, unknown>;
     const cycleId = String((existing as { id: string }).id);
@@ -328,14 +225,6 @@ export function ensureDailyCycleInternal(database: DatabaseSync, businessDate: s
     }));
     const iso = nowIso();
     scored = scoreCandidates(database, inputs, iso) as unknown as typeof scored;
-    for (const cand of scored) {
-      const row = filtered.find((r) => r.source_item_id === (cand as { id: string }).id);
-      if (!row) continue;
-      const isPending = (cand as { total: number }).total === 0 || (cand as { dims: { evidenceAvailability: number } }).dims.evidenceAvailability === 0;
-      if (isPending) {
-        ensureMinimalDraftAndPlanner(database, businessDate, (cand as { id: string }).id, row.question_title_snapshot);
-      }
-    }
     selection = selectWithQuota(scored as never, targetCount) as unknown as { selected: Array<{ id: string; route: string }> };
   }
   const selected = selection.selected as unknown as Array<{ id: string; route: string }>;

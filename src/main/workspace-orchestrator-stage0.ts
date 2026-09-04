@@ -108,14 +108,6 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     writeTables: ['plan_items', 'plans', 'daily_content_targets'], processOrSession: null, legacyDirect: false
   },
   {
-    producerId: 'proposal.plan-item-advance', sourceLocation: "src/main/ipc-today-studio-business.ts:plan-item:advance; src/main/mcp-business-commands.ts:plan_item.advance",
-    trigger: 'Owner or MCP advances an approved proposal', intendedSource: 'proposal_ui', intendedAction: 'stage_d',
-    currentDirectAction: 'Typed proposal stage_d intent submission with frozen candidate/project identity',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(proposal_ui or mcp, stage_d, frozen candidate/project identity) → Actor mailbox',
-    writeTables: ['content_projects', 'content_project_sources', 'jobs', 'agent_tasks', 'task_grants', 'research_claims', 'content_versions'],
-    processOrSession: 'Actor-managed Reporter or Writer child', legacyDirect: false
-  },
-  {
     producerId: 'mcp.jobs-spawn', sourceLocation: "src/main/mcp-job-tools.ts:server.registerTool('jobs.spawn')",
     trigger: 'Manager Pi invokes role job spawn', intendedSource: 'mcp', intendedAction: 'stage_d', currentDirectAction: 'Typed role/action intent submission through the workspace Actor gateway',
     replacementRoute: 'submitWorkspaceOrchestratorIntent(mcp, typed role/action) → Actor mailbox',
@@ -190,14 +182,6 @@ export const WORKSPACE_ORCHESTRATOR_PRODUCER_CENSUS: readonly StageZeroProducer[
     replacementRoute: 'submitWorkspaceOrchestratorIntent(orphan_reconcile, reconcile, original root identity)',
     writeTables: ['research_successor_runs', 'jobs', 'agent_tasks', 'task_grants', 'research_claims', 'content_versions'],
     processOrSession: 'Actor-managed role child', legacyDirect: false
-  },
-  {
-    producerId: 'content-cycle.successor', sourceLocation: 'src/main/daily-content-cycle.ts and src/main/daily-content-article.ts',
-    trigger: 'Daily target state transition requires research, Writer, or derivative work', intendedSource: 'content_cycle', intendedAction: 'stage_d',
-    currentDirectAction: 'Typed content-cycle stage_d intent submission with cycle/target identity',
-    replacementRoute: 'submitWorkspaceOrchestratorIntent(content_cycle, stage_d, cycle/target identity) → Actor mailbox',
-    writeTables: ['daily_content_cycles', 'daily_content_targets', 'jobs', 'agent_tasks', 'research_claims', 'content_versions', 'content_derivative_versions'],
-    processOrSession: 'Actor-managed Research/Writer role job', legacyDirect: false
   },
   {
     producerId: 'maintenance.topic-reproposal', sourceLocation: 'src/main/topic-maintenance-reproposal.ts:topic reproposal scheduler',

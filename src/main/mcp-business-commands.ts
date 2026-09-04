@@ -770,28 +770,6 @@ export function registerBusinessMutationMcp(server: McpServer, runtime: ActiveWo
     }));
   });
 
-  server.registerTool('plan_item.advance', {
-    description: '提交候选推进意图；只返回 Actor receipt',
-    inputSchema: { ...authoritySchema, plan_item_id: z.string() }
-  }, async (input) => {
-    const { request_id, task_id, grant_id, worker_lease_id, plan_item_id } = input;
-    const identity = readPlanItemIntentIdentity(runtime.database, plan_item_id);
-    const payload = freezeMcpIntentPayload({ request_id, task_id, grant_id, worker_lease_id }, {
-      planItemId: identity.planItemId,
-      expectedRevision: identity.planItemRevision,
-      projectId: identity.projectId,
-      projectRevision: identity.projectRevision
-    });
-    return text(await submitWorkspaceOrchestratorIntent(runtime, {
-      producerId: 'proposal.plan-item-advance',
-      businessDate: identity.businessDate,
-      requestId: request_id,
-      action: 'stage_d',
-      logicalInput: payload,
-      payload,
-      rootMode: 'owner'
-    } satisfies SubmitWorkspaceOrchestratorIntentInput));
-  });
 
   server.registerTool('content.import_image', {
     description: '把外部生成或已有图片导入指定内容项目，返回 asset 与可插入正文的 Markdown；授权复用 content.save_version。',

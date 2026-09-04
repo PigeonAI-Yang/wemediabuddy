@@ -357,7 +357,7 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = Object.freeze([
     id: 'cap.planning_review',
     displayName: '策划审批与推进',
     description: 'WMB-5351 策划审批驳回回退与统一推进；仅主管',
-    commands: Object.freeze(['plan_item.approve', 'plan_item.reject', 'plan_item.rework', 'plan_item.advance'] as const),
+    commands: Object.freeze(['plan_item.approve', 'plan_item.reject', 'plan_item.rework'] as const),
     readProfiles: Object.freeze(['plans', 'content', 'sources'] as const),
     defaultRoleBindings: Object.freeze({ desk: true }),
     grantKinds: Object.freeze({ task: Object.freeze(['daily_judge'] as const), page: Object.freeze(['today', 'proposals', 'publish', 'agents'] as const) }),

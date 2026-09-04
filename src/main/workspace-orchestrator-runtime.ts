@@ -336,7 +336,6 @@ function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry)
     case 'today.daily-orchestration':
     case 'today.daily-cycle-ensure':
     case 'ui.jobs-spawn':
-    case 'proposal.plan-item-advance':
     case 'mcp.jobs-spawn':
     case 'mcp.daily-orchestrate':
     case 'scheduler.daily-0900':
@@ -347,7 +346,6 @@ function expectedActions(producerId: string, entry: FrozenProducerRegistryEntry)
     case 'reconcile.daily-handoff-sweeper':
     case 'reconcile.agent-tasks-recover':
     case 'reconcile.research-successor-scheduler':
-    case 'content-cycle.successor':
     case 'maintenance.topic-reproposal':
       return [entry.intendedAction === 'reconcile' ? 'stage_d' : entry.intendedAction as SubmitWorkspaceOrchestratorIntentInput['action']];
     case 'proposal.candidate-decision': return ['approve_candidates', 'repair_invalid_candidate'];

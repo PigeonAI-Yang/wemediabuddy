@@ -4,7 +4,7 @@ import { ensureDailyCycleInternal, getDailyCycleProjection } from './daily-conte
 import { ensureDraftRevisionTargetInternal, ensurePublishedRevisionTargetInternal, getYesterdayIterationProjection } from './daily-iteration.ts';
 import { readZhihuHotViaBrowser, commitZhihuHotScan, zhihuHotReadiness } from './zhihu-hot-channel.ts';
 import { getScoringSettings } from './zhihu-hot-scoring.ts';
-import { ensureTargetArticleLinkInternal, advanceApprovedPlanItem } from './daily-content-article.ts';
+import { ensureTargetArticleLinkInternal } from './daily-content-article.ts';
 import { ensureContentDerivativeInternal } from './content-derivative.ts';
 
 export type DailyOrchestrationSource = 'scheduler' | 'today' | 'mcp';
@@ -74,7 +74,6 @@ export type ProductionOrchestrationOverrides = {
   ensureDraftRevisionTargetInternal?: typeof ensureDraftRevisionTargetInternal;
   ensurePublishedRevisionTargetInternal?: typeof ensurePublishedRevisionTargetInternal;
   ensureTargetArticleLinkInternal?: typeof ensureTargetArticleLinkInternal;
-  advanceApprovedPlanItem?: typeof advanceApprovedPlanItem;
   ensureContentDerivativeInternal?: typeof ensureContentDerivativeInternal;
   runMutation?: OrchestrationMutationExecutor;
 };
@@ -305,53 +304,16 @@ function createProductionStageC(overrides: ProductionOrchestrationOverrides): St
 }
 
 function createProductionStageD(overrides: ProductionOrchestrationOverrides): StageHandler {
-  return async (database: DatabaseSync, businessDate: string, context?: OrchestrationContext): Promise<StageResult> => {
-    const getProj = overrides.getDailyCycleProjection ?? getDailyCycleProjection;
-    const advancer = overrides.advanceApprovedPlanItem ?? advanceApprovedPlanItem;
-    try {
-      // Only the current day's explicitly Owner-approved plan may enter production.
-      // Legacy migrations and historical system approvals are not construction permission.
-      const approvedRows = database.prepare(`
-        SELECT pi.id
-        FROM plan_items pi
-        JOIN plans p ON p.id = pi.plan_id
-        WHERE p.plan_date = ?
-          AND p.is_current = 1
-          AND EXISTS (
-            SELECT 1
-            FROM json_each(pi.planning_provenance_json, '$.transitions') transition
-            WHERE json_extract(transition.value, '$.to') = 'approved'
-              AND json_extract(transition.value, '$.by') = 'owner_ui'
-          )
-        ORDER BY pi.updated_at DESC
-      `).all(businessDate) as Array<{ id:string }>;
-      if (!approvedRows.length) {
-        return { stage: 'D', name: '研究与文章', status: 'skipped', detail: '今日无 Owner 已批准策划' };
-      }
-      let enqueued = 0; let reused = 0; let reporter = 0; let writer = 0;
-      for (const row of approvedRows) {
-        try {
-          // Use runMutation to keep command envelope audit if overrides provide executor
-          const res = await runMutation(overrides, context, {
-            command: 'plan_item.advance',
-            entityType: 'plan_item',
-            entityId: row.id,
-            execute: () => advancer(database, row.id) as unknown as Record<string, unknown>
-          }) as { role?: string; reusedJob?: boolean; reusedProject?: boolean };
-          if (res.role === 'reporter') reporter++;
-          if (res.role === 'writer') writer++;
-          if (res.reusedJob) reused++; else enqueued++;
-        } catch (e) {
-          // If advance fails due to not approved etc., skip
-          if ((e as { code?: string })?.code === 'conflict') continue;
-          throw e;
-        }
-      }
-      if (enqueued===0 && reused>0) return { stage: 'D', name: '研究与文章', status: 'completed', count: reused, detail: `复用 ${reused} 推进 (${reporter}研究/${writer}写作)` };
-      return { stage: 'D', name: '研究与文章', status: 'completed', count: enqueued+reused, detail: `推进 ${enqueued+reused} (${reporter}研究/${writer}写作)` };
-    } catch (e) {
-      return { stage: 'D', name: '研究与文章', status: 'failed', errorCode: (e as {code?:string})?.code ?? null, detail: e instanceof Error ? e.message : String(e) };
-    }
+  return async (database: DatabaseSync, businessDate: string): Promise<StageResult> => {
+    const projection = (overrides.getDailyCycleProjection ?? getDailyCycleProjection)(database, businessDate);
+    const linked = projection.targets.filter((target) => typeof target.project_id === 'string' && target.project_id.length > 0).length;
+    return {
+      stage: 'D',
+      name: '研究与文章',
+      status: 'skipped',
+      count: linked,
+      detail: linked > 0 ? `生产由已批准项目独立推进；当前关联 ${linked} 个项目` : '生产仅由方案批准与自动调查推进'
+    };
   };
 }
 

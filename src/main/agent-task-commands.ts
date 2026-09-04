@@ -21,7 +21,6 @@ import {
 } from './agent-tasks.ts';
 import { dispatchBusinessCommand, receiptAsCommandResult, requireCommandResultData } from './business-command.ts';
 import { dispatchRevokeTaskGrantsForTask } from './task-grants.ts';
-import { handleReporterSuccessAndAdvance } from './daily-content-article.ts';
 import type { ActiveWorkspaceRuntime } from './workspace-runtime.ts';
 
 /**
@@ -154,7 +153,6 @@ export function dispatchPartialAgentTask(dependency: AgentTaskMutationDependency
   return dispatchTask(dependency, context, 'agent_tasks.partial', { id }, id,
     (database, input) => {
       const partial = requireCommandResultData(partialAgentTask(database, input.id));
-      try { handleReporterSuccessAndAdvance(database, input.id); } catch {}
       return partial;
     });
 }
@@ -181,7 +179,6 @@ export function dispatchCompleteAgentTask(dependency: AgentTaskMutationDependenc
   return dispatchTask(dependency, context, 'agent_tasks.complete', { id }, id,
     (database, input) => {
       const completed = requireCommandResultData(completeAgentTask(database, input.id));
-      try { handleReporterSuccessAndAdvance(database, input.id); } catch {}
       return completed;
     });
 }

@@ -1,27 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type ContentCycleNextAction = Readonly<{
-  kind: 'submitWorkspaceOrchestratorIntent';
-  producerId: 'content-cycle.successor';
-  action: 'stage_d';
-  businessDate: string;
-  requestId: string;
-  rootMode: 'scheduler';
-  role: 'planner' | 'reporter' | 'writer';
-  logicalInput: Readonly<Record<string, unknown>>;
-  payload: Readonly<Record<string, unknown>>;
-}>;
-
-export type AdvanceApprovedResult = {
-  projectId: string;
-  role: 'reporter' | 'writer';
-  jobId: string | null;
-  taskId: string | null;
-  reusedProject: boolean;
-  reusedJob: boolean;
-  nextAction: ContentCycleNextAction;
-};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -68,17 +47,18 @@ export function ensureTargetArticleLinkInternal(
   if (!planItemId) {
     throw Object.assign(new Error('target has no approved plan item; legacy direct creation denied'), { code: 'conflict' });
   }
-  const item = database
-    .prepare('SELECT id, planning_status FROM plan_items WHERE id=?')
-    .get(planItemId) as { id: string; planning_status: string } | undefined;
+  const item = database.prepare(`SELECT pi.id, pi.planning_status, cp.id AS projectId
+    FROM plan_items pi
+    LEFT JOIN content_projects cp ON cp.plan_item_id = pi.id
+    WHERE pi.id=?`).get(planItemId) as { id: string; planning_status: string; projectId: string | null } | undefined;
   if (!item) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
   if (item.planning_status !== 'approved') {
     throw Object.assign(new Error(`plan_item_not_approved: ${item.planning_status}`), { code: 'conflict' });
   }
-
-  // Reuse/create project via approved advance path only
-  const adv = advanceApprovedPlanItem(database, planItemId);
-  const projectId = adv.projectId;
+  if (!item.projectId) {
+    throw Object.assign(new Error('approved plan item has no project; approval transaction must create it'), { code: 'conflict' });
+  }
+  const projectId = item.projectId;
   const ts = nowIso();
   database
     .prepare('UPDATE daily_content_targets SET plan_item_id=?, project_id=?, updated_at=?, revision=revision+1 WHERE id=?')
@@ -289,149 +269,3 @@ export function getTargetArticleProjection(database: DatabaseSync, targetId: str
   return { target, project, versions };
 }
 
-/** WMB-5351: unified production advance — persist project state and an Actor intent descriptor. */
-function parseProvenance(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'string' || !value.trim()) return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? { ...(parsed as Record<string, unknown>) } : {};
-  } catch {
-    return {};
-  }
-}
-
-function makeContentCycleNextAction(input: {
-  businessDate: string;
-  planItemId: string;
-  projectId: string;
-  role: 'planner' | 'reporter' | 'writer';
-}): ContentCycleNextAction {
-  const logicalInput = Object.freeze({
-    source: 'content_cycle',
-    businessDate: input.businessDate,
-    planItemId: input.planItemId,
-    projectId: input.projectId,
-    role: input.role,
-  });
-  const requestId = `content-cycle:stage_d:${input.businessDate}:${input.planItemId}:${input.projectId}:${input.role}`;
-  return Object.freeze({
-    kind: 'submitWorkspaceOrchestratorIntent',
-    producerId: 'content-cycle.successor',
-    action: 'stage_d',
-    businessDate: input.businessDate,
-    requestId,
-    rootMode: 'scheduler',
-    role: input.role,
-    logicalInput,
-    payload: logicalInput,
-  });
-}
-
-function persistContentCycleNextAction(database: DatabaseSync, planItemId: string, nextAction: ContentCycleNextAction): void {
-  const row = database
-    .prepare('SELECT planning_provenance_json FROM plan_items WHERE id=?')
-    .get(planItemId) as { planning_provenance_json: string | null } | undefined;
-  if (!row) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-  const provenance = parseProvenance(row.planning_provenance_json);
-  provenance.content_cycle_next_action = nextAction;
-  provenance.next_action = nextAction;
-  database
-    .prepare('UPDATE plan_items SET planning_provenance_json=?, updated_at=? WHERE id=?')
-    .run(JSON.stringify(provenance), nowIso(), planItemId);
-}
-
-export function countSupportedClaimsForProject(database: DatabaseSync, projectId: string, planItemId: string): number {
-  try {
-    const row = database.prepare(
-      `SELECT COUNT(*) as c FROM research_claims rc
-       JOIN agent_tasks at ON at.id = rc.task_id
-       WHERE rc.status='supported' AND (
-         json_extract(at.context_refs_json, '$.planItemId') = ?
-         OR json_extract(at.context_refs_json, '$.plan_item_id') = ?
-         OR json_extract(at.context_refs_json, '$.projectId') = ?
-         OR json_extract(at.context_refs_json, '$.project_id') = ?
-       )`
-    ).get(planItemId, planItemId, projectId, projectId) as { c: number } | undefined;
-    if (row) return Number(row.c);
-  } catch {}
-  return 0;
-}
-
-function getOrCreateProjectForPlanItem(database: DatabaseSync, planItemId: string): { projectId: string; reused: boolean } {
-  let started=false;
-  try { database.exec('BEGIN IMMEDIATE'); started=true; } catch { started=false; }
-  try {
-    const existing = database.prepare('SELECT id FROM content_projects WHERE plan_item_id = ?').get(planItemId) as { id: string } | undefined;
-    if (existing) {
-      if(started) database.exec('COMMIT');
-      return { projectId: existing.id, reused: true };
-    }
-    const item = database.prepare('SELECT topic_id, title, source_ids_json FROM plan_items WHERE id=?').get(planItemId) as { topic_id: string | null; title: string; source_ids_json: string } | undefined;
-    if (!item) {
-      if(started) try{ database.exec('ROLLBACK'); }catch{}
-      throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-    }
-    const projectId = randomUUID();
-    const ts = nowIso();
-    const title = item.title || '未命名项目';
-    database.prepare('INSERT INTO content_projects (id, topic_id, plan_item_id, title, status, created_at, updated_at, revision) VALUES (?,?,?,?,?,?,?,1)').run(projectId, item.topic_id ?? null, planItemId, title, 'idea', ts, ts);
-    try {
-      const sourceIds = JSON.parse(item.source_ids_json || '[]') as string[];
-      for (const sid of sourceIds) {
-        if(!sid) continue;
-        try { database.prepare('INSERT OR IGNORE INTO content_project_sources (project_id, source_id) VALUES (?,?)').run(projectId, sid); } catch {}
-      }
-    } catch {}
-    if(started) database.exec('COMMIT');
-    return { projectId, reused: false };
-  } catch (e) {
-    if(started) try{ database.exec('ROLLBACK'); }catch{}
-    throw e;
-  }
-}
-
-export function advanceApprovedPlanItem(database: DatabaseSync, planItemId: string): AdvanceApprovedResult {
-  if (!planItemId) throw Object.assign(new Error('planItemId_required'), { code: 'validation_failed' });
-  const item = database.prepare(`
-    SELECT pi.id, pi.planning_status, pi.title, p.plan_date AS planDate
-    FROM plan_items pi JOIN plans p ON p.id=pi.plan_id
-    WHERE pi.id=?
-  `).get(planItemId) as { id:string; planning_status:string; title:string; planDate:string } | undefined;
-  if (!item) throw Object.assign(new Error('plan_item_not_found'), { code: 'NOT_FOUND' });
-  if (item.planning_status !== 'approved') throw Object.assign(new Error(`conflict: planning_status must be approved, got ${item.planning_status}`), { code: 'conflict' });
-  const businessDate = String(item.planDate ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) throw Object.assign(new Error('plan_date_required'), { code: 'PLAN_DATE_REQUIRED' });
-  const { projectId, reused: reusedProject } = getOrCreateProjectForPlanItem(database, planItemId);
-  const claims = countSupportedClaimsForProject(database, projectId, planItemId);
-  const role: 'reporter'|'writer' = claims === 0 ? 'reporter' : 'writer';
-  const nextAction = makeContentCycleNextAction({ businessDate, planItemId, projectId, role });
-  persistContentCycleNextAction(database, planItemId, nextAction);
-  return { projectId, role, jobId: null, taskId: null, reusedProject, reusedJob: false, nextAction };
-}
-
-/** Called when a Reporter reaches a completed or partial terminal state; persist a Writer successor descriptor without spawning. */
-export function handleReporterSuccessAndAdvance(database: DatabaseSync, reporterTaskId: string): { advanced: boolean; result?: AdvanceApprovedResult } {
-  try {
-    const task = database.prepare('SELECT intent, context_refs_json FROM agent_tasks WHERE id=?').get(reporterTaskId) as { intent:string; context_refs_json:string } | undefined;
-    if (!task || task.intent !== 'research') return { advanced: false };
-    let ctx: Record<string, unknown> = {};
-    try { ctx = JSON.parse(task.context_refs_json); } catch {}
-    const planItemId = (ctx as Record<string, unknown>).planItemId as string | undefined || (ctx as Record<string, unknown>).plan_item_id as string | undefined || null;
-    const projectId = (ctx as Record<string, unknown>).projectId as string | undefined || (ctx as Record<string, unknown>).project_id as string | undefined || null;
-    let targetPlanItemId: string | null = planItemId as string | null;
-    if (!targetPlanItemId && projectId) {
-      const row = database.prepare('SELECT plan_item_id FROM content_projects WHERE id=?').get(projectId) as { plan_item_id:string|null }|undefined;
-      targetPlanItemId = row?.plan_item_id ?? null;
-    }
-    if (!targetPlanItemId) return { advanced: false };
-    const item = database.prepare('SELECT planning_status FROM plan_items WHERE id=?').get(targetPlanItemId) as { planning_status:string }|undefined;
-    if (!item || item.planning_status !== 'approved') return { advanced: false };
-    const prow = database.prepare('SELECT id FROM content_projects WHERE plan_item_id=?').get(targetPlanItemId) as { id:string }|undefined;
-    const pid = prow?.id ?? projectId;
-    if (!pid) return { advanced: false };
-    const claims = countSupportedClaimsForProject(database, pid, targetPlanItemId);
-    if (claims === 0) return { advanced: false };
-    const result = advanceApprovedPlanItem(database, targetPlanItemId);
-    return { advanced: true, result };
-  } catch { return { advanced: false }; }
-}

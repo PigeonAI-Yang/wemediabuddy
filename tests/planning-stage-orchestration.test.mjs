@@ -1,4 +1,4 @@
-// Planning-state owner decisions, capability boundaries, automatic advance bridge, and legacy-link denial.
+// Planning-state owner decisions, approval-transaction ownership, and legacy-link denial.
 // Verify via: node --test tests/planning-stage-orchestration.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -8,11 +8,12 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { editorialDecision, scoredReasons } from './helpers/planning-fixture.mjs';
 
-let migrateDatabase, planningStage, dailyArticle, upsertSource, capabilities, taskGrants, jobSpawnerMod;
+let migrateDatabase, planningStage, planApproval, dailyArticle, upsertSource, capabilities, taskGrants, jobSpawnerMod;
 async function ensureModules(){
   if(migrateDatabase) return;
   ({ migrateDatabase } = await import('../src/main/db/migrations.ts'));
   planningStage = await import('../src/main/planning-stage.ts');
+  planApproval = await import('../src/main/plan-item-approval.ts');
   dailyArticle = await import('../src/main/daily-content-article.ts');
   ({ upsertSource } = await import('../src/main/sources.ts'));
   capabilities = await import('../src/shared/agent-capabilities.ts');
@@ -98,7 +99,7 @@ test('actor matrix: ordinary planner cannot approve, desk and Owner UI can', asy
     assert.equal(deskCommands.includes('plan_item.approve'), true, 'desk must have approve');
     assert.equal(deskCommands.includes('plan_item.reject'), true);
     assert.equal(deskCommands.includes('plan_item.rework'), true);
-    assert.equal(deskCommands.includes('plan_item.advance'), true);
+    assert.equal(deskCommands.includes('plan_item.advance'), false);
     assert.equal(plannerCommands.includes('plan_item.request_planning'), false);
     assert.equal(plannerCommands.includes('plan_item.submit'), true);
     assert.equal(deskCommands.includes('plan_item.request_planning'), false);
@@ -174,7 +175,6 @@ test('not-found and validation mapping to envelope semantics', async()=>{
     const src=makeSource(db,'https://example.com/notfound-src');
     assert.throws(()=>planningStage.submitPlanItemForReview(db,{planItemId:'non-existent', expectedRevision:1, item:completeItem(src.id)}), e=>e.code==='NOT_FOUND');
     assert.throws(()=>planningStage.transitionPlanItem(db,{planItemId:'non-existent', expectedRevision:1, expectedStatus:'ready_for_review', toStatus:'approved', by:'desk'}), e=>e.code==='NOT_FOUND');
-    assert.throws(()=>dailyArticle.advanceApprovedPlanItem(db,'non-existent'), e=>e.code==='NOT_FOUND');
     const fb = {
       title:'完整策划标题用于评审通过的选题示例标题',
       priority:2,
@@ -272,11 +272,12 @@ test('unapproved legacy link/create denied', async()=>{
     // also ensure that even if we link draft, it is still denied
     db.prepare("UPDATE daily_content_targets SET plan_item_id=? WHERE id=?").run(draftId, targetId);
     assert.throws(()=>dailyArticle.ensureTargetArticleLinkInternal(db, targetId), e=> e.code==='conflict' || String(e.message).includes('not_approved'));
-    // approved should succeed
+    // approved link succeeds only after the approval transaction creates the canonical project
     const good=completeItem(src.id);
     planningStage.submitPlanItemForReview(db,{planItemId: draftId, expectedRevision:1, item:good, by:'planner'});
-    planningStage.transitionPlanItem(db,{planItemId: draftId, expectedRevision:2, expectedStatus:'ready_for_review', toStatus:'approved', by:'desk'});
+    const approved = planApproval.approvePlanItemAndCreateProject(db,{planItemId: draftId, expectedRevision:2, by:'owner'});
     const linked=dailyArticle.ensureTargetArticleLinkInternal(db, targetId);
+    assert.equal(linked.projectId, approved.projectId);
     assert.equal(linked.planItemId, draftId);
     assert.ok(linked.projectId);
     restoreSpawner();

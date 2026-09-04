@@ -59,7 +59,6 @@ export const TASK_INTERNAL_COMMANDS = Object.freeze([
   'knowledge.suggestion_create',
   'knowledge_flywheel.change_set_apply',
   'media.recommendations_generate',
-  'plan_item.advance',
   'plan_item.approve',
   'plan_item.reject',
   'plan_item.rework',
