@@ -1,0 +1,70 @@
+(node:52032) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/planning-stage.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:52032) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ actor matrix: ordinary planner cannot approve, desk and Owner UI can (4356.9704ms)
+✔ stale revision conflict and reason required for reject (1667.496ms)
+✔ illegal jumps are rejected (1311.8466ms)
+✔ not-found and validation mapping to envelope semantics (1226.574ms)
+✔ no direct agent_tasks/jobs INSERT in owned production code (3.4812ms)
+✔ bridge methods expose owner decisions without a second production-advance command (1.5973ms)
+✔ unapproved legacy link/create denied (1428.1859ms)
+(node:41364) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/agent-task-commands.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:41364) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ task grants expose the canonical internal business command IDs (1.7514ms)
+✔ ordinary Pi chat grants (page_today/page_studio) are legally issued and unregistered commands are still rejected (2130.2182ms)
+✔ Pi and an external Agent continue one task under a durable grant while stale authority writes zero (2090.2068ms)
+✔ missing, expired, broadened and stale-worker grants reject with zero domain write while Owner UI needs no task grant (1695.499ms)
+✔ a grant from another root authorizes zero writes (2523.0719ms)
+✔ ensureAutomaticTaskGrant issues exact least-privilege scope per intent for pi and external workers (1307.7648ms)
+✔ ensureAutomaticTaskGrant reuses an active exact-scope grant and rejects inactive tasks (1024.6558ms)
+✔ ensureAutomaticTaskGrant revokes and replaces an active mismatched grant (1068.2328ms)
+(node:15380) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/data-root.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15380) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ Today recommendation action opens the corresponding complete proposal without approving it (8.9972ms)
+✔ approval directly creates the selected content project (4.0435ms)
+✔ approval transaction creates one complete project, closes carry, and advances the projection (2139.937ms)
+✔ approval failure rolls back status, project, version, topic links, and carry as one unit (1952.5232ms)
+(node:40404) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:40404) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5337 legacy orchestration fails closed with an exact Actor intent for every producer (1979.234ms)
+✔ Stage D reports production ownership without advancing approved plans (1891.9456ms)
+✔ WMB-5337 Actor intent identity is deterministic and source-bound (1.1973ms)
+✔ WMB-5337 scheduler keeps Asia/Shanghai timing and persisted toggle (1637.3937ms)
+(node:51236) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:51236) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5365 freezes the approved design identity and bounded defaults (2.1434ms)
+✔ WMB-5365 producer and runtime census is explicit, unique, and replacement-bound (1.8547ms)
+✔ WMB-5365 freezes a build-bound producer registry manifest (3.7261ms)
+✔ WMB-5365 producer allowlist fails closed on unknown or drifted call sites (0.397ms)
+✔ WMB-5365 error matrix is exhaustive, unique, and fail-closed (0.3118ms)
+✔ WMB-5365 baseline collection is read-only and fingerprints the current workspace (1673.0078ms)
+(node:49196) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///j:/PigeonYang/WeMediaBuddy/src/main/db/migrations.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to j:\PigeonYang\WeMediaBuddy\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:49196) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+✔ WMB-5395 one production authorization reaches attributed draft review in the same workspace (2455.1246ms)
+✔ WMB-5399 daily content projections no longer submit Stage D production (16.7545ms)
+✔ WMB-5399 Executor rejects legacy Stage D instead of freezing empty success (2.4967ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12726.4758

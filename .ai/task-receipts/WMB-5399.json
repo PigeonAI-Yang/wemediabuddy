@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5399",
+  "implementationCommit": "a2ae5f3",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "src/main/agent-task-commands.ts",
+    "src/main/daily-content-article.ts",
+    "src/main/daily-content-cycle.ts",
+    "src/main/daily-orchestration.ts",
+    "src/main/mcp-business-commands.ts",
+    "src/main/task-grants.ts",
+    "src/main/workspace-orchestrator-executor.ts",
+    "src/main/workspace-orchestrator-runtime.ts",
+    "src/main/workspace-orchestrator-stage0.ts",
+    "src/shared/agent-capabilities.ts",
+    "tests/planning-stage-orchestration.test.mjs",
+    "tests/task-grants.test.mjs",
+    "tests/wmb-5337-orchestration.test.mjs",
+    "tests/wmb-5365-workspace-orchestrator-stage0.test.mjs",
+    "tests/wmb-5399-stage-d-production-subtraction.test.mjs"
+  ],
+  "verification": {
+    "command": "node --test tests/wmb-5399-stage-d-production-subtraction.test.mjs tests/today-approval-flow.test.mjs tests/wmb-5395-creation-flow-acceptance.test.mjs tests/wmb-5337-orchestration.test.mjs tests/planning-stage-orchestration.test.mjs tests/task-grants.test.mjs tests/wmb-5365-workspace-orchestrator-stage0.test.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5399.verify.log"
+  },
+  "closedAt": "2026-09-04T08:40:41.536Z"
+}
