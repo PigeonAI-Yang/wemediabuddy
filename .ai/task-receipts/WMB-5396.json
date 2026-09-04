@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "WMB-5396",
+  "implementationCommit": "bd08bec",
+  "upstream": "origin/master",
+  "changedPaths": [
+    "TASKS.md",
+    "docs/spark/2026-09-04-intelligent-topic-flow-subtraction-plan.md"
+  ],
+  "verification": {
+    "command": "node scripts/check-task-ledger.mjs",
+    "exitCode": 0,
+    "log": ".ai/task-receipts/WMB-5396.verify.log"
+  },
+  "closedAt": "2026-09-04T07:43:01.895Z"
+}
